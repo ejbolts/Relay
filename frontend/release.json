@@ -2,12 +2,13 @@
   "version": "1.0.1",
   "date": "2026-10-25",
   "title": "Rest alerts and everyday fixes",
-  "summary": "Open the latest release from Notifications, get rest-complete alerts while browsing Relay, see friends? logged times, and open All settings from the Settings icon.",
+  "summary": "Open the latest release from Notifications, get rest-complete alerts while browsing Relay, see friends' logged times, and open All settings from the Settings icon.",
   "changes": [
-    "Notifications includes a Relay release row with its version, title, date and View button. View opens What?s new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
+    "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
     "Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.",
     "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.",
-    "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available."
+    "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.",
+    "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
   "image": {
@@ -17,7 +18,7 @@
   "highlights": [
     {
       "title": "Release notes in Notifications",
-      "description": "The latest Relay release has its own inbox row. Tap View for What?s new; closing the notes returns to the inbox. New clears after viewing and the row stays available.",
+      "description": "The latest Relay release has its own inbox row. Tap View for What's new; closing the notes returns to the inbox. New clears after viewing and the row stays available.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/b217f9b47a27930ca7e340f29cdb706002791daa/docs/screenshots/releases/1.0.1-release-notification.png",
         "alt": "Notifications with a Relay 1.0.1 release row, New indicator, title, date and View button, above synthetic friend activity."

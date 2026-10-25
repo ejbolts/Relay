@@ -5367,7 +5367,6 @@ function MachinePhotoChooser({
         </span>
       </summary>
       <div className="machine-photo-content">
-        <p>Take, choose, or pin equipment photos for every set in this exercise.</p>
         <div className="machine-photo-actions">
           <label>
             <span aria-hidden="true">
