@@ -8,5 +8,35 @@
     "Home's Recent Friends Activity lists friends working out first, showing their live workout in place of their last session until they finish.",
     "Settings > Account & privacy > Profile sharing has a Live activity section with separate Online status and Live workouts switches and a preview of what friends see. Both start on, only accepted friends can see them, and turning one off hides it from friends straight away."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110"
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
+  "image": {
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/b0d204a26a601f47d3cd0e76bd9ec8bac359df82/docs/screenshots/releases/1.1.0-friends-live-activity.png",
+    "alt": "Social Friends tab with two synthetic friends working out at the top, each with a Live row showing the workout name and time so far, then friends active now and active 2h ago."
+  },
+  "highlights": [
+    {
+      "title": "See who's training",
+      "description": "Friends working out move to the top with a Live row, the workout name and how long they have been training. Everyone else shows Active now or when they were last active.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b0d204a26a601f47d3cd0e76bd9ec8bac359df82/docs/screenshots/releases/1.1.0-friends-live-activity.png",
+        "alt": "Social Friends tab with two synthetic friends working out at the top, each with a Live row showing the workout name and time so far, then friends active now and active 2h ago."
+      }
+    },
+    {
+      "title": "Live workouts on Home",
+      "description": "Recent Friends Activity lists friends working out first, with their live workout in place of their last session.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b0d204a26a601f47d3cd0e76bd9ec8bac359df82/docs/screenshots/releases/1.1.0-home-live-workouts.png",
+        "alt": "Home's Recent Friends Activity with two synthetic friends' live workouts first, followed by other friends' latest sessions and reaction buttons."
+      }
+    },
+    {
+      "title": "You choose what friends see",
+      "description": "Live activity in Profile sharing has separate Online status and Live workouts switches, with a preview of what friends see.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b0d204a26a601f47d3cd0e76bd9ec8bac359df82/docs/screenshots/releases/1.1.0-live-activity-settings.png",
+        "alt": "Live activity settings with Online status and Live workouts switched on and a preview showing a synthetic account as Active now."
+      }
+    }
+  ]
 }
