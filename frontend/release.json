@@ -1,9 +1,11 @@
 {
-  "version": "0.10.0",
-  "date": "2026-10-24",
-  "title": "Your training together. More ways to connect.",
-  "summary": "Find sessions, exercises and cardio together in Training. Connect through mutual friendships and workout conversations, keep moving while saves finish, and see saved training changes across devices. Settings, profiles and daily check-ins are easier to use. Cardio brings weekly trends and detailed metrics together.",
+  "version": "1.0.0",
+  "date": "2026-10-25",
+  "title": "Gym Logger is now Relay",
+  "summary": "Gym Logger is now Relay, with a new name and icon. Find sessions, exercises and cardio together in Training, connect through mutual friendships and workout conversations, keep moving while saves finish, and see saved training changes across devices. Settings, profiles and daily check-ins are easier to use, and Cardio brings weekly trends and detailed metrics together.",
   "changes": [
+    "Gym Logger is now Relay. The new name and blue R icon appear on sign-in, in the browser tab, in notifications and when you add the app to your Home Screen. Your account, training history and settings are unchanged. On iPhone, add the app to your Home Screen again to show the new name and icon.",
+    "Choose Relay to import native workout and bodyweight CSVs, including files exported from Gym Logger. The CSV template now downloads as relay-workout-template.csv.",
     "Training combines Sessions, Exercises and Cardio. Sessions keeps the existing calendar, day details, machine filters and workout cards, with the latest three weeks shown first and Show more for older workouts. The initial three-week window respects your week-start preference, and links can still open older sessions directly.",
     "Exercises opens on a searchable list with muscle-group filters, Recent first, A-Z and Most improved sorting, and eight-week estimated 1RM trends. Tap a lift for its focused chart, personal bests and sessions, with an exercise header and back arrow replacing the Training header and tabs. Session rows open the completed sets before Open workout, and returning to Exercises keeps your search, filter, sort, scroll, metric and range.",
     "Cardio has one weekly trend card for time, distance, MET-minutes and calories. Tap a week to see its stats, expand All stats for longer date ranges, and browse history grouped by week. Log session and Import screenshot are available directly above the chart.",
@@ -27,17 +29,25 @@
     "Past-workout exercise cards have more space between them in the view-only workout browser.",
     "The What's new trailer waits for Play and starts with sound at 50% volume where supported. Your device volume still applies."
   ],
-  "url": "https://github.com/ejbolts/Gym-logger/blob/main/docs/RELEASE-NOTES.md#0100",
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#100",
   "video": {
-    "url": "/releases/0.10.0-trailer.mp4",
-    "poster": "/releases/0.10.0-trailer-poster.jpg",
-    "alt": "A narrated one-minute 0.10 trailer with before-and-after comparisons and close-ups: Training, Exercises, Cardio, friends, workout conversations, background saves, a weigh-in syncing from phone to desktop, Settings and profiles, using synthetic sample accounts."
+    "url": "/releases/1.0.0-trailer.mp4",
+    "poster": "/releases/1.0.0-trailer-poster.jpg",
+    "alt": "The narrated two-minute Relay 1.0 trailer. It introduces Relay: Home, starting and logging a workout with a rest timer and a new PR, exercise progress, the training calendar, body trends, imports, friends, and phone or desktop use. It then shows what is new since 0.9: Training, Exercises, Cardio, friends, workout conversations, background saves, cross-device sync, Settings and profiles. Synthetic sample accounts."
   },
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Gym-logger/4406fb7c8c7bf4bfa381a529abd2b31b68ece211/docs/screenshots/releases/0.10.0-navigation-before-after.png",
-    "alt": "Before in 0.9.0: separate History and Progress bottom tabs. Now in 0.10.0: Training contains Sessions, Exercises and Cardio, and Social has its own bottom tab. Actual sample-data screenshots show the header and bottom navigation."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/aac92cd8ae5f5b9ff14dd38aeb7b0dd29b13467b/docs/screenshots/releases/1.0.0-relay-sign-in.png",
+    "alt": "Relay sign-in screen with the new blue R icon above the Relay name, sign-in form and Create account tab."
   },
   "highlights": [
+    {
+      "title": "Gym Logger is now Relay",
+      "description": "A new name and icon on sign-in, in your browser and on your Home Screen. Your account, training and settings stay the same.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/aac92cd8ae5f5b9ff14dd38aeb7b0dd29b13467b/docs/screenshots/releases/1.0.0-relay-sign-in.png",
+        "alt": "Relay sign-in screen with the new blue R icon above the Relay name, sign-in form and Create account tab."
+      }
+    },
     {
       "title": "Your training, together",
       "description": "History and Progress now live in Training. Switch between Sessions, Exercises and Cardio in one place. Social has its own bottom tab for Friends and Find.",

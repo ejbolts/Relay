@@ -1,16 +1,22 @@
-# Gym Logger release notes
+# Relay release notes
 
-## 0.10.0
+_Relay was called Gym Logger before version 1.0._
 
-24 October 2026
+## 1.0.0
 
-### Your training together. More ways to connect.
+25 October 2026
 
-![The one-minute 0.10 trailer: before-and-after wipes and close-ups of Training, Exercises, Cardio, friends, workout conversations, background saves, a weigh-in syncing from phone to desktop, Settings and profiles](screenshots/releases/0.10.0-trailer.gif)
+### Gym Logger is now Relay
 
-_The narrated 0.10 trailer sits at the top of What's new; press Play to start with sound at 50% volume where supported. Device volume still applies. This GIF is its silent preview. Before views come from tagged 0.9.0; every scene uses isolated synthetic accounts and training data, and the desktop updates from the phone's saved weigh-in without a reload._
+![The two-minute Relay 1.0 trailer: a Relay logo intro, a tour of Home, logging a workout with a rest timer and PR, exercise progress, the calendar, body trends, imports, friends and desktop use, then what's new since 0.9 in Training, Exercises, Cardio, friends, conversations, background saves, cross-device sync, Settings and profiles](screenshots/releases/1.0.0-trailer.gif)
 
-[Download the narrated trailer](https://raw.githubusercontent.com/ejbolts/Gym-logger/40f9dcea81c0c1e40eddf242d7c087f8fd31015f/frontend/public/releases/0.10.0-trailer.mp4)
+_The narrated Relay 1.0 trailer sits at the top of What's new. The first half introduces Relay to new members; the second half shows what's new since 0.9. Press Play to start with sound at 50% volume where supported. This GIF is its silent preview. Every scene uses isolated synthetic accounts and training data._
+
+[Watch the narrated trailer](../frontend/public/releases/1.0.0-trailer.mp4)
+
+![Relay sign-in screen with the new blue R icon above the Relay name and the sign-in form](screenshots/releases/1.0.0-relay-sign-in.png)
+
+_Gym Logger is now Relay. The new name and icon appear when you sign in, in your browser tab, in notifications and on your Home Screen. Your account, training history and settings are unchanged._
 
 ![Before and after navigation: History and Progress in 0.9.0 become Training and Social in 0.10.0](screenshots/releases/0.10.0-navigation-before-after.png)
 
@@ -65,6 +71,13 @@ _Notifications show 15 at a time. Use the arrows or the page picker to move betw
 _Social stays highlighted while you view another member's profile._
 
 _Previews use isolated synthetic accounts and training data. Each feature uses one media format._
+
+### A new name: Relay
+
+- **Relay:** Gym Logger is now called Relay, with a new blue R icon on sign-in, in the browser tab, in notifications, in the installed app and on the Home Screen guide. Accounts, training history, settings and sign-in are unchanged.
+- **Home Screen:** on iPhone, add the app to your Home Screen again to show the new name and icon.
+- **Imports:** choose **Relay** for native workout and bodyweight CSVs, including files exported from Gym Logger. The CSV template downloads as `relay-workout-template.csv`.
+- **Repository:** the GitHub repository is now [ejbolts/Relay](https://github.com/ejbolts/Relay); links to the old name redirect.
 
 ### Training in one place
 
