@@ -2,6 +2,18 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.0.1
+
+25 October 2026
+
+### Logged times in friend activity
+
+![Recent Friends Activity with local logged times beside Today for synthetic strength and cardio sessions](screenshots/releases/1.0.1-friend-logged-time.png)
+
+_Recent Friends Activity shows the original logged time beside each session's day label, using isolated sample accounts._
+
+- Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
+
 ## 1.0.0
 
 25 October 2026
