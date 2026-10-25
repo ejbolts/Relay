@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { lastWeek } from './friendFeedData';
+import { publishFriendPresence } from './presence';
 import { SocialScreen } from './SocialScreen';
 import type { FriendActivity, FriendConnections, TrackedWorkout } from './types';
 import { localDate } from './utils';
@@ -230,4 +231,68 @@ it('does not load or poll friends while Social is hidden', async () => {
   await render(false);
   await act(async () => window.dispatchEvent(new Event('focus')));
   expect(api.sharing.friends).toHaveBeenCalledOnce();
+});
+
+it('shows friends’ live activity, working out first, and updates it when it changes', async () => {
+  const started = new Date(Date.now() - 38 * 60_000).toISOString();
+  const morgan: FriendActivity = {
+    ...alex,
+    id: 'morgan',
+    display_name: 'Morgan Sample',
+    training_dates: [week[2]],
+    presence: {
+      online: false,
+      last_active_at: null,
+      workout: { name: 'Push day', kind: 'strength', started_at: started },
+    },
+  };
+  const away: FriendActivity = {
+    ...alex,
+    presence: {
+      online: false,
+      last_active_at: new Date(Date.now() - 125 * 60_000).toISOString(),
+      workout: null,
+    },
+  };
+  const online: FriendActivity = {
+    ...casey,
+    presence: { online: true, last_active_at: null, workout: null },
+  };
+  connections = { ...connections, friends: [away, online, morgan] };
+  await render();
+  const names = () =>
+    [...host.querySelectorAll('.friend-cards > li')].map(
+      (card) => card.querySelector('b')?.textContent,
+    );
+  expect(names()).toEqual(['Morgan Sample', 'Casey Sample', 'Alex Sample']);
+  const [working, active, earlier] = [...host.querySelectorAll('.friend-cards > li')];
+  expect(working.className).toBe('is-live');
+  expect(working.querySelector('.friend-status')?.textContent).toBe('Working out');
+  expect(working.querySelector('.presence-dot.workout')).not.toBeNull();
+  expect(working.querySelector('.friend-card-latest.is-live')?.textContent).toBe(
+    'LivePush dayStrength · 38 min so far',
+  );
+  expect(working.querySelector('[aria-label^="React to"]')).toBeNull();
+  expect(working.querySelector('.friend-week > span:last-child')?.className).toBe(
+    'is-today is-live',
+  );
+  expect(working.querySelector('.friend-week')?.getAttribute('aria-label')).toBe(
+    'Trained on 1 of the last 7 days, training now',
+  );
+  expect(labelled("Open Morgan Sample's profile, Working out")).not.toBeNull();
+  expect(active.querySelector('.friend-status')?.textContent).toBe('Active now');
+  expect(active.querySelector('.presence-dot.online')).not.toBeNull();
+  expect(earlier.querySelector('.friend-status')?.textContent).toBe('Active 2h ago');
+  expect(earlier.querySelector('.presence-dot')).toBeNull();
+
+  // Morgan finishes: their latest session and reaction button return.
+  await act(async () =>
+    publishFriendPresence('morgan', { online: true, last_active_at: null, workout: null }),
+  );
+  expect(names()).toEqual(['Casey Sample', 'Morgan Sample', 'Alex Sample']);
+  const finished = host.querySelectorAll('.friend-cards > li')[1];
+  expect(finished.querySelector('.friend-status')?.textContent).toBe('Active now');
+  expect(
+    finished.querySelector('[aria-label="React to Morgan Sample’s Upper body"]'),
+  ).not.toBeNull();
 });

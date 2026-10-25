@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { FriendsActivityCard } from './FriendsActivity';
 import { friendSession, nextReaction, reactionSummary, relativeDay } from './friendFeedData';
+import { publishFriendPresence } from './presence';
 import type { FriendFeedItem, TrackedWorkout } from './types';
 
 const strength = {
@@ -384,4 +385,46 @@ it('explains the card when your profile is private, you have no friends yet or f
     await render();
     expect(host.textContent).toContain(message);
   }
+});
+
+it('puts friends working out first, showing the live workout instead of reactions', async () => {
+  const started = new Date(Date.now() - 12 * 60_000).toISOString();
+  const working: FriendFeedItem = {
+    ...alex,
+    friend: {
+      ...alex.friend,
+      presence: {
+        online: true,
+        last_active_at: null,
+        workout: { name: 'Easy 5k', kind: 'cardio', started_at: started },
+      },
+    },
+  };
+  vi.spyOn(api.sharing, 'feed').mockResolvedValue({
+    items: [jordan, working],
+    friends: 2,
+    with_sessions: 2,
+  });
+  await render();
+  const rows = () => [...host.querySelectorAll('.friend-activity-list > li')];
+  const [live, latest] = rows();
+  expect(live.querySelector('b')?.textContent).toBe('Alex Preview');
+  expect(live.querySelector('.friend-activity-kind.live')?.textContent).toBe('Live');
+  expect(live.querySelector('.friend-activity-title')?.textContent).toBe('Easy 5k');
+  expect(live.querySelector('.friend-activity-meta.is-live')?.textContent).toBe(
+    'Working out · 12 min',
+  );
+  expect(live.querySelector('.presence-dot.workout')).not.toBeNull();
+  expect(live.querySelector('.friend-react-button')).toBeNull();
+  expect(latest.querySelector('.friend-react-button')).not.toBeNull();
+
+  await act(async () => publishFriendPresence('alex', null));
+  expect(rows().map((row) => row.querySelector('b')?.textContent)).toEqual([
+    'Jordan Preview',
+    'Alex Preview',
+  ]);
+  expect(rows()[1].querySelector('.friend-activity-title')?.textContent).toBe(
+    'Incline walk · 35min',
+  );
+  expect(rows()[1].querySelector('.friend-react-button')).not.toBeNull();
 });

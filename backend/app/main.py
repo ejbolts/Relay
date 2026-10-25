@@ -44,6 +44,7 @@ from .notifications import (
     send_push_notification,
     vapid_public_key,
 )
+from .presence import presence_router
 from .processing import ProcessingValidationError, SessionProcessor, validate_batch_ready
 from .schemas import (
     ActiveWorkoutReminderCreate,
@@ -633,6 +634,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(admin_feedback_router)
     app.include_router(sharing_router)
+    app.include_router(presence_router)
     app.include_router(protected)
     app.include_router(video)
     app.include_router(tracker_router)

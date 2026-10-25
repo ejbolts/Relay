@@ -2,7 +2,8 @@ import { useId, useState } from 'react';
 import { friendSession, lastWeek, reactionSummary, relativeDay } from './friendFeedData';
 import type { FriendConnectionsState } from './friendConnections';
 import { Icon } from './Icon';
-import { ProfileAvatar } from './ProfileAvatar';
+import { PresenceAvatar } from './PresenceAvatar';
+import { byLiveActivity, presenceStatus, presenceText, useNow, workoutElapsed } from './presence';
 import { plural } from './sharedProfileDisplay';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
 import { parseLocalDate } from './trainingSummary';
@@ -25,6 +26,7 @@ function dayLetter(value: string): string {
 function FriendCard({
   friend,
   today,
+  now,
   picking,
   onPickingChange,
   onOpen,
@@ -33,6 +35,7 @@ function FriendCard({
 }: {
   friend: FriendActivity;
   today: string;
+  now: number;
   picking: boolean;
   onPickingChange: (open: boolean) => void;
   onOpen: () => void;
@@ -45,35 +48,47 @@ function FriendCard({
   const activeDays = week.filter((day) => trained.has(day)).length;
   const session = latest ? friendSession(latest.workout) : null;
   const summary = latest ? reactionSummary(latest.reactions.counts) : null;
+  const status = presenceStatus(friend.presence);
+  const statusText = presenceText(status, now);
+  const live = status?.kind === 'workout' ? status.workout : null;
 
   return (
-    <li className={picking ? 'is-picking' : undefined}>
+    <li
+      className={
+        [picking && 'is-picking', live && 'is-live'].filter(Boolean).join(' ') || undefined
+      }
+    >
       <div className="friend-card-top">
         <button
           type="button"
           className="friend-card-person"
-          aria-label={`Open ${friend.display_name}'s profile`}
+          aria-label={`Open ${friend.display_name}'s profile${statusText ? `, ${statusText}` : ''}`}
           onClick={onOpen}
         >
-          <ProfileAvatar
-            className="shared-profile-avatar small"
-            user={{ ...friend, username: '' }}
-          />
+          <PresenceAvatar user={{ ...friend, username: '' }} status={status} />
           <span className="friend-card-name">
             <b>{friend.display_name}</b>
-            <small>{plural(friend.recent_workout_count, 'workout')} in the last 30 days</small>
+            {statusText ? (
+              <small className={`friend-status ${status?.kind}`}>{statusText}</small>
+            ) : (
+              <small>{plural(friend.recent_workout_count, 'workout')} in the last 30 days</small>
+            )}
           </span>
         </button>
         <span
           className="friend-week"
           role="img"
-          aria-label={`Trained on ${activeDays} of the last ${week.length} days`}
+          aria-label={`Trained on ${activeDays} of the last ${week.length} days${live ? ', training now' : ''}`}
         >
           {week.map((day) => (
             <span
               key={day}
               className={
-                [trained.has(day) && 'is-trained', day === today && 'is-today']
+                [
+                  trained.has(day) && 'is-trained',
+                  day === today && 'is-today',
+                  day === today && live && !trained.has(day) && 'is-live',
+                ]
                   .filter(Boolean)
                   .join(' ') || undefined
               }
@@ -84,7 +99,18 @@ function FriendCard({
           ))}
         </span>
       </div>
-      {latest && session && summary ? (
+      {live ? (
+        <div className="friend-card-latest is-live">
+          <span className="friend-activity-kind live">Live</span>
+          <span className="friend-card-session">
+            <span className="friend-card-title">{live.name}</span>
+            <span className="friend-activity-meta">
+              {live.kind === 'cardio' ? 'Cardio' : 'Strength'} ·{' '}
+              {workoutElapsed(live.started_at, now)} so far
+            </span>
+          </span>
+        </div>
+      ) : latest && session && summary ? (
         <div className="friend-card-latest">
           <span className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}>
             {session.cardio ? 'Cardio' : 'Strength'}
@@ -114,7 +140,10 @@ function FriendCard({
   );
 }
 
-/** Social's Friends tab: each friend once, most recently active first, with their latest session. */
+/**
+ * Social's Friends tab: each friend once with their latest session, or the workout they are doing
+ * now. Friends working out come first, then those online, then the most recently active.
+ */
 export function FriendsList({
   connections,
   state,
@@ -138,6 +167,7 @@ export function FriendsList({
 }) {
   const titleId = useId();
   const [picking, setPicking] = useState<string | null>(null);
+  const now = useNow(connections?.friends.some((friend) => friend.presence) ?? false);
 
   if (state === 'locked') return <SharingLocked onChooseSharing={onChooseSharing} />;
   if (!connections) {
@@ -149,7 +179,7 @@ export function FriendsList({
       </p>
     );
   }
-  const friends = connections.friends;
+  const friends = byLiveActivity(connections.friends, (friend) => friend.presence);
   return (
     <section className="pulse-card friends-list" aria-labelledby={titleId}>
       <header className="pulse-card-header">
@@ -173,6 +203,7 @@ export function FriendsList({
                 key={friend.id}
                 friend={friend}
                 today={today}
+                now={now}
                 picking={workoutId !== null && picking === workoutId}
                 onPickingChange={(open) =>
                   setPicking((current) =>

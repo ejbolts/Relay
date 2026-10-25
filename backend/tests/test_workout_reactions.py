@@ -67,6 +67,11 @@ def test_feed_shows_each_friends_latest_session(client, other_client, third_clie
         "id": other_client.user["id"],
         "display_name": "Other",
         "profile_photo_url": None,
+        "presence": {
+            "online": False,
+            "last_active_at": other["friend"]["presence"]["last_active_at"],
+            "workout": None,
+        },
     }
     # Notes stay hidden unless the owner shares them.
     assert other["workout"]["notes"] is None

@@ -2,6 +2,28 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.1.0
+
+26 October 2026
+
+### See when friends are training
+
+![Social Friends tab with Jordan Reid and Maya Chen working out at the top, each with a Live row showing the workout name and time so far, then Priya Patel active now and Leo Martins active 2h ago](screenshots/releases/1.1.0-friends-live-activity.png)
+
+_Friends working out move to the top with a **Live** row, the workout name and how long they have been training. Everyone else shows **Active now** or when they were last active. A friend who hides their status keeps the usual workout count. Every account here is synthetic._
+
+![Home's Recent Friends Activity with Jordan Reid and Maya Chen's live workouts first, followed by other friends' latest sessions and reaction buttons](screenshots/releases/1.1.0-home-live-workouts.png)
+
+_Home's Recent Friends Activity lists friends working out first, with their live workout in place of their last session._
+
+![Live activity in Profile sharing settings with Online status and Live workouts switched on and a preview showing Alex Sample as Active now](screenshots/releases/1.1.0-live-activity-settings.png)
+
+_**Live activity** has separate switches for **Online status** and **Live workouts**, with a preview of what friends see._
+
+- Friends shows when each friend is working out, active now or was last active. A friend's workout in progress moves to the top with a **Live** label, its name and how long they have been training, and stays while their phone is locked between sets. Changes appear as they happen.
+- Home's Recent Friends Activity lists friends working out first, showing their live workout in place of their last session until they finish.
+- **Settings > Account & privacy > Profile sharing** has a **Live activity** section with separate **Online status** and **Live workouts** switches and a preview of what friends see. Both start on, only accepted friends can see them, and turning one off hides it from friends straight away.
+
 ## 1.0.0
 
 25 October 2026

@@ -2,7 +2,14 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { friendSession, relativeDay } from './friendFeedData';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
-import { ProfileAvatar } from './ProfileAvatar';
+import { PresenceAvatar } from './PresenceAvatar';
+import {
+  byLiveActivity,
+  onFriendPresence,
+  presenceStatus,
+  useNow,
+  workoutElapsed,
+} from './presence';
 import type { FriendFeedItem, WorkoutReactions } from './types';
 import { localDate } from './utils';
 
@@ -12,7 +19,10 @@ type ActivityState =
   | { kind: 'error' }
   | { kind: 'ready'; items: FriendFeedItem[]; friends: number; with_sessions: number };
 
-/** Home's Friends card: each friend's latest session, with one button to react to it. */
+/**
+ * Home's Friends card: each friend's latest session, with one button to react to it. Friends
+ * working out now come first, showing the workout in progress instead.
+ */
 export function FriendsActivityCard({
   active,
   onOpenFriend,
@@ -83,6 +93,28 @@ export function FriendsActivityCard({
     };
   }, [active]);
 
+  useEffect(
+    () =>
+      onFriendPresence((friendId, presence) =>
+        setState((current) =>
+          current.kind === 'ready'
+            ? {
+                ...current,
+                items: current.items.map((item) =>
+                  item.friend.id === friendId
+                    ? { ...item, friend: { ...item.friend, presence } }
+                    : item,
+                ),
+              }
+            : current,
+        ),
+      ),
+    [],
+  );
+  const items =
+    state.kind === 'ready' ? byLiveActivity(state.items, (item) => item.friend.presence) : [];
+  const now = useNow(items.some((item) => item.friend.presence?.workout));
+
   function updateReactions(workoutId: string, reactions: WorkoutReactions) {
     setState((current) =>
       current.kind === 'ready'
@@ -138,10 +170,12 @@ export function FriendsActivityCard({
         </p>
       ) : (
         <ul className={`friend-activity-list${picking ? ' is-picking' : ''}`}>
-          {state.items.map((item) => {
+          {items.map((item) => {
             const session = friendSession(item.workout);
             const open = picking === item.workout.id;
             const subject = `${item.friend.display_name}’s ${item.workout.name}`;
+            const status = presenceStatus(item.friend.presence);
+            const live = status?.kind === 'workout' ? status.workout : null;
             return (
               <li key={item.workout.id} className={open ? 'is-picking' : undefined}>
                 <button
@@ -149,40 +183,52 @@ export function FriendsActivityCard({
                   className="friend-activity-open"
                   onClick={() => onOpenFriend(item.friend)}
                 >
-                  <ProfileAvatar
-                    className="shared-profile-avatar small"
-                    user={{ ...item.friend, username: '' }}
-                  />
-                  <span className="friend-activity-copy">
-                    <b>{item.friend.display_name}</b>
-                    <span className="friend-activity-session">
-                      <span
-                        className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}
-                      >
-                        {session.cardio ? 'Cardio' : 'Strength'}
+                  <PresenceAvatar user={{ ...item.friend, username: '' }} status={status} />
+                  {live ? (
+                    <span className="friend-activity-copy">
+                      <b>{item.friend.display_name}</b>
+                      <span className="friend-activity-session">
+                        <span className="friend-activity-kind live">Live</span>
+                        <span className="friend-activity-title">{live.name}</span>
                       </span>
-                      <span className="friend-activity-title">{session.title}</span>
+                      <span className="friend-activity-meta is-live">
+                        Working out · {workoutElapsed(live.started_at, now)}
+                      </span>
                     </span>
-                    <span className="friend-activity-meta">
-                      {[relativeDay(item.workout.workout_date, today), session.detail]
-                        .filter(Boolean)
-                        .join(' · ')}
+                  ) : (
+                    <span className="friend-activity-copy">
+                      <b>{item.friend.display_name}</b>
+                      <span className="friend-activity-session">
+                        <span
+                          className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}
+                        >
+                          {session.cardio ? 'Cardio' : 'Strength'}
+                        </span>
+                        <span className="friend-activity-title">{session.title}</span>
+                      </span>
+                      <span className="friend-activity-meta">
+                        {[relativeDay(item.workout.workout_date, today), session.detail]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </button>
-                <WorkoutReactionControl
-                  onOpenMember={onOpenFriend}
-                  workoutId={item.workout.id}
-                  subject={subject}
-                  reactions={item.reactions}
-                  open={open}
-                  onOpenChange={(value) =>
-                    setPicking((current) =>
-                      value ? item.workout.id : current === item.workout.id ? null : current,
-                    )
-                  }
-                  onChange={(value) => updateReactions(item.workout.id, value)}
-                />
+                {!live && (
+                  <WorkoutReactionControl
+                    onOpenMember={onOpenFriend}
+                    workoutId={item.workout.id}
+                    subject={subject}
+                    reactions={item.reactions}
+                    open={open}
+                    onOpenChange={(value) =>
+                      setPicking((current) =>
+                        value ? item.workout.id : current === item.workout.id ? null : current,
+                      )
+                    }
+                    onChange={(value) => updateReactions(item.workout.id, value)}
+                  />
+                )}
               </li>
             );
           })}

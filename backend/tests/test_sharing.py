@@ -231,15 +231,18 @@ def add_training_history(test_client: TestClient) -> dict:
 
 
 def test_new_accounts_start_public_and_keep_choices(client):
+    live_activity = {"share_online_status": True, "share_live_workouts": True}
     assert client.get("/api/sharing").json() == {
         "visibility": "public",
         **NOTHING_EXTRA,
+        **live_activity,
         "pending_requests": 0,
     }
     saved = share(client, "followers", share_goals=True)
     assert saved == {
         "visibility": "followers",
         **NOTHING_EXTRA,
+        **live_activity,
         "share_goals": True,
         "pending_requests": 0,
     }
