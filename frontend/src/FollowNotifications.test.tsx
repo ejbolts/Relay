@@ -3,6 +3,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
+import metadata from '../release.json';
+import { ReleaseAnnouncement } from './ReleaseAnnouncement';
+import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
+import { rememberRelease } from './releaseAnnouncements';
+import { useReleaseAnnouncement } from './useReleaseAnnouncement';
+import { formatReleaseVersion } from './releaseMetadata';
 import { FollowNotifications, NOTIFICATIONS_PER_PAGE } from './FollowNotifications';
 import {
   markNotificationSnapshotRead,
@@ -59,6 +65,98 @@ async function click(label: string) {
 async function render() {
   await act(async () => root.render(<FollowNotifications active />));
 }
+
+function ReleaseInbox({
+  userId,
+  secondHeader = false,
+}: {
+  userId: string;
+  secondHeader?: boolean;
+}) {
+  const announcement = useReleaseAnnouncement(userId);
+  return (
+    <ReleaseAnnouncementContext.Provider value={announcement}>
+      {announcement.open && (
+        <ReleaseAnnouncement release={announcement.release} onClose={announcement.dismiss} />
+      )}
+      <FollowNotifications active />
+      {secondHeader && <FollowNotifications active={false} />}
+    </ReleaseAnnouncementContext.Provider>
+  );
+}
+
+async function releaseInbox(userId: string, secondHeader = false) {
+  // The automatic announcement was already dismissed; the inbox notice still awaits View.
+  rememberRelease(userId, metadata.version);
+  await act(async () => root.render(<ReleaseInbox userId={userId} secondHeader={secondHeader} />));
+}
+
+it('keeps the release unread on opening, opens its notes with View, and retains the read row across headers and remounts', async () => {
+  await releaseInbox('inbox-view-sample', true);
+  expect(host.querySelectorAll('[aria-label="Notifications, 1 unread"]')).toHaveLength(2);
+  await click('Notifications, 1 unread');
+  const row = document.querySelector('.release-notification-row')!;
+  expect(row.textContent).toContain(`Relay ${metadata.version}`);
+  expect(row.textContent).toContain(metadata.title);
+  expect(row.querySelector('time')?.dateTime).toBe(metadata.date);
+  expect(row.querySelector('.release-notification-new')?.textContent).toBe('New');
+  expect(document.querySelector('.shared-card-empty')).toBeNull();
+  expect(api.sharing.markNotificationsRead).not.toHaveBeenCalled();
+  await click('Close Notifications');
+  await click('Notifications, 1 unread');
+  expect(document.querySelector('.release-notification-new')).not.toBeNull();
+
+  await click(`View Relay ${metadata.version} release notes`);
+  expect(document.querySelector('.follow-notifications')).toBeNull();
+  expect(document.querySelectorAll('dialog')).toHaveLength(1);
+  expect(document.querySelector('.release-announcement h3')?.textContent).toBe(metadata.title);
+  expect(host.querySelectorAll('[aria-label="Notifications"]')).toHaveLength(2);
+  await click(`Close Version ${formatReleaseVersion(metadata.version)}`);
+  expect(document.querySelectorAll('dialog')).toHaveLength(1);
+  expect(document.querySelector('.follow-notifications')).not.toBeNull();
+  await click('Close Notifications');
+  await click('Notifications');
+  expect(document.querySelector('.release-notification-row')).not.toBeNull();
+  expect(document.querySelector('.release-notification-new')).toBeNull();
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await releaseInbox('inbox-view-sample');
+  await click('Notifications');
+  expect(document.querySelector('.release-notification-row')).not.toBeNull();
+  expect(document.querySelector('.release-notification-new')).toBeNull();
+});
+
+it('counts the release in the 15-row page but only acknowledges displayed social events', async () => {
+  snapshot = {
+    requests: Array.from({ length: 15 }, (_, index) => ({ ...person, id: `request-${index}` })),
+    accepted: [],
+  };
+  await releaseInbox('inbox-pagination-sample');
+  await click('Notifications, 16 unread');
+  const rows = () => document.querySelectorAll('.follow-notification-list > li');
+  expect(rows()).toHaveLength(15);
+  expect(rows()[0].classList.contains('release-notification-row')).toBe(true);
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toHaveLength(14);
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(1);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 2 unread');
+  await click('Next notifications page');
+  expect(rows()).toHaveLength(1);
+  expect(document.querySelector('.release-notification-row')).toBeNull();
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toHaveLength(1);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
+});
+
+it('keeps the installed release accessible when social notifications fail', async () => {
+  vi.mocked(api.sharing.notifications).mockRejectedValue(new Error('Offline'));
+  await releaseInbox('inbox-offline-sample');
+  await click('Notifications, 1 unread');
+  expect(document.querySelector('[role="alert"]')).not.toBeNull();
+  expect(document.querySelector('.release-notification-row')).not.toBeNull();
+  await click(`View Relay ${metadata.version} release notes`);
+  expect(document.querySelector('.release-announcement h3')?.textContent).toBe(metadata.title);
+});
+
 it('reads requests, accepted requests and reactions on open without removing their contents or adding Dismiss buttons', async () => {
   snapshot = { requests: [person], accepted: [{ ...person, id: 'riley' }], reactions: [reaction] };
   const accept = vi.spyOn(api.sharing, 'acceptFriend').mockResolvedValue({ status: 'friends' });

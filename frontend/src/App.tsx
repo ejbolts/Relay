@@ -7,6 +7,7 @@ import {
 import {
   Fragment,
   useCallback,
+  useContext,
   startTransition,
   useEffect,
   useMemo,
@@ -108,6 +109,7 @@ import {
 import { machineDate, machineUsedShort } from './machineHistory';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { useReleaseAnnouncement } from './useReleaseAnnouncement';
+import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { AppUpdateCheck } from './AppUpdateCheck';
@@ -526,10 +528,14 @@ function WorkoutCompletionToast({
 }
 
 export function App() {
+  const { user } = useUserSession();
+  const announcement = useReleaseAnnouncement(user?.id ?? null);
   return (
     <TrainingPreferencesProvider>
       <WorkoutTypesProvider>
-        <AppContent />
+        <ReleaseAnnouncementContext.Provider value={announcement}>
+          <AppContent />
+        </ReleaseAnnouncementContext.Provider>
       </WorkoutTypesProvider>
     </TrainingPreferencesProvider>
   );
@@ -542,7 +548,7 @@ function AppContent() {
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
   const { user, signingIn = false } = useUserSession();
-  const announcement = useReleaseAnnouncement(user?.id ?? null);
+  const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
   const [guideWaiting, setGuideWaiting] = useState(() => user !== null && appGuideWaiting(user.id));

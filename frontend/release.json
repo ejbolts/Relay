@@ -1,19 +1,28 @@
 {
   "version": "1.0.1",
   "date": "2026-10-25",
-  "title": "Rest alerts, activity times and Settings",
-  "summary": "Get rest-complete alerts while browsing Relay, see when friends logged their sessions, and open All settings from the Settings icon.",
+  "title": "Rest alerts and everyday fixes",
+  "summary": "Open the latest release from Notifications, get rest-complete alerts while browsing Relay, see friends? logged times, and open All settings from the Settings icon.",
   "changes": [
+    "Notifications includes a Relay release row with its version, title, date and View button. View opens What?s new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
     "Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.",
     "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.",
     "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/5dd30b6a88a9f4c3950a526c3fa3c6a4f87c02f9/docs/screenshots/releases/1.0.1-rest-complete.png",
-    "alt": "Rest complete appears above Body while a synthetic workout remains active, after dismissing the countdown and leaving the workout screen."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/b217f9b47a27930ca7e340f29cdb706002791daa/docs/screenshots/releases/1.0.1-release-notification.png",
+    "alt": "Notifications with a Relay 1.0.1 release row, New indicator, title, date and View button, above synthetic friend activity."
   },
   "highlights": [
+    {
+      "title": "Release notes in Notifications",
+      "description": "The latest Relay release has its own inbox row. Tap View for What?s new; closing the notes returns to the inbox. New clears after viewing and the row stays available.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b217f9b47a27930ca7e340f29cdb706002791daa/docs/screenshots/releases/1.0.1-release-notification.png",
+        "alt": "Notifications with a Relay 1.0.1 release row, New indicator, title, date and View button, above synthetic friend activity."
+      }
+    },
     {
       "title": "Rest alerts while you browse",
       "description": "Rest complete appears above your current screen, even after dismissing the countdown. The alert leaves navigation available; background phone notifications keep their existing delivery path.",
