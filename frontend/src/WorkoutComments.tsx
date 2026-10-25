@@ -4,7 +4,7 @@ import { authErrorMessage } from './authForm';
 import { REACTIONS, reactionEmoji } from './friendFeedData';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
-import type { WorkoutComment, WorkoutReactionKind, WorkoutReactions } from './types';
+import type { WorkoutComment, WorkoutReactions } from './types';
 
 export function WorkoutComments({
   workoutId,
@@ -25,7 +25,6 @@ export function WorkoutComments({
   const [body, setBody] = useState('');
   const [reply, setReply] = useState<WorkoutComment | null>(null);
   const [editing, setEditing] = useState<WorkoutComment | null>(null);
-  const [reaction, setReaction] = useState<WorkoutReactionKind | null>(null);
   const [picker, setPicker] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<WorkoutComment | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -308,29 +307,14 @@ export function WorkoutComments({
           if (!body.trim() || Array.from(body).length > 280) return;
           void run(async () => {
             if (editing) await api.sharing.editComment(editing.id, body);
-            else await api.sharing.addComment(workoutId, body, reply?.id ?? null, reaction);
+            else await api.sharing.addComment(workoutId, body, reply?.id ?? null, null);
             setBody('');
             setReply(null);
             setEditing(null);
-            setReaction(null);
             await refresh();
           });
         }}
       >
-        {!editing && (
-          <select
-            aria-label="Comment reaction"
-            value={reaction ?? ''}
-            onChange={(event) => setReaction((event.target.value as WorkoutReactionKind) || null)}
-          >
-            <option value="">☺</option>
-            {REACTIONS.map((rx) => (
-              <option key={rx.kind} value={rx.kind}>
-                {rx.emoji} {rx.label}
-              </option>
-            ))}
-          </select>
-        )}
         <textarea
           ref={input}
           aria-label="Comment"
