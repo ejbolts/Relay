@@ -318,12 +318,6 @@
   font-weight: 650;
 }
 
-.shared-preview-note {
-  margin: 0 !important;
-  color: var(--p-accent-text) !important;
-  font-size: 0.75rem !important;
-}
-
 .shared-card .shared-stat-row {
   margin-bottom: 0.75rem;
 }

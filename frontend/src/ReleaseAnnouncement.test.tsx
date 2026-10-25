@@ -24,6 +24,9 @@ describe('release popup', () => {
     expect(markup).toContain('<dialog');
     expect(markup).toContain('aria-modal="true"');
     expect(markup).toContain(`>Version ${metadata.version}</h2>`);
+    expect(markup).toContain(
+      '<svg class="release-confetti" viewBox="0 0 24 24" aria-hidden="true"',
+    );
     expect(markup).toContain(renderToStaticMarkup(<h3>{metadata.title}</h3>));
     expect(markup).toContain(metadata.summary);
     expect(markup.match(/<li>/g)).toHaveLength(metadata.changes.length);

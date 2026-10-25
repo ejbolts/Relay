@@ -160,7 +160,7 @@ describe('cardio weekly trend screen', () => {
         '1 session',
       );
       await click(named('Calories'));
-      expect(hero()).toContain('300 kcal');
+      expect(hero()).toContain('300 kcal burnt');
     },
   );
 

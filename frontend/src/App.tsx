@@ -7185,7 +7185,7 @@ function SettingsScreen({
           },
           {
             id: 'help',
-            icon: 'heart',
+            icon: 'help',
             description: 'App guides, installation, updates and feedback.',
             content: (
               <>

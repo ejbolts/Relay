@@ -4207,6 +4207,12 @@ body:has(.popup-dialog[open]) {
   font-size: 1.12rem;
 }
 
+.popup-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .popup-dialog-close {
   width: 2.6rem;
   height: 2.6rem;

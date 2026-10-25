@@ -8,6 +8,40 @@ import {
   type ReleaseVideo,
 } from './releaseMetadata';
 
+/** A small party popper beside the version in the What's new header. */
+function ReleaseConfetti() {
+  return (
+    <svg className="release-confetti" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path className="release-confetti-cone" d="M2.8 21.2 7.5 9.3l7.2 7.2z" />
+      <path className="release-confetti-stripe" d="M5.1 15.3l3.6 3.6M6.4 12l5.6 5.6" />
+      <path
+        className="release-confetti-streamer"
+        d="M10.2 8.6c-.4-2.4 1-4 3.2-3.8M15.4 13.8c2.4.4 4-1 3.8-3.2"
+      />
+      <circle className="release-confetti-blue" cx="16.6" cy="3.6" r="1.2" />
+      <circle className="release-confetti-green" cx="20.6" cy="8" r="1.1" />
+      <rect
+        className="release-confetti-pink"
+        x="18.4"
+        y="14.6"
+        width="2.4"
+        height="2.4"
+        rx=".5"
+        transform="rotate(25 19.6 15.8)"
+      />
+      <rect
+        className="release-confetti-gold"
+        x="11.2"
+        y="1.4"
+        width="2"
+        height="2"
+        rx=".4"
+        transform="rotate(-20 12.2 2.4)"
+      />
+    </svg>
+  );
+}
+
 function ReleaseDate({ release }: { release: Release }) {
   return release.date ? (
     <time className="release-date" dateTime={release.date}>
@@ -184,6 +218,7 @@ export function ReleaseAnnouncement({
   return (
     <PopupDialog
       title={`Version ${release.version}`}
+      titleBadge={<ReleaseConfetti />}
       kicker="WHAT'S NEW"
       className="release-announcement"
       onClose={onClose}

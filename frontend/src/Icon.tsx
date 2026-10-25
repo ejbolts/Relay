@@ -44,6 +44,8 @@ const PATHS = {
     'M7.5 4h9A3.5 3.5 0 0 1 20 7.5v9a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5v-9A3.5 3.5 0 0 1 7.5 4zM12 9v6M9 12h6',
   // Two level lines, for a maintain-weight goal.
   level: 'M5.5 9.5h13M5.5 14.5h13',
+  // A question mark in a circle, for help.
+  help: 'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 16.6h.01',
   heart: 'M20.5 5.5a5 5 0 0 0-7 0L12 7l-1.5-1.5a5 5 0 0 0-7 7L12 21l8.5-8.5a5 5 0 0 0 0-7z',
   // A smiling face with a plus, for adding a reaction.
   react:

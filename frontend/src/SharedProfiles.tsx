@@ -1138,11 +1138,6 @@ export function SharedProfileScreen({
     ownProfile?.user.id === profileId ? (
       <ProfileIdentity user={ownProfile.user} onSaved={ownProfile.onSaved}>
         {profile?.is_you && <ProfileStats profile={profile} />}
-        {profile?.is_you && profile.visibility !== 'private' && (
-          <p className="shared-preview-note">
-            This is the training you share with members who can view your profile.
-          </p>
-        )}
       </ProfileIdentity>
     ) : null;
 
@@ -1234,11 +1229,6 @@ export function SharedProfileScreen({
           </div>
           <ProfileAccountId accountId={profile.id} />
           <ProfileStats profile={profile} />
-          {profile.is_you && (
-            <p className="shared-preview-note">
-              This is what members who can see your profile see. Sharing is managed in Settings.
-            </p>
-          )}
         </section>
       )}
       {!profile.can_view ? (
