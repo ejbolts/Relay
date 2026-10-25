@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api } from './api';
+import * as push from './push';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import {
   readActiveWorkoutDraft,
@@ -382,6 +383,87 @@ describe('rest time controls', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
+
+  async function startRest(serverScheduled = false) {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    vi.spyOn(push, 'pushNotificationsSupported').mockReturnValue(serverScheduled);
+    vi.spyOn(push, 'existingPhonePushSubscription').mockResolvedValue(
+      serverScheduled
+        ? ({ endpoint: 'https://push.example.com/sample' } as PushSubscription)
+        : null,
+    );
+    vi.spyOn(api, 'scheduleRestTimerNotification').mockResolvedValue(undefined);
+    vi.spyOn(api, 'scheduleActiveWorkoutReminder').mockResolvedValue(undefined);
+    vi.spyOn(api, 'cancelActiveWorkoutReminder').mockResolvedValue(undefined);
+    const systemNotification = vi
+      .spyOn(push, 'showRestTimerNotification')
+      .mockResolvedValue(undefined);
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].rest_seconds = 30;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await click('Complete set 1');
+    return systemNotification;
+  }
+
+  it.each([false, true])(
+    'alerts above other tabs after a dismissed countdown (server push scheduled: %s)',
+    async (scheduled) => {
+      const systemNotification = await startRest(scheduled);
+      await click('Dismiss rest timer popup and show it beside the live time');
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click(),
+      );
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.app-tab[data-guide-target="body"]')!.click(),
+      );
+      expect(window.location.hash).toBe('#body');
+      await act(async () => vi.advanceTimersByTimeAsync(30_000));
+      expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+        'Rest complete. Time for your next set.',
+      );
+      expect(systemNotification).not.toHaveBeenCalled();
+      if (scheduled) expect(api.scheduleRestTimerNotification).toHaveBeenCalled();
+      // Dismissal and returning focus must not announce the same timer a second time.
+      await act(async () =>
+        document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
+      );
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(document.querySelector('.app-notification-toast')).toBeNull();
+    },
+  );
+
+  it('does not announce a cancelled rest', async () => {
+    await startRest();
+    await click('Cancel rest timer');
+    await act(async () => vi.advanceTimersByTimeAsync(31_000));
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it.each([false, true])(
+    'preserves background notification delivery (server scheduled: %s)',
+    async (scheduled) => {
+      const systemNotification = await startRest(scheduled);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      await act(async () => vi.advanceTimersByTimeAsync(30_000));
+      expect(document.querySelector('.app-notification-toast')).toBeNull();
+      expect(systemNotification).toHaveBeenCalledTimes(scheduled ? 0 : 1);
+    },
+  );
+
+  it('checks an overdue timer immediately when the visible app regains focus', async () => {
+    await startRest();
+    vi.setSystemTime(Date.now() + 31_000);
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Rest complete',
+    );
+  });
 
   it('removes only a rest, offers Undo, persists removal and restores it only on a saved edit', async () => {
     vi.useFakeTimers();

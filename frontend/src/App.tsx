@@ -663,6 +663,10 @@ function AppContent() {
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const notifyRestComplete = useCallback(
+    () => setMessage('Rest complete. Time for your next set.'),
+    [],
+  );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [workoutSaving, setWorkoutSaving] = useState(false);
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
@@ -1610,6 +1614,7 @@ function AppContent() {
                         onRestTimerChange={
                           editingWorkout || viewedWorkout ? undefined : setRestEndsAt
                         }
+                        onRestTimerComplete={notifyRestComplete}
                         onClose={navigateBack}
                         onDelete={() => {
                           if (workoutSaving) return;
@@ -2258,6 +2263,7 @@ function WorkoutLogger({
   onClose,
   onDelete,
   onRestTimerChange,
+  onRestTimerComplete,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
@@ -2287,6 +2293,7 @@ function WorkoutLogger({
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
+  onRestTimerComplete: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const restoredDraft = useState(() => (initialWorkout ? null : readActiveWorkoutDraft()))[0];
@@ -2619,20 +2626,27 @@ function WorkoutLogger({
 
   useEffect(() => {
     if (restLeft <= 0) return;
-    const interval = window.setInterval(() => {
+    const tick = () => {
       const active = activeRestTimerRef.current;
       if (!active) return;
       const next = restSecondsLeft(active.endsAt);
-      setRestLeft((current) => {
-        if (next === 0 && current > 0) {
-          activeRestTimerRef.current = null;
-          if (!active.serverScheduled) void showRestTimerNotification();
-        }
-        return next;
-      });
-    }, 500);
-    return () => window.clearInterval(interval);
-  }, [restLeft]);
+      setRestLeft(next);
+      if (next > 0) return;
+      activeRestTimerRef.current = null;
+      setRestPopupOpen(false);
+      onRestTimerChange?.(null);
+      if (document.visibilityState === 'visible') onRestTimerComplete();
+      else if (!active.serverScheduled) void showRestTimerNotification().catch(() => undefined);
+    };
+    const interval = window.setInterval(tick, 500);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+    };
+  }, [restLeft, onRestTimerChange, onRestTimerComplete]);
 
   const [undoDeletion, setUndoDeletion] = useState<{
     kind: 'set' | 'rest';
@@ -2935,7 +2949,7 @@ function WorkoutLogger({
     if (endpoint) scheduleRestTimerPush(timer, endpoint);
   }
 
-  function cancelRestTimer() {
+  const cancelRestTimer = useCallback(() => {
     const timer = activeRestTimerRef.current;
     activeRestTimerRef.current = null;
     setRestLeft(0);
@@ -2948,7 +2962,7 @@ function WorkoutLogger({
         api.cancelRestTimerNotification({ endpoint, timer_id: timer.id });
       void cancelRestTimerPushSchedule(cancelServerTimer, timer.pendingSchedules);
     }
-  }
+  }, [onRestTimerChange]);
 
   function skipRestTimer() {
     cancelRestTimer();
@@ -2957,7 +2971,7 @@ function WorkoutLogger({
   useEffect(() => {
     if (restTimerEnabled) return;
     cancelRestTimer();
-  }, [restTimerEnabled]);
+  }, [restTimerEnabled, cancelRestTimer]);
 
   // A closed workout leaves no rest countdown on the tab bar.
   useEffect(() => () => onRestTimerChange?.(null), [onRestTimerChange]);

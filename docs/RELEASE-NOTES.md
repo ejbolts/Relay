@@ -6,12 +6,17 @@ _Relay was called Gym Logger before version 1.0._
 
 25 October 2026
 
-### Logged times in friend activity
+### Rest alerts and friend activity times
+
+![Rest complete appears over Body while a synthetic workout remains active](screenshots/releases/1.0.1-rest-complete.png)
+
+_A rest-complete alert appears above the current screen after the countdown has been dismissed. This example uses isolated sample data._
 
 ![Recent Friends Activity with local logged times beside Today for synthetic strength and cardio sessions](screenshots/releases/1.0.1-friend-logged-time.png)
 
 _Recent Friends Activity shows the original logged time beside each session's day label, using isolated sample accounts._
 
+- Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.
 - Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
 
 ## 1.0.0
