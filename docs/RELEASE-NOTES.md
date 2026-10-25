@@ -18,6 +18,10 @@ _The narrated Relay 1.0 trailer sits at the top of What's new. The first half in
 
 _Gym Logger is now Relay. The new name and icon appear when you sign in, in your browser tab, in notifications and on your Home Screen. Your account, training history and settings are unchanged._
 
+![Add to Home Screen guide linking to relayfitness.app and showing the new address in the Safari toolbar and share-sheet illustrations](screenshots/releases/1.0.0-home-screen-domain.png)
+
+_Start at **https://relayfitness.app**, then follow the illustrated Safari steps or the Android installation instructions. The guide uses the new address even when opened from a preview._
+
 ![Before and after navigation: History and Progress in 0.9.0 become Training and Social in 0.10.0](screenshots/releases/0.10.0-navigation-before-after.png)
 
 _History and Progress now live in Training, with Sessions, Exercises and Cardio together. Social gets its own bottom tab for Friends and Find. These are navigation crops from actual isolated sample-data screens in tagged 0.9.0 and pending 0.10.0._
@@ -75,7 +79,7 @@ _Previews use isolated synthetic accounts and training data. Each feature uses o
 ### A new name: Relay
 
 - **Relay:** Gym Logger is now called Relay, with a new blue R icon on sign-in, in the browser tab, in notifications, in the installed app and on the Home Screen guide. Accounts, training history, settings and sign-in are unchanged.
-- **Home Screen:** on iPhone, add the app to your Home Screen again to show the new name and icon.
+- **Home Screen:** start at **https://relayfitness.app**. The illustrated installation guide links to the new address and shows it in Safari’s toolbar and share sheet. On iPhone, add the app to your Home Screen again to show the new name and icon.
 - **Imports:** choose **Relay** for native workout and bodyweight CSVs, including files exported from Gym Logger. The CSV template downloads as `relay-workout-template.csv`.
 - **Repository:** the GitHub repository is now [ejbolts/Relay](https://github.com/ejbolts/Relay); links to the old name redirect.
 

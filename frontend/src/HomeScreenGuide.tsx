@@ -28,8 +28,8 @@ function SafariIcon({ name }: { name: keyof typeof SAFARI_PATHS }) {
   );
 }
 
-const APPLICATION_URL = 'https://gym-logger.duckdns.org';
-const APPLICATION_HOST = 'gym-logger.duckdns.org';
+const APPLICATION_URL = 'https://relayfitness.app';
+const APPLICATION_HOST = 'relayfitness.app';
 
 function ToolbarShot() {
   return (
