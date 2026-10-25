@@ -4517,6 +4517,7 @@ function MovementCard({
       <button
         type="button"
         className={`completed-set-value ${className}`}
+        data-rpe={field === 'rpe' ? (item.rpe ?? undefined) : undefined}
         aria-label={`${label} for set ${index + 1}`}
         onClick={(event) => {
           event.stopPropagation();
@@ -4638,6 +4639,7 @@ function MovementCard({
         )}
         <select
           data-set-field="rpe"
+          data-rpe={item.rpe ?? undefined}
           className={item.rpe === null ? 'is-empty' : ''}
           value={item.rpe ?? ''}
           onChange={(event) => onUpdateSet(item.key, { rpe: numberOrNull(event.target.value) })}
@@ -5014,6 +5016,7 @@ function MovementCard({
                 <div
                   className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
                   data-set-key={item.key}
+                  data-set-type={cardio ? 'normal' : setKindOf(item)}
                   data-expand-key={item.key}
                   data-expanded={open}
                 >

@@ -425,6 +425,79 @@ it('keeps settings search navigation working after the header resets a previous 
   await searchRest();
 });
 
+describe('RPE and set type presentation', () => {
+  async function click(label: string) {
+    const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+    expect(button).not.toBeNull();
+    await act(async () => button.click());
+  }
+
+  it('keeps edited RPE values on the number through folding, clearing and draft recovery', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].rpe = 9;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const summary = () => container.querySelector<HTMLButtonElement>('.completed-set-rpe')!;
+    expect(summary().textContent).toBe('9');
+    expect(summary().dataset.rpe).toBe('9');
+
+    for (const value of ['10', '9.5', '8', '6.5', '5', '']) {
+      await click('Edit RPE for set 1');
+      const editor = container.querySelector<HTMLSelectElement>('[data-set-field="rpe"]')!;
+      await act(async () => {
+        editor.value = value;
+        editor.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(editor.dataset.rpe).toBe(value || undefined);
+      expect(readActiveWorkoutDraft()?.movements[0].sets[0].rpe).toBe(value ? Number(value) : null);
+      await click('Done editing set 1');
+      expect(summary().textContent).toBe(value || '–');
+      expect(summary().dataset.rpe).toBe(value || undefined);
+      expect(container.querySelector('.set-details')?.getAttribute('data-set-type')).toBe('normal');
+    }
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(summary().textContent).toBe('–');
+    expect(summary().hasAttribute('data-rpe')).toBe(false);
+  });
+
+  it('keeps type and RPE independent when changing a completed set, reopening and unticking it', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].rpe = 10;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const row = () => container.querySelector<HTMLElement>('.set-details')!;
+    for (const [label, kind] of [
+      ['Warm-up', 'warmup'],
+      ['Drop set', 'drop'],
+      ['Failure', 'failure'],
+      ['Working set', 'normal'],
+    ]) {
+      await act(async () => row().querySelector<HTMLButtonElement>('.set-number-cell')!.click());
+      const option = [
+        ...container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+      ].find((button) => button.textContent?.endsWith(label))!;
+      await act(async () => option.click());
+      expect(row().dataset.setType).toBe(kind);
+      expect(row().classList.contains('completed')).toBe(true);
+      expect(row().querySelector<HTMLElement>('.completed-set-rpe')?.dataset.rpe).toBe('10');
+      expect(readActiveWorkoutDraft()?.movements[0].sets[0].rpe).toBe(10);
+      await click('Edit RPE for set 1');
+      expect(row().dataset.setType).toBe(kind);
+      expect(row().querySelector<HTMLElement>('[data-set-field="rpe"]')?.dataset.rpe).toBe('10');
+      await click('Done editing set 1');
+    }
+    await click('Mark set 1 incomplete');
+    expect(row().classList.contains('completed')).toBe(false);
+    expect(row().dataset.setType).toBe('normal');
+    expect(row().querySelector<HTMLElement>('[data-set-field="rpe"]')?.dataset.rpe).toBe('10');
+  });
+});
+
 describe('rest time controls', () => {
   function restControl() {
     return (

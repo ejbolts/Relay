@@ -4,9 +4,13 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.0.1
 
-25 October 2026
+26 October 2026
 
 ### Rest alerts and everyday fixes
+
+![Workout table with orange warm-up, green working, purple drop and red failure rows, plus coloured RPE numbers](screenshots/releases/1.0.1-rpe-set-colours.png)
+
+_Set type controls each row tint; RPE colours only the effort number, including while editing. This workout uses isolated sample data._
 
 ![Notifications includes a Relay release row with version, title, date, New and View above synthetic friend activity](screenshots/releases/1.0.1-release-notification.png)
 
@@ -33,6 +37,8 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 - Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
 - The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.
 - Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.
+- RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
+- Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 
 ## 1.0.0
 
