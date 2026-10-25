@@ -68,8 +68,8 @@
       "title": "Every workout, a conversation",
       "description": "Tap Comments for an inline conversation, or React for a quick reaction. Add up to 280 characters, reply with tappable @names, and react to comments. Replies and reactions appear in Notifications; existing sharing and block rules still apply.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Gym-logger/72ae786b6422a3d46c7bef2fa063b2b46b7ef490/docs/screenshots/releases/0.10.0-inline-comments.png",
-        "alt": "An inline workout conversation with nested replies, tappable mentions, comment reactions and the combined activity button, using synthetic accounts."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/40ca9f905830db61c687866d718801e158380906/docs/screenshots/releases/1.0.0-workout-comments.png",
+        "alt": "Casey Sample's Push day on Social with separate reaction and comments buttons and the inline thread open, using synthetic accounts."
       }
     },
     {
