@@ -537,6 +537,7 @@ export function App() {
 
 function AppContent() {
   const [settingsJump, setSettingsJump] = useState<SettingsJump | null>(null);
+  const settingsJumpSerial = useRef(0);
   const [settingsGroup, setSettingsGroup] = useState<SettingsGroupId | null>(() =>
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
@@ -1238,8 +1239,14 @@ function AppContent() {
   }
 
   function openSetting(destination: SettingsDestination) {
-    setSettingsJump((current) => ({ destination, serial: (current?.serial ?? 0) + 1 }));
+    setSettingsJump({ destination, serial: ++settingsJumpSerial.current });
     setTab(destination.page);
+  }
+
+  function openAllSettings() {
+    setSettingsJump(null);
+    setSettingsGroup(null);
+    setTab('settings');
   }
 
   function updateReduceMotion(reduced: boolean) {
@@ -1449,9 +1456,7 @@ function AppContent() {
             subtitle={nestedHeader.subtitle}
             onBack={navigateBack}
             backLabel={tab === 'settings' && settingsGroup ? 'All settings' : undefined}
-            actions={
-              tab !== 'settings' ? <SettingsButton onClick={() => setTab('settings')} /> : undefined
-            }
+            actions={tab !== 'settings' ? <SettingsButton onClick={openAllSettings} /> : undefined}
           />
         )}
 
@@ -1523,7 +1528,7 @@ function AppContent() {
                   }
                   onOpenCardio={() => openHistorySection('cardio')}
                   onOpenBody={() => setTab('body')}
-                  onOpenSettings={() => setTab('settings')}
+                  onOpenSettings={openAllSettings}
                   onOpenVideos={videosAllowed ? () => setTab('videos') : undefined}
                   onOpenProfile={user ? () => setTab('profile') : undefined}
                   profileLabel={user?.display_name}
@@ -1672,7 +1677,7 @@ function AppContent() {
                 onDelete={deleteMeasurement}
                 onDataChange={refreshAfterMutation}
                 trendPreference={bodyTrendPreference}
-                onOpenSettings={() => setTab('settings')}
+                onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(tab === 'body')}
               />
             </CachedTabPanel>
@@ -1694,7 +1699,7 @@ function AppContent() {
                 initialOpenId={historyOpenId}
                 section={historySection}
                 onSectionChange={(section) => setTab(section)}
-                onOpenSettings={() => setTab('settings')}
+                onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(sectionFromTab !== null)}
                 onOpenExercise={(exerciseId) => openHistorySection('progress', exerciseId)}
                 onOpenWorkout={openSavedWorkout}
@@ -1765,7 +1770,7 @@ function AppContent() {
                 onOpenProfile={openSharedProfile}
                 onOpenOwnProfile={() => setTab('profile')}
                 onChooseSharing={openSharingSettings}
-                onOpenSettings={() => setTab('settings')}
+                onOpenSettings={openAllSettings}
               />
             </CachedTabPanel>
           )}

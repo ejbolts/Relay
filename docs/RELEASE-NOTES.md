@@ -6,7 +6,7 @@ _Relay was called Gym Logger before version 1.0._
 
 25 October 2026
 
-### Rest alerts and friend activity times
+### Rest alerts, activity times and Settings
 
 ![Rest complete appears over Body while a synthetic workout remains active](screenshots/releases/1.0.1-rest-complete.png)
 
@@ -16,8 +16,13 @@ _A rest-complete alert appears above the current screen after the countdown has 
 
 _Recent Friends Activity shows the original logged time beside each session's day label, using isolated sample accounts._
 
+![All settings overview after reopening Settings from another screen, using a synthetic account](screenshots/releases/1.0.1-all-settings.png)
+
+_The Settings icon returns to the overview after a previous visit to Appearance._
+
 - Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.
 - Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
+- The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.
 
 ## 1.0.0
 

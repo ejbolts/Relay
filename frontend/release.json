@@ -1,11 +1,12 @@
 {
   "version": "1.0.1",
   "date": "2026-10-25",
-  "title": "Rest alerts and friend activity times",
-  "summary": "Get a rest-complete alert while using Relay, and see when friends logged their sessions.",
+  "title": "Rest alerts, activity times and Settings",
+  "summary": "Get rest-complete alerts while browsing Relay, see when friends logged their sessions, and open All settings from the Settings icon.",
   "changes": [
     "Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.",
-    "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time."
+    "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.",
+    "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
   "image": {
@@ -27,6 +28,14 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/e31794bde860086321cbf3c44cca4b1729b3df3e/docs/screenshots/releases/1.0.1-friend-logged-time.png",
         "alt": "Recent Friends Activity showing local logged times beside Today for synthetic strength and cardio sessions."
+      }
+    },
+    {
+      "title": "Settings starts at the overview",
+      "description": "Tap the top-right Settings icon to open All settings, even after visiting another section. Search still takes you straight to the selected control.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e90b4f322f66a6527da1875d81a88827cc5aea16/docs/screenshots/releases/1.0.1-all-settings.png",
+        "alt": "All settings overview after reopening Settings from another screen, using a synthetic account."
       }
     }
   ]

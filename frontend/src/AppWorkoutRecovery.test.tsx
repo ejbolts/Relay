@@ -361,6 +361,70 @@ it('uses the top header to return from settings sections before leaving settings
   expect(window.location.hash).toBe('#dashboard');
 });
 
+it.each(['Home', 'Training', 'Body'])(
+  'opens All settings from the %s header after visiting a section',
+  async (page) => {
+    window.history.replaceState(null, '', '#settings');
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    await mount();
+    const appearance = [
+      ...container.querySelectorAll<HTMLButtonElement>('.settings-category-card'),
+    ].find((button) => button.textContent?.includes('Appearance'))!;
+    await act(async () => appearance.click());
+    expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(true);
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('nav[aria-label="Main navigation"] button')]
+        .find((button) => button.textContent?.trim() === page)!
+        .click(),
+    );
+    const settings = [
+      ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Settings"]'),
+    ].find((button) => !button.closest('[hidden]'))!;
+    expect(settings).toBeDefined();
+    await act(async () => settings.click());
+    expect(window.location.hash).toBe('#settings');
+    expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);
+    expect(container.querySelector('.overlay-header-back')?.getAttribute('aria-label')).toBe(
+      'Go back',
+    );
+  },
+);
+
+it('keeps settings search navigation working after the header resets a previous search jump', async () => {
+  window.history.replaceState(null, '', '#settings');
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  await mount();
+  const searchRest = async () => {
+    const input = container.querySelector<HTMLInputElement>('.settings-search input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Rest timer',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const result = [
+      ...container.querySelectorAll<HTMLButtonElement>('.settings-search button'),
+    ].find((button) => button.querySelector('strong')?.textContent === 'Rest timer')!;
+    await act(async () => result.click());
+    expect(container.querySelector('.settings-hub')?.classList.contains('has-selection')).toBe(
+      true,
+    );
+    expect(
+      container.querySelector('[data-settings-group="training"]')?.hasAttribute('hidden'),
+    ).toBe(false);
+  };
+  await searchRest();
+  await navigateTo('Body');
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Settings"]')]
+      .find((button) => !button.closest('[hidden]'))!
+      .click(),
+  );
+  expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);
+  await searchRest();
+});
+
 describe('rest time controls', () => {
   function restControl() {
     return (
