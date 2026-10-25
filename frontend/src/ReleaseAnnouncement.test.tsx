@@ -19,11 +19,11 @@ afterEach(() => vi.unstubAllGlobals());
 describe('release popup', () => {
   it('shows the version, notes, safe GitHub link and accessible dismissal controls', () => {
     const markup = renderToStaticMarkup(
-      <ReleaseAnnouncement release={metadata} onClose={vi.fn()} />,
+      <ReleaseAnnouncement release={{ ...metadata, version: '1.0.0' }} onClose={vi.fn()} />,
     );
     expect(markup).toContain('<dialog');
     expect(markup).toContain('aria-modal="true"');
-    expect(markup).toContain(`>Version ${metadata.version}</h2>`);
+    expect(markup).toContain('>Version 1.0</h2>');
     expect(markup).toContain(
       '<svg class="release-confetti" viewBox="0 0 24 24" aria-hidden="true"',
     );
@@ -32,7 +32,7 @@ describe('release popup', () => {
     expect(markup.match(/<li>/g)).toHaveLength(metadata.changes.length);
     expect(markup).toContain(`href="${metadata.url}"`);
     expect(markup).toContain('target="_blank" rel="noopener noreferrer"');
-    expect(markup).toContain(`aria-label="Close Version ${metadata.version}"`);
+    expect(markup).toContain('aria-label="Close Version 1.0"');
     expect(markup).toContain('>Got it</button>');
   });
 

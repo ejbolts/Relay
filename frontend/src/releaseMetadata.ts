@@ -76,6 +76,11 @@ export function formatReleaseDate(date: string): string {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
+/** Shortens a `.0` patch release for headings, so 1.0.0 reads as 1.0. */
+export function formatReleaseVersion(version: string): string {
+  return version.replace(/^(\d+\.\d+)\.0$/, '$1');
+}
+
 /** Reject incomplete notes and unsafe links before displaying a server response. */
 export function parseRelease(value: unknown): Release | null {
   if (!value || typeof value !== 'object') return null;

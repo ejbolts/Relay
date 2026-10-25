@@ -27,7 +27,7 @@
     "Swipe down from the muscle details handle or header to close the sheet. You can also pull down on its content when the list is at the top; short pulls return to place and scrolling still works.",
     "Removed the redundant Contributing exercises heading and count from muscle details. Done, Escape and tapping outside still close the sheet.",
     "Past-workout exercise cards have more space between them in the view-only workout browser.",
-    "The What's new trailer waits for Play and starts with sound at 50% volume where supported. Your device volume still applies. A small confetti icon celebrates the version in the What's new header."
+    "The What's new trailer waits for Play and starts with sound at 50% volume where supported. Your device volume still applies. The What's new header shows the version as 1.0, with a small confetti icon beside it."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#100",
   "video": {

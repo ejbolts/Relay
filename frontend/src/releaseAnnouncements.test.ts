@@ -13,6 +13,7 @@ import {
   formatReleaseDate,
   parseRelease,
   parseReleaseHistory,
+  formatReleaseVersion,
 } from './releaseMetadata';
 
 const screenshot = {
@@ -136,6 +137,13 @@ describe('release announcements', () => {
     expect(history.map((release) => release.version)).not.toContain(metadata.version);
     expect(compareVersions('0.10.0', '0.9.9')).toBeGreaterThan(0);
     expect(compareVersions('1.2.3', '1.2.3')).toBe(0);
+  });
+
+  it('shortens only .0 patch releases in headings', () => {
+    expect(formatReleaseVersion('1.0.0')).toBe('1.0');
+    expect(formatReleaseVersion('0.10.0')).toBe('0.10');
+    expect(formatReleaseVersion('1.0.2')).toBe('1.0.2');
+    expect(formatReleaseVersion('2.0.0-beta.1')).toBe('2.0.0-beta.1');
   });
 
   it('rejects release history that is invalid, unordered, duplicated or not older', () => {

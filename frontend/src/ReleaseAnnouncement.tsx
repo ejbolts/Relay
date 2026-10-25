@@ -3,6 +3,7 @@ import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import {
   formatReleaseDate,
+  formatReleaseVersion,
   type Release,
   type ReleaseHighlight,
   type ReleaseVideo,
@@ -217,7 +218,7 @@ export function ReleaseAnnouncement({
 
   return (
     <PopupDialog
-      title={`Version ${release.version}`}
+      title={`Version ${formatReleaseVersion(release.version)}`}
       titleBadge={<ReleaseConfetti />}
       kicker="WHAT'S NEW"
       className="release-announcement"

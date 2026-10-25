@@ -10,7 +10,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ![The two-minute Relay 1.0 trailer: a Relay logo intro, a tour of Home, logging a workout with a rest timer and PR, exercise progress, the calendar, body trends, imports, friends and reactions, workout comments and live phone-to-desktop sync, then what's new since 0.9 in Training, Exercises, Cardio, the Social tab, background saves while switching tabs, Settings and profiles](screenshots/releases/1.0.0-trailer.gif)
 
-_The narrated Relay 1.0 trailer sits at the top of What's new. The first half introduces Relay to new members; the second half shows what's new since 0.9. Press Play to start with sound at 50% volume where supported; a small confetti icon sits beside the version in the header. This GIF is its silent preview. Every scene uses isolated synthetic accounts and training data._
+_The narrated Relay 1.0 trailer sits at the top of What's new. The first half introduces Relay to new members; the second half shows what's new since 0.9. Press Play to start with sound at 50% volume where supported; the header reads **Version 1.0** with a small confetti icon beside it. This GIF is its silent preview. Every scene uses isolated synthetic accounts and training data._
 
 [Watch the narrated trailer](../frontend/public/releases/1.0.0-trailer.mp4)
 
