@@ -8,7 +8,7 @@
     "Exercises opens on a searchable list with muscle-group filters, Recent first, A-Z and Most improved sorting, and eight-week estimated 1RM trends. Tap a lift for its focused chart, personal bests and sessions, with an exercise header and back arrow replacing the Training header and tabs. Session rows open the completed sets before Open workout, and returning to Exercises keeps your search, filter, sort, scroll, metric and range.",
     "Cardio has one weekly trend card for time, distance, MET-minutes and calories. Tap a week to see its stats, expand All stats for longer date ranges, and browse history grouped by week. Log session and Import screenshot are available directly above the chart.",
     "Follows are now friendships. Send a friend request, and once it is accepted you both see each other’s shared training. Requests always need accepting, even for public profiles. Existing follows in either direction became friendships, and waiting follow requests became friend requests.",
-    "Social has its own bottom tab. Friends shows each friend once with their latest session, a seven-day activity strip and a reaction button. Find holds friend requests, people search, requests you sent and blocked members. Remove or block a friend from their profile, and Social stays highlighted while you view it. Home keeps its compact friends card.",
+    "Social has its own bottom tab. Friends shows each friend once with their latest session, a seven-day activity strip labelled with each day's initial, and a reaction button. Find holds friend requests, people search, requests you sent and blocked members. Remove or block a friend from their profile, and Social stays highlighted while you view it. Home keeps its compact friends card.",
     "Open the combined reactions and comments button on a shared workout to read its inline thread. Add an optional workout reaction with a comment, reply with a tappable @name, and react to comments. Comments and replies allow up to 280 characters. Reply and comment-reaction notices appear in the notification bell. Authors can edit or delete their comments; workout owners can moderate them. Existing sharing, friendship and block rules still apply. Removed the redundant Find friends header link from Social; use the Find tab.",
     "Finish a workout or save an old session and keep navigating while the save completes. Routine notices and completion PRs no longer lock the page; failed saves retain your entries for retry and respect a screen you have moved to.",
     "Saved workouts, bodyweight, goals and cardio refresh automatically across signed-in devices. The visible app checks every five seconds and when you return or reconnect, refreshes changed data quietly, and preserves active workouts, unsaved edits and filters. In-progress workouts stay on the device where you are logging.",
@@ -50,8 +50,8 @@
       "title": "Friends, not followers",
       "description": "Send one friend request; once it is accepted you both see each other. Friends lists everyone once with their latest session and week. Find holds requests and people search.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Gym-logger/8b48cf8fa2a112899ecc6c7c248a1a7879315ce2/docs/screenshots/releases/0.10.0-social-friends.png",
-        "alt": "Social Friends tab listing synthetic friends once each, with a seven-day activity strip, latest session and reaction button."
+        "url": "https://raw.githubusercontent.com/ejbolts/Gym-logger/eb7ac22a30766d58e159573f512e9378de7e8eba/docs/screenshots/releases/0.10.0-social-friends-day-letters.png",
+        "alt": "Social Friends tab listing synthetic friends once each, with a seven-day activity strip labelled by day initial, latest session and reaction button."
       }
     },
     {

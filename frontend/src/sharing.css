@@ -1127,19 +1127,38 @@
 .friend-week {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 3px;
+  gap: 5px;
 }
 
 .friend-week > span {
-  width: 7px;
+  width: 13px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--p-muted) 60%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.friend-week > span::before {
+  content: '';
+  width: 9px;
   height: 18px;
   border-radius: 3px;
   background: var(--p-line-strong);
 }
 
 .friend-week > span.is-trained {
+  color: var(--p-accent-text);
+}
+
+.friend-week > span.is-trained::before {
   background: var(--p-accent);
+}
+
+.friend-week > span.is-today:not(.is-trained) {
+  color: var(--p-ink);
 }
 
 .friend-card-latest {

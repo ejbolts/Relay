@@ -18,6 +18,10 @@ function dayTitle(value: string): string {
   });
 }
 
+function dayLetter(value: string): string {
+  return parseLocalDate(value).toLocaleDateString('en-GB', { weekday: 'narrow' });
+}
+
 function FriendCard({
   friend,
   today,
@@ -68,9 +72,15 @@ function FriendCard({
           {week.map((day) => (
             <span
               key={day}
-              className={trained.has(day) ? 'is-trained' : undefined}
+              className={
+                [trained.has(day) && 'is-trained', day === today && 'is-today']
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
               title={dayTitle(day)}
-            />
+            >
+              {dayLetter(day)}
+            </span>
           ))}
         </span>
       </div>

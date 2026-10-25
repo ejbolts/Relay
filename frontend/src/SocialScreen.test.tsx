@@ -128,6 +128,13 @@ it('lists each friend once with their week and latest session, and opens their p
     'Trained on 2 of the last 7 days',
   );
   expect(cards[0].querySelectorAll('.friend-week .is-trained')).toHaveLength(2);
+  const days = [...cards[0].querySelectorAll<HTMLElement>('.friend-week > span')];
+  expect(days.map((day) => day.textContent)).toEqual(
+    week.map((day) =>
+      new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'narrow' }),
+    ),
+  );
+  expect(days.at(-1)?.className).toBe('is-trained is-today');
   expect(cards[0].querySelector('[aria-label="React to Alex Sample’s Upper body"]')).not.toBeNull();
   expect(cards[1].textContent).toContain('No sessions logged yet.');
   await click(labelled("Open Alex Sample's profile"));
