@@ -121,8 +121,8 @@ export async function showRestTimerNotification(): Promise<void> {
   const registration = await navigator.serviceWorker.ready;
   const options: NotificationOptions & { renotify: boolean } = {
     body: 'Time for your next set.',
-    icon: '/icon.svg',
-    badge: '/icon.svg',
+    icon: '/icon-192.png',
+    badge: '/badge.png',
     tag: 'rest-timer',
     renotify: true,
     data: { url: '/#log' },
@@ -140,8 +140,8 @@ export async function showWorkoutAutoSavedNotification(): Promise<void> {
   const registration = await navigator.serviceWorker.ready;
   const options: NotificationOptions & { renotify: boolean } = {
     body: 'Your inactive workout passed its time limit and was saved.',
-    icon: '/icon.svg',
-    badge: '/icon.svg',
+    icon: '/icon-192.png',
+    badge: '/badge.png',
     tag: 'workout-auto-saved',
     renotify: true,
     data: { url: '/#dashboard' },

@@ -1,12 +1,12 @@
 self.addEventListener('push', (event) => {
   const payload = event.data
     ? event.data.json()
-    : { title: 'Gym logger', body: 'Your workout video is ready.', url: '/' };
+    : { title: 'Relay', body: 'Your workout video is ready.', url: '/' };
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icon-192.png',
+      badge: '/badge.png',
       tag: payload.tag || undefined,
       renotify: Boolean(payload.tag),
       data: { url: payload.url || '/' },

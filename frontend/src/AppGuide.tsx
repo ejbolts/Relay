@@ -124,7 +124,7 @@ export function AppGuide({
               <Icon name={step?.icon ?? 'heart'} />
             </span>
             <h3 ref={titleRef} tabIndex={-1}>
-              {step?.title ?? 'Thanks for trying Gym Logger!'}
+              {step?.title ?? 'Thanks for trying Relay!'}
             </h3>
             <p>
               {step?.description ??
@@ -135,7 +135,7 @@ export function AppGuide({
             <>
               <FeedbackForm optional onSendingChange={setSendingFeedback} />
               <details className="guide-contribute">
-                <summary>Want to help build Gym Logger?</summary>
+                <summary>Want to help build Relay?</summary>
                 <p>
                   Check existing issues, discuss bigger changes first, then work on a focused branch
                   or fork. Use sample data, run the project checks and include screenshots for UI

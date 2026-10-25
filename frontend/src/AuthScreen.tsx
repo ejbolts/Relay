@@ -118,8 +118,8 @@ export function AuthBrand() {
   return (
     <header className="auth-brand">
       <div className="auth-brand-mark">
-        <img src="/icon.svg" alt="" width={72} height={72} />
-        <h1>Gym Logger</h1>
+        <img src="/relay-logo.png" alt="" width={72} height={72} />
+        <h1>Relay</h1>
       </div>
       <p>Log every set, track every PR.</p>
     </header>

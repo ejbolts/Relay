@@ -33,7 +33,7 @@ export function ImportHistoryPrompt({
           </h3>
           <p>
             Bring your workout CSV straight from Strength Level, Hevy or Strong, or use a
-            spreadsheet or Gym Logger export. Review it before saving so your charts, records and
+            spreadsheet or Relay export. Review it before saving so your charts, records and
             suggestions start from your real training.
           </p>
           <p className="import-history-later">

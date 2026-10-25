@@ -27,7 +27,7 @@ describe('home screen guide popup', () => {
       'Tap Share.',
       'Tap View More.',
       'Tap Add to Home Screen.',
-      'Tap Add, then open Gym Logger from your Home Screen.',
+      'Tap Add, then open Relay from your Home Screen.',
     ]);
     expect(markup.match(/class="home-guide-shot" aria-hidden="true"/g)).toHaveLength(5);
     expect(markup).toContain('href="https://gym-logger.duckdns.org"');

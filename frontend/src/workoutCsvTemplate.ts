@@ -28,7 +28,7 @@ export function downloadWorkoutCsvTemplate(unit: WeightUnit) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'gym-logger-workout-template.csv';
+  link.download = 'relay-workout-template.csv';
   document.body.appendChild(link);
   link.click();
   link.remove();

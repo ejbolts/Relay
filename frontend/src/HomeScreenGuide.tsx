@@ -82,7 +82,7 @@ function ShareSheetShot() {
       <div className="home-guide-sheet-title">
         <img src="/apple-touch-icon.png" alt="" width={34} height={34} />
         <span>
-          <strong>Gym Video Logger</strong>
+          <strong>Relay</strong>
           <small>{APPLICATION_HOST}</small>
         </span>
       </div>
@@ -131,7 +131,7 @@ function AddShot() {
       </div>
       <div className="home-guide-add-app">
         <img src="/apple-touch-icon.png" alt="" width={40} height={40} />
-        <span>Gym Logger</span>
+        <span>Relay</span>
       </div>
     </div>
   );
@@ -173,7 +173,7 @@ const STEPS: { text: ReactNode; shot: ReactNode }[] = [
   {
     text: (
       <>
-        Tap <strong>Add</strong>, then open Gym Logger from your Home Screen.
+        Tap <strong>Add</strong>, then open Relay from your Home Screen.
       </>
     ),
     shot: <AddShot />,
@@ -184,8 +184,8 @@ export function HomeScreenGuideContent() {
   return (
     <div className="home-guide-body">
       <p className="home-guide-intro" tabIndex={-1}>
-        Open Gym Logger like an app: full screen and one tap away. On iPhone, workout notifications
-        also need the Home Screen app.
+        Open Relay like an app: full screen and one tap away. On iPhone, workout notifications also
+        need the Home Screen app.
       </p>
       <p className="home-guide-site">
         Start at{' '}

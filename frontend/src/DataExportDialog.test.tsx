@@ -64,7 +64,7 @@ async function click(element: HTMLElement) {
   await act(async () => element.click());
 }
 
-describe('Gym Logger export choices', () => {
+describe('Relay export choices', () => {
   it('opens without exporting and Cancel never sends requests', async () => {
     expect(api.exportWorkouts).not.toHaveBeenCalled();
     await click([...document.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')!);

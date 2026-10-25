@@ -35,7 +35,8 @@
 .auth-brand img {
   width: 4.5rem;
   height: 4.5rem;
-  border-radius: 20px;
+  /* Matches the rounded tile drawn in the Relay logo artwork. */
+  border-radius: 21.4%;
   box-shadow: 0 10px 30px rgb(0 0 0 / 40%);
 }
 

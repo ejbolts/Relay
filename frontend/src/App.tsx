@@ -7210,7 +7210,7 @@ function SettingsScreen({
                   <p>
                     {runningAsInstalledApp()
                       ? 'You are already using the installed app. View the steps to set up another browser or device.'
-                      : 'Open Gym Logger full screen from an icon on your phone, like an app.'}
+                      : 'Open Relay full screen from an icon on your phone, like an app.'}
                   </p>
                 </section>
                 <section
@@ -7254,7 +7254,7 @@ function SettingsScreen({
                       View changes
                     </button>
                   </header>
-                  <p>Read the latest release notes and see what's changed in Gym Logger.</p>
+                  <p>Read the latest release notes and see what's changed in Relay.</p>
                   {updateCheck}
                 </section>
                 <section className="settings-panel panel" aria-labelledby="feedback-settings-title">

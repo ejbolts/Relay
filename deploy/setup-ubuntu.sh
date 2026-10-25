@@ -4,7 +4,7 @@
 # Usage, on the VM:
 #   sudo bash /opt/gym-logger/deploy/setup-ubuntu.sh <domain> <repo-url> [branch]
 #
-#   sudo bash deploy/setup-ubuntu.sh gym.example.com https://github.com/ejbolts/Gym-logger.git main
+#   sudo bash deploy/setup-ubuntu.sh gym.example.com https://github.com/ejbolts/Relay.git main
 #
 # The repo is cloned into /opt/gym-logger when it is not there yet. If you run this script from a
 # checkout that is already in /opt/gym-logger, the repo-url argument is still required; the script

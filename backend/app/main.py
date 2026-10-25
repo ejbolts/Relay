@@ -159,7 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The interactive docs describe every endpoint, so a public server keeps them off by default.
     docs = settings.api_docs
     app = FastAPI(
-        title="Gym Video Logger",
+        title="Relay",
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs" if docs else None,
@@ -266,7 +266,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         send_push_notification(
             SessionLocal,
             settings,
-            title="Gym logger alerts are ready",
+            title="Relay alerts are ready",
             body="This phone will be notified when YouTube finishes processing a workout.",
             user_id=user.id,
         )
