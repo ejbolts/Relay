@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="frontend/public/icon-512.png" alt="Gym Logger app icon: a training journal with a dumbbell" width="96" height="96">
+  <img src="frontend/public/icon-512.png" alt="Relay app icon: a blue R on a dark rounded tile" width="96" height="96">
 </p>
 
-<h1 align="center">Gym Logger</h1>
+<h1 align="center">Relay</h1>
 
-Gym Logger is a mobile-first app for recording workouts and following your progress. Keep strength training, cardio, body measurements and optional workout videos together in one place, with your own account and private training history.
+Relay, formerly Gym Logger, is a mobile-first app for recording workouts and following your progress. Keep strength training, cardio, body measurements and optional workout videos together in one place, with your own account and private training history.
 
 Use it in your browser or add it to your phone's Home Screen for an app-like experience.
 
@@ -38,7 +38,7 @@ Choose kilograms or pounds for weight entry and display.
 
 **Training > Exercises** opens on a searchable exercise list with muscle filters, Recent first, A-Z and Most improved sorting, and eight-week estimated 1RM trends. Tap a lift for its chart, personal bests and session history. Open a session to see its completed sets before opening the workout. Return to **Exercises** with your search, filter, sort, list position, metric and range intact. A **Weight PR** celebrates a heavier completed working set; a **Volume PR** celebrates more reps in a set at a weight you have used before. You can also follow estimated one-rep max and weekly muscle-group set totals. **Cardio** remains in Training alongside Sessions and Exercises.
 
-Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose the app in **Settings > Data & connections > Import & export**, select its export, then review before saving. Strong body-weight measurement exports work there too and keep existing check-ins. Gym Logger workout and bodyweight CSVs use the same picker, preserving check-in notes and body-fat values and skipping existing dates. You can also import a spreadsheet. Choose **Export data** beside any import source to select workout history, bodyweight check-ins or both, and a date range; both downloads two CSVs. A built-in CSV guide shows the columns and one-row-per-set layout and offers a template; files you make yourself need only date, exercise and reps columns, plus weight for weighted sets. Workout CSVs are for set history rather than a full backup of notes, photos, videos and other account data.
+Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose the app in **Settings > Data & connections > Import & export**, select its export, then review before saving. Strong body-weight measurement exports work there too and keep existing check-ins. Relay workout and bodyweight CSVs, including those exported as Gym Logger, use the same picker, preserving check-in notes and body-fat values and skipping existing dates. You can also import a spreadsheet. Choose **Export data** beside any import source to select workout history, bodyweight check-ins or both, and a date range; both downloads two CSVs. A built-in CSV guide shows the columns and one-row-per-set layout and offers a template; files you make yourself need only date, exercise and reps columns, plus weight for weighted sets. Workout CSVs are for set history rather than a full backup of notes, photos, videos and other account data.
 
 <p>
   <a href="docs/screenshots/readme/progress.png"><img src="docs/screenshots/readme/progress.png" alt="Exercise progress screen with estimated one-rep max, personal records and previous sessions" width="360"></a>

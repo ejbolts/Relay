@@ -3,6 +3,14 @@ export interface ReleaseImage {
   alt: string;
 }
 
+/** A muted, looping trailer bundled with the app under /releases/. */
+export interface ReleaseVideo {
+  url: string;
+  /** Still frame shown before playback and instead of a video that cannot play. */
+  poster: string;
+  alt: string;
+}
+
 export interface ReleaseHighlight {
   title: string;
   description: string;
@@ -18,6 +26,8 @@ export interface Release {
   changes: string[];
   url: string;
   image?: ReleaseImage;
+  /** Shown above the summary; older clients ignore it and use the image or highlights. */
+  video?: ReleaseVideo;
   /** Ordered feature previews, shown before the change list. Image is the older-client fallback. */
   highlights?: ReleaseHighlight[];
 }
@@ -36,6 +46,21 @@ function validImage(value: unknown): value is ReleaseImage {
   );
 }
 
+// Same-origin files keep their video/mp4 type and byte-range support, which iOS needs to play them.
+function bundledAsset(value: unknown, extensions: RegExp): value is string {
+  return typeof value === 'string' && /^\/releases\/[\w.-]+$/.test(value) && extensions.test(value);
+}
+
+function validVideo(value: unknown): value is ReleaseVideo {
+  if (!value || typeof value !== 'object') return false;
+  const video = value as Partial<ReleaseVideo>;
+  return (
+    text(video.alt) &&
+    bundledAsset(video.url, /\.mp4$/) &&
+    bundledAsset(video.poster, /\.(?:jpe?g|png|webp)$/)
+  );
+}
+
 function validDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
@@ -49,6 +74,11 @@ export function formatReleaseDate(date: string): string {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${date}T00:00:00Z`));
+}
+
+/** Shortens a `.0` patch release for headings, so 1.0.0 reads as 1.0. */
+export function formatReleaseVersion(version: string): string {
+  return version.replace(/^(\d+\.\d+)\.0$/, '$1');
 }
 
 /** Reject incomplete notes and unsafe links before displaying a server response. */
@@ -72,6 +102,7 @@ export function parseRelease(value: unknown): Release | null {
   }
   if (release.date !== undefined && !validDate(release.date)) return null;
   if (release.image !== undefined && !validImage(release.image)) return null;
+  if (release.video !== undefined && !validVideo(release.video)) return null;
   if (
     release.highlights !== undefined &&
     (!Array.isArray(release.highlights) ||

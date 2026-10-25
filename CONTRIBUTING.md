@@ -1,6 +1,6 @@
-# Contributing to Gym Logger
+# Contributing to Relay
 
-Thanks for helping improve Gym Logger. Bug reports, documentation, accessibility fixes and small improvements are welcome.
+Thanks for helping improve Relay. Bug reports, documentation, accessibility fixes and small improvements are welcome.
 
 ## Before you start
 

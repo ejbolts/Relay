@@ -35,7 +35,8 @@
 .auth-brand img {
   width: 4.5rem;
   height: 4.5rem;
-  border-radius: 20px;
+  /* Matches the rounded tile drawn in the Relay logo artwork. */
+  border-radius: 21.4%;
   box-shadow: 0 10px 30px rgb(0 0 0 / 40%);
 }
 
@@ -810,6 +811,48 @@
 
 .profile-identity > .profile-form {
   margin-top: 0 !important;
+}
+
+/* Keep rows at their natural height while the card resizes. */
+.profile-identity {
+  align-content: start;
+}
+
+.profile-identity.is-editing > .profile-form,
+.profile-identity.is-editing > .profile-photo-remove {
+  animation: profile-editor-in 260ms 60ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.profile-identity.is-editing .profile-photo-edit > .pulse-icon {
+  animation: profile-photo-edit-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes profile-editor-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+
+@keyframes profile-photo-edit-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+html[data-reduce-motion] .profile-identity.is-editing > .profile-form,
+html[data-reduce-motion] .profile-identity.is-editing > .profile-photo-remove,
+html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pulse-icon {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-identity.is-editing > .profile-form,
+  .profile-identity.is-editing > .profile-photo-remove,
+  .profile-identity.is-editing .profile-photo-edit > .pulse-icon {
+    animation: none;
+  }
 }
 
 .profile-identity .auth-field > span {

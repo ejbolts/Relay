@@ -30,7 +30,7 @@ export function WorkoutImportReview({
         {options && (
           <p>
             {options.source === 'gym'
-              ? 'Gym Logger / spreadsheet'
+              ? 'Relay / spreadsheet'
               : options.source === 'strengthlevel'
                 ? 'Strength Level'
                 : options.source === 'hevy'

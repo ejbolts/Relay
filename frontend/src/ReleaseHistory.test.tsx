@@ -18,6 +18,8 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
     this.open = false;
   };
+  // jsdom has no media playback; the release trailer starts muted on open.
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -26,6 +28,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

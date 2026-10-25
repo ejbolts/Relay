@@ -16,8 +16,8 @@ describe('AuthScreen', () => {
   it('renders the branded sign-in form with accessible, autofill-friendly fields', () => {
     const markup = render(open);
 
-    expect(markup).toContain('gym logger');
-    expect(markup).toContain('src="/icon.svg"');
+    expect(markup).toContain('relay');
+    expect(markup).toContain('src="/relay-logo.png"');
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('autocomplete="current-password"');
     expect(markup).toContain('autocomplete="username"');

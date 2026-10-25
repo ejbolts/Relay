@@ -82,7 +82,74 @@ async function save() {
   );
 }
 
+/** Cards measure 120px closed and 300px open; a running resize reports its halfway height, like a browser. */
+function stubCardHeights() {
+  const resizes: { playState: string; height: number; cancel: () => void }[] = [];
+  const animate = vi.fn((frames: { height: string }[]) => {
+    const resize = {
+      playState: 'running',
+      height: (parseFloat(frames[0].height) + parseFloat(frames[1].height)) / 2,
+      onfinish: null,
+      oncancel: null,
+      cancel: () => (resize.playState = 'idle'),
+    };
+    resizes.push(resize);
+    return resize;
+  });
+  Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: animate });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const running = resizes.find((resize) => resize.playState === 'running');
+    const natural = this.classList.contains('is-editing') ? 300 : 120;
+    return { height: running ? running.height : natural } as DOMRect;
+  });
+  const finish = () => resizes.forEach((resize) => (resize.playState = 'finished'));
+  return { animate, finish };
+}
+
 describe('profile viewing and editing', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+    document.documentElement.removeAttribute('data-reduce-motion');
+  });
+
+  it('grows the card into the editor and shrinks it back on Cancel', async () => {
+    const { animate, finish } = stubCardHeights();
+    await act(async () => button('Edit profile').click());
+    expect(animate).toHaveBeenCalledOnce();
+    finish();
+    await act(async () => button('Cancel').click());
+    expect(animate).toHaveBeenLastCalledWith(
+      [{ height: '300px' }, { height: '120px' }],
+      expect.objectContaining({ duration: 280 }),
+    );
+    expect(container.querySelector<HTMLElement>('.profile-identity')!.style.overflow).toBe(
+      'hidden',
+    );
+  });
+
+  it('reverses from the on-screen height when the editor is reopened mid-close', async () => {
+    const { animate, finish } = stubCardHeights();
+    await act(async () => button('Edit profile').click());
+    finish();
+    await act(async () => button('Cancel').click());
+    await act(async () => button('Edit profile').click());
+    expect(animate).toHaveBeenLastCalledWith(
+      [{ height: '210px' }, { height: '300px' }],
+      expect.objectContaining({ duration: 280 }),
+    );
+  });
+
+  it('opens the editor without animating when motion is reduced', async () => {
+    const { animate } = stubCardHeights();
+    document.documentElement.setAttribute('data-reduce-motion', '');
+    await act(async () => button('Edit profile').click());
+    await act(async () => button('Cancel').click());
+    expect(animate).not.toHaveBeenCalled();
+    expect(container.querySelector('.profile-identity')!.getAttribute('style')).toBeNull();
+  });
+
   it('opens explicit editing and cancels name/photo drafts without saving', async () => {
     expect(container.textContent).toContain('Joined October 2026');
     expect(container.querySelector('.profile-photo-edit')).toBeNull();

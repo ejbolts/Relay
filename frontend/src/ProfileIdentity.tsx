@@ -2,6 +2,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -12,6 +13,7 @@ import { authErrorMessage, USERNAME_HINT, validateUsername } from './authForm';
 import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
 import { ProfileAvatar } from './ProfileAvatar';
+import { motionReduced } from './motion';
 import { formatMemberSince } from './profileDisplay';
 import type { User } from './types';
 import { SettingsNavigationContext } from './settingsNavigation';
@@ -86,6 +88,40 @@ export function ProfileIdentity({
       target.focus({ preventScroll: true });
     } else nameInput.current?.focus();
   }, [editing]);
+
+  // Opening or closing the editor grows or shrinks the card from its last height.
+  const renderedHeight = useRef<number | null>(null);
+  const shownEditing = useRef(editing);
+  const resizing = useRef<Animation | null>(null);
+  useLayoutEffect(() => {
+    const card = section.current;
+    if (shownEditing.current === editing) return;
+    shownEditing.current = editing;
+    if (!card) return;
+    // Toggling mid-animation continues from the height currently on screen.
+    const running = resizing.current?.playState === 'running';
+    const from = running ? card.getBoundingClientRect().height : renderedHeight.current;
+    resizing.current?.cancel();
+    resizing.current = null;
+    const to = card.getBoundingClientRect().height;
+    renderedHeight.current = to;
+    if (from === null || motionReduced() || typeof card.animate !== 'function') return;
+    if (Math.abs(to - from) < 1) return;
+    card.style.overflow = 'hidden';
+    const resize = card.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 280,
+      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+    });
+    const done = () => card.style.removeProperty('overflow');
+    resize.onfinish = done;
+    resize.oncancel = done;
+    resizing.current = resize;
+  }, [editing]);
+  useLayoutEffect(() => {
+    // Measuring during a resize would record an in-between height.
+    if (resizing.current?.playState === 'running') return;
+    renderedHeight.current = section.current?.getBoundingClientRect().height ?? null;
+  });
 
   const photoUrl = editing
     ? (preview ?? (removePhoto ? null : user.profile_photo_url))

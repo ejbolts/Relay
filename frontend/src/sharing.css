@@ -318,12 +318,6 @@
   font-weight: 650;
 }
 
-.shared-preview-note {
-  margin: 0 !important;
-  color: var(--p-accent-text) !important;
-  font-size: 0.75rem !important;
-}
-
 .shared-card .shared-stat-row {
   margin-bottom: 0.75rem;
 }
@@ -1217,16 +1211,40 @@
   min-width: 0;
   width: 100%;
 }
-.friend-react-button.combined-discussion-button {
+.workout-discussion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+/* Reactions and comments are separate pills: one opens the picker, the other the thread. */
+.workout-discussion .discussion-button {
   width: auto;
   height: auto;
   min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--p-line-strong);
   border-radius: 24px;
   padding: 0.4rem 0.75rem;
-  display: inline-flex;
-  gap: 0.3rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font: inherit;
   font-size: 0.8125rem;
   white-space: nowrap;
+  cursor: pointer;
+}
+.workout-discussion .discussion-button .pulse-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.workout-discussion .discussion-button.is-yours,
+.workout-discussion .discussion-button[aria-expanded='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+}
+.workout-discussion .discussion-reaction-summary {
+  cursor: default;
 }
 .friend-card-latest {
   flex-wrap: wrap;
@@ -1382,15 +1400,6 @@
   color: var(--p-ink);
   font: inherit;
   font-size: 0.875rem;
-}
-.comment-composer select {
-  width: 42px;
-  min-height: 40px;
-  background: var(--p-surface);
-  color: var(--p-ink);
-  border: 1px solid var(--p-line-strong);
-  border-radius: 12px;
-  font-size: 1rem;
 }
 .comment-length {
   flex-basis: 100%;

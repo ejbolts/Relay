@@ -8,7 +8,7 @@ const metrics = [
   { key: 'time', label: 'Time', unit: 'min' },
   { key: 'distance', label: 'Distance', unit: 'km' },
   { key: 'metMinutes', label: 'MET-min', unit: 'MET-min' },
-  { key: 'calories', label: 'Calories', unit: 'kcal' },
+  { key: 'calories', label: 'Calories', unit: 'kcal', suffix: 'burnt' },
 ] as const;
 const format = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 const shortDate = (value: string) =>
@@ -51,7 +51,8 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
           {shortDate(selected.start)} – {shortDate(selected.end)}
         </h2>
         <div className="cardio-week-value">
-          {value === null ? '—' : format(value)} <small>{metric.unit}</small>
+          {value === null ? '—' : format(value)}{' '}
+          <small>{'suffix' in metric ? `${metric.unit} ${metric.suffix}` : metric.unit}</small>
         </div>
         <div className="cardio-week-comparison">
           {selected.sessions} {selected.sessions === 1 ? 'session' : 'sessions'}

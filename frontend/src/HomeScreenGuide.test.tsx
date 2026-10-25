@@ -9,7 +9,7 @@ vi.mock('react-dom', async (importOriginal) => ({
 }));
 beforeEach(() => {
   vi.stubGlobal('document', { body: {} });
-  vi.stubGlobal('window', { location: { host: 'mainpc.tail494810.ts.net:8447' } });
+  vi.stubGlobal('window', { location: { host: 'preview.example.test:8447' } });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -27,12 +27,12 @@ describe('home screen guide popup', () => {
       'Tap Share.',
       'Tap View More.',
       'Tap Add to Home Screen.',
-      'Tap Add, then open Gym Logger from your Home Screen.',
+      'Tap Add, then open Relay from your Home Screen.',
     ]);
     expect(markup.match(/class="home-guide-shot" aria-hidden="true"/g)).toHaveLength(5);
-    expect(markup).toContain('href="https://gym-logger.duckdns.org"');
-    expect(markup.match(/>gym-logger.duckdns.org</g)).toHaveLength(2);
-    expect(markup).not.toContain('mainpc.tail494810.ts.net');
+    expect(markup).toContain('href="https://relayfitness.app"');
+    expect(markup.match(/>relayfitness.app</g)).toHaveLength(2);
+    expect(markup).not.toContain('preview.example.test');
     expect(markup).toContain('>Got it</button>');
   });
 });

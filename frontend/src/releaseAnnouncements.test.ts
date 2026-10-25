@@ -13,6 +13,7 @@ import {
   formatReleaseDate,
   parseRelease,
   parseReleaseHistory,
+  formatReleaseVersion,
 } from './releaseMetadata';
 
 const screenshot = {
@@ -106,11 +107,43 @@ describe('release announcements', () => {
       expect(parseRelease({ ...metadata, highlights })).toBeNull();
   });
 
+  it('accepts a trailer bundled with the app and rejects external, unsafe or incomplete videos', () => {
+    const video = {
+      url: '/releases/sample-trailer.mp4',
+      poster: '/releases/sample-trailer.jpg',
+      alt: 'Sample release trailer',
+    };
+    expect(parseRelease({ ...metadata, video })).toEqual({ ...metadata, video });
+    expect(parseRelease({ ...metadata, video: undefined })).not.toBeNull();
+    for (const invalid of [
+      null,
+      {},
+      { ...video, alt: ' ' },
+      { ...video, poster: undefined },
+      { ...video, url: 'https://raw.githubusercontent.com/owner/repo/sha/trailer.mp4' },
+      { ...video, url: '//example.com/releases/trailer.mp4' },
+      { ...video, url: '/releases/../index.html' },
+      { ...video, url: '/releases/trailer.webm' },
+      { ...video, url: '/assets/trailer.mp4' },
+      { ...video, url: 'javascript:alert(1)//.mp4' },
+      { ...video, poster: '/releases/poster.svg' },
+      { ...video, poster: 'https://example.com/releases/poster.jpg' },
+    ])
+      expect(parseRelease({ ...metadata, video: invalid })).toBeNull();
+  });
+
   it('ships earlier releases newest first, all older than the current version', () => {
     expect(parseReleaseHistory(history, metadata.version)).toEqual(history);
     expect(history.map((release) => release.version)).not.toContain(metadata.version);
     expect(compareVersions('0.10.0', '0.9.9')).toBeGreaterThan(0);
     expect(compareVersions('1.2.3', '1.2.3')).toBe(0);
+  });
+
+  it('shortens only .0 patch releases in headings', () => {
+    expect(formatReleaseVersion('1.0.0')).toBe('1.0');
+    expect(formatReleaseVersion('0.10.0')).toBe('0.10');
+    expect(formatReleaseVersion('1.0.2')).toBe('1.0.2');
+    expect(formatReleaseVersion('2.0.0-beta.1')).toBe('2.0.0-beta.1');
   });
 
   it('rejects release history that is invalid, unordered, duplicated or not older', () => {

@@ -80,7 +80,7 @@ export function appGuideSteps(videosAllowed: boolean): AppGuideStep[] {
         ]
       : []),
     {
-      title: 'Make Gym Logger your own',
+      title: 'Make Relay your own',
       description:
         'Settings has illustrated Add to Home Screen steps, timers, phone alerts and display preferences. Use Replay guide here whenever you need a refresher.',
       target: 'installation',
@@ -90,5 +90,5 @@ export function appGuideSteps(videosAllowed: boolean): AppGuideStep[] {
   ];
 }
 
-export const PROJECT_URL = 'https://github.com/ejbolts/Gym-video-logger';
+export const PROJECT_URL = 'https://github.com/ejbolts/Relay';
 export const CONTRIBUTING_URL = `${PROJECT_URL}/blob/main/CONTRIBUTING.md`;

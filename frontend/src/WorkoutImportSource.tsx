@@ -5,7 +5,7 @@ export const IMPORT_APPS = [
   { id: 'strengthlevel', name: 'Strength Level', icon: '/import-apps/strengthlevel.png' },
   { id: 'hevy', name: 'Hevy', icon: '/import-apps/hevy.png' },
   { id: 'strong', name: 'Strong', icon: '/import-apps/strong.png' },
-  { id: 'gym', name: 'Gym Logger', icon: '/icon-192.png' },
+  { id: 'gym', name: 'Relay', icon: '/icon-192.png' },
 ] as const;
 
 export function WorkoutImportSource({
@@ -42,7 +42,7 @@ export function WorkoutImportSource({
         {value.source === 'strong' &&
           'Choose a Strong workout or measurement CSV. Rest-timer rows are skipped. Body weights add missing check-ins without replacing yours.'}
         {value.source === 'gym' &&
-          'Choose a Gym Logger workout or bodyweight CSV, or a spreadsheet using the template columns. Review before saving; existing check-ins are kept.'}
+          'Choose a Relay or Gym Logger workout or bodyweight CSV, or a spreadsheet using the template columns. Review before saving; existing check-ins are kept.'}
       </p>
       {value.source === 'strong' && (
         <div className="workout-import-units">

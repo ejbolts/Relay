@@ -66,7 +66,7 @@ export function DataExportDialog({
   }
 
   return (
-    <PopupDialog title="Export Gym Logger data" kicker="CSV EXPORT" onClose={close}>
+    <PopupDialog title="Export Relay data" kicker="CSV EXPORT" onClose={close}>
       <div className="data-export-dialog">
         <p>Choose what to export.</p>
         <fieldset disabled={busy} className="data-export-choices">

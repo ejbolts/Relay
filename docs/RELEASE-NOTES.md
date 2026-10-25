@@ -1,129 +1,100 @@
-# Gym Logger release notes
+# Relay release notes
 
-## 0.10.0
+_Relay was called Gym Logger before version 1.0._
 
-24 October 2026
+## 1.0.0
 
-### Your training together. More ways to connect.
+25 October 2026
 
-![Training Sessions keeps the existing calendar above the latest three weeks of workouts](screenshots/releases/0.9.1-training-sessions.png)
+### Gym Logger is now Relay
 
-*The calendar, date details, machine filter and session cards stay together in Sessions. Show more reveals older workouts.*
+![The two-minute Relay 1.0 trailer: a Relay logo intro, a tour of Home, logging a workout with a rest timer and PR, exercise progress, the calendar, body trends, imports, friends and reactions, workout comments and live phone-to-desktop sync, then what's new since 0.9 in Training, Exercises, Cardio, the Social tab, background saves while switching tabs, Settings and profiles](screenshots/releases/1.0.0-trailer.gif)
 
-![Exercises list with search, muscle filters, sorting, and eight-week estimated 1RM trends](screenshots/releases/0.10.0-exercise-list.png)
+_The narrated Relay 1.0 trailer sits at the top of What's new. The first half introduces Relay to new members; the second half shows what's new since 0.9. Press Play to start with sound at 50% volume where supported; the header reads **Version 1.0** with a small confetti icon beside it. This GIF is its silent preview. Every scene uses isolated synthetic accounts and training data._
 
-*Search or filter the full exercise list, then sort by recent use, name or percentage improvement. Each trained lift shows its latest estimated 1RM and eight-week trend; untrained exercises remain available.*
+[Watch the narrated trailer](../frontend/public/releases/1.0.0-trailer.mp4)
 
-![Exercise detail with a back-arrow header, metric controls, chart and personal bests](screenshots/releases/0.10.0-exercise-header.png)
+![Relay sign-in screen with the new blue R icon above the Relay name and the sign-in form](screenshots/releases/1.0.0-relay-sign-in.png)
 
-*Tap a lift to replace the Training header and tabs with its name and a back arrow above per-session charts, personal bests and session history. Session rows open completed sets before Open workout. Return to Exercises with the list's search, filters, sort and scroll position intact. These previews use isolated synthetic workouts.*
+_Gym Logger is now Relay. The new name and icon appear when you sign in, in your browser tab, in notifications and on your Home Screen. Your account, training history and settings are unchanged._
 
-![Cardio weekly trend with metric tabs, week bars, grouped history and labeled logging and screenshot-import actions](screenshots/releases/0.10.0-cardio-weekly-trend-spacing.png)
+![Add to Home Screen guide linking to relayfitness.app and showing the new address in the Safari toolbar and share-sheet illustrations](screenshots/releases/1.0.0-home-screen-domain.png)
 
-*Choose time, distance, MET-minutes or calories, then tap a week for its totals and duration-weighted averages. Log session and Import screenshot sit just below the Training tabs with compact spacing; history is grouped by your week-start preference.*
+_Start at **https://relayfitness.app**, then follow the illustrated Safari steps or the Android installation instructions. The guide uses the new address even when opened from a preview._
 
-![Expanded Cardio All stats with compact date-range controls, MET-minutes and the matching metric grid](screenshots/releases/0.10.0-cardio-all-stats.png)
+![Before and after navigation: History and Progress in 0.9.0 become Training and Social in 0.10.0](screenshots/releases/0.10.0-navigation-before-after.png)
 
-*All stats keeps longer date ranges and prior-period comparisons in the same card. Unlogged metrics stay empty, session counts use the correct plural, and the question mark explains METs and the calorie-based fat energy equivalent.*
+_History and Progress now live in Training, with Sessions, Exercises and Cardio together. Social gets its own bottom tab for Friends and Find. These are navigation crops from actual isolated sample-data screens in tagged 0.9.0 and pending 0.10.0._
 
 ![Social Friends tab listing each friend once with a seven-day activity strip labelled by day initial, latest session and reaction button](screenshots/releases/0.10.0-social-friends-day-letters.png)
 
-*Friends lists each friend once, most recently active first, with their week at a glance, latest session and a reaction button. Each day in the activity strip is labelled with its initial, so you can see which days they trained.*
+_Friends lists each friend once, most recently active first, with their week at a glance, latest session and a reaction button. Each day in the activity strip is labelled with its initial, so you can see which days they trained._
 
 ![Social Find tab with a waiting friend request, people search and a sent request](screenshots/releases/0.10.0-social-find.png)
 
-*Find holds friend requests to accept or decline, people search, requests you sent and blocked members. All previews use isolated synthetic accounts and workouts.*
+_Find holds friend requests to accept or decline, people search, requests you sent and blocked members. All previews use isolated synthetic accounts and workouts._
 
-![Inline workout discussion with nested replies, tappable mentions and comment reactions using synthetic accounts](screenshots/releases/0.10.0-inline-comments.png)
+![Casey Sample's Push day on Social with separate reaction and 3 comments buttons, the thread open below with a reply mentioning @Alex Sample, comment reactions and the composer, using synthetic accounts](screenshots/releases/1.0.0-workout-comments.png)
 
-*The combined reactions and comments button opens an inline thread. Replies stay together, @names open profiles, and the composer allows 280 characters.*
+_**Comments** opens the inline thread on its own, separate from **React**. Replies stay together, @names open profiles, and the composer allows 280 characters._
 
 ![Comment notifications on the second inbox page using synthetic accounts](screenshots/releases/0.10.0-comments-notifications-pagination.png)
 
-*Comments and replies share the 15-row inbox pagination. Notices stay unread until their page is displayed; this sample shows the final three notices on page two.*
+_Comments and replies share the 15-row inbox pagination. Notices stay unread until their page is displayed; this sample shows the final three notices on page two._
 
 ![Finish a workout, navigate while saving, then open Body with the completion PR notice still visible](screenshots/releases/0.10.0-nonblocking-saves.gif)
 
-*Saving and updating stay in the background. Routine notices and completion PRs no longer lock navigation, scrolling or focus. The recording uses isolated sample training.*
-
-![A workout saved in a separate signed-in session appears on the desktop without a reload](screenshots/releases/0.10.0-cross-device-refresh.gif)
-
-*Your visible app checks for saved training changes every five seconds and when you return or reconnect. A separate sample session creates the workout while this page stays open.*
-
-![The Settings overview with six focused categories](screenshots/releases/0.10.0-settings-overview-clean.png)
-
-*Find Training, Appearance, Notifications, Account & privacy, Data & connections, and Help & about from one searchable overview. Search opens the right section and focuses its control; account editing still opens your profile.*
-
-![Appearance settings with All settings in the top header](screenshots/releases/0.10.0-settings-appearance-navigation.png)
-
-*All settings stays in the top header inside every section. Return to the overview without losing unfinished edits. The previews use an isolated sample account.*
-
-![Your own training profile with name and photo editing, workout totals and the consistency calendar](screenshots/releases/0.10.0-own-profile.png)
-
-*Your profile uses the same training layout as other members. Edit your name and photo above the calendar, training totals and workouts. A private account can preview its own profile without enabling sharing; the header omits the private-profile reminder.*
-
-![Time trained switched to Past year, showing workout, cardio and combined totals since the same day last year](screenshots/releases/0.10.0-time-trained-range.png)
-
-*Time trained opens on All time; choose Past year for totals since this day last year.*
-
-![Time trained help popup explaining workout and cardio duration totals](screenshots/releases/0.10.0-training-time-help.png)
-
-*Tap the question mark beside Time trained to read how the totals avoid counting cardio twice.*
-
-![Profile sharing help popup explaining who can see shared training](screenshots/releases/0.10.0-sharing-help.png)
-
-*Sharing guidance opens from its own question mark without folding the section. The collapsed What you share arrow points down independently of the parent section.*
-
-![Home with separate Combined, Body weight and Body fat check-in sections](screenshots/releases/0.10.0-home-checkin-sections.png)
-
-*Add, hide, resize and arrange each check-in independently through Edit Home layout. The existing card becomes Combined in its saved position. Weight needs no body-fat value; logging body fat still requires today’s weight.*
-
-![Past-workout browser with space between exercise cards](screenshots/releases/0.10.0-workout-exercise-spacing.png)
-
-*Past workouts keep a clear gap between each exercise card. These previews use isolated synthetic measurements and workouts.*
-
-![Recent Friends Activity loads three additional friends inline with a loading spinner](screenshots/releases/0.10.0-friends-load-three.gif)
-
-*Tap +N more to add three friends without leaving Home. The spinner runs while loading, the remaining count excludes friends without sessions, and refreshes preserve the expanded list. All media uses isolated synthetic accounts.*
+_Saving and updating stay in the background. Routine notices and completion PRs no longer lock navigation, scrolling or focus. The recording uses isolated sample training._
 
 ![Remove an individual rest using zero time, restore it with Undo, then swipe its row left to remove it again](screenshots/releases/0.10.0-rest-removal.gif)
 
-*Choose 0:00 (no rest) or swipe left to remove just the rest. Undo restores it, and both sets stay in the workout. This recording uses isolated sample data.*
+_Choose 0:00 (no rest) or swipe left to remove just the rest. Undo restores it, and both sets stay in the workout. This recording uses isolated sample data._
+
+![The Settings overview with six focused categories](screenshots/releases/0.10.0-settings-overview-clean.png)
+
+_Find Training, Appearance, Notifications, Account & privacy, Data & connections, and Help & about from one searchable overview. Search opens the right section and focuses its control; account editing still opens your profile._
+
+![Appearance settings with All settings in the top header](screenshots/releases/0.10.0-settings-appearance-navigation.png)
+
+_All settings stays in the top header inside every section. Return to the overview without losing unfinished edits. The previews use an isolated sample account._
+
+![Profile sharing help popup explaining who can see shared training](screenshots/releases/0.10.0-sharing-help.png)
+
+_Sharing guidance opens from its own question mark without folding the section. The collapsed What you share arrow points down independently of the parent section._
+
+![Past-workout browser with space between exercise cards](screenshots/releases/0.10.0-workout-exercise-spacing.png)
+
+_Past workouts keep a clear gap between each exercise card. These previews use isolated synthetic measurements and workouts._
 
 ![Notifications showing 15 friend requests on the first page with previous, page-picker and next controls and Page 1 of 2](screenshots/releases/0.10.0-notifications-pagination.png)
 
-*Notifications show 15 at a time. Use the arrows or the page picker to move between pages; the Manage friends link is gone.*
+_Notifications show 15 at a time. Use the arrows or the page picker to move between pages; the Manage friends link is gone._
 
 ![A friend's shared profile with the Social tab highlighted in the bottom bar](screenshots/releases/0.10.0-shared-profile-social-tab.png)
 
-*Social stays highlighted while you view another member's profile.*
+_Social stays highlighted while you view another member's profile._
 
-![Body with matching Notifications, Profile and Settings buttons and no duplicate header plus](screenshots/releases/0.9.1-header-controls.png)
+_Previews use isolated synthetic accounts and training data. Each feature uses one media format._
 
-*Notifications and Profile stay beside Settings in the same order on Home, Training, Social and Body. The existing inbox, account photo or initial and profile controls are reused. Body uses Log weigh-in for new entries, without a duplicate header plus button.*
+### A new name: Relay
 
-![Quick-start menu with larger Cardio, Up next and Empty circles](screenshots/releases/0.9.1-quick-start-circles.png)
-
-*The three quick-start circles are now 52 px across, with larger icons and the full-screen background blur.*
-
-![A short pull returns muscle details to place; a longer swipe dismisses the sheet](screenshots/releases/0.9.1-muscle-sheet-swipe.gif)
-
-*Muscle details follow your finger and close with a downward swipe. The exercise list no longer repeats a heading.*
-
-*Previews use isolated synthetic accounts and training data. Each feature uses one media format.*
+- **Relay:** Gym Logger is now called Relay, with a new blue R icon on sign-in, in the browser tab, in notifications, in the installed app and on the Home Screen guide. Accounts, training history, settings and sign-in are unchanged.
+- **Home Screen:** start at **https://relayfitness.app**. The illustrated installation guide links to the new address and shows it in Safari’s toolbar and share sheet. On iPhone, add the app to your Home Screen again to show the new name and icon.
+- **Imports:** choose **Relay** for native workout and bodyweight CSVs, including files exported from Gym Logger. The CSV template downloads as `relay-workout-template.csv`.
+- **Repository:** the GitHub repository is now [ejbolts/Relay](https://github.com/ejbolts/Relay); links to the old name redirect.
 
 ### Training in one place
 
 - **Training:** one bottom tab combines **Sessions**, **Exercises** and **Cardio**. Sessions keeps the full calendar, date details, machine filtering, notes, photos and existing workout actions. Your open session and selected exercise remain when you visit another tab. Sessions initially shows the latest workout week and the two preceding calendar weeks, respecting your week-start preference. Show more reveals older sessions; calendar and exercise links can still open older workouts directly. [#107](https://github.com/ejbolts/Gym-logger/pull/107)
 - **Exercises:** option A replaces the library/preview split with a full exercise list and a focused detail view. Search by exercise or equipment, filter by muscle group, and cycle Recent first, A-Z and Most improved sorting. Rows show recent estimated 1RM, an eight-week trend and change; untrained lifts remain available. Tap a lift for per-session charts, personal bests and session history. Session rows open a set sheet with weight, reps, RPE and an Open workout action. Back to Exercises retains the query, filter, sort, scroll, metric and range. The list loads its account-owned trends in one request, excluding future sessions, warmups and unfinished sets.
 
-- **Cardio weekly trends:** one card replaces the separate cardio-time, METs and previous-weeks cards. Switch between time, distance, MET-minutes and calories; tap any of the last eight weeks for its totals, previous-week comparison and duration-weighted averages. **All stats** opens the familiar metrics and longer date ranges in a compact grid. The displayed week uses the full calendar range while totals exclude future sessions. History groups expandable session rows by your preferred week start, retaining filters, pagination, source-workout links and editing actions. **Log session** and **Import screenshot** are available above the chart; screenshot OCR still fills the form for review before saving.
+- **Cardio weekly trends:** one card replaces the separate cardio-time, METs and previous-weeks cards. Switch between time, distance, MET-minutes and calories burnt; tap any of the last eight weeks for its totals, previous-week comparison and duration-weighted averages. **All stats** opens the familiar metrics and longer date ranges in a compact grid. The displayed week uses the full calendar range while totals exclude future sessions. History groups expandable session rows by your preferred week start, retaining filters, pagination, source-workout links and editing actions. **Log session** and **Import screenshot** are available above the chart; screenshot OCR still fills the form for review before saving.
 
 ### Friends and workout conversations
 
 - **Friends instead of followers:** send one friend request; once it is accepted you both see each other’s shared training. Requests always need accepting, even for public profiles, and either friend can remove the friendship. Existing follows in either direction became friendships, and waiting follow requests became friend requests. Notifications show requests to you and requests that were accepted. [#107](https://github.com/ejbolts/Gym-logger/pull/107)
 - **Social:** a dedicated bottom tab with **Friends** and **Find**. Friends shows each friend once with their latest session, a seven-day activity strip labelled with each day's initial, and a reaction button. Find holds friend requests, people search, requests you sent and blocked members, with a badge for waiting requests. Profiles offer **Add friend**, **Accept** or **Decline**, and a menu to cancel a request, remove a friend or block. The **Social** tab stays highlighted while you view another member's profile. Home keeps its compact friends card. [#107](https://github.com/ejbolts/Gym-logger/pull/107) [#115](https://github.com/ejbolts/Gym-logger/pull/115)
-- **Workout conversations:** open the combined reactions and comments button on Home, Social or a shared workout. Add an optional workout reaction with a comment, reply inline with tappable @names, and react to comments. Comments and replies allow up to 280 characters. The notification bell includes replies and reactions to your comments. All notice types share the 15-row pagination; only the displayed page is marked read. Authors can edit or delete their comments, and workout owners can delete comments on their workouts; deleting a top-level comment also deletes its replies. Current profile sharing, friendship, disabled-account and block rules govern access, comment counts and notifications. Collapsing the thread keeps an unsent comment. Social no longer repeats the **Find friends** header link beside its dedicated **Find** tab. [#116](https://github.com/ejbolts/Gym-logger/pull/116)
+- **Workout conversations:** Home, Social and shared workouts have separate **React** and **Comments** buttons. React opens the six reactions; Comments opens the inline thread without them. Reply inline with tappable @names and react to comments. Comments and replies allow up to 280 characters. The notification bell includes replies and reactions to your comments. All notice types share the 15-row pagination; only the displayed page is marked read. Authors can edit or delete their comments, and workout owners can delete comments on their workouts; deleting a top-level comment also deletes its replies. Current profile sharing, friendship, disabled-account and block rules govern access, comment counts and notifications. Collapsing the thread keeps an unsent comment. Social no longer repeats the **Find friends** header link beside its dedicated **Find** tab. [#116](https://github.com/ejbolts/Gym-logger/pull/116)
 - **Recent Friends Activity:** the renamed Home card loads three additional friends inline when you tap **+N more**, with a spinner and duplicate-click protection while loading. Refreshes preserve the expanded list, a failed expansion keeps existing activity and allows retry, and the remaining count excludes friends without sessions. [#118](https://github.com/ejbolts/Gym-logger/pull/118)
 - **Notifications:** the inbox shows 15 notifications per page, with previous, next and page-picker controls when there are more. The **Manage friends** link is removed; friend management stays in **Social > Find**. [#115](https://github.com/ejbolts/Gym-logger/pull/115) [#116](https://github.com/ejbolts/Gym-logger/pull/116)
 
@@ -134,8 +105,8 @@
 
 ### Settings and your training profile
 
-- **Settings, reorganized:** six focused sections replace the long stack of controls, with category labels in search results and a persistent section menu on wider screens. Training brings units, weekly muscle-set goals, automatic rest timers, workout types and bodyweight chart defaults together. Appearance combines theme and reduced motion; Notifications holds phone alerts and installation help; Account & privacy keeps sharing, password, sign-out and deletion together. Import/export and YouTube live in Data & connections; guides, updates and feedback live in Help & about. Search reveals hidden panels and folded editors without activating their controls. All settings replaces the top back button inside a section and returns to the overview before leaving Settings. Browse cards omit the blue preference summaries, and the extra search hint is removed. Unfinished forms survive section changes, and Export stays available for every import source. The app tour and import onboarding open their matching panels. [#111](https://github.com/ejbolts/Gym-logger/pull/111) [#114](https://github.com/ejbolts/Gym-logger/pull/114)
-- **Your profile:** tapping your avatar opens the same calendar, training totals and workout layout used for other members, with the existing name, username and photo editor. Sharing, account UUID, password, sign-out, account deletion and administrator feedback controls move to **Settings**. Search opens their new locations; choosing sharing from Social goes directly to its settings section. Private accounts can view their own profile while remaining hidden from other members. [#108](https://github.com/ejbolts/Gym-logger/pull/108)
+- **Settings, reorganized:** six focused sections replace the long stack of controls, with category labels in search results and a persistent section menu on wider screens. Training brings units, weekly muscle-set goals, automatic rest timers, workout types and bodyweight chart defaults together. Appearance combines theme and reduced motion; Notifications holds phone alerts and installation help; Account & privacy keeps sharing, password, sign-out and deletion together. Import/export and YouTube live in Data & connections; guides, updates and feedback live in Help & about. Search reveals hidden panels and folded editors without activating their controls. All settings replaces the top back button inside a section and returns to the overview before leaving Settings. Browse cards omit the blue preference summaries, and the extra search hint is removed. **Help & about** uses a question-mark icon. Unfinished forms survive section changes, and Export stays available for every import source. The app tour and import onboarding open their matching panels. [#111](https://github.com/ejbolts/Gym-logger/pull/111) [#114](https://github.com/ejbolts/Gym-logger/pull/114)
+- **Your profile:** tapping your avatar opens the same calendar, training totals and workout layout used for other members, with the existing name, username and photo editor. Sharing, account UUID, password, sign-out, account deletion and administrator feedback controls move to **Settings**. Search opens their new locations; choosing sharing from Social goes directly to its settings section. Private accounts can view their own profile while remaining hidden from other members. **Edit profile** opens and closes with a short animation, and the reminder about who sees your training no longer appears under your totals. [#108](https://github.com/ejbolts/Gym-logger/pull/108)
 - **Time trained ranges:** switch between **All time** (the default) and **Past year** on your own and shared profiles. Past year counts workouts and cardio dated from the same day last year onwards. [#117](https://github.com/ejbolts/Gym-logger/pull/117)
 - **Help when you need it:** tap **?** beside **Time trained** or **Profile sharing** for their explanations. The descriptions no longer take space in the cards. Collapsed **What you share** shows a downward arrow, even when its parent is expanded. [#108](https://github.com/ejbolts/Gym-logger/pull/108)
 
@@ -164,22 +135,22 @@
 
 **Quick start, right from the bottom bar.** Tap **Start** to choose **Cardio**, your recommended **Up next** session or an **Empty** workout. A live session resumes straight away.
 
-| Follow each muscle set | Look back, keep your place |
-| :--- | :--- |
+| Follow each muscle set                                                                                                                              | Look back, keep your place                                                                                                                                      |
+| :-------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ![Open a muscle contribution sheet and select an exercise to focus it in its saved workout](screenshots/releases/0.9.0-muscle-sheet-to-workout.gif) | ![Browse an earlier read-only workout and return to the live session with its notes and entered sets intact](screenshots/releases/0.9.0-workout-navigation.gif) |
-| **From total to exercise.** Tap a muscle on Home, inspect its direct and assistance credits, then jump to the exact exercise in its saved workout. | **Your live workout stays intact.** Centred summary arrows browse earlier sessions read-only. Notes, entered sets and timers are waiting when you return. |
+| **From total to exercise.** Tap a muscle on Home, inspect its direct and assistance credits, then jump to the exact exercise in its saved workout.  | **Your live workout stays intact.** Centred summary arrows browse earlier sessions read-only. Notes, entered sets and timers are waiting when you return.       |
 
-| Your weight, in context | Your friends’ consistency |
-| :--- | :--- |
+| Your weight, in context                                                                                                                                  | Your friends’ consistency                                                                                                                         |
+| :------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
 | ![Monthly bodyweight history with change amounts and dotted Lose, Maintain and Gain goal dividers](screenshots/releases/0.9.0-weight-change-monthly.png) | ![A sample shared profile with the compact Following menu open above its consistency calendar](screenshots/releases/0.9.0-social-consistency.png) |
-| **See the change and the goal behind it.** Gain/loss amounts use the goal you had at the time. Maintain joins Lose and Gain. | **See the training rhythm.** Streaks, training days and a tappable calendar join shared profiles, with follow controls in one compact menu. |
+| **See the change and the goal behind it.** Gain/loss amounts use the goal you had at the time. Maintain joins Lose and Gain.                             | **See the training rhythm.** Streaks, training days and a tappable calendar join shared profiles, with follow controls in one compact menu.       |
 
-| Make Home yours | A clearer start for new accounts |
-| :--- | :--- |
-| ![Hold Home’s Bodyweight section for half a second to enter the layout editor](screenshots/releases/0.9.0-home-hold-edit-500ms.gif) | ![Create account with Sam Sample and sam.sample examples, an @ username prefix, and concise Name and Username help](screenshots/releases/0.9.0-signup-name-username.png) |
-| **Half a second to customise.** Hold any section to resize, hide or reorder cards. Bodyweight gains numbered dotted guides in your preferred unit. | **A clearer form.** Sample placeholders and shorter help distinguish your display name from your sign-in handle. |
+| Make Home yours                                                                                                                                    | A clearer start for new accounts                                                                                                                                         |
+| :------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Hold Home’s Bodyweight section for half a second to enter the layout editor](screenshots/releases/0.9.0-home-hold-edit-500ms.gif)                | ![Create account with Sam Sample and sam.sample examples, an @ username prefix, and concise Name and Username help](screenshots/releases/0.9.0-signup-name-username.png) |
+| **Half a second to customise.** Hold any section to resize, hide or reorder cards. Bodyweight gains numbered dotted guides in your preferred unit. | **A clearer form.** Sample placeholders and shorter help distinguish your display name from your sign-in handle.                                                         |
 
-*Previews use isolated synthetic accounts and training data. Each feature uses one media format.*
+_Previews use isolated synthetic accounts and training data. Each feature uses one media format._
 
 ### What’s changed
 
@@ -207,7 +178,6 @@
 
 [Release triage and merged PR coverage](releases/0.9.0-triage.md)
 
-
 ## 0.8.5
 
 19 October 2026
@@ -216,43 +186,43 @@
 
 ![Compact notification popup with a workout reaction and three new followers, without Dismiss buttons](screenshots/releases/0.8.5-compact-notifications.png)
 
-*Opening the bell marks its displayed notices read. Recent notices stay available, and follow requests keep Approve and Decline.*
+_Opening the bell marks its displayed notices read. Recent notices stay available, and follow requests keep Approve and Decline._
 
 ![Alex Preview shared profile showing workout, cardio and combined time plus React and selected Like buttons on workout cards](screenshots/releases/0.8.5-shared-profile-time-reactions.png)
 
-*See lifetime training time and react to individual workouts directly on a shared profile.*
+_See lifetime training time and react to individual workouts directly on a shared profile._
 
 ![Friends on Home showing each friend's latest cardio or strength session with a single reaction button](screenshots/releases/0.8.5-friends-sessions.png)
 
-*One Friends card shows up to five friends, with their latest workout or cardio session.*
+_One Friends card shows up to five friends, with their latest workout or cardio session._
 
 ![Home's Friends card with each friend's latest strength or cardio session and the reaction picker open above one friend's smiley button](screenshots/releases/0.8.5-friends-reactions.png)
 
-*Friends on Home: tap the smiley beside a friend's latest session and pick a reaction.*
+_Friends on Home: tap the smiley beside a friend's latest session and pick a reaction._
 
 ![Profile Time trained panel showing 8h 25min across 8 workouts, 2h 20min across 5 cardio sessions and 10h 10min combined](screenshots/releases/0.8.5-time-trained.png)
 
-*Time trained on Profile adds up workouts, cardio and all exercise combined.*
+_Time trained on Profile adds up workouts, cardio and all exercise combined._
 
 ![Settings Workout types with built-in types plus custom Arms, Legs, Limbs and Torso, colour controls and Add type](screenshots/releases/0.8.1-workout-types.png)
 
-*Add your own types and colours in Settings. Remove hides a type from new workouts; Restore brings it back.*
+_Add your own types and colours in Settings. Remove hides a type from new workouts; Restore brings it back._
 
 ![Today with a notification bell beside the profile picture and a seven-column calendar with custom workout types](screenshots/releases/0.8.1-custom-type-calendar.png)
 
-*Saved workouts keep their custom type in the calendar, including after that type is removed.*
+_Saved workouts keep their custom type in the calendar, including after that type is removed._
 
 ![A searchable friends-only account with a pending follow request and a Cancel request button](screenshots/releases/0.8.1-friends-only-search.png)
 
-*Friends-only accounts remain discoverable; their training stays hidden while a request is pending.*
+_Friends-only accounts remain discoverable; their training stays hidden while a request is pending._
 
 ![Create account form with the Name and Username help open: Name doesn't need to be unique, Username must be unique, and both can be changed in Profile](screenshots/releases/0.8.1-account-help.png)
 
-*Tap ? beside Name or Username to see what each is for and which must be unique. The form also explains the default public profile visibility.*
+_Tap ? beside Name or Username to see what each is for and which must be unique. The form also explains the default public profile visibility._
 
 ![Sample profile popup showing Jordan Reyes and @jordan.r outlined on a profile card with example workouts, cardio and PRs](screenshots/releases/0.8.1-sample-profile.png)
 
-*See a sample profile shows the names you've typed on a profile card.*
+_See a sample profile shows the names you've typed on a profile card._
 
 - Open **Settings > Workout types** to add your own types and choose their colours, such as **Arms**, **Legs**, **Limbs** or **Torso**.
 - Remove built-in or custom types from new workouts and restore them later. Saved workouts retain their type and colour.
@@ -290,23 +260,23 @@
 
 ![Show guide directly below the Workouts and bodyweight title, above the app choices](screenshots/releases/0.8.0-settings-show-guide.jpg)
 
-*Show guide replaces the small description under the title; import and export stay together below.*
+_Show guide replaces the small description under the title; import and export stay together below._
 
 ![One-page import guide with four app choices and a Choose CSV file button](screenshots/releases/0.8.0-app-import.jpg)
 
-*Choose the matching app and its original CSV from one simple popup.*
+_Choose the matching app and its original CSV from one simple popup._
 
 ![Gym Logger export popup with workout history, bodyweight check-ins and a shared date range](screenshots/releases/0.8.0-export-data.png)
 
-*Choose either data type or both. Both downloads two CSV files for the selected date range.*
+_Choose either data type or both. Both downloads two CSV files for the selected date range._
 
 ![Workout import review with the sessions and sets being added highlighted in green](screenshots/releases/0.8.0-import-totals.png)
 
-*Import totals stand out in green before you save, for every app's export.*
+_Import totals stand out in green before you save, for every app's export._
 
 ![Today Up next card with the dimmer Empty shortcut beside Start workout](screenshots/releases/0.8.0-empty-workout.png)
 
-*Start a blank workout from Empty, even when the suggested type has no previous session.*
+_Start a blank workout from Empty, even when the suggested type has no previous session._
 
 - Release previews show feature screenshots before the change bullets, including
   expanded earlier versions. Written release notes also lead with feature media.
@@ -351,11 +321,11 @@
 
 ![Today header with a red badge showing 3 on the profile picture](screenshots/releases/0.8.0-admin-feedback-badge.png)
 
-*Open feedback is counted in the profile badge on Today.*
+_Open feedback is counted in the profile badge on Today._
 
 ![App feedback in the admin console with 2 open messages, one resolved message with a Reopen button, and Resolve buttons on the others](screenshots/releases/0.8.0-admin-feedback-inbox.png)
 
-*Resolve or reopen each message from the admin console.*
+_Resolve or reopen each message from the admin console._
 
 - New feedback appears in the badge on an administrator's profile picture on **Today**,
   added to any follow requests. Profile shows how many messages are waiting and a
@@ -368,15 +338,15 @@
 
 ![Workout logger with the rest timer popup at the bottom: Cancel, -30s, the 2:59 rest countdown centred, +30s and a dismiss button, above a countdown bar](screenshots/releases/0.8.0-rest-timer-popup.png)
 
-*The rest countdown sits centred between -30s and +30s buttons.*
+_The rest countdown sits centred between -30s and +30s buttons._
 
 ![Bottom navigation with a timer icon and 2:57 rest countdown in place of the live workout dot](screenshots/releases/0.8.0-rest-timer-tab-bar.png)
 
-*Away from the workout, the tab bar counts down your rest.*
+_Away from the workout, the tab bar counts down your rest._
 
 ![Workout header showing Live 0:07 followed by the 2:56 rest countdown and its red skip button](screenshots/releases/0.8.0-rest-timer-header.png)
 
-*After dismissing the popup, the countdown stays beside the live time.*
+_After dismissing the popup, the countdown stays beside the live time._
 
 - Completing a set opens a **rest timer popup** at the bottom of the workout, in the same
   style as the app's other popups. The time left is centred, and a bar along its bottom edge
@@ -394,7 +364,7 @@
 
 ![What you share with Workouts + cardio and Profile photo marked Always, and switches for machine photos, body weight, goals and notes](screenshots/releases/0.8.0-share-workouts-cardio.png)
 
-*Cardio is now shared together with your workouts.*
+_Cardio is now shared together with your workouts._
 
 - In **Profile > What you share**, workouts and cardio are now one always-shared item,
   **Workouts + cardio**, and the separate **Cardio sessions** switch has been removed.
@@ -406,15 +376,15 @@
 
 ![Plate calculator for 100 kg on an Olympic bar, with a red 25 kg and yellow 15 kg plate drawn on each side, bar choices and coloured plate buttons](screenshots/releases/0.8.0-plate-calculator.png)
 
-*See which plates to load on each side, drawn on the bar in standard plate colours.*
+_See which plates to load on each side, drawn on the bar in standard plate colours._
 
 ![Plate calculator in pounds for a trap bar deadlift: 305 lb on a 55 lb trap bar with 45, 45, 25 and 10 lb plates per side](screenshots/releases/0.8.0-plate-calculator-trap-lb.png)
 
-*Pound users get pound plates and bars, here on a trap bar.*
+_Pound users get pound plates and bars, here on a trap bar._
 
 ![Barbell Bench Press header with the new barbell button beside the finish tick](screenshots/releases/0.8.0-plate-calculator-button.png)
 
-*Open it from the barbell button on the exercise.*
+_Open it from the barbell button on the exercise._
 
 - Barbell, EZ-bar and trap-bar exercises have a **barbell button** in their header. It opens the
   plate calculator for the next set to lift, or the last set once every set is ticked.
@@ -433,11 +403,11 @@
 
 ![Cycling set row while a screenshot uploads, with a spinning circle beside the word Scanning](screenshots/releases/0.8.0-cardio-scanning.png)
 
-*A spinner shows while the screenshot is read.*
+_A spinner shows while the screenshot is read._
 
 ![Cycling set logged from a screenshot as 30:00, 4.2 km and 8.4 km/h with a green tick](screenshots/releases/0.8.0-cardio-scan-logged.png)
 
-*The scanned set is filled in and ticked off.*
+_The scanned set is filled in and ticked off._
 
 - Uploading a screenshot for a cardio set fills in its details and ticks the set off, so it
   folds away like any logged set. Tap the set to correct anything the scan missed.
@@ -448,7 +418,7 @@
 
 ![Friends card on Today with each friend's workouts, cardio sessions and PRs beside matching calendar, heart and trophy icons](screenshots/releases/0.8.0-friend-totals.png)
 
-*Each friend's totals use the same icons as your profile on Today.*
+_Each friend's totals use the same icons as your profile on Today._
 
 - The **Friends** card on **Today** shows each friend's total **workouts**, **cardio** sessions
   and **PRs**, replacing the exercise and set counts from their latest workout. The latest
@@ -473,7 +443,7 @@
 
 ![Sign-in form after account creation, showing the Account created confirmation and empty username and password fields](screenshots/releases/0.7.0-signup-requires-login.png)
 
-*New accounts return to Sign in and require their credentials before entering the app.*
+_New accounts return to Sign in and require their credentials before entering the app._
 
 - Tap the question mark beside an exercise in the picker, workout logger or Progress
   header to see its muscle credits per working set. The popup separates direct work
@@ -481,7 +451,7 @@
 
 ![Exercise muscle credits popup showing pecs as direct work and front delts and triceps as partial assistance](screenshots/releases/0.7.0-exercise-muscle-help.png)
 
-*Tap an exercise's question mark to see the credits added by each working set.*
+_Tap an exercise's question mark to see the credits added by each working set._
 
 - The weekly muscle-goal line has more space between its dots.
 - The [exercise-credit audit](EXERCISE-MUSCLE-CREDITS.md) reviews the built-in library using

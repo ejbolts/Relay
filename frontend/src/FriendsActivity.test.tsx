@@ -190,15 +190,39 @@ it("shows each friend's latest session with one reaction button and opens their 
 
   const rows = [...host.querySelectorAll('.friend-activity-list li')];
   expect(rows.map((row) => row.textContent)).toEqual([
-    'JJordan PreviewStrengthLeg day · 1h 11minToday · 2 sets❤️👍 3 · 0 comments',
-    'AAlex PreviewCardioIncline walk · 35minYesterday · 2.8 km · 0 comments',
+    'JJordan PreviewStrengthLeg day · 1h 11minToday · 2 sets❤️👍 30 comments',
+    'AAlex PreviewCardioIncline walk · 35minYesterday · 2.8 km0 comments',
   ]);
-  // One reaction button per friend rather than every reaction.
+  // One reaction button and one comments button per friend rather than every reaction.
   expect(host.querySelectorAll('.friend-react-button')).toHaveLength(2);
+  expect(host.querySelectorAll('.discussion-comments-button')).toHaveLength(2);
   expect(host.querySelector('.friend-react-picker')).toBeNull();
 
   await act(async () => host.querySelector<HTMLButtonElement>('.friend-activity-open')!.click());
   expect(openFriend).toHaveBeenCalledWith(jordan.friend);
+});
+
+it('opens comments without the reaction picker, and reactions without the comments', async () => {
+  vi.spyOn(api.sharing, 'feed').mockResolvedValue({ items: [alex], friends: 1, with_sessions: 1 });
+  const comments = vi
+    .spyOn(api.sharing, 'comments')
+    .mockResolvedValue({ items: [], total: 0, next_offset: null });
+  await render();
+
+  const commentsButton = button('0 comments on Alex Preview’s Incline walk');
+  await act(async () => commentsButton.click());
+  expect(commentsButton.getAttribute('aria-expanded')).toBe('true');
+  expect(comments).toHaveBeenCalledWith('w2');
+  expect(host.querySelector('.workout-discussion-thread')?.hasAttribute('hidden')).toBe(false);
+  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(host.querySelector('.comment-composer select')).toBeNull();
+
+  const reactButton = button('React to Alex Preview’s Incline walk');
+  await act(async () => reactButton.click());
+  expect(reactButton.getAttribute('aria-expanded')).toBe('true');
+  expect(commentsButton.getAttribute('aria-expanded')).toBe('false');
+  expect(host.querySelector('.friend-react-picker')).not.toBeNull();
+  expect(host.querySelector('.workout-discussion-thread')?.hasAttribute('hidden')).toBe(true);
 });
 
 it('reacts from the picker, shows your reaction, and removes it when chosen again', async () => {
@@ -226,11 +250,14 @@ it('reacts from the picker, shows your reaction, and removes it when chosen agai
   });
   await act(async () => button('Love').click());
   expect(react).toHaveBeenCalledWith('w2', 'love');
-  expect(host.querySelector('.workout-comments')).toBeTruthy();
+  // Choosing a reaction closes the picker without opening the comments.
+  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(host.querySelector('.workout-comments')).toBeNull();
   const mine = button('Your reaction to Alex Preview’s Incline walk: Love. Change reaction');
-  expect(mine.textContent).toBe('❤️ 1 · 0 comments');
+  expect(mine.textContent).toBe('❤️ 1');
   expect(document.activeElement).toBe(mine);
 
+  await act(async () => mine.click());
   expect(button('Love').getAttribute('aria-pressed')).toBe('true');
   feed.mockResolvedValue({ items: [alex], friends: 1, with_sessions: 1 });
   await act(async () => button('Love').click());

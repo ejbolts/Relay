@@ -4,6 +4,7 @@ import { useSheetDismiss } from './useSheetDismiss';
 
 export function PopupDialog({
   title,
+  titleBadge,
   kicker,
   className = '',
   closeLabel,
@@ -13,6 +14,8 @@ export function PopupDialog({
   children,
 }: {
   title: string;
+  /** Decoration shown beside the title, outside its accessible name. */
+  titleBadge?: ReactNode;
   kicker?: string;
   className?: string;
   closeLabel?: string;
@@ -52,7 +55,14 @@ export function PopupDialog({
       <header>
         <div>
           {kicker && <p className="section-kicker">{kicker}</p>}
-          <h2 id={titleId}>{title}</h2>
+          {titleBadge ? (
+            <div className="popup-dialog-title-row">
+              <h2 id={titleId}>{title}</h2>
+              {titleBadge}
+            </div>
+          ) : (
+            <h2 id={titleId}>{title}</h2>
+          )}
         </div>
         <button
           type="button"

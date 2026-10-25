@@ -82,7 +82,7 @@ export function SettingsHub({
       <header className="settings-hub-intro">
         <div>
           <p className="section-kicker">YOUR SETUP</p>
-          <h2>Make Gym Logger yours.</h2>
+          <h2>Make Relay yours.</h2>
           <p>Set up your training, make the app yours, and stay in control of your data.</p>
         </div>
         {includeAccount && (

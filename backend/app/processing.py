@@ -451,7 +451,7 @@ class SessionProcessor:
                     )
                     db.commit()
                     notification = (
-                        "Gym logger needs YouTube permission",
+                        "Relay needs YouTube permission",
                         f"Reconnect YouTube to finish checking {session.name}.",
                     )
                 else:

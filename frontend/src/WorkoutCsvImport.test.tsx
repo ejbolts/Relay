@@ -169,7 +169,7 @@ describe('workout CSV review flow', () => {
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('Strength Level');
     expect(markup).toContain('/icon-192.png');
-    expect(markup).toContain('Gym Logger');
+    expect(markup).toContain('Relay');
   });
 
   it('file selection only previews; Cancel never invokes the save callback', async () => {

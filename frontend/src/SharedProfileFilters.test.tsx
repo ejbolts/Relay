@@ -221,14 +221,15 @@ describe('own profile', () => {
     );
     expect(container.querySelector('.calendar-panel')).not.toBeNull();
     expect(container.textContent).toContain('First workout');
-    expect(container.querySelector('.shared-preview-note')).toBeNull();
     expect(container.querySelector('.profile-training-time')?.textContent).toContain('4h 33min');
     expect(container.textContent).not.toContain('Change password');
     expect(container.textContent).not.toContain('Profile sharing');
     expect(container.querySelector('.profile-account-id')).toBeNull();
+    // Your own workouts offer comments but no reaction picker.
     expect(
-      container.querySelector('.combined-discussion-button')?.getAttribute('aria-label'),
-    ).toContain('Reactions and comments');
+      container.querySelector('.discussion-comments-button')?.getAttribute('aria-label'),
+    ).toContain('comments on');
+    expect(container.querySelector('.friend-react-button')).toBeNull();
     expect(container.querySelector('.profile-friend-actions')).toBeNull();
     await act(async () => button('Edit profile').click());
     expect(container.querySelector('input[autocomplete="name"]')).not.toBeNull();
@@ -242,9 +243,6 @@ describe('own profile', () => {
     const owner = { user, onSaved: vi.fn() };
     vi.mocked(api.sharing.profile).mockResolvedValue({ ...profile, id: user.id, is_you: true });
     await renderProfile(user.id, owner);
-    expect(container.querySelector('.shared-preview-note')?.textContent).toContain(
-      'This is the training you share',
-    );
     await chooseType('lower');
     await renderProfile(user.id, owner, false);
     vi.mocked(api.sharing.profile)
@@ -252,7 +250,6 @@ describe('own profile', () => {
       .mockResolvedValue({ ...profile, id: user.id, is_you: true, visibility: 'private' });
     await renderProfile(user.id, owner, true);
     expect(api.sharing.profile).toHaveBeenCalledExactlyOnceWith(user.id);
-    expect(container.querySelector('.shared-preview-note')).toBeNull();
     expect(api.sharing.workouts).toHaveBeenLastCalledWith(
       user.id,
       0,
@@ -391,9 +388,12 @@ it('shows lifetime time separately from history filters and reacts on a shared w
       .click(),
   );
   expect(react).toHaveBeenCalledWith('first', 'love');
-  expect(container.querySelector('.friend-react-button')?.textContent).toBe('❤️ 1 · 0 comments');
+  expect(container.querySelector('.friend-react-button')?.textContent).toBe('❤️ 1');
   expect(container.querySelector('.friend-react-button')?.getAttribute('aria-label')).toContain(
     'Love',
+  );
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('.friend-react-button')!.click(),
   );
   await act(async () =>
     [...container.querySelectorAll<HTMLButtonElement>('.friend-react-picker button')]
@@ -403,7 +403,7 @@ it('shows lifetime time separately from history filters and reacts on a shared w
   expect(remove).toHaveBeenCalledWith('first');
   await chooseType('push');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('4h 33min');
-  expect(container.querySelector('.combined-discussion-button')).toBeNull();
+  expect(container.querySelector('.workout-discussion')).toBeNull();
 });
 
 it('shows the viewed account calendar, toggles its legend and selects a day without truncating stats', async () => {
