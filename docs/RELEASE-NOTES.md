@@ -16,17 +16,9 @@ _Choose a template or build your own repeating cycle. Custom workout types and r
 
 _Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
 
-![Social Friends tab with Jordan Reid and Maya Chen working out at the top, each with a Live row showing the workout name and time so far, then Priya Patel active now and Leo Martins active 2h ago](screenshots/releases/1.1.0-friends-live-activity.png)
+![Live friend workout and privacy updates without reloading](screenshots/releases/1.1.0-live-friend-updates.gif)
 
-_Friends working out move to the top with a **Live** row, the workout name and how long they have been training. Everyone else shows **Active now** or when they were last active. A friend who hides their status keeps the usual workout count. Every account here is synthetic._
-
-![Home's Recent Friends Activity with Jordan Reid and Maya Chen's live workouts first, followed by other friends' latest sessions and reaction buttons](screenshots/releases/1.1.0-home-live-workouts.png)
-
-_Home's Recent Friends Activity lists friends working out first, with their live workout in place of their last session._
-
-![Live activity in Profile sharing settings with Online status and Live workouts switched on and a preview showing Alex Sample as Active now](screenshots/releases/1.1.0-live-activity-settings.png)
-
-_**Live activity** has separate switches for **Online status** and **Live workouts**, with a preview of what friends see._
+_A friend starts and discards a workout, then hides live workouts and online status. The Friends card updates immediately through each step without reloading. This looping GIF was captured directly from isolated synthetic accounts; Home uses the same live updates._
 
 ![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
 
@@ -119,6 +111,7 @@ _Five sessions per page keep profiles compact. Use the arrows or page picker to 
 - Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 - **Cardio on profiles:** your own profile and shared profiles show five sessions at a time, newest first. The header shows the visible range and total, with previous, next and direct page selection below.
 - **Older sessions:** pagination reaches the whole shared cardio history, beyond the former latest-20 limit. Profile refreshes retain the selected page; failed page requests keep the current sessions and offer retry. Existing access, notes and sample-data rules still apply.
+- Signing out ends live activity access from that window. Expired or disabled sign-ins cannot send or receive live updates.
 
 ## 1.0.0
 
