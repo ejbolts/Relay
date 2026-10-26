@@ -118,6 +118,7 @@ import {
 } from './MachineHistoryFilter';
 import { machineDate, machineUsedShort } from './machineHistory';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
+import { useReleaseAnnouncement } from './useReleaseAnnouncement';
 import { usePresenceConnection } from './presence';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
