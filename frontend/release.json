@@ -23,16 +23,16 @@
       "title": "Keep each week’s partial-set choices",
       "description": "Choose a week in an exercise’s question-mark popup. Count partial sets carries forward until changed again, while earlier weeks keep their setting.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-partial-sets.png",
-        "alt": "Bench press muscle credits with Count partial sets off, direct pectoral credit retained and assistance marked Off."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/932f2a772dbd8da05ab300061c7b18ffd335ebc4/docs/screenshots/releases/1.0.1-weekly-partial-sets.png",
+        "alt": "Leg Press week-of selector on 5 October with partial adductors off and direct glute and quad credits retained."
       }
     },
     {
       "title": "See this week or four weeks",
       "description": "Switch the muscle card between This week and 4 weeks. Each workout uses its week’s credit setting, and Show more reveals the remaining muscles.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-training-muscles.png",
-        "alt": "Expanded weekly Sets per muscle card in Training showing trained muscles, zero-set muscles and Show less."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/932f2a772dbd8da05ab300061c7b18ffd335ebc4/docs/screenshots/releases/1.0.1-four-week-muscles.png",
+        "alt": "Four-week muscle card with 16 direct glute and quad sets and 6 partial adductor credits from three enabled weeks."
       }
     }
   ],
