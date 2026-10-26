@@ -9,5 +9,35 @@
     "Count partial sets in an exercise’s muscle-credit popup can switch its assistance credits off or on for your account. Saved workout totals update across devices; direct sets and the original workout records remain unchanged.",
     "Sets per muscle has Show more and Show less controls to reveal remaining trained and untrained muscles. The same weekly card is also at the bottom of Training, with links to the contributing exercises and workouts."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101"
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
+  "highlights": [
+    {
+      "title": "Exercises, ten at a time",
+      "description": "Use the question mark beside a lift for muscle credits and the three-line button to change page size. Filters include direct and enabled partial credits.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-exercise-list.png",
+        "alt": "Training exercise list with a question-mark help button beside each lift, list options and Page 1 of 4."
+      }
+    },
+    {
+      "title": "Choose which partial sets count",
+      "description": "Turn Count partial sets off for one exercise. Saved muscle totals update for your account while direct sets stay counted.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-partial-sets.png",
+        "alt": "Bench press muscle credits with Count partial sets off, direct pectoral credit retained and assistance marked Off."
+      }
+    },
+    {
+      "title": "See every weekly muscle total",
+      "description": "Show more reveals remaining trained and untrained muscles. The same card is at the bottom of Training and on Home.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-training-muscles.png",
+        "alt": "Expanded weekly Sets per muscle card in Training showing trained muscles, zero-set muscles and Show less."
+      }
+    }
+  ],
+  "image": {
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-exercise-list.png",
+    "alt": "Training exercise list with a question-mark help button beside each lift, list options and Page 1 of 4."
+  }
 }
