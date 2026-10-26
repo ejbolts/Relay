@@ -1,8 +1,8 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "date": "2026-10-26",
-  "title": "Find exercises by muscle",
-  "summary": "Browse exercises by their muscle credits, choose when partial sets count, and review your weekly training.",
+  "title": "Train together with clearer workout tools",
+  "summary": "Browse exercises by their muscle credits, choose when partial sets count, and review your weekly training. Discover public profiles in Find, see RPE and set types in colour, get rest alerts while browsing Relay, and open release notes from Notifications.",
   "changes": [
     "Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.",
     "The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.",
@@ -11,9 +11,18 @@
     "Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.",
     "Volume records now say Volume PR for this weight on set badges, popups and record lists, making the same-weight comparison clear.",
     "Swipe through saved equipment photos while logging. Deleting an old photo removes its workout attachments after confirmation and keeps the recorded sets.",
-    "Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets."
+    "Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets.",
+    "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",
+    "Social > Find automatically suggests public accounts you are not already connected to, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile, or use Add friend separately. Your account, existing friends and requests, private and disabled accounts, and blocks in either direction are excluded. Search remains available above the suggestions.",
+    "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
+    "Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.",
+    "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.",
+    "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.",
+    "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.",
+    "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
+    "Workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "highlights": [
     {
       "title": "Exercises, ten at a time",
@@ -53,6 +62,54 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/b7cefaa3a0e519a67c28e1b47806b980eadc38d9/docs/screenshots/releases/1.0.1-equipment-photos.gif",
         "alt": "Swiping both ways through saved equipment photos, cancelling deletion, then deleting an older photo while preserving the workout sets and another pin."
+      }
+    },
+    {
+      "title": "Suggested friends in Find",
+      "description": "Find automatically lists public accounts you are not connected to, eight per page, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a90b338d409b698581bb1300976b7698a92ecc8b/docs/screenshots/releases/1.0.1-suggested-friends.png",
+        "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."
+      }
+    },
+    {
+      "title": "RPE effort and set types in colour",
+      "description": "RPE numbers run from green through orange to red, including half points. Row tints follow the set type and stay consistent while editing or completing a set.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/5ea1245482639e8588bf7a6229a37f3dd444c709/docs/screenshots/releases/1.0.1-rpe-set-colours.png",
+        "alt": "Workout table with orange warm-up, green working, purple drop and red failure rows, plus coloured RPE numbers; the green working set is being edited at RPE 10. Isolated sample data."
+      }
+    },
+    {
+      "title": "Release notes in Notifications",
+      "description": "The latest Relay release has its own inbox row. Tap View for What's new; closing the notes returns to the inbox. New clears after viewing and the row stays available.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b217f9b47a27930ca7e340f29cdb706002791daa/docs/screenshots/releases/1.0.1-release-notification.png",
+        "alt": "Notifications with a Relay 1.0.1 release row, New indicator, title, date and View button, above synthetic friend activity."
+      }
+    },
+    {
+      "title": "Rest alerts while you browse",
+      "description": "Rest complete appears above your current screen, even after dismissing the countdown. The alert leaves navigation available; background phone notifications keep their existing delivery path.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/5dd30b6a88a9f4c3950a526c3fa3c6a4f87c02f9/docs/screenshots/releases/1.0.1-rest-complete.png",
+        "alt": "Rest complete appears above Body while a synthetic workout remains active, after dismissing the countdown and leaving the workout screen."
+      }
+    },
+    {
+      "title": "When friends logged their sessions",
+      "description": "Recent Friends Activity shows the original logged time in your local time beside the day label, for strength and cardio.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e31794bde860086321cbf3c44cca4b1729b3df3e/docs/screenshots/releases/1.0.1-friend-logged-time.png",
+        "alt": "Recent Friends Activity showing local logged times beside Today for synthetic strength and cardio sessions."
+      }
+    },
+    {
+      "title": "Settings starts at the overview",
+      "description": "Tap the top-right Settings icon to open All settings, even after visiting another section. Search still takes you straight to the selected control.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e90b4f322f66a6527da1875d81a88827cc5aea16/docs/screenshots/releases/1.0.1-all-settings.png",
+        "alt": "All settings overview after reopening Settings from another screen, using a synthetic account."
       }
     }
   ],

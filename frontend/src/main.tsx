@@ -13,6 +13,7 @@ import {
 import './styles.css';
 import './pulse.css';
 import './lightMode.css';
+import './workoutSetColours.css';
 import './auth.css';
 import './releaseAnnouncement.css';
 import './homeScreenGuide.css';

@@ -1,0 +1,100 @@
+/* Set type controls the row; RPE controls only the recorded effort number. */
+:root {
+  --rpe-low: #8ed4a1;
+  --rpe-6-5: #abd68b;
+  --rpe-7: #c8d775;
+  --rpe-7-5: #d6d36e;
+  --rpe-8: #e4cf66;
+  --rpe-8-5: #f2bf69;
+  --rpe-9: #ffae6b;
+  --rpe-9-5: #ff9577;
+  --rpe-10: #ff7c83;
+}
+
+:root[data-colour-mode='light'] {
+  --rpe-low: #256b39;
+  --rpe-6-5: #48651d;
+  --rpe-7: #586319;
+  --rpe-7-5: #696117;
+  --rpe-8: #786000;
+  --rpe-8-5: #8b510c;
+  --rpe-9: #a04708;
+  --rpe-9-5: #ac3520;
+  --rpe-10: #b32336;
+}
+
+.logger-screen [data-set-type='normal'] {
+  --set-type-rgb: 35 166 62;
+}
+
+.logger-screen [data-set-type='warmup'] {
+  --set-type-rgb: 240 140 40;
+}
+
+.logger-screen [data-set-type='drop'] {
+  --set-type-rgb: 150 110 240;
+}
+
+.logger-screen [data-set-type='failure'] {
+  --set-type-rgb: 230 103 103;
+}
+
+/* Also override the legacy suggested/completed/editing row surfaces in both themes. */
+.logger-screen .set-grid .set-details[data-set-type],
+.logger-screen .set-grid .set-details.previous-set-details[data-set-type] {
+  border-color: rgb(var(--set-type-rgb) / 34%);
+  background: rgb(var(--set-type-rgb) / 12%);
+}
+
+.logger-screen [data-rpe='5'],
+.logger-screen [data-rpe='6'] {
+  --rpe-colour: var(--rpe-low);
+}
+
+.logger-screen [data-rpe='6.5'] {
+  --rpe-colour: var(--rpe-6-5);
+}
+
+.logger-screen [data-rpe='7'] {
+  --rpe-colour: var(--rpe-7);
+}
+
+.logger-screen [data-rpe='7.5'] {
+  --rpe-colour: var(--rpe-7-5);
+}
+
+.logger-screen [data-rpe='8'] {
+  --rpe-colour: var(--rpe-8);
+}
+
+.logger-screen [data-rpe='8.5'] {
+  --rpe-colour: var(--rpe-8-5);
+}
+
+.logger-screen [data-rpe='9'] {
+  --rpe-colour: var(--rpe-9);
+}
+
+.logger-screen [data-rpe='9.5'] {
+  --rpe-colour: var(--rpe-9-5);
+}
+
+.logger-screen [data-rpe='10'] {
+  --rpe-colour: var(--rpe-10);
+}
+
+.logger-screen .set-grid .completed-set-summary > .completed-set-rpe[data-rpe],
+.logger-screen .set-editor > select[data-rpe] {
+  color: var(--rpe-colour, var(--p-muted));
+  font-weight: 700;
+}
+
+/* Native pickers keep their own platform presentation; the selected value is coloured. */
+.logger-screen .set-editor > select[data-set-field='rpe'] option {
+  color: var(--p-ink);
+  background: var(--p-surface-2);
+}
+
+:root[data-colour-mode='light'] .logger-screen .set-number-cell.set-number-failure {
+  color: #a62736;
+}

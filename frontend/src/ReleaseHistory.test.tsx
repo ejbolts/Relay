@@ -113,8 +113,8 @@ it('shows feature media before change bullets for current and expanded earlier r
   await act(async () =>
     root.render(
       <ReleaseAnnouncement
-        release={{ ...metadata, highlights: undefined, image }}
-        history={[{ ...history[0], video: undefined, highlights: undefined, image }]}
+        release={{ ...metadata, highlights: undefined, video: undefined, image }}
+        history={[{ ...history[0], highlights: undefined, video: undefined, image }]}
         onClose={vi.fn()}
       />,
     ),

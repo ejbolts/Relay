@@ -41,6 +41,7 @@ import type {
   ServerStatus,
   SharedProfile,
   SharedProfileSummary,
+  SuggestedProfilePage,
   SharedWorkoutPage,
   SharingChoices,
   FriendConnections,
@@ -258,6 +259,8 @@ export const api = {
       request<SharedProfileSummary[]>(
         `/api/sharing/profiles${query === undefined ? '' : `?q=${encodeURIComponent(query.trim())}`}`,
       ),
+    suggestions: (page = 1) =>
+      request<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`),
     profile: (userId: string) =>
       request<SharedProfile>(`/api/sharing/profiles/${encodeURIComponent(userId)}`),
     workoutFilters: (userId: string) =>

@@ -742,6 +742,17 @@ export interface SharedProfileSummary {
   } | null;
 }
 
+export interface SuggestedProfileSummary extends SharedProfileSummary {
+  username: string;
+}
+
+export interface SuggestedProfilePage {
+  profiles: SuggestedProfileSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface SharingConnection {
   id: string;
   display_name: string;

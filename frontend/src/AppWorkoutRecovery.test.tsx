@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api } from './api';
+import * as push from './push';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import {
   readActiveWorkoutDraft,
@@ -360,6 +361,143 @@ it('uses the top header to return from settings sections before leaving settings
   expect(window.location.hash).toBe('#dashboard');
 });
 
+it.each(['Home', 'Training', 'Body'])(
+  'opens All settings from the %s header after visiting a section',
+  async (page) => {
+    window.history.replaceState(null, '', '#settings');
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    await mount();
+    const appearance = [
+      ...container.querySelectorAll<HTMLButtonElement>('.settings-category-card'),
+    ].find((button) => button.textContent?.includes('Appearance'))!;
+    await act(async () => appearance.click());
+    expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(true);
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('nav[aria-label="Main navigation"] button')]
+        .find((button) => button.textContent?.trim() === page)!
+        .click(),
+    );
+    const settings = [
+      ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Settings"]'),
+    ].find((button) => !button.closest('[hidden]'))!;
+    expect(settings).toBeDefined();
+    await act(async () => settings.click());
+    expect(window.location.hash).toBe('#settings');
+    expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);
+    expect(container.querySelector('.overlay-header-back')?.getAttribute('aria-label')).toBe(
+      'Go back',
+    );
+  },
+);
+
+it('keeps settings search navigation working after the header resets a previous search jump', async () => {
+  window.history.replaceState(null, '', '#settings');
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  await mount();
+  const searchRest = async () => {
+    const input = container.querySelector<HTMLInputElement>('.settings-search input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Rest timer',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const result = [
+      ...container.querySelectorAll<HTMLButtonElement>('.settings-search button'),
+    ].find((button) => button.querySelector('strong')?.textContent === 'Rest timer')!;
+    await act(async () => result.click());
+    expect(container.querySelector('.settings-hub')?.classList.contains('has-selection')).toBe(
+      true,
+    );
+    expect(
+      container.querySelector('[data-settings-group="training"]')?.hasAttribute('hidden'),
+    ).toBe(false);
+  };
+  await searchRest();
+  await navigateTo('Body');
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Settings"]')]
+      .find((button) => !button.closest('[hidden]'))!
+      .click(),
+  );
+  expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);
+  await searchRest();
+});
+
+describe('RPE and set type presentation', () => {
+  async function click(label: string) {
+    const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+    expect(button).not.toBeNull();
+    await act(async () => button.click());
+  }
+
+  it('keeps edited RPE values on the number through folding, clearing and draft recovery', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].rpe = 9;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const summary = () => container.querySelector<HTMLButtonElement>('.completed-set-rpe')!;
+    expect(summary().textContent).toBe('9');
+    expect(summary().dataset.rpe).toBe('9');
+
+    for (const value of ['10', '9.5', '8', '6.5', '5', '']) {
+      await click('Edit RPE for set 1');
+      const editor = container.querySelector<HTMLSelectElement>('[data-set-field="rpe"]')!;
+      await act(async () => {
+        editor.value = value;
+        editor.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(editor.dataset.rpe).toBe(value || undefined);
+      expect(readActiveWorkoutDraft()?.movements[0].sets[0].rpe).toBe(value ? Number(value) : null);
+      await click('Done editing set 1');
+      expect(summary().textContent).toBe(value || '–');
+      expect(summary().dataset.rpe).toBe(value || undefined);
+      expect(container.querySelector('.set-details')?.getAttribute('data-set-type')).toBe('normal');
+    }
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(summary().textContent).toBe('–');
+    expect(summary().hasAttribute('data-rpe')).toBe(false);
+  });
+
+  it('keeps type and RPE independent when changing a completed set, reopening and unticking it', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].rpe = 10;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const row = () => container.querySelector<HTMLElement>('.set-details')!;
+    for (const [label, kind] of [
+      ['Warm-up', 'warmup'],
+      ['Drop set', 'drop'],
+      ['Failure', 'failure'],
+      ['Working set', 'normal'],
+    ]) {
+      await act(async () => row().querySelector<HTMLButtonElement>('.set-number-cell')!.click());
+      const option = [
+        ...container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+      ].find((button) => button.textContent?.endsWith(label))!;
+      await act(async () => option.click());
+      expect(row().dataset.setType).toBe(kind);
+      expect(row().classList.contains('completed')).toBe(true);
+      expect(row().querySelector<HTMLElement>('.completed-set-rpe')?.dataset.rpe).toBe('10');
+      expect(readActiveWorkoutDraft()?.movements[0].sets[0].rpe).toBe(10);
+      await click('Edit RPE for set 1');
+      expect(row().dataset.setType).toBe(kind);
+      expect(row().querySelector<HTMLElement>('[data-set-field="rpe"]')?.dataset.rpe).toBe('10');
+      await click('Done editing set 1');
+    }
+    await click('Mark set 1 incomplete');
+    expect(row().classList.contains('completed')).toBe(false);
+    expect(row().dataset.setType).toBe('normal');
+    expect(row().querySelector<HTMLElement>('[data-set-field="rpe"]')?.dataset.rpe).toBe('10');
+  });
+});
+
 describe('rest time controls', () => {
   function restControl() {
     return (
@@ -382,6 +520,87 @@ describe('rest time controls', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
+
+  async function startRest(serverScheduled = false) {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    vi.spyOn(push, 'pushNotificationsSupported').mockReturnValue(serverScheduled);
+    vi.spyOn(push, 'existingPhonePushSubscription').mockResolvedValue(
+      serverScheduled
+        ? ({ endpoint: 'https://push.example.com/sample' } as PushSubscription)
+        : null,
+    );
+    vi.spyOn(api, 'scheduleRestTimerNotification').mockResolvedValue(undefined);
+    vi.spyOn(api, 'scheduleActiveWorkoutReminder').mockResolvedValue(undefined);
+    vi.spyOn(api, 'cancelActiveWorkoutReminder').mockResolvedValue(undefined);
+    const systemNotification = vi
+      .spyOn(push, 'showRestTimerNotification')
+      .mockResolvedValue(undefined);
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].rest_seconds = 30;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await click('Complete set 1');
+    return systemNotification;
+  }
+
+  it.each([false, true])(
+    'alerts above other tabs after a dismissed countdown (server push scheduled: %s)',
+    async (scheduled) => {
+      const systemNotification = await startRest(scheduled);
+      await click('Dismiss rest timer popup and show it beside the live time');
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click(),
+      );
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.app-tab[data-guide-target="body"]')!.click(),
+      );
+      expect(window.location.hash).toBe('#body');
+      await act(async () => vi.advanceTimersByTimeAsync(30_000));
+      expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+        'Rest complete. Time for your next set.',
+      );
+      expect(systemNotification).not.toHaveBeenCalled();
+      if (scheduled) expect(api.scheduleRestTimerNotification).toHaveBeenCalled();
+      // Dismissal and returning focus must not announce the same timer a second time.
+      await act(async () =>
+        document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
+      );
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(document.querySelector('.app-notification-toast')).toBeNull();
+    },
+  );
+
+  it('does not announce a cancelled rest', async () => {
+    await startRest();
+    await click('Cancel rest timer');
+    await act(async () => vi.advanceTimersByTimeAsync(31_000));
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it.each([false, true])(
+    'preserves background notification delivery (server scheduled: %s)',
+    async (scheduled) => {
+      const systemNotification = await startRest(scheduled);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      await act(async () => vi.advanceTimersByTimeAsync(30_000));
+      expect(document.querySelector('.app-notification-toast')).toBeNull();
+      expect(systemNotification).toHaveBeenCalledTimes(scheduled ? 0 : 1);
+    },
+  );
+
+  it('checks an overdue timer immediately when the visible app regains focus', async () => {
+    await startRest();
+    vi.setSystemTime(Date.now() + 31_000);
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Rest complete',
+    );
+  });
 
   it('removes only a rest, offers Undo, persists removal and restores it only on a saved edit', async () => {
     vi.useFakeTimers();
