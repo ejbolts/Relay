@@ -6,7 +6,15 @@ _Relay was called Gym Logger before version 1.0._
 
 26 October 2026
 
-### Train together with clearer workout tools
+### Your training split and friends
+
+![Your split editor with templates, a named Full body A / B cycle, rest days, start date and a seven-day preview using synthetic training data](screenshots/releases/1.1.0-training-split.png)
+
+_Choose a template or build your own repeating cycle. Custom workout types and rest days stay in the order you choose._
+
+![Home showing the scheduled Full body A day and Edit split shortcut using a synthetic sample account](screenshots/releases/1.1.0-training-split-home.png)
+
+_Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
 
 ![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
 
@@ -68,6 +76,11 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- **Your split:** open **Settings > Training > Your split** or **Edit split** on Home. Choose **Upper / Lower**, **Push / Pull / Legs**, **FBEOD** (full body every other day), **Cardio**, or start custom.
+- **Your own cycle:** name it, choose a start date, add, remove and reorder workout or rest days, create custom types such as **Full body A** and **Full body B**, and preview upcoming weeks. Each step is one calendar day. The cycle repeats across weeks; logging or skipping a workout does not move the schedule.
+- **Up next:** Home and the Start menu follow the saved split. Custom types reuse only their own previous sessions, and starting without a previous session keeps the chosen type. Rest days appear as rest; you can still start a workout manually. The visible app refreshes its schedule after local midnight.
+- **Saved to your account:** splits follow your sign-in and are included in account backups. A removed workout type asks you to update the split or restore the type. Failed saves keep your edits for retry.
+- **Automatic suggestions:** switch off **Use this split** and save to return to the existing recommendations while retaining your pattern. Accounts that have not saved a split keep their current behavior.
 - Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
 - The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
 - Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
