@@ -24,11 +24,16 @@ _The weekly muscle card is on Home and Training. Show more reveals the remaining
 
 _The Home title and actions share one row at phone width, with the date above. Very narrow screens place the actions on a left-aligned row._
 
+![Workout set with a Volume PR for this weight badge](screenshots/releases/1.0.1-volume-pr-weight.png)
+
+_The badge makes it clear that the record compares reps at the same weight._
+
 - Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
 - The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
 - Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
 - Sets per muscle is on Home and at the bottom of Training. Weekly totals use each workout’s saved credit setting. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.
 - Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.
+- Volume records now say **Volume PR for this weight** on set badges, popups and record lists. The calculation still compares the best reps at that same weight.
 
 ## 1.0.0
 

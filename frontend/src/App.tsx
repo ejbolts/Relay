@@ -472,7 +472,7 @@ function prettyDate(value: string): string {
 function recordTypeLabel(type: PersonalRecord['record_type']): string {
   return {
     weight: 'Weight PR',
-    reps_at_weight: 'Volume PR',
+    reps_at_weight: 'Volume PR for this weight',
     estimated_1rm: 'estimated 1RM PR',
     duration: 'duration PR',
     distance: 'distance PR',
