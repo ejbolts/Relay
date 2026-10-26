@@ -36,6 +36,11 @@ _The Settings icon returns to the overview after a previous visit to Appearance.
 
 _Equipment photo opens directly to its controls in this isolated sample workout._
 
+![Workout exercise card ending at Add set, without the Exercise note for next time field](screenshots/releases/1.0.1-no-exercise-note.png)
+
+_The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
+
+- Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
 - Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
 - Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.
 - Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.

@@ -3603,13 +3603,6 @@ function WorkoutLogger({
                   ),
                 )
               }
-              onMovementNotes={(value) =>
-                setMovements((current) =>
-                  current.map((item) =>
-                    item.key === movement.key ? { ...item, notes: value } : item,
-                  ),
-                )
-              }
             />
           ))}
         </div>
@@ -4081,7 +4074,6 @@ function MovementCard({
   onSwitch,
   onRemove,
   onMachinePhotos,
-  onMovementNotes,
   prBadges,
   supersetLabel,
   onMoveUp,
@@ -4105,7 +4097,6 @@ function MovementCard({
   onSwitch: () => void;
   onRemove: () => void;
   onMachinePhotos: (photoIds: string[]) => void;
-  onMovementNotes: (value: string) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
   onMoveUp: () => void;
@@ -5080,12 +5071,6 @@ function MovementCard({
           onClose={() => setPlateSetKey(null)}
         />
       )}
-      <input
-        className="movement-note"
-        value={movement.notes}
-        onChange={(event) => onMovementNotes(event.target.value)}
-        placeholder="Exercise note for next time…"
-      />
     </article>
   );
 }
