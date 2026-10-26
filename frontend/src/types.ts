@@ -738,6 +738,13 @@ export interface SharedProfileSummary {
   } | null;
 }
 
+export interface SuggestedProfilePage {
+  profiles: SharedProfileSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface SharingConnection {
   id: string;
   display_name: string;

@@ -36,6 +36,7 @@ import type {
   SharedGoals,
   SharedProfile,
   SharedProfileSummary,
+  SuggestedProfilePage,
   SharedConsistency,
   SharedWorkoutFilters as WorkoutFilters,
   SharedWorkoutFilterOptions,
@@ -386,7 +387,7 @@ function FriendRow({
   actions,
 }: {
   person: { display_name: string; profile_photo_url: string | null };
-  detail: string;
+  detail?: string;
   onOpen?: () => void;
   actions?: ReactNode;
 }) {
@@ -402,7 +403,7 @@ function FriendRow({
         <ProfileAvatar className="shared-profile-avatar small" user={avatarUser(person)} />
         <span className="shared-connection-copy">
           <strong>{person.display_name}</strong>
-          <small>{detail}</small>
+          {detail && <small>{detail}</small>}
         </span>
         {onOpen && !actions && <Icon name="chevron-right" />}
       </button>
@@ -562,7 +563,156 @@ export function PeopleSearch({
   );
 }
 
-/** Social's Find tab: requests waiting for you, people search, your requests and blocks. */
+export function SuggestedFriends({
+  active,
+  refreshKey,
+  onOpenProfile,
+  onFriendChanged,
+}: {
+  active: boolean;
+  refreshKey: string;
+  onOpenProfile: (profile: SharedProfileSummary) => void;
+  onFriendChanged: () => void;
+}) {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const [revision, setRevision] = useState(0);
+  const [result, setResult] = useState<SuggestedProfilePage | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusPage = useRef(false);
+  const headingId = useId();
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    setState('loading');
+    setError(null);
+    api.sharing
+      .suggestions(requestedPage)
+      .then((page) => {
+        if (cancelled) return;
+        setResult(page);
+        setState('ready');
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setError(authErrorMessage(reason));
+        setState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, refreshKey, requestedPage, revision]);
+  useEffect(() => {
+    if (state !== 'ready' || !focusPage.current) return;
+    focusPage.current = false;
+    heading.current?.focus({ preventScroll: true });
+    heading.current?.scrollIntoView({ block: 'start' });
+  }, [state, result]);
+  const pageCount = result ? Math.ceil(result.total / result.page_size) : 0;
+  const page = result?.page ?? 1;
+  const firstPage = Math.max(1, Math.min(page - 2, pageCount - 4));
+  const pageNumbers = Array.from(
+    { length: Math.min(5, pageCount) },
+    (_, index) => firstPage + index,
+  );
+  function changePage(next: number) {
+    if (next === page) return;
+    focusPage.current = true;
+    setRequestedPage(next);
+  }
+  return (
+    <div className="friend-group suggested-friends" aria-labelledby={headingId}>
+      <h3 id={headingId} ref={heading} tabIndex={-1}>
+        Suggested friends
+      </h3>
+      {state === 'loading' && (
+        <p role="status" className="sharing-loading">
+          Loading suggestions…
+        </p>
+      )}
+      {state === 'error' && (
+        <div className="sharing-load-error">
+          <p className="inline-error" role="alert">
+            {error ?? 'Could not load suggestions.'}
+          </p>
+          <button
+            type="button"
+            className="profile-secondary"
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+      {state === 'ready' && result && (
+        <>
+          {result.profiles.length === 0 ? (
+            <p className="shared-card-empty">No suggested friends right now.</p>
+          ) : (
+            <ul>
+              {result.profiles.map((profile) => (
+                <FriendRow
+                  key={profile.id}
+                  person={profile}
+                  onOpen={() => onOpenProfile(profile)}
+                  actions={
+                    <FriendButton
+                      profile={profile}
+                      onChange={() => {
+                        setRevision((value) => value + 1);
+                        onFriendChanged();
+                      }}
+                    />
+                  }
+                />
+              ))}
+            </ul>
+          )}
+          {result.total > 0 && (
+            <p className="suggested-friends-range" role="status">
+              {(page - 1) * result.page_size + 1}–{Math.min(page * result.page_size, result.total)}{' '}
+              of {result.total}
+            </p>
+          )}
+          {pageCount > 1 && (
+            <nav className="suggested-friends-pages" aria-label="Suggested friends pages">
+              <button
+                type="button"
+                disabled={page === 1}
+                aria-label="Previous suggested friends page"
+                onClick={() => changePage(page - 1)}
+              >
+                ‹
+              </button>
+              {pageNumbers.map((number) => (
+                <button
+                  type="button"
+                  key={number}
+                  aria-current={page === number ? 'page' : undefined}
+                  aria-label={`Suggested friends page ${number}`}
+                  onClick={() => changePage(number)}
+                >
+                  {number}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={page === pageCount}
+                aria-label="Next suggested friends page"
+                onClick={() => changePage(page + 1)}
+              >
+                ›
+              </button>
+            </nav>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Social's Find tab: requests, people search, public suggestions, sent requests and blocks. */
 export function FindPanel({
   active,
   connections,
@@ -706,6 +856,12 @@ export function FindPanel({
         </FriendGroup>
       )}
       <PeopleSearch
+        active={active}
+        refreshKey={`${searchVersion}:${people.map((person) => person.id).join(',')}`}
+        onOpenProfile={onOpenProfile}
+        onFriendChanged={onChanged}
+      />
+      <SuggestedFriends
         active={active}
         refreshKey={`${searchVersion}:${people.map((person) => person.id).join(',')}`}
         onOpenProfile={onOpenProfile}

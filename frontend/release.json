@@ -1,9 +1,10 @@
 {
   "version": "1.0.1",
   "date": "2026-10-26",
-  "title": "Rest alerts and everyday fixes",
-  "summary": "See RPE effort and set types in colour, get rest alerts while browsing Relay, open release notes from Notifications, and check when friends logged their sessions.",
+  "title": "Find friends and improve your workouts",
+  "summary": "Discover public profiles in Find, see RPE and set types in colour, get rest alerts while browsing Relay, and open release notes from Notifications.",
   "changes": [
+    "Social > Find automatically suggests public accounts you are not already connected to, eight per page with numbered, Previous and Next controls. Tap a name or avatar to open the profile, or use Add friend separately. Your account, existing friends and requests, private and disabled accounts, and blocks in either direction are excluded. Search remains available above the suggestions.",
     "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
     "Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.",
     "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.",
@@ -14,10 +15,18 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/5ea1245482639e8588bf7a6229a37f3dd444c709/docs/screenshots/releases/1.0.1-rpe-set-colours.png",
-    "alt": "Workout table with orange warm-up, green working, purple drop and red failure rows, plus coloured RPE numbers; the green working set is being edited at RPE 10. Isolated sample data."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/31046da9f3bd1af38d2b381401219d84f8c993e5/docs/screenshots/releases/1.0.1-suggested-friends.png",
+    "alt": "Social Find automatically listing eight fictional public profiles with separate Add friend buttons, names that open profiles, a 1-8 of 17 range and numbered pagination in a phone-sized view."
   },
   "highlights": [
+    {
+      "title": "Suggested friends in Find",
+      "description": "Find automatically lists public accounts you are not connected to, eight per page. Tap a name or avatar to open the profile; Add friend is separate.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/31046da9f3bd1af38d2b381401219d84f8c993e5/docs/screenshots/releases/1.0.1-suggested-friends.png",
+        "alt": "Social Find automatically listing eight fictional public profiles with separate Add friend buttons, names that open profiles, a 1-8 of 17 range and numbered pagination in a phone-sized view."
+      }
+    },
     {
       "title": "RPE effort and set types in colour",
       "description": "RPE numbers run from green through orange to red, including half points. Row tints follow the set type and stay consistent while editing or completing a set.",
