@@ -410,6 +410,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercisePartialSets: (exerciseId: string, enabled: boolean) =>
+    request<Exercise>(`/api/exercises/${exerciseId}/partial-sets`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partial_sets_enabled: enabled }),
+    }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
   listAllMachinePhotos: () => request<MachinePhotoUsage[]>('/api/machine-photos'),

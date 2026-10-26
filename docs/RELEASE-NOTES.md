@@ -2,6 +2,29 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.0.1
+
+26 October 2026
+
+### Find exercises by muscle
+
+![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
+
+_Browse ten lifts per page. Muscle filters include direct and enabled partial credits; the three-line button changes the page size._
+
+![Bench press muscle credits with Count partial sets switched off and direct pectoral sets still counted](screenshots/releases/1.0.1-partial-sets.png)
+
+_Turn partial sets off for one exercise from its question-mark popup. Your account’s saved totals recalculate, while direct sets remain counted._
+
+![Expanded weekly Sets per muscle card at the bottom of Training, including muscles with zero sets and Show less](screenshots/releases/1.0.1-training-muscles.png)
+
+_Show more reveals the remaining trained and untrained muscles on Home and Training. Tap a muscle to open its contributing workouts. All previews use isolated synthetic training data._
+
+- Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
+- The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
+- Count partial sets in an exercise’s muscle-credit popup can switch its assistance credits off or on for your account. Saved workout totals update across devices; direct sets and the original workout records remain unchanged.
+- Sets per muscle has Show more and Show less controls to reveal remaining trained and untrained muscles. The same weekly card is also at the bottom of Training, with links to the contributing exercises and workouts.
+
 ## 1.0.0
 
 25 October 2026

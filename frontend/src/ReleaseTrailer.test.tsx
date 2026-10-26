@@ -2,12 +2,17 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import metadata from '../release.json';
+import currentRelease from '../release.json';
+import releaseHistory from '../release-history.json';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
+import type { Release } from './releaseMetadata';
 
 let root: Root;
 let container: HTMLDivElement;
 let play: ReturnType<typeof vi.fn>;
+const metadata = ([currentRelease, ...releaseHistory] as Release[]).find(
+  (release) => release.version === '1.0.0',
+)!;
 const video = metadata.video!;
 
 beforeEach(() => {

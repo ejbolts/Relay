@@ -81,6 +81,7 @@ from .tracker_schemas import (
     ExerciseHistoryBaselineRead,
     ExerciseLatestSessionRead,
     ExerciseLibrarySummaryRead,
+    ExercisePartialSetsUpdate,
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
@@ -851,6 +852,20 @@ def update_exercise_favorite(
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
     exercise.is_favorite = payload.is_favorite
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    db.refresh(exercise)
+    return exercise
+
+
+@router.patch("/exercises/{exercise_id}/partial-sets", response_model=ExerciseRead)
+def update_exercise_partial_sets(
+    exercise_id: str, payload: ExercisePartialSetsUpdate, db: DbSession, user: CurrentUser
+) -> Exercise:
+    exercise = get_owned(db, Exercise, exercise_id, user.id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise was not found.")
+    exercise.partial_sets_enabled = payload.partial_sets_enabled
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(exercise)

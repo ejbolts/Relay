@@ -257,7 +257,9 @@ def is_pr_eligible(item: WorkoutSet) -> bool:
     return True
 
 
-def muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
+def muscle_credits(
+    exercise: Exercise, *, include_partial: bool | None = None
+) -> list[tuple[str, float]]:
     if exercise.kind == ExerciseKind.CARDIO or exercise.category == WorkoutCategory.CARDIO:
         return []
     if exercise.muscle_contributions:
@@ -267,7 +269,9 @@ def muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
                 continue
             muscle_name = MUSCLE_GROUP_ALIASES.get(item.muscle_name, item.muscle_name)
             credits[muscle_name] = max(credits.get(muscle_name, 0), item.contribution_factor)
-        return list(credits.items())
+        if include_partial is None:
+            include_partial = getattr(exercise, "partial_sets_enabled", True) is not False
+        return [(name, sets) for name, sets in credits.items() if sets >= 1 or include_partial]
     # Custom exercises retain the user's explicit muscle field until they edit detailed credits.
     muscle_name = exercise.muscle_group.strip()
     if not muscle_name or muscle_name in HIDDEN_MUSCLE_GROUPS:

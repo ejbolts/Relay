@@ -598,6 +598,7 @@ class Exercise(Base):
     equipment: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    partial_sets_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     movements: Mapped[list[WorkoutMovement]] = relationship(back_populates="exercise")

@@ -13,7 +13,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
+import type {
+  ContextType,
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  RefObject,
+} from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
@@ -100,6 +106,8 @@ import { PopupDialog } from './PopupDialog';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
+import { MuscleSetsCard } from './MuscleSetsCard';
 import {
   MachineFilterBanner,
   MachineFilterPicker,
@@ -532,6 +540,26 @@ export function App() {
         <AppContent />
       </WorkoutTypesProvider>
     </TrainingPreferencesProvider>
+  );
+}
+
+function AppContentProviders({
+  exercises,
+  updatePartialSets,
+  settingsNavigation,
+  children,
+}: {
+  exercises: Exercise[];
+  updatePartialSets: (id: string, enabled: boolean) => Promise<Exercise>;
+  settingsNavigation: ContextType<typeof SettingsNavigationContext>;
+  children: ReactNode;
+}) {
+  return (
+    <ExerciseCreditsContext.Provider value={{ exercises, updatePartialSets }}>
+      <SettingsNavigationContext.Provider value={settingsNavigation}>
+        {children}
+      </SettingsNavigationContext.Provider>
+    </ExerciseCreditsContext.Provider>
   );
 }
 
@@ -1215,6 +1243,15 @@ function AppContent() {
     );
   }
 
+  async function updateExercisePartialSets(exerciseId: string, enabled: boolean) {
+    const updated = await api.updateExercisePartialSets(exerciseId, enabled);
+    setExercises((current) =>
+      current.map((exercise) => (exercise.id === updated.id ? updated : exercise)),
+    );
+    await refreshData({ silent: true, activityLabel: null });
+    return updated;
+  }
+
   async function createExercise(input: ExerciseCreateInput): Promise<Exercise> {
     const exercise = await withBackgroundActivity('Creating exercise…', () =>
       api.createExercise(input),
@@ -1372,7 +1409,11 @@ function AppContent() {
   }
 
   return (
-    <SettingsNavigationContext.Provider value={{ request: settingsJump, navigate: openSetting }}>
+    <AppContentProviders
+      exercises={exercises}
+      updatePartialSets={updateExercisePartialSets}
+      settingsNavigation={{ request: settingsJump, navigate: openSetting }}
+    >
       <div
         className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
@@ -1697,6 +1738,8 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
+                weeklySets={dashboard?.weekly_sets}
+                onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -1840,7 +1883,7 @@ function AppContent() {
           />
         )}
       </div>
-    </SettingsNavigationContext.Provider>
+    </AppContentProviders>
   );
 }
 
@@ -8855,6 +8898,8 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
+  weeklySets,
+  onOpenMuscleWorkout,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -8884,6 +8929,8 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
+  weeklySets: DashboardData['weekly_sets'] | undefined;
+  onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -8896,6 +8943,7 @@ function HistoryScreen({
 }) {
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
+  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -9271,6 +9319,13 @@ function HistoryScreen({
             />
           )}
         </CachedTabPanel>
+      )}
+      {!exerciseHeader && (
+        <MuscleSetsCard
+          weeklySets={weeklySets}
+          goal={muscleSetGoal}
+          onOpenWorkout={onOpenMuscleWorkout}
+        />
       )}
     </section>
   );

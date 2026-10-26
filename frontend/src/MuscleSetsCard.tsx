@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useId, useState, type CSSProperties } from 'react';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { shortDate } from './trainingSummary';
@@ -17,60 +17,77 @@ export function MuscleSetsCard({
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const muscles = (weeklySets?.muscle_groups ?? [])
-    .filter((muscle) => muscle.raw_sets > 0)
-    .sort((left, right) => right.raw_sets - left.raw_sets);
+  const [expanded, setExpanded] = useState(false);
+  const titleId = useId();
+  const listId = useId();
+  const allMuscles = [...(weeklySets?.muscle_groups ?? [])].sort(
+    (left, right) =>
+      right.raw_sets - left.raw_sets || left.muscle_group.localeCompare(right.muscle_group),
+  );
+  const muscles = allMuscles.filter((muscle) => muscle.raw_sets > 0);
+  const visibleMuscles = expanded ? allMuscles : muscles.slice(0, 8);
   const untrained = (weeklySets?.muscle_groups ?? []).filter(
     (muscle) => muscle.raw_sets <= 0,
   ).length;
   const maximum = Math.max(...muscles.map((muscle) => muscle.raw_sets), goal * 1.15);
-  const muscle = muscles.find((item) => item.muscle_group === selected);
+  const muscle = allMuscles.find((item) => item.muscle_group === selected);
 
   return (
-    <section className="pulse-card" aria-labelledby="muscle-sets-title">
+    <section className="pulse-card muscle-sets-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
-        <h2 id="muscle-sets-title">Sets per muscle</h2>
+        <h2 id={titleId}>Sets per muscle</h2>
         <span>This week · working sets</span>
       </header>
       <p className="muscle-set-goal-key">
         <span aria-hidden="true" /> Weekly goal: {goal} sets per muscle
       </p>
-      {muscles.length ? (
-        <ul
-          className="muscle-bars"
-          aria-label={`Working sets per muscle; weekly goal: ${goal} sets`}
-          style={{ '--muscle-goal-ratio': goal / maximum } as CSSProperties}
-        >
-          {muscles.slice(0, 8).map((item, index) => (
-            <li key={item.muscle_group}>
-              <button
-                type="button"
-                className="muscle-name-button"
-                aria-label={`Exercises contributing to ${item.muscle_group}`}
-                aria-haspopup="dialog"
-                onClick={() => setSelected(item.muscle_group)}
-              >
-                {item.muscle_group}
-              </button>
-              <span className="muscle-bar-track">
-                <i
-                  style={
-                    {
-                      width: `${(item.raw_sets / maximum) * 100}%`,
-                      '--d': `${index * 45}ms`,
-                    } as CSSProperties
-                  }
-                />
-              </span>
-              <b className="num">{credits(item.raw_sets)}</b>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="pulse-empty-line">No working sets logged yet this week.</p>
-      )}
+      <ul
+        id={listId}
+        hidden={visibleMuscles.length === 0}
+        className="muscle-bars"
+        aria-label={`Working sets per muscle; weekly goal: ${goal} sets`}
+        style={{ '--muscle-goal-ratio': goal / maximum } as CSSProperties}
+      >
+        {visibleMuscles.map((item, index) => (
+          <li key={item.muscle_group}>
+            <button
+              type="button"
+              className="muscle-name-button"
+              aria-label={`Exercises contributing to ${item.muscle_group}`}
+              aria-haspopup="dialog"
+              onClick={() => setSelected(item.muscle_group)}
+            >
+              {item.muscle_group}
+            </button>
+            <span className="muscle-bar-track">
+              <i
+                style={
+                  {
+                    width: `${(item.raw_sets / maximum) * 100}%`,
+                    '--d': `${index * 45}ms`,
+                  } as CSSProperties
+                }
+              />
+            </span>
+            <b className="num">{credits(item.raw_sets)}</b>
+          </li>
+        ))}
+      </ul>
+      {!muscles.length && <p className="pulse-empty-line">No working sets logged yet this week.</p>}
       {muscles.length > 0 && untrained > 0 && (
         <p className="pulse-footnote">{untrained} muscles not trained yet</p>
+      )}
+      {(expanded || allMuscles.length > visibleMuscles.length) && (
+        <button
+          type="button"
+          className="show-more-button muscle-sets-expand"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+          <Icon name="chevron-down" />
+        </button>
       )}
       {muscle && (
         <MuscleContributionSheet
@@ -182,7 +199,11 @@ function MuscleContributionSheet({
             ))}
           </ul>
         ) : (
-          <p className="muscle-sheet-note">Refresh Home to load the contributing exercises.</p>
+          <p className="muscle-sheet-note">
+            {muscle.raw_sets > 0
+              ? 'Refresh Home to load the contributing exercises.'
+              : 'No working sets for this muscle this week.'}
+          </p>
         )}
         {busy && (
           <p className="muscle-sheet-note" role="status">

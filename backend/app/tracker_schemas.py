@@ -52,6 +52,7 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    partial_sets_enabled: bool = True
     muscle_contributions: list[MuscleContributionRead] = []
 
     @computed_field
@@ -61,6 +62,18 @@ class ExerciseRead(BaseModel):
         return [
             MuscleSetCreditRead(muscle_name=name, sets=sets) for name, sets in muscle_credits(self)
         ]
+
+    @computed_field
+    @property
+    def default_muscle_set_credits(self) -> list[MuscleSetCreditRead]:
+        return [
+            MuscleSetCreditRead(muscle_name=name, sets=sets)
+            for name, sets in muscle_credits(self, include_partial=True)
+        ]
+
+
+class ExercisePartialSetsUpdate(BaseModel):
+    partial_sets_enabled: bool
 
 
 class ExerciseFavoriteUpdate(BaseModel):

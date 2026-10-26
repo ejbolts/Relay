@@ -1,15 +1,35 @@
-import { useRef, useState } from 'react';
+import { useContext, useRef, useState } from 'react';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { PopupDialog } from './PopupDialog';
 import type { Exercise } from './types';
 import './exerciseMuscleHelp.css';
 
 export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
+  const context = useContext(ExerciseCreditsContext);
+  const ownedExercise = context?.exercises.find((item) => item.id === exercise.id);
+  exercise = ownedExercise ?? exercise;
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const cardio = exercise.kind === 'cardio' || exercise.category === 'cardio';
-  const credits = exercise.muscle_set_credits ?? [];
+  const credits = exercise.default_muscle_set_credits ?? exercise.muscle_set_credits ?? [];
   const direct = credits.filter((credit) => credit.sets >= 1);
   const partial = credits.filter((credit) => credit.sets > 0 && credit.sets < 1);
+  const partialEnabled = exercise.partial_sets_enabled !== false;
+
+  async function togglePartialSets() {
+    if (!context || !ownedExercise || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await context.updatePartialSets(exercise.id, !partialEnabled);
+    } catch {
+      setError('Could not save partial sets. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <span
@@ -48,9 +68,26 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
             <p>Cardio does not add strength sets to your weekly muscle totals.</p>
           ) : (
             <>
-              <p>
-                For each completed working set, these credits go towards your weekly muscle totals.
-              </p>
+              {partial.length > 0 && ownedExercise && context && (
+                <div className="exercise-partial-control">
+                  <label>
+                    <span>Count partial sets</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={partialEnabled}
+                      disabled={saving}
+                      onChange={() => void togglePartialSets()}
+                    />
+                  </label>
+                  {saving && <span role="status">Saving…</span>}
+                  {error && (
+                    <p role="alert" className="inline-error">
+                      {error}
+                    </p>
+                  )}
+                </div>
+              )}
               {credits.length ? (
                 <div className="exercise-muscle-credit-groups">
                   {[
@@ -64,8 +101,14 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
                           {items.map((credit) => (
                             <li key={credit.muscle_name}>
                               <span>{credit.muscle_name}</span>
-                              <strong>
-                                {credit.sets} {credit.sets === 1 ? 'set' : 'sets'}
+                              <strong
+                                className={
+                                  credit.sets < 1 && !partialEnabled ? 'credit-disabled' : undefined
+                                }
+                              >
+                                {credit.sets < 1 && !partialEnabled
+                                  ? 'Off'
+                                  : `${credit.sets} ${credit.sets === 1 ? 'set' : 'sets'}`}
                               </strong>
                             </li>
                           ))}
@@ -82,12 +125,9 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
                 <p>No muscle set credits are available for this exercise.</p>
               )}
               <p className="exercise-muscle-note">
-                Each listed muscle receives its own credit. Warmups, unfinished sets and failed sets
-                with no completed reps do not count.
-              </p>
-              <p className="exercise-muscle-note">
-                These are estimates for tracking training, not exact measures of muscle growth.
-                Technique and equipment can change muscle involvement.
+                Credits apply to each completed working set. Changing partial sets updates this
+                exercise across your saved workouts; direct sets stay counted. Warmups and
+                unfinished sets do not count.
               </p>
             </>
           )}
