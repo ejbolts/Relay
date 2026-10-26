@@ -61,6 +61,14 @@ export function relativeDay(value: string, today: string): string {
   return shortDate(value);
 }
 
+/** The saved timestamp is UTC, including older SQLite responses without an offset. */
+export function loggedTime(value: string | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 /** The last seven days, oldest first, ending with `today`. */
 export function lastWeek(today: string): string[] {
   return Array.from({ length: 7 }, (_, index) => addDays(today, index - 6));

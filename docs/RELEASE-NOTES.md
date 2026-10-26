@@ -2,6 +2,54 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.1.0
+
+26 October 2026
+
+### Find friends and improve your workouts
+
+![Social Find showing eight suggested public profiles with usernames, separate Add friend buttons and numbered pagination](screenshots/releases/1.0.1-suggested-friends.png)
+
+_Find automatically lists public accounts you are not connected to, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate. This phone-sized view uses isolated sample data._
+
+![Workout table with orange warm-up, green working, purple drop and red failure rows, plus coloured RPE numbers](screenshots/releases/1.0.1-rpe-set-colours.png)
+
+_Set type controls each row tint; RPE colours only the effort number, including while editing. This workout uses isolated sample data._
+
+![Notifications includes a Relay release row with version, title, date, New and View above synthetic friend activity](screenshots/releases/1.0.1-release-notification.png)
+
+_Tap View for What's new, then close the notes to return to the inbox. The release row remains after viewing._
+
+![Rest complete appears over Body while a synthetic workout remains active](screenshots/releases/1.0.1-rest-complete.png)
+
+_A rest-complete alert appears above the current screen after the countdown has been dismissed. This example uses isolated sample data._
+
+![Recent Friends Activity with local logged times beside Today for synthetic strength and cardio sessions](screenshots/releases/1.0.1-friend-logged-time.png)
+
+_Recent Friends Activity shows the original logged time beside each session's day label, using isolated sample accounts._
+
+![All settings overview after reopening Settings from another screen, using a synthetic account](screenshots/releases/1.0.1-all-settings.png)
+
+_The Settings icon returns to the overview after a previous visit to Appearance._
+
+![Expanded Equipment photo panel with Take photo and Choose photo controls, without the introductory sentence](screenshots/releases/1.0.1-equipment-photo-controls.png)
+
+_Equipment photo opens directly to its controls in this isolated sample workout._
+
+![Workout exercise card ending at Add set, without the Exercise note for next time field](screenshots/releases/1.0.1-no-exercise-note.png)
+
+_The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
+
+- Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
+- Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
+- Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.
+- Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.
+- Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
+- The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.
+- Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.
+- RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
+- Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
+
 ## 1.0.0
 
 25 October 2026
