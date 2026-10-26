@@ -32,6 +32,10 @@ _The badge makes it clear that the record compares reps at the same weight._
 
 _Swipe both ways through saved equipment photos. Confirming deletion removes an old photo from the library and its saved workout attachments while keeping the sets._
 
+![Profile workout with subtle orange warm-up chips, green working sets, purple drop sets and red failed sets](screenshots/releases/1.0.1-history-set-colours.png)
+
+_Saved sets use the logger's set-type colours in Profile and Training history, with readable labels in both themes._
+
 - Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
 - The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
 - Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
@@ -39,6 +43,7 @@ _Swipe both ways through saved equipment photos. Confirming deletion removes an 
 - Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.
 - Volume records now say **Volume PR for this weight** on set badges, popups and record lists. The calculation still compares the best reps at that same weight.
 - Swipe through saved equipment photos within the exercise card while logging, with keyboard scrolling available too. Deleting an old photo removes its saved workout attachments after confirmation and keeps the recorded sets.
+- Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets. Existing type labels remain visible, including older warm-up records.
 
 ## 1.0.0
 

@@ -9654,12 +9654,12 @@ function HistorySetFlow({
     <div className="history-set-flow">
       {sets.map((item, index) => (
         <Fragment key={item.id}>
-          <div className={`history-set-pill ${item.failed ? 'failed-set' : ''}`}>
+          <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
             {item.rpe !== null && <small>RPE {item.rpe}</small>}
             <em>
-              {item.set_type === 'warmup'
+              {item.set_type === 'warmup' || item.warmup
                 ? 'Warm-up'
                 : item.set_type === 'drop'
                   ? 'Drop'

@@ -406,6 +406,40 @@ describe('saving and pinning a machine photo while logging', () => {
 describe('filtering History by machine', () => {
   beforeEach(() => window.history.replaceState(null, '', '#history'));
 
+  it('keeps saved set types distinct, including legacy warm-ups, with their results and labels', async () => {
+    const source = recentTravel.movements[0].sets[0];
+    const sets = [
+      { ...source, id: 'warmup', order_index: 0, set_type: 'warmup' as const, warmup: false },
+      { ...source, id: 'legacy-warmup', order_index: 1, set_type: 'normal' as const, warmup: true },
+      { ...source, id: 'working', order_index: 2 },
+      { ...source, id: 'drop', order_index: 3, set_type: 'drop' as const },
+      { ...source, id: 'failed', order_index: 4, failed: true },
+    ];
+    vi.mocked(api.listWorkouts).mockResolvedValue([
+      { ...recentTravel, movements: [{ ...recentTravel.movements[0], sets }] },
+    ]);
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
+    const pills = [...container.querySelectorAll('.history-set-pill')];
+    expect(pills.map((item) => item.getAttribute('data-set-type'))).toEqual([
+      'warmup',
+      'warmup',
+      'normal',
+      'drop',
+      'failure',
+    ]);
+    expect(pills.map((item) => item.querySelector('em')?.textContent)).toEqual([
+      'Warm-up',
+      'Warm-up',
+      '',
+      'Drop',
+      'Failed',
+    ]);
+    expect(pills.every((item) => item.querySelector('span')?.textContent === '140 kg × 10')).toBe(
+      true,
+    );
+  });
+
   it('replaces the Training header with an exercise back header and restores the searched list', async () => {
     await act(async () => root.render(<App />));
     await click(button('Exercises'));
