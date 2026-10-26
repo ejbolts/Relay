@@ -398,8 +398,6 @@ export const api = {
     }),
   listSessions: () => request<WorkoutSession[]>('/api/sessions'),
   listExercises: () => request<Exercise[]>('/api/exercises'),
-  muscleSets: (weeks: 1 | 4) =>
-    request<DashboardData['weekly_sets']>(`/api/muscle-sets?weeks=${weeks}`),
   createExercise: (payload: ExerciseCreateInput) =>
     request<Exercise>('/api/exercises', {
       method: 'POST',

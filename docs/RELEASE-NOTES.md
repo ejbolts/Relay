@@ -16,14 +16,14 @@ _Browse ten lifts per page. Muscle filters include direct and currently enabled 
 
 _Choose a week and switch partial sets off or on. That choice carries forward until the next change, while earlier weeks retain their settings. Direct credits stay counted._
 
-![Four-week muscle totals showing 16 direct sets for glutes and quadriceps and 6 partial adductor credits after one week off and three weeks on](screenshots/releases/1.0.1-four-week-muscles.png)
+![Weekly muscle totals at the bottom of Training](screenshots/releases/1.0.1-weekly-muscle-totals.png)
 
-_Four weeks of four Leg Press sets produce 16 direct glute and quad sets. With partial credits off in week 1 and on in weeks 2–4, adductors receive 6 set credits. Muscle mappings are unchanged. All previews use isolated synthetic training data._
+_The weekly muscle card is on Home and Training. Show more reveals the remaining muscles, and tapping a muscle opens its contributing workouts. All previews use isolated synthetic training data._
 
 - Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
 - The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
 - Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
-- Sets per muscle is on Home and at the bottom of Training, with This week and 4 weeks views. Four-week totals combine each week’s saved credit settings. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.
+- Sets per muscle is on Home and at the bottom of Training. Weekly totals use each workout’s saved credit setting. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.
 
 ## 1.0.0
 

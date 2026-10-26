@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MuscleSetsCard } from './MuscleSetsCard';
-import { api } from './api';
 import type { WeeklyMuscleContribution, WeeklySets } from './types';
 
 let root: Root;
@@ -181,60 +180,4 @@ it('can reveal untrained muscles before the first workout of the week', async ()
   await act(async () => host.querySelector<HTMLButtonElement>('.muscle-sets-expand')!.click());
   expect(host.querySelectorAll('.muscle-bars > li')).toHaveLength(1);
   expect(host.querySelector('.num')?.textContent).toBe('0');
-});
-
-it('loads four-week contributions, retries failures, uses a four-week goal and links the correct workout', async () => {
-  const contributions = Array.from({ length: 4 }, (_, index) => ({
-    ...contribution,
-    workout_id: `week-${index}`,
-    movement_id: `movement-${index}`,
-  }));
-  const data = {
-    ...weeklySets,
-    muscle_groups: [{ ...weeklySets.muscle_groups[0], raw_sets: 12, contributions }],
-  };
-  const read = vi
-    .spyOn(api, 'muscleSets')
-    .mockRejectedValueOnce(new Error('Offline'))
-    .mockResolvedValue(data);
-  const open = vi.fn();
-  await act(async () =>
-    root.render(<MuscleSetsCard weeklySets={weeklySets} goal={10} onOpenWorkout={open} />),
-  );
-  const period = (name: string) =>
-    [...host.querySelectorAll<HTMLButtonElement>('.muscle-period-options button')].find(
-      (button) => button.textContent === name,
-    )!;
-  await act(async () => period('4 weeks').click());
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not load');
-  await act(async () => host.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
-  expect(read).toHaveBeenCalledWith(4);
-  expect(host.textContent).toContain('4-week goal: 40');
-  expect(host.querySelector('.num')?.textContent).toBe('12');
-  await act(async () => host.querySelector<HTMLButtonElement>('.muscle-name-button')!.click());
-  expect(document.querySelector('dialog')?.textContent).toContain('LAST 4 WEEKS');
-  expect(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuemax')).toBe('40');
-  await act(async () =>
-    document.querySelectorAll<HTMLButtonElement>('.muscle-contribution-list button')[2].click(),
-  );
-  expect(open).toHaveBeenCalledExactlyOnceWith(contributions[2]);
-  await act(async () => period('This week').click());
-  expect(host.querySelector('.num')?.textContent).toBe('6');
-});
-
-it('ignores a delayed four-week response after returning to this week', async () => {
-  let finish!: (data: WeeklySets) => void;
-  vi.spyOn(api, 'muscleSets').mockReturnValue(
-    new Promise((resolve) => {
-      finish = resolve;
-    }),
-  );
-  await act(async () => root.render(<MuscleSetsCard weeklySets={weeklySets} goal={10} />));
-  const buttons = host.querySelectorAll<HTMLButtonElement>('.muscle-period-options button');
-  await act(async () => buttons[1].click());
-  expect(host.querySelector('[role="status"]')?.textContent).toContain('Loading');
-  await act(async () => buttons[0].click());
-  await act(async () => finish({ ...weeklySets, muscle_groups: [] }));
-  expect(host.querySelector('.num')?.textContent).toBe('6');
-  expect(host.querySelector('[role="status"]')).toBeNull();
 });

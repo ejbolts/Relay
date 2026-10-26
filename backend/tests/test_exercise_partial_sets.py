@@ -121,7 +121,7 @@ def test_partial_sets_migration_preserves_existing_exercises_and_defaults_to_ena
     engine.dispose()
 
 
-def test_four_week_leg_press_totals_use_each_weeks_carried_setting(client, other_client):
+def test_leg_press_history_uses_each_weeks_carried_setting(client):
     exercise = exercise_named(client, "Leg Press")
     current = start_of_week(date.today(), "monday")
     weeks = [current - timedelta(weeks=3 - index) for index in range(4)]
@@ -185,16 +185,6 @@ def test_four_week_leg_press_totals_use_each_weeks_carried_setting(client, other
     )
     assert assistance["raw_sets"] == 2
     assert assistance["contributions"][0]["credit_per_set"] == 0.5
-    period = client.get("/api/muscle-sets", params={"weeks": 4})
-    assert period.status_code == 200, period.text
-    assistance_period = next(
-        item for item in period.json()["muscle_groups"] if item["muscle_group"] == "Adductors"
-    )
-    assert assistance_period["raw_sets"] == 6
-    assert len(assistance_period["contributions"]) == 3
-    assert sum(item["set_credits"] for item in assistance_period["contributions"]) == 6
-    assert client.get("/api/muscle-sets", params={"weeks": 2}).status_code == 422
-    assert other_client.get("/api/muscle-sets", params={"weeks": 4}).json()["raw_sets"] == 0
     assert (
         client.patch(
             url, json={"partial_sets_enabled": False, "week_start": weeks[2].isoformat()}

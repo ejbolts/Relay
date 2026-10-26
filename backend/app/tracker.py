@@ -267,11 +267,10 @@ def exercise_coverage_groups(exercise: Exercise, on_date: date | None = None) ->
 
 
 def weekly_sets(
-    workouts: list[TrainingWorkout], today: date, week_start_day: str = "monday", weeks: int = 1
+    workouts: list[TrainingWorkout], today: date, week_start_day: str = "monday"
 ) -> WeeklySetsRead:
-    current_week = start_of_week(today, week_start_day)
-    week_start = current_week - timedelta(weeks=weeks - 1)
-    week_end = current_week + timedelta(days=6)
+    week_start = start_of_week(today, week_start_day)
+    week_end = week_start + timedelta(days=6)
     active_start = today - timedelta(days=27)
     active_groups: set[str] = set()
     raw_by_group: dict[str, float] = defaultdict(float)
@@ -1680,27 +1679,6 @@ def weekly_muscle_volume(
         MuscleVolumeRead(muscle_name=name, set_total=value)
         for name, value in sorted(totals.items())
     ]
-
-
-@router.get("/muscle-sets", response_model=WeeklySetsRead)
-def muscle_sets_for_period(db: DbSession, user: CurrentUser, weeks: int = 1) -> WeeklySetsRead:
-    if weeks not in (1, 4):
-        raise HTTPException(status_code=422, detail="Choose one or four weeks.")
-    today = date.today()
-    preferences = training_preferences(db, user.id)
-    start = start_of_week(today, preferences.week_start) - timedelta(weeks=weeks - 1)
-    workouts = list(
-        db.scalars(
-            select(TrainingWorkout)
-            .where(
-                TrainingWorkout.user_id == user.id,
-                TrainingWorkout.workout_date >= start,
-                TrainingWorkout.workout_date <= today,
-            )
-            .options(*workout_options())
-        )
-    )
-    return weekly_sets(workouts, today, preferences.week_start, weeks)
 
 
 def workouts_between(
