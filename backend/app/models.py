@@ -629,6 +629,7 @@ class Exercise(Base):
     equipment: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    partial_sets_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     movements: Mapped[list[WorkoutMovement]] = relationship(back_populates="exercise")
@@ -640,8 +641,25 @@ class Exercise(Base):
         cascade="all, delete-orphan",
         order_by="ExerciseMuscleContribution.muscle_name",
     )
+    partial_set_weeks: Mapped[list[ExercisePartialSetWeek]] = relationship(
+        back_populates="exercise",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ExercisePartialSetWeek.week_start",
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_exercise_user_name"),)
+
+
+class ExercisePartialSetWeek(Base):
+    __tablename__ = "exercise_partial_set_weeks"
+
+    exercise_id: Mapped[str] = mapped_column(
+        ForeignKey("exercises.id", ondelete="CASCADE"), primary_key=True
+    )
+    week_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exercise: Mapped[Exercise] = relationship(back_populates="partial_set_weeks")
 
 
 class ExerciseMuscleContribution(Base):

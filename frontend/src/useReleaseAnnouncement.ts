@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import releaseHistory from '../release-history.json';
 import releaseMetadata from '../release.json';
-import { hasSeenRelease, rememberRelease } from './releaseAnnouncements';
+import {
+  hasReadReleaseNotice,
+  hasSeenRelease,
+  rememberRelease,
+  rememberReleaseNoticeRead,
+} from './releaseAnnouncements';
 import { parseRelease, parseReleaseHistory } from './releaseMetadata';
 
 const bundledRelease = parseRelease(releaseMetadata)!;
@@ -20,6 +25,14 @@ export function useReleaseAnnouncement(userId: string | null) {
       userId !== null &&
       (state.userId === userId ? state.open : !hasSeenRelease(userId, bundledRelease.version)),
     checked: true,
+    noticeUnread: userId !== null && !hasReadReleaseNotice(userId, bundledRelease.version),
+    readNotice: () => {
+      if (userId) {
+        rememberReleaseNoticeRead(userId, bundledRelease.version);
+        rememberRelease(userId, bundledRelease.version);
+      }
+      setState({ userId, open: false });
+    },
     show: () => setState({ userId, open: true }),
     dismiss: () => {
       if (userId) rememberRelease(userId, bundledRelease.version);

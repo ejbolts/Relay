@@ -34,6 +34,7 @@ PRIVATE = "private"
 # Longer than any real session; caps a workout whose app never reports again.
 MAX_WORKOUT = timedelta(hours=12)
 MAX_MESSAGE_CHARACTERS = 2_000
+SESSION_CHECK_SECONDS = 30
 # Close codes the app understands: sign in again, rather than reconnecting.
 SIGNED_OUT = 4401
 
@@ -81,12 +82,14 @@ class PresenceReport(BaseModel):
 class Window:
     """An open presence socket, the event loop serving it, and whether its window is visible."""
 
-    __slots__ = ("loop", "socket", "visible")
+    __slots__ = ("loop", "socket", "visible", "user_id", "token")
 
-    def __init__(self, socket: WebSocket) -> None:
+    def __init__(self, socket: WebSocket, user_id: str, token: str) -> None:
         self.socket = socket
         self.loop = asyncio.get_running_loop()
         self.visible = False
+        self.user_id = user_id
+        self.token = token
 
 
 class PresenceHub:
@@ -96,9 +99,9 @@ class PresenceHub:
         self._lock = threading.Lock()
         self._windows: dict[str, dict[str, Window]] = {}
 
-    def connect(self, user_id: str, socket_id: str, socket: WebSocket) -> None:
+    def connect(self, user_id: str, socket_id: str, socket: WebSocket, token: str) -> None:
         with self._lock:
-            self._windows.setdefault(user_id, {})[socket_id] = Window(socket)
+            self._windows.setdefault(user_id, {})[socket_id] = Window(socket, user_id, token)
 
     def _online(self, user_id: str) -> bool:
         return any(window.visible for window in self._windows.get(user_id, {}).values())
@@ -281,16 +284,19 @@ async def broadcast(user_id: str) -> None:
     for window in hub.windows_for(viewers):
         # Production serves every socket from one loop; test clients give each socket its own.
         if window.loop is current:
-            await deliver(window.socket, message)
+            await deliver(window, message)
         elif not window.loop.is_closed():
             with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(deliver(window.socket, message), window.loop)
+                asyncio.run_coroutine_threadsafe(deliver(window, message), window.loop)
 
 
-async def deliver(socket: WebSocket, message: dict) -> None:
+async def deliver(window: Window, message: dict) -> None:
     # A socket closing mid-send is cleaned up by its own handler.
     with contextlib.suppress(Exception):
-        await socket.send_json(message)
+        if await run_in_threadpool(signed_in_user_id, window.token) != window.user_id:
+            await window.socket.close(code=SIGNED_OUT)
+            return
+        await window.socket.send_json(message)
 
 
 async def leave(user_id: str, socket_id: str) -> None:
@@ -317,11 +323,22 @@ async def presence_socket(websocket: WebSocket) -> None:
         return
     socket_id = uuid4().hex
     # Registered before the handshake completes, so the window counts as soon as it opens.
-    hub.connect(user_id, socket_id, websocket)
+    hub.connect(user_id, socket_id, websocket, token)
     try:
         await websocket.accept()
         while True:
-            message = await websocket.receive_text()
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=SESSION_CHECK_SECONDS
+                )
+            except TimeoutError:
+                message = None
+            # Open sockets must obey logout, password changes, account disabling and expiry.
+            if await run_in_threadpool(signed_in_user_id, token) != user_id:
+                await websocket.close(code=SIGNED_OUT)
+                break
+            if message is None:
+                continue
             if len(message) > MAX_MESSAGE_CHARACTERS:
                 continue
             try:

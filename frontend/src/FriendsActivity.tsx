@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { api, ApiError } from './api';
-import { friendSession, relativeDay } from './friendFeedData';
+import { friendSession, loggedTime, relativeDay } from './friendFeedData';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { PresenceAvatar } from './PresenceAvatar';
 import {
@@ -207,7 +207,11 @@ export function FriendsActivityCard({
                         <span className="friend-activity-title">{session.title}</span>
                       </span>
                       <span className="friend-activity-meta">
-                        {[relativeDay(item.workout.workout_date, today), session.detail]
+                        {[
+                          relativeDay(item.workout.workout_date, today),
+                          loggedTime(item.workout.created_at),
+                          session.detail,
+                        ]
                           .filter(Boolean)
                           .join(' · ')}
                       </span>

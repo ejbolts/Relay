@@ -4,6 +4,8 @@ Setup, maintenance and detailed behavior for contributors and administrators. Fo
 
 ## Detailed app behavior
 
+Per-exercise partial-set choices are saved in `exercise_partial_set_weeks` (migration `0043_weekly_partial_sets`). `PATCH /api/exercises/{id}/partial-sets` accepts `partial_sets_enabled` and optional `week_start`; dates normalize to the account's week start, default to this week and cannot be in future weeks. Each change carries forward until a later explicit change; the original `exercises.partial_sets_enabled` is retained as the legacy baseline. Responses expose that baseline as `partial_sets_default`, the dated changes as `partial_set_weeks`, and the effective current choice as `partial_sets_enabled`. Weekly totals, contribution details, recommendations and muscle-volume date ranges resolve the choice on each workout date. Backups include the account-owned history. `default_muscle_set_credits` retains the full mapping for help and filter choices; exercise filters use current effective credits, and pagination starts at ten rows. Direct credits and original logged sets are preserved.
+
 A private, multi-user mobile PWA for batching individual gym-set videos, stitching them locally, and uploading one unlisted workout video to YouTube by default. Each person signs in with their own account and a cookie session, and new accounts share their workouts and cardio publicly with sharing members by default; existing accounts retain their visibility choices. The first account created becomes the admin and claims any existing data. The admin console (Settings → Help & about → Admin console) lets the admin disable accounts, see each account's activity and storage, check disk space and the video queue, and switch video uploads (off, admins only, or everyone) and new sign-ups on or off without a restart. Video uploads are admin-only by default.
 
 The app also includes a structured, dark, mobile-first workout tracker: an exercise library, set/reps/weight logging, RPE and rest tracking, per-set notes, a live rest timer, workout history, a colour-coded training heatmap, weekly muscle-set tracking, and per-exercise progression charts. Reusable machine photos can be captured from a phone, captioned, pinned to an exercise in a particular workout, and expanded from History. Workout records and photo metadata live in the local SQLite database independently of the optional video workflow; processed photo files live under `data/machine-photos/`.
@@ -78,7 +80,7 @@ then those online, and the feed puts friends working out first. Changes are push
 open windows immediately, with the existing 30-second refreshes as a fallback. Only accepted
 friends who could see the member on their Friends list receive it. **Online status** and **Live
 workouts** in **Settings > Account & privacy > Profile sharing > Live activity** turn each part
-off separately; both start on. Migration `0042_live_activity` adds both choices to
+off separately; both start on. Migration `0044_live_activity` adds both choices to
 `profile_sharing` and creates `live_workouts`, which account backups leave out and account
 deletion removes.
 
@@ -218,6 +220,26 @@ reviewed revision, sample-data evidence, prioritized findings and feature roadma
 Use [GitHub issue #29](https://github.com/ejbolts/Gym-video-logger/issues/29) as its
 tracking index; each P1 finding has a separate issue. Recheck historical findings
 against the current code before starting new work.
+
+## Training splits
+
+`GET /api/training-split` returns the signed-in account's saved split or `null`.
+`PUT /api/training-split` saves a name, enabled flag, start date and 1–28 ordered steps;
+each step has an account-owned `workout_type_id`, or `null` for rest. At least one step
+must be a workout. Enabled splits require active types. The JSON is stored in the account's
+`training_split` key in `user_settings` and is included in account backups without a schema migration.
+
+Each step is one calendar day. The index is days since the start date modulo cycle length;
+logging or skipping sessions does not advance it. Before the start, Home shows the first
+scheduled day and its date. `GET /api/dashboard?on_date=YYYY-MM-DD` uses the client's local
+calendar date; callers that omit it keep the server-date default. The visible app rechecks
+after local midnight even when the training revision has not changed.
+
+Saving a split changes the account's training revision so other devices refresh. Disabled
+or absent splits use the existing muscle-frequency recommendations. A type removed after
+saving produces an update-split state rather than substituting a different workout. Custom
+recommendations carry the account-owned type metadata, and previous-session templates match
+the custom type ID as well as the compatibility category.
 
 ## Checks
 

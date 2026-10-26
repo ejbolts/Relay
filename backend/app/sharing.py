@@ -12,8 +12,8 @@ choose.
 New accounts start public; existing accounts retain their choices, including private defaults.
 
 Private, disabled and missing profiles all answer "not found". A friends-only profile shows only
-its name and photo until the two members are friends. Usernames can be searched but are not
-returned in shared profiles. Videos and sample data are never shared.
+its name and photo until the two members are friends. Public friend suggestions include usernames;
+other shared-profile responses omit them. Videos and sample data are never shared.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ PENDING, ACCEPTED = "pending", "accepted"
 MAX_WORKOUT_PAGE = 50
 FEED_SIZE = 5
 MAX_REACTION_NOTICES = 20
-RECENT_CARDIO_SESSIONS = 20
+PROFILE_CARDIO_PAGE_SIZE = 5
 RECENT_DAYS = 30
 # Friends list training days; one spare day covers members in time zones ahead of the server.
 ACTIVITY_DAYS = 8
@@ -137,6 +137,17 @@ class SharedProfileSummary(BaseModel):
     shares: SharedContent | None = None
 
 
+class SuggestedProfileSummary(SharedProfileSummary):
+    username: str
+
+
+class SuggestedProfilePage(BaseModel):
+    profiles: list[SuggestedProfileSummary]
+    total: int
+    page: int
+    page_size: int = 8
+
+
 class SharedBodyMeasurement(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -178,6 +189,11 @@ class SharedCardioSession(BaseModel):
     notes: str | None
 
 
+class SharedCardioPage(BaseModel):
+    total: int
+    sessions: list[SharedCardioSession]
+
+
 class SharedConsistencyRead(BaseModel):
     heatmap: list[HeatmapDay]
     current_streak: int
@@ -190,6 +206,7 @@ class SharedProfileRead(SharedProfileSummary):
     body_weight: list[SharedBodyMeasurement] | None = None
     goals: SharedGoals | None = None
     cardio_sessions: list[SharedCardioSession] | None = None
+    cardio_total: int | None = None
     training_time: TrainingTimeRead | None = None
     training_time_past_year: TrainingTimeRead | None = None
     consistency: SharedConsistencyRead | None = None
@@ -586,24 +603,37 @@ def shared_goals(db: Session, user_id: str) -> SharedGoals:
     )
 
 
-def shared_cardio(db: Session, user_id: str, sharing: ProfileSharing) -> list[SharedCardioSession]:
+def shared_cardio(
+    db: Session,
+    user_id: str,
+    sharing: ProfileSharing,
+    offset: int = 0,
+    limit: int = PROFILE_CARDIO_PAGE_SIZE,
+) -> SharedCardioPage:
+    owned = (
+        CardioSession.user_id == user_id,
+        or_(
+            CardioSession.source_workout_id.is_(None),
+            CardioSession.source_workout_id.not_in(sample_workout_ids()),
+        ),
+    )
+    total = db.scalar(select(func.count(CardioSession.id)).where(*owned)) or 0
     sessions = db.scalars(
         select(CardioSession)
-        .where(
-            CardioSession.user_id == user_id,
-            or_(
-                CardioSession.source_workout_id.is_(None),
-                CardioSession.source_workout_id.not_in(sample_workout_ids()),
-            ),
+        .where(*owned)
+        .order_by(
+            CardioSession.session_date.desc(),
+            CardioSession.created_at.desc(),
+            CardioSession.id.desc(),
         )
-        .order_by(CardioSession.session_date.desc(), CardioSession.created_at.desc())
-        .limit(RECENT_CARDIO_SESSIONS)
+        .offset(offset)
+        .limit(limit)
     )
     shared = [SharedCardioSession.model_validate(session) for session in sessions]
     if not sharing.share_notes:
         for session in shared:
             session.notes = None
-    return shared
+    return SharedCardioPage(total=total, sessions=shared)
 
 
 def pending_request_count(db: Session, user_id: str) -> int:
@@ -651,6 +681,42 @@ def update_sharing(payload: SharingChoices, user: CurrentUser, db: Db) -> Sharin
     # Friends' open windows show or hide live activity straight away.
     hub.notify(user.id)
     return sharing_read(db, sharing)
+
+
+@sharing_router.get("/suggestions", response_model=SuggestedProfilePage)
+def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, ge=1)):
+    require_sharing(db, user)
+    excluded = blocked_member_ids(db, user.id) | set(friendships_of(db, user.id))
+    query = (
+        select(User, ProfileSharing)
+        .join(ProfileSharing, ProfileSharing.user_id == User.id)
+        .where(
+            ProfileSharing.visibility == PUBLIC,
+            User.id != user.id,
+            User.disabled_at.is_(None),
+            User.id.not_in(excluded),
+        )
+    )
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    # A request or privacy change can remove the last member on the current page.
+    current_page = min(page, max(1, (total + 7) // 8))
+    rows = db.execute(
+        query.order_by(func.lower(User.display_name), User.id)
+        .offset((current_page - 1) * 8)
+        .limit(8)
+    ).all()
+    stats = workout_stats(db, [member.id for member, _ in rows])
+    return SuggestedProfilePage(
+        profiles=[
+            SuggestedProfileSummary(
+                **profile_summary(user, member, sharing, None, stats.get(member.id)).model_dump(),
+                username=member.username,
+            )
+            for member, sharing in rows
+        ],
+        total=total,
+        page=current_page,
+    )
 
 
 @sharing_router.get("/profiles", response_model=list[SharedProfileSummary])
@@ -768,18 +834,32 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
         if sharing.share_body_weight
         else None
     )
+    cardio = shared_cardio(db, member.id, sharing)
     return SharedProfileRead(
         **summary.model_dump(),
         body_weight=body_weight,
         goals=shared_goals(db, member.id) if sharing.share_goals else None,
         # Cardio is shared with workouts; its notes still follow the notes choice.
-        cardio_sessions=shared_cardio(db, member.id, sharing),
+        cardio_sessions=cardio.sessions,
+        cardio_total=cardio.total,
         training_time=training_time_totals(db, member.id),
         training_time_past_year=training_time_totals(
             db, member.id, since=past_year_start(date.today())
         ),
         consistency=shared_consistency(db, member.id),
     )
+
+
+@sharing_router.get("/profiles/{user_id}/cardio", response_model=SharedCardioPage)
+def list_shared_cardio(
+    user_id: str,
+    user: CurrentUser,
+    db: Db,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=PROFILE_CARDIO_PAGE_SIZE)] = PROFILE_CARDIO_PAGE_SIZE,
+) -> SharedCardioPage:
+    member, sharing = viewable_member(db, user, user_id)
+    return shared_cardio(db, member.id, sharing, offset, limit)
 
 
 @sharing_router.get("/profiles/{user_id}/workouts", response_model=SharedWorkoutPage)

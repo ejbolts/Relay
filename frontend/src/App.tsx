@@ -7,13 +7,20 @@ import {
 import {
   Fragment,
   useCallback,
+  useContext,
   startTransition,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
+import type {
+  ContextType,
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  RefObject,
+} from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
@@ -22,6 +29,7 @@ import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
+import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
@@ -59,6 +67,7 @@ import type {
   WorkoutHistorySummary,
   User,
   WorkoutTypeColors,
+  WorkoutType,
   WorkoutInput,
   WorkoutRecommendation,
   WorkoutSetInput,
@@ -100,6 +109,8 @@ import { PopupDialog } from './PopupDialog';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
+import { MuscleSetsCard } from './MuscleSetsCard';
 import {
   MachineFilterBanner,
   MachineFilterPicker,
@@ -107,8 +118,8 @@ import {
 } from './MachineHistoryFilter';
 import { machineDate, machineUsedShort } from './machineHistory';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
-import { useReleaseAnnouncement } from './useReleaseAnnouncement';
 import { usePresenceConnection } from './presence';
+import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { AppUpdateCheck } from './AppUpdateCheck';
@@ -465,7 +476,7 @@ function prettyDate(value: string): string {
 function recordTypeLabel(type: PersonalRecord['record_type']): string {
   return {
     weight: 'Weight PR',
-    reps_at_weight: 'Volume PR',
+    reps_at_weight: 'Volume PR for this weight',
     estimated_1rm: 'estimated 1RM PR',
     duration: 'duration PR',
     distance: 'distance PR',
@@ -527,23 +538,48 @@ function WorkoutCompletionToast({
 }
 
 export function App() {
+  const { user } = useUserSession();
+  const announcement = useReleaseAnnouncement(user?.id ?? null);
   return (
     <TrainingPreferencesProvider>
       <WorkoutTypesProvider>
-        <AppContent />
+        <ReleaseAnnouncementContext.Provider value={announcement}>
+          <AppContent />
+        </ReleaseAnnouncementContext.Provider>
       </WorkoutTypesProvider>
     </TrainingPreferencesProvider>
   );
 }
 
+function AppContentProviders({
+  exercises,
+  updatePartialSets,
+  settingsNavigation,
+  children,
+}: {
+  exercises: Exercise[];
+  updatePartialSets: (id: string, enabled: boolean, weekStart: string) => Promise<Exercise>;
+  settingsNavigation: ContextType<typeof SettingsNavigationContext>;
+  children: ReactNode;
+}) {
+  return (
+    <ExerciseCreditsContext.Provider value={{ exercises, updatePartialSets }}>
+      <SettingsNavigationContext.Provider value={settingsNavigation}>
+        {children}
+      </SettingsNavigationContext.Provider>
+    </ExerciseCreditsContext.Provider>
+  );
+}
+
 function AppContent() {
   const [settingsJump, setSettingsJump] = useState<SettingsJump | null>(null);
+  const settingsJumpSerial = useRef(0);
   const [settingsGroup, setSettingsGroup] = useState<SettingsGroupId | null>(() =>
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
   const { user, signingIn = false } = useUserSession();
   usePresenceConnection(user?.id ?? null);
-  const announcement = useReleaseAnnouncement(user?.id ?? null);
+  const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
   const [guideWaiting, setGuideWaiting] = useState(() => user !== null && appGuideWaiting(user.id));
@@ -584,6 +620,7 @@ function AppContent() {
   const refreshGenerationRef = useRef(0);
   const refreshingDataRef = useRef(0);
   const trainingRevisionRef = useRef<string | null>(null);
+  const dashboardDateRef = useRef(localDate());
   const [dataRevision, setDataRevision] = useState<string | null>(null);
   currentTabRef.current = tab;
   const [visitedTabs, setVisitedTabs] = useState(() => new Set<AppTab>([tab]));
@@ -663,8 +700,13 @@ function AppContent() {
   const [workoutTemplate, setWorkoutTemplate] = useState<SessionTemplate | null>(null);
   // The type chosen from the Start menu's Cardio option, before any exercise is added.
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
+  const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const notifyRestComplete = useCallback(
+    () => setMessage('Rest complete. Time for your next set.'),
+    [],
+  );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [workoutSaving, setWorkoutSaving] = useState(false);
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
@@ -782,9 +824,11 @@ function AppContent() {
       const revision = await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
+      const dashboardRequestDate = localDate();
       const results = await Promise.allSettled([
         api.dashboard(windowStart).then((nextDashboard) => {
           if (!current()) return;
+          dashboardDateRef.current = dashboardRequestDate;
           startTransition(() =>
             setDashboard((current) => {
               const olderDays = keepLoadedBefore(
@@ -896,7 +940,7 @@ function AppContent() {
       if (
         generation !== refreshGenerationRef.current ||
         refreshingDataRef.current ||
-        revision === trainingRevisionRef.current
+        (revision === trainingRevisionRef.current && dashboardDateRef.current === localDate())
       )
         return;
       await refreshData({ silent: true, activityLabel: null });
@@ -1150,6 +1194,7 @@ function AppContent() {
     replaceActiveWorkout = false,
     template: SessionTemplate | null = null,
     category: WorkoutCategory | null = null,
+    startType: WorkoutType | null = null,
   ) {
     if (workoutSaving) return;
     if (replaceActiveWorkout) clearActiveWorkoutDraft();
@@ -1157,6 +1202,7 @@ function AppContent() {
     const freshStart = !storedDraft && activeWorkoutStartedAt === null;
     setWorkoutTemplate(freshStart ? template : null);
     setWorkoutStartCategory(freshStart ? category : null);
+    setWorkoutStartType(freshStart ? startType : null);
     const startedAt = storedDraft?.startedAt ?? Date.now();
     setEditingWorkout(null);
     setResumingWorkoutId(storedDraft?.resumingWorkoutId ?? null);
@@ -1217,6 +1263,19 @@ function AppContent() {
     );
   }
 
+  async function updateExercisePartialSets(
+    exerciseId: string,
+    enabled: boolean,
+    weekStart: string,
+  ) {
+    const updated = await api.updateExercisePartialSets(exerciseId, enabled, weekStart);
+    setExercises((current) =>
+      current.map((exercise) => (exercise.id === updated.id ? updated : exercise)),
+    );
+    await refreshData({ silent: true, activityLabel: null });
+    return updated;
+  }
+
   async function createExercise(input: ExerciseCreateInput): Promise<Exercise> {
     const exercise = await withBackgroundActivity('Creating exercise…', () =>
       api.createExercise(input),
@@ -1236,8 +1295,14 @@ function AppContent() {
   }
 
   function openSetting(destination: SettingsDestination) {
-    setSettingsJump((current) => ({ destination, serial: (current?.serial ?? 0) + 1 }));
+    setSettingsJump({ destination, serial: ++settingsJumpSerial.current });
     setTab(destination.page);
+  }
+
+  function openAllSettings() {
+    setSettingsJump(null);
+    setSettingsGroup(null);
+    setTab('settings');
   }
 
   function updateReduceMotion(reduced: boolean) {
@@ -1252,21 +1317,23 @@ function AppContent() {
   }
 
   const nestedHeader =
-    tab === 'settings'
-      ? settingsGroup
-        ? { title: 'All settings', subtitle: null }
-        : { title: 'Settings', subtitle: 'Preferences • privacy • data' }
-      : tab === 'videos' && videosAllowed
-        ? { title: 'Videos', subtitle: 'Workout clips • uploads' }
-        : tab === 'profile'
-          ? { title: 'Profile', subtitle: user ? user.display_name : 'Account • security' }
-          : tab === 'shared-profile' && sharedProfile
-            ? { title: sharedProfile.name, subtitle: 'Shared profile' }
-            : tab === 'admin' && isAdmin
-              ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
-              : null;
+    tab === 'split'
+      ? { title: 'Your split', subtitle: null }
+      : tab === 'settings'
+        ? settingsGroup
+          ? { title: 'All settings', subtitle: null }
+          : { title: 'Settings', subtitle: 'Preferences • privacy • data' }
+        : tab === 'videos' && videosAllowed
+          ? { title: 'Videos', subtitle: 'Workout clips • uploads' }
+          : tab === 'profile'
+            ? { title: 'Profile', subtitle: user ? user.display_name : 'Account • security' }
+            : tab === 'shared-profile' && sharedProfile
+              ? { title: sharedProfile.name, subtitle: 'Shared profile' }
+              : tab === 'admin' && isAdmin
+                ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
+                : null;
   const activeMainTab = mainTabFor(tab);
-  const showTabBar = tab !== 'log';
+  const showTabBar = tab !== 'log' && tab !== 'split';
   // The home screen guide follows the release announcement, behind the same interruptions.
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
@@ -1374,7 +1441,11 @@ function AppContent() {
   }
 
   return (
-    <SettingsNavigationContext.Provider value={{ request: settingsJump, navigate: openSetting }}>
+    <AppContentProviders
+      exercises={exercises}
+      updatePartialSets={updateExercisePartialSets}
+      settingsNavigation={{ request: settingsJump, navigate: openSetting }}
+    >
       <div
         className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
@@ -1447,9 +1518,7 @@ function AppContent() {
             subtitle={nestedHeader.subtitle}
             onBack={navigateBack}
             backLabel={tab === 'settings' && settingsGroup ? 'All settings' : undefined}
-            actions={
-              tab !== 'settings' ? <SettingsButton onClick={() => setTab('settings')} /> : undefined
-            }
+            actions={tab !== 'settings' ? <SettingsButton onClick={openAllSettings} /> : undefined}
           />
         )}
 
@@ -1513,6 +1582,16 @@ function AppContent() {
                   }
                   onStartTemplate={(template) => startWorkout(localDate(), false, template)}
                   onStartEmpty={() => startWorkout()}
+                  onStartRecommended={() =>
+                    startWorkout(
+                      localDate(),
+                      false,
+                      upNext.template,
+                      upNext.recommendation?.category ?? null,
+                      upNext.type ?? null,
+                    )
+                  }
+                  onEditSplit={() => setTab('split')}
                   onResumeWorkout={() => setTab('log')}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
@@ -1521,7 +1600,7 @@ function AppContent() {
                   }
                   onOpenCardio={() => openHistorySection('cardio')}
                   onOpenBody={() => setTab('body')}
-                  onOpenSettings={() => setTab('settings')}
+                  onOpenSettings={openAllSettings}
                   onOpenVideos={videosAllowed ? () => setTab('videos') : undefined}
                   onOpenProfile={user ? () => setTab('profile') : undefined}
                   profileLabel={user?.display_name}
@@ -1582,6 +1661,7 @@ function AppContent() {
                         recommendation={dashboard?.recommendation ?? null}
                         template={workoutTemplate}
                         startCategory={workoutStartCategory}
+                        startType={workoutStartType}
                         initialDate={workoutStartDate}
                         initialWorkout={viewedWorkout ?? editingWorkout}
                         readOnly={Boolean(viewedWorkout)}
@@ -1612,6 +1692,7 @@ function AppContent() {
                         onRestTimerChange={
                           editingWorkout || viewedWorkout ? undefined : setRestEndsAt
                         }
+                        onRestTimerComplete={notifyRestComplete}
                         onClose={navigateBack}
                         onDelete={() => {
                           if (workoutSaving) return;
@@ -1669,7 +1750,7 @@ function AppContent() {
                 onDelete={deleteMeasurement}
                 onDataChange={refreshAfterMutation}
                 trendPreference={bodyTrendPreference}
-                onOpenSettings={() => setTab('settings')}
+                onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(tab === 'body')}
               />
             </CachedTabPanel>
@@ -1691,7 +1772,7 @@ function AppContent() {
                 initialOpenId={historyOpenId}
                 section={historySection}
                 onSectionChange={(section) => setTab(section)}
-                onOpenSettings={() => setTab('settings')}
+                onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(sectionFromTab !== null)}
                 onOpenExercise={(exerciseId) => openHistorySection('progress', exerciseId)}
                 onOpenWorkout={openSavedWorkout}
@@ -1699,6 +1780,8 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
+                weeklySets={dashboard?.weekly_sets}
+                onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -1709,12 +1792,27 @@ function AppContent() {
               />
             </CachedTabPanel>
           )}
+          {!loading && tab === 'split' && (
+            <TrainingSplitEditor
+              onSaved={async (saved) => {
+                await refreshData({ silent: true, activityLabel: null });
+                setMessage(
+                  saved.enabled
+                    ? 'Training split saved.'
+                    : 'Automatic workout suggestions restored.',
+                );
+                if (currentTabRef.current === 'split') navigateBack();
+              }}
+            />
+          )}
           {!loading && (tab === 'settings' || visitedTabs.has('settings')) && (
             <CachedTabPanel active={tab === 'settings'}>
               <SettingsScreen
                 active={tab === 'settings'}
                 selectedGroup={settingsGroup}
                 onSelectGroup={setSettingsGroup}
+                onOpenSplit={() => setTab('split')}
+                splitName={dashboard?.recommendation?.split_name ?? null}
                 guideActive={prompt === 'tour'}
                 workouts={workouts}
                 historySummary={historySummary}
@@ -1762,7 +1860,7 @@ function AppContent() {
                 onOpenProfile={openSharedProfile}
                 onOpenOwnProfile={() => setTab('profile')}
                 onChooseSharing={openSharingSettings}
-                onOpenSettings={() => setTab('settings')}
+                onOpenSettings={openAllSettings}
               />
             </CachedTabPanel>
           )}
@@ -1828,7 +1926,10 @@ function AppContent() {
             }}
             onStart={() => startWorkout()}
             startMenu={{
-              upNextLabel: upNext.label ? `${upNext.label} day` : null,
+              upNextLabel:
+                upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
+                  ? `${upNext.label} day`
+                  : null,
               onCardio: () =>
                 startWorkout(
                   localDate(),
@@ -1836,13 +1937,20 @@ function AppContent() {
                   sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
                   'cardio',
                 ),
-              onUpNext: () => startWorkout(localDate(), false, upNext.template),
+              onUpNext: () =>
+                startWorkout(
+                  localDate(),
+                  false,
+                  upNext.template,
+                  upNext.recommendation?.category ?? null,
+                  upNext.type ?? null,
+                ),
               onEmpty: () => startWorkout(),
             }}
           />
         )}
       </div>
-    </SettingsNavigationContext.Provider>
+    </AppContentProviders>
   );
 }
 
@@ -2241,6 +2349,7 @@ function WorkoutLogger({
   recommendation,
   template,
   startCategory = null,
+  startType = null,
   initialDate,
   initialWorkout,
   readOnly = false,
@@ -2260,6 +2369,7 @@ function WorkoutLogger({
   onClose,
   onDelete,
   onRestTimerChange,
+  onRestTimerComplete,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
@@ -2268,6 +2378,7 @@ function WorkoutLogger({
   template: SessionTemplate | null;
   /** A type chosen before starting, such as Cardio from the Start menu. */
   startCategory?: WorkoutCategory | null;
+  startType?: WorkoutType | null;
   initialDate: string;
   initialWorkout: TrackedWorkout | null;
   readOnly?: boolean;
@@ -2289,6 +2400,7 @@ function WorkoutLogger({
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
+  onRestTimerComplete: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const restoredDraft = useState(() => (initialWorkout ? null : readActiveWorkoutDraft()))[0];
@@ -2315,6 +2427,7 @@ function WorkoutLogger({
     initialWorkout?.workout_type_id ??
       restoredDraft?.workoutTypeId ??
       resumingWorkout?.workout_type_id ??
+      (startType?.is_custom ? startType.id : null) ??
       template?.sourceWorkout.workout_type_id ??
       null,
   );
@@ -2621,20 +2734,27 @@ function WorkoutLogger({
 
   useEffect(() => {
     if (restLeft <= 0) return;
-    const interval = window.setInterval(() => {
+    const tick = () => {
       const active = activeRestTimerRef.current;
       if (!active) return;
       const next = restSecondsLeft(active.endsAt);
-      setRestLeft((current) => {
-        if (next === 0 && current > 0) {
-          activeRestTimerRef.current = null;
-          if (!active.serverScheduled) void showRestTimerNotification();
-        }
-        return next;
-      });
-    }, 500);
-    return () => window.clearInterval(interval);
-  }, [restLeft]);
+      setRestLeft(next);
+      if (next > 0) return;
+      activeRestTimerRef.current = null;
+      setRestPopupOpen(false);
+      onRestTimerChange?.(null);
+      if (document.visibilityState === 'visible') onRestTimerComplete();
+      else if (!active.serverScheduled) void showRestTimerNotification().catch(() => undefined);
+    };
+    const interval = window.setInterval(tick, 500);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+    };
+  }, [restLeft, onRestTimerChange, onRestTimerComplete]);
 
   const [undoDeletion, setUndoDeletion] = useState<{
     kind: 'set' | 'rest';
@@ -2937,7 +3057,7 @@ function WorkoutLogger({
     if (endpoint) scheduleRestTimerPush(timer, endpoint);
   }
 
-  function cancelRestTimer() {
+  const cancelRestTimer = useCallback(() => {
     const timer = activeRestTimerRef.current;
     activeRestTimerRef.current = null;
     setRestLeft(0);
@@ -2950,7 +3070,7 @@ function WorkoutLogger({
         api.cancelRestTimerNotification({ endpoint, timer_id: timer.id });
       void cancelRestTimerPushSchedule(cancelServerTimer, timer.pendingSchedules);
     }
-  }
+  }, [onRestTimerChange]);
 
   function skipRestTimer() {
     cancelRestTimer();
@@ -2959,7 +3079,7 @@ function WorkoutLogger({
   useEffect(() => {
     if (restTimerEnabled) return;
     cancelRestTimer();
-  }, [restTimerEnabled]);
+  }, [restTimerEnabled, cancelRestTimer]);
 
   // A closed workout leaves no rest countdown on the tab bar.
   useEffect(() => () => onRestTimerChange?.(null), [onRestTimerChange]);
@@ -3293,7 +3413,11 @@ function WorkoutLogger({
         }
       />
       {recommendation &&
-        !workoutTypes.types.find((type) => type.id === recommendation.category)?.archived &&
+        !recommendation.is_rest_day &&
+        !recommendation.needs_split_update &&
+        !workoutTypes.types.find(
+          (type) => type.id === (recommendation.workout_type?.id ?? recommendation.category),
+        )?.archived &&
         !initialWorkout &&
         !template &&
         !startCategory &&
@@ -3304,7 +3428,12 @@ function WorkoutLogger({
                 <p className="section-kicker">RECOMMENDED NEXT</p>
                 <h2>{recommendation.session_name.replace(' workout', '')}</h2>
               </div>
-              <span style={{ background: categoryColors[recommendation.category] }} />
+              <span
+                style={{
+                  background:
+                    recommendation.workout_type?.color ?? categoryColors[recommendation.category],
+                }}
+              />
             </div>
             <p>{recommendation.reason}</p>
             <div className="frequency-chips" aria-label="Seven-day muscle frequency">
@@ -3328,7 +3457,9 @@ function WorkoutLogger({
               type="button"
               onClick={() => {
                 setCategory(recommendation.category);
-                setCustomTypeId(null);
+                setCustomTypeId(
+                  recommendation.workout_type?.is_custom ? recommendation.workout_type.id : null,
+                );
                 setWorkoutTypeExplicit(true);
                 setName(recommendation.session_name);
               }}
@@ -3577,13 +3708,6 @@ function WorkoutLogger({
                     item.key === movement.key
                       ? { ...item, machinePhotoIds, machinePhotosInitialized: true }
                       : item,
-                  ),
-                )
-              }
-              onMovementNotes={(value) =>
-                setMovements((current) =>
-                  current.map((item) =>
-                    item.key === movement.key ? { ...item, notes: value } : item,
                   ),
                 )
               }
@@ -4058,7 +4182,6 @@ function MovementCard({
   onSwitch,
   onRemove,
   onMachinePhotos,
-  onMovementNotes,
   prBadges,
   supersetLabel,
   onMoveUp,
@@ -4082,7 +4205,6 @@ function MovementCard({
   onSwitch: () => void;
   onRemove: () => void;
   onMachinePhotos: (photoIds: string[]) => void;
-  onMovementNotes: (value: string) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
   onMoveUp: () => void;
@@ -4494,6 +4616,7 @@ function MovementCard({
       <button
         type="button"
         className={`completed-set-value ${className}`}
+        data-rpe={field === 'rpe' ? (item.rpe ?? undefined) : undefined}
         aria-label={`${label} for set ${index + 1}`}
         onClick={(event) => {
           event.stopPropagation();
@@ -4615,6 +4738,7 @@ function MovementCard({
         )}
         <select
           data-set-field="rpe"
+          data-rpe={item.rpe ?? undefined}
           className={item.rpe === null ? 'is-empty' : ''}
           value={item.rpe ?? ''}
           onChange={(event) => onUpdateSet(item.key, { rpe: numberOrNull(event.target.value) })}
@@ -4991,6 +5115,7 @@ function MovementCard({
                 <div
                   className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
                   data-set-key={item.key}
+                  data-set-type={cardio ? 'normal' : setKindOf(item)}
                   data-expand-key={item.key}
                   data-expanded={open}
                 >
@@ -5054,12 +5179,6 @@ function MovementCard({
           onClose={() => setPlateSetKey(null)}
         />
       )}
-      <input
-        className="movement-note"
-        value={movement.notes}
-        onChange={(event) => onMovementNotes(event.target.value)}
-        placeholder="Exercise note for next time…"
-      />
     </article>
   );
 }
@@ -5295,7 +5414,7 @@ function MachinePhotoChooser({
   }
 
   async function deletePhoto(photo: MachinePhoto) {
-    await api.deleteMachinePhoto(photo.id);
+    await api.deleteMachinePhoto(photo.id, true);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
     onChange(selectedIds.filter((id) => id !== photo.id));
     setExpanded(null);
@@ -5344,7 +5463,6 @@ function MachinePhotoChooser({
         </span>
       </summary>
       <div className="machine-photo-content">
-        <p>Take, choose, or pin equipment photos for every set in this exercise.</p>
         <div className="machine-photo-actions">
           <label>
             <span aria-hidden="true">
@@ -5385,7 +5503,13 @@ function MachinePhotoChooser({
                   : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
               </p>
             )}
-            <div className="machine-photo-rail" ref={photoRailRef}>
+            <div
+              className="machine-photo-rail"
+              ref={photoRailRef}
+              role="region"
+              aria-label={`Saved equipment photos for ${exercise.name}`}
+              tabIndex={0}
+            >
               {photos.map((photo) => {
                 const selected = selectedIds.includes(photo.id);
                 return (
@@ -5515,7 +5639,7 @@ function MachinePhotoDetail({
       setError(
         deleteError instanceof Error
           ? deleteError.message
-          : 'Could not delete a photo that is used by a workout.',
+          : 'Could not delete the photo. Try again.',
       );
       setSaving(false);
     }
@@ -5559,11 +5683,12 @@ function MachinePhotoDetail({
               className="photo-delete"
               label="Delete"
               confirmLabel="Delete photo"
+              confirmationMessage="Also removes this photo from saved workouts."
               onConfirm={removePhoto}
               disabled={saving}
             />
           )}
-          {error && <p>{error}</p>}
+          {error && <p role="alert">{error}</p>}
         </div>
       </div>
     </section>
@@ -6599,6 +6724,8 @@ function SettingsScreen({
   active,
   selectedGroup,
   onSelectGroup,
+  onOpenSplit,
+  splitName,
   guideActive,
   workouts,
   historySummary,
@@ -6629,6 +6756,8 @@ function SettingsScreen({
   active: boolean;
   selectedGroup: SettingsGroupId | null;
   onSelectGroup: (group: SettingsGroupId | null) => void;
+  onOpenSplit: () => void;
+  splitName: string | null;
   guideActive: boolean;
   releaseVersion: string;
   onOpenReleaseNotes: () => void;
@@ -6798,6 +6927,16 @@ function SettingsScreen({
             description: 'Units, weekly goals, rest timers and workout types.',
             content: (
               <>
+                <button
+                  id="training-split-settings"
+                  className="training-split-setting"
+                  type="button"
+                  onClick={onOpenSplit}
+                >
+                  <strong>Your split</strong>
+                  <span>{splitName ?? 'Automatic'}</span>
+                  <Icon name="chevron-right" />
+                </button>
                 <section
                   className="settings-panel panel"
                   aria-labelledby="training-preferences-title"
@@ -8857,6 +8996,8 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
+  weeklySets,
+  onOpenMuscleWorkout,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -8886,6 +9027,8 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
+  weeklySets: DashboardData['weekly_sets'] | undefined;
+  onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -8898,6 +9041,7 @@ function HistoryScreen({
 }) {
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
+  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -9274,6 +9418,13 @@ function HistoryScreen({
           )}
         </CachedTabPanel>
       )}
+      {!exerciseHeader && (
+        <MuscleSetsCard
+          weeklySets={weeklySets}
+          goal={muscleSetGoal}
+          onOpenWorkout={onOpenMuscleWorkout}
+        />
+      )}
     </section>
   );
 }
@@ -9590,12 +9741,12 @@ function HistorySetFlow({
     <div className="history-set-flow">
       {sets.map((item, index) => (
         <Fragment key={item.id}>
-          <div className={`history-set-pill ${item.failed ? 'failed-set' : ''}`}>
+          <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
             {item.rpe !== null && <small>RPE {item.rpe}</small>}
             <em>
-              {item.set_type === 'warmup'
+              {item.set_type === 'warmup' || item.warmup
                 ? 'Warm-up'
                 : item.set_type === 'drop'
                   ? 'Drop'

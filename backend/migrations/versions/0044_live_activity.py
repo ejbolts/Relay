@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0042_live_activity"
-down_revision = "0041_workout_comments"
+revision = "0044_live_activity"
+down_revision = "0043_weekly_partial_sets"
 branch_labels = None
 depends_on = None
 

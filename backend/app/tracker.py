@@ -40,6 +40,7 @@ from .models import (
     CardioSession,
     Exercise,
     ExerciseKind,
+    ExercisePartialSetWeek,
     MachinePhoto,
     PersonalRecord,
     SupersetGroup,
@@ -81,6 +82,7 @@ from .tracker_schemas import (
     ExerciseHistoryBaselineRead,
     ExerciseLatestSessionRead,
     ExerciseLibrarySummaryRead,
+    ExercisePartialSetsUpdate,
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
@@ -94,6 +96,7 @@ from .tracker_schemas import (
     ProgressPoint,
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
+    TrainingSplit,
     TrainingTimeRead,
     TrainingWorkoutCreate,
     TrainingWorkoutRead,
@@ -126,6 +129,12 @@ from .training_metrics import (
     seed_muscle_mappings,
     set_setting,
     start_of_week,
+)
+from .training_split import (
+    TRAINING_SPLIT_KEY,
+    saved_training_split,
+    split_recommendation,
+    validate_split_types,
 )
 from .training_time import training_time_totals
 from .workout_types import (
@@ -250,16 +259,18 @@ SESSION_NAMES = {
 }
 
 
-def exercise_muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
+def exercise_muscle_credits(
+    exercise: Exercise, on_date: date | None = None
+) -> list[tuple[str, float]]:
     if exercise.category == WorkoutCategory.CARDIO or exercise.kind == ExerciseKind.CARDIO:
         return []
-    return muscle_credits(exercise)
+    return muscle_credits(exercise, on_date=on_date)
 
 
-def exercise_coverage_groups(exercise: Exercise) -> set[str]:
+def exercise_coverage_groups(exercise: Exercise, on_date: date | None = None) -> set[str]:
     if exercise.category == WorkoutCategory.CARDIO or exercise.kind == ExerciseKind.CARDIO:
         return {"Cardio"}
-    return {group for group, _ in exercise_muscle_credits(exercise)}
+    return {group for group, _ in exercise_muscle_credits(exercise, on_date)}
 
 
 def weekly_sets(
@@ -283,7 +294,7 @@ def weekly_sets(
             continue
         in_current_week = week_start <= workout.workout_date <= today
         for movement in workout.movements:
-            credits = exercise_muscle_credits(movement.exercise)
+            credits = exercise_muscle_credits(movement.exercise, workout.workout_date)
             if not credits:
                 continue
             work_sets = [item for item in movement.sets if is_working_set(item)]
@@ -364,7 +375,7 @@ def workout_recommendation(
         for movement in workout.movements:
             if not any(is_working_set(item) for item in movement.sets):
                 continue
-            for group in exercise_coverage_groups(movement.exercise):
+            for group in exercise_coverage_groups(movement.exercise, workout.workout_date):
                 group_dates[group].add(workout.workout_date)
 
     last_rotation = next(
@@ -857,6 +868,33 @@ def update_exercise_favorite(
     return exercise
 
 
+@router.patch("/exercises/{exercise_id}/partial-sets", response_model=ExerciseRead)
+def update_exercise_partial_sets(
+    exercise_id: str, payload: ExercisePartialSetsUpdate, db: DbSession, user: CurrentUser
+) -> Exercise:
+    exercise = get_owned(db, Exercise, exercise_id, user.id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise was not found.")
+    week_day = training_preferences(db, user.id).week_start
+    week_start = start_of_week(payload.week_start or date.today(), week_day)
+    if week_start > start_of_week(date.today(), week_day):
+        raise HTTPException(status_code=422, detail="Choose this week or an earlier week.")
+    entry = db.get(ExercisePartialSetWeek, (exercise.id, week_start))
+    if entry:
+        entry.enabled = payload.partial_sets_enabled
+    else:
+        db.add(
+            ExercisePartialSetWeek(
+                exercise_id=exercise.id, week_start=week_start, enabled=payload.partial_sets_enabled
+            )
+        )
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    db.refresh(exercise)
+    db.expire(exercise, ["partial_set_weeks"])
+    return exercise
+
+
 def machine_photo_usage(
     db: Session, user_id: str, photos: list[MachinePhoto]
 ) -> list[MachinePhotoUsageRead]:
@@ -1083,7 +1121,11 @@ def get_machine_photo_image(
 
 @router.delete("/machine-photos/{photo_id}", status_code=204)
 def delete_machine_photo(
-    photo_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+    photo_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    detach_from_workouts: bool = False,
 ) -> None:
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
@@ -1093,14 +1135,21 @@ def delete_machine_photo(
         .where(movement_machine_photos.c.machine_photo_id == photo_id)
         .limit(1)
     )
-    if reference:
+    if reference and not detach_from_workouts:
         raise HTTPException(
             status_code=409,
             detail="Remove this photo from its workouts before deleting it.",
         )
+    if reference:
+        db.execute(
+            delete(movement_machine_photos).where(
+                movement_machine_photos.c.machine_photo_id == photo_id
+            )
+        )
     full_filename = photo.full_filename
     thumbnail_filename = photo.thumbnail_filename
     db.delete(photo)
+    bump_workout_cache_revision(db, user.id)
     db.commit()
     delete_machine_photo_files(settings, full_filename, thumbnail_filename)
 
@@ -1154,6 +1203,22 @@ def zone2_week(
 @router.get("/training-preferences", response_model=TrainingPreferencesRead)
 def get_training_preferences(db: DbSession, user: CurrentUser) -> TrainingPreferencesRead:
     return training_preferences(db, user.id)
+
+
+@router.get("/training-split", response_model=TrainingSplit | None)
+def get_training_split(db: DbSession, user: CurrentUser) -> TrainingSplit | None:
+    return saved_training_split(db, user.id)
+
+
+@router.put("/training-split", response_model=TrainingSplit)
+def update_training_split(
+    payload: TrainingSplit, db: DbSession, user: CurrentUser
+) -> TrainingSplit:
+    validate_split_types(db, user.id, payload)
+    set_setting(db, user.id, TRAINING_SPLIT_KEY, payload.model_dump_json())
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return payload
 
 
 @router.get("/workout-type-colors", response_model=WorkoutTypeColors)
@@ -2197,11 +2262,14 @@ def workout_history_summary(db: Session, user_id: str) -> WorkoutHistorySummaryR
 
 @router.get("/dashboard", response_model=DashboardRead)
 def dashboard(
-    db: DbSession, user: CurrentUser, calendar_start: date | None = None
+    db: DbSession,
+    user: CurrentUser,
+    calendar_start: date | None = None,
+    on_date: date | None = None,
 ) -> DashboardRead:
     """Today's summary. ``calendar_start`` limits the calendar to recent days so long histories
     open quickly; ``/calendar`` serves older days. Without it, every day is included."""
-    today = date.today()
+    today = on_date or date.today()
     preferences = training_preferences(db, user.id)
     week_start = start_of_week(today, preferences.week_start)
     # Weekly figures look back at most four weeks, so a calendar window never truncates them.
@@ -2339,7 +2407,10 @@ def dashboard(
         cardio_energy_periods=cardio_energy_periods(cardio_sessions, today, preferences.week_start),
         heatmap=heatmap,
         weekly_days=weekly_days,
-        recommendation=workout_recommendation(workouts, today, earlier_rotation),
+        recommendation=(
+            split_recommendation(db, user.id, today)
+            or workout_recommendation(workouts, today, earlier_rotation)
+        ),
         weekly_sets=weekly_sets(workouts, today, preferences.week_start),
         muscle_volume=[
             MuscleVolumeRead(muscle_name=name, set_total=value)

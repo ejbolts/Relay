@@ -67,6 +67,12 @@ beforeEach(() => {
     reactions: [],
   });
   vi.spyOn(api.sharing, 'profiles').mockResolvedValue([]);
+  vi.spyOn(api.sharing, 'suggestions').mockResolvedValue({
+    profiles: [],
+    total: 0,
+    page: 1,
+    page_size: 8,
+  });
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);

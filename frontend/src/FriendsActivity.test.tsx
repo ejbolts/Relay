@@ -203,6 +203,55 @@ it("shows each friend's latest session with one reaction button and opens their 
   expect(openFriend).toHaveBeenCalledWith(jordan.friend);
 });
 
+it('shows the original logged time in local time beside the workout day for strength and cardio', async () => {
+  const savedAt = '2026-10-19T06:34:00Z';
+  const localTime = new Date(savedAt).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  vi.spyOn(api.sharing, 'feed').mockResolvedValue({
+    items: [
+      {
+        ...jordan,
+        workout: {
+          ...strength,
+          created_at: savedAt,
+          updated_at: '2026-10-19T09:00:00Z',
+          start_time: '12:00:00',
+          end_time: '13:11:00',
+        },
+      },
+      { ...alex, workout: { ...cardio, created_at: '2026-10-19T17:34:00+11:00' } },
+      {
+        ...jordan,
+        workout: { ...strength, id: 'legacy', created_at: '2026-10-19T06:34:00' },
+      },
+    ],
+    friends: 3,
+    with_sessions: 3,
+  });
+  await render();
+  expect([...host.querySelectorAll('.friend-activity-meta')].map((row) => row.textContent)).toEqual(
+    [
+      `Today · ${localTime} · 2 sets`,
+      `Yesterday · ${localTime} · 2.8 km`,
+      `Today · ${localTime} · 2 sets`,
+    ],
+  );
+});
+
+it('omits unavailable logged times without displaying an invalid time', async () => {
+  vi.spyOn(api.sharing, 'feed').mockResolvedValue({
+    items: [{ ...jordan, workout: { ...strength, created_at: 'invalid' } }, alex],
+    friends: 2,
+    with_sessions: 2,
+  });
+  await render();
+  expect([...host.querySelectorAll('.friend-activity-meta')].map((row) => row.textContent)).toEqual(
+    ['Today · 2 sets', 'Yesterday · 2.8 km'],
+  );
+});
+
 it('opens comments without the reaction picker, and reactions without the comments', async () => {
   vi.spyOn(api.sharing, 'feed').mockResolvedValue({ items: [alex], friends: 1, with_sessions: 1 });
   const comments = vi

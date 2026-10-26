@@ -4,12 +4,15 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from conftest import register_user
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 from test_auth import named, workout_payload
 from test_sharing import befriend, share
 
+from app import presence
+from app.config import get_settings
 from app.database import SessionLocal
-from app.models import LiveWorkout, User
+from app.models import LiveWorkout, User, UserSession
 from app.presence import LiveWorkoutReport, hub, leave, presence_update, save_live_workout
 
 SOCKET = "/api/presence/ws"
@@ -78,9 +81,11 @@ def test_closing_the_last_window_records_last_active_and_tells_friends(client, o
             sent.append(message)
 
     async def close_phone():
-        hub.connect(client.user["id"], "viewer", Window())
-        hub.connect(owner, "phone", Window())
-        hub.connect(owner, "desktop", Window())
+        viewer_token = client.cookies.get(get_settings().session_cookie)
+        owner_token = other_client.cookies.get(get_settings().session_cookie)
+        hub.connect(client.user["id"], "viewer", Window(), viewer_token)
+        hub.connect(owner, "phone", Window(), owner_token)
+        hub.connect(owner, "desktop", Window(), owner_token)
         hub.set_visible(owner, "phone", True)
         await leave(owner, "desktop")  # still online on the phone
         await leave(owner, "phone")
@@ -213,3 +218,46 @@ def test_malformed_reports_are_ignored(client, other_client):
             phone.send_json(report())
             presence = viewer.receive_json()["presence"]
             assert presence["online"] is True and presence["workout"] is None
+
+
+@pytest.mark.parametrize("revoke", ["logout", "expired", "disabled"])
+def test_open_socket_cannot_write_after_session_ends(client, revoke):
+    with client.websocket_connect(SOCKET) as socket:
+        if revoke == "logout":
+            assert client.post("/api/auth/logout").status_code == 204
+        else:
+            with SessionLocal() as db:
+                if revoke == "expired":
+                    db.scalar(
+                        select(UserSession).where(UserSession.user_id == client.user["id"])
+                    ).expires_at = datetime.now(UTC) - timedelta(seconds=1)
+                else:
+                    db.get(User, client.user["id"]).disabled_at = datetime.now(UTC)
+                db.commit()
+        socket.send_json(report(workout=live("Must not be saved")))
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+        assert closed.value.code == 4401
+    with SessionLocal() as db:
+        assert db.get(LiveWorkout, client.user["id"]) is None
+    assert not hub.is_online(client.user["id"])
+
+
+def test_signed_out_viewer_cannot_receive_friend_updates(client, other_client):
+    befriend(client, other_client)
+    with client.websocket_connect(SOCKET) as viewer:
+        assert client.post("/api/auth/logout").status_code == 204
+        with other_client.websocket_connect(SOCKET) as phone:
+            phone.send_json(report(workout=live()))
+            with pytest.raises(WebSocketDisconnect) as closed:
+                viewer.receive_json()
+            assert closed.value.code == 4401
+
+
+def test_idle_socket_closes_after_session_ends(client, monkeypatch):
+    monkeypatch.setattr(presence, "SESSION_CHECK_SECONDS", 0.01)
+    with client.websocket_connect(SOCKET) as socket:
+        assert client.post("/api/auth/logout").status_code == 204
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+        assert closed.value.code == 4401
