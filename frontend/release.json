@@ -45,6 +45,14 @@
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/52909b0a76986f647495d9c08fb84418c982fa0c/docs/screenshots/releases/1.0.1-home-header.png",
         "alt": "Home header at 393px with the date above and all five action buttons aligned beside the title."
       }
+    },
+    {
+      "title": "Manage equipment photos while logging",
+      "description": "Swipe through saved machines. Confirming deletion removes an old photo and its workout attachments while keeping the sets.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b7cefaa3a0e519a67c28e1b47806b980eadc38d9/docs/screenshots/releases/1.0.1-equipment-photos.gif",
+        "alt": "Swiping both ways through saved equipment photos, cancelling deletion, then deleting an older photo while preserving the workout sets and another pin."
+      }
     }
   ],
   "image": {
