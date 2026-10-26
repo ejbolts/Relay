@@ -1114,7 +1114,11 @@ def get_machine_photo_image(
 
 @router.delete("/machine-photos/{photo_id}", status_code=204)
 def delete_machine_photo(
-    photo_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+    photo_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    detach_from_workouts: bool = False,
 ) -> None:
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
@@ -1124,14 +1128,21 @@ def delete_machine_photo(
         .where(movement_machine_photos.c.machine_photo_id == photo_id)
         .limit(1)
     )
-    if reference:
+    if reference and not detach_from_workouts:
         raise HTTPException(
             status_code=409,
             detail="Remove this photo from its workouts before deleting it.",
         )
+    if reference:
+        db.execute(
+            delete(movement_machine_photos).where(
+                movement_machine_photos.c.machine_photo_id == photo_id
+            )
+        )
     full_filename = photo.full_filename
     thumbnail_filename = photo.thumbnail_filename
     db.delete(photo)
+    bump_workout_cache_revision(db, user.id)
     db.commit()
     delete_machine_photo_files(settings, full_filename, thumbnail_filename)
 

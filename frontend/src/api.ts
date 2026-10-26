@@ -438,8 +438,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ caption }),
     }),
-  deleteMachinePhoto: (photoId: string) =>
-    request<void>(`/api/machine-photos/${photoId}`, { method: 'DELETE' }),
+  deleteMachinePhoto: (photoId: string, detachFromWorkouts = false) =>
+    request<void>(
+      `/api/machine-photos/${photoId}${detachFromWorkouts ? '?detach_from_workouts=true' : ''}`,
+      { method: 'DELETE' },
+    ),
   dashboard: (calendarStart?: string) =>
     request<DashboardData>(
       `/api/dashboard${calendarStart ? `?${new URLSearchParams({ calendar_start: calendarStart })}` : ''}`,

@@ -9,7 +9,8 @@
     "Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.",
     "Sets per muscle is on Home and at the bottom of Training. Weekly totals use each workout’s saved credit setting. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.",
     "Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.",
-    "Volume records now say Volume PR for this weight on set badges, popups and record lists, making the same-weight comparison clear."
+    "Volume records now say Volume PR for this weight on set badges, popups and record lists, making the same-weight comparison clear.",
+    "Swipe through saved equipment photos while logging. Deleting an old photo removes its workout attachments after confirmation and keeps the recorded sets."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
   "highlights": [

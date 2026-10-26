@@ -5340,7 +5340,7 @@ function MachinePhotoChooser({
   }
 
   async function deletePhoto(photo: MachinePhoto) {
-    await api.deleteMachinePhoto(photo.id);
+    await api.deleteMachinePhoto(photo.id, true);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
     onChange(selectedIds.filter((id) => id !== photo.id));
     setExpanded(null);
@@ -5430,7 +5430,13 @@ function MachinePhotoChooser({
                   : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
               </p>
             )}
-            <div className="machine-photo-rail" ref={photoRailRef}>
+            <div
+              className="machine-photo-rail"
+              ref={photoRailRef}
+              role="region"
+              aria-label={`Saved equipment photos for ${exercise.name}`}
+              tabIndex={0}
+            >
               {photos.map((photo) => {
                 const selected = selectedIds.includes(photo.id);
                 return (
@@ -5560,7 +5566,7 @@ function MachinePhotoDetail({
       setError(
         deleteError instanceof Error
           ? deleteError.message
-          : 'Could not delete a photo that is used by a workout.',
+          : 'Could not delete the photo. Try again.',
       );
       setSaving(false);
     }
@@ -5604,11 +5610,12 @@ function MachinePhotoDetail({
               className="photo-delete"
               label="Delete"
               confirmLabel="Delete photo"
+              confirmationMessage="Also removes this photo from saved workouts."
               onConfirm={removePhoto}
               disabled={saving}
             />
           )}
-          {error && <p>{error}</p>}
+          {error && <p role="alert">{error}</p>}
         </div>
       </div>
     </section>

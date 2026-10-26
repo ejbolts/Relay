@@ -3216,6 +3216,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .movement-card {
+  min-width: 0;
   margin-bottom: 0.75rem;
   overflow: visible;
 }
