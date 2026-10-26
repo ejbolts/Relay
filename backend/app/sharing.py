@@ -12,8 +12,8 @@ choose.
 New accounts start public; existing accounts retain their choices, including private defaults.
 
 Private, disabled and missing profiles all answer "not found". A friends-only profile shows only
-its name and photo until the two members are friends. Usernames can be searched but are not
-returned in shared profiles. Videos and sample data are never shared.
+its name and photo until the two members are friends. Public friend suggestions include usernames;
+other shared-profile responses omit them. Videos and sample data are never shared.
 """
 
 from __future__ import annotations
@@ -134,8 +134,12 @@ class SharedProfileSummary(BaseModel):
     shares: SharedContent | None = None
 
 
+class SuggestedProfileSummary(SharedProfileSummary):
+    username: str
+
+
 class SuggestedProfilePage(BaseModel):
-    profiles: list[SharedProfileSummary]
+    profiles: list[SuggestedProfileSummary]
     total: int
     page: int
     page_size: int = 8
@@ -676,7 +680,10 @@ def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, g
     stats = workout_stats(db, [member.id for member, _ in rows])
     return SuggestedProfilePage(
         profiles=[
-            profile_summary(user, member, sharing, None, stats.get(member.id))
+            SuggestedProfileSummary(
+                **profile_summary(user, member, sharing, None, stats.get(member.id)).model_dump(),
+                username=member.username,
+            )
             for member, sharing in rows
         ],
         total=total,

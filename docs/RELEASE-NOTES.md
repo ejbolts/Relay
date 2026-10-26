@@ -8,9 +8,9 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
-![Social Find showing eight suggested public profiles, separate Add friend buttons and numbered pagination](screenshots/releases/1.0.1-suggested-friends.png)
+![Social Find showing eight suggested public profiles with usernames, separate Add friend buttons and numbered pagination](screenshots/releases/1.0.1-suggested-friends.png)
 
-_Find automatically lists public accounts you are not connected to. Tap a name or avatar to open the profile; Add friend is separate. This phone-sized view uses isolated sample data._
+_Find automatically lists public accounts you are not connected to, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate. This phone-sized view uses isolated sample data._
 
 ![Workout table with orange warm-up, green working, purple drop and red failure rows, plus coloured RPE numbers](screenshots/releases/1.0.1-rpe-set-colours.png)
 
@@ -41,7 +41,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
-- Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
+- Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
 - Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.
 - Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.
 - Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.

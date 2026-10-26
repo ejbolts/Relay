@@ -4,11 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { SuggestedFriends } from './SharedProfiles';
-import type { SharedProfileSummary, SuggestedProfilePage } from './types';
+import type { SuggestedProfileSummary, SuggestedProfilePage } from './types';
 
-const members: SharedProfileSummary[] = Array.from({ length: 17 }, (_, index) => ({
+const members: SuggestedProfileSummary[] = Array.from({ length: 17 }, (_, index) => ({
   id: `person-${index + 1}`,
   display_name: `Person ${index + 1}`,
+  username: `person.${index + 1}`,
   profile_photo_url: null,
   member_since: '2026-10-01T12:00:00Z',
   visibility: 'public',
@@ -22,7 +23,7 @@ const members: SharedProfileSummary[] = Array.from({ length: 17 }, (_, index) =>
 }));
 let root: Root;
 let host: HTMLDivElement;
-let available: SharedProfileSummary[];
+let available: SuggestedProfileSummary[];
 const open = vi.fn();
 const changed = vi.fn();
 function result(page = 1): SuggestedProfilePage {
@@ -76,6 +77,9 @@ it('automatically lists eight suggestions and opens a name without sending a req
   await render();
   expect(api.sharing.suggestions).toHaveBeenCalledWith(1);
   expect(host.querySelectorAll('li')).toHaveLength(8);
+  expect(
+    [...host.querySelectorAll('.shared-connection-copy small')].map((el) => el.textContent),
+  ).toEqual(members.slice(0, 8).map((person) => `@${person.username}`));
   expect(host.textContent).toContain('1–8 of 17');
   await click(button("Open Person 1's profile"));
   expect(open).toHaveBeenCalledWith(members[0]);
@@ -90,6 +94,7 @@ it('supports next, previous and numbered pages with boundary states and focus', 
   expect(host.querySelectorAll('li')).toHaveLength(8);
   expect(host.textContent).toContain('9–16 of 17');
   expect(button("Open Person 9's profile")).not.toBeNull();
+  expect(button("Open Person 9's profile").textContent).toContain('@person.9');
   expect(document.activeElement).toBe(host.querySelector('h3'));
   await click(button('Suggested friends page 3'));
   expect(host.querySelectorAll('li')).toHaveLength(1);

@@ -738,8 +738,12 @@ export interface SharedProfileSummary {
   } | null;
 }
 
+export interface SuggestedProfileSummary extends SharedProfileSummary {
+  username: string;
+}
+
 export interface SuggestedProfilePage {
-  profiles: SharedProfileSummary[];
+  profiles: SuggestedProfileSummary[];
   total: number;
   page: number;
   page_size: number;

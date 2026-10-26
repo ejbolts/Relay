@@ -655,6 +655,10 @@
   min-height: 2.75rem;
 }
 
+.suggested-friends .shared-connection-copy small {
+  overflow-wrap: anywhere;
+}
+
 .suggested-friends h3 {
   scroll-margin-top: 5.5rem;
 }

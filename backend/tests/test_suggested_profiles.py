@@ -37,7 +37,7 @@ def test_suggestions_page_eight_public_non_friends_and_clamp_after_request(
         person["friend_status"] == "none"
         and person["visibility"] == "public"
         and person["can_view"]
-        and "username" not in person
+        and person["username"] == f"suggestion_{ids.index(person['id'])}"
         for page in data
         for person in page["profiles"]
     )

@@ -655,6 +655,7 @@ export function SuggestedFriends({
                 <FriendRow
                   key={profile.id}
                   person={profile}
+                  detail={`@${profile.username}`}
                   onOpen={() => onOpenProfile(profile)}
                   actions={
                     <FriendButton
