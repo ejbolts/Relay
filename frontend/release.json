@@ -16,16 +16,16 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/31046da9f3bd1af38d2b381401219d84f8c993e5/docs/screenshots/releases/1.0.1-suggested-friends.png",
-    "alt": "Social Find automatically listing eight fictional public profiles with separate Add friend buttons, names that open profiles, a 1-8 of 17 range and numbered pagination in a phone-sized view."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/a90b338d409b698581bb1300976b7698a92ecc8b/docs/screenshots/releases/1.0.1-suggested-friends.png",
+    "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."
   },
   "highlights": [
     {
       "title": "Suggested friends in Find",
-      "description": "Find automatically lists public accounts you are not connected to, eight per page. Tap a name or avatar to open the profile; Add friend is separate.",
+      "description": "Find automatically lists public accounts you are not connected to, eight per page, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/31046da9f3bd1af38d2b381401219d84f8c993e5/docs/screenshots/releases/1.0.1-suggested-friends.png",
-        "alt": "Social Find automatically listing eight fictional public profiles with separate Add friend buttons, names that open profiles, a 1-8 of 17 range and numbered pagination in a phone-sized view."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a90b338d409b698581bb1300976b7698a92ecc8b/docs/screenshots/releases/1.0.1-suggested-friends.png",
+        "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."
       }
     },
     {
