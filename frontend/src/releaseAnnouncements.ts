@@ -2,6 +2,31 @@ import type { Release } from './releaseMetadata';
 import { parseRelease } from './releaseMetadata';
 
 const seenThisSession = new Set<string>();
+const readNoticesThisSession = new Set<string>();
+
+function noticeReadKey(userId: string, version: string): string {
+  return `gym-logger-release-notice-read:${encodeURIComponent(userId)}:${version}`;
+}
+
+export function hasReadReleaseNotice(userId: string, version: string): boolean {
+  const key = noticeReadKey(userId, version);
+  if (readNoticesThisSession.has(key)) return true;
+  try {
+    return window.localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function rememberReleaseNoticeRead(userId: string, version: string): void {
+  const key = noticeReadKey(userId, version);
+  readNoticesThisSession.add(key);
+  try {
+    window.localStorage.setItem(key, '1');
+  } catch {
+    // Retain this session's read state even when device storage is unavailable.
+  }
+}
 
 function seenKey(userId: string, version: string): string {
   return `gym-logger-release-seen:${encodeURIComponent(userId)}:${version}`;

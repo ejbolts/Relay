@@ -28,7 +28,7 @@ describe('release popup', () => {
       '<svg class="release-confetti" viewBox="0 0 24 24" aria-hidden="true"',
     );
     expect(markup).toContain(renderToStaticMarkup(<h3>{metadata.title}</h3>));
-    expect(markup).toContain(metadata.summary);
+    expect(markup).toContain(renderToStaticMarkup(<p>{metadata.summary}</p>));
     expect(markup.match(/<li>/g)).toHaveLength(metadata.changes.length);
     expect(markup).toContain(`href="${metadata.url}"`);
     expect(markup).toContain('target="_blank" rel="noopener noreferrer"');
@@ -57,7 +57,7 @@ describe('release popup', () => {
       />,
     );
     expect(markup).not.toContain('<img');
-    expect(markup).toContain(metadata.summary);
+    expect(markup).toContain(renderToStaticMarkup(<p>{metadata.summary}</p>));
     expect(markup).toContain('>Got it</button>');
   });
 

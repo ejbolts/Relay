@@ -6,7 +6,7 @@ _Relay was called Gym Logger before version 1.0._
 
 26 October 2026
 
-### Your training split
+### Your training split and friends
 
 ![Your split editor with templates, a named Full body A / B cycle, rest days, start date and a seven-day preview using synthetic training data](screenshots/releases/1.1.0-training-split.png)
 
@@ -16,11 +16,88 @@ _Choose a template or build your own repeating cycle. Custom workout types and r
 
 _Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
 
+![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
+
+_Browse ten lifts per page. Muscle filters include direct and currently enabled partial credits; the three-line button changes the page size._
+
+![Leg Press muscle-credit popup showing the selected week with partial sets off and direct quadriceps and glute credits retained](screenshots/releases/1.0.1-weekly-partial-sets.png)
+
+_Choose a week and switch partial sets off or on. That choice carries forward until the next change, while earlier weeks retain their settings. Direct credits stay counted._
+
+![Weekly muscle totals at the bottom of Training](screenshots/releases/1.0.1-weekly-muscle-totals.png)
+
+_The weekly muscle card is on Home and Training. Show more reveals the remaining muscles, and tapping a muscle opens its contributing workouts. All previews use isolated synthetic training data._
+
+![Home header with the date above the title and all five action buttons aligned beside Home](screenshots/releases/1.0.1-home-header.png)
+
+_The Home title and actions share one row at phone width, with the date above. Very narrow screens place the actions on a left-aligned row._
+
+![Workout set with a Volume PR for this weight badge](screenshots/releases/1.0.1-volume-pr-weight.png)
+
+_The badge makes it clear that the record compares reps at the same weight._
+
+![Swiping saved machine photos and deleting an old photo while logging](screenshots/releases/1.0.1-equipment-photos.gif)
+
+_Swipe both ways through saved equipment photos. Confirming deletion removes an old photo from the library and its saved workout attachments while keeping the sets._
+
+![Profile workout with subtle orange warm-up chips, green working sets, purple drop sets and red failed sets](screenshots/releases/1.0.1-history-set-colours.png)
+
+_Saved sets use the logger's set-type colours in Profile and Training history, with readable labels in both themes._
+
+![Social Find showing eight suggested public profiles with usernames, separate Add friend buttons and numbered pagination](screenshots/releases/1.0.1-suggested-friends.png)
+
+_Find automatically lists public accounts you are not connected to, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate. This phone-sized view uses isolated sample data._
+
+![Workout table with orange warm-up, green working, purple drop and red failure rows, plus coloured RPE numbers](screenshots/releases/1.0.1-rpe-set-colours.png)
+
+_Set type controls each row tint; RPE colours only the effort number, including while editing. This workout uses isolated sample data._
+
+![Notifications includes a Relay release row with version, title, date, New and View above synthetic friend activity](screenshots/releases/1.0.1-release-notification.png)
+
+_Tap View for What's new, then close the notes to return to the inbox. The release row remains after viewing._
+
+![Rest complete appears over Body while a synthetic workout remains active](screenshots/releases/1.0.1-rest-complete.png)
+
+_A rest-complete alert appears above the current screen after the countdown has been dismissed. This example uses isolated sample data._
+
+![Recent Friends Activity with local logged times beside Today for synthetic strength and cardio sessions](screenshots/releases/1.0.1-friend-logged-time.png)
+
+_Recent Friends Activity shows the original logged time beside each session's day label, using isolated sample accounts._
+
+![All settings overview after reopening Settings from another screen, using a synthetic account](screenshots/releases/1.0.1-all-settings.png)
+
+_The Settings icon returns to the overview after a previous visit to Appearance._
+
+![Expanded Equipment photo panel with Take photo and Choose photo controls, without the introductory sentence](screenshots/releases/1.0.1-equipment-photo-controls.png)
+
+_Equipment photo opens directly to its controls in this isolated sample workout._
+
+![Workout exercise card ending at Add set, without the Exercise note for next time field](screenshots/releases/1.0.1-no-exercise-note.png)
+
+_The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
+
 - **Your split:** open **Settings > Training > Your split** or **Edit split** on Home. Choose **Upper / Lower**, **Push / Pull / Legs**, **FBEOD** (full body every other day), **Cardio**, or start custom.
 - **Your own cycle:** name it, choose a start date, add, remove and reorder workout or rest days, create custom types such as **Full body A** and **Full body B**, and preview upcoming weeks. Each step is one calendar day. The cycle repeats across weeks; logging or skipping a workout does not move the schedule.
 - **Up next:** Home and the Start menu follow the saved split. Custom types reuse only their own previous sessions, and starting without a previous session keeps the chosen type. Rest days appear as rest; you can still start a workout manually. The visible app refreshes its schedule after local midnight.
 - **Saved to your account:** splits follow your sign-in and are included in account backups. A removed workout type asks you to update the split or restore the type. Failed saves keep your edits for retry.
 - **Automatic suggestions:** switch off **Use this split** and save to return to the existing recommendations while retaining your pattern. Accounts that have not saved a split keep their current behavior.
+- Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
+- The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
+- Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
+- Sets per muscle is on Home and at the bottom of Training. Weekly totals use each workout’s saved credit setting. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.
+- Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.
+- Volume records now say **Volume PR for this weight** on set badges, popups and record lists. The calculation still compares the best reps at that same weight.
+- Swipe through saved equipment photos within the exercise card while logging, with keyboard scrolling available too. Deleting an old photo removes its saved workout attachments after confirmation and keeps the recorded sets.
+- Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets. Existing type labels remain visible, including older warm-up records.
+- Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
+- Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
+- Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.
+- Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.
+- Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
+- The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.
+- Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.
+- RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
+- Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 
 ## 1.0.0
 

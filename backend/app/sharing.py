@@ -12,8 +12,8 @@ choose.
 New accounts start public; existing accounts retain their choices, including private defaults.
 
 Private, disabled and missing profiles all answer "not found". A friends-only profile shows only
-its name and photo until the two members are friends. Usernames can be searched but are not
-returned in shared profiles. Videos and sample data are never shared.
+its name and photo until the two members are friends. Public friend suggestions include usernames;
+other shared-profile responses omit them. Videos and sample data are never shared.
 """
 
 from __future__ import annotations
@@ -132,6 +132,17 @@ class SharedProfileSummary(BaseModel):
     cardio_count: int | None = None
     record_count: int | None = None
     shares: SharedContent | None = None
+
+
+class SuggestedProfileSummary(SharedProfileSummary):
+    username: str
+
+
+class SuggestedProfilePage(BaseModel):
+    profiles: list[SuggestedProfileSummary]
+    total: int
+    page: int
+    page_size: int = 8
 
 
 class SharedBodyMeasurement(BaseModel):
@@ -642,6 +653,42 @@ def update_sharing(payload: SharingChoices, user: CurrentUser, db: Db) -> Sharin
     db.commit()
     db.refresh(sharing)
     return sharing_read(db, sharing)
+
+
+@sharing_router.get("/suggestions", response_model=SuggestedProfilePage)
+def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, ge=1)):
+    require_sharing(db, user)
+    excluded = blocked_member_ids(db, user.id) | set(friendships_of(db, user.id))
+    query = (
+        select(User, ProfileSharing)
+        .join(ProfileSharing, ProfileSharing.user_id == User.id)
+        .where(
+            ProfileSharing.visibility == PUBLIC,
+            User.id != user.id,
+            User.disabled_at.is_(None),
+            User.id.not_in(excluded),
+        )
+    )
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    # A request or privacy change can remove the last member on the current page.
+    current_page = min(page, max(1, (total + 7) // 8))
+    rows = db.execute(
+        query.order_by(func.lower(User.display_name), User.id)
+        .offset((current_page - 1) * 8)
+        .limit(8)
+    ).all()
+    stats = workout_stats(db, [member.id for member, _ in rows])
+    return SuggestedProfilePage(
+        profiles=[
+            SuggestedProfileSummary(
+                **profile_summary(user, member, sharing, None, stats.get(member.id)).model_dump(),
+                username=member.username,
+            )
+            for member, sharing in rows
+        ],
+        total=total,
+        page=current_page,
+    )
 
 
 @sharing_router.get("/profiles", response_model=list[SharedProfileSummary])

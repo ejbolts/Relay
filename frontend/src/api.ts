@@ -41,6 +41,7 @@ import type {
   ServerStatus,
   SharedProfile,
   SharedProfileSummary,
+  SuggestedProfilePage,
   SharedWorkoutPage,
   SharingChoices,
   FriendConnections,
@@ -260,6 +261,8 @@ export const api = {
       request<SharedProfileSummary[]>(
         `/api/sharing/profiles${query === undefined ? '' : `?q=${encodeURIComponent(query.trim())}`}`,
       ),
+    suggestions: (page = 1) =>
+      request<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`),
     profile: (userId: string) =>
       request<SharedProfile>(`/api/sharing/profiles/${encodeURIComponent(userId)}`),
     workoutFilters: (userId: string) =>
@@ -412,6 +415,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercisePartialSets: (exerciseId: string, enabled: boolean, weekStart: string) =>
+    request<Exercise>(`/api/exercises/${exerciseId}/partial-sets`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partial_sets_enabled: enabled, week_start: weekStart }),
+    }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
   listAllMachinePhotos: () => request<MachinePhotoUsage[]>('/api/machine-photos'),
@@ -434,8 +443,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ caption }),
     }),
-  deleteMachinePhoto: (photoId: string) =>
-    request<void>(`/api/machine-photos/${photoId}`, { method: 'DELETE' }),
+  deleteMachinePhoto: (photoId: string, detachFromWorkouts = false) =>
+    request<void>(
+      `/api/machine-photos/${photoId}${detachFromWorkouts ? '?detach_from_workouts=true' : ''}`,
+      { method: 'DELETE' },
+    ),
   dashboard: (calendarStart?: string) =>
     request<DashboardData>(
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,

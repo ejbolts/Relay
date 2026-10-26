@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { Icon } from './Icon';
@@ -10,6 +10,9 @@ import {
   unreadNotificationReferences,
 } from './notificationReadState';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
+import { ReleaseAnnouncement } from './ReleaseAnnouncement';
+import { formatReleaseDate, type Release } from './releaseMetadata';
 import type {
   SharingConnection,
   SharingNotifications,
@@ -21,13 +24,15 @@ import './FollowNotifications.css';
 export const NOTIFICATIONS_PER_PAGE = 15;
 
 type NotificationRow =
+  | { kind: 'release'; item: Release }
   | { kind: 'comment'; item: CommentNotice }
   | { kind: 'request'; item: SharingConnection }
   | { kind: 'reaction'; item: ReactionNotice }
   | { kind: 'accepted'; item: SharingConnection };
 
-function notificationRows(items: SharingNotifications): NotificationRow[] {
+function notificationRows(items: SharingNotifications, release?: Release): NotificationRow[] {
   return [
+    ...(release ? [{ kind: 'release' as const, item: release }] : []),
     ...(items.comments ?? []).map((item) => ({ kind: 'comment' as const, item })),
     ...items.requests.map((item) => ({ kind: 'request' as const, item })),
     ...(items.reactions ?? []).map((item) => ({ kind: 'reaction' as const, item })),
@@ -35,8 +40,12 @@ function notificationRows(items: SharingNotifications): NotificationRow[] {
   ];
 }
 
-function notificationPage(items: SharingNotifications, page: number): NotificationRow[] {
-  const rows = notificationRows(items);
+function notificationPage(
+  items: SharingNotifications,
+  page: number,
+  release?: Release,
+): NotificationRow[] {
+  const rows = notificationRows(items, release);
   const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / NOTIFICATIONS_PER_PAGE)));
   return rows.slice(
     (currentPage - 1) * NOTIFICATIONS_PER_PAGE,
@@ -44,13 +53,17 @@ function notificationPage(items: SharingNotifications, page: number): Notificati
   );
 }
 
-function displayedNotifications(items: SharingNotifications, page: number): SharingNotifications {
+function displayedNotifications(
+  items: SharingNotifications,
+  page: number,
+  release?: Release,
+): SharingNotifications {
   const visible: SharingNotifications = { requests: [], accepted: [], reactions: [], comments: [] };
-  for (const row of notificationPage(items, page)) {
+  for (const row of notificationPage(items, page, release)) {
     if (row.kind === 'request') visible.requests.push(row.item);
     else if (row.kind === 'accepted') visible.accepted.push(row.item);
     else if (row.kind === 'reaction') visible.reactions!.push(row.item);
-    else visible.comments!.push(row.item);
+    else if (row.kind === 'comment') visible.comments!.push(row.item);
   }
   return visible;
 }
@@ -72,8 +85,11 @@ function NotificationDate({ since }: { since: string }) {
 
 /** Opening the compact inbox reads displayed notices; requests remain actionable. */
 export function FollowNotifications({ active }: { active: boolean }) {
+  const announcement = useContext(ReleaseAnnouncementContext);
+  const release = announcement?.release;
   const [items, setItems] = useState<SharingNotifications | null>(null);
   const [open, setOpen] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +108,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
         if (cancelled) return;
         setItems(next);
         setError(null);
-        const unread = unreadNotificationReferences(displayedNotifications(next, page));
+        const unread = unreadNotificationReferences(displayedNotifications(next, page, release));
         if (open && unread.length) {
           await api.sharing.markNotificationsRead(unread);
           if (!cancelled)
@@ -115,7 +131,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [active, open, attempt, page]);
+  }, [active, open, attempt, page, release]);
 
   async function respond(person: SharingConnection, action: 'accept' | 'decline') {
     if (busy) return;
@@ -139,12 +155,15 @@ export function FollowNotifications({ active }: { active: boolean }) {
     }
   }
 
-  const count = items ? unreadNotificationReferences(items).length : 0;
-  const rows = items ? notificationRows(items) : [];
+  const count =
+    (items ? unreadNotificationReferences(items).length : 0) +
+    Number(announcement?.noticeUnread ?? false);
+  const currentItems = items ?? { requests: [], accepted: [] };
+  const rows = notificationRows(currentItems, release);
   const total = rows.length;
   const pageCount = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = items ? notificationPage(items, page) : [];
+  const pageRows = notificationPage(currentItems, page, release);
   return (
     <>
       <button
@@ -195,7 +214,39 @@ export function FollowNotifications({ active }: { active: boolean }) {
           )}
           <ul className="follow-notification-list" ref={list}>
             {pageRows.map((row) =>
-              row.kind === 'comment' ? (
+              row.kind === 'release' ? (
+                <li key={`release-${row.item.version}`} className="release-notification-row">
+                  <span className="release-notification-icon" aria-hidden="true">
+                    <Icon name="sparkle" />
+                  </span>
+                  <div className="follow-notification-copy">
+                    <p>
+                      <strong>Relay {row.item.version}</strong>
+                      {announcement?.noticeUnread && (
+                        <span className="release-notification-new">New</span>
+                      )}
+                    </p>
+                    <p>{row.item.title}</p>
+                    {row.item.date && (
+                      <span className="follow-notification-date release-notification-date">
+                        <time dateTime={row.item.date}>{formatReleaseDate(row.item.date)}</time>
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-secondary release-notification-view"
+                    aria-label={`View Relay ${row.item.version} release notes`}
+                    onClick={() => {
+                      setOpen(false);
+                      announcement?.readNotice();
+                      setReleaseOpen(true);
+                    }}
+                  >
+                    View
+                  </button>
+                </li>
+              ) : row.kind === 'comment' ? (
                 <li key={`comment-${row.item.notice_id}`}>
                   <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
                   <div className="follow-notification-copy">
@@ -289,6 +340,16 @@ export function FollowNotifications({ active }: { active: boolean }) {
             label="notifications"
           />
         </PopupDialog>
+      )}
+      {releaseOpen && announcement && (
+        <ReleaseAnnouncement
+          release={announcement.release}
+          history={announcement.history}
+          onClose={() => {
+            setReleaseOpen(false);
+            setOpen(true);
+          }}
+        />
       )}
     </>
   );

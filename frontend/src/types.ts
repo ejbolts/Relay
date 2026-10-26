@@ -117,6 +117,10 @@ export interface Exercise {
   is_favorite: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
+  default_muscle_set_credits?: { muscle_name: string; sets: number }[];
+  partial_sets_enabled?: boolean;
+  partial_sets_default?: boolean;
+  partial_set_weeks?: { week_start: string; enabled: boolean }[];
 }
 
 export type ExerciseCreateInput = Pick<
@@ -748,6 +752,17 @@ export interface SharedProfileSummary {
     goals: boolean;
     machine_photos: boolean;
   } | null;
+}
+
+export interface SuggestedProfileSummary extends SharedProfileSummary {
+  username: string;
+}
+
+export interface SuggestedProfilePage {
+  profiles: SuggestedProfileSummary[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface SharingConnection {

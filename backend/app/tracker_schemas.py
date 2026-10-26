@@ -12,7 +12,7 @@ from .models import (
     SetType,
     WorkoutCategory,
 )
-from .training_metrics import muscle_credits
+from .training_metrics import muscle_credits, partial_sets_enabled_on
 
 
 class MuscleContributionRead(BaseModel):
@@ -41,6 +41,12 @@ class MuscleSetCreditRead(BaseModel):
     sets: float
 
 
+class ExercisePartialSetWeekRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    week_start: date
+    enabled: bool
+
+
 class ExerciseRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,7 +58,14 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
+    partial_set_weeks: list[ExercisePartialSetWeekRead] = []
     muscle_contributions: list[MuscleContributionRead] = []
+
+    @computed_field
+    @property
+    def partial_sets_enabled(self) -> bool:
+        return partial_sets_enabled_on(self, date.today())
 
     @computed_field
     @property
@@ -61,6 +74,19 @@ class ExerciseRead(BaseModel):
         return [
             MuscleSetCreditRead(muscle_name=name, sets=sets) for name, sets in muscle_credits(self)
         ]
+
+    @computed_field
+    @property
+    def default_muscle_set_credits(self) -> list[MuscleSetCreditRead]:
+        return [
+            MuscleSetCreditRead(muscle_name=name, sets=sets)
+            for name, sets in muscle_credits(self, include_partial=True)
+        ]
+
+
+class ExercisePartialSetsUpdate(BaseModel):
+    partial_sets_enabled: bool
+    week_start: date | None = None
 
 
 class ExerciseFavoriteUpdate(BaseModel):
