@@ -16,6 +16,10 @@ _Choose a template or build your own repeating cycle. Custom workout types and r
 
 _Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
 
+![Live friend workout and privacy updates without reloading](screenshots/releases/1.1.0-live-friend-updates.gif)
+
+_A friend starts and discards a workout, then hides live workouts and online status. The Friends card updates immediately through each step without reloading. This looping GIF was captured directly from isolated synthetic accounts; Home uses the same live updates._
+
 ![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
 
 _Browse ten lifts per page. Muscle filters include direct and currently enabled partial credits; the three-line button changes the page size._
@@ -85,6 +89,9 @@ _Five sessions per page keep profiles compact. Use the arrows or page picker to 
 - **Up next:** Home and the Start menu follow the saved split. Custom types reuse only their own previous sessions, and starting without a previous session keeps the chosen type. Rest days appear as rest; you can still start a workout manually. The visible app refreshes its schedule after local midnight.
 - **Saved to your account:** splits follow your sign-in and are included in account backups. A removed workout type asks you to update the split or restore the type. Failed saves keep your edits for retry.
 - **Automatic suggestions:** switch off **Use this split** and save to return to the existing recommendations while retaining your pattern. Accounts that have not saved a split keep their current behavior.
+- Friends shows when each friend is working out, active now or was last active. A friend's workout in progress moves to the top with a **Live** label, its name and how long they have been training, and stays while their phone is locked between sets. Changes appear as they happen.
+- Home's Recent Friends Activity lists friends working out first, showing their live workout in place of their last session until they finish.
+- **Settings > Account & privacy > Profile sharing** has a **Live activity** section with separate **Online status** and **Live workouts** switches and a preview of what friends see. Both start on, only accepted friends can see them, and turning one off hides it from friends straight away.
 - Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
 - The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
 - Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
@@ -104,6 +111,7 @@ _Five sessions per page keep profiles compact. Use the arrows or page picker to 
 - Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 - **Cardio on profiles:** your own profile and shared profiles show five sessions at a time, newest first. The header shows the visible range and total, with previous, next and direct page selection below.
 - **Older sessions:** pagination reaches the whole shared cardio history, beyond the former latest-20 limit. Profile refreshes retain the selected page; failed page requests keep the current sessions and offer retry. Existing access, notes and sample-data rules still apply.
+- Signing out ends live activity access from that window. Expired or disabled sign-ins cannot send or receive live updates.
 
 ## 1.0.0
 

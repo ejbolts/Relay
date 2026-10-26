@@ -24,6 +24,8 @@ describe('Home friend and feedback counts', () => {
       share_body_weight: false,
       share_goals: false,
       share_machine_photos: false,
+      share_online_status: true,
+      share_live_workouts: true,
     });
     const container = document.createElement('div');
     document.body.append(container);

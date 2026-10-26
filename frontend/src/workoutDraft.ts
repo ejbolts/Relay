@@ -1,6 +1,8 @@
 import type { TrackedWorkout, WorkoutCategory, WorkoutSetInput } from './types';
 
 export const ACTIVE_WORKOUT_DRAFT_KEY = 'gym-video-logger.active-workout.v1';
+/** Dispatched on `window` when this window saves or clears the active workout draft. */
+export const ACTIVE_WORKOUT_CHANGE_EVENT = 'relay:active-workout-change';
 
 export interface DraftStorage {
   getItem(key: string): string | null;
@@ -154,10 +156,11 @@ export function writeActiveWorkoutDraft(
   if (!target) return false;
   try {
     target.setItem(ACTIVE_WORKOUT_DRAFT_KEY, JSON.stringify(draft));
-    return true;
   } catch {
     return false;
   }
+  if (storage === undefined) announceDraftChange();
+  return true;
 }
 
 export function clearActiveWorkoutDraft(storage?: DraftStorage | null): void {
@@ -168,6 +171,11 @@ export function clearActiveWorkoutDraft(storage?: DraftStorage | null): void {
   } catch {
     // Storage can be unavailable in private modes; the in-memory workout remains usable.
   }
+  if (storage === undefined) announceDraftChange();
+}
+
+function announceDraftChange(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACTIVE_WORKOUT_CHANGE_EVENT));
 }
 
 function completedSetSignature(

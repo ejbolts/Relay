@@ -55,6 +55,7 @@ from .models import (
     utc_now,
 )
 from .photo_storage import profile_photo_path
+from .presence import FriendPresence, hub, presence_by_member
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
     HeatmapDay,
@@ -99,6 +100,8 @@ class SharingChoices(BaseModel):
     share_body_weight: bool = False
     share_goals: bool = False
     share_machine_photos: bool = False
+    share_online_status: bool = True
+    share_live_workouts: bool = True
 
 
 class SharingRead(SharingChoices):
@@ -260,6 +263,7 @@ class FeedFriend(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    presence: FriendPresence | None = None
 
 
 class FriendFeedItem(BaseModel):
@@ -288,6 +292,7 @@ class FriendActivity(ConnectionRead):
     recent_workout_count: int = 0
     # Days with a shared workout in the last week or so, for a compact activity strip.
     training_dates: list[date] = []
+    presence: FriendPresence | None = None
 
 
 class FriendsRead(BaseModel):
@@ -333,6 +338,8 @@ def sharing_choices(db: Session, user_id: str) -> ProfileSharing:
         share_body_weight=False,
         share_goals=False,
         share_machine_photos=False,
+        share_online_status=True,
+        share_live_workouts=True,
     )
 
 
@@ -671,6 +678,8 @@ def update_sharing(payload: SharingChoices, user: CurrentUser, db: Db) -> Sharin
     # Friend requests keep waiting: anyone can see a public profile, but friends are chosen.
     db.commit()
     db.refresh(sharing)
+    # Friends' open windows show or hide live activity straight away.
+    hub.notify(user.id)
     return sharing_read(db, sharing)
 
 
@@ -1184,6 +1193,14 @@ def friend_feed(
     friend_ids = shared_friend_ids(db, user.id)
     friends = db.scalar(select(func.count()).select_from(friend_ids.subquery())) or 0
     sessions = latest_workouts(db, friend_ids)
+    presence = presence_by_member(db, [(member, sharing) for _, member, sharing in sessions])
+
+    def live_since(row: tuple[TrainingWorkout, User, ProfileSharing]) -> float:
+        current = presence[row[1].id]
+        return -current.workout.started_at.timestamp() if current and current.workout else 0
+
+    # Friends working out now come first, most recently started first; the rest stay newest first.
+    sessions.sort(key=live_since)
     rows = sessions[:limit]
     reactions = reaction_summaries(db, user.id, [workout.id for workout, _, _ in rows])
     return FriendFeedRead(
@@ -1195,6 +1212,7 @@ def friend_feed(
                     id=member.id,
                     display_name=member.display_name,
                     profile_photo_url=photo_url(member),
+                    presence=presence[member.id],
                 ),
                 workout=shared_workout(workout, sharing),
                 reactions=reactions[workout.id],
@@ -1324,6 +1342,11 @@ def list_friends(user: CurrentUser, db: Db) -> FriendsRead:
     reactions = reaction_summaries(db, user.id, [workout.id for workout, _ in latest.values()])
     stats = workout_stats(db, ids)
     dates = training_dates(db, ids)
+    sharings = {
+        sharing.user_id: sharing
+        for sharing in db.scalars(select(ProfileSharing).where(ProfileSharing.user_id.in_(ids)))
+    }
+    presence = presence_by_member(db, [(member, sharings[member.id]) for member in members])
     friends = []
     for member in members:
         newest = latest.get(member.id)
@@ -1340,6 +1363,7 @@ def list_friends(user: CurrentUser, db: Db) -> FriendsRead:
                 ),
                 recent_workout_count=stats[member.id].recent_workouts,
                 training_dates=dates[member.id],
+                presence=presence[member.id],
             )
         )
     # Most recent activity first; friends without a session come last, by name.

@@ -119,6 +119,7 @@ import {
 import { machineDate, machineUsedShort } from './machineHistory';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { useReleaseAnnouncement } from './useReleaseAnnouncement';
+import { usePresenceConnection } from './presence';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
@@ -578,6 +579,7 @@ function AppContent() {
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
   const { user, signingIn = false } = useUserSession();
+  usePresenceConnection(user?.id ?? null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);

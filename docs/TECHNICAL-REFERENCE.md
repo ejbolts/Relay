@@ -66,6 +66,24 @@ Home's Friends card refreshes its latest-workout feed every 30 seconds while vis
 focus, when the page becomes visible and on reconnection. Each member contributes one latest
 session, sorted by workout date and creation time; reactions do not affect this order.
 
+Live friend activity shows whether each friend is working out, active now or when they were last
+active. Each signed-in, open window keeps a WebSocket to `/api/presence/ws`, authenticated by the
+session cookie and rejected from other origins, and reports whether it is visible and which
+workout this device is doing. A member is online while any of their windows is visible. Online
+status lives in memory, so the backend must run as a single process (the provided systemd unit
+does); a reverse proxy must pass WebSocket upgrades, which Caddy does by default. The workout in
+progress is stored in `live_workouts`, so it stays visible while a phone is locked between sets.
+It clears when the logging device finishes or discards the workout, or when the app's inactivity
+auto-finish time passes; another device without that workout open cannot clear it. The Friends
+and feed responses include each friend's `presence`, Friends lists friends working out first,
+then those online, and the feed puts friends working out first. Changes are pushed to friends'
+open windows immediately, with the existing 30-second refreshes as a fallback. Only accepted
+friends who could see the member on their Friends list receive it. **Online status** and **Live
+workouts** in **Settings > Account & privacy > Profile sharing > Live activity** turn each part
+off separately; both start on. Migration `0044_live_activity` adds both choices to
+`profile_sharing` and creates `live_workouts`, which account backups leave out and account
+deletion removes.
+
 ## Project structure
 
 - `frontend/`: React, TypeScript, Vite and `vite-plugin-pwa`; the default screen is the two-row menu with total and weekly stats.
@@ -183,15 +201,15 @@ python -m app.manage import-legacy-backup --username yourname --source <backup f
 
 Limits stop one account from bloating the server. They sit far above real use (a six-year log peaks at 55 sets and 9 exercises in one workout), and people are never told they exist: anything over a limit gets a plain "couldn't be saved" message, and the server log records which limit was hit. The exception is the photo upload size, which people are told ("Photos can be up to 5 MB."). The app also shrinks photos before uploading them (to 1,800 px on the long side, as JPEG), so phone photos fit easily. Adjust them under **Settings → Help & about → Admin console → Account limits**; changes apply immediately.
 
-| Limit | Default | Applies to |
-|---|---|---|
-| Workouts, cardio sessions | 5,000 each | each account, except admins |
-| Custom exercises | 100 | each account, except admins |
-| Machine photos | 25 | each account, except admins |
-| Changes per minute | 60 | each account, except admins |
-| Exercises / sets in one workout | 20 / 100 | everyone |
-| Workout / exercise / set note | 2,000 / 1,000 / 500 characters | everyone |
-| Photo upload size | 5 MB (shown to people) | everyone |
+| Limit                           | Default                        | Applies to                  |
+| ------------------------------- | ------------------------------ | --------------------------- |
+| Workouts, cardio sessions       | 5,000 each                     | each account, except admins |
+| Custom exercises                | 100                            | each account, except admins |
+| Machine photos                  | 25                             | each account, except admins |
+| Changes per minute              | 60                             | each account, except admins |
+| Exercises / sets in one workout | 20 / 100                       | everyone                    |
+| Workout / exercise / set note   | 2,000 / 1,000 / 500 characters | everyone                    |
+| Photo upload size               | 5 MB (shown to people)         | everyone                    |
 
 CSV imports follow the same limits and save nothing if any is exceeded. A workout saved before a limit was lowered can still be edited, but not grown.
 

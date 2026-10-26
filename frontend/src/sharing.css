@@ -1526,3 +1526,152 @@
   width: 0;
   flex: 1 1 100px;
 }
+
+/* Live friend activity: who is online now and who is working out. */
+.presence-avatar {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-grid;
+}
+
+.presence-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 0.8125rem;
+  height: 0.8125rem;
+  border: 2.5px solid var(--p-surface-2);
+  border-radius: 50%;
+  background: var(--p-good);
+}
+
+.presence-dot.workout {
+  background: var(--p-accent);
+  animation: presence-pulse 1.8s ease-out infinite;
+}
+
+.friend-activity-list .presence-dot,
+.sharing-live-preview .presence-dot {
+  border-color: var(--p-surface);
+}
+
+.friend-status {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.friend-status.workout,
+.friend-activity-meta.is-live {
+  color: var(--p-accent-text);
+  font-weight: 600;
+}
+
+.friend-status.online {
+  color: var(--p-good);
+  font-weight: 600;
+}
+
+.friend-status.workout::before,
+.friend-status.online::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.friend-activity-kind.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--p-accent);
+  color: #fff;
+}
+
+.friend-activity-kind.live::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+  animation: presence-blink 1.4s ease-in-out infinite;
+}
+
+.friend-cards > li.is-live {
+  border-color: color-mix(in srgb, var(--p-accent) 40%, var(--p-line));
+}
+
+.friend-card-latest.is-live {
+  border-color: color-mix(in srgb, var(--p-accent) 30%, var(--p-line));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--p-accent) 13%, var(--p-surface)),
+    var(--p-surface) 70%
+  );
+}
+
+.friend-week > span.is-live {
+  color: var(--p-accent-text);
+}
+
+.friend-week > span.is-live::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--p-accent) 0 3px,
+    color-mix(in srgb, var(--p-accent) 35%, transparent) 3px 6px
+  );
+  animation: presence-blink 1.8s ease-in-out infinite;
+}
+
+.sharing-live-preview {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
+  border-top: 1px solid var(--p-line-strong);
+  padding-top: 0.85rem;
+}
+
+.sharing-live-preview-label {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sharing-live-preview-person {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  padding: 0.65rem 0.75rem;
+  background: var(--p-surface-2);
+}
+
+@keyframes presence-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-accent) 60%, transparent);
+  }
+
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@keyframes presence-blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-dot.workout,
+  .friend-activity-kind.live::before,
+  .friend-week > span.is-live::before {
+    animation: none;
+  }
+}
