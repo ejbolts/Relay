@@ -117,6 +117,10 @@ export interface Exercise {
   is_favorite: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
+  default_muscle_set_credits?: { muscle_name: string; sets: number }[];
+  partial_sets_enabled?: boolean;
+  partial_sets_default?: boolean;
+  partial_set_weeks?: { week_start: string; enabled: boolean }[];
 }
 
 export type ExerciseCreateInput = Pick<
@@ -308,6 +312,18 @@ export interface WorkoutRecommendation {
   rotation_next: WorkoutCategory;
   reason: string;
   muscle_frequency: MuscleFrequency[];
+  workout_type?: WorkoutType | null;
+  is_rest_day?: boolean;
+  needs_split_update?: boolean;
+  scheduled_date?: string | null;
+  split_name?: string | null;
+}
+
+export interface TrainingSplit {
+  name: string;
+  enabled: boolean;
+  start_date: string;
+  steps: { workout_type_id: string | null }[];
 }
 
 export interface WeeklyMuscleContribution {
@@ -736,6 +752,17 @@ export interface SharedProfileSummary {
     goals: boolean;
     machine_photos: boolean;
   } | null;
+}
+
+export interface SuggestedProfileSummary extends SharedProfileSummary {
+  username: string;
+}
+
+export interface SuggestedProfilePage {
+  profiles: SuggestedProfileSummary[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface SharingConnection {

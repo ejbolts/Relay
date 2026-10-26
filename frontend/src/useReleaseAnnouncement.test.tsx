@@ -41,6 +41,60 @@ afterEach(async () => {
 });
 
 describe('installed release announcements', () => {
+  it('keeps the notice unread until View, independently of automatic announcement dismissal', async () => {
+    await render('notice-account-first');
+    expect(announcement.noticeUnread).toBe(true);
+    await act(async () => announcement.dismiss());
+    expect(announcement.noticeUnread).toBe(true);
+    await act(async () => announcement.readNotice());
+    expect(announcement.open).toBe(false);
+    expect(announcement.noticeUnread).toBe(false);
+    expect(
+      window.localStorage.getItem(
+        `gym-logger-release-notice-read:notice-account-first:${metadata.version}`,
+      ),
+    ).toBe('1');
+    await render('notice-account-second');
+    expect(announcement.noticeUnread).toBe(true);
+    await render('notice-account-first');
+    expect(announcement.noticeUnread).toBe(false);
+    await render(null);
+    expect(announcement.noticeUnread).toBe(false);
+  });
+
+  it('does not reuse an older version notice read state for the installed version', async () => {
+    window.localStorage.setItem('gym-logger-release-notice-read:notice-old-version:0.0.0', '1');
+    await render('notice-old-version');
+    expect(announcement.noticeUnread).toBe(true);
+  });
+
+  it('honours a notice read in an earlier browser session and survives blocked storage', async () => {
+    window.localStorage.setItem(
+      `gym-logger-release-notice-read:notice-stored:${metadata.version}`,
+      '1',
+    );
+    await render('notice-stored');
+    expect(announcement.noticeUnread).toBe(false);
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Blocked');
+    });
+    try {
+      await render('notice-blocked-storage');
+      expect(announcement.noticeUnread).toBe(true);
+      await act(async () => announcement.readNotice());
+      expect(announcement.noticeUnread).toBe(false);
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await render('notice-blocked-storage');
+      expect(announcement.noticeUnread).toBe(false);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('announces the running release without replacing it with future deployed notes', async () => {
     vi.mocked(fetchRelease).mockResolvedValue({
       ...metadata,

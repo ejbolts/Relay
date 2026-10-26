@@ -85,6 +85,15 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
     ).json()
     add_photo(owner_id, "owner-photo")
     add_photo(other_id, "other-photo")
+    owner_exercise = client.get("/api/exercises").json()[0]["id"]
+    other_exercise = other_client.get("/api/exercises").json()[0]["id"]
+    for browser, exercise_id in [(client, owner_exercise), (other_client, other_exercise)]:
+        assert (
+            browser.patch(
+                f"/api/exercises/{exercise_id}/partial-sets", json={"partial_sets_enabled": False}
+            ).status_code
+            == 200
+        )
 
     backup = snapshot("owner")
 
@@ -96,6 +105,9 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
     assert rows(database, "SELECT id, name FROM workout_types") == [(owner_type["id"], "Arms")]
     assert rows(database, "SELECT COUNT(*) FROM workout_sets") == [(2,)]
     assert {owner for (owner,) in rows(database, "SELECT user_id FROM exercises")} == {owner_id}
+    assert rows(database, "SELECT exercise_id, enabled FROM exercise_partial_set_weeks") == [
+        (owner_exercise, 0)
+    ]
     for table in ("user_sessions", "push_subscriptions", "account_backups"):
         assert rows(database, f"SELECT COUNT(*) FROM {table}") == [(0,)]
     photos = sorted(path.name for path in (folder / "machine-photos").iterdir())
@@ -117,6 +129,9 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
     other_backup = snapshot("other")
     other_database = backup_folder(get_settings(), other_id, other_backup.id) / BACKUP_DATABASE
     assert rows(other_database, "SELECT id FROM training_workouts") == [(other_workout,)]
+    assert rows(other_database, "SELECT exercise_id, enabled FROM exercise_partial_set_weeks") == [
+        (other_exercise, 0)
+    ]
     assert rows(other_database, "SELECT id, name FROM workout_types") == [
         (other_type["id"], "Legs")
     ]

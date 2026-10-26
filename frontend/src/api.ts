@@ -41,6 +41,7 @@ import type {
   ServerStatus,
   SharedProfile,
   SharedProfileSummary,
+  SuggestedProfilePage,
   SharedWorkoutPage,
   SharedCardioPage,
   SharingChoices,
@@ -58,6 +59,7 @@ import type {
   WorkoutSnapshot,
   WorkoutSession,
   TrainingPreferences,
+  TrainingSplit,
   TrainingTime,
   WorkoutTypeColors,
   WorkoutType,
@@ -67,6 +69,7 @@ import { cachedWorkoutsForRevision, readWorkoutCache, writeWorkoutCache } from '
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
 import type { HomeLayout } from './homeLayout';
+import { localDate } from './utils';
 
 export class ApiError extends Error {
   constructor(
@@ -259,6 +262,8 @@ export const api = {
       request<SharedProfileSummary[]>(
         `/api/sharing/profiles${query === undefined ? '' : `?q=${encodeURIComponent(query.trim())}`}`,
       ),
+    suggestions: (page = 1) =>
+      request<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`),
     profile: (userId: string) =>
       request<SharedProfile>(`/api/sharing/profiles/${encodeURIComponent(userId)}`),
     cardio: (userId: string, offset: number, limit = 5) =>
@@ -415,6 +420,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercisePartialSets: (exerciseId: string, enabled: boolean, weekStart: string) =>
+    request<Exercise>(`/api/exercises/${exerciseId}/partial-sets`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partial_sets_enabled: enabled, week_start: weekStart }),
+    }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
   listAllMachinePhotos: () => request<MachinePhotoUsage[]>('/api/machine-photos'),
@@ -437,12 +448,22 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ caption }),
     }),
-  deleteMachinePhoto: (photoId: string) =>
-    request<void>(`/api/machine-photos/${photoId}`, { method: 'DELETE' }),
+  deleteMachinePhoto: (photoId: string, detachFromWorkouts = false) =>
+    request<void>(
+      `/api/machine-photos/${photoId}${detachFromWorkouts ? '?detach_from_workouts=true' : ''}`,
+      { method: 'DELETE' },
+    ),
   dashboard: (calendarStart?: string) =>
     request<DashboardData>(
-      `/api/dashboard${calendarStart ? `?${new URLSearchParams({ calendar_start: calendarStart })}` : ''}`,
+      `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
     ),
+  getTrainingSplit: () => request<TrainingSplit | null>('/api/training-split'),
+  saveTrainingSplit: (payload: TrainingSplit) =>
+    request<TrainingSplit>('/api/training-split', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
   trainingTime: () => request<TrainingTime>('/api/training-time'),
   workoutRevision: () =>
     request<WorkoutCacheRevision>('/api/workouts/revision', {

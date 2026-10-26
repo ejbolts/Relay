@@ -12,7 +12,7 @@ from .models import (
     SetType,
     WorkoutCategory,
 )
-from .training_metrics import muscle_credits
+from .training_metrics import muscle_credits, partial_sets_enabled_on
 
 
 class MuscleContributionRead(BaseModel):
@@ -41,6 +41,12 @@ class MuscleSetCreditRead(BaseModel):
     sets: float
 
 
+class ExercisePartialSetWeekRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    week_start: date
+    enabled: bool
+
+
 class ExerciseRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,7 +58,14 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
+    partial_set_weeks: list[ExercisePartialSetWeekRead] = []
     muscle_contributions: list[MuscleContributionRead] = []
+
+    @computed_field
+    @property
+    def partial_sets_enabled(self) -> bool:
+        return partial_sets_enabled_on(self, date.today())
 
     @computed_field
     @property
@@ -61,6 +74,19 @@ class ExerciseRead(BaseModel):
         return [
             MuscleSetCreditRead(muscle_name=name, sets=sets) for name, sets in muscle_credits(self)
         ]
+
+    @computed_field
+    @property
+    def default_muscle_set_credits(self) -> list[MuscleSetCreditRead]:
+        return [
+            MuscleSetCreditRead(muscle_name=name, sets=sets)
+            for name, sets in muscle_credits(self, include_partial=True)
+        ]
+
+
+class ExercisePartialSetsUpdate(BaseModel):
+    partial_sets_enabled: bool
+    week_start: date | None = None
 
 
 class ExerciseFavoriteUpdate(BaseModel):
@@ -372,6 +398,11 @@ class WorkoutRecommendationRead(BaseModel):
     rotation_next: WorkoutCategory
     reason: str
     muscle_frequency: list[MuscleFrequencyRead]
+    workout_type: WorkoutTypeRead | None = None
+    is_rest_day: bool = False
+    needs_split_update: bool = False
+    scheduled_date: date | None = None
+    split_name: str | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):
@@ -573,6 +604,29 @@ class CardioSessionRead(CardioSessionFields):
     source_workout_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TrainingSplitStep(BaseModel):
+    # A null type is a rest day; custom types retain their account-owned identity.
+    workout_type_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class TrainingSplit(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    enabled: bool = True
+    start_date: date
+    steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def includes_workout(self) -> TrainingSplit:
+        if not any(step.workout_type_id is not None for step in self.steps):
+            raise ValueError("Include at least one workout day in your split.")
+        return self
 
 
 class TrainingPreferencesUpdate(BaseModel):

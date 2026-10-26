@@ -294,11 +294,13 @@ export function sessionTemplateFor(
   category: WorkoutCategory,
   today: string,
   unit: WeightUnit = 'kg',
+  workoutTypeId: string | null = null,
 ): SessionTemplate | null {
   const source = workouts
     .filter(
       (workout) =>
         workout.category === category &&
+        (workout.workout_type_id ?? null) === workoutTypeId &&
         workout.workout_date <= today &&
         workout.movements.length > 0,
     )
