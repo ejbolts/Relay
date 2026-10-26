@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "date": "2026-10-26",
   "title": "Find friends and improve your workouts",
   "summary": "Discover public profiles in Find, see RPE and set types in colour, get rest alerts while browsing Relay, and open release notes from Notifications.",
@@ -14,7 +14,7 @@
     "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
     "Workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#101",
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
     "url": "https://raw.githubusercontent.com/ejbolts/Relay/a90b338d409b698581bb1300976b7698a92ecc8b/docs/screenshots/releases/1.0.1-suggested-friends.png",
     "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."

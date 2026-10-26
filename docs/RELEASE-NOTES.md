@@ -2,7 +2,7 @@
 
 _Relay was called Gym Logger before version 1.0._
 
-## 1.0.1
+## 1.1.0
 
 26 October 2026
 
