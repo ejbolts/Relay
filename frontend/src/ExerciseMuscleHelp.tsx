@@ -58,7 +58,7 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
-          setSelectedWeek(currentWeek);
+          setSelectedWeek(weekStartFor(localDate(), weekStartDay));
           setError(null);
           setOpen(true);
         }}

@@ -68,6 +68,24 @@ it('carries weekly choices without applying future changes to earlier weeks', ()
   ]);
 });
 
+it('opens the new week when the page was left open across a weekly rollover', async () => {
+  vi.setSystemTime(new Date('2026-10-25T23:59:00'));
+  await act(async () =>
+    root.render(
+      <ExerciseCreditsContext.Provider
+        value={{ exercises: [exercise], updatePartialSets: vi.fn() }}
+      >
+        <ExerciseMuscleHelp exercise={exercise} />
+      </ExerciseCreditsContext.Provider>,
+    ),
+  );
+  vi.setSystemTime(new Date('2026-10-26T00:01:00'));
+  await click(named('Muscle set credits for Leg Press'));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Partial-set week"]')!.value).toBe(
+    '2026-10-26',
+  );
+});
+
 it('opens this week, browses prior settings and saves only the selected week while later choices survive', async () => {
   const save = vi.fn();
   function Harness() {
