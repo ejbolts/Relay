@@ -94,6 +94,7 @@ from .tracker_schemas import (
     ProgressPoint,
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
+    TrainingSplit,
     TrainingTimeRead,
     TrainingWorkoutCreate,
     TrainingWorkoutRead,
@@ -126,6 +127,12 @@ from .training_metrics import (
     seed_muscle_mappings,
     set_setting,
     start_of_week,
+)
+from .training_split import (
+    TRAINING_SPLIT_KEY,
+    saved_training_split,
+    split_recommendation,
+    validate_split_types,
 )
 from .training_time import training_time_totals
 from .workout_types import (
@@ -1154,6 +1161,22 @@ def zone2_week(
 @router.get("/training-preferences", response_model=TrainingPreferencesRead)
 def get_training_preferences(db: DbSession, user: CurrentUser) -> TrainingPreferencesRead:
     return training_preferences(db, user.id)
+
+
+@router.get("/training-split", response_model=TrainingSplit | None)
+def get_training_split(db: DbSession, user: CurrentUser) -> TrainingSplit | None:
+    return saved_training_split(db, user.id)
+
+
+@router.put("/training-split", response_model=TrainingSplit)
+def update_training_split(
+    payload: TrainingSplit, db: DbSession, user: CurrentUser
+) -> TrainingSplit:
+    validate_split_types(db, user.id, payload)
+    set_setting(db, user.id, TRAINING_SPLIT_KEY, payload.model_dump_json())
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return payload
 
 
 @router.get("/workout-type-colors", response_model=WorkoutTypeColors)
@@ -2197,11 +2220,14 @@ def workout_history_summary(db: Session, user_id: str) -> WorkoutHistorySummaryR
 
 @router.get("/dashboard", response_model=DashboardRead)
 def dashboard(
-    db: DbSession, user: CurrentUser, calendar_start: date | None = None
+    db: DbSession,
+    user: CurrentUser,
+    calendar_start: date | None = None,
+    on_date: date | None = None,
 ) -> DashboardRead:
     """Today's summary. ``calendar_start`` limits the calendar to recent days so long histories
     open quickly; ``/calendar`` serves older days. Without it, every day is included."""
-    today = date.today()
+    today = on_date or date.today()
     preferences = training_preferences(db, user.id)
     week_start = start_of_week(today, preferences.week_start)
     # Weekly figures look back at most four weeks, so a calendar window never truncates them.
@@ -2339,7 +2365,10 @@ def dashboard(
         cardio_energy_periods=cardio_energy_periods(cardio_sessions, today, preferences.week_start),
         heatmap=heatmap,
         weekly_days=weekly_days,
-        recommendation=workout_recommendation(workouts, today, earlier_rotation),
+        recommendation=(
+            split_recommendation(db, user.id, today)
+            or workout_recommendation(workouts, today, earlier_rotation)
+        ),
         weekly_sets=weekly_sets(workouts, today, preferences.week_start),
         muscle_volume=[
             MuscleVolumeRead(muscle_name=name, set_total=value)

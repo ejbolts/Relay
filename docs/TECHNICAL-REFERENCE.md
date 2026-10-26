@@ -201,6 +201,26 @@ Use [GitHub issue #29](https://github.com/ejbolts/Gym-video-logger/issues/29) as
 tracking index; each P1 finding has a separate issue. Recheck historical findings
 against the current code before starting new work.
 
+## Training splits
+
+`GET /api/training-split` returns the signed-in account's saved split or `null`.
+`PUT /api/training-split` saves a name, enabled flag, start date and 1–28 ordered steps;
+each step has an account-owned `workout_type_id`, or `null` for rest. At least one step
+must be a workout. Enabled splits require active types. The JSON is stored in the account's
+`training_split` key in `user_settings` and is included in account backups without a schema migration.
+
+Each step is one calendar day. The index is days since the start date modulo cycle length;
+logging or skipping sessions does not advance it. Before the start, Home shows the first
+scheduled day and its date. `GET /api/dashboard?on_date=YYYY-MM-DD` uses the client's local
+calendar date; callers that omit it keep the server-date default. The visible app rechecks
+after local midnight even when the training revision has not changed.
+
+Saving a split changes the account's training revision so other devices refresh. Disabled
+or absent splits use the existing muscle-frequency recommendations. A type removed after
+saving produces an update-split state rather than substituting a different workout. Custom
+recommendations carry the account-owned type metadata, and previous-session templates match
+the custom type ID as well as the compatibility category.
+
 ## Checks
 
 While developing, run the tests for the behaviour you changed. From the repository root,

@@ -308,6 +308,18 @@ export interface WorkoutRecommendation {
   rotation_next: WorkoutCategory;
   reason: string;
   muscle_frequency: MuscleFrequency[];
+  workout_type?: WorkoutType | null;
+  is_rest_day?: boolean;
+  needs_split_update?: boolean;
+  scheduled_date?: string | null;
+  split_name?: string | null;
+}
+
+export interface TrainingSplit {
+  name: string;
+  enabled: boolean;
+  start_date: string;
+  steps: { workout_type_id: string | null }[];
 }
 
 export interface WeeklyMuscleContribution {

@@ -2,6 +2,26 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.1.0
+
+26 October 2026
+
+### Your training split
+
+![Your split editor with templates, a named Full body A / B cycle, rest days, start date and a seven-day preview using synthetic training data](screenshots/releases/1.1.0-training-split.png)
+
+_Choose a template or build your own repeating cycle. Custom workout types and rest days stay in the order you choose._
+
+![Home showing the scheduled Full body A day and Edit split shortcut using a synthetic sample account](screenshots/releases/1.1.0-training-split-home.png)
+
+_Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
+
+- **Your split:** open **Settings > Training > Your split** or **Edit split** on Home. Choose **Upper / Lower**, **Push / Pull / Legs**, **FBEOD** (full body every other day), **Cardio**, or start custom.
+- **Your own cycle:** name it, choose a start date, add, remove and reorder workout or rest days, create custom types such as **Full body A** and **Full body B**, and preview upcoming weeks. Each step is one calendar day. The cycle repeats across weeks; logging or skipping a workout does not move the schedule.
+- **Up next:** Home and the Start menu follow the saved split. Custom types reuse only their own previous sessions, and starting without a previous session keeps the chosen type. Rest days appear as rest; you can still start a workout manually. The visible app refreshes its schedule after local midnight.
+- **Saved to your account:** splits follow your sign-in and are included in account backups. A removed workout type asks you to update the split or restore the type. Failed saves keep your edits for retry.
+- **Automatic suggestions:** switch off **Use this split** and save to return to the existing recommendations while retaining your pattern. Accounts that have not saved a split keep their current behavior.
+
 ## 1.0.0
 
 25 October 2026

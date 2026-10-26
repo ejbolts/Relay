@@ -114,6 +114,8 @@ export interface TodayScreenProps {
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
   onStartTemplate: (template: SessionTemplate) => void;
   onStartEmpty: () => void;
+  onStartRecommended?: () => void;
+  onEditSplit?: () => void;
   onResumeWorkout: () => void;
   onOpenHistory: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
@@ -157,6 +159,8 @@ export function TodayScreen({
   onSaveBodyFat,
   onStartTemplate,
   onStartEmpty,
+  onStartRecommended,
+  onEditSplit,
   onResumeWorkout,
   onOpenHistory,
   onOpenWorkout,
@@ -192,6 +196,9 @@ export function TodayScreen({
     recommendation,
     label: recommendationLabel,
     template,
+    type: recommendedType,
+    isRestDay,
+    needsSplitUpdate,
   } = useUpNextSession(data?.recommendation, workouts, today);
   const currentWeek = weeks.at(-1);
   const history = weeks.slice(0, -1);
@@ -293,21 +300,38 @@ export function TodayScreen({
     'next-workout':
       workoutStartedAt === null ? (
         <section className="pulse-card next-session" aria-labelledby="next-session-title">
-          <p className="next-session-tag">
-            {recommendation && (
-              <i
-                className="category-dot"
-                style={{ background: categoryColors[recommendation.category] }}
-                aria-hidden="true"
-              />
+          <div className="next-session-top">
+            <p className="next-session-tag">
+              {recommendation && !isRestDay && !needsSplitUpdate && (
+                <i
+                  className="category-dot"
+                  style={{
+                    background: recommendedType?.color ?? categoryColors[recommendation.category],
+                  }}
+                  aria-hidden="true"
+                />
+              )}
+              {recommendation ? 'Up next' : 'Ready when you are'}
+            </p>
+            {onEditSplit && (
+              <button className="text-button" type="button" onClick={onEditSplit}>
+                Edit split
+              </button>
             )}
-            {recommendation ? 'Up next' : 'Ready when you are'}
-          </p>
+          </div>
           <div className="next-session-head">
             <h2 id="next-session-title">
-              {recommendationLabel ? `${recommendationLabel} day` : 'Start a workout'}
+              {needsSplitUpdate
+                ? 'Update your split'
+                : recommendationLabel
+                  ? `${recommendationLabel} day`
+                  : 'Start a workout'}
             </h2>
-            {template && <small>Last: {shortDate(template.sourceWorkout.workout_date)}</small>}
+            {recommendation?.scheduled_date && recommendation.scheduled_date > today ? (
+              <small>{shortDate(recommendation.scheduled_date)}</small>
+            ) : (
+              template && <small>Last: {shortDate(template.sourceWorkout.workout_date)}</small>
+            )}
           </div>
           {template ? (
             <>
@@ -329,26 +353,38 @@ export function TodayScreen({
                 </p>
               )}
             </>
-          ) : (
+          ) : needsSplitUpdate ? (
+            <p className="inline-error">{recommendation?.reason}</p>
+          ) : !isRestDay && !recommendation?.split_name ? (
             <p className="next-session-meta">
               {recommendation
                 ? 'No previous session of this type yet. Start empty and add exercises.'
                 : 'Log your first session to get a suggested next workout.'}
             </p>
-          )}
+          ) : null}
           <div className="next-session-actions">
             {template ? (
               <button
                 className="pulse-button primary"
                 type="button"
-                onClick={() => onStartTemplate(template)}
+                onClick={() =>
+                  onStartRecommended ? onStartRecommended() : onStartTemplate(template)
+                }
                 aria-label={`Start ${recommendationLabel?.toLowerCase()} workout`}
               >
                 <Icon name="play" filled />
                 Start workout
               </button>
             ) : (
-              <button className="pulse-button primary" type="button" onClick={onStartEmpty}>
+              <button
+                className="pulse-button primary"
+                type="button"
+                onClick={
+                  isRestDay || needsSplitUpdate
+                    ? onStartEmpty
+                    : (onStartRecommended ?? onStartEmpty)
+                }
+              >
                 <Icon name="plus" />
                 Start workout
               </button>

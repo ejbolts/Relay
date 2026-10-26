@@ -360,6 +360,136 @@ it('uses the top header to return from settings sections before leaving settings
   expect(window.location.hash).toBe('#dashboard');
 });
 
+describe('saved training splits on Home', () => {
+  const custom = {
+    id: 'custom-a',
+    name: 'Full body A',
+    color: '#123456',
+    is_custom: true,
+    archived: false,
+  };
+  const recommendation = {
+    category: 'other',
+    session_name: 'Full body A workout',
+    rotation_next: 'other',
+    reason: 'Day 1',
+    muscle_frequency: [],
+    workout_type: custom,
+    split_name: 'My split',
+    scheduled_date: '2026-10-26',
+  };
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#dashboard');
+    vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom]);
+    vi.mocked(api.dashboard).mockResolvedValue({ recommendation } as unknown as DashboardData);
+  });
+
+  it('opens the full editor from the Home shortcut', async () => {
+    vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(null);
+    await mount();
+    const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent === 'Edit split',
+    )!;
+    await act(async () => edit.click());
+    expect(window.location.hash).toBe('#split');
+    expect(container.querySelector('[aria-label="Training split editor"]')).not.toBeNull();
+    expect(container.querySelector('.tab-bar')).toBeNull();
+  });
+
+  it('preserves later navigation when a split save finishes in the background', async () => {
+    const split = {
+      name: 'My split',
+      enabled: true,
+      start_date: '2026-10-26',
+      steps: [{ workout_type_id: custom.id }],
+    };
+    vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(split);
+    let finish!: (value: typeof split) => void;
+    vi.spyOn(api, 'saveTrainingSplit').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await mount();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('button')]
+        .find((item) => item.textContent === 'Edit split')!
+        .click(),
+    );
+    await act(async () =>
+      container
+        .querySelector('.split-editor form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('.overlay-screen-header [aria-label="Settings"]')!
+        .click(),
+    );
+    expect(window.location.hash).toBe('#settings');
+    await act(async () => finish(split));
+    expect(window.location.hash).toBe('#settings');
+  });
+
+  it('starts the scheduled custom type even without a previous workout of that type', async () => {
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    expect(window.location.hash).toBe('#log');
+    expect(readActiveWorkoutDraft()).toMatchObject({
+      category: 'other',
+      workoutTypeId: 'custom-a',
+      workoutTypeExplicit: true,
+    });
+  });
+
+  it('shows a rest day without offering it as a workout in the Start menu', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: { ...recommendation, workout_type: null, is_rest_day: true },
+    } as unknown as DashboardData);
+    await mount();
+    expect(container.querySelector('#next-session-title')?.textContent).toBe('Rest day');
+    expect(container.querySelector('.next-session-exercises')).toBeNull();
+    const start = container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!;
+    await act(async () => start.click());
+    expect(container.querySelector('.start-menu')?.textContent).not.toContain('Rest day');
+  });
+
+  it('refreshes the scheduled day after local midnight even when training has not changed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T23:59:59'));
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    await mount();
+    const before = vi.mocked(api.dashboard).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(vi.mocked(api.dashboard).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('rechecks the day when a dashboard response crosses local midnight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T23:59:59'));
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    let finish!: (value: DashboardData) => void;
+    vi.mocked(api.dashboard).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await mount();
+    expect(api.dashboard).toHaveBeenCalledOnce();
+    vi.setSystemTime(new Date('2026-10-27T00:00:01'));
+    await act(async () => finish({ recommendation } as unknown as DashboardData));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(vi.mocked(api.dashboard).mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
 describe('rest time controls', () => {
   function restControl() {
     return (
