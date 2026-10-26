@@ -31,8 +31,8 @@
       "title": "See every weekly muscle total",
       "description": "The weekly muscle card is on Home and at the bottom of Training. Show more reveals remaining trained and untrained muscles.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/932f2a772dbd8da05ab300061c7b18ffd335ebc4/docs/screenshots/releases/1.0.1-four-week-muscles.png",
-        "alt": "Four-week muscle card with 16 direct glute and quad sets and 6 partial adductor credits from three enabled weeks."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e5cab9ec4a52a9eec48795facf0c8f645683a38d/docs/screenshots/releases/1.0.1-weekly-muscle-totals.png",
+        "alt": "Weekly muscle totals with 4 direct glute and quad sets and 2 partial adductor set credits."
       }
     }
   ],
