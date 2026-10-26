@@ -1,6 +1,11 @@
 import { useContext, useRef, useState } from 'react';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { PopupDialog } from './PopupDialog';
+import { Icon } from './Icon';
+import { partialSetsEnabledForWeek } from './exercisePartialSets';
+import { addDays, weekStartFor } from './trainingSummary';
+import { useTrainingPreferences } from './trainingPreferencesContext';
+import { localDate } from './utils';
 import type { Exercise } from './types';
 import './exerciseMuscleHelp.css';
 
@@ -11,19 +16,25 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { preferences } = useTrainingPreferences();
+  const weekStartDay =
+    preferences?.week_start === 'sunday' ? 0 : preferences?.week_start === 'saturday' ? 6 : 1;
+  const today = localDate();
+  const currentWeek = weekStartFor(today, weekStartDay);
+  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const cardio = exercise.kind === 'cardio' || exercise.category === 'cardio';
   const credits = exercise.default_muscle_set_credits ?? exercise.muscle_set_credits ?? [];
   const direct = credits.filter((credit) => credit.sets >= 1);
   const partial = credits.filter((credit) => credit.sets > 0 && credit.sets < 1);
-  const partialEnabled = exercise.partial_sets_enabled !== false;
+  const partialEnabled = partialSetsEnabledForWeek(exercise, selectedWeek);
 
   async function togglePartialSets() {
     if (!context || !ownedExercise || saving) return;
     setSaving(true);
     setError(null);
     try {
-      await context.updatePartialSets(exercise.id, !partialEnabled);
+      await context.updatePartialSets(exercise.id, !partialEnabled, selectedWeek);
     } catch {
       setError('Could not save partial sets. Try again.');
     } finally {
@@ -46,7 +57,11 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
         aria-label={`Muscle set credits for ${exercise.name}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setSelectedWeek(currentWeek);
+          setError(null);
+          setOpen(true);
+        }}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
@@ -70,6 +85,45 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
             <>
               {partial.length > 0 && ownedExercise && context && (
                 <div className="exercise-partial-control">
+                  <label className="exercise-credit-week">
+                    <span>Week of</span>
+                    <span className="exercise-credit-week-controls">
+                      <button
+                        type="button"
+                        aria-label="Previous partial-set week"
+                        disabled={saving}
+                        onClick={() => {
+                          setSelectedWeek(addDays(selectedWeek, -7));
+                          setError(null);
+                        }}
+                      >
+                        <Icon name="chevron-left" />
+                      </button>
+                      <input
+                        type="date"
+                        aria-label="Partial-set week"
+                        value={selectedWeek}
+                        max={today}
+                        disabled={saving}
+                        onChange={(event) => {
+                          if (event.target.value && event.target.value <= today)
+                            setSelectedWeek(weekStartFor(event.target.value, weekStartDay));
+                          setError(null);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        aria-label="Next partial-set week"
+                        disabled={saving || selectedWeek >= currentWeek}
+                        onClick={() => {
+                          setSelectedWeek(addDays(selectedWeek, 7));
+                          setError(null);
+                        }}
+                      >
+                        <Icon name="chevron-right" />
+                      </button>
+                    </span>
+                  </label>
                   <label>
                     <span>Count partial sets</span>
                     <input
@@ -125,9 +179,8 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
                 <p>No muscle set credits are available for this exercise.</p>
               )}
               <p className="exercise-muscle-note">
-                Credits apply to each completed working set. Changing partial sets updates this
-                exercise across your saved workouts; direct sets stay counted. Warmups and
-                unfinished sets do not count.
+                Partial sets carry forward from the selected week until changed again. Earlier weeks
+                keep their settings. Direct sets always count; warmups and unfinished sets do not.
               </p>
             </>
           )}

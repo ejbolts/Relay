@@ -550,7 +550,7 @@ function AppContentProviders({
   children,
 }: {
   exercises: Exercise[];
-  updatePartialSets: (id: string, enabled: boolean) => Promise<Exercise>;
+  updatePartialSets: (id: string, enabled: boolean, weekStart: string) => Promise<Exercise>;
   settingsNavigation: ContextType<typeof SettingsNavigationContext>;
   children: ReactNode;
 }) {
@@ -1243,8 +1243,12 @@ function AppContent() {
     );
   }
 
-  async function updateExercisePartialSets(exerciseId: string, enabled: boolean) {
-    const updated = await api.updateExercisePartialSets(exerciseId, enabled);
+  async function updateExercisePartialSets(
+    exerciseId: string,
+    enabled: boolean,
+    weekStart: string,
+  ) {
+    const updated = await api.updateExercisePartialSets(exerciseId, enabled, weekStart);
     setExercises((current) =>
       current.map((exercise) => (exercise.id === updated.id ? updated : exercise)),
     );

@@ -1,4 +1,5 @@
-import { useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useState, type CSSProperties } from 'react';
+import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { shortDate } from './trainingSummary';
@@ -18,35 +19,81 @@ export function MuscleSetsCard({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [weeks, setWeeks] = useState<1 | 4>(1);
+  const [fourWeekSets, setFourWeekSets] = useState<WeeklySets | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (weeks !== 4) return;
+    let cancelled = false;
+    setLoading(true);
+    setFourWeekSets(null);
+    setError(false);
+    void api
+      .muscleSets(4)
+      .then((data) => {
+        if (!cancelled) setFourWeekSets(data);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [weeks, weeklySets, attempt]);
+  const periodSets = weeks === 4 ? fourWeekSets : weeklySets;
+  const periodLoading = weeks === 4 && loading;
+  const periodError = weeks === 4 && error;
+  const periodGoal = goal * weeks;
   const titleId = useId();
   const listId = useId();
-  const allMuscles = [...(weeklySets?.muscle_groups ?? [])].sort(
+  const allMuscles = [...(periodSets?.muscle_groups ?? [])].sort(
     (left, right) =>
       right.raw_sets - left.raw_sets || left.muscle_group.localeCompare(right.muscle_group),
   );
   const muscles = allMuscles.filter((muscle) => muscle.raw_sets > 0);
   const visibleMuscles = expanded ? allMuscles : muscles.slice(0, 8);
-  const untrained = (weeklySets?.muscle_groups ?? []).filter(
+  const untrained = (periodSets?.muscle_groups ?? []).filter(
     (muscle) => muscle.raw_sets <= 0,
   ).length;
-  const maximum = Math.max(...muscles.map((muscle) => muscle.raw_sets), goal * 1.15);
+  const maximum = Math.max(...muscles.map((muscle) => muscle.raw_sets), periodGoal * 1.15);
   const muscle = allMuscles.find((item) => item.muscle_group === selected);
 
   return (
     <section className="pulse-card muscle-sets-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
         <h2 id={titleId}>Sets per muscle</h2>
-        <span>This week · working sets</span>
+        <div className="muscle-period-options" role="group" aria-label="Muscle set period">
+          {([1, 4] as const).map((value) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={weeks === value}
+              onClick={() => {
+                setWeeks(value);
+                setSelected(null);
+                setExpanded(false);
+              }}
+            >
+              {value === 1 ? 'This week' : '4 weeks'}
+            </button>
+          ))}
+        </div>
       </header>
       <p className="muscle-set-goal-key">
-        <span aria-hidden="true" /> Weekly goal: {goal} sets per muscle
+        <span aria-hidden="true" /> {weeks === 1 ? 'Weekly' : '4-week'} goal: {periodGoal} sets per
+        muscle
       </p>
       <ul
         id={listId}
         hidden={visibleMuscles.length === 0}
         className="muscle-bars"
-        aria-label={`Working sets per muscle; weekly goal: ${goal} sets`}
-        style={{ '--muscle-goal-ratio': goal / maximum } as CSSProperties}
+        aria-label={`Working sets per muscle; ${weeks === 1 ? 'weekly' : '4-week'} goal: ${periodGoal} sets`}
+        style={{ '--muscle-goal-ratio': periodGoal / maximum } as CSSProperties}
       >
         {visibleMuscles.map((item, index) => (
           <li key={item.muscle_group}>
@@ -73,7 +120,28 @@ export function MuscleSetsCard({
           </li>
         ))}
       </ul>
-      {!muscles.length && <p className="pulse-empty-line">No working sets logged yet this week.</p>}
+      {periodLoading && (
+        <p className="pulse-empty-line" role="status">
+          Loading muscle sets…
+        </p>
+      )}
+      {periodError && (
+        <p className="inline-error" role="alert">
+          Could not load muscle sets.{' '}
+          <button
+            type="button"
+            className="text-link"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      {!muscles.length && !periodLoading && !periodError && (
+        <p className="pulse-empty-line">
+          No working sets logged {weeks === 1 ? 'yet this week' : 'in these four weeks'}.
+        </p>
+      )}
       {muscles.length > 0 && untrained > 0 && (
         <p className="pulse-footnote">{untrained} muscles not trained yet</p>
       )}
@@ -93,7 +161,8 @@ export function MuscleSetsCard({
         <MuscleContributionSheet
           key={muscle.muscle_group}
           muscle={muscle}
-          goal={goal}
+          goal={periodGoal}
+          weeks={weeks}
           onClose={() => setSelected(null)}
           onOpenWorkout={onOpenWorkout}
         />
@@ -105,11 +174,13 @@ export function MuscleSetsCard({
 function MuscleContributionSheet({
   muscle,
   goal,
+  weeks,
   onClose,
   onOpenWorkout,
 }: {
   muscle: WeeklyMuscleSets;
   goal: number;
+  weeks: 1 | 4;
   onClose: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
 }) {
@@ -137,7 +208,7 @@ function MuscleContributionSheet({
   return (
     <PopupDialog
       title={muscle.muscle_group}
-      kicker="THIS WEEK"
+      kicker={weeks === 1 ? 'THIS WEEK' : 'LAST 4 WEEKS'}
       className="muscle-contribution-sheet"
       closeLabel="Done"
       swipeToDismiss
@@ -146,12 +217,12 @@ function MuscleContributionSheet({
       <div className="muscle-sheet-body">
         <p className="muscle-sheet-total">
           <strong>{credits(muscle.raw_sets)}</strong>
-          <span>set credits this week</span>
+          <span>set credits {weeks === 1 ? 'this week' : 'in four weeks'}</span>
         </p>
         <div
           className="muscle-sheet-goal"
           role="progressbar"
-          aria-label={`${muscle.muscle_group} weekly goal`}
+          aria-label={`${muscle.muscle_group} ${weeks === 1 ? 'weekly' : '4-week'} goal`}
           aria-valuemin={0}
           aria-valuemax={goal}
           aria-valuenow={Math.min(muscle.raw_sets, goal)}
@@ -202,7 +273,7 @@ function MuscleContributionSheet({
           <p className="muscle-sheet-note">
             {muscle.raw_sets > 0
               ? 'Refresh Home to load the contributing exercises.'
-              : 'No working sets for this muscle this week.'}
+              : `No working sets for this muscle ${weeks === 1 ? 'this week' : 'in these four weeks'}.`}
           </p>
         )}
         {busy && (

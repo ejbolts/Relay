@@ -119,6 +119,8 @@ export interface Exercise {
   muscle_set_credits?: { muscle_name: string; sets: number }[];
   default_muscle_set_credits?: { muscle_name: string; sets: number }[];
   partial_sets_enabled?: boolean;
+  partial_sets_default?: boolean;
+  partial_set_weeks?: { week_start: string; enabled: boolean }[];
 }
 
 export type ExerciseCreateInput = Pick<

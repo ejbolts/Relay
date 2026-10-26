@@ -166,3 +166,26 @@
 .muscle-sets-expand[aria-expanded='true'] .pulse-icon {
   transform: rotate(180deg);
 }
+.muscle-period-options {
+  display: flex;
+  gap: 0.15rem;
+  flex-shrink: 0;
+  padding: 0.15rem;
+  border: 1px solid var(--p-line);
+  border-radius: 8px;
+}
+.muscle-period-options button {
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.25rem 0.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+.muscle-period-options button[aria-pressed='true'] {
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}

@@ -40,6 +40,7 @@ from .models import (
     CardioSession,
     Exercise,
     ExerciseKind,
+    ExercisePartialSetWeek,
     MachinePhoto,
     PersonalRecord,
     SupersetGroup,
@@ -251,23 +252,26 @@ SESSION_NAMES = {
 }
 
 
-def exercise_muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
+def exercise_muscle_credits(
+    exercise: Exercise, on_date: date | None = None
+) -> list[tuple[str, float]]:
     if exercise.category == WorkoutCategory.CARDIO or exercise.kind == ExerciseKind.CARDIO:
         return []
-    return muscle_credits(exercise)
+    return muscle_credits(exercise, on_date=on_date)
 
 
-def exercise_coverage_groups(exercise: Exercise) -> set[str]:
+def exercise_coverage_groups(exercise: Exercise, on_date: date | None = None) -> set[str]:
     if exercise.category == WorkoutCategory.CARDIO or exercise.kind == ExerciseKind.CARDIO:
         return {"Cardio"}
-    return {group for group, _ in exercise_muscle_credits(exercise)}
+    return {group for group, _ in exercise_muscle_credits(exercise, on_date)}
 
 
 def weekly_sets(
-    workouts: list[TrainingWorkout], today: date, week_start_day: str = "monday"
+    workouts: list[TrainingWorkout], today: date, week_start_day: str = "monday", weeks: int = 1
 ) -> WeeklySetsRead:
-    week_start = start_of_week(today, week_start_day)
-    week_end = week_start + timedelta(days=6)
+    current_week = start_of_week(today, week_start_day)
+    week_start = current_week - timedelta(weeks=weeks - 1)
+    week_end = current_week + timedelta(days=6)
     active_start = today - timedelta(days=27)
     active_groups: set[str] = set()
     raw_by_group: dict[str, float] = defaultdict(float)
@@ -284,7 +288,7 @@ def weekly_sets(
             continue
         in_current_week = week_start <= workout.workout_date <= today
         for movement in workout.movements:
-            credits = exercise_muscle_credits(movement.exercise)
+            credits = exercise_muscle_credits(movement.exercise, workout.workout_date)
             if not credits:
                 continue
             work_sets = [item for item in movement.sets if is_working_set(item)]
@@ -365,7 +369,7 @@ def workout_recommendation(
         for movement in workout.movements:
             if not any(is_working_set(item) for item in movement.sets):
                 continue
-            for group in exercise_coverage_groups(movement.exercise):
+            for group in exercise_coverage_groups(movement.exercise, workout.workout_date):
                 group_dates[group].add(workout.workout_date)
 
     last_rotation = next(
@@ -865,10 +869,23 @@ def update_exercise_partial_sets(
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
-    exercise.partial_sets_enabled = payload.partial_sets_enabled
+    week_day = training_preferences(db, user.id).week_start
+    week_start = start_of_week(payload.week_start or date.today(), week_day)
+    if week_start > start_of_week(date.today(), week_day):
+        raise HTTPException(status_code=422, detail="Choose this week or an earlier week.")
+    entry = db.get(ExercisePartialSetWeek, (exercise.id, week_start))
+    if entry:
+        entry.enabled = payload.partial_sets_enabled
+    else:
+        db.add(
+            ExercisePartialSetWeek(
+                exercise_id=exercise.id, week_start=week_start, enabled=payload.partial_sets_enabled
+            )
+        )
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(exercise)
+    db.expire(exercise, ["partial_set_weeks"])
     return exercise
 
 
@@ -1663,6 +1680,27 @@ def weekly_muscle_volume(
         MuscleVolumeRead(muscle_name=name, set_total=value)
         for name, value in sorted(totals.items())
     ]
+
+
+@router.get("/muscle-sets", response_model=WeeklySetsRead)
+def muscle_sets_for_period(db: DbSession, user: CurrentUser, weeks: int = 1) -> WeeklySetsRead:
+    if weeks not in (1, 4):
+        raise HTTPException(status_code=422, detail="Choose one or four weeks.")
+    today = date.today()
+    preferences = training_preferences(db, user.id)
+    start = start_of_week(today, preferences.week_start) - timedelta(weeks=weeks - 1)
+    workouts = list(
+        db.scalars(
+            select(TrainingWorkout)
+            .where(
+                TrainingWorkout.user_id == user.id,
+                TrainingWorkout.workout_date >= start,
+                TrainingWorkout.workout_date <= today,
+            )
+            .options(*workout_options())
+        )
+    )
+    return weekly_sets(workouts, today, preferences.week_start, weeks)
 
 
 def workouts_between(

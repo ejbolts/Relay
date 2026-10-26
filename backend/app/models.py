@@ -610,8 +610,25 @@ class Exercise(Base):
         cascade="all, delete-orphan",
         order_by="ExerciseMuscleContribution.muscle_name",
     )
+    partial_set_weeks: Mapped[list[ExercisePartialSetWeek]] = relationship(
+        back_populates="exercise",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ExercisePartialSetWeek.week_start",
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_exercise_user_name"),)
+
+
+class ExercisePartialSetWeek(Base):
+    __tablename__ = "exercise_partial_set_weeks"
+
+    exercise_id: Mapped[str] = mapped_column(
+        ForeignKey("exercises.id", ondelete="CASCADE"), primary_key=True
+    )
+    week_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exercise: Mapped[Exercise] = relationship(back_populates="partial_set_weeks")
 
 
 class ExerciseMuscleContribution(Base):

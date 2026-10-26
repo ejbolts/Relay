@@ -398,6 +398,8 @@ export const api = {
     }),
   listSessions: () => request<WorkoutSession[]>('/api/sessions'),
   listExercises: () => request<Exercise[]>('/api/exercises'),
+  muscleSets: (weeks: 1 | 4) =>
+    request<DashboardData['weekly_sets']>(`/api/muscle-sets?weeks=${weeks}`),
   createExercise: (payload: ExerciseCreateInput) =>
     request<Exercise>('/api/exercises', {
       method: 'POST',
@@ -410,11 +412,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
-  updateExercisePartialSets: (exerciseId: string, enabled: boolean) =>
+  updateExercisePartialSets: (exerciseId: string, enabled: boolean, weekStart: string) =>
     request<Exercise>(`/api/exercises/${exerciseId}/partial-sets`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ partial_sets_enabled: enabled }),
+      body: JSON.stringify({ partial_sets_enabled: enabled, week_start: weekStart }),
     }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),

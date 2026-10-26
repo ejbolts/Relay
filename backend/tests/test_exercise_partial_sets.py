@@ -1,10 +1,14 @@
 import importlib.util
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, text
+
+from app.database import SessionLocal
+from app.models import Exercise
+from app.training_metrics import partial_sets_enabled_on, start_of_week
 
 
 def exercise_named(client, name):
@@ -114,4 +118,153 @@ def test_partial_sets_migration_preserves_existing_exercises_and_defaults_to_ena
             )
             migration.downgrade()
         assert connection.execute(text("SELECT * FROM exercises")).one() == ("bench", "Bench Press")
+    engine.dispose()
+
+
+def test_four_week_leg_press_totals_use_each_weeks_carried_setting(client, other_client):
+    exercise = exercise_named(client, "Leg Press")
+    current = start_of_week(date.today(), "monday")
+    weeks = [current - timedelta(weeks=3 - index) for index in range(4)]
+    url = f"/api/exercises/{exercise['id']}/partial-sets"
+    assert (
+        client.patch(
+            url, json={"partial_sets_enabled": False, "week_start": weeks[0].isoformat()}
+        ).status_code
+        == 200
+    )
+    carried = exercise_named(client, "Leg Press")
+    assert carried["partial_sets_enabled"] is False
+    for week in weeks:
+        response = client.post(
+            "/api/workouts",
+            json={
+                "name": "Sample legs",
+                "category": "lower",
+                "workout_date": week.isoformat(),
+                "movements": [
+                    {
+                        "exercise_id": exercise["id"],
+                        "sets": [{"reps": 8, "weight_kg": 80, "completed": True}] * 4,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 201, response.text
+    with SessionLocal() as db:
+        model = db.get(Exercise, exercise["id"])
+        assert not partial_sets_enabled_on(model, weeks[0])
+        assert not partial_sets_enabled_on(model, weeks[1])
+        assert partial_sets_enabled_on(model, weeks[0] - timedelta(days=1))
+    response = client.patch(
+        url, json={"partial_sets_enabled": True, "week_start": weeks[1].isoformat()}
+    )
+    assert response.status_code == 200
+    assert response.json()["partial_sets_enabled"] is True
+    assert response.json()["partial_sets_default"] is True
+    for index, week in enumerate(weeks):
+        result = client.get(
+            "/api/muscle-volume",
+            params={"start": week.isoformat(), "end": (week + timedelta(days=6)).isoformat()},
+        )
+        totals = {item["muscle_name"]: item["set_total"] for item in result.json()}
+        assert totals.get("Adductors", 0) == (0 if index == 0 else 2)
+        assert totals["Quadriceps"] == 4
+    totals = {
+        item["muscle_name"]: item["set_total"]
+        for item in client.get(
+            "/api/muscle-volume",
+            params={"start": weeks[0].isoformat(), "end": date.today().isoformat()},
+        ).json()
+    }
+    assert totals["Adductors"] == 6
+    assert totals["Quadriceps"] == 16
+    assert totals["Glutes"] == 16
+    weekly = client.get("/api/dashboard").json()["weekly_sets"]
+    assistance = next(
+        item for item in weekly["muscle_groups"] if item["muscle_group"] == "Adductors"
+    )
+    assert assistance["raw_sets"] == 2
+    assert assistance["contributions"][0]["credit_per_set"] == 0.5
+    period = client.get("/api/muscle-sets", params={"weeks": 4})
+    assert period.status_code == 200, period.text
+    assistance_period = next(
+        item for item in period.json()["muscle_groups"] if item["muscle_group"] == "Adductors"
+    )
+    assert assistance_period["raw_sets"] == 6
+    assert len(assistance_period["contributions"]) == 3
+    assert sum(item["set_credits"] for item in assistance_period["contributions"]) == 6
+    assert client.get("/api/muscle-sets", params={"weeks": 2}).status_code == 422
+    assert other_client.get("/api/muscle-sets", params={"weeks": 4}).json()["raw_sets"] == 0
+    assert (
+        client.patch(
+            url, json={"partial_sets_enabled": False, "week_start": weeks[2].isoformat()}
+        ).status_code
+        == 200
+    )
+    # Editing an earlier week must not overwrite a later explicit choice.
+    edited = client.patch(
+        url, json={"partial_sets_enabled": True, "week_start": weeks[1].isoformat()}
+    ).json()
+    assert edited["partial_sets_enabled"] is False
+    assert len(edited["partial_set_weeks"]) == 3
+    assert (
+        client.patch(
+            url,
+            json={
+                "partial_sets_enabled": True,
+                "week_start": (current + timedelta(weeks=1)).isoformat(),
+            },
+        ).status_code
+        == 422
+    )
+
+
+def test_weekly_changes_follow_account_week_start_and_preserve_legacy_default(client):
+    preferences = client.get("/api/training-preferences").json()
+    assert (
+        client.put(
+            "/api/training-preferences", json={**preferences, "week_start": "sunday"}
+        ).status_code
+        == 200
+    )
+    exercise = exercise_named(client, "Barbell Bench Press")
+    with SessionLocal() as db:
+        model = db.get(Exercise, exercise["id"])
+        model.partial_sets_enabled = False
+        db.commit()
+    current = start_of_week(date.today(), "sunday")
+    response = client.patch(
+        f"/api/exercises/{exercise['id']}/partial-sets",
+        json={"partial_sets_enabled": True, "week_start": date.today().isoformat()},
+    )
+    assert response.status_code == 200
+    assert response.json()["partial_set_weeks"] == [
+        {"week_start": current.isoformat(), "enabled": True}
+    ]
+    assert response.json()["partial_sets_default"] is False
+    with SessionLocal() as db:
+        model = db.get(Exercise, exercise["id"])
+        assert not partial_sets_enabled_on(model, current - timedelta(days=1))
+        assert partial_sets_enabled_on(model, current)
+
+
+def test_weekly_history_migration_preserves_legacy_choices_and_downgrades():
+    path = Path(__file__).parents[1] / "migrations/versions/0043_weekly_partial_sets.py"
+    spec = importlib.util.spec_from_file_location("weekly_partial_sets_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(
+            text("CREATE TABLE exercises (id TEXT PRIMARY KEY, partial_sets_enabled BOOLEAN)")
+        )
+        connection.execute(text("INSERT INTO exercises VALUES ('bench', 0)"))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+            connection.execute(
+                text("INSERT INTO exercise_partial_set_weeks VALUES ('bench', '2026-10-19', 1)")
+            )
+            assert connection.scalar(text("SELECT COUNT(*) FROM exercise_partial_set_weeks")) == 1
+            migration.downgrade()
+        assert connection.execute(text("SELECT * FROM exercises")).one() == ("bench", 0)
     engine.dispose()
