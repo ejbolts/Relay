@@ -2,6 +2,19 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.0.1
+
+26 October 2026
+
+### Profile cardio pages
+
+![Profile Cardio card showing the five latest sessions, the visible range and page controls, using synthetic sample data](screenshots/releases/1.0.1-profile-cardio-pages.png)
+
+_Five sessions per page keep profiles compact. Use the arrows or page picker to browse older cardio._
+
+- **Cardio on profiles:** your own profile and shared profiles show five sessions at a time, newest first. The header shows the visible range and total, with previous, next and direct page selection below.
+- **Older sessions:** pagination reaches the whole shared cardio history, beyond the former latest-20 limit. Profile refreshes retain the selected page; failed page requests keep the current sessions and offer retry. Existing access, notes and sample-data rules still apply.
+
 ## 1.0.0
 
 25 October 2026

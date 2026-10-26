@@ -80,7 +80,7 @@ PENDING, ACCEPTED = "pending", "accepted"
 MAX_WORKOUT_PAGE = 50
 FEED_SIZE = 5
 MAX_REACTION_NOTICES = 20
-RECENT_CARDIO_SESSIONS = 20
+PROFILE_CARDIO_PAGE_SIZE = 5
 RECENT_DAYS = 30
 # Friends list training days; one spare day covers members in time zones ahead of the server.
 ACTIVITY_DAYS = 8
@@ -175,6 +175,11 @@ class SharedCardioSession(BaseModel):
     notes: str | None
 
 
+class SharedCardioPage(BaseModel):
+    total: int
+    sessions: list[SharedCardioSession]
+
+
 class SharedConsistencyRead(BaseModel):
     heatmap: list[HeatmapDay]
     current_streak: int
@@ -187,6 +192,7 @@ class SharedProfileRead(SharedProfileSummary):
     body_weight: list[SharedBodyMeasurement] | None = None
     goals: SharedGoals | None = None
     cardio_sessions: list[SharedCardioSession] | None = None
+    cardio_total: int | None = None
     training_time: TrainingTimeRead | None = None
     training_time_past_year: TrainingTimeRead | None = None
     consistency: SharedConsistencyRead | None = None
@@ -579,24 +585,37 @@ def shared_goals(db: Session, user_id: str) -> SharedGoals:
     )
 
 
-def shared_cardio(db: Session, user_id: str, sharing: ProfileSharing) -> list[SharedCardioSession]:
+def shared_cardio(
+    db: Session,
+    user_id: str,
+    sharing: ProfileSharing,
+    offset: int = 0,
+    limit: int = PROFILE_CARDIO_PAGE_SIZE,
+) -> SharedCardioPage:
+    owned = (
+        CardioSession.user_id == user_id,
+        or_(
+            CardioSession.source_workout_id.is_(None),
+            CardioSession.source_workout_id.not_in(sample_workout_ids()),
+        ),
+    )
+    total = db.scalar(select(func.count(CardioSession.id)).where(*owned)) or 0
     sessions = db.scalars(
         select(CardioSession)
-        .where(
-            CardioSession.user_id == user_id,
-            or_(
-                CardioSession.source_workout_id.is_(None),
-                CardioSession.source_workout_id.not_in(sample_workout_ids()),
-            ),
+        .where(*owned)
+        .order_by(
+            CardioSession.session_date.desc(),
+            CardioSession.created_at.desc(),
+            CardioSession.id.desc(),
         )
-        .order_by(CardioSession.session_date.desc(), CardioSession.created_at.desc())
-        .limit(RECENT_CARDIO_SESSIONS)
+        .offset(offset)
+        .limit(limit)
     )
     shared = [SharedCardioSession.model_validate(session) for session in sessions]
     if not sharing.share_notes:
         for session in shared:
             session.notes = None
-    return shared
+    return SharedCardioPage(total=total, sessions=shared)
 
 
 def pending_request_count(db: Session, user_id: str) -> int:
@@ -759,18 +778,32 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
         if sharing.share_body_weight
         else None
     )
+    cardio = shared_cardio(db, member.id, sharing)
     return SharedProfileRead(
         **summary.model_dump(),
         body_weight=body_weight,
         goals=shared_goals(db, member.id) if sharing.share_goals else None,
         # Cardio is shared with workouts; its notes still follow the notes choice.
-        cardio_sessions=shared_cardio(db, member.id, sharing),
+        cardio_sessions=cardio.sessions,
+        cardio_total=cardio.total,
         training_time=training_time_totals(db, member.id),
         training_time_past_year=training_time_totals(
             db, member.id, since=past_year_start(date.today())
         ),
         consistency=shared_consistency(db, member.id),
     )
+
+
+@sharing_router.get("/profiles/{user_id}/cardio", response_model=SharedCardioPage)
+def list_shared_cardio(
+    user_id: str,
+    user: CurrentUser,
+    db: Db,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=PROFILE_CARDIO_PAGE_SIZE)] = PROFILE_CARDIO_PAGE_SIZE,
+) -> SharedCardioPage:
+    member, sharing = viewable_member(db, user, user_id)
+    return shared_cardio(db, member.id, sharing, offset, limit)
 
 
 @sharing_router.get("/profiles/{user_id}/workouts", response_model=SharedWorkoutPage)

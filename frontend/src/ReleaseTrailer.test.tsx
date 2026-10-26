@@ -2,12 +2,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import metadata from '../release.json';
+import history from '../release-history.json';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 
 let root: Root;
 let container: HTMLDivElement;
 let play: ReturnType<typeof vi.fn>;
+// Keep verifying the deployed 1.0 trailer after its release moves into Earlier versions.
+const metadata = history.find((release) => release.version === '1.0.0')!;
 const video = metadata.video!;
 
 beforeEach(() => {

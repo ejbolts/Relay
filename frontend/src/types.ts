@@ -886,9 +886,15 @@ export interface SharedProfile extends SharedProfileSummary {
   body_weight: SharedBodyMeasurement[] | null;
   goals: SharedGoals | null;
   cardio_sessions: SharedCardioSession[] | null;
+  cardio_total?: number | null;
   training_time?: TrainingTime | null;
   /** The same totals from this day last year onwards. */
   training_time_past_year?: TrainingTime | null;
+}
+
+export interface SharedCardioPage {
+  total: number;
+  sessions: SharedCardioSession[];
 }
 
 export interface SharedWorkoutPage {

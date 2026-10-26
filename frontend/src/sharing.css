@@ -370,6 +370,20 @@
   list-style: none;
 }
 
+.profile-cardio-pagination {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.profile-cardio-error {
+  margin-top: 0.75rem;
+}
+.profile-cardio-error .inline-error {
+  margin: 0 0 0.5rem;
+}
+
 .shared-cardio-list li {
   display: flex;
   align-items: baseline;

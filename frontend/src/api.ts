@@ -42,6 +42,7 @@ import type {
   SharedProfile,
   SharedProfileSummary,
   SharedWorkoutPage,
+  SharedCardioPage,
   SharingChoices,
   FriendConnections,
   SharingNotifications,
@@ -260,6 +261,10 @@ export const api = {
       ),
     profile: (userId: string) =>
       request<SharedProfile>(`/api/sharing/profiles/${encodeURIComponent(userId)}`),
+    cardio: (userId: string, offset: number, limit = 5) =>
+      request<SharedCardioPage>(
+        `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
+      ),
     workoutFilters: (userId: string) =>
       request<SharedWorkoutFilterOptions>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/workout-filters`,
