@@ -10,6 +10,7 @@ import {
   unreadNotificationReferences,
 } from './notificationReadState';
 import { ProfileAvatar } from './ProfileAvatar';
+import { onNotificationsChanged } from './notificationEvents';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { formatReleaseDate, type Release } from './releaseMetadata';
@@ -100,35 +101,49 @@ export function FollowNotifications({ active }: { active: boolean }) {
     if (!active) return;
     let cancelled = false;
     let refreshing = false;
+    let refreshAgain = false;
+    const visible = () => document.visibilityState !== 'hidden';
     async function refresh() {
-      if (document.visibilityState === 'hidden' || refreshing) return;
+      if (cancelled || !visible()) return;
+      if (refreshing) {
+        refreshAgain = true;
+        return;
+      }
       refreshing = true;
       try {
-        const next = await api.sharing.notifications();
-        if (cancelled) return;
-        setItems(next);
-        setError(null);
-        const unread = unreadNotificationReferences(displayedNotifications(next, page, release));
-        if (open && unread.length) {
-          await api.sharing.markNotificationsRead(unread);
-          if (!cancelled)
-            setItems((current) => current && markNotificationSnapshotRead(current, unread));
-        }
+        do {
+          refreshAgain = false;
+          const next = await api.sharing.notifications();
+          if (cancelled) return;
+          setItems(next);
+          setError(null);
+          const unread = unreadNotificationReferences(displayedNotifications(next, page, release));
+          if (open && unread.length) {
+            await api.sharing.markNotificationsRead(unread);
+            if (!cancelled)
+              setItems((current) => current && markNotificationSnapshotRead(current, unread));
+          }
+        } while (refreshAgain && !cancelled && visible());
       } catch (reason) {
         if (!cancelled) setError(authErrorMessage(reason));
       } finally {
         refreshing = false;
+        if (refreshAgain && !cancelled) void refresh();
       }
     }
     void refresh();
     const timer = window.setInterval(() => void refresh(), 30_000);
     const onFocus = () => void refresh();
+    const stopNotifications = onNotificationsChanged(onFocus);
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onFocus);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      stopNotifications();
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
   }, [active, open, attempt, page, release]);

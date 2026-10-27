@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
+import { notifyNotificationsChanged } from './notificationEvents';
 import type { FriendPresence, LiveWorkout } from './types';
 import { workoutNameForCategory } from './workoutCategory';
 import {
@@ -99,12 +100,24 @@ export function usePresenceConnection(userId: string | null): void {
       const current = new WebSocket(`${protocol}//${window.location.host}/api/presence/ws`);
       socket = current;
       current.onopen = () => {
+        if (stopped || socket !== current) return;
         attempts = 0;
         send(true);
+        notifyNotificationsChanged();
       };
       current.onmessage = (event: MessageEvent) => {
+        if (stopped || socket !== current) return;
         try {
           const message: unknown = JSON.parse(String(event.data));
+          if (
+            message &&
+            typeof message === 'object' &&
+            'type' in message &&
+            message.type === 'notifications'
+          ) {
+            notifyNotificationsChanged();
+            return;
+          }
           if (
             message &&
             typeof message === 'object' &&
@@ -117,7 +130,7 @@ export function usePresenceConnection(userId: string | null): void {
             publishFriendPresence(message.user_id, message.presence as FriendPresence | null);
           }
         } catch {
-          // Ignore anything that is not a presence update.
+          // Ignore malformed messages.
         }
       };
       current.onclose = (event: CloseEvent) => {

@@ -9,6 +9,10 @@ auto-finish time passes.
 Only accepted friends who could see the member on their Friends list receive it, and each part can
 be turned off in the sharing settings. Changes are pushed to friends' open windows; the Friends
 and feed responses include the same presence, so a dropped socket only delays updates.
+
+The same authenticated connection invalidates the account's own notification inbox after
+committed changes. These messages carry no notification contents and do not depend on friend
+status or live-activity sharing choices.
 """
 
 from __future__ import annotations
@@ -154,6 +158,19 @@ class PresenceHub:
             return
         with contextlib.suppress(RuntimeError):
             asyncio.run_coroutine_threadsafe(broadcast(user_id), loop)
+
+    def notifications_changed(self, *user_ids: str) -> None:
+        """Invalidate only recipients' inboxes, after the request's transaction commits.
+
+        No notice contents travel over the socket. Each window fetches its own authenticated
+        snapshot, including requests from people who are not friends yet.
+        """
+        for window in self.windows_for(list(set(user_ids))):
+            if not window.loop.is_closed():
+                with contextlib.suppress(RuntimeError):
+                    asyncio.run_coroutine_threadsafe(
+                        deliver(window, {"type": "notifications"}), window.loop
+                    )
 
 
 hub = PresenceHub()
