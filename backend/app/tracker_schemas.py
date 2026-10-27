@@ -29,6 +29,7 @@ class ExerciseCreate(BaseModel):
     kind: ExerciseKind = ExerciseKind.STRENGTH
     muscle_group: str = Field(min_length=1, max_length=100)
     equipment: str | None = Field(default=None, max_length=100)
+    muscle_set_credit: Literal[0.5, 1] = 1
 
     @field_validator("name", "muscle_group", "equipment", mode="before")
     @classmethod

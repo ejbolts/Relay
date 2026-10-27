@@ -2,8 +2,9 @@
   "version": "1.1.0",
   "date": "2026-10-26",
   "title": "Find friends and improve your workouts",
-  "summary": "Discover public profiles in Find, see RPE and set types in colour, get rest alerts while browsing Relay, and open release notes from Notifications.",
+  "summary": "Discover public profiles in Find, choose muscle credit for custom exercises, see RPE and set types in colour, get rest alerts while browsing Relay, and open release notes from Notifications.",
   "changes": [
+    "When adding a custom strength exercise, choose its target muscle and Direct (1 set) or Partial (half a set) credit per completed working set. The saved choice feeds the exercise's muscle help and weekly muscle totals. Existing exercise credits stay unchanged; cardio does not add strength sets.",
     "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",
     "Social > Find automatically suggests public accounts you are not already connected to, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile, or use Add friend separately. Your account, existing friends and requests, private and disabled accounts, and blocks in either direction are excluded. Search remains available above the suggestions.",
     "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",

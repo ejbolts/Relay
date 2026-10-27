@@ -6,6 +6,7 @@ export interface ExerciseCreationDraft {
   kind: ExerciseKind;
   muscle_group: string;
   equipment: string;
+  muscle_set_credit: 0.5 | 1;
 }
 
 export function prepareExerciseInput(
@@ -31,5 +32,8 @@ export function prepareExerciseInput(
     kind: draft.kind,
     muscle_group: muscleGroup,
     equipment: equipment || null,
+    ...(draft.kind !== 'cardio' && draft.category !== 'cardio'
+      ? { muscle_set_credit: draft.muscle_set_credit }
+      : {}),
   };
 }

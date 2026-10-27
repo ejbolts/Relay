@@ -28,17 +28,28 @@ export function CreateExerciseDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const savingRef = useRef(false);
   const titleId = useId();
-  const groupsId = useId();
   const [draft, setDraft] = useState<ExerciseCreationDraft>(() => ({
     name: initialName.slice(0, 160),
     category: initialCategory,
     kind: initialCategory === 'cardio' ? 'cardio' : 'strength',
     muscle_group: '',
     equipment: '',
+    muscle_set_credit: 1,
   }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const muscleGroups = [...new Set(exercises.map((exercise) => exercise.muscle_group))].sort();
+  const strength = draft.kind !== 'cardio' && draft.category !== 'cardio';
+  const muscleGroups = [
+    ...new Set(
+      exercises
+        .filter((exercise) => exercise.kind !== 'cardio' && exercise.category !== 'cardio')
+        .flatMap((exercise) =>
+          exercise.muscle_set_credits?.length
+            ? exercise.muscle_set_credits.map((credit) => credit.muscle_name)
+            : [exercise.muscle_group],
+        ),
+    ),
+  ].sort();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -100,7 +111,6 @@ export function CreateExerciseDialog({
           ×
         </button>
       </header>
-      <p>Create an exercise in your library, then add it to your workout.</p>
       <form onSubmit={(event) => void submit(event)} aria-busy={saving}>
         <fieldset disabled={saving}>
           <legend className="sr-only">Exercise details</legend>
@@ -155,21 +165,54 @@ export function CreateExerciseDialog({
             </select>
           </label>
           <label>
-            Muscle group
-            <input
-              required
-              maxLength={100}
-              list={groupsId}
-              value={draft.muscle_group}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  muscle_group: event.target.value,
-                }))
-              }
-              placeholder="e.g. Lats"
-            />
+            {strength ? 'Target muscle' : 'Muscle group'}
+            {strength ? (
+              <select
+                required
+                value={draft.muscle_group}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, muscle_group: event.target.value }))
+                }
+              >
+                <option value="">Choose muscle</option>
+                {muscleGroups.map((group) => (
+                  <option value={group} key={group}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                required
+                maxLength={100}
+                value={draft.muscle_group}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    muscle_group: event.target.value,
+                  }))
+                }
+                placeholder="e.g. Lats"
+              />
+            )}
           </label>
+          {strength && (
+            <label>
+              Credit per working set
+              <select
+                value={draft.muscle_set_credit}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    muscle_set_credit: Number(event.target.value) as 0.5 | 1,
+                  }))
+                }
+              >
+                <option value={1}>Direct · 1 set</option>
+                <option value={0.5}>Partial · ½ set</option>
+              </select>
+            </label>
+          )}
           <label>
             Equipment (optional)
             <input
@@ -185,11 +228,6 @@ export function CreateExerciseDialog({
             />
           </label>
         </fieldset>
-        <datalist id={groupsId}>
-          {muscleGroups.map((group) => (
-            <option value={group} key={group} />
-          ))}
-        </datalist>
         {error && (
           <p className="inline-error" role="alert">
             {error}

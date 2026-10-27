@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 
@@ -98,3 +100,63 @@ def test_custom_exercise_is_private_to_its_creator(client, other_client):
     assert favorite.status_code == 404
     # The same name stays available to the other account as its own custom exercise.
     assert other_client.post("/api/exercises", json=exercise_payload()).status_code == 201
+
+
+@pytest.mark.parametrize(("credit", "role"), [(1, "primary"), (0.5, "secondary")])
+def test_custom_muscle_credit_persists_and_counts_only_completed_working_sets(
+    client, other_client, credit, role
+):
+    response = client.post("/api/exercises", json=exercise_payload(muscle_set_credit=credit))
+    assert response.status_code == 201
+    exercise = response.json()
+    assert exercise["muscle_set_credits"] == [{"muscle_name": "Lats", "sets": credit}]
+    assert exercise["muscle_contributions"] == [
+        {"muscle_name": "Lats", "role": role, "contribution_factor": credit}
+    ]
+    assert exercise in client.get("/api/exercises").json()
+    assert other_client.get("/api/exercises", params={"search": exercise["name"]}).json() == []
+
+    workout = client.post(
+        "/api/workouts",
+        json={
+            "name": "Custom muscle workout",
+            "category": "pull",
+            "workout_date": date.today().isoformat(),
+            "movements": [
+                {
+                    "exercise_id": exercise["id"],
+                    "sets": [
+                        {"reps": 8, "weight_kg": 20, "completed": True},
+                        {"reps": 8, "weight_kg": 20, "completed": True},
+                        {"reps": 8, "weight_kg": 10, "completed": True, "warmup": True},
+                        {"reps": 8, "weight_kg": 20, "completed": False},
+                    ],
+                }
+            ],
+        },
+    )
+    assert workout.status_code == 201, workout.text
+    assert workout.json()["movements"][0]["exercise"]["muscle_set_credits"] == [
+        {"muscle_name": "Lats", "sets": credit}
+    ]
+    groups = client.get("/api/dashboard").json()["weekly_sets"]["muscle_groups"]
+    lats = next(group for group in groups if group["muscle_group"] == "Lats")
+    assert lats["raw_sets"] == 2 * credit
+    assert lats["contributions"][0]["credit_per_set"] == credit
+    assert lats["contributions"][0]["working_sets"] == 2
+
+
+@pytest.mark.parametrize("credit", [0, -0.5, 0.25, 1.5, "partial", None])
+def test_create_exercise_rejects_invalid_muscle_set_credit(client, credit):
+    response = client.post("/api/exercises", json=exercise_payload(muscle_set_credit=credit))
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("changes", [{"kind": "cardio"}, {"category": "cardio"}])
+def test_cardio_does_not_receive_strength_credits(client, changes):
+    response = client.post(
+        "/api/exercises", json=exercise_payload(muscle_set_credit=0.5, **changes)
+    )
+    assert response.status_code == 201
+    assert response.json()["muscle_set_credits"] == []
+    assert response.json()["muscle_contributions"] == []

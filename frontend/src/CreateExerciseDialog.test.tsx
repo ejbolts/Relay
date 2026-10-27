@@ -42,7 +42,10 @@ describe('create exercise prompt', () => {
     expect(markup).toContain('aria-modal="true"');
     expect(markup).toContain('value="New lat exercise"');
     expect(markup).toContain('value="pull" selected=""');
-    expect(markup).toContain('Muscle group');
+    expect(markup).toContain('Target muscle');
+    expect(markup).toContain('Choose muscle');
+    expect(markup).toContain('Direct · 1 set');
+    expect(markup).toContain('Partial · ½ set');
     expect(markup).toContain('Equipment (optional)');
     expect(markup).toContain('type="submit"');
     expect(markup).toContain('Cancel');

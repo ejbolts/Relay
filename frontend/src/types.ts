@@ -122,7 +122,7 @@ export interface Exercise {
 export type ExerciseCreateInput = Pick<
   Exercise,
   'name' | 'category' | 'kind' | 'muscle_group' | 'equipment'
->;
+> & { muscle_set_credit?: 0.5 | 1 };
 
 export interface MachinePhoto {
   id: string;

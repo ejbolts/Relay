@@ -7,6 +7,7 @@ const draft: ExerciseCreationDraft = {
   kind: 'strength',
   muscle_group: ' Lats ',
   equipment: ' Cable ',
+  muscle_set_credit: 1,
 };
 
 describe('new exercise validation', () => {
@@ -17,6 +18,7 @@ describe('new exercise validation', () => {
       kind: 'strength',
       muscle_group: 'Lats',
       equipment: 'Cable',
+      muscle_set_credit: 1,
     });
   });
 
@@ -24,6 +26,18 @@ describe('new exercise validation', () => {
     expect(
       prepareExerciseInput({ ...draft, category: 'cardio', kind: 'cardio', equipment: ' ' }, []),
     ).toMatchObject({ category: 'cardio', kind: 'cardio', equipment: null });
+  });
+
+  it('keeps partial muscle credit and omits strength credit for either cardio classification', () => {
+    expect(prepareExerciseInput({ ...draft, muscle_set_credit: 0.5 }, [])).toMatchObject({
+      muscle_group: 'Lats',
+      muscle_set_credit: 0.5,
+    });
+    for (const patch of [{ category: 'cardio' as const }, { kind: 'cardio' as const }]) {
+      expect(prepareExerciseInput({ ...draft, ...patch }, [])).not.toHaveProperty(
+        'muscle_set_credit',
+      );
+    }
   });
 
   it.each([

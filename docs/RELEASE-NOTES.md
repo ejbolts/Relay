@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Add exercise form with Lats selected as the target muscle and Partial half-set credit per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
+
+_Choose a target muscle and Direct (1 set) or Partial (half a set) credit when creating a strength exercise. This phone-sized form uses isolated sample data._
+
 ![Social Find showing eight suggested public profiles with usernames, separate Add friend buttons and numbered pagination](screenshots/releases/1.0.1-suggested-friends.png)
 
 _Find automatically lists public accounts you are not connected to, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate. This phone-sized view uses isolated sample data._
@@ -40,6 +44,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- When adding a custom strength exercise, choose its target muscle and **Direct (1 set)** or **Partial (half a set)** credit per completed working set. The saved choice feeds the exercise's muscle help and weekly muscle totals. Existing exercise credits stay unchanged; cardio does not add strength sets.
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
 - Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
 - Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.

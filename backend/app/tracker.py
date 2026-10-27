@@ -40,7 +40,9 @@ from .models import (
     CardioSession,
     Exercise,
     ExerciseKind,
+    ExerciseMuscleContribution,
     MachinePhoto,
+    MuscleRole,
     PersonalRecord,
     SupersetGroup,
     TrainingWorkout,
@@ -828,9 +830,17 @@ def create_exercise(
         EXERCISE_NOT_CREATED,
         Exercise.is_custom.is_(True),
     )
-    exercise_data = payload.model_dump()
+    exercise_data = payload.model_dump(exclude={"muscle_set_credit"})
     exercise_data["name"] = canonical_exercise_name(payload.name)
     exercise = Exercise(user_id=user.id, **exercise_data, is_custom=True)
+    if payload.kind != ExerciseKind.CARDIO and payload.category != WorkoutCategory.CARDIO:
+        exercise.muscle_contributions = [
+            ExerciseMuscleContribution(
+                muscle_name=payload.muscle_group,
+                role=MuscleRole.PRIMARY if payload.muscle_set_credit == 1 else MuscleRole.SECONDARY,
+                contribution_factor=payload.muscle_set_credit,
+            )
+        ]
     try:
         db.add(exercise)
         db.commit()
