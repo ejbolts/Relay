@@ -3,13 +3,16 @@
   max-height: calc(85dvh - env(safe-area-inset-bottom));
   margin: auto auto max(0.5rem, env(safe-area-inset-bottom));
   border-radius: 24px;
-  animation: reaction-people-rise 200ms ease-out;
+  animation: none;
   transform: translateY(var(--sheet-offset, 0px));
   transition: transform 180ms ease-out;
 }
 .popup-dialog.reaction-people-sheet.sheet-dragging {
   transition: none;
   user-select: none;
+}
+.popup-dialog.reaction-people-sheet[open]::backdrop {
+  animation: none;
 }
 .reaction-people-sheet > header {
   position: sticky;
@@ -59,17 +62,8 @@
 .reaction-person-emoji {
   font-size: 1.5rem;
 }
-@keyframes reaction-people-rise {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .popup-dialog.reaction-people-sheet[open] {
-    animation: none;
     transition: none;
   }
 }
