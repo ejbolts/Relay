@@ -125,7 +125,14 @@ it.each(['history', 'progress'] as const)(
   'creates an exercise from %s without starting a workout',
   async (section) => {
     await render(section);
-    await click(host.querySelector('.training-exercise-actions button')!);
+    expect(host.querySelector('.training-exercise-actions')).toBeNull();
+    const shortcut = host.querySelector(
+      section === 'history'
+        ? '.page-header-title-row [aria-label="Add exercise"]'
+        : '.exercise-list-toolbar [aria-label="Add exercise"]',
+    )!;
+    expect(shortcut).not.toBeNull();
+    await click(shortcut);
     const dialog = document.querySelector<HTMLDialogElement>('.create-exercise-dialog')!;
     expect(dialog.open).toBe(true);
     await setValue(dialog.querySelector('input[placeholder="Exercise name"]')!, 'Custom press');
@@ -149,7 +156,7 @@ it.each(['history', 'progress'] as const)(
       }),
     );
     expect(document.querySelector('.create-exercise-dialog')).toBeNull();
-    expect(host.querySelector('.training-exercise-actions [role="status"]')?.textContent).toContain(
+    expect(host.querySelector('.training-exercise-notice')?.textContent).toContain(
       'Custom press added',
     );
     expect(
@@ -170,7 +177,7 @@ it.each(['history', 'progress'] as const)(
 it('cancels without a write or changing the current exercise filters', async () => {
   await render('progress');
   await setValue(host.querySelector('[aria-label="Search exercises"]')!, 'Sample');
-  await click(host.querySelector('.training-exercise-actions button')!);
+  await click(host.querySelector('.exercise-list-toolbar [aria-label="Add exercise"]')!);
   const dialog = document.querySelector('.create-exercise-dialog')!;
   await click(dialog.querySelector('.create-exercise-cancel')!);
   expect(document.querySelector('.create-exercise-dialog')).toBeNull();

@@ -6138,6 +6138,7 @@ export function ProgressScreen({
   browseFirst = false,
   onOpenSettings,
   onDetailChange,
+  onCreateExercise,
 }: {
   dataRevision?: string | null;
   exercises: Exercise[];
@@ -6150,6 +6151,7 @@ export function ProgressScreen({
   browseFirst?: boolean;
   onOpenSettings?: () => void;
   onDetailChange?: (header: ExerciseDetailHeader | null) => void;
+  onCreateExercise?: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const strengthExercises = useMemo(
@@ -6321,6 +6323,7 @@ export function ProgressScreen({
           <ExerciseLibraryList
             exercises={strengthExercises}
             dataRevision={dataRevision}
+            onCreate={onCreateExercise}
             onOpen={(id) => {
               libraryScroll.current = window.scrollY;
               setExerciseId(id);
@@ -8914,6 +8917,10 @@ function HistoryScreen({
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
   const [createdExerciseName, setCreatedExerciseName] = useState<string | null>(null);
+  const openExerciseCreation = () => {
+    setCreatedExerciseName(null);
+    setCreateExerciseOpen(true);
+  };
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -9108,6 +9115,20 @@ function HistoryScreen({
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"
+            titleAction={
+              section === 'history' ? (
+                <button
+                  type="button"
+                  className="training-add-exercise"
+                  aria-label="Add exercise"
+                  title="Add exercise"
+                  aria-haspopup="dialog"
+                  onClick={openExerciseCreation}
+                >
+                  <Icon name="plus" />
+                </button>
+              ) : undefined
+            }
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
           />
@@ -9146,24 +9167,10 @@ function HistoryScreen({
               Cardio
             </button>
           </div>
-          {section !== 'cardio' && (
-            <div className="training-exercise-actions">
-              {createdExerciseName && (
-                <span role="status">{createdExerciseName} added to your library.</span>
-              )}
-              <button
-                type="button"
-                className="pulse-button primary"
-                aria-haspopup="dialog"
-                onClick={() => {
-                  setCreatedExerciseName(null);
-                  setCreateExerciseOpen(true);
-                }}
-              >
-                <Icon name="plus" />
-                Add exercise
-              </button>
-            </div>
+          {section !== 'cardio' && createdExerciseName && (
+            <p className="training-exercise-notice" role="status">
+              {createdExerciseName} added to your library.
+            </p>
           )}
         </>
       )}
@@ -9192,6 +9199,7 @@ function HistoryScreen({
             embedded
             browseFirst
             onDetailChange={setExerciseHeader}
+            onCreateExercise={openExerciseCreation}
             initialExerciseId={initialExerciseId}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}
