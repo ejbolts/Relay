@@ -8,9 +8,9 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
-![Compact custom machine settings with Seat 5 and Backrest B above the sample workout sets](screenshots/releases/1.1.0-machine-settings.png)
+![Compact custom machine settings with Seat 5 and Backrest B above the sample workout sets](screenshots/releases/1.1.0-machine-settings-polished.png)
 
-_Type any setting name and value, add or remove rows, then Save. This phone-sized view uses isolated sample data._
+_Type any setting name and value, add or remove rows, then Save. The inset panel has even spacing and matching input and button heights. This phone-sized view uses isolated sample data._
 
 ![Opening a preloaded profile, viewing the people behind a workout's reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
 

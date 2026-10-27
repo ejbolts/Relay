@@ -4,7 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Save custom machine settings, discover public profiles, open preloaded profiles, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
   "changes": [
-    "Each strength exercise has a compact Settings section. Type any setting name and value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.",
+    "Each strength exercise has a compact Settings section with an inset border, even spacing and matching input and button heights. Type any setting name and value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
     "Tap a workout's reaction count to instantly open a bottom sheet showing the people who reacted and their emojis. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction remains a separate control.",
     "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",
@@ -19,7 +19,7 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/223980b698a19e26e8f1f37f760ff421ef711e07/docs/screenshots/releases/1.1.0-machine-settings.png",
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/a7245ddc7e5cdedf98fb2d46f053476c73ce499e/docs/screenshots/releases/1.1.0-machine-settings-polished.png",
     "alt": "Compact machine Settings section with custom Seat 5 and Backrest B rows, remove buttons, Add and Save above isolated sample workout sets."
   },
   "highlights": [
@@ -27,7 +27,7 @@
       "title": "Your machine, your settings",
       "description": "Type any setting name and value, add or remove rows, then Save. Settings carry into the next workout for that exercise, while older sessions keep their recorded values.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/223980b698a19e26e8f1f37f760ff421ef711e07/docs/screenshots/releases/1.1.0-machine-settings.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a7245ddc7e5cdedf98fb2d46f053476c73ce499e/docs/screenshots/releases/1.1.0-machine-settings-polished.png",
         "alt": "Compact machine Settings section with custom Seat 5 and Backrest B rows, remove buttons, Add and Save above isolated sample workout sets."
       }
     },
