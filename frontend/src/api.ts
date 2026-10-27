@@ -48,6 +48,7 @@ import type {
   SharingNotifications,
   FriendFeed,
   WorkoutReactionKind,
+  WorkoutReactionPage,
   WorkoutReactions,
   SharingSettings,
   FriendStatus,
@@ -302,6 +303,10 @@ export const api = {
         body: JSON.stringify({ items }),
       }),
     feed: (limit = 5) => request<FriendFeed>(`/api/sharing/feed?limit=${limit}`),
+    reactionPeople: (workoutId: string, offset = 0) =>
+      request<WorkoutReactionPage>(
+        `/api/sharing/workouts/${encodeURIComponent(workoutId)}/reactions?offset=${offset}`,
+      ),
     react: (workoutId: string, reaction: WorkoutReactionKind) =>
       request<WorkoutReactions>(`/api/sharing/workouts/${encodeURIComponent(workoutId)}/reaction`, {
         method: 'PUT',
