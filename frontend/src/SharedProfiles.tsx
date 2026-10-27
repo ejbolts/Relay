@@ -1207,12 +1207,15 @@ export function SharedProfileScreen({
   const invalidDates = Boolean(
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
+  const preload = Boolean(ownProfile);
+  const loadedFilters = useRef<string | null>(null);
+  const filterKey = JSON.stringify(filters);
   const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
   const currentQuery = useRef(queryKey);
   currentQuery.current = queryKey;
 
   useEffect(() => {
-    if (!active) return;
+    if (!active && !preload) return;
     if (invalidDates) {
       setLoadingWorkouts(false);
       return;
@@ -1222,18 +1225,28 @@ export function SharedProfileScreen({
     setLoadingMore(false);
     setMoreError(null);
     async function load() {
-      const nextProfile = await api.sharing.profile(profileId);
-      // A friends-only profile of a non-friend shares only its name and photo.
-      const [page, options] = nextProfile.can_view
+      const initial = preload
         ? await Promise.all([
+            api.sharing.profile(profileId),
             api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
             api.sharing.workoutFilters(profileId),
           ])
-        : [
-            { workouts: [], personal_records: [], total: 0 },
-            { exercises: [], machines: [] },
-          ];
+        : null;
+      const nextProfile = initial?.[0] ?? (await api.sharing.profile(profileId));
+      // A friends-only profile of a non-friend shares only its name and photo.
+      const [page, options] = initial
+        ? [initial[1], initial[2]]
+        : nextProfile.can_view
+          ? await Promise.all([
+              api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+              api.sharing.workoutFilters(profileId),
+            ])
+          : [
+              { workouts: [], personal_records: [], total: 0 },
+              { exercises: [], machines: [] },
+            ];
       if (cancelled) return;
+      loadedFilters.current = filterKey;
       setProfile(nextProfile);
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
@@ -1255,7 +1268,7 @@ export function SharedProfileScreen({
     return () => {
       cancelled = true;
     };
-  }, [profileId, attempt, filters, invalidDates, active, dataRevision]);
+  }, [profileId, attempt, filters, filterKey, invalidDates, active, preload, dataRevision]);
 
   async function loadMore() {
     if (loadingMore || loadingWorkouts || invalidDates) return;
@@ -1461,7 +1474,8 @@ export function SharedProfileScreen({
               <p className="inline-error" role="alert">
                 From date must not be after To date.
               </p>
-            ) : loadingWorkouts ? (
+            ) : loadingWorkouts &&
+              (workouts.length === 0 || loadedFilters.current !== filterKey) ? (
               <p className="sharing-loading" role="status">
                 Loading workouts…
               </p>

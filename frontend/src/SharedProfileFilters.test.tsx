@@ -206,6 +206,25 @@ describe('own profile', () => {
     created_at: '2026-10-01T12:00:00Z',
   };
 
+  it('preloads while hidden and keeps workouts visible during the opening refresh', async () => {
+    const owner = { user, onSaved: vi.fn() };
+    vi.mocked(api.sharing.profile).mockResolvedValue({ ...profile, id: user.id, is_you: true });
+    await renderProfile(user.id, owner, false);
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(user.id, 0, 10, expect.any(Object));
+    expect(container.textContent).toContain('First workout');
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await renderProfile(user.id, owner, true);
+    expect(container.textContent).toContain('First workout');
+    expect(container.textContent).not.toContain('Loading profile');
+    expect(container.textContent).not.toContain('Loading workouts');
+  });
+
+  it('does not preload another member while their panel is hidden', async () => {
+    vi.mocked(api.sharing.profile).mockClear();
+    await renderProfile('another-member', undefined, false);
+    expect(api.sharing.profile).not.toHaveBeenCalled();
+  });
+
   it('reuses the training profile with editing and hides settings and self-friend/reaction actions', async () => {
     vi.mocked(api.sharing.profile).mockResolvedValue({
       ...profile,
@@ -388,7 +407,8 @@ it('shows lifetime time separately from history filters and reacts on a shared w
       .click(),
   );
   expect(react).toHaveBeenCalledWith('first', 'love');
-  expect(container.querySelector('.friend-react-button')?.textContent).toBe('❤️ 1');
+  expect(container.querySelector('.friend-react-button')?.textContent).toBe('❤️');
+  expect(container.querySelector('.discussion-reaction-summary')?.textContent).toBe('❤️ 1');
   expect(container.querySelector('.friend-react-button')?.getAttribute('aria-label')).toContain(
     'Love',
   );

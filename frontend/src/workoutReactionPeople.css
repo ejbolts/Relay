@@ -1,0 +1,75 @@
+.popup-dialog.reaction-people-sheet[open] {
+  width: min(30rem, calc(100% - 1rem));
+  max-height: calc(85dvh - env(safe-area-inset-bottom));
+  margin: auto auto max(0.5rem, env(safe-area-inset-bottom));
+  border-radius: 24px;
+  animation: reaction-people-rise 200ms ease-out;
+  transform: translateY(var(--sheet-offset, 0px));
+  transition: transform 180ms ease-out;
+}
+.popup-dialog.reaction-people-sheet.sheet-dragging {
+  transition: none;
+  user-select: none;
+}
+.reaction-people-sheet > header {
+  position: sticky;
+  top: 0;
+  padding-top: 1.5rem;
+  background: var(--p-surface);
+}
+.reaction-people-sheet > header::before {
+  content: '';
+  position: absolute;
+  top: 0.625rem;
+  left: calc(50% - 1.125rem);
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: 8px;
+  background: var(--p-muted);
+}
+.reaction-people-body {
+  padding: 0 1.25rem 1.25rem;
+}
+.reaction-people-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reaction-people-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.25rem;
+  border-bottom: 1px solid var(--p-line);
+}
+.reaction-people-list li:last-child {
+  border-bottom: 0;
+}
+.reaction-people-list .profile-avatar {
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1rem;
+}
+.reaction-people-list strong {
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+}
+.reaction-person-emoji {
+  font-size: 1.5rem;
+}
+@keyframes reaction-people-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popup-dialog.reaction-people-sheet[open] {
+    animation: none;
+    transition: none;
+  }
+}

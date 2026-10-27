@@ -1780,9 +1780,10 @@ function AppContent() {
               />
             </CachedTabPanel>
           )}
-          {user && (tab === 'profile' || visitedTabs.has('profile')) && (
+          {user && (
             <CachedTabPanel active={tab === 'profile'}>
               <ProfileScreen
+                key={user.id}
                 onOpenMember={openSharedProfile}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
