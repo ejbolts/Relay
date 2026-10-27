@@ -17,12 +17,14 @@ export function MachineSettingsEditor({
   exerciseId,
   initialSettings,
   onChange,
+  onSaved,
 }: {
   id?: string;
   hidden?: boolean;
   exerciseId: string;
   initialSettings?: MachineSetting[];
   onChange: (settings: MachineSetting[]) => void;
+  onSaved?: () => void;
 }) {
   const initial = useRef(initialSettings);
   const onChangeRef = useRef(onChange);
@@ -117,6 +119,7 @@ export function MachineSettingsEditor({
       setRows(rowsFor(saved.settings));
       onChangeRef.current(saved.settings);
       setMessage('Settings saved');
+      onSaved?.();
     } catch {
       if (mounted.current) setError('Could not save settings. Try again.');
     } finally {

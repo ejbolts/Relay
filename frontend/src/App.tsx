@@ -5023,6 +5023,10 @@ function MovementCard({
           exerciseId={movement.exercise.id}
           initialSettings={movement.machineSettings}
           onChange={onMachineSettings}
+          onSaved={() => {
+            setSettingsExerciseId(null);
+            movementMenuRef.current?.querySelector('summary')?.focus();
+          }}
         />
       )}
 

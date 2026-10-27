@@ -12,6 +12,10 @@ _Relay was called Gym Logger before version 1.0._
 
 _The muscle set credits popup keeps the credit lists and shows saved settings below, with **Edit** or **Add** opening the numeric editor. The exercise menu still has **Settings** and **Hide Settings**. This phone-sized view uses isolated sample data._
 
+![Exercise card after saving machine settings, with the editor closed and workout sets visible](screenshots/releases/1.1.0-machine-settings-saved-closed.png)
+
+_**Save** closes the settings editor after the settings are saved. Reopen **Settings** to edit the saved values; a failed save keeps the form open. Isolated sample data._
+
 ![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
 
 _Add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit for each one when creating a strength exercise. This phone-sized form uses isolated sample data._
@@ -56,7 +60,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- While logging, the muscle set credits popup shows saved machine settings below the credits, with **Edit** or **Add** opening the numeric editor. Its three explanatory paragraphs have been removed. Machine settings are hidden by default. Open a strength exercise's options menu and choose Settings to show the compact editor, or Hide Settings to fold it away. Type any setting name and a numeric value, add or remove rows, then Save. Saved settings carry into the next workout for that exercise and stay recorded with each session without changing older workouts.
+- While logging, the muscle set credits popup shows saved machine settings below the credits, with **Edit** or **Add** opening the numeric editor. Its three explanatory paragraphs have been removed. Machine settings are hidden by default. Open a strength exercise's options menu and choose Settings to show the compact editor, or Hide Settings to fold it away. Type any setting name and a numeric value, add or remove rows, then Save. The editor closes after a successful save and keeps the saved values for reopening. Saved settings carry into the next workout for that exercise and stay recorded with each session without changing older workouts.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.

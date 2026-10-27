@@ -326,7 +326,41 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(api.saveMachineSettings).toHaveBeenCalledWith(legPress.id, [
       { name: 'Seat', value: '6' },
     ]);
+    expect(panel.hidden).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(menu.querySelector('summary'));
+    menu.open = true;
+    await click(toggle);
+    expect(panel.querySelector<HTMLInputElement>('input[aria-label="Seat value"]')?.value).toBe(
+      '6',
+    );
     expect(api.getMachineSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps settings open during a failed save and closes after a successful retry', async () => {
+    vi.mocked(api.getMachineSettings).mockResolvedValue({
+      settings: [{ name: 'Seat', value: '5' }],
+    });
+    vi.mocked(api.saveMachineSettings).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => root.render(<App />));
+    const panel = container.querySelector<HTMLElement>('.machine-settings')!;
+    const menu = container.querySelector<HTMLDetailsElement>('.movement-overflow')!;
+    menu.open = true;
+    await click(button('Settings', menu));
+    await click(button('Save', panel));
+    expect(panel.hidden).toBe(false);
+    expect(panel.querySelector('[role="alert"]')?.textContent).toContain('Could not save');
+    let resolveSave!: (saved: { settings: Array<{ name: string; value: string }> }) => void;
+    vi.mocked(api.saveMachineSettings).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    await click(button('Save', panel));
+    expect(panel.hidden).toBe(false);
+    expect(panel.querySelector('fieldset')?.disabled).toBe(true);
+    await act(async () => resolveSave({ settings: [{ name: 'Seat', value: '5' }] }));
+    expect(panel.hidden).toBe(true);
   });
 
   it('opens settings from a collapsed exercise and keeps them hidden for other exercises', async () => {
