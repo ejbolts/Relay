@@ -27,8 +27,8 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 - Add your own workout types and colours in Settings; remove or restore types while keeping saved history.
 - Use previous-session suggestions to pick up where you left off.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
-- Attach reusable machine photos to remember equipment settings or setups.
-- Open an exercise's options menu and choose **Settings** to save custom names and numeric values, add or remove rows, and reuse them next time. The panel stays hidden until opened; saved workouts keep the settings used for that session.
+- Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
+- Open an exercise's options menu and choose **Settings** to save custom names and numeric values, add or remove rows, and reuse them next time. The panel stays hidden until opened; saved workouts keep the settings used for that session. When a machine is pinned, the editor saves settings for that machine.
 - Resume an active workout after returning to the app, then save it to your history.
 
 Choose kilograms or pounds for weight entry and display.

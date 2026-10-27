@@ -1,10 +1,12 @@
 import json
 import sqlite3
 from contextlib import closing
+from io import BytesIO
 
 import pytest
+from PIL import Image
 from test_sharing import befriend, share
-from test_tracker import workout_payload
+from test_tracker import upload_machine_photo, workout_payload
 
 from app.account_backups import BACKUP_DATABASE, backup_folder, create_account_snapshot
 from app.config import get_settings
@@ -36,6 +38,90 @@ def test_custom_settings_round_trip_and_account_isolation(client, other_client):
     assert other_client.get(other_path).json() == {"settings": []}
     assert client.put(path, json={"settings": []}).json() == {"settings": []}
     assert client.get(path).json() == {"settings": []}
+
+
+def test_machine_settings_are_separate_for_each_machine_and_exercise(client, other_client):
+    exercise = exercise_id(client)
+    other_exercise = client.get("/api/exercises").json()[1]["id"]
+    first = upload_machine_photo(client, exercise, "Home press", "blue")
+    second = upload_machine_photo(client, exercise, "Travel press", "red")
+    path = f"/api/exercises/{exercise}/machine-settings"
+    first_path = f"{path}?machine_photo_id={first['id']}"
+    second_path = f"{path}?machine_photo_id={second['id']}"
+    defaults = {"settings": [{"name": "Seat", "value": "9"}]}
+    home = {"settings": [{"name": "Seat", "value": "5"}]}
+    travel = {"settings": [{"name": "Seat", "value": "2"}]}
+    assert client.put(path, json=defaults).status_code == 200
+    assert client.get(first_path).json() == {"settings": []}
+    assert client.put(first_path, json=home).json() == home
+    assert client.put(second_path, json=travel).json() == travel
+    assert client.get(first_path).json() == home
+    assert client.get(second_path).json() == travel
+    assert client.get(path).json() == defaults
+    assert other_client.get(first_path).status_code == 404
+    foreign_exercise = exercise_id(other_client)
+    foreign_path = (
+        f"/api/exercises/{foreign_exercise}/machine-settings?machine_photo_id={first['id']}"
+    )
+    wrong_exercise_path = (
+        f"/api/exercises/{other_exercise}/machine-settings?machine_photo_id={first['id']}"
+    )
+    for forbidden in (foreign_path, wrong_exercise_path, f"{path}?machine_photo_id=missing"):
+        requester = other_client if forbidden == foreign_path else client
+        assert requester.get(forbidden).status_code == 404
+        assert requester.put(forbidden, json=travel).status_code == 404
+    assert (
+        client.put(first_path, json={"settings": [{"name": "Seat", "value": "B"}]}).status_code
+        == 422
+    )
+    assert client.get(first_path).json() == home
+    assert client.put(first_path, json={"settings": []}).json() == {"settings": []}
+    assert client.get(second_path).json() == travel
+
+
+def test_new_photo_saves_settings_atomically_and_in_account_backup(client):
+    exercise = exercise_id(client)
+    image = BytesIO()
+    Image.new("RGB", (64, 48), "blue").save(image, format="JPEG")
+    settings = {"settings": [{"name": "Seat", "value": " 5 "}, {"name": "Backrest", "value": "2"}]}
+    response = client.post(
+        f"/api/exercises/{exercise}/machine-photos",
+        data={"caption": "Home press", "machine_settings": json.dumps(settings)},
+        files={"file": ("machine.jpg", image.getvalue(), "image/jpeg")},
+    )
+    assert response.status_code == 201
+    photo_id = response.json()["id"]
+    key = f"machine_settings:{exercise}:{photo_id}"
+    settings["settings"][0]["value"] = "5"
+    assert (
+        client.get(f"/api/exercises/{exercise}/machine-settings?machine_photo_id={photo_id}").json()
+        == settings
+    )
+    with SessionLocal() as db:
+        user = db.get(User, client.user["id"])
+        backup = create_account_snapshot(db, get_settings(), user)
+    database = backup_folder(get_settings(), user.id, backup.id) / BACKUP_DATABASE
+    with closing(sqlite3.connect(database)) as connection:
+        stored = connection.execute(
+            "SELECT value FROM user_settings WHERE key = ?", (key,)
+        ).fetchone()
+    assert json.loads(stored[0]) == settings
+
+
+@pytest.mark.parametrize("value", ["not json", '{"settings":[{"name":"Seat","value":"B"}]}'])
+def test_invalid_new_machine_settings_do_not_create_a_photo(client, value):
+    exercise = exercise_id(client)
+    image = BytesIO()
+    Image.new("RGB", (64, 48), "blue").save(image, format="JPEG")
+    path = f"/api/exercises/{exercise}/machine-photos"
+    before = client.get(path).json()
+    response = client.post(
+        path,
+        data={"caption": "Home press", "machine_settings": value},
+        files={"file": ("machine.jpg", image.getvalue(), "image/jpeg")},
+    )
+    assert response.status_code == 422
+    assert client.get(path).json() == before
 
 
 @pytest.mark.parametrize(

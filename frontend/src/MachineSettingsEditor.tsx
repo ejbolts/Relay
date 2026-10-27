@@ -15,16 +15,24 @@ export function MachineSettingsEditor({
   id,
   hidden = false,
   exerciseId,
+  machinePhotoId,
   initialSettings,
   onChange,
   onSaved,
+  onSave,
+  saveLabel = 'Save',
+  onCancel,
 }: {
   id?: string;
   hidden?: boolean;
   exerciseId: string;
+  machinePhotoId?: string;
   initialSettings?: MachineSetting[];
   onChange: (settings: MachineSetting[]) => void;
   onSaved?: () => void;
+  onSave?: (settings: MachineSetting[]) => Promise<{ settings: MachineSetting[] }>;
+  saveLabel?: string;
+  onCancel?: () => void;
 }) {
   const initial = useRef(initialSettings);
   const onChangeRef = useRef(onChange);
@@ -58,7 +66,7 @@ export function MachineSettingsEditor({
     let cancelled = false;
     setLoading(true);
     setLoadError(false);
-    void api.getMachineSettings(exerciseId).then(
+    void api.getMachineSettings(exerciseId, machinePhotoId).then(
       ({ settings }) => {
         if (cancelled) return;
         setRows(rowsFor(settings));
@@ -74,7 +82,7 @@ export function MachineSettingsEditor({
     return () => {
       cancelled = true;
     };
-  }, [exerciseId, attempt]);
+  }, [exerciseId, machinePhotoId, attempt]);
 
   useEffect(() => {
     if (focusNew.current) {
@@ -114,14 +122,23 @@ export function MachineSettingsEditor({
     setError('');
     setMessage('');
     try {
-      const saved = await api.saveMachineSettings(exerciseId, settings);
+      const saved = await (onSave
+        ? onSave(settings)
+        : machinePhotoId
+          ? api.saveMachineSettings(exerciseId, settings, machinePhotoId)
+          : api.saveMachineSettings(exerciseId, settings));
       if (!mounted.current) return;
       setRows(rowsFor(saved.settings));
       onChangeRef.current(saved.settings);
       setMessage('Settings saved');
       onSaved?.();
-    } catch {
-      if (mounted.current) setError('Could not save settings. Try again.');
+    } catch (reason) {
+      if (mounted.current)
+        setError(
+          onSave && reason instanceof Error
+            ? reason.message
+            : 'Could not save settings. Try again.',
+        );
     } finally {
       savingRef.current = false;
       if (mounted.current) setSaving(false);
@@ -197,9 +214,16 @@ export function MachineSettingsEditor({
               >
                 + Add
               </button>
-              <button className="machine-setting-save" type="button" onClick={() => void save()}>
-                {saving ? 'Saving…' : 'Save'}
-              </button>
+              <div className="machine-settings-save-actions">
+                {onCancel && (
+                  <button type="button" className="machine-setting-cancel" onClick={onCancel}>
+                    Cancel
+                  </button>
+                )}
+                <button className="machine-setting-save" type="button" onClick={() => void save()}>
+                  {saving ? 'Saving…' : saveLabel}
+                </button>
+              </div>
             </div>
           </fieldset>
           {error && <p role="alert">{error}</p>}

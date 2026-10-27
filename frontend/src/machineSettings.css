@@ -7,6 +7,30 @@
 .machine-settings[hidden] {
   display: none;
 }
+.machine-photo-content > .machine-settings {
+  margin: 0.75rem 0 0;
+}
+.photo-inline-editor .machine-settings {
+  margin: 1rem 0 0;
+  padding: 0;
+  border: 0;
+}
+.photo-inline-editor > div > input {
+  min-height: 44px;
+  margin-top: 0.75rem;
+  font-size: 1rem;
+}
+.machine-settings-save-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.machine-setting-cancel {
+  padding: 0.5rem 0.75rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+}
 .machine-settings h3 {
   margin: 0 0 0.625rem;
   color: var(--p-ink);

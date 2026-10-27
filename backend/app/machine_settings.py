@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .account_limits import limit_save_rate
 from .auth import CurrentUser
 from .database import get_db
-from .models import Exercise
+from .models import Exercise, MachinePhoto
 from .training_metrics import get_setting, set_setting
 
 
@@ -54,13 +54,25 @@ def require_exercise(db: Session, user_id: str, exercise_id: str) -> None:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
 
 
+def settings_key(
+    db: Session, user_id: str, exercise_id: str, machine_photo_id: str | None = None
+) -> str:
+    require_exercise(db, user_id, exercise_id)
+    if machine_photo_id is None:
+        return f"machine_settings:{exercise_id}"
+    photo = db.get(MachinePhoto, machine_photo_id)
+    if photo is None or photo.user_id != user_id or photo.exercise_id != exercise_id:
+        raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    return f"machine_settings:{exercise_id}:{machine_photo_id}"
+
+
 @router.get("/{exercise_id}/machine-settings", response_model=MachineSettings)
-def get_machine_settings(exercise_id: str, db: DbSession, user: CurrentUser) -> MachineSettings:
-    require_exercise(db, user.id, exercise_id)
+def get_machine_settings(
+    exercise_id: str, db: DbSession, user: CurrentUser, machine_photo_id: str | None = None
+) -> MachineSettings:
+    key = settings_key(db, user.id, exercise_id, machine_photo_id)
     try:
-        return MachineSettings.model_validate_json(
-            get_setting(db, user.id, f"machine_settings:{exercise_id}", "{}")
-        )
+        return MachineSettings.model_validate_json(get_setting(db, user.id, key, "{}"))
     except ValidationError:
         return MachineSettings()
 
@@ -71,9 +83,13 @@ def get_machine_settings(exercise_id: str, db: DbSession, user: CurrentUser) -> 
     dependencies=[Depends(limit_save_rate)],
 )
 def save_machine_settings(
-    exercise_id: str, payload: MachineSettingsUpdate, db: DbSession, user: CurrentUser
+    exercise_id: str,
+    payload: MachineSettingsUpdate,
+    db: DbSession,
+    user: CurrentUser,
+    machine_photo_id: str | None = None,
 ) -> MachineSettings:
-    require_exercise(db, user.id, exercise_id)
-    set_setting(db, user.id, f"machine_settings:{exercise_id}", payload.model_dump_json())
+    key = settings_key(db, user.id, exercise_id, machine_photo_id)
+    set_setting(db, user.id, key, payload.model_dump_json())
     db.commit()
     return payload

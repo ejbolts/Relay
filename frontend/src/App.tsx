@@ -3603,11 +3603,20 @@ function WorkoutLogger({
               onDeleteSet={(index) => deleteSet(movement, index)}
               onRemoveRestTime={(item) => removeRestTime(movement, item)}
               onSuperset={(button) => openSupersetPicker(movement.key, button)}
-              onMachinePhotos={(machinePhotoIds) =>
+              onMachinePhotos={(machinePhotoIds, machineSettings) =>
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key
-                      ? { ...item, machinePhotoIds, machinePhotosInitialized: true }
+                      ? {
+                          ...item,
+                          machinePhotoIds,
+                          machinePhotosInitialized: true,
+                          machineSettings:
+                            machineSettings ??
+                            (item.machinePhotoIds.join(',') === machinePhotoIds.join(',')
+                              ? item.machineSettings
+                              : undefined),
+                        }
                       : item,
                   ),
                 )
@@ -4113,7 +4122,7 @@ function MovementCard({
   onAddSet: () => void;
   onSwitch: () => void;
   onRemove: () => void;
-  onMachinePhotos: (photoIds: string[]) => void;
+  onMachinePhotos: (photoIds: string[], settings?: MachineSetting[]) => void;
   onMachineSettings: (settings: MachineSetting[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
@@ -5017,26 +5026,29 @@ function MovementCard({
       )}
 
       {!cardio && (
-        <MachineSettingsEditor
-          key={movement.exercise.id}
-          id={settingsPanelId}
-          hidden={!settingsOpen}
-          exerciseId={movement.exercise.id}
-          initialSettings={movement.machineSettings}
-          onChange={onMachineSettings}
-          onSaved={() => {
-            setSettingsExerciseId(null);
-            movementMenuRef.current?.querySelector('summary')?.focus();
-          }}
-        />
-      )}
-
-      {!cardio && (
         <MachinePhotoChooser
+          key={movement.exercise.id}
           exercise={movement.exercise}
           selectedIds={movement.machinePhotoIds}
           autoPinLastUsed={!movement.machinePhotosInitialized}
           onChange={onMachinePhotos}
+          settingsOpen={settingsOpen}
+          onSettingsOpen={(open) => setSettingsExerciseId(open ? movement.exercise.id : null)}
+          settingsEditor={
+            <MachineSettingsEditor
+              key={`${movement.exercise.id}:${movement.machinePhotoIds.at(-1) ?? ''}`}
+              id={settingsPanelId}
+              hidden={!settingsOpen}
+              exerciseId={movement.exercise.id}
+              machinePhotoId={movement.machinePhotoIds.at(-1)}
+              initialSettings={movement.machineSettings}
+              onChange={onMachineSettings}
+              onSaved={() => {
+                setSettingsExerciseId(null);
+                movementMenuRef.current?.querySelector('summary')?.focus();
+              }}
+            />
+          }
         />
       )}
 
@@ -5263,11 +5275,17 @@ function MachinePhotoChooser({
   selectedIds,
   autoPinLastUsed,
   onChange,
+  settingsOpen,
+  onSettingsOpen,
+  settingsEditor,
 }: {
   exercise: Exercise;
   selectedIds: string[];
   autoPinLastUsed: boolean;
-  onChange: (photoIds: string[]) => void;
+  onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
+  settingsOpen: boolean;
+  onSettingsOpen: (open: boolean) => void;
+  settingsEditor: ReactNode;
 }) {
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
@@ -5281,6 +5299,10 @@ function MachinePhotoChooser({
   const autoPinLastUsedRef = useRef(autoPinLastUsed);
   const onChangeRef = useRef(onChange);
   const selectedIdsRef = useRef(selectedIds);
+
+  useEffect(() => {
+    if (settingsOpen) setPhotoPanelOpen(true);
+  }, [settingsOpen]);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -5324,39 +5346,50 @@ function MachinePhotoChooser({
     if (!file) return;
     setError(null);
     setCaption('');
+    onSettingsOpen(false);
+    setExpanded(null);
     setPending({ file, previewUrl: URL.createObjectURL(file) });
   }
 
-  async function uploadPhoto() {
+  async function uploadPhoto(machineSettings: MachineSetting[]) {
     if (!pending || !caption.trim()) {
-      setError('Enter the machine name before saving the photo.');
-      return;
+      throw new Error('Enter the machine name before saving the photo.');
     }
     setUploading(true);
     setError(null);
     try {
       const upload = await optimisePhoto(pending.file);
-      const photo = await api.uploadMachinePhoto(exercise.id, upload, caption.trim());
+      const photo = await api.uploadMachinePhoto(
+        exercise.id,
+        upload,
+        caption.trim(),
+        machineSettings,
+      );
       setPhotos((current) => [
         { ...photo, exercise_name: exercise.name, workout_count: 0, last_used_date: null },
         ...current,
       ]);
-      onChange(choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])]);
+      onChange(
+        choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])],
+        machineSettings,
+      );
       setChoosingReplacement(false);
       setPending(null);
       setCaption('');
       setPhotoPanelOpen(false);
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Could not save that photo.');
+      return { settings: machineSettings };
     } finally {
       setUploading(false);
     }
   }
 
   function togglePhoto(photoId: string) {
+    setPending(null);
+    setExpanded(null);
     if (choosingReplacement) {
       onChange([photoId]);
       setChoosingReplacement(false);
+      onSettingsOpen(true);
       return;
     }
     onChange(
@@ -5364,6 +5397,7 @@ function MachinePhotoChooser({
         ? selectedIds.filter((current) => current !== photoId)
         : [...selectedIds, photoId],
     );
+    onSettingsOpen(!selectedIds.includes(photoId));
   }
 
   async function updatePhoto(photo: MachinePhoto, nextCaption: string) {
@@ -5404,7 +5438,10 @@ function MachinePhotoChooser({
       className="machine-photo-picker"
       aria-label={`Machine photos for ${exercise.name}`}
       open={photoPanelOpen}
-      onToggle={(event) => setPhotoPanelOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        setPhotoPanelOpen(event.currentTarget.open);
+        if (!event.currentTarget.open) onSettingsOpen(false);
+      }}
     >
       <summary className="machine-photo-summary">
         {primaryPinnedPhoto ? (
@@ -5433,6 +5470,7 @@ function MachinePhotoChooser({
             <input
               className="sr-only"
               type="file"
+              disabled={uploading}
               accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
               capture="environment"
               onChange={(event) => {
@@ -5447,6 +5485,7 @@ function MachinePhotoChooser({
             <input
               className="sr-only"
               type="file"
+              disabled={uploading}
               accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
               onChange={(event) => {
                 stagePhoto(event.target.files?.[0]);
@@ -5492,6 +5531,7 @@ function MachinePhotoChooser({
                       type="button"
                       className="machine-pin"
                       onClick={() => togglePhoto(photo.id)}
+                      disabled={uploading}
                     >
                       {choosingReplacement
                         ? selected
@@ -5509,31 +5549,32 @@ function MachinePhotoChooser({
         )}
         {error && <p className="machine-photo-error">{error}</p>}
 
+        {settingsEditor}
+
         {pending && (
           <section className="photo-inline-editor panel">
-            <button type="button" className="photo-inline-close" onClick={() => setPending(null)}>
-              Cancel
-            </button>
             <img src={pending.previewUrl} alt="New machine preview" />
             <div>
               <p className="section-kicker">NEW MACHINE PHOTO</p>
               <h2>Name this machine</h2>
-              <p>For example: Hammer Strength lying leg curl.</p>
               <input
                 autoFocus
+                aria-label="Machine name"
+                disabled={uploading}
                 value={caption}
                 maxLength={160}
                 onChange={(event) => setCaption(event.target.value)}
                 placeholder="Machine name"
               />
-              <div className="photo-inline-actions">
-                <button type="button" onClick={() => setPending(null)} disabled={uploading}>
-                  Cancel
-                </button>
-                <button type="button" onClick={() => void uploadPhoto()} disabled={uploading}>
-                  {uploading ? 'Saving…' : 'Save and pin'}
-                </button>
-              </div>
+              <MachineSettingsEditor
+                key={pending.previewUrl}
+                exerciseId={exercise.id}
+                initialSettings={[]}
+                onChange={() => undefined}
+                onSave={uploadPhoto}
+                saveLabel="Save and pin"
+                onCancel={() => setPending(null)}
+              />
             </div>
           </section>
         )}

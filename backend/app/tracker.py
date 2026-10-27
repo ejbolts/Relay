@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
+from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -34,6 +35,7 @@ from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
 from .exercise_aliases import canonical_exercise_name
+from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
     BodyMeasurement,
     BodyWeightGoal,
@@ -1018,12 +1020,19 @@ async def upload_machine_photo(
     settings: SettingsDependency,
     file: Annotated[UploadFile, File(...)],
     caption: Annotated[str, Form(min_length=1, max_length=160)],
+    machine_settings: Annotated[str, Form()] = '{"settings":[]}',
 ) -> MachinePhoto:
     if not get_owned(db, Exercise, exercise_id, user.id):
         raise HTTPException(status_code=404, detail="Exercise was not found.")
     cleaned_caption = caption.strip()
     if not cleaned_caption:
         raise HTTPException(status_code=422, detail="Enter a machine name.")
+    try:
+        machine_values = MachineSettingsUpdate.model_validate_json(machine_settings)
+    except ValidationError as error:
+        raise HTTPException(
+            status_code=422, detail="Enter a name and numeric value for each setting."
+        ) from error
     limits = load_account_limits(db, settings)
     check_account_total(
         db, user, MachinePhoto, limits.photos_per_account, "photos_per_account", PHOTO_NOT_UPLOADED
@@ -1051,6 +1060,13 @@ async def upload_machine_photo(
     )
     try:
         db.add(photo)
+        db.flush()
+        set_setting(
+            db,
+            user.id,
+            settings_key(db, user.id, exercise_id, photo.id),
+            machine_values.model_dump_json(),
+        )
         db.commit()
         db.refresh(photo)
         return photo

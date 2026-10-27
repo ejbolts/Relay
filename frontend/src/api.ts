@@ -421,22 +421,33 @@ export const api = {
     }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
-  getMachineSettings: (exerciseId: string) =>
-    request<{ settings: MachineSetting[] }>(`/api/exercises/${exerciseId}/machine-settings`),
-  saveMachineSettings: (exerciseId: string, settings: MachineSetting[]) =>
-    request<{ settings: MachineSetting[] }>(`/api/exercises/${exerciseId}/machine-settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings }),
-    }),
+  getMachineSettings: (exerciseId: string, machinePhotoId?: string) =>
+    request<{ settings: MachineSetting[] }>(
+      `/api/exercises/${exerciseId}/machine-settings${machinePhotoId ? `?${new URLSearchParams({ machine_photo_id: machinePhotoId })}` : ''}`,
+    ),
+  saveMachineSettings: (exerciseId: string, settings: MachineSetting[], machinePhotoId?: string) =>
+    request<{ settings: MachineSetting[] }>(
+      `/api/exercises/${exerciseId}/machine-settings${machinePhotoId ? `?${new URLSearchParams({ machine_photo_id: machinePhotoId })}` : ''}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings }),
+      },
+    ),
   listAllMachinePhotos: () => request<MachinePhotoUsage[]>('/api/machine-photos'),
   machinePhotoWorkouts: (photoId: string) =>
     request<TrackedWorkout[]>(`/api/machine-photos/${photoId}/workouts`),
   lastUsedMachinePhotos: (exerciseId: string) =>
     request<MachinePhoto[]>(`/api/exercises/${exerciseId}/machine-photos/last-used`),
-  uploadMachinePhoto: (exerciseId: string, file: File, caption: string) => {
+  uploadMachinePhoto: (
+    exerciseId: string,
+    file: File,
+    caption: string,
+    settings: MachineSetting[] = [],
+  ) => {
     const form = new FormData();
     form.append('caption', caption);
+    form.append('machine_settings', JSON.stringify({ settings }));
     form.append('file', file, file.name);
     return request<MachinePhoto>(`/api/exercises/${exerciseId}/machine-photos`, {
       method: 'POST',
