@@ -4,6 +4,7 @@ import type { MachineSetting } from './types';
 import './machineSettings.css';
 
 type Row = MachineSetting & { key: string };
+const numericValue = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/;
 const row = (setting: MachineSetting = { name: '', value: '' }): Row => ({
   ...setting,
   key: crypto.randomUUID(),
@@ -97,6 +98,11 @@ export function MachineSettingsEditor({
       setMessage('');
       return;
     }
+    if (settings.some(({ value }) => !numericValue.test(value))) {
+      setError('Enter a number for each value.');
+      setMessage('');
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setError('');
@@ -142,6 +148,9 @@ export function MachineSettingsEditor({
                 />
                 <input
                   aria-label={`${item.name.trim() || `Setting ${index + 1}`} value`}
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
                   placeholder="5"
                   value={item.value}
                   maxLength={30}

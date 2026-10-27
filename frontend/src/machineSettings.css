@@ -35,8 +35,15 @@
   line-height: 1.25;
 }
 .machine-setting-row input:nth-child(2) {
+  appearance: textfield;
+  -moz-appearance: textfield;
   padding-inline: 0.25rem;
   text-align: center;
+}
+.machine-setting-row input[type='number']::-webkit-inner-spin-button,
+.machine-setting-row input[type='number']::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
 }
 .machine-setting-row input::placeholder {
   color: var(--p-muted);

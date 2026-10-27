@@ -23,7 +23,7 @@ def test_custom_settings_round_trip_and_account_isolation(client, other_client):
     payload = {
         "settings": [
             {"name": " Seat height ", "value": " 5 "},
-            {"name": "Start position", "value": "B"},
+            {"name": "Start position", "value": "2"},
         ]
     }
     saved = client.put(path, json=payload)
@@ -45,7 +45,11 @@ def test_custom_settings_round_trip_and_account_isolation(client, other_client):
         {"name": "Seat", "value": ""},
         {"name": "x" * 41, "value": "5"},
         {"name": "Seat", "value": "x" * 31},
-        {"name": "Seat", "value": 5},
+        {"name": "Seat", "value": "B"},
+        {"name": "Seat", "value": "45 degrees"},
+        {"name": "Seat", "value": "NaN"},
+        {"name": "Seat", "value": "Infinity"},
+        {"name": "Seat", "value": True},
     ],
 )
 def test_invalid_settings_preserve_saved_values(client, setting):
@@ -73,14 +77,14 @@ def test_row_limit(client):
 def test_workout_snapshot_and_backups_keep_settings(client):
     exercise = exercise_id(client)
     path = f"/api/exercises/{exercise}/machine-settings"
-    original = [{"name": "Seat", "value": "5"}, {"name": "Angle", "value": "45°"}]
+    original = [{"name": "Seat", "value": "5"}, {"name": "Angle", "value": "45"}]
     assert client.put(path, json={"settings": original}).status_code == 200
     payload = workout_payload(exercise)
     payload["movements"][0]["machine_settings"] = original
     response = client.post("/api/workouts", json=payload)
     assert response.status_code == 201, response.text
     workout_id = response.json()["id"]
-    changed = [{"name": "Seat", "value": "B"}]
+    changed = [{"name": "Seat", "value": "2"}]
     client.put(path, json={"settings": changed})
     read = client.get(f"/api/workouts/{workout_id}").json()
     assert read["movements"][0]["machine_settings"] == original
@@ -112,3 +116,38 @@ def test_shared_workouts_only_include_settings_when_notes_are_shared(client, oth
     assert (
         other_client.get(path).json()["workouts"][0]["movements"][0]["machine_settings"] == original
     )
+
+
+@pytest.mark.parametrize(
+    "value,expected", [(0, "0"), (5, "5"), (2.5, "2.5"), ("-2", "-2"), (".5", ".5")]
+)
+def test_numeric_values_are_saved(client, value, expected):
+    path = f"/api/exercises/{exercise_id(client)}/machine-settings"
+    result = client.put(path, json={"settings": [{"name": "Seat", "value": value}]})
+    assert result.status_code == 200
+    assert result.json()["settings"][0]["value"] == expected
+
+
+def test_workout_cannot_bypass_numeric_validation(client):
+    payload = workout_payload(exercise_id(client))
+    payload["movements"][0]["machine_settings"] = [{"name": "Seat", "value": "B"}]
+    assert client.post("/api/workouts", json=payload).status_code == 422
+
+
+def test_old_text_snapshots_still_load_without_modifying_history(client):
+    from sqlalchemy import select
+
+    from app.models import WorkoutMovement
+
+    response = client.post("/api/workouts", json=workout_payload(exercise_id(client)))
+    assert response.status_code == 201
+    workout_id = response.json()["id"]
+    with SessionLocal() as db:
+        movement = db.scalar(
+            select(WorkoutMovement).where(WorkoutMovement.workout_id == workout_id)
+        )
+        movement.machine_settings = [{"name": "Seat", "value": "B"}]
+        db.commit()
+    read = client.get(f"/api/workouts/{workout_id}")
+    assert read.status_code == 200
+    assert read.json()["movements"][0]["machine_settings"] == [{"name": "Seat", "value": "B"}]

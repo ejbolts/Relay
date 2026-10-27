@@ -4,7 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Save custom machine settings, build your exercise library with individual muscle credits, discover public profiles, and see who reacted to workouts.",
   "changes": [
-    "Each strength exercise has a compact Settings section with an inset border, even spacing and matching input and button heights. Type any setting name and value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.",
+    "Each strength exercise has a compact Settings section with an inset border, even spacing and matching input and button heights. Type any setting name and a numeric value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.",
     "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
@@ -21,16 +21,16 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/a7245ddc7e5cdedf98fb2d46f053476c73ce499e/docs/screenshots/releases/1.1.0-machine-settings-polished.png",
-    "alt": "Compact machine Settings section with custom Seat 5 and Backrest B rows, remove buttons, Add and Save above isolated sample workout sets."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/25c19bae9d344e847ef929a92aec57e41ed03f02/docs/screenshots/releases/1.1.0-machine-settings-numeric.png",
+    "alt": "Compact machine Settings section with custom Seat 5 and Backrest 2 rows, remove buttons, Add and Save above isolated sample workout sets."
   },
   "highlights": [
     {
       "title": "Your machine, your settings",
-      "description": "Type any setting name and value, add or remove rows, then Save. Settings carry into the next workout for that exercise, while older sessions keep their recorded values.",
+      "description": "Type any setting name and a numeric value, add or remove rows, then Save. Settings carry into the next workout for that exercise, while older sessions keep their recorded values.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a7245ddc7e5cdedf98fb2d46f053476c73ce499e/docs/screenshots/releases/1.1.0-machine-settings-polished.png",
-        "alt": "Compact machine Settings section with custom Seat 5 and Backrest B rows, remove buttons, Add and Save above isolated sample workout sets."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/25c19bae9d344e847ef929a92aec57e41ed03f02/docs/screenshots/releases/1.1.0-machine-settings-numeric.png",
+        "alt": "Compact machine Settings section with custom Seat 5 and Backrest 2 rows, remove buttons, Add and Save above isolated sample workout sets."
       }
     },
     {

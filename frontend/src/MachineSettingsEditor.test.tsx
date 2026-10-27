@@ -64,26 +64,50 @@ afterEach(async () => {
 });
 
 describe('custom machine settings', () => {
-  it('starts with blank Seat and 5 placeholders and saves arbitrary text', async () => {
+  it('starts with blank Seat and 5 placeholders and saves named numeric settings', async () => {
     await render();
     expect(input('Setting 1 name').value).toBe('');
     expect(input('Setting 1 name').placeholder).toBe('Seat');
     expect(input('Setting 1 value').placeholder).toBe('5');
+    expect(input('Setting 1 value').type).toBe('number');
+    expect(input('Setting 1 value').inputMode).toBe('decimal');
     await type('Setting 1 name', ' Start angle ');
-    await type('Start angle value', '45°');
+    await type('Start angle value', '45');
     await click('+ Add');
     expect(document.activeElement).toBe(input('Setting 2 name'));
     await type('Setting 2 name', 'Pad');
-    await type('Pad value', 'B');
+    await type('Pad value', '2.5');
     await click('Save');
     expect(api.saveMachineSettings).toHaveBeenCalledWith('press', [
-      { name: 'Start angle', value: '45°' },
-      { name: 'Pad', value: 'B' },
+      { name: 'Start angle', value: '45' },
+      { name: 'Pad', value: '2.5' },
     ]);
     expect(changed).toHaveBeenLastCalledWith([
-      { name: 'Start angle', value: '45°' },
-      { name: 'Pad', value: 'B' },
+      { name: 'Start angle', value: '45' },
+      { name: 'Pad', value: '2.5' },
     ]);
+  });
+  it('rejects letters and unit text instead of saving them', async () => {
+    await render([]);
+    await type('Setting 1 name', 'Seat');
+    for (const invalid of ['B', '45 degrees', 'Infinity', 'NaN']) {
+      await type('Seat value', invalid);
+      await click('Save');
+      expect(api.saveMachineSettings).not.toHaveBeenCalled();
+      expect(input('Seat value').value).toBe('');
+    }
+    await type('Seat value', '0');
+    await click('Save');
+    expect(changed).toHaveBeenCalledWith([{ name: 'Seat', value: '0' }]);
+  });
+  it('requires an old text value to be replaced before saving', async () => {
+    await render([{ name: 'Seat', value: 'B' }]);
+    await click('Save');
+    expect(api.saveMachineSettings).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Enter a number');
+    await type('Seat value', '5');
+    await click('Save');
+    expect(changed).toHaveBeenCalledWith(settings);
   });
   it('loads saved settings, removes rows and clears all saved settings', async () => {
     vi.mocked(api.getMachineSettings).mockResolvedValue({ settings });
@@ -114,13 +138,13 @@ describe('custom machine settings', () => {
   it('preserves edits after a failed save and lets the user retry', async () => {
     vi.mocked(api.saveMachineSettings).mockRejectedValueOnce(new Error('offline'));
     await render(settings);
-    await type('Seat value', 'B');
+    await type('Seat value', '2.5');
     await click('Save');
-    expect(input('Seat value').value).toBe('B');
+    expect(input('Seat value').value).toBe('2.5');
     expect(changed).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Could not save');
     await click('Save');
-    expect(changed).toHaveBeenCalledWith([{ name: 'Seat', value: 'B' }]);
+    expect(changed).toHaveBeenCalledWith([{ name: 'Seat', value: '2.5' }]);
   });
   it('does not allow a failed load to overwrite existing defaults', async () => {
     vi.mocked(api.getMachineSettings).mockRejectedValueOnce(new Error('offline'));

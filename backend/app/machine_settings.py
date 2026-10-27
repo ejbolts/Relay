@@ -27,6 +27,23 @@ class MachineSettings(BaseModel):
     settings: list[MachineSetting] = Field(default_factory=list, max_length=20)
 
 
+class NumericMachineSetting(MachineSetting):
+    value: str = Field(
+        min_length=1, max_length=30, pattern=r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$"
+    )
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def number_as_text(cls, value: object) -> object:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        return value
+
+
+class MachineSettingsUpdate(MachineSettings):
+    settings: list[NumericMachineSetting] = Field(default_factory=list, max_length=20)
+
+
 router = APIRouter(prefix="/api/exercises", tags=["machine settings"])
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -54,7 +71,7 @@ def get_machine_settings(exercise_id: str, db: DbSession, user: CurrentUser) -> 
     dependencies=[Depends(limit_save_rate)],
 )
 def save_machine_settings(
-    exercise_id: str, payload: MachineSettings, db: DbSession, user: CurrentUser
+    exercise_id: str, payload: MachineSettingsUpdate, db: DbSession, user: CurrentUser
 ) -> MachineSettings:
     require_exercise(db, user.id, exercise_id)
     set_setting(db, user.id, f"machine_settings:{exercise_id}", payload.model_dump_json())
