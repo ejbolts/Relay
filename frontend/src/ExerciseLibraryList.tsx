@@ -38,10 +38,12 @@ export function ExerciseLibraryList({
   exercises,
   dataRevision,
   onOpen,
+  onCreate,
 }: {
   exercises: Exercise[];
   dataRevision: string | null;
   onOpen: (id: string) => void;
+  onCreate?: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const [query, setQuery] = useState('');
@@ -102,29 +104,43 @@ export function ExerciseLibraryList({
     });
   return (
     <section className="exercise-list-library" aria-label="Exercise library">
-      <label className="exercise-list-search">
-        <Icon name="search" />
-        <input
-          ref={input}
-          type="search"
-          aria-label="Search exercises"
-          placeholder="Search exercises"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        {query && (
+      <div className="exercise-list-toolbar">
+        <label className="exercise-list-search">
+          <Icon name="search" />
+          <input
+            ref={input}
+            type="search"
+            aria-label="Search exercises"
+            placeholder="Search exercises"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => {
+                setQuery('');
+                input.current?.focus();
+              }}
+            >
+              <Icon name="close" />
+            </button>
+          )}
+        </label>
+        {onCreate && (
           <button
             type="button"
-            aria-label="Clear search"
-            onClick={() => {
-              setQuery('');
-              input.current?.focus();
-            }}
+            className="exercise-library-add"
+            aria-label="Add exercise"
+            title="Add exercise"
+            aria-haspopup="dialog"
+            onClick={onCreate}
           >
-            <Icon name="close" />
+            <Icon name="plus" />
           </button>
         )}
-      </label>
+      </div>
       <div className="exercise-muscle-filters" role="group" aria-label="Muscle group">
         {['All', ...muscles].map((name) => (
           <button

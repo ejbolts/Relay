@@ -8,6 +8,14 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
+
+_Add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit for each one when creating a strength exercise. This phone-sized form uses isolated sample data._
+
+![Training's Exercises tab with a compact plus button beside exercise search and two newly created custom exercises](screenshots/releases/1.1.0-library-add-exercise.png)
+
+_The plus beside exercise search opens Add exercise. Sessions keeps a compact plus beside the Training heading. The library updates after saving; this view uses isolated sample data._
+
 ![Opening a preloaded profile, viewing the people behind a workout's reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
 
 _Your profile loads while Home is open. Tap a reaction count to instantly show names and emojis, then swipe down to close. This recording uses isolated sample accounts._
@@ -44,6 +52,8 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
+- When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.
 - Tap a workout's reaction count to instantly open a bottom sheet showing who reacted and each person's emoji. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.

@@ -2,8 +2,10 @@
   "version": "1.1.0",
   "date": "2026-10-26",
   "title": "Find friends and improve your workouts",
-  "summary": "Discover public profiles in Find, open your preloaded profile, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
+  "summary": "Build your exercise library with individual muscle credits, discover public profiles, open your preloaded profile, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
   "changes": [
+    "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
+    "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
     "Tap a workout's reaction count to instantly open a bottom sheet showing the people who reacted and their emojis. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction remains a separate control.",
     "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",

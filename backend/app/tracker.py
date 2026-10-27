@@ -40,7 +40,9 @@ from .models import (
     CardioSession,
     Exercise,
     ExerciseKind,
+    ExerciseMuscleContribution,
     MachinePhoto,
+    MuscleRole,
     PersonalRecord,
     SupersetGroup,
     TrainingWorkout,
@@ -89,6 +91,7 @@ from .tracker_schemas import (
     MachinePhotoRead,
     MachinePhotoUsageRead,
     MuscleFrequencyRead,
+    MuscleSetCreditCreate,
     MuscleVolumeRead,
     PersonalRecordRead,
     ProgressPoint,
@@ -828,9 +831,21 @@ def create_exercise(
         EXERCISE_NOT_CREATED,
         Exercise.is_custom.is_(True),
     )
-    exercise_data = payload.model_dump()
+    exercise_data = payload.model_dump(exclude={"muscle_set_credit", "muscle_set_credits"})
     exercise_data["name"] = canonical_exercise_name(payload.name)
     exercise = Exercise(user_id=user.id, **exercise_data, is_custom=True)
+    if payload.kind != ExerciseKind.CARDIO and payload.category != WorkoutCategory.CARDIO:
+        credits = payload.muscle_set_credits or [
+            MuscleSetCreditCreate(muscle_name=payload.muscle_group, sets=payload.muscle_set_credit)
+        ]
+        exercise.muscle_contributions = [
+            ExerciseMuscleContribution(
+                muscle_name=credit.muscle_name,
+                role=MuscleRole.PRIMARY if credit.sets == 1 else MuscleRole.SECONDARY,
+                contribution_factor=credit.sets,
+            )
+            for credit in credits
+        ]
     try:
         db.add(exercise)
         db.commit()
