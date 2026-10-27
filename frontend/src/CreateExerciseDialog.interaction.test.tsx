@@ -80,6 +80,8 @@ afterEach(async () => {
 });
 
 function control(label: string) {
+  const named = document.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
+  if (named) return named;
   const element = [...document.querySelectorAll('label')].find(
     (item) => item.firstChild?.textContent === label,
   );
@@ -103,40 +105,103 @@ async function submit() {
 }
 
 it('offers the muscles used in weekly totals and saves partial credit', async () => {
-  expect([...control('Target muscle').options].map((option) => option.value)).toEqual([
+  expect([...control('Target muscle 1').options].map((option) => option.value)).toEqual([
     '',
     'Pectorals',
     'Triceps',
   ]);
-  await select('Target muscle', 'Triceps');
-  await select('Credit per working set', '0.5');
+  await select('Target muscle 1', 'Triceps');
+  await select('Credit per working set 1', '0.5');
   await submit();
   expect(onCreate).toHaveBeenCalledWith(
-    expect.objectContaining({ muscle_group: 'Triceps', muscle_set_credit: 0.5 }),
+    expect.objectContaining({
+      muscle_group: 'Triceps',
+      muscle_set_credits: [{ muscle_name: 'Triceps', sets: 0.5 }],
+    }),
   );
   expect(onCreated).toHaveBeenCalledWith(exercise);
 });
 
 it('keeps direct credit as the default and preserves selections after a save error', async () => {
-  await select('Target muscle', 'Pectorals');
+  await select('Target muscle 1', 'Pectorals');
   onCreate.mockRejectedValueOnce(new Error('Please try again.'));
   await submit();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('Please try again.');
-  expect(control('Target muscle').value).toBe('Pectorals');
-  expect(control('Credit per working set').value).toBe('1');
+  expect(control('Target muscle 1').value).toBe('Pectorals');
+  expect(control('Credit per working set 1').value).toBe('1');
   await submit();
-  expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ muscle_set_credit: 1 }));
+  expect(onCreate).toHaveBeenLastCalledWith(
+    expect.objectContaining({ muscle_set_credits: [{ muscle_name: 'Pectorals', sets: 1 }] }),
+  );
 });
 
 it('hides and omits strength credit for cardio and restores it when returning to strength', async () => {
-  await select('Target muscle', 'Triceps');
-  await select('Credit per working set', '0.5');
+  await select('Target muscle 1', 'Triceps');
+  await select('Credit per working set 1', '0.5');
   await select('Type', 'cardio');
-  expect(document.body.textContent).not.toContain('Credit per working set');
+  expect(document.querySelector('[aria-label="Target muscles"]')).toBeNull();
+  await act(async () => {
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="e.g. Lats"]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      input,
+      'Full body',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   await submit();
-  expect(onCreate.mock.calls[0][0]).not.toHaveProperty('muscle_set_credit');
+  expect(onCreate.mock.calls[0][0]).not.toHaveProperty('muscle_set_credits');
   await select('Type', 'strength');
-  expect(control('Credit per working set').value).toBe('0.5');
+  expect(control('Credit per working set 1').value).toBe('0.5');
   await select('Category', 'cardio');
-  expect(document.body.textContent).not.toContain('Credit per working set');
+  expect(document.querySelector('[aria-label="Target muscles"]')).toBeNull();
+});
+
+async function clickButton(name: string) {
+  const button = [...document.querySelectorAll('button')].find(
+    (item) => item.getAttribute('aria-label') === name || item.textContent === name,
+  )!;
+  await act(async () => button.click());
+}
+
+it('adds independent targets, prevents duplicate choices, and removes only the chosen target', async () => {
+  await select('Target muscle 1', 'Pectorals');
+  await clickButton('+ Add muscle');
+  expect([...control('Target muscle 2').options].map((option) => option.value)).toEqual([
+    '',
+    'Triceps',
+  ]);
+  await select('Target muscle 2', 'Triceps');
+  await select('Credit per working set 2', '0.5');
+  await submit();
+  expect(onCreate).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      muscle_set_credits: [
+        { muscle_name: 'Pectorals', sets: 1 },
+        { muscle_name: 'Triceps', sets: 0.5 },
+      ],
+    }),
+  );
+  await clickButton('Remove muscle 1');
+  expect(control('Target muscle 1').value).toBe('Triceps');
+  expect(control('Credit per working set 1').value).toBe('0.5');
+  expect(
+    (document.querySelector('[aria-label="Remove muscle 1"]') as HTMLButtonElement).disabled,
+  ).toBe(true);
+  await clickButton('+ Add muscle');
+  await select('Target muscle 2', 'Pectorals');
+  expect(control('Credit per working set 2').value).toBe('1');
+});
+
+it('requires every added row to have a target and keeps mixed credits after a save error', async () => {
+  await select('Target muscle 1', 'Pectorals');
+  await clickButton('+ Add muscle');
+  await submit();
+  expect(onCreate).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Choose a muscle');
+  await select('Target muscle 2', 'Triceps');
+  await select('Credit per working set 2', '0.5');
+  onCreate.mockRejectedValueOnce(new Error('Please try again.'));
+  await submit();
+  expect(control('Target muscle 1').value).toBe('Pectorals');
+  expect(control('Credit per working set 2').value).toBe('0.5');
 });

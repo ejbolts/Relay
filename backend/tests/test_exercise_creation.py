@@ -160,3 +160,88 @@ def test_cardio_does_not_receive_strength_credits(client, changes):
     assert response.status_code == 201
     assert response.json()["muscle_set_credits"] == []
     assert response.json()["muscle_contributions"] == []
+
+
+def test_multiple_targets_keep_independent_credits_and_weekly_totals(client, other_client):
+    credits = [
+        {"muscle_name": " Pectorals ", "sets": 1},
+        {"muscle_name": "Triceps", "sets": 0.5},
+        {"muscle_name": "Front delts", "sets": 0.5},
+    ]
+    response = client.post("/api/exercises", json=exercise_payload(muscle_set_credits=credits))
+    assert response.status_code == 201, response.text
+    exercise = response.json()
+    expected = {"Pectorals": 1, "Triceps": 0.5, "Front delts": 0.5}
+    assert exercise["muscle_group"] == "Pectorals"
+    assert {
+        item["muscle_name"]: item["sets"] for item in exercise["muscle_set_credits"]
+    } == expected
+    assert {item["muscle_name"]: item["role"] for item in exercise["muscle_contributions"]} == {
+        "Pectorals": "primary",
+        "Triceps": "secondary",
+        "Front delts": "secondary",
+    }
+    assert exercise in client.get("/api/exercises").json()
+    assert other_client.get("/api/exercises", params={"search": exercise["name"]}).json() == []
+    workout = client.post(
+        "/api/workouts",
+        json={
+            "name": "Mixed muscle credits",
+            "category": "push",
+            "workout_date": date.today().isoformat(),
+            "movements": [
+                {
+                    "exercise_id": exercise["id"],
+                    "sets": [
+                        {"reps": 8, "weight_kg": 20, "completed": True},
+                        {"reps": 8, "weight_kg": 20, "completed": True},
+                        {"reps": 8, "weight_kg": 10, "completed": True, "warmup": True},
+                        {"reps": 8, "weight_kg": 20, "completed": False},
+                    ],
+                }
+            ],
+        },
+    )
+    assert workout.status_code == 201, workout.text
+    saved_credits = workout.json()["movements"][0]["exercise"]["muscle_set_credits"]
+    assert {item["muscle_name"]: item["sets"] for item in saved_credits} == expected
+    groups = client.get("/api/dashboard").json()["weekly_sets"]["muscle_groups"]
+    for muscle, credit in expected.items():
+        group = next(item for item in groups if item["muscle_group"] == muscle)
+        assert group["raw_sets"] == 2 * credit
+        assert group["contributions"][0]["credit_per_set"] == credit
+        assert group["contributions"][0]["working_sets"] == 2
+
+
+@pytest.mark.parametrize(
+    "credits",
+    [
+        [],
+        [{"muscle_name": " ", "sets": 1}],
+        [{"muscle_name": "a" * 101, "sets": 1}],
+        [{"muscle_name": "Lats", "sets": 0.25}],
+        [{"muscle_name": "Lats", "sets": 1}, {"muscle_name": " lats ", "sets": 0.5}],
+        [
+            {"muscle_name": "Upper back", "sets": 1},
+            {"muscle_name": "Mid / Upper Back", "sets": 0.5},
+        ],
+    ],
+)
+def test_create_exercise_rejects_invalid_multiple_targets(client, credits):
+    response = client.post("/api/exercises", json=exercise_payload(muscle_set_credits=credits))
+    assert response.status_code == 422
+
+
+def test_cardio_ignores_multiple_strength_targets(client):
+    response = client.post(
+        "/api/exercises",
+        json=exercise_payload(
+            kind="cardio",
+            muscle_set_credits=[
+                {"muscle_name": "Lats", "sets": 1},
+                {"muscle_name": "Biceps", "sets": 0.5},
+            ],
+        ),
+    )
+    assert response.status_code == 201
+    assert response.json()["muscle_set_credits"] == []

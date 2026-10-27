@@ -44,8 +44,8 @@ describe('create exercise prompt', () => {
     expect(markup).toContain('value="pull" selected=""');
     expect(markup).toContain('Target muscle');
     expect(markup).toContain('Choose muscle');
-    expect(markup).toContain('Direct · 1 set');
-    expect(markup).toContain('Partial · ½ set');
+    expect(markup).toContain('Direct · 1');
+    expect(markup).toContain('Partial · ½');
     expect(markup).toContain('Equipment (optional)');
     expect(markup).toContain('type="submit"');
     expect(markup).toContain('Cancel');
