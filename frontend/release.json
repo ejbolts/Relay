@@ -2,9 +2,11 @@
   "version": "1.1.0",
   "date": "2026-10-27",
   "title": "Find friends and improve your workouts",
-  "summary": "Save custom machine settings, discover public profiles, open preloaded profiles, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
+  "summary": "Save custom machine settings, build your exercise library with individual muscle credits, discover public profiles, and see who reacted to workouts.",
   "changes": [
     "Each strength exercise has a compact Settings section with an inset border, even spacing and matching input and button heights. Type any setting name and value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.",
+    "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
+    "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
     "Tap a workout's reaction count to instantly open a bottom sheet showing the people who reacted and their emojis. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction remains a separate control.",
     "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",

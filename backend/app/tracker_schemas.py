@@ -13,7 +13,7 @@ from .models import (
     SetType,
     WorkoutCategory,
 )
-from .training_metrics import muscle_credits
+from .training_metrics import MUSCLE_GROUP_ALIASES, muscle_credits
 
 
 class MuscleContributionRead(BaseModel):
@@ -24,17 +24,44 @@ class MuscleContributionRead(BaseModel):
     contribution_factor: float
 
 
+class MuscleSetCreditCreate(BaseModel):
+    muscle_name: str = Field(min_length=1, max_length=100)
+    sets: Literal[0.5, 1]
+
+    @field_validator("muscle_name", mode="before")
+    @classmethod
+    def clean_muscle_name(cls, value: str) -> str:
+        if isinstance(value, str):
+            value = value.strip()
+            return MUSCLE_GROUP_ALIASES.get(value, value)
+        return value
+
+
 class ExerciseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     category: WorkoutCategory
     kind: ExerciseKind = ExerciseKind.STRENGTH
     muscle_group: str = Field(min_length=1, max_length=100)
     equipment: str | None = Field(default=None, max_length=100)
+    muscle_set_credit: Literal[0.5, 1] = 1
+    muscle_set_credits: list[MuscleSetCreditCreate] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
 
     @field_validator("name", "muscle_group", "equipment", mode="before")
     @classmethod
     def clean_strings(cls, value: str | None) -> str | None:
         return value.strip() or None if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_muscle_targets(self) -> ExerciseCreate:
+        if self.muscle_set_credits:
+            names = [credit.muscle_name.casefold() for credit in self.muscle_set_credits]
+            if len(names) != len(set(names)):
+                raise ValueError("Choose each target muscle only once.")
+            if self.kind != ExerciseKind.CARDIO and self.category != WorkoutCategory.CARDIO:
+                self.muscle_group = self.muscle_set_credits[0].muscle_name
+        return self
 
 
 class MuscleSetCreditRead(BaseModel):

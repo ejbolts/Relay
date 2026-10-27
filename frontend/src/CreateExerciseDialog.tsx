@@ -19,8 +19,8 @@ export function CreateExerciseDialog({
   categoryLabels: Record<WorkoutCategory, string>;
   initialName: string;
   initialCategory: WorkoutCategory | '';
-  viewportHeight: number;
-  viewportTop: number;
+  viewportHeight?: number;
+  viewportTop?: number;
   onCreate: (input: ExerciseCreateInput) => Promise<Exercise>;
   onCreated: (exercise: Exercise) => void;
   onClose: () => void;
@@ -28,17 +28,32 @@ export function CreateExerciseDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const savingRef = useRef(false);
   const titleId = useId();
-  const groupsId = useId();
+  const [viewport, setViewport] = useState(() => ({
+    height: viewportHeight ?? window.visualViewport?.height ?? window.innerHeight,
+    top: viewportTop ?? window.visualViewport?.offsetTop ?? 0,
+  }));
   const [draft, setDraft] = useState<ExerciseCreationDraft>(() => ({
     name: initialName.slice(0, 160),
     category: initialCategory,
     kind: initialCategory === 'cardio' ? 'cardio' : 'strength',
     muscle_group: '',
     equipment: '',
+    muscle_set_credits: [{ muscle_name: '', sets: 1 }],
   }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const muscleGroups = [...new Set(exercises.map((exercise) => exercise.muscle_group))].sort();
+  const strength = draft.kind !== 'cardio' && draft.category !== 'cardio';
+  const muscleGroups = [
+    ...new Set(
+      exercises
+        .filter((exercise) => exercise.kind !== 'cardio' && exercise.category !== 'cardio')
+        .flatMap((exercise) =>
+          exercise.muscle_set_credits?.length
+            ? exercise.muscle_set_credits.map((credit) => credit.muscle_name)
+            : [exercise.muscle_group],
+        ),
+    ),
+  ].sort();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -48,6 +63,24 @@ export function CreateExerciseDialog({
       if (dialog.open) dialog.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (viewportHeight !== undefined) return;
+    const visualViewport = window.visualViewport;
+    const update = () =>
+      setViewport({
+        height: visualViewport?.height ?? window.innerHeight,
+        top: visualViewport?.offsetTop ?? 0,
+      });
+    window.addEventListener('resize', update);
+    visualViewport?.addEventListener('resize', update);
+    visualViewport?.addEventListener('scroll', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      visualViewport?.removeEventListener('resize', update);
+      visualViewport?.removeEventListener('scroll', update);
+    };
+  }, [viewportHeight]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,8 +108,8 @@ export function CreateExerciseDialog({
       aria-labelledby={titleId}
       style={
         {
-          '--create-exercise-viewport-height': `${viewportHeight}px`,
-          '--create-exercise-viewport-top': `${viewportTop}px`,
+          '--create-exercise-viewport-height': `${viewportHeight ?? viewport.height}px`,
+          '--create-exercise-viewport-top': `${viewportTop ?? viewport.top}px`,
         } as CSSProperties
       }
       onKeyDown={(event) => {
@@ -100,7 +133,6 @@ export function CreateExerciseDialog({
           ×
         </button>
       </header>
-      <p>Create an exercise in your library, then add it to your workout.</p>
       <form onSubmit={(event) => void submit(event)} aria-busy={saving}>
         <fieldset disabled={saving}>
           <legend className="sr-only">Exercise details</legend>
@@ -154,22 +186,113 @@ export function CreateExerciseDialog({
               <option value="cardio">Cardio</option>
             </select>
           </label>
-          <label>
-            Muscle group
-            <input
-              required
-              maxLength={100}
-              list={groupsId}
-              value={draft.muscle_group}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  muscle_group: event.target.value,
-                }))
-              }
-              placeholder="e.g. Lats"
-            />
-          </label>
+          {strength ? (
+            <section className="create-exercise-muscles" aria-label="Target muscles">
+              <h3>Target muscles</h3>
+              {draft.muscle_set_credits.map((credit, index) => (
+                <div className="create-exercise-muscle-row" key={index}>
+                  <label>
+                    Muscle
+                    <select
+                      required
+                      aria-label={`Target muscle ${index + 1}`}
+                      value={credit.muscle_name}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          muscle_set_credits: current.muscle_set_credits.map((item, i) =>
+                            i === index ? { ...item, muscle_name: event.target.value } : item,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="">Choose muscle</option>
+                      {muscleGroups
+                        .filter(
+                          (group) =>
+                            !draft.muscle_set_credits.some(
+                              (item, i) => i !== index && item.muscle_name === group,
+                            ),
+                        )
+                        .map((group) => (
+                          <option value={group} key={group}>
+                            {group}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Set credit
+                    <select
+                      aria-label={`Credit per working set ${index + 1}`}
+                      value={credit.sets}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          muscle_set_credits: current.muscle_set_credits.map((item, i) =>
+                            i === index
+                              ? { ...item, sets: Number(event.target.value) as 0.5 | 1 }
+                              : item,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value={1}>Direct · 1</option>
+                      <option value={0.5}>Partial · ½</option>
+                    </select>
+                  </label>
+                  <button
+                    className="create-exercise-remove-muscle"
+                    type="button"
+                    aria-label={`Remove muscle ${index + 1}`}
+                    disabled={draft.muscle_set_credits.length === 1}
+                    onClick={() =>
+                      setDraft((current) => ({
+                        ...current,
+                        muscle_set_credits: current.muscle_set_credits.filter(
+                          (_, i) => i !== index,
+                        ),
+                      }))
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                className="create-exercise-add-muscle"
+                type="button"
+                disabled={draft.muscle_set_credits.length >= muscleGroups.length}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    muscle_set_credits: [
+                      ...current.muscle_set_credits,
+                      { muscle_name: '', sets: 1 },
+                    ],
+                  }))
+                }
+              >
+                + Add muscle
+              </button>
+            </section>
+          ) : (
+            <label>
+              Muscle group
+              <input
+                required
+                maxLength={100}
+                value={draft.muscle_group}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    muscle_group: event.target.value,
+                  }))
+                }
+                placeholder="e.g. Lats"
+              />
+            </label>
+          )}
           <label>
             Equipment (optional)
             <input
@@ -185,11 +308,6 @@ export function CreateExerciseDialog({
             />
           </label>
         </fieldset>
-        <datalist id={groupsId}>
-          {muscleGroups.map((group) => (
-            <option value={group} key={group} />
-          ))}
-        </datalist>
         {error && (
           <p className="inline-error" role="alert">
             {error}

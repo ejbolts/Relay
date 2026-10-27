@@ -52,6 +52,7 @@ import { formatElapsed, useElapsedSeconds } from './elapsed';
 export function PageHeader({
   eyebrow,
   title,
+  titleAction,
   actions,
   accountActions,
   onOpenSettings,
@@ -59,6 +60,7 @@ export function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
+  titleAction?: ReactNode;
   actions?: ReactNode;
   accountActions?: ReactNode;
   onOpenSettings?: () => void;
@@ -69,7 +71,14 @@ export function PageHeader({
     <header className="page-header">
       <div>
         {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
-        <Heading>{title}</Heading>
+        {titleAction ? (
+          <div className="page-header-title-row">
+            <Heading>{title}</Heading>
+            {titleAction}
+          </div>
+        ) : (
+          <Heading>{title}</Heading>
+        )}
       </div>
       {(actions || accountActions || onOpenSettings) && (
         <div className="page-header-actions">

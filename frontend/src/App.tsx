@@ -1705,6 +1705,7 @@ function AppContent() {
                 personalRecords={personalRecords}
                 onDataChange={refreshAfterMutation}
                 initialOpenId={historyOpenId}
+                onCreateExercise={createExercise}
                 section={historySection}
                 onSectionChange={(section) => setTab(section)}
                 onOpenSettings={openAllSettings}
@@ -6160,6 +6161,7 @@ export function ProgressScreen({
   browseFirst = false,
   onOpenSettings,
   onDetailChange,
+  onCreateExercise,
 }: {
   dataRevision?: string | null;
   exercises: Exercise[];
@@ -6172,6 +6174,7 @@ export function ProgressScreen({
   browseFirst?: boolean;
   onOpenSettings?: () => void;
   onDetailChange?: (header: ExerciseDetailHeader | null) => void;
+  onCreateExercise?: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const strengthExercises = useMemo(
@@ -6343,6 +6346,7 @@ export function ProgressScreen({
           <ExerciseLibraryList
             exercises={strengthExercises}
             dataRevision={dataRevision}
+            onCreate={onCreateExercise}
             onOpen={(id) => {
               libraryScroll.current = window.scrollY;
               setExerciseId(id);
@@ -8882,6 +8886,7 @@ function HistoryScreen({
   onDelete,
   personalRecords,
   onDataChange,
+  onCreateExercise,
   initialOpenId,
   section,
   onSectionChange,
@@ -8911,6 +8916,7 @@ function HistoryScreen({
   onDelete: (workout: TrackedWorkout) => void;
   personalRecords: PersonalRecord[];
   onDataChange: () => Promise<void>;
+  onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   initialOpenId: string | null;
   section: HistorySection;
   onSectionChange: (section: HistorySection) => void;
@@ -8932,6 +8938,12 @@ function HistoryScreen({
 }) {
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
+  const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
+  const [createdExerciseName, setCreatedExerciseName] = useState<string | null>(null);
+  const openExerciseCreation = () => {
+    setCreatedExerciseName(null);
+    setCreateExerciseOpen(true);
+  };
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -9126,6 +9138,20 @@ function HistoryScreen({
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"
+            titleAction={
+              section === 'history' ? (
+                <button
+                  type="button"
+                  className="training-add-exercise"
+                  aria-label="Add exercise"
+                  title="Add exercise"
+                  aria-haspopup="dialog"
+                  onClick={openExerciseCreation}
+                >
+                  <Icon name="plus" />
+                </button>
+              ) : undefined
+            }
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
           />
@@ -9164,7 +9190,26 @@ function HistoryScreen({
               Cardio
             </button>
           </div>
+          {section !== 'cardio' && createdExerciseName && (
+            <p className="training-exercise-notice" role="status">
+              {createdExerciseName} added to your library.
+            </p>
+          )}
         </>
+      )}
+      {createExerciseOpen && (
+        <CreateExerciseDialog
+          exercises={exercises}
+          categoryLabels={categoryNames}
+          initialName=""
+          initialCategory=""
+          onCreate={onCreateExercise}
+          onCreated={(exercise) => {
+            setCreateExerciseOpen(false);
+            setCreatedExerciseName(exercise.name);
+          }}
+          onClose={() => setCreateExerciseOpen(false)}
+        />
       )}
       {visitedSections.has('progress') && (
         <CachedTabPanel active={section === 'progress'}>
@@ -9177,6 +9222,7 @@ function HistoryScreen({
             embedded
             browseFirst
             onDetailChange={setExerciseHeader}
+            onCreateExercise={openExerciseCreation}
             initialExerciseId={initialExerciseId}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}

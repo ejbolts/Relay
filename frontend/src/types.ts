@@ -119,10 +119,15 @@ export interface Exercise {
   muscle_set_credits?: { muscle_name: string; sets: number }[];
 }
 
+export interface MuscleSetCreditInput {
+  muscle_name: string;
+  sets: 0.5 | 1;
+}
+
 export type ExerciseCreateInput = Pick<
   Exercise,
   'name' | 'category' | 'kind' | 'muscle_group' | 'equipment'
->;
+> & { muscle_set_credit?: 0.5 | 1; muscle_set_credits?: MuscleSetCreditInput[] };
 
 export interface MachinePhoto {
   id: string;
