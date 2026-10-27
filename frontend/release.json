@@ -23,16 +23,16 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/eb020073f2ba78b684c92d41249b1637f32d401c/docs/screenshots/releases/1.1.0-muscle-credits-settings.png",
-    "alt": "Compact muscle set credits popup for Single Leg Press with Direct work and Partial credit lists, saved Seat 5 and Backrest 2 values, and Edit. Isolated sample data."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/d48f08cfb658aa9e3b78029296438f3a4ebd9e06/docs/screenshots/releases/1.1.0-machine-setup-settings.png",
+    "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
     {
       "title": "Your machine, your settings",
       "description": "Add seat, backrest or any numeric setting while naming a machine photo. Save and pin keeps everything together. Choosing a saved machine loads its own values; Save closes the editor. The exercise menu and muscle credits popup also open settings.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/eb020073f2ba78b684c92d41249b1637f32d401c/docs/screenshots/releases/1.1.0-muscle-credits-settings.png",
-        "alt": "Compact muscle set credits popup for Single Leg Press with Direct work and Partial credit lists, saved Seat 5 and Backrest 2 values, and Edit. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/d48f08cfb658aa9e3b78029296438f3a4ebd9e06/docs/screenshots/releases/1.1.0-machine-setup-settings.png",
+        "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
       }
     },
     {
