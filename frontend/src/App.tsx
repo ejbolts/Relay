@@ -4146,7 +4146,7 @@ function MovementCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsExerciseId, setSettingsExerciseId] = useState<string | null>(null);
   const settingsOpen = settingsExerciseId === movement.exercise.id;
-  const settingsPanelId = useId();
+  const photoPanelId = useId();
   const [openSetActionsKey, setOpenSetActionsKey] = useState<string | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
@@ -4806,22 +4806,7 @@ function MovementCard({
             >
               {movement.exercise.name}
             </button>
-            <ExerciseMuscleHelp
-              exercise={movement.exercise}
-              settings={movement.machineSettings}
-              onSettings={
-                cardio
-                  ? undefined
-                  : () => {
-                      setSettingsExerciseId(movement.exercise.id);
-                      setExpanded(true);
-                      closeMovementMenu();
-                      requestAnimationFrame(() =>
-                        document.getElementById(settingsPanelId)?.querySelector('input')?.focus(),
-                      );
-                    }
-              }
-            />
+            <ExerciseMuscleHelp exercise={movement.exercise} />
             <button
               type="button"
               className="movement-expand-toggle"
@@ -4913,19 +4898,22 @@ function MovementCard({
               {!cardio && (
                 <button
                   type="button"
-                  aria-expanded={settingsOpen}
-                  aria-controls={settingsPanelId}
+                  aria-controls={photoPanelId}
                   onClick={() => {
-                    setSettingsExerciseId(settingsOpen ? null : movement.exercise.id);
-                    if (!settingsOpen) setExpanded(true);
+                    setSettingsExerciseId(movement.exercise.id);
+                    setExpanded(true);
                     closeMovementMenu();
-                    movementMenuRef.current?.querySelector('summary')?.focus();
+                    requestAnimationFrame(() => {
+                      const section = document.getElementById(photoPanelId);
+                      section?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      section?.querySelector('summary')?.focus({ preventScroll: true });
+                    });
                   }}
                 >
                   <span aria-hidden="true">
                     <Icon name="settings" />
                   </span>
-                  {settingsOpen ? 'Hide Settings' : 'Settings'}
+                  Settings
                 </button>
               )}
               <button
@@ -5028,6 +5016,7 @@ function MovementCard({
       {!cardio && (
         <MachinePhotoChooser
           key={movement.exercise.id}
+          id={photoPanelId}
           exercise={movement.exercise}
           selectedIds={movement.machinePhotoIds}
           autoPinLastUsed={!movement.machinePhotosInitialized}
@@ -5035,19 +5024,23 @@ function MovementCard({
           settingsOpen={settingsOpen}
           onSettingsOpen={(open) => setSettingsExerciseId(open ? movement.exercise.id : null)}
           settingsEditor={
-            <MachineSettingsEditor
-              key={`${movement.exercise.id}:${movement.machinePhotoIds.at(-1) ?? ''}`}
-              id={settingsPanelId}
-              hidden={!settingsOpen}
-              exerciseId={movement.exercise.id}
-              machinePhotoId={movement.machinePhotoIds.at(-1)}
-              initialSettings={movement.machineSettings}
-              onChange={onMachineSettings}
-              onSaved={() => {
-                setSettingsExerciseId(null);
-                movementMenuRef.current?.querySelector('summary')?.focus();
-              }}
-            />
+            movement.machinePhotoIds.length > 0 ? (
+              <MachineSettingsEditor
+                key={`${movement.exercise.id}:${movement.machinePhotoIds.at(-1) ?? ''}`}
+                hidden={!settingsOpen}
+                exerciseId={movement.exercise.id}
+                machinePhotoId={movement.machinePhotoIds.at(-1)}
+                initialSettings={movement.machineSettings}
+                onChange={onMachineSettings}
+                onSaved={() => {
+                  setSettingsExerciseId(null);
+                  document
+                    .getElementById(photoPanelId)
+                    ?.querySelector('summary')
+                    ?.focus({ preventScroll: true });
+                }}
+              />
+            ) : null
           }
         />
       )}
@@ -5271,6 +5264,7 @@ function CardioSetScreenshotUpload({ onScan }: { onScan: (scan: CardioScreenshot
 }
 
 function MachinePhotoChooser({
+  id,
   exercise,
   selectedIds,
   autoPinLastUsed,
@@ -5279,6 +5273,7 @@ function MachinePhotoChooser({
   onSettingsOpen,
   settingsEditor,
 }: {
+  id: string;
   exercise: Exercise;
   selectedIds: string[];
   autoPinLastUsed: boolean;
@@ -5435,6 +5430,7 @@ function MachinePhotoChooser({
 
   return (
     <details
+      id={id}
       className="machine-photo-picker"
       aria-label={`Machine photos for ${exercise.name}`}
       open={photoPanelOpen}
@@ -5443,7 +5439,15 @@ function MachinePhotoChooser({
         if (!event.currentTarget.open) onSettingsOpen(false);
       }}
     >
-      <summary className="machine-photo-summary">
+      <summary
+        className="machine-photo-summary"
+        onClick={(event) => {
+          event.preventDefault();
+          const open = !photoPanelOpen;
+          setPhotoPanelOpen(open);
+          onSettingsOpen(open && selectedIds.length > 0 && !pending);
+        }}
+      >
         {primaryPinnedPhoto ? (
           <img src={primaryPinnedPhoto.thumbnail_url} alt="" loading="lazy" />
         ) : (

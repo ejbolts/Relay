@@ -12,21 +12,17 @@ _Relay was called Gym Logger before version 1.0._
 
 _Add settings while naming a new machine. **Save and pin** saves the photo, name and numeric values together. Isolated sample data and an illustration from the exercise library._
 
-![Equipment photo chooser with two saved machines and the selected machine's Seat and Backrest settings](screenshots/releases/1.1.0-machine-selection-settings.png)
+![Exercise card with Equipment photo open and Seat and Backrest settings beside the selected machine](screenshots/releases/1.1.0-machine-photo-section-settings.png)
 
-_Choosing a saved machine opens its own settings. Add or remove rows, then **Save** to keep the values and close the editor. Isolated sample data._
+_The exercise menu's **Settings** action opens and scrolls to **Equipment photo**. Settings stay with the chosen machine; Save closes the editor. Isolated sample data._
 
 ![Workout dated 27 October with start time 11:30 pm, end time 12:30 am and a one-hour duration](screenshots/releases/1.1.0-overnight-start-date.png)
 
 _An overnight workout stays on its starting day. This isolated sample starts at 11:30 pm on 27 October and finishes at 12:30 am on 28 October, recording one hour on 27 October. The prompt beneath empty start and end times has been removed._
 
-![Compact muscle set credits popup with saved Seat and Backrest settings and an Edit button](screenshots/releases/1.1.0-muscle-credits-settings.png)
+![Compact muscle set credits popup with Direct work and Partial credit lists](screenshots/releases/1.1.0-muscle-credits-only.png)
 
-_The muscle set credits popup keeps the credit lists and shows saved settings below, with **Edit** or **Add** opening the numeric editor. The exercise menu still has **Settings** and **Hide Settings**. This phone-sized view uses isolated sample data._
-
-![Exercise card after saving machine settings, with the editor closed and workout sets visible](screenshots/releases/1.1.0-machine-settings-saved-closed.png)
-
-_**Save** closes the settings editor after the settings are saved. Reopen **Settings** to edit the saved values; a failed save keeps the form open. Isolated sample data._
+_The exercise popup now contains only muscle credits. Machine settings are available in Equipment photo. Isolated sample data._
 
 ![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
 
@@ -72,9 +68,8 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- Add custom numeric settings while naming a new machine photo, then Save and pin the photo, name and settings together. Choosing a saved machine opens its settings; each machine keeps its own values. Saving closes the editor, and workouts retain the settings used for that session. The exercise options menu and muscle credits popup keep their settings shortcuts.
+- Machine settings stay in Equipment photo. Add any setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine loads its own settings. The exercise menu Settings action opens and scrolls to Equipment photo; it no longer toggles a separate exercise editor. The muscle set credits popup shows only muscle credits. Saving closes the editor, and workouts keep their original settings snapshot.
 - Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
-- While logging, the muscle set credits popup shows saved machine settings below the credits, with **Edit** or **Add** opening the numeric editor. Its three explanatory paragraphs have been removed. Machine settings are hidden by default. Open a strength exercise's options menu and choose Settings to show the compact editor, or Hide Settings to fold it away. Type any setting name and a numeric value, add or remove rows, then Save. The editor closes after a successful save and keeps the saved values for reopening. Saved settings carry into the next workout for that exercise and stay recorded with each session without changing older workouts.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.

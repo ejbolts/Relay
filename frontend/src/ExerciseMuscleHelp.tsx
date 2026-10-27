@@ -1,18 +1,9 @@
 import { useRef, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
-import { MachineSettingsSummary } from './MachineSettingsEditor';
-import type { Exercise, MachineSetting } from './types';
+import type { Exercise } from './types';
 import './exerciseMuscleHelp.css';
 
-export function ExerciseMuscleHelp({
-  exercise,
-  settings,
-  onSettings,
-}: {
-  exercise: Exercise;
-  settings?: MachineSetting[];
-  onSettings?: () => void;
-}) {
+export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const cardio = exercise.kind === 'cardio' || exercise.category === 'cardio';
@@ -86,28 +77,6 @@ export function ExerciseMuscleHelp({
                 </div>
               ) : (
                 <p>No muscle set credits are available for this exercise.</p>
-              )}
-              {(onSettings || !!settings?.length) && (
-                <section className="exercise-muscle-settings" aria-label="Machine settings">
-                  <div className="exercise-muscle-settings-heading">
-                    <h3>Settings</h3>
-                    {onSettings && (
-                      <button
-                        type="button"
-                        aria-label={
-                          settings?.length ? 'Edit machine settings' : 'Add machine settings'
-                        }
-                        onClick={() => {
-                          setOpen(false);
-                          onSettings();
-                        }}
-                      >
-                        {settings?.length ? 'Edit' : 'Add'}
-                      </button>
-                    )}
-                  </div>
-                  <MachineSettingsSummary settings={settings} />
-                </section>
               )}
             </>
           )}
