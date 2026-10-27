@@ -9153,7 +9153,7 @@ function HistoryScreen({
               )}
               <button
                 type="button"
-                className="pulse-button"
+                className="pulse-button primary"
                 aria-haspopup="dialog"
                 onClick={() => {
                   setCreatedExerciseName(null);

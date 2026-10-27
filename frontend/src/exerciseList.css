@@ -25,6 +25,8 @@
 
 .training-exercise-actions > button {
   flex-shrink: 0;
+  width: auto;
+  margin: 0;
 }
 .exercise-list-search {
   display: flex;

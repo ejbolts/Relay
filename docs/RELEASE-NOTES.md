@@ -11,6 +11,7 @@ _Relay was called Gym Logger before version 1.0._
 ![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
 
 _Add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit for each one when creating a strength exercise. This phone-sized form uses isolated sample data._
+
 ![Training's Exercises tab with Add exercise above the library and two newly created custom exercises](screenshots/releases/1.1.0-library-add-exercise.png)
 
 _Add exercise is available from Sessions and Exercises without starting a workout. The library updates after saving; this view uses isolated sample data._
