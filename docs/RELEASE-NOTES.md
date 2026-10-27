@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Your training split and friends
 
+![The notification bell gains an unread badge before the inbox opens, then displays a sample friend request](screenshots/releases/1.1.0-live-notification-badge.gif)
+
+_A new request updates the closed bell immediately. Opening the inbox shows the request and syncs its read state to the account's other open windows. Captured directly as a looping GIF with isolated sample accounts._
+
 ![Your split editor with templates, a named Full body A / B cycle, rest days, start date and a seven-day preview using synthetic training data](screenshots/releases/1.1.0-training-split.png)
 
 _Choose a template or build your own repeating cycle. Custom workout types and rest days stay in the order you choose._
@@ -84,6 +88,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _Five sessions per page keep profiles compact. Use the arrows or page picker to browse older cardio._
 
+- The notification bell updates immediately for friend requests, acceptances, workout reactions, comments and replies while connected. Reading notifications syncs across your open windows and devices. Reconnecting catches up automatically; 30-second polling remains as a fallback.
 - **Your split:** open **Settings > Training > Your split** or **Edit split** on Home. Choose **Upper / Lower**, **Push / Pull / Legs**, **FBEOD** (full body every other day), **Cardio**, or start custom.
 - **Your own cycle:** name it, choose a start date, add, remove and reorder workout or rest days, create custom types such as **Full body A** and **Full body B**, and preview upcoming weeks. Each step is one calendar day. The cycle repeats across weeks; logging or skipping a workout does not move the schedule.
 - **Up next:** Home and the Start menu follow the saved split. Custom types reuse only their own previous sessions, and starting without a previous session keeps the chosen type. Rest days appear as rest; you can still start a workout manually. The visible app refreshes its schedule after local midnight.

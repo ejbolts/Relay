@@ -1056,6 +1056,7 @@ def add_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
         )
         try:
             db.commit()
+            hub.notifications_changed(member.id)
         except IntegrityError:
             # A repeated tap, or their request, raced this one; that row stands.
             db.rollback()
@@ -1063,6 +1064,7 @@ def add_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
     elif friendship.status == PENDING and friendship.requested_by_id != user.id:
         accept_request(friendship)
         db.commit()
+        hub.notifications_changed(user.id, member.id)
     return FriendRequestRead(status=friend_status(friendship, user.id))
 
 
@@ -1078,6 +1080,7 @@ def accept_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
     if friendship.status == PENDING:
         accept_request(friendship)
         db.commit()
+        hub.notifications_changed(user.id, user_id)
     return FriendRequestRead(status="friends")
 
 
@@ -1086,6 +1089,7 @@ def remove_friend(user_id: str, user: CurrentUser, db: Db) -> None:
     """Remove a friend, cancel your request or decline theirs. Always allowed."""
     db.execute(delete(Friendship).where(*friendship_key(user.id, user_id)))
     db.commit()
+    hub.notifications_changed(user.id, user_id)
 
 
 def friendship_key(user_id: str, other_id: str):
@@ -1246,6 +1250,7 @@ def react_to_workout(
         reaction.notification_seen = False
     try:
         db.commit()
+        hub.notifications_changed(workout.user_id)
     except IntegrityError:
         # Another tab reacted first; that reaction stands.
         db.rollback()
@@ -1261,6 +1266,7 @@ def remove_workout_reaction(workout_id: str, user: CurrentUser, db: Db) -> Worko
         )
     )
     db.commit()
+    hub.notifications_changed(workout.user_id)
     return reaction_summaries(db, user.id, [workout.id])[workout.id]
 
 
@@ -1514,7 +1520,10 @@ def mark_notifications_read(payload: NotificationsSeen, user: CurrentUser, db: D
             friendship = friendships.get(item.id)
             if notice_matches(friendship, user.id, item.kind, item.since):
                 friendship.notification_seen = True
+    changed = any(db.is_modified(row) for row in db.dirty)
     db.commit()
+    if changed:
+        hub.notifications_changed(user.id)
 
 
 class NotificationDismiss(BaseModel):
@@ -1536,6 +1545,7 @@ def dismiss_reaction_notification(
     ):
         reaction.notification_seen = True
         db.commit()
+        hub.notifications_changed(user.id)
 
 
 @sharing_router.post("/notifications/{user_id}/dismiss", status_code=204)
@@ -1547,6 +1557,7 @@ def dismiss_friend_notification(
     if notice_matches(friendship, user.id, "accepted", payload.since):
         friendship.notification_seen = True
         db.commit()
+        hub.notifications_changed(user.id)
 
 
 @sharing_router.post("/blocks/{user_id}", status_code=204)
@@ -1583,6 +1594,7 @@ def block_member(user_id: str, user: CurrentUser, db: Db) -> None:
         )
     )
     db.commit()
+    hub.notifications_changed(user.id, user_id)
 
 
 @sharing_router.delete("/blocks/{user_id}", status_code=204)
@@ -1593,3 +1605,4 @@ def unblock_member(user_id: str, user: CurrentUser, db: Db) -> None:
         )
     )
     db.commit()
+    hub.notifications_changed(user.id, user_id)

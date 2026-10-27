@@ -4,6 +4,7 @@
   "title": "Your training split and friends",
   "summary": "Plan your own repeating training split, see friends’ live workouts and online status, and discover public accounts. Browse exercises by muscle credits, save partial-set choices by week, and log with clearer set colours, rest alerts and equipment-photo controls. Profiles now show cardio in pages of five.",
   "changes": [
+    "The notification bell updates immediately for friend requests, acceptances, workout reactions, comments and replies while connected. Reading notifications syncs across your open windows and devices. Reconnecting catches up automatically, and 30-second polling remains as a fallback.",
     "Open Your split in Settings > Training, or choose Edit split on Home. Pick an Upper / Lower, Push / Pull / Legs, FBEOD or Cardio template, or start custom.",
     "Name your split, choose its start date, add and reorder workout or rest days, and preview upcoming weeks. Each step is one calendar day; cycles continue across weeks, so full body every other day stays every other day.",
     "Use built-in workout types or create your own, including Full body A and Full body B. Home and the Start menu keep each custom type separate when suggesting exercises from its previous session. Starting without a previous session still selects the scheduled workout type.",
@@ -39,6 +40,14 @@
     "alt": "Your split editor with templates, Full body A and Full body B workout days, rest days and the upcoming week, using synthetic sample data."
   },
   "highlights": [
+    {
+      "title": "Notifications arrive while you browse",
+      "description": "The bell updates as requests, reactions, comments and replies arrive. Reading them syncs across your open windows, and reconnecting catches up automatically.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/725207c4cc88e9cf3d4e21e648aabb80a44b3768/docs/screenshots/releases/1.1.0-live-notification-badge.gif",
+        "alt": "The unread badge appears on the closed notification bell, then the inbox opens to a friend request from a synthetic sample account."
+      }
+    },
     {
       "title": "Your training split",
       "description": "Build a training split around your own workouts. Start with Upper / Lower, Push / Pull / Legs, full body every other day or Cardio, then edit the repeating cycle and rest days. Home follows your saved schedule.",

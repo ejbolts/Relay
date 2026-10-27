@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { onNotificationsChanged } from './notificationEvents';
 import {
   activeAgo,
   byLiveActivity,
@@ -216,4 +217,32 @@ it('connects only while signed in and closes on sign-out', async () => {
   await act(async () => socket.drop(1000));
   await act(async () => vi.advanceTimersByTime(60_000));
   expect(FakeSocket.instances).toHaveLength(1);
+});
+
+it('invalidates notifications on connect, recipient events and reconnect, ignoring an old account socket', async () => {
+  const changed = vi.fn();
+  const stop = onNotificationsChanged(changed);
+  try {
+    await act(async () => root.render(<Connection userId="first-account" />));
+    const first = FakeSocket.instances[0];
+    await act(async () => first.open());
+    expect(changed).toHaveBeenCalledTimes(1);
+    first.onmessage?.({ data: JSON.stringify({ type: 'notifications' }) });
+    expect(changed).toHaveBeenCalledTimes(2);
+    await act(async () => first.drop());
+    await act(async () => vi.advanceTimersByTime(1_000));
+    const retry = FakeSocket.instances[1];
+    await act(async () => retry.open());
+    expect(changed).toHaveBeenCalledTimes(3);
+    // A delayed callback from a replaced or signed-out socket must not refresh another account.
+    first.onmessage?.({ data: JSON.stringify({ type: 'notifications' }) });
+    await act(async () => root.render(<Connection userId="second-account" />));
+    retry.onmessage?.({ data: JSON.stringify({ type: 'notifications' }) });
+    retry.open();
+    expect(changed).toHaveBeenCalledTimes(3);
+    await act(async () => FakeSocket.instances[2].open());
+    expect(changed).toHaveBeenCalledTimes(4);
+  } finally {
+    stop();
+  }
 });
