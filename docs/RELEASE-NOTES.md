@@ -8,7 +8,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
-![Opening a preloaded profile, viewing the people behind a workout?s reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
+![Opening a preloaded profile, viewing the people behind a workout's reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
 
 _Your profile loads while Home is open. Tap a reaction count for names and emojis, then swipe down to close. This recording uses isolated sample accounts._
 
@@ -45,7 +45,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.
-- Tap a workout?s reaction count to see who reacted and each person?s emoji in a bottom sheet. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
+- Tap a workout's reaction count to see who reacted and each person's emoji in a bottom sheet. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
 - Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
 - Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.

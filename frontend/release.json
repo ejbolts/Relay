@@ -23,6 +23,14 @@
   },
   "highlights": [
     {
+      "title": "Profiles ready sooner, people behind reactions",
+      "description": "Your profile loads quietly after sign-in. Tap a workout's reaction count to see names and emojis in a bottom sheet; swipe down to close it.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a897e1eaf38063ac1bd60d6990ba7e8e718b5851/docs/screenshots/releases/1.1.0-profile-reactions.gif",
+        "alt": "Opening a profile already loaded while Home was active, tapping a workout reaction count to view three sample people and their emojis, then swiping the bottom sheet down to close it."
+      }
+    },
+    {
       "title": "Suggested friends in Find",
       "description": "Find automatically lists public accounts you are not connected to, eight per page, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate.",
       "image": {
