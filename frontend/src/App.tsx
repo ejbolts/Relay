@@ -4183,9 +4183,9 @@ function MovementCard({
     setDragTargetSetKey(null);
   }
 
-  /** New and unticked sets are edited in place; logged and suggested sets open on tap. */
+  /** Incomplete cardio sets stay editable, including suggestions from the last session. */
   function isSetOpen(item: DraftSet) {
-    return openOverrides[item.key] ?? (!item.completed && !item.fromPrevious);
+    return openOverrides[item.key] ?? (!item.completed && (cardio || !item.fromPrevious));
   }
 
   /** Pins a set open or closed; `null` returns it to the default for its state. */
