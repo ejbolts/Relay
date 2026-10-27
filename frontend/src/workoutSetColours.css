@@ -1,4 +1,4 @@
-/* Set type controls the row; RPE controls only the recorded effort number. */
+/* Set type controls strength rows; cardio uses completion; RPE colours only effort. */
 :root {
   --rpe-low: #8ed4a1;
   --rpe-6-5: #abd68b;
@@ -44,6 +44,12 @@
 .logger-screen .set-grid .set-details.previous-set-details[data-set-type] {
   border-color: rgb(var(--set-type-rgb) / 34%);
   background: rgb(var(--set-type-rgb) / 12%);
+}
+
+/* Cardio stays on the editing surface until the set is completed. */
+.logger-screen .set-grid-cardio .set-details[data-set-type]:not(.completed) {
+  border-color: rgb(57 135 229 / 28%);
+  background: var(--p-accent-soft);
 }
 
 .logger-screen [data-rpe='5'],
