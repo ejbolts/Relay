@@ -205,3 +205,29 @@ it('requires every added row to have a target and keeps mixed credits after a sa
   expect(control('Target muscle 1').value).toBe('Pectorals');
   expect(control('Credit per working set 2').value).toBe('0.5');
 });
+
+it('tracks the visual viewport when opened outside the workout picker', async () => {
+  const viewport = Object.assign(new EventTarget(), { height: 420, offsetTop: 30 });
+  vi.stubGlobal('visualViewport', viewport);
+  await act(async () =>
+    root.render(
+      <CreateExerciseDialog
+        exercises={[exercise]}
+        categoryLabels={categoryLabels}
+        initialName=""
+        initialCategory=""
+        onCreate={onCreate}
+        onCreated={onCreated}
+        onClose={vi.fn()}
+      />,
+    ),
+  );
+  await act(async () => viewport.dispatchEvent(new Event('resize')));
+  const dialog = document.querySelector('dialog')!;
+  expect(dialog.style.getPropertyValue('--create-exercise-viewport-height')).toBe('420px');
+  expect(dialog.style.getPropertyValue('--create-exercise-viewport-top')).toBe('30px');
+  viewport.height = 700;
+  viewport.offsetTop = 0;
+  await act(async () => window.dispatchEvent(new Event('resize')));
+  expect(dialog.style.getPropertyValue('--create-exercise-viewport-height')).toBe('700px');
+});

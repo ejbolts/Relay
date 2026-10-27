@@ -44,6 +44,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- **Add exercise** is available in Training's **Sessions** and **Exercises** tabs, so you can build your exercise library without starting a workout. Use the same form to save multiple target muscles and their individual set credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
 - Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.

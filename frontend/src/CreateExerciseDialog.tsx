@@ -19,8 +19,8 @@ export function CreateExerciseDialog({
   categoryLabels: Record<WorkoutCategory, string>;
   initialName: string;
   initialCategory: WorkoutCategory | '';
-  viewportHeight: number;
-  viewportTop: number;
+  viewportHeight?: number;
+  viewportTop?: number;
   onCreate: (input: ExerciseCreateInput) => Promise<Exercise>;
   onCreated: (exercise: Exercise) => void;
   onClose: () => void;
@@ -28,6 +28,10 @@ export function CreateExerciseDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const savingRef = useRef(false);
   const titleId = useId();
+  const [viewport, setViewport] = useState(() => ({
+    height: viewportHeight ?? window.visualViewport?.height ?? window.innerHeight,
+    top: viewportTop ?? window.visualViewport?.offsetTop ?? 0,
+  }));
   const [draft, setDraft] = useState<ExerciseCreationDraft>(() => ({
     name: initialName.slice(0, 160),
     category: initialCategory,
@@ -60,6 +64,24 @@ export function CreateExerciseDialog({
     };
   }, []);
 
+  useEffect(() => {
+    if (viewportHeight !== undefined) return;
+    const visualViewport = window.visualViewport;
+    const update = () =>
+      setViewport({
+        height: visualViewport?.height ?? window.innerHeight,
+        top: visualViewport?.offsetTop ?? 0,
+      });
+    window.addEventListener('resize', update);
+    visualViewport?.addEventListener('resize', update);
+    visualViewport?.addEventListener('scroll', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      visualViewport?.removeEventListener('resize', update);
+      visualViewport?.removeEventListener('scroll', update);
+    };
+  }, [viewportHeight]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (savingRef.current) return;
@@ -86,8 +108,8 @@ export function CreateExerciseDialog({
       aria-labelledby={titleId}
       style={
         {
-          '--create-exercise-viewport-height': `${viewportHeight}px`,
-          '--create-exercise-viewport-top': `${viewportTop}px`,
+          '--create-exercise-viewport-height': `${viewportHeight ?? viewport.height}px`,
+          '--create-exercise-viewport-top': `${viewportTop ?? viewport.top}px`,
         } as CSSProperties
       }
       onKeyDown={(event) => {

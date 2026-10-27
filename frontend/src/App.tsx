@@ -1703,6 +1703,7 @@ function AppContent() {
                 personalRecords={personalRecords}
                 onDataChange={refreshAfterMutation}
                 initialOpenId={historyOpenId}
+                onCreateExercise={createExercise}
                 section={historySection}
                 onSectionChange={(section) => setTab(section)}
                 onOpenSettings={openAllSettings}
@@ -8858,6 +8859,7 @@ function HistoryScreen({
   onDelete,
   personalRecords,
   onDataChange,
+  onCreateExercise,
   initialOpenId,
   section,
   onSectionChange,
@@ -8887,6 +8889,7 @@ function HistoryScreen({
   onDelete: (workout: TrackedWorkout) => void;
   personalRecords: PersonalRecord[];
   onDataChange: () => Promise<void>;
+  onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   initialOpenId: string | null;
   section: HistorySection;
   onSectionChange: (section: HistorySection) => void;
@@ -8908,6 +8911,8 @@ function HistoryScreen({
 }) {
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
+  const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
+  const [createdExerciseName, setCreatedExerciseName] = useState<string | null>(null);
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -9140,7 +9145,40 @@ function HistoryScreen({
               Cardio
             </button>
           </div>
+          {section !== 'cardio' && (
+            <div className="training-exercise-actions">
+              {createdExerciseName && (
+                <span role="status">{createdExerciseName} added to your library.</span>
+              )}
+              <button
+                type="button"
+                className="pulse-button"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCreatedExerciseName(null);
+                  setCreateExerciseOpen(true);
+                }}
+              >
+                <Icon name="plus" />
+                Add exercise
+              </button>
+            </div>
+          )}
         </>
+      )}
+      {createExerciseOpen && (
+        <CreateExerciseDialog
+          exercises={exercises}
+          categoryLabels={categoryNames}
+          initialName=""
+          initialCategory=""
+          onCreate={onCreateExercise}
+          onCreated={(exercise) => {
+            setCreateExerciseOpen(false);
+            setCreatedExerciseName(exercise.name);
+          }}
+          onClose={() => setCreateExerciseOpen(false)}
+        />
       )}
       {visitedSections.has('progress') && (
         <CachedTabPanel active={section === 'progress'}>

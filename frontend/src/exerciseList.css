@@ -7,6 +7,25 @@
 .exercise-list-library {
   margin-top: 0.75rem;
 }
+
+.training-exercise-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.training-exercise-actions > span {
+  min-width: 0;
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.training-exercise-actions > button {
+  flex-shrink: 0;
+}
 .exercise-list-search {
   display: flex;
   align-items: center;
