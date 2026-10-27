@@ -1,4 +1,4 @@
-import type { TrackedWorkout, WorkoutCategory, WorkoutSetInput } from './types';
+import type { MachineSetting, TrackedWorkout, WorkoutCategory, WorkoutSetInput } from './types';
 
 export const ACTIVE_WORKOUT_DRAFT_KEY = 'gym-video-logger.active-workout.v1';
 
@@ -18,6 +18,7 @@ export interface StoredDraftMovement {
   exerciseId: string;
   notes: string;
   machinePhotoIds: string[];
+  machineSettings?: MachineSetting[];
   supersetKey: string | null;
   isComplete?: boolean;
   sets: StoredDraftSet[];
@@ -82,6 +83,15 @@ function isStoredMovement(value: unknown): value is StoredDraftMovement {
     typeof value.notes === 'string' &&
     Array.isArray(value.machinePhotoIds) &&
     value.machinePhotoIds.every((id) => typeof id === 'string') &&
+    (value.machineSettings === undefined ||
+      (Array.isArray(value.machineSettings) &&
+        value.machineSettings.length <= 20 &&
+        value.machineSettings.every(
+          (setting) =>
+            isRecord(setting) &&
+            typeof setting.name === 'string' &&
+            typeof setting.value === 'string',
+        ))) &&
     (value.supersetKey === null || typeof value.supersetKey === 'string') &&
     (value.isComplete === undefined || typeof value.isComplete === 'boolean') &&
     Array.isArray(value.sets) &&

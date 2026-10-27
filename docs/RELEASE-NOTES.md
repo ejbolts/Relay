@@ -4,9 +4,13 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.1.0
 
-26 October 2026
+27 October 2026
 
 ### Find friends and improve your workouts
+
+![Compact custom machine settings with Seat 5 and Backrest B above the sample workout sets](screenshots/releases/1.1.0-machine-settings.png)
+
+_Type any setting name and value, add or remove rows, then Save. This phone-sized view uses isolated sample data._
 
 ![Opening a preloaded profile, viewing the people behind a workout's reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
 
@@ -44,6 +48,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Each strength exercise has a compact Settings section. Type any setting name and value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.
 - Tap a workout's reaction count to instantly open a bottom sheet showing who reacted and each person's emoji. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.

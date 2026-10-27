@@ -17,6 +17,7 @@ import {
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
@@ -51,6 +52,7 @@ import type {
   ExerciseProgress,
   MachinePhoto,
   MachinePhotoUsage,
+  MachineSetting,
   PersonalRecord,
   SharedProfileSummary,
   TrackedSet,
@@ -2408,6 +2410,7 @@ function WorkoutLogger({
           notes: movement.notes ?? '',
           machinePhotoIds: movement.machine_photos.map((photo) => photo.id),
           machinePhotosInitialized: true,
+          machineSettings: movement.machine_settings ?? [],
           supersetKey: movement.superset_group_id,
           isComplete: false,
           sets: movement.sets.map((item) => ({
@@ -2553,6 +2556,7 @@ function WorkoutLogger({
           exerciseId: movement.exercise.id,
           notes: movement.notes,
           machinePhotoIds: movement.machinePhotoIds,
+          machineSettings: movement.machineSettings,
           supersetKey: movement.supersetKey,
           isComplete: movement.isComplete,
           sets: movement.sets,
@@ -3141,6 +3145,7 @@ function WorkoutLogger({
           exercise_id: movement.exercise.id,
           notes: movement.notes.trim() || null,
           machine_photo_ids: movement.machinePhotoIds,
+          machine_settings: movement.machineSettings ?? [],
           sets: movement.sets.map((item) => ({
             reps: item.reps,
             weight_kg: item.weight_kg,
@@ -3601,6 +3606,13 @@ function WorkoutLogger({
                     item.key === movement.key
                       ? { ...item, machinePhotoIds, machinePhotosInitialized: true }
                       : item,
+                  ),
+                )
+              }
+              onMachineSettings={(machineSettings) =>
+                setMovements((current) =>
+                  current.map((item) =>
+                    item.key === movement.key ? { ...item, machineSettings } : item,
                   ),
                 )
               }
@@ -4075,6 +4087,7 @@ function MovementCard({
   onSwitch,
   onRemove,
   onMachinePhotos,
+  onMachineSettings,
   prBadges,
   supersetLabel,
   onMoveUp,
@@ -4098,6 +4111,7 @@ function MovementCard({
   onSwitch: () => void;
   onRemove: () => void;
   onMachinePhotos: (photoIds: string[]) => void;
+  onMachineSettings: (settings: MachineSetting[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
   onMoveUp: () => void;
@@ -4961,6 +4975,15 @@ function MovementCard({
             <p className="movement-history-empty">No previous entries for this exercise yet.</p>
           )}
         </section>
+      )}
+
+      {!cardio && (
+        <MachineSettingsEditor
+          key={movement.exercise.id}
+          exerciseId={movement.exercise.id}
+          initialSettings={movement.machineSettings}
+          onChange={onMachineSettings}
+        />
       )}
 
       {!cardio && (
@@ -9547,6 +9570,7 @@ function HistoryWorkoutCard({
                       )}
                   </>
                 )}
+                <MachineSettingsSummary settings={movement.machine_settings} />
                 <HistorySetFlow
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}

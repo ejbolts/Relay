@@ -62,6 +62,19 @@ const draft: ActiveWorkoutDraft = {
 };
 
 describe('active workout draft persistence', () => {
+  it('preserves custom machine settings and rejects malformed settings', () => {
+    const storage = new MemoryStorage();
+    const withSettings = structuredClone(draft);
+    withSettings.movements[0].machineSettings = [{ name: 'Pad', value: 'B' }];
+    writeActiveWorkoutDraft(withSettings, storage);
+    expect(readActiveWorkoutDraft(storage)?.movements[0].machineSettings).toEqual([
+      { name: 'Pad', value: 'B' },
+    ]);
+    const malformed = JSON.parse(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)!);
+    malformed.movements[0].machineSettings = [{ name: 'Pad', value: 5 }];
+    storage.setItem(ACTIVE_WORKOUT_DRAFT_KEY, JSON.stringify(malformed));
+    expect(readActiveWorkoutDraft(storage)).toBeNull();
+  });
   it('restores the explicit custom type and rejects a malformed type identifier', () => {
     const storage = new MemoryStorage();
     const custom = {

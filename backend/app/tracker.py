@@ -542,6 +542,7 @@ def replace_workout_contents(
             exercise=exercise,
             order_index=movement_index,
             notes=movement_payload.notes,
+            machine_settings=[item.model_dump() for item in movement_payload.machine_settings],
             superset_group=groups.get(movement_payload.superset_key or ""),
         )
         if movement_payload.machine_photo_ids:

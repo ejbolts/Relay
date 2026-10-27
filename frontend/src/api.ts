@@ -31,6 +31,7 @@ import type {
   LoginInput,
   MachinePhoto,
   MachinePhotoUsage,
+  MachineSetting,
   MuscleVolume,
   PersonalRecord,
   ProfileUpdateInput,
@@ -420,6 +421,14 @@ export const api = {
     }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
+  getMachineSettings: (exerciseId: string) =>
+    request<{ settings: MachineSetting[] }>(`/api/exercises/${exerciseId}/machine-settings`),
+  saveMachineSettings: (exerciseId: string, settings: MachineSetting[]) =>
+    request<{ settings: MachineSetting[] }>(`/api/exercises/${exerciseId}/machine-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings }),
+    }),
   listAllMachinePhotos: () => request<MachinePhotoUsage[]>('/api/machine-photos'),
   machinePhotoWorkouts: (photoId: string) =>
     request<TrackedWorkout[]>(`/api/machine-photos/${photoId}/workouts`),
