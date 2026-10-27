@@ -31,6 +31,8 @@ vi.mock('./api', async (importOriginal) => {
       listPersonalRecords: vi.fn(),
       getWorkoutTypeColors: vi.fn(),
       listMachinePhotos: vi.fn(),
+      getMachineSettings: vi.fn(),
+      saveMachineSettings: vi.fn(),
       lastUsedMachinePhotos: vi.fn(),
       uploadMachinePhoto: vi.fn(),
       listAllMachinePhotos: vi.fn(),
@@ -214,6 +216,10 @@ beforeEach(() => {
     other: '#94a3b8',
   });
   vi.mocked(api.listMachinePhotos).mockResolvedValue([usage(homeGym, 2, '2025-10-12')]);
+  vi.mocked(api.getMachineSettings).mockResolvedValue({ settings: [] });
+  vi.mocked(api.saveMachineSettings).mockImplementation(async (_exerciseId, settings) => ({
+    settings,
+  }));
   vi.mocked(api.lastUsedMachinePhotos).mockResolvedValue([]);
   vi.mocked(api.listAllMachinePhotos).mockResolvedValue([
     usage(travelGym, 1, '2026-10-14'),
@@ -283,6 +289,65 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(card.querySelector('.machine-last-used')?.getAttribute('title')).toBe(
       'Last used 12 Oct 2025',
     );
+  });
+
+  it('keeps settings hidden until selected from the exercise menu, without losing saved defaults', async () => {
+    const saved = [{ name: 'Seat', value: '5' }];
+    vi.mocked(api.getMachineSettings).mockResolvedValue({ settings: saved });
+    await act(async () => root.render(<App />));
+    const card = container.querySelector<HTMLElement>('.movement-card')!;
+    const panel = card.querySelector<HTMLElement>('.machine-settings')!;
+    const menu = card.querySelector<HTMLDetailsElement>('.movement-overflow')!;
+    const toggle = button('Settings', menu);
+    expect(panel.hidden).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-controls')).toBe(panel.id);
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual(saved);
+
+    menu.open = true;
+    await click(toggle);
+    expect(menu.open).toBe(false);
+    expect(panel.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.querySelector<HTMLInputElement>('input[aria-label="Seat value"]')?.value).toBe(
+      '5',
+    );
+
+    await type(panel.querySelector<HTMLInputElement>('input[aria-label="Seat value"]')!, '6');
+    menu.open = true;
+    await click(toggle);
+    expect(panel.hidden).toBe(true);
+    menu.open = true;
+    await click(toggle);
+    expect(panel.querySelector<HTMLInputElement>('input[aria-label="Seat value"]')?.value).toBe(
+      '6',
+    );
+    await click(button('Save', panel));
+    expect(api.saveMachineSettings).toHaveBeenCalledWith(legPress.id, [
+      { name: 'Seat', value: '6' },
+    ]);
+    expect(api.getMachineSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens settings from a collapsed exercise and keeps them hidden for other exercises', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements.push({
+      ...draft.movements[0],
+      key: 'second-movement',
+      machineSettings: [],
+    });
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    const cards = container.querySelectorAll<HTMLElement>('.movement-card');
+    const first = cards[0];
+    await click(first.querySelector<HTMLButtonElement>('.movement-expand-toggle')!);
+    expect(first.classList.contains('is-collapsed')).toBe(true);
+    const menu = first.querySelector<HTMLDetailsElement>('.movement-overflow')!;
+    menu.open = true;
+    await click(button('Settings', menu));
+    expect(first.classList.contains('is-collapsed')).toBe(false);
+    expect(first.querySelector<HTMLElement>('.machine-settings')?.hidden).toBe(false);
+    expect(cards[1].querySelector<HTMLElement>('.machine-settings')?.hidden).toBe(true);
   });
 
   it('requires a machine name, then uploads the photo and pins it to every set', async () => {

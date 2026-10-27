@@ -10,6 +10,7 @@ import {
   useContext,
   startTransition,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -4133,6 +4134,9 @@ function MovementCard({
     !cardio && history[0] ? compactSetSummary(history[0].sets, weightUnit) : '';
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsExerciseId, setSettingsExerciseId] = useState<string | null>(null);
+  const settingsOpen = settingsExerciseId === movement.exercise.id;
+  const settingsPanelId = useId();
   const [openSetActionsKey, setOpenSetActionsKey] = useState<string | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
@@ -4881,6 +4885,24 @@ function MovementCard({
                 </span>
                 {historyOpen ? 'Hide Recent History' : 'Recent History'}
               </button>
+              {!cardio && (
+                <button
+                  type="button"
+                  aria-expanded={settingsOpen}
+                  aria-controls={settingsPanelId}
+                  onClick={() => {
+                    setSettingsExerciseId(settingsOpen ? null : movement.exercise.id);
+                    if (!settingsOpen) setExpanded(true);
+                    closeMovementMenu();
+                    movementMenuRef.current?.querySelector('summary')?.focus();
+                  }}
+                >
+                  <span aria-hidden="true">
+                    <Icon name="settings" />
+                  </span>
+                  {settingsOpen ? 'Hide Settings' : 'Settings'}
+                </button>
+              )}
               <button
                 type="button"
                 className={supersetLabel ? 'active' : ''}
@@ -4981,6 +5003,8 @@ function MovementCard({
       {!cardio && (
         <MachineSettingsEditor
           key={movement.exercise.id}
+          id={settingsPanelId}
+          hidden={!settingsOpen}
           exerciseId={movement.exercise.id}
           initialSettings={movement.machineSettings}
           onChange={onMachineSettings}

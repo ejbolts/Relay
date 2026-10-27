@@ -4,6 +4,9 @@
   border: 1px solid var(--p-line-strong);
   border-radius: 14px;
 }
+.machine-settings[hidden] {
+  display: none;
+}
 .machine-settings h3 {
   margin: 0 0 0.625rem;
   color: var(--p-ink);

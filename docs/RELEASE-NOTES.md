@@ -8,9 +8,9 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
-![Compact custom machine settings with Seat 5 and Backrest 2 above the sample workout sets](screenshots/releases/1.1.0-machine-settings-numeric.png)
+![Exercise options menu with Settings while the machine settings panel stays hidden](screenshots/releases/1.1.0-machine-settings-menu.png)
 
-_Type any setting name and a numeric value, add or remove rows, then Save. The inset panel has even spacing and matching input and button heights. This phone-sized view uses isolated sample data._
+_Choose **Settings** in an exercise's options menu to open its editor. The panel stays hidden until you choose it; **Hide Settings** folds it away without discarding edits. This phone-sized view uses isolated sample data._
 
 ![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
 
@@ -56,7 +56,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- Each strength exercise has a compact Settings section. Type any setting name and a numeric value, such as Seat and 5, add or remove rows, then Save. Settings are private to your account, carry into the next workout for that exercise, and stay recorded with the session without changing older workouts.
+- Machine settings are hidden by default. Open a strength exercise's options menu and choose Settings to show the compact editor, or Hide Settings to fold it away. Type any setting name and a numeric value, add or remove rows, then Save. Saved settings carry into the next workout for that exercise and stay recorded with each session without changing older workouts.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.

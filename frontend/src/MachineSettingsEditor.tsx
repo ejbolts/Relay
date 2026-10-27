@@ -12,10 +12,14 @@ const row = (setting: MachineSetting = { name: '', value: '' }): Row => ({
 const rowsFor = (settings: MachineSetting[]) => (settings.length ? settings.map(row) : [row()]);
 
 export function MachineSettingsEditor({
+  id,
+  hidden = false,
   exerciseId,
   initialSettings,
   onChange,
 }: {
+  id?: string;
+  hidden?: boolean;
   exerciseId: string;
   initialSettings?: MachineSetting[];
   onChange: (settings: MachineSetting[]) => void;
@@ -122,7 +126,7 @@ export function MachineSettingsEditor({
   }
 
   return (
-    <section className="machine-settings" aria-label="Machine settings">
+    <section id={id} hidden={hidden} className="machine-settings" aria-label="Machine settings">
       <h3>Settings</h3>
       {loading ? (
         <p role="status">Loading settings…</p>
