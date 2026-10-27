@@ -350,6 +350,44 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(cards[1].querySelector<HTMLElement>('.machine-settings')?.hidden).toBe(true);
   });
 
+  it('shows saved settings in the muscle credits popup and opens their editor', async () => {
+    vi.mocked(api.getMachineSettings).mockResolvedValue({
+      settings: [
+        { name: 'Seat', value: '5' },
+        { name: 'Backrest', value: '2' },
+      ],
+    });
+    await act(async () => root.render(<App />));
+    const panel = container.querySelector<HTMLElement>('.machine-settings')!;
+    expect(panel.hidden).toBe(true);
+    await click(button(`Muscle set credits for ${legPress.name}`));
+    const dialog = document.querySelector<HTMLDialogElement>('.exercise-muscle-dialog')!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).not.toContain('For each completed working set');
+    expect(dialog.textContent).not.toContain('These are estimates');
+    expect(dialog.textContent).not.toContain('Each listed muscle');
+    expect(dialog.querySelector('dl')?.textContent).toContain('Seat5');
+    expect(dialog.querySelector('dl')?.textContent).toContain('Backrest2');
+    await click(button('Edit machine settings', dialog));
+    expect(document.querySelector('.exercise-muscle-dialog')).toBeNull();
+    expect(panel.hidden).toBe(false);
+    expect(panel.querySelector<HTMLInputElement>('input[aria-label="Seat value"]')?.value).toBe(
+      '5',
+    );
+  });
+
+  it('offers Add in the muscle credits popup when no machine settings are saved', async () => {
+    await act(async () => root.render(<App />));
+    await click(button(`Muscle set credits for ${legPress.name}`));
+    const dialog = document.querySelector<HTMLDialogElement>('.exercise-muscle-dialog')!;
+    await click(button('Add machine settings', dialog));
+    expect(document.querySelector('.exercise-muscle-dialog')).toBeNull();
+    expect(container.querySelector<HTMLElement>('.machine-settings')?.hidden).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('.machine-settings input')?.placeholder).toBe(
+      'Seat',
+    );
+  });
+
   it('requires a machine name, then uploads the photo and pins it to every set', async () => {
     const created = photo('new-cybex', 'Travel gym Cybex press');
     vi.mocked(api.uploadMachinePhoto).mockResolvedValue(created);

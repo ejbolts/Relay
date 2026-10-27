@@ -1,10 +1,10 @@
 {
   "version": "1.1.0",
-  "date": "2026-10-27",
+  "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
   "summary": "Save custom machine settings, build your exercise library with individual muscle credits, discover public profiles, and see who reacted to workouts.",
   "changes": [
-    "Machine settings are hidden by default. Open a strength exercise's options menu and choose Settings to show the compact editor, or Hide Settings to fold it away. Type any setting name and a numeric value, add or remove rows, then Save. Saved settings carry into the next workout for that exercise and stay recorded with each session without changing older workouts.",
+    "Machine settings are hidden by default. Open a strength exercise's options menu and choose Settings to show the compact editor, or Hide Settings to fold it away. Type any setting name and a numeric value, add or remove rows, then Save. Saved settings carry into the next workout for that exercise and stay recorded with each session without changing older workouts. While logging, the muscle set credits popup shows saved machine settings with an Edit or Add shortcut. Its three explanatory paragraphs have been removed.",
     "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
@@ -21,16 +21,16 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/9f546e2fc69085ea402bb9acb3eaaacac5763053/docs/screenshots/releases/1.1.0-machine-settings-menu.png",
-    "alt": "Exercise options menu with Settings below Recent History; the custom machine settings panel stays hidden until selected. Isolated sample workout."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/eb020073f2ba78b684c92d41249b1637f32d401c/docs/screenshots/releases/1.1.0-muscle-credits-settings.png",
+    "alt": "Compact muscle set credits popup for Single Leg Press with Direct work and Partial credit lists, saved Seat 5 and Backrest 2 values, and Edit. Isolated sample data."
   },
   "highlights": [
     {
       "title": "Your machine, your settings",
-      "description": "Open an exercise's options menu and choose Settings to show its editor. Add names and numeric values, remove rows, then Save. Settings stay hidden until you choose to open them.",
+      "description": "Settings stay hidden until opened from the exercise options menu. The muscle set credits popup also shows your saved values, with Edit or Add opening the numeric editor.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/9f546e2fc69085ea402bb9acb3eaaacac5763053/docs/screenshots/releases/1.1.0-machine-settings-menu.png",
-        "alt": "Exercise options menu with Settings below Recent History; the custom machine settings panel stays hidden until selected. Isolated sample workout."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/eb020073f2ba78b684c92d41249b1637f32d401c/docs/screenshots/releases/1.1.0-muscle-credits-settings.png",
+        "alt": "Compact muscle set credits popup for Single Leg Press with Direct work and Partial credit lists, saved Seat 5 and Backrest 2 values, and Edit. Isolated sample data."
       }
     },
     {

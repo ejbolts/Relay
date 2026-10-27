@@ -4796,7 +4796,22 @@ function MovementCard({
             >
               {movement.exercise.name}
             </button>
-            <ExerciseMuscleHelp exercise={movement.exercise} />
+            <ExerciseMuscleHelp
+              exercise={movement.exercise}
+              settings={movement.machineSettings}
+              onSettings={
+                cardio
+                  ? undefined
+                  : () => {
+                      setSettingsExerciseId(movement.exercise.id);
+                      setExpanded(true);
+                      closeMovementMenu();
+                      requestAnimationFrame(() =>
+                        document.getElementById(settingsPanelId)?.querySelector('input')?.focus(),
+                      );
+                    }
+              }
+            />
             <button
               type="button"
               className="movement-expand-toggle"

@@ -1,9 +1,18 @@
 import { useRef, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
-import type { Exercise } from './types';
+import { MachineSettingsSummary } from './MachineSettingsEditor';
+import type { Exercise, MachineSetting } from './types';
 import './exerciseMuscleHelp.css';
 
-export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
+export function ExerciseMuscleHelp({
+  exercise,
+  settings,
+  onSettings,
+}: {
+  exercise: Exercise;
+  settings?: MachineSetting[];
+  onSettings?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const cardio = exercise.kind === 'cardio' || exercise.category === 'cardio';
@@ -48,9 +57,6 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
             <p>Cardio does not add strength sets to your weekly muscle totals.</p>
           ) : (
             <>
-              <p>
-                For each completed working set, these credits go towards your weekly muscle totals.
-              </p>
               {credits.length ? (
                 <div className="exercise-muscle-credit-groups">
                   {[
@@ -81,14 +87,28 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
               ) : (
                 <p>No muscle set credits are available for this exercise.</p>
               )}
-              <p className="exercise-muscle-note">
-                Each listed muscle receives its own credit. Warmups, unfinished sets and failed sets
-                with no completed reps do not count.
-              </p>
-              <p className="exercise-muscle-note">
-                These are estimates for tracking training, not exact measures of muscle growth.
-                Technique and equipment can change muscle involvement.
-              </p>
+              {(onSettings || !!settings?.length) && (
+                <section className="exercise-muscle-settings" aria-label="Machine settings">
+                  <div className="exercise-muscle-settings-heading">
+                    <h3>Settings</h3>
+                    {onSettings && (
+                      <button
+                        type="button"
+                        aria-label={
+                          settings?.length ? 'Edit machine settings' : 'Add machine settings'
+                        }
+                        onClick={() => {
+                          setOpen(false);
+                          onSettings();
+                        }}
+                      >
+                        {settings?.length ? 'Edit' : 'Add'}
+                      </button>
+                    )}
+                  </div>
+                  <MachineSettingsSummary settings={settings} />
+                </section>
+              )}
             </>
           )}
         </PopupDialog>
