@@ -2,10 +2,12 @@
   "version": "1.1.0",
   "date": "2026-10-26",
   "title": "Find friends and improve your workouts",
-  "summary": "Discover public profiles in Find, choose muscle credit for custom exercises, see RPE and set types in colour, get rest alerts while browsing Relay, and open release notes from Notifications.",
+  "summary": "Build your exercise library with individual muscle credits, discover public profiles, open your preloaded profile, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
   "changes": [
     "Add exercise is available in Training's Sessions and Exercises tabs, so you can build your exercise library without starting a workout. Use the same form to save multiple target muscles and their individual set credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
+    "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
+    "Tap a workout's reaction count to instantly open a bottom sheet showing the people who reacted and their emojis. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction remains a separate control.",
     "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",
     "Social > Find automatically suggests public accounts you are not already connected to, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile, or use Add friend separately. Your account, existing friends and requests, private and disabled accounts, and blocks in either direction are excluded. Search remains available above the suggestions.",
     "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
@@ -22,6 +24,14 @@
     "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."
   },
   "highlights": [
+    {
+      "title": "Profiles ready sooner, people behind reactions",
+      "description": "Your profile loads quietly after sign-in. Tap a workout's reaction count to instantly open names and emojis in a bottom sheet; swipe down to close it.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/8fe590caf8ad77fb26bd9c49b55d8c369536d74b/docs/screenshots/releases/1.1.0-profile-reactions.gif",
+        "alt": "Opening a profile already loaded while Home was active, tapping a workout reaction count to view three sample people and their emojis, then swiping the bottom sheet down to close it."
+      }
+    },
     {
       "title": "Suggested friends in Find",
       "description": "Find automatically lists public accounts you are not connected to, eight per page, with usernames beneath their names. Tap a name or avatar to open the profile; Add friend is separate.",

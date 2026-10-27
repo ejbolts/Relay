@@ -5,8 +5,9 @@ import { nextReaction, reactionEmoji, reactionSummary, REACTIONS } from './frien
 import { Icon } from './Icon';
 import type { WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
+import { WorkoutReactionPeople } from './WorkoutReactionPeople';
 
-type Panel = 'reactions' | 'comments';
+type Panel = 'reactions' | 'comments' | 'people';
 
 /** Separate reaction and comment buttons, shared by Home, Social and shared workouts. */
 export function WorkoutReactionControl({
@@ -38,6 +39,7 @@ export function WorkoutReactionControl({
   const container = useRef<HTMLDivElement>(null);
   const reactTrigger = useRef<HTMLButtonElement>(null);
   const commentTrigger = useRef<HTMLButtonElement>(null);
+  const peopleTrigger = useRef<HTMLButtonElement>(null);
   const closeRef = useRef(onOpenChange);
   closeRef.current = onOpenChange;
   const shown = open ? panel : null;
@@ -56,7 +58,7 @@ export function WorkoutReactionControl({
   }
 
   useEffect(() => {
-    if (!shown) return;
+    if (!shown || shown === 'people') return;
     if (shown === 'reactions') {
       const selectedButton =
         picker.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
@@ -116,17 +118,20 @@ export function WorkoutReactionControl({
   return (
     <div ref={container} className="workout-discussion">
       <div className="workout-discussion-actions">
-        {ownWorkout ? (
-          summary.total > 0 && (
-            <span
-              className="discussion-button discussion-reaction-summary"
-              role="img"
-              aria-label={reactionCount}
-            >
-              {reactionContent}
-            </span>
-          )
-        ) : (
+        {summary.total > 0 && (
+          <button
+            ref={peopleTrigger}
+            type="button"
+            className="discussion-button discussion-reaction-summary"
+            aria-label={`View ${reactionCount} on ${subject}`}
+            aria-haspopup="dialog"
+            aria-expanded={shown === 'people'}
+            onClick={() => show(shown === 'people' ? null : 'people')}
+          >
+            {reactionContent}
+          </button>
+        )}
+        {!ownWorkout && (
           <button
             ref={reactTrigger}
             type="button"
@@ -141,7 +146,7 @@ export function WorkoutReactionControl({
             aria-controls={`reactions-${workoutId}`}
             onClick={() => show(shown === 'reactions' ? null : 'reactions')}
           >
-            {reactionContent}
+            {yours ? <span aria-hidden="true">{reactionEmoji(yours)}</span> : <Icon name="react" />}
           </button>
         )}
         <button
@@ -157,6 +162,15 @@ export function WorkoutReactionControl({
           {commentLabel}
         </button>
       </div>
+      {shown === 'people' && (
+        <WorkoutReactionPeople
+          workoutId={workoutId}
+          onClose={() => {
+            show(null);
+            requestAnimationFrame(() => peopleTrigger.current?.focus());
+          }}
+        />
+      )}
       {shown === 'reactions' && (
         <div
           ref={picker}

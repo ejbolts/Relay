@@ -303,7 +303,8 @@ it('reacts from the picker, shows your reaction, and removes it when chosen agai
   expect(host.querySelector('.friend-react-picker')).toBeNull();
   expect(host.querySelector('.workout-comments')).toBeNull();
   const mine = button('Your reaction to Alex Preview’s Incline walk: Love. Change reaction');
-  expect(mine.textContent).toBe('❤️ 1');
+  expect(mine.textContent).toBe('❤️');
+  expect(host.querySelector('.discussion-reaction-summary')?.textContent).toBe('❤️ 1');
   expect(document.activeElement).toBe(mine);
 
   await act(async () => mine.click());

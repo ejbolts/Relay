@@ -1180,6 +1180,60 @@ def reactable_workout(db: Session, user: User, workout_id: str) -> TrainingWorko
     return workout
 
 
+class ReactionPerson(FeedFriend):
+    reaction: Reaction
+
+
+class ReactionPeoplePage(BaseModel):
+    items: list[ReactionPerson]
+    total: int
+    next_offset: int | None
+
+
+@sharing_router.get("/workouts/{workout_id}/reactions", response_model=ReactionPeoplePage)
+def workout_reaction_people(
+    workout_id: str, user: CurrentUser, db: Db, offset: int = Query(0, ge=0)
+) -> ReactionPeoplePage:
+    from .comments import discussion_workout
+
+    workout = discussion_workout(db, user, workout_id)
+    visible = (
+        WorkoutReaction.workout_id == workout.id,
+        User.disabled_at.is_(None),
+        User.id.not_in(blocked_member_ids(db, user.id)),
+    )
+    total = (
+        db.scalar(
+            select(func.count())
+            .select_from(WorkoutReaction)
+            .join(User, User.id == WorkoutReaction.user_id)
+            .where(*visible)
+        )
+        or 0
+    )
+    rows = db.execute(
+        select(WorkoutReaction, User)
+        .join(User, User.id == WorkoutReaction.user_id)
+        .where(*visible)
+        .order_by(WorkoutReaction.created_at.desc(), User.id)
+        .offset(offset)
+        .limit(30)
+    ).all()
+    return ReactionPeoplePage(
+        items=[
+            ReactionPerson(
+                id=member.id,
+                display_name=member.display_name,
+                profile_photo_url=photo_url(member),
+                reaction=reaction.reaction,
+            )
+            for reaction, member in rows
+        ],
+        total=total,
+        next_offset=offset + len(rows) if offset + len(rows) < total else None,
+    )
+
+
 @sharing_router.put("/workouts/{workout_id}/reaction", response_model=WorkoutReactions)
 def react_to_workout(
     workout_id: str, payload: ReactionChoice, user: CurrentUser, db: Db

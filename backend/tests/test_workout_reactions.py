@@ -27,6 +27,90 @@ def log_workout(test_client: TestClient, name: str, days_ago: int, notes: str | 
     return response.json()
 
 
+def test_reaction_people_show_current_reactions_to_owner_and_authorized_viewers(
+    client, other_client, third_client
+):
+    share(client, "public")
+    workout = log_workout(client, "Leg day", 0)
+    url = f"/api/sharing/workouts/{workout['id']}/reaction"
+    for member, reaction in ((other_client, "love"), (third_client, "fire")):
+        share(member, "public")
+        assert member.put(url, json={"reaction": reaction}).status_code == 200
+    other_client.put(url, json={"reaction": "strong"})
+    people_url = url + "s"
+    expected = {
+        other_client.user["id"]: "strong",
+        third_client.user["id"]: "fire",
+    }
+    for viewer in (client, other_client):
+        response = viewer.get(people_url)
+        assert response.status_code == 200
+        page = response.json()
+        assert page["total"] == 2 and page["next_offset"] is None
+        assert {person["id"]: person["reaction"] for person in page["items"]} == expected
+        assert set(page["items"][0]) == {"id", "display_name", "profile_photo_url", "reaction"}
+    other_client.delete(url)
+    assert client.get(people_url).json()["total"] == 1
+    assert client.get(people_url + "?offset=-1").status_code == 422
+
+
+def test_reaction_people_recheck_workout_access_and_allow_private_owners(client, other_client):
+    share(client, "followers")
+    workout = log_workout(client, "Private training", 0)
+    people_url = f"/api/sharing/workouts/{workout['id']}/reactions"
+    assert other_client.get(people_url).status_code == 403
+    befriend(client, other_client)
+    assert other_client.get(people_url).status_code == 200
+    share(client, "private")
+    assert other_client.get(people_url).status_code == 404
+    assert client.get(people_url).json() == {"items": [], "total": 0, "next_offset": None}
+    assert client.get("/api/sharing/workouts/missing/reactions").status_code == 404
+
+
+def test_reaction_people_hide_blocked_and_disabled_members(client, other_client, third_client):
+    from app.database import SessionLocal
+    from app.models import User, utc_now
+
+    share(client, "public")
+    workout = log_workout(client, "Training", 0)
+    url = f"/api/sharing/workouts/{workout['id']}/reaction"
+    for member in (other_client, third_client):
+        assert member.put(url, json={"reaction": "love"}).status_code == 200
+    with SessionLocal() as db:
+        db.get(User, third_client.user["id"]).disabled_at = utc_now()
+        db.commit()
+    assert client.get(url + "s").json()["total"] == 1
+    assert client.post(f"/api/sharing/blocks/{other_client.user['id']}").status_code == 204
+    assert client.get(url + "s").json() == {"items": [], "total": 0, "next_offset": None}
+
+
+def test_reaction_people_paginate_with_a_stable_order(client):
+    from conftest import make_user
+
+    from app.database import SessionLocal
+    from app.models import WorkoutReaction, utc_now
+
+    workout = log_workout(client, "Training", 0)
+    instant = utc_now()
+    ids = [make_user(f"reactor-{index}") for index in range(32)]
+    with SessionLocal() as db:
+        db.add_all(
+            [
+                WorkoutReaction(
+                    workout_id=workout["id"], user_id=member_id, reaction="clap", created_at=instant
+                )
+                for member_id in ids
+            ]
+        )
+        db.commit()
+    url = f"/api/sharing/workouts/{workout['id']}/reactions"
+    first = client.get(url).json()
+    assert first["total"] == 32 and first["next_offset"] == 30
+    second = client.get(url + "?offset=30").json()
+    assert second["next_offset"] is None
+    assert [person["id"] for person in first["items"] + second["items"]] == sorted(ids)
+
+
 @pytest.fixture
 def third_client(client):
     third = TestClient(client.app)

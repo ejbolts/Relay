@@ -791,6 +791,19 @@ export interface WorkoutReactions {
   comment_count?: number;
 }
 
+export interface WorkoutReactionPerson {
+  id: string;
+  display_name: string;
+  profile_photo_url: string | null;
+  reaction: WorkoutReactionKind;
+}
+
+export interface WorkoutReactionPage {
+  items: WorkoutReactionPerson[];
+  total: number;
+  next_offset: number | null;
+}
+
 export interface WorkoutComment {
   id: string;
   author: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'>;
