@@ -821,6 +821,41 @@ describe('finishing workouts in the background', () => {
     await act(async () => confirm.click());
   }
 
+  it.each([false, true])(
+    'keeps a 23:30–00:30 workout on its start day (restored after midnight: %s)',
+    async (restoreAfterMidnight) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const startedAt = new Date(2026, 9, 27, 23, 30).getTime();
+      const endedAt = new Date(2026, 9, 28, 0, 30).getTime();
+      vi.setSystemTime(startedAt);
+      const draft = storedDraft({
+        startedAt,
+        updatedAt: startedAt,
+        lastActiveAt: startedAt,
+        inactiveFinishAt: startedAt + 3 * 60 * 60 * 1000,
+        workoutDate: '2026-10-27',
+      });
+      writeActiveWorkoutDraft(draft);
+      vi.mocked(api.createWorkout).mockImplementationOnce(async (payload) => ({
+        ...payload,
+        id: 'overnight-workout',
+        movements: [],
+        is_sample: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      if (restoreAfterMidnight) vi.setSystemTime(endedAt);
+      await mount();
+      if (!restoreAfterMidnight) vi.setSystemTime(endedAt);
+      await confirmFinish();
+      expect(api.createWorkout).toHaveBeenCalledOnce();
+      expect(vi.mocked(api.createWorkout).mock.calls[0][0]).toMatchObject({
+        workout_date: '2026-10-27',
+        duration_minutes: 60,
+      });
+    },
+  );
+
   it('returns to Today before the server responds, preserves recovery, and does not interrupt later navigation', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);

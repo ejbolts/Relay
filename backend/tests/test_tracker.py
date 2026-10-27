@@ -4,6 +4,7 @@ import csv
 from datetime import date, timedelta
 from io import BytesIO, StringIO
 
+import pytest
 from PIL import Image
 from pillow_heif import from_pillow
 
@@ -413,25 +414,31 @@ def test_workout_sets_notes_rest_and_rpe_are_saved(client):
     }
 
 
-def test_previous_workout_times_can_be_edited_and_recalculate_duration(client):
+@pytest.mark.parametrize("end_time,duration", [("00:30", 60), ("00:45", 75)])
+def test_previous_workout_times_can_be_edited_and_recalculate_duration(client, end_time, duration):
     exercise = next(
         item
         for item in client.get("/api/exercises").json()
         if item["name"] == "Barbell Bench Press"
     )
     payload = workout_payload(exercise["id"])
+    payload["workout_date"] = "2026-10-27"
     created = client.post("/api/workouts", json=payload)
     assert created.status_code == 201
     assert created.json()["start_time"] is None
     assert created.json()["end_time"] is None
 
-    payload.update({"start_time": "23:30", "end_time": "00:45", "duration_minutes": 1})
+    payload.update({"start_time": "23:30", "end_time": end_time, "duration_minutes": 1})
     updated = client.put(f"/api/workouts/{created.json()['id']}", json=payload)
 
     assert updated.status_code == 200
     assert updated.json()["start_time"] == "23:30:00"
-    assert updated.json()["end_time"] == "00:45:00"
-    assert updated.json()["duration_minutes"] == 75
+    assert updated.json()["end_time"] == f"{end_time}:00"
+    assert updated.json()["duration_minutes"] == duration
+    assert updated.json()["workout_date"] == "2026-10-27"
+    calendar = client.get("/api/calendar?start=2026-10-27&end=2026-10-28").json()
+    assert len(calendar) == 1
+    assert calendar[0]["workout_date"] == "2026-10-27"
 
 
 def test_workout_start_and_end_times_must_be_provided_together(client):

@@ -2316,6 +2316,7 @@ function WorkoutLogger({
   const [name, setName] = useState(
     initialWorkout?.name ?? restoredDraft?.name ?? resumingWorkout?.name ?? '',
   );
+  // Keep the selected start day even when the workout finishes after midnight.
   const [workoutDate, setWorkoutDate] = useState(
     initialWorkout?.workout_date ??
       restoredDraft?.workoutDate ??
@@ -3493,15 +3494,15 @@ function WorkoutLogger({
                     aria-label="Workout duration minutes"
                   />
                 </label>
-                <small className="workout-timing-help">
-                  {initialWorkout
-                    ? hasCompleteTimeRange
+                {(!initialWorkout || hasCompleteTimeRange) && (
+                  <small className="workout-timing-help">
+                    {initialWorkout
                       ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
-                      : 'Add both times to calculate duration automatically, including workouts ending after midnight.'
-                    : resumedWorkoutId
-                      ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
-                      : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
-                </small>
+                      : resumedWorkoutId
+                        ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
+                        : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
+                  </small>
+                )}
               </fieldset>
             )}
           </div>
