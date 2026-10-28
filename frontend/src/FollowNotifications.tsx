@@ -95,6 +95,15 @@ export function FollowNotifications({ active }: { active: boolean }) {
   const [attempt, setAttempt] = useState(0);
   const [page, setPage] = useState(1);
   const list = useRef<HTMLUListElement>(null);
+  const bell = useRef<HTMLButtonElement>(null);
+  const restoreBellFocus = useRef(false);
+
+  useEffect(() => {
+    // Runs after the notes dialog has closed, so its own focus restoration cannot override this.
+    if (releaseOpen || !restoreBellFocus.current) return;
+    restoreBellFocus.current = false;
+    bell.current?.focus();
+  }, [releaseOpen]);
 
   useEffect(() => {
     if (!active) return;
@@ -167,6 +176,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
   return (
     <>
       <button
+        ref={bell}
         type="button"
         className="icon-button-pulse follow-notification-button"
         aria-label={`Notifications${count ? `, ${count} unread` : ''}`}
@@ -346,8 +356,8 @@ export function FollowNotifications({ active }: { active: boolean }) {
           release={announcement.release}
           history={announcement.history}
           onClose={() => {
+            restoreBellFocus.current = true;
             setReleaseOpen(false);
-            setOpen(true);
           }}
         />
       )}
