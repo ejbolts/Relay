@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Split planner showing a saved cycle with workouts, consecutive rest days and a seven-day preview](screenshots/releases/1.1.0-split-rest-days.png)
+
+_Add, move or change rest days as part of your repeating split. This phone-sized planner uses isolated sample data._
+
 ![New cardio session with the suggested treadmill set expanded for editing](screenshots/releases/1.1.0-cardio-expanded.png)
 
 _Cardio sets open ready to edit or upload a screenshot, with previous-session values preserved and a blue row until completed. This phone-sized view uses isolated sample data._
@@ -56,6 +60,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.
 - Cardio sets open with their editable fields expanded, including suggestions from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately. Sets remain uncompleted until you tick them; completed sets still fold away.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.

@@ -16,17 +16,30 @@ export function useUpNextSession(
 ) {
   const weightUnit = useWeightUnit();
   const { types } = useWorkoutTypes();
-  const active = types.find((type) => type.id === recommendation?.category)?.archived
-    ? null
-    : (recommendation ?? null);
+  const typeId = recommendation?.workout_type?.id ?? recommendation?.category;
+  const type = recommendation?.workout_type ?? types.find((item) => item.id === typeId);
+  const archived = type?.archived || types.find((item) => item.id === typeId)?.archived;
+  const active = archived && !recommendation?.split_name ? null : (recommendation ?? null);
+  const isRestDay = active?.is_rest_day === true;
+  const needsSplitUpdate =
+    active?.needs_split_update === true || !!(active?.split_name && archived);
   const template = useMemo(
-    () => (active ? sessionTemplateFor(workouts, active.category, today, weightUnit) : null),
-    [active, today, workouts, weightUnit],
+    () =>
+      active && !isRestDay && !needsSplitUpdate
+        ? sessionTemplateFor(
+            workouts,
+            active.category,
+            today,
+            weightUnit,
+            type?.is_custom ? type.id : null,
+          )
+        : null,
+    [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type],
   );
   const label = active
-    ? active.category === 'cardio'
-      ? 'Cardio'
-      : CATEGORY_LABELS[active.category]
+    ? isRestDay
+      ? 'Rest'
+      : (type?.name ?? (active.category === 'cardio' ? 'Cardio' : CATEGORY_LABELS[active.category]))
     : null;
-  return { recommendation: active, label, template };
+  return { recommendation: active, label, template, type, isRestDay, needsSplitUpdate };
 }

@@ -399,6 +399,11 @@ class WorkoutRecommendationRead(BaseModel):
     rotation_next: WorkoutCategory
     reason: str
     muscle_frequency: list[MuscleFrequencyRead]
+    workout_type: WorkoutTypeRead | None = None
+    is_rest_day: bool = False
+    needs_split_update: bool = False
+    scheduled_date: date | None = None
+    split_name: str | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):
@@ -600,6 +605,29 @@ class CardioSessionRead(CardioSessionFields):
     source_workout_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TrainingSplitStep(BaseModel):
+    # A null type is a rest day; custom types retain their account-owned identity.
+    workout_type_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class TrainingSplit(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    enabled: bool = True
+    start_date: date
+    steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def includes_workout(self) -> TrainingSplit:
+        if not any(step.workout_type_id is not None for step in self.steps):
+            raise ValueError("Include at least one workout day in your split.")
+        return self
 
 
 class TrainingPreferencesUpdate(BaseModel):

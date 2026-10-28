@@ -2,8 +2,9 @@
   "version": "1.1.0",
   "date": "2026-10-26",
   "title": "Find friends and improve your workouts",
-  "summary": "Build your exercise library with individual muscle credits, discover public profiles, open your preloaded profile, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
+  "summary": "Plan your training and rest days, build your exercise library with individual muscle credits, discover public profiles, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
   "changes": [
+    "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
     "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",

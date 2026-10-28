@@ -24,6 +24,15 @@ export interface SettingsDestination {
 
 export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   {
+    id: 'training-split',
+    group: 'training',
+    title: 'Your split',
+    page: 'settings',
+    keywords:
+      'schedule rotation upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
+    selector: '#training-split-settings',
+  },
+  {
     id: 'rest',
     group: 'training',
     title: 'Rest timer',

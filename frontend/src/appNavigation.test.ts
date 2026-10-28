@@ -18,6 +18,7 @@ describe('app navigation history', () => {
     expect(appTabFromHash('#shared')).toBe('social');
     expect(appTabFromHash('#cardio')).toBe('cardio');
     expect(appTabFromHash('#log')).toBe('log');
+    expect(appTabFromHash('#split')).toBe('split');
     expect(appTabFromHash('#admin')).toBe('admin');
     expect(appTabFromHash('#missing')).toBe('dashboard');
   });
