@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
 import { AuthBrand, AuthScreen } from './AuthScreen';
 import { subscribeAuthExpired } from './authEvents';
@@ -6,6 +6,7 @@ import { adoptSignedInUser, resolveSession, type AuthState } from './authSession
 import {
   browserDeps,
   clearAfterAccountDeletion,
+  clearUserDeviceData,
   rememberUser,
   restartApp,
   signOutAndClear,
@@ -13,6 +14,7 @@ import {
 import { TodaySkeleton } from './TodayScreen';
 import type { AuthConfig, User } from './types';
 import { UserContext, type UserSession } from './userContext';
+import { useSessionConnection } from './useSessionConnection';
 
 export function AuthLoading() {
   return (
@@ -107,18 +109,35 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const cleanup = useRef(Promise.resolve());
+  const generation = useRef(0);
+  useSessionConnection(state.status === 'authenticated' ? state.user.id : null);
 
   useEffect(() => {
     let cancelled = false;
-    void resolveSession({ ...browserDeps(), me: api.auth.me }).then((next) => {
-      if (!cancelled) setState(next);
+    const started = generation.current;
+    void resolveSession({
+      ...browserDeps(),
+      me: api.auth.me,
+      isCurrent: () => !cancelled && generation.current === started,
+    }).then((next) => {
+      if (!cancelled && generation.current === started) setState(next);
     });
     return () => {
       cancelled = true;
     };
   }, [attempt]);
 
-  useEffect(() => subscribeAuthExpired(() => setState({ status: 'signed-out' })), []);
+  useEffect(
+    () =>
+      subscribeAuthExpired(() => {
+        generation.current += 1;
+        // Drop the app's in-memory state and its offline account data together.
+        setState({ status: 'signed-out' });
+        cleanup.current = clearUserDeviceData().catch(() => undefined);
+      }),
+    [],
+  );
 
   const signedOut = state.status === 'signed-out';
   useEffect(() => {
@@ -152,6 +171,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Signing in mounts the app straight away, so its data loads while the sign-in screen exits.
   const [signInExiting, setSignInExiting] = useState(false);
   const onAuthenticated = useCallback(async (user: User) => {
+    generation.current += 1;
+    await cleanup.current;
     const next = await adoptSignedInUser(user, browserDeps());
     setSignInExiting(true);
     setState(next);
