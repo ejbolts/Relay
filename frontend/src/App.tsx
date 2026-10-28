@@ -4180,9 +4180,29 @@ function MovementCard({
     !cardio && history[0] ? compactSetSummary(history[0].sets, weightUnit) : '';
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [settingsExerciseId, setSettingsExerciseId] = useState<string | null>(null);
-  const settingsOpen = settingsExerciseId === movement.exercise.id;
   const photoPanelId = useId();
+  const pinnedMachinePhotoId = movement.machinePhotoIds.at(-1);
+  const machineSettingsUnloaded = movement.machineSettings === undefined;
+  const onMachineSettingsRef = useRef(onMachineSettings);
+
+  useEffect(() => {
+    onMachineSettingsRef.current = onMachineSettings;
+  }, [onMachineSettings]);
+
+  useEffect(() => {
+    // Choosing a saved machine records its settings; restored workouts keep their snapshot.
+    if (cardio || !pinnedMachinePhotoId || !machineSettingsUnloaded) return;
+    let cancelled = false;
+    void api.getMachineSettings(movement.exercise.id, pinnedMachinePhotoId).then(
+      ({ settings }) => {
+        if (!cancelled) onMachineSettingsRef.current(settings);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [cardio, movement.exercise.id, pinnedMachinePhotoId, machineSettingsUnloaded]);
   const [openSetActionsKey, setOpenSetActionsKey] = useState<string | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
@@ -4931,27 +4951,6 @@ function MovementCard({
                 </span>
                 {historyOpen ? 'Hide Recent History' : 'Recent History'}
               </button>
-              {!cardio && (
-                <button
-                  type="button"
-                  aria-controls={photoPanelId}
-                  onClick={() => {
-                    setSettingsExerciseId(movement.exercise.id);
-                    setExpanded(true);
-                    closeMovementMenu();
-                    requestAnimationFrame(() => {
-                      const section = document.getElementById(photoPanelId);
-                      section?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                      section?.querySelector('summary')?.focus({ preventScroll: true });
-                    });
-                  }}
-                >
-                  <span aria-hidden="true">
-                    <Icon name="settings" />
-                  </span>
-                  Settings
-                </button>
-              )}
               <button
                 type="button"
                 className={supersetLabel ? 'active' : ''}
@@ -5057,27 +5056,6 @@ function MovementCard({
           selectedIds={movement.machinePhotoIds}
           autoPinLastUsed={!movement.machinePhotosInitialized}
           onChange={onMachinePhotos}
-          settingsOpen={settingsOpen}
-          onSettingsOpen={(open) => setSettingsExerciseId(open ? movement.exercise.id : null)}
-          settingsEditor={
-            movement.machinePhotoIds.length > 0 ? (
-              <MachineSettingsEditor
-                key={`${movement.exercise.id}:${movement.machinePhotoIds.at(-1) ?? ''}`}
-                hidden={!settingsOpen}
-                exerciseId={movement.exercise.id}
-                machinePhotoId={movement.machinePhotoIds.at(-1)}
-                initialSettings={movement.machineSettings}
-                onChange={onMachineSettings}
-                onSaved={() => {
-                  setSettingsExerciseId(null);
-                  document
-                    .getElementById(photoPanelId)
-                    ?.querySelector('summary')
-                    ?.focus({ preventScroll: true });
-                }}
-              />
-            ) : null
-          }
         />
       )}
 
@@ -5305,18 +5283,12 @@ function MachinePhotoChooser({
   selectedIds,
   autoPinLastUsed,
   onChange,
-  settingsOpen,
-  onSettingsOpen,
-  settingsEditor,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
   autoPinLastUsed: boolean;
   onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
-  settingsOpen: boolean;
-  onSettingsOpen: (open: boolean) => void;
-  settingsEditor: ReactNode;
 }) {
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
@@ -5330,10 +5302,6 @@ function MachinePhotoChooser({
   const autoPinLastUsedRef = useRef(autoPinLastUsed);
   const onChangeRef = useRef(onChange);
   const selectedIdsRef = useRef(selectedIds);
-
-  useEffect(() => {
-    if (settingsOpen) setPhotoPanelOpen(true);
-  }, [settingsOpen]);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -5377,7 +5345,6 @@ function MachinePhotoChooser({
     if (!file) return;
     setError(null);
     setCaption('');
-    onSettingsOpen(false);
     setExpanded(null);
     setPending({ file, previewUrl: URL.createObjectURL(file) });
   }
@@ -5420,7 +5387,6 @@ function MachinePhotoChooser({
     if (choosingReplacement) {
       onChange([photoId]);
       setChoosingReplacement(false);
-      onSettingsOpen(true);
       return;
     }
     onChange(
@@ -5428,7 +5394,6 @@ function MachinePhotoChooser({
         ? selectedIds.filter((current) => current !== photoId)
         : [...selectedIds, photoId],
     );
-    onSettingsOpen(!selectedIds.includes(photoId));
   }
 
   async function updatePhoto(photo: MachinePhoto, nextCaption: string) {
@@ -5472,16 +5437,13 @@ function MachinePhotoChooser({
       open={photoPanelOpen}
       onToggle={(event) => {
         setPhotoPanelOpen(event.currentTarget.open);
-        if (!event.currentTarget.open) onSettingsOpen(false);
       }}
     >
       <summary
         className="machine-photo-summary"
         onClick={(event) => {
           event.preventDefault();
-          const open = !photoPanelOpen;
-          setPhotoPanelOpen(open);
-          onSettingsOpen(open && selectedIds.length > 0 && !pending);
+          setPhotoPanelOpen(!photoPanelOpen);
         }}
       >
         {primaryPinnedPhoto ? (
@@ -5588,8 +5550,6 @@ function MachinePhotoChooser({
           </>
         )}
         {error && <p className="machine-photo-error">{error}</p>}
-
-        {settingsEditor}
 
         {pending && (
           <section className="photo-inline-editor panel">

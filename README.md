@@ -28,7 +28,7 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 - Use previous-session suggestions to pick up where you left off.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
-- Choose **Settings** in an exercise's options menu to open its **Equipment photo** section. Settings are edited beside the machine photo, and each saved workout keeps the values used for that session.
+- Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.
 
 Choose kilograms or pounds for weight entry and display.

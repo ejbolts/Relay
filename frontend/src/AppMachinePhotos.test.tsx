@@ -297,107 +297,34 @@ describe('saving and pinning a machine photo while logging', () => {
     writeActiveWorkoutDraft(draft);
   }
 
-  it('opens the photo section from Settings without an exercise-level editor when no machine is selected', async () => {
+  it('has no exercise menu Settings action or machine settings editor without a pinned machine', async () => {
     await act(async () => root.render(<App />));
     const card = container.querySelector<HTMLElement>('.movement-card')!;
     const picker = card.querySelector<HTMLDetailsElement>('.machine-photo-picker')!;
     const menu = card.querySelector<HTMLDetailsElement>('.movement-overflow')!;
-    const action = button('Settings', menu);
-    expect(picker.open).toBe(false);
-    expect(action.getAttribute('aria-controls')).toBe(picker.id);
-    expect(card.querySelector('.machine-settings')).toBeNull();
-    expect(api.getMachineSettings).not.toHaveBeenCalled();
-    menu.open = true;
-    await click(action);
-    expect(menu.open).toBe(false);
+    expect(
+      [...menu.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Settings'),
+    ).toBe(false);
+    await click(picker.querySelector('summary')!);
     expect(picker.open).toBe(true);
     expect(card.querySelector('.machine-settings')).toBeNull();
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
     expect(picker.textContent).toContain('Take photo');
     expect(picker.textContent).toContain('Choose photo');
   });
 
-  it('keeps machine settings in the photo section and reopens them from Settings after saving', async () => {
+  it('records a pinned machine settings without showing an editor in the photo section', async () => {
     pinHomeMachine();
     const saved = [{ name: 'Seat', value: '5' }];
     vi.mocked(api.getMachineSettings).mockResolvedValue({ settings: saved });
     await act(async () => root.render(<App />));
     const card = container.querySelector<HTMLElement>('.movement-card')!;
     const picker = card.querySelector<HTMLDetailsElement>('.machine-photo-picker')!;
-    const panel = picker.querySelector<HTMLElement>('.machine-settings')!;
-    const menu = card.querySelector<HTMLDetailsElement>('.movement-overflow')!;
-    expect(panel.hidden).toBe(true);
-    expect(card.querySelectorAll('.machine-settings')).toHaveLength(1);
     expect(api.getMachineSettings).toHaveBeenCalledWith(legPress.id, homeGym.id);
-    menu.open = true;
-    await click(button('Settings', menu));
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual(saved);
+    await click(picker.querySelector('summary')!);
     expect(picker.open).toBe(true);
-    expect(panel.hidden).toBe(false);
-    await type(panel.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!, '6');
-    await click(button('Save', panel));
-    expect(api.saveMachineSettings).toHaveBeenCalledWith(
-      legPress.id,
-      [{ name: 'Seat', value: '6' }],
-      homeGym.id,
-    );
-    expect(panel.hidden).toBe(true);
-    expect(picker.open).toBe(true);
-    expect(document.activeElement).toBe(picker.querySelector('summary'));
-    menu.open = true;
-    await click(button('Settings', menu));
-    expect(panel.hidden).toBe(false);
-    expect(panel.querySelector<HTMLInputElement>('[aria-label="Seat value"]')?.value).toBe('6');
-    expect(api.getMachineSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps settings open during a failed save and closes after a successful retry', async () => {
-    pinHomeMachine();
-    vi.mocked(api.getMachineSettings).mockResolvedValue({
-      settings: [{ name: 'Seat', value: '5' }],
-    });
-    vi.mocked(api.saveMachineSettings).mockRejectedValueOnce(new Error('offline'));
-    await act(async () => root.render(<App />));
-    const panel = container.querySelector<HTMLElement>('.machine-settings')!;
-    const menu = container.querySelector<HTMLDetailsElement>('.movement-overflow')!;
-    menu.open = true;
-    await click(button('Settings', menu));
-    await click(button('Save', panel));
-    expect(panel.hidden).toBe(false);
-    expect(panel.querySelector('[role="alert"]')?.textContent).toContain('Could not save');
-    let resolveSave!: (saved: { settings: Array<{ name: string; value: string }> }) => void;
-    vi.mocked(api.saveMachineSettings).mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveSave = resolve;
-      }),
-    );
-    await click(button('Save', panel));
-    expect(panel.hidden).toBe(false);
-    expect(panel.querySelector('fieldset')?.disabled).toBe(true);
-    await act(async () => resolveSave({ settings: [{ name: 'Seat', value: '5' }] }));
-    expect(panel.hidden).toBe(true);
-  });
-
-  it('opens the photo section from a collapsed exercise and keeps other exercises closed', async () => {
-    pinHomeMachine();
-    const draft = readActiveWorkoutDraft()!;
-    draft.movements.push({
-      ...draft.movements[0],
-      key: 'second-movement',
-      machinePhotoIds: [],
-      machineSettings: [],
-    });
-    writeActiveWorkoutDraft(draft);
-    await act(async () => root.render(<App />));
-    const cards = container.querySelectorAll<HTMLElement>('.movement-card');
-    const first = cards[0];
-    await click(first.querySelector<HTMLButtonElement>('.movement-expand-toggle')!);
-    expect(first.classList.contains('is-collapsed')).toBe(true);
-    const menu = first.querySelector<HTMLDetailsElement>('.movement-overflow')!;
-    menu.open = true;
-    await click(button('Settings', menu));
-    expect(first.classList.contains('is-collapsed')).toBe(false);
-    expect(first.querySelector<HTMLElement>('.machine-settings')?.hidden).toBe(false);
-    expect(cards[1].querySelector('.machine-settings')).toBeNull();
-    expect(cards[1].querySelector<HTMLDetailsElement>('.machine-photo-picker')?.open).toBe(false);
+    expect(card.querySelector('.machine-settings')).toBeNull();
   });
 
   it('keeps the muscle credits popup focused on credits even when machine settings are saved', async () => {
@@ -419,7 +346,7 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(dialog.querySelector('dl')).toBeNull();
     expect(dialog.querySelector('[aria-label="Edit machine settings"]')).toBeNull();
     expect(dialog.querySelector('[aria-label="Add machine settings"]')).toBeNull();
-    expect(container.querySelector<HTMLElement>('.machine-settings')?.hidden).toBe(true);
+    expect(container.querySelector('.machine-settings')).toBeNull();
   });
 
   it('requires a machine name, then uploads the photo and pins it to every set', async () => {
@@ -491,20 +418,8 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(picker.querySelector('.photo-inline-editor')).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual(settings);
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual(['new-cybex']);
-    await click(button('Settings'));
-    const editor = picker.querySelector<HTMLElement>('.machine-settings')!;
-    expect(editor.querySelector<HTMLInputElement>('[aria-label="Seat value"]')?.value).toBe('5');
-    await type(editor.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!, '6');
-    await click(button('Save', editor));
-    expect(api.saveMachineSettings).toHaveBeenCalledWith(
-      legPress.id,
-      [
-        { name: 'Seat', value: '6' },
-        { name: 'Backrest', value: '2' },
-      ],
-      'new-cybex',
-    );
-    expect(editor.hidden).toBe(true);
+    expect(picker.querySelector('.machine-settings')).toBeNull();
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
   });
 
   it('retains new-machine edits on upload failure and rejects incomplete settings before uploading', async () => {
@@ -524,7 +439,7 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([]);
   });
 
-  it('loads and saves the chosen machine settings without changing exercise defaults', async () => {
+  it('loads the chosen machine settings into the workout without saving machine defaults', async () => {
     vi.mocked(api.listMachinePhotos).mockResolvedValue([
       usage(homeGym, 2, null),
       usage(travelGym, 1, null),
@@ -542,25 +457,16 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toBeUndefined();
     const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
     await click(button('Pin to sets', picker.querySelector('article')!));
-    let editor = picker.querySelector<HTMLElement>('.machine-settings')!;
-    expect(editor.hidden).toBe(false);
-    expect(editor.querySelector<HTMLInputElement>('[aria-label="Seat value"]')?.value).toBe('5');
-    await type(editor.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!, '6');
-    await click(button('Save', editor));
-    expect(api.saveMachineSettings).toHaveBeenCalledWith(
-      legPress.id,
-      [{ name: 'Seat', value: '6' }],
-      homeGym.id,
-    );
-    expect(editor.hidden).toBe(true);
+    expect(picker.querySelector('.machine-settings')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
+      { name: 'Seat', value: '5' },
+    ]);
     await click(button('Pin to sets', picker.querySelectorAll('article')[1]));
-    editor = picker.querySelector<HTMLElement>('.machine-settings')!;
-    expect(editor.hidden).toBe(false);
-    expect(editor.querySelector<HTMLInputElement>('[aria-label="Seat value"]')?.value).toBe('2');
+    expect(picker.querySelector('.machine-settings')).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
       { name: 'Seat', value: '2' },
     ]);
-    expect(api.saveMachineSettings).toHaveBeenCalledTimes(1);
+    expect(api.saveMachineSettings).not.toHaveBeenCalled();
   });
 
   it('keeps restored workout settings instead of replacing them with newer machine defaults', async () => {
@@ -576,8 +482,6 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
       { name: 'Seat', value: '3' },
     ]);
-    await click(button('Settings'));
-    expect(container.querySelector<HTMLInputElement>('[aria-label="Seat value"]')?.value).toBe('3');
   });
 });
 

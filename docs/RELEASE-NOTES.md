@@ -16,17 +16,13 @@ _A sample workout remains one 45-minute session after its save response is lost,
 
 _Add settings while naming a new machine. **Save and pin** saves the photo, name and numeric values together. Isolated sample data and an illustration from the exercise library._
 
-![Exercise card with Equipment photo open and Seat and Backrest settings beside the selected machine](screenshots/releases/1.1.0-machine-photo-section-settings.png)
-
-_The exercise menu's **Settings** action opens and scrolls to **Equipment photo**. Settings stay with the chosen machine; Save closes the editor. Isolated sample data._
-
 ![Workout dated 27 October with start time 11:30 pm, end time 12:30 am and a one-hour duration](screenshots/releases/1.1.0-overnight-start-date.png)
 
 _An overnight workout stays on its starting day. This isolated sample starts at 11:30 pm on 27 October and finishes at 12:30 am on 28 October, recording one hour on 27 October. The prompt beneath empty start and end times has been removed._
 
 ![Compact muscle set credits popup with Direct work and Partial credit lists](screenshots/releases/1.1.0-muscle-credits-only.png)
 
-_The exercise popup now contains only muscle credits. Machine settings are available in Equipment photo. Isolated sample data._
+_The exercise popup now contains only muscle credits. Isolated sample data._
 
 ![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
 
@@ -73,7 +69,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
-- Machine settings stay in Equipment photo. Add any setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine loads its own settings. The exercise menu Settings action opens and scrolls to Equipment photo; it no longer toggles a separate exercise editor. The muscle set credits popup shows only muscle credits. Saving closes the editor, and workouts keep their original settings snapshot.
+- Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.
 - Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
