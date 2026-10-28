@@ -18,6 +18,7 @@ import {
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
@@ -5114,6 +5115,7 @@ function MovementCard({
           id={photoPanelId}
           exercise={movement.exercise}
           selectedIds={movement.machinePhotoIds}
+          settings={movement.machineSettings}
           autoPinLastUsed={!movement.machinePhotosInitialized}
           onChange={onMachinePhotos}
         />
@@ -5341,15 +5343,18 @@ function MachinePhotoChooser({
   id,
   exercise,
   selectedIds,
+  settings,
   autoPinLastUsed,
   onChange,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
+  settings?: MachineSetting[];
   autoPinLastUsed: boolean;
   onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
 }) {
+  const [selectingForMerge, setSelectingForMerge] = useState(false);
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [caption, setCaption] = useState('');
@@ -5362,11 +5367,13 @@ function MachinePhotoChooser({
   const autoPinLastUsedRef = useRef(autoPinLastUsed);
   const onChangeRef = useRef(onChange);
   const selectedIdsRef = useRef(selectedIds);
+  const settingsRef = useRef(settings);
 
   useEffect(() => {
     onChangeRef.current = onChange;
     selectedIdsRef.current = selectedIds;
-  }, [onChange, selectedIds]);
+    settingsRef.current = settings;
+  }, [onChange, selectedIds, settings]);
 
   useEffect(() => {
     let active = true;
@@ -5379,6 +5386,19 @@ function MachinePhotoChooser({
       .then(([items, lastUsed]) => {
         if (!active) return;
         setPhotos(items);
+        const canonicalIds = [
+          ...new Set(
+            selectedIdsRef.current.map(
+              (id) =>
+                items.find(
+                  (photo) => photo.id === id || photo.images?.some((image) => image.id === id),
+                )?.id ?? id,
+            ),
+          ),
+        ];
+        if (canonicalIds.join(',') !== selectedIdsRef.current.join(',')) {
+          onChangeRef.current(canonicalIds, settingsRef.current);
+        }
         if (autoPinLastUsedRef.current && selectedIdsRef.current.length === 0) {
           onChangeRef.current(lastUsed.map((photo) => photo.id));
         }
@@ -5403,6 +5423,7 @@ function MachinePhotoChooser({
 
   function stagePhoto(file: File | undefined) {
     if (!file) return;
+    setSelectingForMerge(false);
     setError(null);
     setCaption('');
     setExpanded(null);
@@ -5523,90 +5544,136 @@ function MachinePhotoChooser({
         </span>
       </summary>
       <div className="machine-photo-content">
-        <div className="machine-photo-actions">
-          <label>
-            <span aria-hidden="true">
-              <Icon name="camera" />
-            </span>
-            Take photo
-            <input
-              className="sr-only"
-              type="file"
-              disabled={uploading}
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              capture="environment"
-              onChange={(event) => {
-                stagePhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-          <label>
-            <span aria-hidden="true">＋</span>
-            Choose photo
-            <input
-              className="sr-only"
-              type="file"
-              disabled={uploading}
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              onChange={(event) => {
-                stagePhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-        {photos.length > 0 && (
+        {selectingForMerge ? (
+          <MachinePhotoMergePicker
+            exerciseId={exercise.id}
+            photos={photos}
+            onCancel={() => setSelectingForMerge(false)}
+            onMerged={(merged, sourceIds) => {
+              const sourceSet = new Set(sourceIds);
+              const nextIds = [
+                ...new Set(
+                  selectedIdsRef.current.map((id) => (sourceSet.has(id) ? merged.id : id)),
+                ),
+              ];
+              setPhotos((current) => [
+                merged,
+                ...current.filter((photo) => !sourceSet.has(photo.id)),
+              ]);
+              if (nextIds.join(',') !== selectedIdsRef.current.join(',')) {
+                onChange(nextIds, settingsRef.current);
+              }
+              setSelectingForMerge(false);
+              setExpanded(merged);
+            }}
+          />
+        ) : (
           <>
-            {choosingReplacement && (
-              <p className="machine-photo-choice-prompt" role="status">
-                {photos.length > 1
-                  ? 'Choose the machine you are using for this workout.'
-                  : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
-              </p>
+            {photos.length >= 2 && (
+              <div className="machine-photo-library-actions">
+                <button
+                  type="button"
+                  disabled={uploading || !!pending}
+                  onClick={() => {
+                    setExpanded(null);
+                    setChoosingReplacement(false);
+                    setSelectingForMerge(true);
+                    setError(null);
+                  }}
+                >
+                  Select
+                </button>
+              </div>
             )}
-            <div className="machine-photo-rail" ref={photoRailRef}>
-              {photos.map((photo) => {
-                const selected = selectedIds.includes(photo.id);
-                return (
-                  <article className={selected ? 'selected' : ''} key={photo.id}>
-                    <button
-                      type="button"
-                      className="machine-thumbnail"
-                      onClick={() => setExpanded(photo)}
-                      aria-label={`Expand ${photo.caption}`}
-                    >
-                      <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
-                    </button>
-                    <strong title={photo.caption}>{photo.caption}</strong>
-                    <small
-                      className="machine-last-used"
-                      title={
-                        photo.last_used_date
-                          ? `Last used ${machineDate(photo.last_used_date)}`
-                          : undefined
-                      }
-                    >
-                      {machineUsedShort(photo.last_used_date, today)}
-                    </small>
-                    <button
-                      type="button"
-                      className="machine-pin"
-                      onClick={() => togglePhoto(photo.id)}
-                      disabled={uploading}
-                    >
-                      {choosingReplacement
-                        ? selected
-                          ? 'Currently pinned'
-                          : 'Use this machine'
-                        : selected
-                          ? '✓ Pinned'
-                          : 'Pin to sets'}
-                    </button>
-                  </article>
-                );
-              })}
+            <div className="machine-photo-actions">
+              <label>
+                <span aria-hidden="true">
+                  <Icon name="camera" />
+                </span>
+                Take photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  capture="environment"
+                  onChange={(event) => {
+                    stagePhoto(event.target.files?.[0]);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              <label>
+                <span aria-hidden="true">＋</span>
+                Choose photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  onChange={(event) => {
+                    stagePhoto(event.target.files?.[0]);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
             </div>
+            {photos.length > 0 && (
+              <>
+                {choosingReplacement && (
+                  <p className="machine-photo-choice-prompt" role="status">
+                    {photos.length > 1
+                      ? 'Choose the machine you are using for this workout.'
+                      : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
+                  </p>
+                )}
+                <div className="machine-photo-rail" ref={photoRailRef}>
+                  {photos.map((photo) => {
+                    const selected = selectedIds.includes(photo.id);
+                    return (
+                      <article className={selected ? 'selected' : ''} key={photo.id}>
+                        <button
+                          type="button"
+                          className="machine-thumbnail"
+                          onClick={() => setExpanded(photo)}
+                          aria-label={`Expand ${photo.caption}`}
+                        >
+                          <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
+                        </button>
+                        <strong title={photo.caption}>{photo.caption}</strong>
+                        {(photo.images?.length ?? 0) > 1 && (
+                          <span className="machine-photo-count">{photo.images!.length} photos</span>
+                        )}
+                        <small
+                          className="machine-last-used"
+                          title={
+                            photo.last_used_date
+                              ? `Last used ${machineDate(photo.last_used_date)}`
+                              : undefined
+                          }
+                        >
+                          {machineUsedShort(photo.last_used_date, today)}
+                        </small>
+                        <button
+                          type="button"
+                          className="machine-pin"
+                          onClick={() => togglePhoto(photo.id)}
+                          disabled={uploading}
+                        >
+                          {choosingReplacement
+                            ? selected
+                              ? 'Currently pinned'
+                              : 'Use this machine'
+                            : selected
+                              ? '✓ Pinned'
+                              : 'Pin to sets'}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </>
         )}
         {error && <p className="machine-photo-error">{error}</p>}
@@ -5669,6 +5736,9 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [imageIndex, setImageIndex] = useState(0);
+  const images = photo.images?.length ? photo.images : [photo];
+  const image = images[Math.min(imageIndex, images.length - 1)];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -5707,7 +5777,22 @@ function MachinePhotoDetail({
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
         </button>
-        <img src={photo.full_url} alt={photo.caption} />
+        <img src={image.full_url} alt={photo.caption} />
+        {images.length > 1 && (
+          <div className="machine-photo-gallery" aria-label="Merged machine photos">
+            {images.map((item, index) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-label={`View photo ${index + 1} of ${images.length}`}
+                aria-pressed={imageIndex === index}
+                onClick={() => setImageIndex(index)}
+              >
+                <img src={item.thumbnail_url} alt="" />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="photo-detail-caption">
           {onUpdate ? (
             <input
@@ -5737,8 +5822,8 @@ function MachinePhotoDetail({
           {onDelete && (
             <InlineConfirmButton
               className="photo-delete"
-              label="Delete"
-              confirmLabel="Delete photo"
+              label={images.length > 1 ? 'Delete machine' : 'Delete'}
+              confirmLabel={images.length > 1 ? 'Delete machine and all photos' : 'Delete photo'}
               onConfirm={removePhoto}
               disabled={saving}
             />

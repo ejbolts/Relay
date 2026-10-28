@@ -31,6 +31,7 @@ vi.mock('./api', async (importOriginal) => {
       listPersonalRecords: vi.fn(),
       getWorkoutTypeColors: vi.fn(),
       listMachinePhotos: vi.fn(),
+      mergeMachinePhotos: vi.fn(),
       getMachineSettings: vi.fn(),
       saveMachineSettings: vi.fn(),
       lastUsedMachinePhotos: vi.fn(),
@@ -482,6 +483,60 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
       { name: 'Seat', value: '3' },
     ]);
+  });
+  it('merges selected machines without changing the active workout settings and opens every retained photo', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].machinePhotoIds = [travelGym.id];
+    draft.movements[0].machineSettings = [{ name: 'Seat', value: '3' }];
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, null),
+      usage(travelGym, 1, null),
+    ]);
+    vi.mocked(api.mergeMachinePhotos).mockResolvedValue({
+      ...usage(homeGym, 3, null),
+      images: [homeGym, travelGym],
+    });
+    await act(async () => root.render(<App />));
+    const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
+    await click(button('Select', picker));
+    const tiles = picker.querySelectorAll<HTMLButtonElement>('.machine-merge-grid button');
+    await click(tiles[0]);
+    await click(tiles[1]);
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([travelGym.id]);
+    await click(button('Merge (2)', picker));
+    await act(async () =>
+      picker
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(picker.querySelectorAll('.machine-photo-rail article')).toHaveLength(1);
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([homeGym.id]);
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
+      { name: 'Seat', value: '3' },
+    ]);
+    const gallery = picker.querySelector('.machine-photo-gallery')!;
+    expect(gallery.querySelectorAll('button')).toHaveLength(2);
+    await click(gallery.querySelectorAll('button')[1]);
+    expect(picker.querySelector('.photo-detail > div > img')?.getAttribute('src')).toBe(
+      travelGym.full_url,
+    );
+  });
+
+  it('remaps an older draft photo ID to a merged machine while keeping its recorded settings', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].machinePhotoIds = [travelGym.id];
+    draft.movements[0].machineSettings = [{ name: 'Seat', value: '3' }];
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      { ...usage(homeGym, 3, null), images: [homeGym, travelGym] },
+    ]);
+    await act(async () => root.render(<App />));
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([homeGym.id]);
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
+      { name: 'Seat', value: '3' },
+    ]);
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
   });
 });
 

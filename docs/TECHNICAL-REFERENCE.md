@@ -8,6 +8,14 @@ A private, multi-user mobile PWA for batching individual gym-set videos, stitchi
 
 The app also includes a structured, dark, mobile-first workout tracker: an exercise library, set/reps/weight logging, RPE and rest tracking, per-set notes, a live rest timer, workout history, a colour-coded training heatmap, weekly muscle-set tracking, and per-exercise progression charts. Reusable machine photos can be captured from a phone, captioned, pinned to an exercise in a particular workout, and expanded from History. Workout records and photo metadata live in the local SQLite database independently of the optional video workflow; processed photo files live under `data/machine-photos/`.
 
+**Equipment photo > Select** opens a multi-select grid. Merge at least two saved machines from
+one exercise, choose the cover and future settings to keep, then confirm the name. Migration
+`0044_merged_machine_photos` retains all original image rows and files under one canonical machine.
+Merging transfers and deduplicates workout links without altering recorded workout settings;
+older draft photo IDs resolve to that canonical machine when saved. Repeated merges flatten
+existing groups, and account backups retain the group and every image. Shared group images
+follow the owner's existing machine-photo visibility and access checks.
+
 Weekly muscle-set tracking excludes warmups and cardio, reports raw and RPE-aware effective sets for each active muscle group, and shows unrated or lower-effort sets separately. Today's bars compare raw working-set credits with one account-owned weekly goal per muscle, configurable in Settings > Training > Units & weekly goals and defaulting to 10. Primary and secondary muscle credits keep their existing weighting; the goal does not change set counting or workout recommendations.
 
 The [exercise muscle-credit audit](EXERCISE-MUSCLE-CREDITS.md) documents the built-in

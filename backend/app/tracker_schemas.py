@@ -105,7 +105,7 @@ class MachinePhotoCaptionUpdate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
-class MachinePhotoRead(BaseModel):
+class MachinePhotoImageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -116,6 +116,22 @@ class MachinePhotoRead(BaseModel):
     width: int
     height: int
     created_at: datetime
+
+
+class MachinePhotoRead(MachinePhotoImageRead):
+    images: list[MachinePhotoImageRead] = Field(default_factory=list)
+
+
+class MachinePhotoMerge(MachinePhotoCaptionUpdate):
+    photo_ids: list[str] = Field(min_length=2, max_length=100)
+    keep_photo_id: str
+
+    @field_validator("photo_ids")
+    @classmethod
+    def unique_photo_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("Select different machine photos.")
+        return value
 
 
 class MachinePhotoUsageRead(MachinePhotoRead):

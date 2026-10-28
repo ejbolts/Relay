@@ -129,7 +129,7 @@ export type ExerciseCreateInput = Pick<
   'name' | 'category' | 'kind' | 'muscle_group' | 'equipment'
 > & { muscle_set_credit?: 0.5 | 1; muscle_set_credits?: MuscleSetCreditInput[] };
 
-export interface MachinePhoto {
+export interface MachinePhotoImage {
   id: string;
   exercise_id: string;
   caption: string;
@@ -138,6 +138,10 @@ export interface MachinePhoto {
   width: number;
   height: number;
   created_at: string;
+}
+
+export interface MachinePhoto extends MachinePhotoImage {
+  images?: MachinePhotoImage[];
 }
 
 /** A saved machine with when, and how often, saved workouts have pinned it. */
