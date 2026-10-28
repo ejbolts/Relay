@@ -45,7 +45,7 @@
       "title": "Undo one import",
       "description": "Import history removes one tracked batch while keeping other sessions and edited check-ins. Earlier imports cannot be undone as a batch.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/03e635cefc31aa0193961bc2ed5ab43a80471793/docs/screenshots/releases/1.1.0-undo-import-batch.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/cdf2beea2fba8e624465ff788b6ad540626b76c4/docs/screenshots/releases/1.1.0-undo-import-batch.png",
         "alt": "Import history asking to undo one sample batch of one session and one check-in, with Undo import and Cancel buttons. Isolated sample data."
       }
     },
