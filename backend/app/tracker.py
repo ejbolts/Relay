@@ -1833,6 +1833,24 @@ def exercise_history_baselines(
 def create_workout(
     payload: TrainingWorkoutCreate, db: DbSession, user: CurrentUser, settings: SettingsDependency
 ) -> TrainingWorkout:
+    user_id = user.id
+    client_session_id = str(payload.client_session_id) if payload.client_session_id else None
+
+    def saved_session() -> TrainingWorkout | None:
+        if client_session_id is None:
+            return None
+        return db.scalar(
+            select(TrainingWorkout)
+            .where(
+                TrainingWorkout.user_id == user_id,
+                TrainingWorkout.client_session_id == client_session_id,
+            )
+            .options(*workout_options())
+        )
+
+    existing = saved_session()
+    if existing is not None:
+        return existing
     limits = load_account_limits(db, settings)
     check_workout_size(payload, limits, user)
     check_account_total(
@@ -1844,7 +1862,8 @@ def create_workout(
         WORKOUT_NOT_SAVED,
     )
     workout = TrainingWorkout(
-        user_id=user.id,
+        user_id=user_id,
+        client_session_id=client_session_id,
         name=payload.name,
         workout_date=payload.workout_date,
         category=payload.category,
@@ -1854,6 +1873,16 @@ def create_workout(
         end_time=payload.end_time,
     )
     db.add(workout)
+    try:
+        # Reserve the session before writing its contents. A second device/tab or a
+        # retry after a lost response must not insert another completed workout.
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing = saved_session()
+        if existing is not None:
+            return existing
+        raise
     replace_workout_contents(db, user.id, workout, payload)
     db.flush()
     sync_workout_cardio_sessions(db, workout)

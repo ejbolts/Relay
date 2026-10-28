@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
+
+_A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
+
 ![New machine photo form with a machine name, custom Seat and Backrest settings, Add, Cancel and Save and pin](screenshots/releases/1.1.0-machine-setup-settings.png)
 
 _Add settings while naming a new machine. **Save and pin** saves the photo, name and numeric values together. Isolated sample data and an illustration from the exercise library._
@@ -68,6 +72,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Machine settings stay in Equipment photo. Add any setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine loads its own settings. The exercise menu Settings action opens and scrolls to Equipment photo; it no longer toggles a separate exercise editor. The muscle set credits popup shows only muscle credits. Saving closes the editor, and workouts keep their original settings snapshot.
 - Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.

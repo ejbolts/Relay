@@ -167,6 +167,23 @@ describe('active workout draft persistence', () => {
       ],
     };
     expect(savedWorkoutMatchesOldDraft(stored, saved, Date.UTC(2026, 8, 12))).toBe(true);
+    const clientSessionId = '925d14de-9bfe-4d59-a081-4eaab99b714a';
+    const identifiedDraft = { ...stored, clientSessionId, name: '' };
+    const identifiedSaved = { ...saved, client_session_id: clientSessionId };
+    // Exact save identity reconciles a lost response immediately, including auto-named sessions.
+    expect(
+      savedWorkoutMatchesOldDraft(identifiedDraft, identifiedSaved, stored.startedAt + 60_000),
+    ).toBe(true);
+    expect(
+      savedWorkoutMatchesOldDraft(
+        { ...identifiedDraft, resumingWorkoutId: saved.id },
+        identifiedSaved,
+        stored.startedAt + 60_000,
+      ),
+    ).toBe(false);
+    expect(savedWorkoutMatchesOldDraft(identifiedDraft, saved, stored.startedAt + 60_000)).toBe(
+      false,
+    );
     expect(
       savedWorkoutMatchesOldDraft(
         { ...stored, workoutTypeId: 'arms' },

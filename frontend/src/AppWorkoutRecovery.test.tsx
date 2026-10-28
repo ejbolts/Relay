@@ -3,11 +3,13 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api } from './api';
 import * as push from './push';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import {
+  ACTIVE_WORKOUT_DRAFT_KEY,
   readActiveWorkoutDraft,
   writeActiveWorkoutDraft,
   type ActiveWorkoutDraft,
@@ -291,6 +293,23 @@ function expectPreserved(draft: ActiveWorkoutDraft) {
     notes: draft.notes,
     movements: draft.movements,
   });
+}
+
+async function confirmFinish() {
+  const finish = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Finish workout',
+  )!;
+  await act(async () => finish.click());
+  const confirm = document.querySelector<HTMLButtonElement>(
+    '.workout-finish-dialog .popup-primary-action',
+  )!;
+  await act(async () => confirm.click());
+}
+
+function restoreOldLoggerLocation() {
+  const state = createAppHistoryState('log', 0);
+  window.history.replaceState(state, '', '#log');
+  window.dispatchEvent(new PopStateEvent('popstate', { state }));
 }
 
 beforeEach(() => {
@@ -809,18 +828,142 @@ describe('active workout recovery at startup', () => {
   });
 });
 
-describe('finishing workouts in the background', () => {
-  async function confirmFinish() {
-    const finish = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Finish workout',
-    )!;
-    await act(async () => finish.click());
-    const confirm = document.querySelector<HTMLButtonElement>(
-      '.workout-finish-dialog .popup-primary-action',
-    )!;
-    await act(async () => confirm.click());
+describe('phantom workout prevention', () => {
+  beforeEach(() => {
+    vi.mocked(api.createWorkout).mockReset();
+  });
+
+  function expectNoActiveWorkout() {
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.logger-screen')).toBeNull();
+    expect(container.querySelector('[aria-label="Resume active workout"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Start workout"]')).not.toBeNull();
   }
 
+  it('does not start a workout from an old logger link, including after eight hours and background events', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await mount();
+    expect(window.location.hash).toBe('#dashboard');
+    expectNoActiveWorkout();
+
+    vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expectNoActiveWorkout();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expect(api.updateWorkout).not.toHaveBeenCalled();
+  });
+
+  it('does not recreate a workout when browser history returns to the logger after a successful save', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    await confirmFinish();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expectNoActiveWorkout();
+
+    await act(async () => restoreOldLoggerLocation());
+    expect(window.location.hash).toBe('#dashboard');
+    await act(async () => window.dispatchEvent(new Event('pagehide')));
+    expectNoActiveWorkout();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+  });
+
+  it('closes the original logger without replacing it when a save succeeds after returning to the logger', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    let finishSave!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    expect(window.location.hash).toBe('#dashboard');
+    await act(async () => restoreOldLoggerLocation());
+    expect(window.location.hash).toBe('#log');
+    expect(readActiveWorkoutDraft()).not.toBeNull();
+
+    await act(async () => finishSave(remoteWorkout()));
+    expect(window.location.hash).toBe('#dashboard');
+    await act(async () => window.dispatchEvent(new Event('pagehide')));
+    expectNoActiveWorkout();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+  });
+
+  it.each(['clears', 'replaces'] as const)(
+    'stops a stale logger when another tab %s its draft, before background handlers can rewrite or auto-save it',
+    async (change) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+      const original = storedDraft();
+      writeActiveWorkoutDraft(original);
+      await mount();
+      const oldValue = window.localStorage.getItem(ACTIVE_WORKOUT_DRAFT_KEY);
+      vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000);
+      const replacement = storedDraft({
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        lastActiveAt: Date.now(),
+        inactiveFinishAt: Date.now() + 3 * 60 * 60 * 1000,
+        name: 'Workout started in the other tab',
+        notes: 'New session must survive the stale tab',
+      });
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+
+      await act(async () => {
+        if (change === 'clears') window.localStorage.removeItem(ACTIVE_WORKOUT_DRAFT_KEY);
+        else writeActiveWorkoutDraft(replacement);
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: ACTIVE_WORKOUT_DRAFT_KEY,
+            oldValue,
+            newValue: window.localStorage.getItem(ACTIVE_WORKOUT_DRAFT_KEY),
+            storageArea: window.localStorage,
+          }),
+        );
+        // These events run before React commits the storage listener's state update.
+        window.dispatchEvent(new Event('pagehide'));
+        document.dispatchEvent(new Event('visibilitychange'));
+        window.dispatchEvent(new Event('focus'));
+      });
+
+      if (change === 'clears') expectNoActiveWorkout();
+      else expect(readActiveWorkoutDraft()).toMatchObject(replacement);
+      expect(api.createWorkout).not.toHaveBeenCalled();
+      expect(api.updateWorkout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps one client session identity across a failed save, reload and retry', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(new Error('Connection lost.'));
+    await mount();
+    const clientSessionId = readActiveWorkoutDraft()?.clientSessionId;
+    expect(clientSessionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    await confirmFinish();
+    expect(vi.mocked(api.createWorkout).mock.calls[0][0].client_session_id).toBe(clientSessionId);
+    expect(readActiveWorkoutDraft()?.clientSessionId).toBe(clientSessionId);
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(readActiveWorkoutDraft()?.clientSessionId).toBe(clientSessionId);
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    await confirmFinish();
+    expect(api.createWorkout).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.createWorkout).mock.calls[1][0].client_session_id).toBe(clientSessionId);
+    expectNoActiveWorkout();
+  });
+});
+
+describe('finishing workouts in the background', () => {
   it.each([false, true])(
     'keeps a 23:30–00:30 workout on its start day (restored after midnight: %s)',
     async (restoreAfterMidnight) => {
