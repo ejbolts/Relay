@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { MachineSettingsSummary } from './MachineSettingsEditor';
 import { PopupDialog } from './PopupDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { formatWeight } from './weightUnits';
@@ -91,6 +92,9 @@ export function ExerciseSessionSheet({
                 ]
               : [],
           )}
+          {movements.map((movement) => (
+            <MachineSettingsSummary key={movement.id} settings={movement.machine_settings} />
+          ))}
           <table>
             <thead>
               <tr>

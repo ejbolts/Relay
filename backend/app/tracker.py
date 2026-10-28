@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
+from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -34,6 +35,7 @@ from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
 from .exercise_aliases import canonical_exercise_name
+from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
     BodyMeasurement,
     BodyWeightGoal,
@@ -552,6 +554,7 @@ def replace_workout_contents(
             exercise=exercise,
             order_index=movement_index,
             notes=movement_payload.notes,
+            machine_settings=[item.model_dump() for item in movement_payload.machine_settings],
             superset_group=groups.get(movement_payload.superset_key or ""),
         )
         if movement_payload.machine_photo_ids:
@@ -1024,12 +1027,19 @@ async def upload_machine_photo(
     settings: SettingsDependency,
     file: Annotated[UploadFile, File(...)],
     caption: Annotated[str, Form(min_length=1, max_length=160)],
+    machine_settings: Annotated[str, Form()] = '{"settings":[]}',
 ) -> MachinePhoto:
     if not get_owned(db, Exercise, exercise_id, user.id):
         raise HTTPException(status_code=404, detail="Exercise was not found.")
     cleaned_caption = caption.strip()
     if not cleaned_caption:
         raise HTTPException(status_code=422, detail="Enter a machine name.")
+    try:
+        machine_values = MachineSettingsUpdate.model_validate_json(machine_settings)
+    except ValidationError as error:
+        raise HTTPException(
+            status_code=422, detail="Enter a name and numeric value for each setting."
+        ) from error
     limits = load_account_limits(db, settings)
     check_account_total(
         db, user, MachinePhoto, limits.photos_per_account, "photos_per_account", PHOTO_NOT_UPLOADED
@@ -1057,6 +1067,13 @@ async def upload_machine_photo(
     )
     try:
         db.add(photo)
+        db.flush()
+        set_setting(
+            db,
+            user.id,
+            settings_key(db, user.id, exercise_id, photo.id),
+            machine_values.model_dump_json(),
+        )
         db.commit()
         db.refresh(photo)
         return photo
@@ -1839,6 +1856,24 @@ def exercise_history_baselines(
 def create_workout(
     payload: TrainingWorkoutCreate, db: DbSession, user: CurrentUser, settings: SettingsDependency
 ) -> TrainingWorkout:
+    user_id = user.id
+    client_session_id = str(payload.client_session_id) if payload.client_session_id else None
+
+    def saved_session() -> TrainingWorkout | None:
+        if client_session_id is None:
+            return None
+        return db.scalar(
+            select(TrainingWorkout)
+            .where(
+                TrainingWorkout.user_id == user_id,
+                TrainingWorkout.client_session_id == client_session_id,
+            )
+            .options(*workout_options())
+        )
+
+    existing = saved_session()
+    if existing is not None:
+        return existing
     limits = load_account_limits(db, settings)
     check_workout_size(payload, limits, user)
     check_account_total(
@@ -1850,7 +1885,8 @@ def create_workout(
         WORKOUT_NOT_SAVED,
     )
     workout = TrainingWorkout(
-        user_id=user.id,
+        user_id=user_id,
+        client_session_id=client_session_id,
         name=payload.name,
         workout_date=payload.workout_date,
         category=payload.category,
@@ -1860,6 +1896,16 @@ def create_workout(
         end_time=payload.end_time,
     )
     db.add(workout)
+    try:
+        # Reserve the session before writing its contents. A second device/tab or a
+        # retry after a lost response must not insert another completed workout.
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing = saved_session()
+        if existing is not None:
+            return existing
+        raise
     replace_workout_contents(db, user.id, workout, payload)
     db.flush()
     sync_workout_cardio_sessions(db, workout)

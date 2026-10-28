@@ -170,6 +170,11 @@ export interface TrackedSet {
   completed: boolean;
 }
 
+export interface MachineSetting {
+  name: string;
+  value: string;
+}
+
 export interface TrackedMovement {
   id: string;
   order_index: number;
@@ -177,11 +182,13 @@ export interface TrackedMovement {
   exercise: Exercise;
   sets: TrackedSet[];
   machine_photos: MachinePhoto[];
+  machine_settings?: MachineSetting[];
   superset_group_id: string | null;
   superset_name: string | null;
 }
 
 export interface TrackedWorkout {
+  client_session_id?: string | null;
   id: string;
   name: string;
   workout_date: string;
@@ -228,6 +235,7 @@ export interface WorkoutSetInput {
 }
 
 export interface WorkoutInput {
+  client_session_id?: string;
   name: string;
   workout_date: string;
   category: WorkoutCategory;
@@ -240,6 +248,7 @@ export interface WorkoutInput {
     exercise_id: string;
     notes: string | null;
     machine_photo_ids: string[];
+    machine_settings?: MachineSetting[];
     superset_key?: string | null;
     sets: WorkoutSetInput[];
   }>;

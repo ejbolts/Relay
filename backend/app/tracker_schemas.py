@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
     MuscleRole,
@@ -161,6 +163,7 @@ class WorkoutMovementCreate(BaseModel):
     exercise_id: str
     notes: str | None = Field(default=None, max_length=2_000)
     machine_photo_ids: list[str] = Field(default_factory=list, max_length=20)
+    machine_settings: list[NumericMachineSetting] = Field(default_factory=list, max_length=20)
     superset_key: str | None = Field(default=None, max_length=50)
     sets: list[WorkoutSetCreate] = Field(min_length=1, max_length=100)
 
@@ -209,6 +212,7 @@ class WorkoutTypeUpdate(BaseModel):
 
 
 class TrainingWorkoutCreate(BaseModel):
+    client_session_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     workout_date: date
     category: WorkoutCategory
@@ -280,6 +284,7 @@ class WorkoutMovementRead(BaseModel):
     notes: str | None
     exercise: ExerciseRead
     machine_photos: list[MachinePhotoRead] = []
+    machine_settings: list[MachineSetting] = Field(default_factory=list)
     superset_group_id: str | None
     superset_name: str | None = None
     sets: list[WorkoutSetRead] = []
@@ -289,6 +294,7 @@ class TrainingWorkoutRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    client_session_id: str | None = None
     name: str
     workout_date: date
     category: WorkoutCategory

@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, date, datetime, time
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
@@ -697,6 +699,7 @@ class TrainingWorkout(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     user_id: Mapped[str | None] = user_id_column()
+    client_session_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
     workout_date: Mapped[date] = mapped_column(Date)
     category: Mapped[WorkoutCategory] = mapped_column(Enum(WorkoutCategory, native_enum=False))
@@ -729,6 +732,12 @@ class TrainingWorkout(Base):
     )
 
     __table_args__ = (
+        Index(
+            "uq_training_workout_user_client_session",
+            "user_id",
+            "client_session_id",
+            unique=True,
+        ),
         CheckConstraint(
             "duration_minutes IS NULL OR duration_minutes >= 0",
             name="training_workout_duration_nonnegative",
@@ -749,6 +758,9 @@ class WorkoutMovement(Base):
     exercise_id: Mapped[str] = mapped_column(ForeignKey("exercises.id"))
     order_index: Mapped[int] = mapped_column(Integer)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    machine_settings: Mapped[list[dict[str, str]]] = mapped_column(
+        JSON, default=list, server_default="[]"
+    )
     superset_group_id: Mapped[str | None] = mapped_column(
         ForeignKey("superset_groups.id", ondelete="SET NULL"), nullable=True, index=True
     )

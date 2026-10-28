@@ -10,6 +10,7 @@ import {
   useContext,
   startTransition,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -17,6 +18,7 @@ import {
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
@@ -52,6 +54,7 @@ import type {
   ExerciseProgress,
   MachinePhoto,
   MachinePhotoUsage,
+  MachineSetting,
   PersonalRecord,
   SharedProfileSummary,
   TrackedSet,
@@ -267,6 +270,7 @@ import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
 import { RestTimerToast, WorkoutHeaderMeta } from './WorkoutRestTimer';
 import {
+  ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
@@ -640,9 +644,7 @@ function AppContent() {
     () => readActiveWorkoutDraft()?.resumingWorkoutId ?? null,
   );
   const [activeWorkoutStartedAt, setActiveWorkoutStartedAt] = useState<number | null>(() => {
-    const storedDraft = readActiveWorkoutDraft();
-    if (storedDraft) return storedDraft.startedAt;
-    return window.location.hash === '#log' ? Date.now() : null;
+    return readActiveWorkoutDraft()?.startedAt ?? null;
   });
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
   // The opened shared profile; each opening refetches it, while Back reveals the cached screen.
@@ -681,6 +683,27 @@ function AppContent() {
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [workoutSaving, setWorkoutSaving] = useState(false);
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
+  useEffect(() => {
+    // A URL (including an old phone notification) is navigation, never a Start action.
+    if (tab !== 'log' || editingWorkout || activeWorkoutStartedAt !== null) return;
+    navigationActionRef.current = 'replace';
+    setTabState('dashboard');
+  }, [activeWorkoutStartedAt, editingWorkout, tab]);
+  useEffect(() => {
+    if (activeWorkoutStartedAt === null) return;
+    const reconcileDraft = () => {
+      const draft = readActiveWorkoutDraft();
+      if (draft?.startedAt === activeWorkoutStartedAt) return;
+      // Another tab finished, discarded or replaced this session. Do not erase its new draft.
+      setActiveWorkoutStartedAt(null);
+      setResumingWorkoutId(null);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === ACTIVE_WORKOUT_DRAFT_KEY || event.key === null) reconcileDraft();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [activeWorkoutStartedAt]);
   useEffect(() => {
     // Accounts without upload access never reach the video screen, even from an old #videos link.
     if (tab !== 'videos' || videosAllowed) return;
@@ -1082,7 +1105,8 @@ function AppContent() {
 
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
     if (!wasEditing) {
-      clearActiveWorkoutDraft();
+      const draft = readActiveWorkoutDraft();
+      if (draft?.startedAt === activeWorkoutStartedAt) clearActiveWorkoutDraft();
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
     }
@@ -1590,111 +1614,106 @@ function AppContent() {
               )}
             </CachedTabPanel>
           )}
-          {!loading &&
-            (tab === 'log' ||
-              activeWorkoutStartedAt !== null ||
-              (visitedTabs.has('log') && editingWorkout !== null)) && (
-              <CachedTabPanel active={tab === 'log'}>
-                {workoutCatalogueReady ? (
-                  <WorkoutBrowser
-                    key={
-                      editingWorkout
-                        ? `edit-${editingWorkout.id}`
-                        : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
-                    }
-                    workouts={workouts}
-                    initialWorkout={editingWorkout}
-                    resumedWorkoutId={resumingWorkoutId}
-                    hasOlder={olderHistoryAvailable}
-                  >
-                    {(navigation, viewedWorkout) => (
-                      <WorkoutLogger
-                        key={viewedWorkout?.id ?? 'original'}
-                        exercises={exercises}
-                        restoredDraftMovements={restoredDraftMovements}
-                        recommendation={dashboard?.recommendation ?? null}
-                        template={workoutTemplate}
-                        startCategory={workoutStartCategory}
-                        startType={workoutStartType}
-                        initialDate={workoutStartDate}
-                        initialWorkout={viewedWorkout ?? editingWorkout}
-                        readOnly={Boolean(viewedWorkout)}
-                        navigation={navigation}
-                        resumingWorkout={viewedWorkout ? null : resumingWorkout}
-                        currentBodyweight={
-                          viewedWorkout
-                            ? savedWorkoutBodyweight(viewedWorkout)
-                            : (measurements[0]?.weight_kg ?? null)
-                        }
-                        historicalWorkouts={workouts}
-                        historyBaselines={historyBaselines}
-                        restTimerEnabled={restTimerEnabled}
-                        showRestTimes={showRestTimes}
-                        categoryColors={workoutTypeColors}
-                        onExerciseHistory={(exerciseId) =>
-                          openHistorySection('progress', exerciseId)
-                        }
-                        onExerciseFavorite={updateExerciseFavorite}
-                        onCreateExercise={createExercise}
-                        onSave={saveWorkout}
-                        onAutoSaved={() =>
-                          setMessage(
-                            'Your inactive workout passed its time limit and was auto-saved.',
-                          )
-                        }
-                        activeStartedAt={activeWorkoutStartedAt}
-                        onRestTimerChange={
-                          editingWorkout || viewedWorkout ? undefined : setRestEndsAt
-                        }
-                        onRestTimerComplete={notifyRestComplete}
-                        onClose={navigateBack}
-                        onDelete={() => {
-                          if (workoutSaving) return;
-                          if (editingWorkout) {
-                            void deleteWorkout(editingWorkout);
-                            setTab('history');
-                          } else {
-                            clearActiveWorkoutDraft();
-                            setActiveWorkoutStartedAt(null);
-                            setResumingWorkoutId(null);
-                            setTab('dashboard');
-                          }
-                          setEditingWorkout(null);
-                        }}
-                      />
-                    )}
-                  </WorkoutBrowser>
-                ) : (
-                  <section className="logger-screen content-page" aria-live="polite">
-                    <OverlayScreenHeader
-                      title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
-                      subtitle={
-                        activeDraft
-                          ? 'Your workout is saved on this device'
-                          : 'Load your exercise library to start'
+          {!loading && (activeWorkoutStartedAt !== null || editingWorkout !== null) && (
+            <CachedTabPanel active={tab === 'log'}>
+              {workoutCatalogueReady ? (
+                <WorkoutBrowser
+                  key={
+                    editingWorkout
+                      ? `edit-${editingWorkout.id}`
+                      : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
+                  }
+                  workouts={workouts}
+                  initialWorkout={editingWorkout}
+                  resumedWorkoutId={resumingWorkoutId}
+                  hasOlder={olderHistoryAvailable}
+                >
+                  {(navigation, viewedWorkout) => (
+                    <WorkoutLogger
+                      key={viewedWorkout?.id ?? 'original'}
+                      exercises={exercises}
+                      restoredDraftMovements={restoredDraftMovements}
+                      recommendation={dashboard?.recommendation ?? null}
+                      template={workoutTemplate}
+                      startCategory={workoutStartCategory}
+                      startType={workoutStartType}
+                      initialDate={workoutStartDate}
+                      initialWorkout={viewedWorkout ?? editingWorkout}
+                      readOnly={Boolean(viewedWorkout)}
+                      navigation={navigation}
+                      resumingWorkout={viewedWorkout ? null : resumingWorkout}
+                      currentBodyweight={
+                        viewedWorkout
+                          ? savedWorkoutBodyweight(viewedWorkout)
+                          : (measurements[0]?.weight_kg ?? null)
                       }
-                      onBack={navigateBack}
+                      historicalWorkouts={workouts}
+                      historyBaselines={historyBaselines}
+                      restTimerEnabled={restTimerEnabled}
+                      showRestTimes={showRestTimes}
+                      categoryColors={workoutTypeColors}
+                      onExerciseHistory={(exerciseId) => openHistorySection('progress', exerciseId)}
+                      onExerciseFavorite={updateExerciseFavorite}
+                      onCreateExercise={createExercise}
+                      onSave={saveWorkout}
+                      onAutoSaved={() =>
+                        setMessage(
+                          'Your inactive workout passed its time limit and was auto-saved.',
+                        )
+                      }
+                      activeStartedAt={activeWorkoutStartedAt}
+                      onRestTimerChange={
+                        editingWorkout || viewedWorkout ? undefined : setRestEndsAt
+                      }
+                      onRestTimerComplete={notifyRestComplete}
+                      onClose={navigateBack}
+                      onDelete={() => {
+                        if (workoutSaving) return;
+                        if (editingWorkout) {
+                          void deleteWorkout(editingWorkout);
+                          setTab('history');
+                        } else {
+                          clearActiveWorkoutDraft();
+                          setActiveWorkoutStartedAt(null);
+                          setResumingWorkoutId(null);
+                          setTab('dashboard');
+                        }
+                        setEditingWorkout(null);
+                      }}
                     />
-                    <p>
-                      {exerciseCatalogue.error
-                        ? 'Your exercises could not be loaded.'
-                        : 'Some exercises in your saved workout are not available yet.'}{' '}
-                      {activeDraft
-                        ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
-                        : 'Reload the exercises to start your workout.'}
-                    </p>
-                    {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
-                    >
-                      Retry loading exercises
-                    </button>
-                  </section>
-                )}
-              </CachedTabPanel>
-            )}
+                  )}
+                </WorkoutBrowser>
+              ) : (
+                <section className="logger-screen content-page" aria-live="polite">
+                  <OverlayScreenHeader
+                    title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
+                    subtitle={
+                      activeDraft
+                        ? 'Your workout is saved on this device'
+                        : 'Load your exercise library to start'
+                    }
+                    onBack={navigateBack}
+                  />
+                  <p>
+                    {exerciseCatalogue.error
+                      ? 'Your exercises could not be loaded.'
+                      : 'Some exercises in your saved workout are not available yet.'}{' '}
+                    {activeDraft
+                      ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
+                      : 'Reload the exercises to start your workout.'}
+                  </p>
+                  {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                  >
+                    Retry loading exercises
+                  </button>
+                </section>
+              )}
+            </CachedTabPanel>
+          )}
           {!loading && (tab === 'body' || visitedTabs.has('body')) && (
             <CachedTabPanel active={tab === 'body'}>
               <BodyCompositionScreen
@@ -2361,6 +2380,7 @@ function WorkoutLogger({
   const [name, setName] = useState(
     initialWorkout?.name ?? restoredDraft?.name ?? resumingWorkout?.name ?? '',
   );
+  // Keep the selected start day even when the workout finishes after midnight.
   const [workoutDate, setWorkoutDate] = useState(
     initialWorkout?.workout_date ??
       restoredDraft?.workoutDate ??
@@ -2458,6 +2478,7 @@ function WorkoutLogger({
           notes: movement.notes ?? '',
           machinePhotoIds: movement.machine_photos.map((photo) => photo.id),
           machinePhotosInitialized: true,
+          machineSettings: movement.machine_settings ?? [],
           supersetKey: movement.superset_group_id,
           isComplete: false,
           sets: movement.sets.map((item) => ({
@@ -2520,6 +2541,16 @@ function WorkoutLogger({
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
+  const clientSessionId = useState(() => restoredDraft?.clientSessionId ?? crypto.randomUUID())[0];
+  const draftPersistedRef = useRef(Boolean(restoredDraft));
+  const isCurrentDraft = useCallback(() => {
+    if (!draftPersistedRef.current) return true;
+    const current = readActiveWorkoutDraft();
+    return (
+      current?.startedAt === startedAt &&
+      (!current.clientSessionId || current.clientSessionId === clientSessionId)
+    );
+  }, [clientSessionId, startedAt]);
   const resumedWorkoutId = restoredDraft?.resumingWorkoutId ?? resumingWorkout?.id ?? null;
   const previousDurationMinutes = useState(
     () => restoredDraft?.previousDurationMinutes ?? resumingWorkout?.duration_minutes ?? 0,
@@ -2581,8 +2612,11 @@ function WorkoutLogger({
     }
     let lastActivityWriteAt = 0;
     const persistDraft = () => {
-      return writeActiveWorkoutDraft({
+      // Read synchronously: a frozen tab can wake before its storage event is delivered.
+      if (savingRef.current || !isCurrentDraft()) return false;
+      const persisted = writeActiveWorkoutDraft({
         version: 1,
+        clientSessionId,
         startedAt,
         ...(resumedWorkoutId && {
           resumingWorkoutId: resumedWorkoutId,
@@ -2603,13 +2637,17 @@ function WorkoutLogger({
           exerciseId: movement.exercise.id,
           notes: movement.notes,
           machinePhotoIds: movement.machinePhotoIds,
+          machineSettings: movement.machineSettings,
           supersetKey: movement.supersetKey,
           isComplete: movement.isComplete,
           sets: movement.sets,
         })),
       });
+      if (persisted) draftPersistedRef.current = true;
+      return persisted;
     };
     const recordActivity = () => {
+      if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();
       if (now >= inactiveFinishAtRef.current) {
         void finishWorkoutRef.current(inactiveFinishAtRef.current);
@@ -2659,6 +2697,8 @@ function WorkoutLogger({
     startedAt,
     workoutDate,
     durationOverrideMinutes,
+    clientSessionId,
+    isCurrentDraft,
   ]);
 
   useEffect(() => {
@@ -3106,6 +3146,7 @@ function WorkoutLogger({
 
   async function finishWorkout(automaticEndAt?: number) {
     if (savingRef.current) return;
+    if (!initialWorkout && !isCurrentDraft()) return;
     if (workoutTypes.loading) {
       setError('Workout types are still loading. Please try saving again in a moment.');
       return;
@@ -3179,6 +3220,7 @@ function WorkoutLogger({
     try {
       cancelRestTimer();
       await onSave({
+        ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
         name: completedIdentity.name,
         workout_date: workoutDate,
         category: completedIdentity.category,
@@ -3191,6 +3233,7 @@ function WorkoutLogger({
           exercise_id: movement.exercise.id,
           notes: movement.notes.trim() || null,
           machine_photo_ids: movement.machinePhotoIds,
+          machine_settings: movement.machineSettings ?? [],
           sets: movement.sets.map((item) => ({
             reps: item.reps,
             weight_kg: item.weight_kg,
@@ -3547,15 +3590,15 @@ function WorkoutLogger({
                     aria-label="Workout duration minutes"
                   />
                 </label>
-                <small className="workout-timing-help">
-                  {initialWorkout
-                    ? hasCompleteTimeRange
+                {(!initialWorkout || hasCompleteTimeRange) && (
+                  <small className="workout-timing-help">
+                    {initialWorkout
                       ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
-                      : 'Add both times to calculate duration automatically, including workouts ending after midnight.'
-                    : resumedWorkoutId
-                      ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
-                      : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
-                </small>
+                      : resumedWorkoutId
+                        ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
+                        : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
+                  </small>
+                )}
               </fieldset>
             )}
           </div>
@@ -3656,12 +3699,28 @@ function WorkoutLogger({
               onDeleteSet={(index) => deleteSet(movement, index)}
               onRemoveRestTime={(item) => removeRestTime(movement, item)}
               onSuperset={(button) => openSupersetPicker(movement.key, button)}
-              onMachinePhotos={(machinePhotoIds) =>
+              onMachinePhotos={(machinePhotoIds, machineSettings) =>
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key
-                      ? { ...item, machinePhotoIds, machinePhotosInitialized: true }
+                      ? {
+                          ...item,
+                          machinePhotoIds,
+                          machinePhotosInitialized: true,
+                          machineSettings:
+                            machineSettings ??
+                            (item.machinePhotoIds.join(',') === machinePhotoIds.join(',')
+                              ? item.machineSettings
+                              : undefined),
+                        }
                       : item,
+                  ),
+                )
+              }
+              onMachineSettings={(machineSettings) =>
+                setMovements((current) =>
+                  current.map((item) =>
+                    item.key === movement.key ? { ...item, machineSettings } : item,
                   ),
                 )
               }
@@ -4136,6 +4195,7 @@ function MovementCard({
   onSwitch,
   onRemove,
   onMachinePhotos,
+  onMachineSettings,
   prBadges,
   supersetLabel,
   onMoveUp,
@@ -4158,7 +4218,8 @@ function MovementCard({
   onAddSet: () => void;
   onSwitch: () => void;
   onRemove: () => void;
-  onMachinePhotos: (photoIds: string[]) => void;
+  onMachinePhotos: (photoIds: string[], settings?: MachineSetting[]) => void;
+  onMachineSettings: (settings: MachineSetting[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
   onMoveUp: () => void;
@@ -4179,6 +4240,29 @@ function MovementCard({
     !cardio && history[0] ? compactSetSummary(history[0].sets, weightUnit) : '';
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const photoPanelId = useId();
+  const pinnedMachinePhotoId = movement.machinePhotoIds.at(-1);
+  const machineSettingsUnloaded = movement.machineSettings === undefined;
+  const onMachineSettingsRef = useRef(onMachineSettings);
+
+  useEffect(() => {
+    onMachineSettingsRef.current = onMachineSettings;
+  }, [onMachineSettings]);
+
+  useEffect(() => {
+    // Choosing a saved machine records its settings; restored workouts keep their snapshot.
+    if (cardio || !pinnedMachinePhotoId || !machineSettingsUnloaded) return;
+    let cancelled = false;
+    void api.getMachineSettings(movement.exercise.id, pinnedMachinePhotoId).then(
+      ({ settings }) => {
+        if (!cancelled) onMachineSettingsRef.current(settings);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [cardio, movement.exercise.id, pinnedMachinePhotoId, machineSettingsUnloaded]);
   const [openSetActionsKey, setOpenSetActionsKey] = useState<string | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
@@ -5026,6 +5110,8 @@ function MovementCard({
 
       {!cardio && (
         <MachinePhotoChooser
+          key={movement.exercise.id}
+          id={photoPanelId}
           exercise={movement.exercise}
           selectedIds={movement.machinePhotoIds}
           autoPinLastUsed={!movement.machinePhotosInitialized}
@@ -5252,15 +5338,17 @@ function CardioSetScreenshotUpload({ onScan }: { onScan: (scan: CardioScreenshot
 }
 
 function MachinePhotoChooser({
+  id,
   exercise,
   selectedIds,
   autoPinLastUsed,
   onChange,
 }: {
+  id: string;
   exercise: Exercise;
   selectedIds: string[];
   autoPinLastUsed: boolean;
-  onChange: (photoIds: string[]) => void;
+  onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
 }) {
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
@@ -5317,36 +5405,45 @@ function MachinePhotoChooser({
     if (!file) return;
     setError(null);
     setCaption('');
+    setExpanded(null);
     setPending({ file, previewUrl: URL.createObjectURL(file) });
   }
 
-  async function uploadPhoto() {
+  async function uploadPhoto(machineSettings: MachineSetting[]) {
     if (!pending || !caption.trim()) {
-      setError('Enter the machine name before saving the photo.');
-      return;
+      throw new Error('Enter the machine name before saving the photo.');
     }
     setUploading(true);
     setError(null);
     try {
       const upload = await optimisePhoto(pending.file);
-      const photo = await api.uploadMachinePhoto(exercise.id, upload, caption.trim());
+      const photo = await api.uploadMachinePhoto(
+        exercise.id,
+        upload,
+        caption.trim(),
+        machineSettings,
+      );
       setPhotos((current) => [
         { ...photo, exercise_name: exercise.name, workout_count: 0, last_used_date: null },
         ...current,
       ]);
-      onChange(choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])]);
+      onChange(
+        choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])],
+        machineSettings,
+      );
       setChoosingReplacement(false);
       setPending(null);
       setCaption('');
       setPhotoPanelOpen(false);
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Could not save that photo.');
+      return { settings: machineSettings };
     } finally {
       setUploading(false);
     }
   }
 
   function togglePhoto(photoId: string) {
+    setPending(null);
+    setExpanded(null);
     if (choosingReplacement) {
       onChange([photoId]);
       setChoosingReplacement(false);
@@ -5394,12 +5491,21 @@ function MachinePhotoChooser({
 
   return (
     <details
+      id={id}
       className="machine-photo-picker"
       aria-label={`Machine photos for ${exercise.name}`}
       open={photoPanelOpen}
-      onToggle={(event) => setPhotoPanelOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        setPhotoPanelOpen(event.currentTarget.open);
+      }}
     >
-      <summary className="machine-photo-summary">
+      <summary
+        className="machine-photo-summary"
+        onClick={(event) => {
+          event.preventDefault();
+          setPhotoPanelOpen(!photoPanelOpen);
+        }}
+      >
         {primaryPinnedPhoto ? (
           <img src={primaryPinnedPhoto.thumbnail_url} alt="" loading="lazy" />
         ) : (
@@ -5426,6 +5532,7 @@ function MachinePhotoChooser({
             <input
               className="sr-only"
               type="file"
+              disabled={uploading}
               accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
               capture="environment"
               onChange={(event) => {
@@ -5440,6 +5547,7 @@ function MachinePhotoChooser({
             <input
               className="sr-only"
               type="file"
+              disabled={uploading}
               accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
               onChange={(event) => {
                 stagePhoto(event.target.files?.[0]);
@@ -5485,6 +5593,7 @@ function MachinePhotoChooser({
                       type="button"
                       className="machine-pin"
                       onClick={() => togglePhoto(photo.id)}
+                      disabled={uploading}
                     >
                       {choosingReplacement
                         ? selected
@@ -5504,29 +5613,28 @@ function MachinePhotoChooser({
 
         {pending && (
           <section className="photo-inline-editor panel">
-            <button type="button" className="photo-inline-close" onClick={() => setPending(null)}>
-              Cancel
-            </button>
             <img src={pending.previewUrl} alt="New machine preview" />
             <div>
               <p className="section-kicker">NEW MACHINE PHOTO</p>
               <h2>Name this machine</h2>
-              <p>For example: Hammer Strength lying leg curl.</p>
               <input
                 autoFocus
+                aria-label="Machine name"
+                disabled={uploading}
                 value={caption}
                 maxLength={160}
                 onChange={(event) => setCaption(event.target.value)}
                 placeholder="Machine name"
               />
-              <div className="photo-inline-actions">
-                <button type="button" onClick={() => setPending(null)} disabled={uploading}>
-                  Cancel
-                </button>
-                <button type="button" onClick={() => void uploadPhoto()} disabled={uploading}>
-                  {uploading ? 'Saving…' : 'Save and pin'}
-                </button>
-              </div>
+              <MachineSettingsEditor
+                key={pending.previewUrl}
+                exerciseId={exercise.id}
+                initialSettings={[]}
+                onChange={() => undefined}
+                onSave={uploadPhoto}
+                saveLabel="Save and pin"
+                onCancel={() => setPending(null)}
+              />
             </div>
           </section>
         )}
@@ -9667,6 +9775,7 @@ function HistoryWorkoutCard({
                       )}
                   </>
                 )}
+                <MachineSettingsSummary settings={movement.machine_settings} />
                 <HistorySetFlow
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}

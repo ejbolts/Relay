@@ -28,7 +28,8 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 - Build your own repeating training split in **Settings > Training > Your split**, with Upper / Lower, PPL, full body every other day and Cardio templates, custom workout types and rest days. **Edit split** on Home opens the editor; Up next follows your saved cycle.
 - Use previous-session suggestions to pick up where you left off.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
-- Attach reusable machine photos to remember equipment settings or setups.
+- Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
+- Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.
 
 Choose kilograms or pounds for weight entry and display.

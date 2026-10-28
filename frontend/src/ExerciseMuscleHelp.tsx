@@ -48,9 +48,6 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
             <p>Cardio does not add strength sets to your weekly muscle totals.</p>
           ) : (
             <>
-              <p>
-                For each completed working set, these credits go towards your weekly muscle totals.
-              </p>
               {credits.length ? (
                 <div className="exercise-muscle-credit-groups">
                   {[
@@ -81,14 +78,6 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
               ) : (
                 <p>No muscle set credits are available for this exercise.</p>
               )}
-              <p className="exercise-muscle-note">
-                Each listed muscle receives its own credit. Warmups, unfinished sets and failed sets
-                with no completed reps do not count.
-              </p>
-              <p className="exercise-muscle-note">
-                These are estimates for tracking training, not exact measures of muscle growth.
-                Technique and equipment can change muscle involvement.
-              </p>
             </>
           )}
         </PopupDialog>

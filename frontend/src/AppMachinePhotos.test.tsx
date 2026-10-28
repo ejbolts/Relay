@@ -31,6 +31,8 @@ vi.mock('./api', async (importOriginal) => {
       listPersonalRecords: vi.fn(),
       getWorkoutTypeColors: vi.fn(),
       listMachinePhotos: vi.fn(),
+      getMachineSettings: vi.fn(),
+      saveMachineSettings: vi.fn(),
       lastUsedMachinePhotos: vi.fn(),
       uploadMachinePhoto: vi.fn(),
       listAllMachinePhotos: vi.fn(),
@@ -214,6 +216,10 @@ beforeEach(() => {
     other: '#94a3b8',
   });
   vi.mocked(api.listMachinePhotos).mockResolvedValue([usage(homeGym, 2, '2025-10-12')]);
+  vi.mocked(api.getMachineSettings).mockResolvedValue({ settings: [] });
+  vi.mocked(api.saveMachineSettings).mockImplementation(async (_exerciseId, settings) => ({
+    settings,
+  }));
   vi.mocked(api.lastUsedMachinePhotos).mockResolvedValue([]);
   vi.mocked(api.listAllMachinePhotos).mockResolvedValue([
     usage(travelGym, 1, '2026-10-14'),
@@ -285,6 +291,64 @@ describe('saving and pinning a machine photo while logging', () => {
     );
   });
 
+  function pinHomeMachine() {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].machinePhotoIds = [homeGym.id];
+    writeActiveWorkoutDraft(draft);
+  }
+
+  it('has no exercise menu Settings action or machine settings editor without a pinned machine', async () => {
+    await act(async () => root.render(<App />));
+    const card = container.querySelector<HTMLElement>('.movement-card')!;
+    const picker = card.querySelector<HTMLDetailsElement>('.machine-photo-picker')!;
+    const menu = card.querySelector<HTMLDetailsElement>('.movement-overflow')!;
+    expect(
+      [...menu.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Settings'),
+    ).toBe(false);
+    await click(picker.querySelector('summary')!);
+    expect(picker.open).toBe(true);
+    expect(card.querySelector('.machine-settings')).toBeNull();
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
+    expect(picker.textContent).toContain('Take photo');
+    expect(picker.textContent).toContain('Choose photo');
+  });
+
+  it('records a pinned machine settings without showing an editor in the photo section', async () => {
+    pinHomeMachine();
+    const saved = [{ name: 'Seat', value: '5' }];
+    vi.mocked(api.getMachineSettings).mockResolvedValue({ settings: saved });
+    await act(async () => root.render(<App />));
+    const card = container.querySelector<HTMLElement>('.movement-card')!;
+    const picker = card.querySelector<HTMLDetailsElement>('.machine-photo-picker')!;
+    expect(api.getMachineSettings).toHaveBeenCalledWith(legPress.id, homeGym.id);
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual(saved);
+    await click(picker.querySelector('summary')!);
+    expect(picker.open).toBe(true);
+    expect(card.querySelector('.machine-settings')).toBeNull();
+  });
+
+  it('keeps the muscle credits popup focused on credits even when machine settings are saved', async () => {
+    pinHomeMachine();
+    vi.mocked(api.getMachineSettings).mockResolvedValue({
+      settings: [
+        { name: 'Seat', value: '5' },
+        { name: 'Backrest', value: '2' },
+      ],
+    });
+    await act(async () => root.render(<App />));
+    await click(button(`Muscle set credits for ${legPress.name}`));
+    const dialog = document.querySelector<HTMLDialogElement>('.exercise-muscle-dialog')!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).not.toContain('For each completed working set');
+    expect(dialog.textContent).not.toContain('These are estimates');
+    expect(dialog.textContent).not.toContain('Each listed muscle');
+    expect(dialog.textContent).not.toContain('Settings');
+    expect(dialog.querySelector('dl')).toBeNull();
+    expect(dialog.querySelector('[aria-label="Edit machine settings"]')).toBeNull();
+    expect(dialog.querySelector('[aria-label="Add machine settings"]')).toBeNull();
+    expect(container.querySelector('.machine-settings')).toBeNull();
+  });
+
   it('requires a machine name, then uploads the photo and pins it to every set', async () => {
     const created = photo('new-cybex', 'Travel gym Cybex press');
     vi.mocked(api.uploadMachinePhoto).mockResolvedValue(created);
@@ -305,6 +369,7 @@ describe('saving and pinning a machine photo while logging', () => {
       legPress.id,
       file,
       'Travel gym Cybex press',
+      [],
     );
     const pinned = [...picker.querySelectorAll('.machine-photo-rail article.selected')];
     expect(pinned.map((item) => item.querySelector('strong')?.textContent)).toEqual([
@@ -331,6 +396,92 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(picker.textContent).toContain('Photo storage is full.');
     expect(picker.querySelector('.photo-inline-editor')).not.toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([]);
+  });
+
+  it('saves custom numeric settings with a new machine and closes its form', async () => {
+    vi.mocked(api.uploadMachinePhoto).mockResolvedValue(photo('new-cybex', 'Cybex'));
+    await act(async () => root.render(<App />));
+    const { picker, file } = await stageNewPhoto();
+    const form = picker.querySelector<HTMLElement>('.photo-inline-editor')!;
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Machine name"]')!, 'Cybex');
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Setting 1 name"]')!, 'Seat');
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!, '5');
+    await click(button('+ Add', form));
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Setting 2 name"]')!, 'Backrest');
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Backrest value"]')!, '2');
+    await click(button('Save and pin', form));
+    const settings = [
+      { name: 'Seat', value: '5' },
+      { name: 'Backrest', value: '2' },
+    ];
+    expect(api.uploadMachinePhoto).toHaveBeenCalledWith(legPress.id, file, 'Cybex', settings);
+    expect(picker.querySelector('.photo-inline-editor')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual(settings);
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual(['new-cybex']);
+    expect(picker.querySelector('.machine-settings')).toBeNull();
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
+  });
+
+  it('retains new-machine edits on upload failure and rejects incomplete settings before uploading', async () => {
+    vi.mocked(api.uploadMachinePhoto).mockRejectedValue(new Error('Photo storage is full.'));
+    await act(async () => root.render(<App />));
+    const { picker } = await stageNewPhoto();
+    const form = picker.querySelector<HTMLElement>('.photo-inline-editor')!;
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Machine name"]')!, 'Cybex');
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Setting 1 name"]')!, 'Seat');
+    await click(button('Save and pin', form));
+    expect(form.textContent).toContain('Enter a setting name and value.');
+    expect(api.uploadMachinePhoto).not.toHaveBeenCalled();
+    await type(form.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!, '5');
+    await click(button('Save and pin', form));
+    expect(form.querySelector<HTMLInputElement>('[aria-label="Seat value"]')?.value).toBe('5');
+    expect(form.textContent).toContain('Photo storage is full.');
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([]);
+  });
+
+  it('loads the chosen machine settings into the workout without saving machine defaults', async () => {
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, null),
+      usage(travelGym, 1, null),
+    ]);
+    vi.mocked(api.getMachineSettings).mockImplementation(async (_exerciseId, photoId) => ({
+      settings: [
+        {
+          name: 'Seat',
+          value: photoId === homeGym.id ? '5' : photoId === travelGym.id ? '2' : '9',
+        },
+      ],
+    }));
+    await act(async () => root.render(<App />));
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toBeUndefined();
+    const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
+    await click(button('Pin to sets', picker.querySelector('article')!));
+    expect(picker.querySelector('.machine-settings')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
+      { name: 'Seat', value: '5' },
+    ]);
+    await click(button('Pin to sets', picker.querySelectorAll('article')[1]));
+    expect(picker.querySelector('.machine-settings')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
+      { name: 'Seat', value: '2' },
+    ]);
+    expect(api.saveMachineSettings).not.toHaveBeenCalled();
+  });
+
+  it('keeps restored workout settings instead of replacing them with newer machine defaults', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].machinePhotoIds = [homeGym.id];
+    draft.movements[0].machineSettings = [{ name: 'Seat', value: '3' }];
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.getMachineSettings).mockResolvedValue({
+      settings: [{ name: 'Seat', value: '8' }],
+    });
+    await act(async () => root.render(<App />));
+    expect(api.getMachineSettings).not.toHaveBeenCalled();
+    expect(readActiveWorkoutDraft()?.movements[0].machineSettings).toEqual([
+      { name: 'Seat', value: '3' },
+    ]);
   });
 });
 

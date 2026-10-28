@@ -1,4 +1,4 @@
-import type { TrackedWorkout, WorkoutCategory, WorkoutSetInput } from './types';
+import type { MachineSetting, TrackedWorkout, WorkoutCategory, WorkoutSetInput } from './types';
 
 export const ACTIVE_WORKOUT_DRAFT_KEY = 'gym-video-logger.active-workout.v1';
 
@@ -18,6 +18,7 @@ export interface StoredDraftMovement {
   exerciseId: string;
   notes: string;
   machinePhotoIds: string[];
+  machineSettings?: MachineSetting[];
   supersetKey: string | null;
   isComplete?: boolean;
   sets: StoredDraftSet[];
@@ -25,6 +26,7 @@ export interface StoredDraftMovement {
 
 export interface ActiveWorkoutDraft {
   version: 1;
+  clientSessionId?: string;
   startedAt: number;
   resumingWorkoutId?: string;
   previousDurationMinutes?: number;
@@ -82,6 +84,15 @@ function isStoredMovement(value: unknown): value is StoredDraftMovement {
     typeof value.notes === 'string' &&
     Array.isArray(value.machinePhotoIds) &&
     value.machinePhotoIds.every((id) => typeof id === 'string') &&
+    (value.machineSettings === undefined ||
+      (Array.isArray(value.machineSettings) &&
+        value.machineSettings.length <= 20 &&
+        value.machineSettings.every(
+          (setting) =>
+            isRecord(setting) &&
+            typeof setting.name === 'string' &&
+            typeof setting.value === 'string',
+        ))) &&
     (value.supersetKey === null || typeof value.supersetKey === 'string') &&
     (value.isComplete === undefined || typeof value.isComplete === 'boolean') &&
     Array.isArray(value.sets) &&
@@ -93,6 +104,11 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
   return (
     isRecord(value) &&
     value.version === 1 &&
+    (value.clientSessionId === undefined ||
+      (typeof value.clientSessionId === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          value.clientSessionId,
+        ))) &&
     typeof value.startedAt === 'number' &&
     Number.isFinite(value.startedAt) &&
     value.startedAt > 0 &&
@@ -189,6 +205,7 @@ export function savedWorkoutMatchesOldDraft(
   now = Date.now(),
 ): boolean {
   if (draft.resumingWorkoutId) return false;
+  if (draft.clientSessionId && workout.client_session_id === draft.clientSessionId) return true;
   if (now - draft.startedAt < 24 * 60 * 60 * 1000) return false;
   if (
     workout.workout_date !== draft.workoutDate ||

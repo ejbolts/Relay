@@ -4,9 +4,25 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.1.0
 
-26 October 2026
+28 October 2026
 
 ### Find friends and improve your workouts
+
+![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
+
+_A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
+
+![New machine photo form with a machine name, custom Seat and Backrest settings, Add, Cancel and Save and pin](screenshots/releases/1.1.0-machine-setup-settings.png)
+
+_Add settings while naming a new machine. **Save and pin** saves the photo, name and numeric values together. Isolated sample data and an illustration from the exercise library._
+
+![Workout dated 27 October with start time 11:30 pm, end time 12:30 am and a one-hour duration](screenshots/releases/1.1.0-overnight-start-date.png)
+
+_An overnight workout stays on its starting day. This isolated sample starts at 11:30 pm on 27 October and finishes at 12:30 am on 28 October, recording one hour on 27 October. The prompt beneath empty start and end times has been removed._
+
+![Compact muscle set credits popup with Direct work and Partial credit lists](screenshots/releases/1.1.0-muscle-credits-only.png)
+
+_The exercise popup now contains only muscle credits. Isolated sample data._
 
 ![Split planner showing a saved cycle with workouts, consecutive rest days and a seven-day preview](screenshots/releases/1.1.0-split-rest-days.png)
 
@@ -60,6 +76,9 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
+- Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.
+- Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
 - Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.
 - Cardio sets open with their editable fields expanded, including suggestions from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately. Sets remain uncompleted until you tick them; completed sets still fold away.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
@@ -68,12 +87,13 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 - Tap a workout's reaction count to instantly open a bottom sheet showing who reacted and each person's emoji. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
 - Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.
 - Social > Find automatically suggests public accounts, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile; Add friend is a separate action. Your account, existing friends and requests, private or disabled accounts, and blocks in either direction are excluded. Search remains available above the list.
-- Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; closing the notes returns to Notifications; opening the inbox alone does not. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.
+- Notifications includes a Relay release row with its version, title, date and **View** button. View opens What's new and clears **New**; opening the inbox alone does not, and closing the notes returns to the page you were viewing. The latest release stays available after viewing, with read state kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.
 - Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.
 - Home's Recent Friends Activity now shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.
 - The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.
 - Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.
 - RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
+- The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.
 - Strength workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 
 ## 1.0.0

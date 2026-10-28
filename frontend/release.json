@@ -1,29 +1,33 @@
 {
   "version": "1.1.0",
-  "date": "2026-10-26",
+  "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Plan your training and rest days, build your exercise library with individual muscle credits, discover public profiles, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
+  "summary": "Save machine setups, plan training and rest days, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
     "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
+    "Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save.",
+    "Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.",
+    "Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.",
     "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
     "Tap a workout's reaction count to instantly open a bottom sheet showing the people who reacted and their emojis. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction remains a separate control.",
     "Removed the Exercise note for next time field from workout exercise cards. Previously saved exercise notes remain in workout history.",
     "Social > Find automatically suggests public accounts you are not already connected to, eight per page with numbered, Previous and Next controls. Each person's username appears beneath their name. Tap a name or avatar to open the profile, or use Add friend separately. Your account, existing friends and requests, private and disabled accounts, and blocks in either direction are excluded. Search remains available above the suggestions.",
-    "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; closing the notes returns to Notifications; opening the inbox alone does not. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
+    "Notifications includes a Relay release row with its version, title, date and View button. View opens What's new and clears New; opening the inbox alone does not, and closing the notes returns to the page you were viewing. The latest release remains available after viewing, and its read state is kept per account and release on this device. The row counts towards the 15-notification page limit and stays available if social notifications cannot load.",
     "Rest complete now appears as a nonblocking in-app alert while Relay is visible, including when you are on another tab or have dismissed the countdown. Background phone notifications keep their existing delivery path. Cancelled rests do not trigger an alert.",
     "Recent Friends Activity on Home shows the original logged time in your local time beside Today, Yesterday or the session date, for strength and cardio sessions. Editing a workout does not change its logged time.",
     "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.",
     "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.",
     "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
+    "The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.",
     "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/a90b338d409b698581bb1300976b7698a92ecc8b/docs/screenshots/releases/1.0.1-suggested-friends.png",
-    "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/d48f08cfb658aa9e3b78029296438f3a4ebd9e06/docs/screenshots/releases/1.1.0-machine-setup-settings.png",
+    "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
     {
@@ -32,6 +36,14 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/fa42998b90e3cbb752032a0dc1018f35ae98c47d/docs/screenshots/releases/1.1.0-split-rest-days.png",
         "alt": "Saved training split with Pull and Lower body workouts, consecutive Rest days, an Add rest day button and a seven-day calendar preview. Isolated sample data."
+      }
+    },
+    {
+      "title": "Your machine, your settings",
+      "description": "Add numeric settings while naming a new machine photo, then Save and pin everything together. Choosing a saved machine records its settings with the workout. Equipment photo shows machine photos; the muscle popup shows only credits.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/d48f08cfb658aa9e3b78029296438f3a4ebd9e06/docs/screenshots/releases/1.1.0-machine-setup-settings.png",
+        "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
       }
     },
     {
@@ -60,7 +72,7 @@
     },
     {
       "title": "Release notes in Notifications",
-      "description": "The latest Relay release has its own inbox row. Tap View for What's new; closing the notes returns to the inbox. New clears after viewing and the row stays available.",
+      "description": "The latest Relay release has its own inbox row. Tap View for What's new; closing the notes returns to the page you were viewing. New clears after viewing and the release row stays available.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/b217f9b47a27930ca7e340f29cdb706002791daa/docs/screenshots/releases/1.0.1-release-notification.png",
         "alt": "Notifications with a Relay 1.0.1 release row, New indicator, title, date and View button, above synthetic friend activity."

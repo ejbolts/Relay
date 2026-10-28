@@ -1,4 +1,4 @@
-import type { Exercise, WorkoutSetInput } from './types';
+import type { Exercise, MachineSetting, WorkoutSetInput } from './types';
 import type { StoredDraftMovement } from './workoutDraft';
 
 export type WorkoutDraftSet = WorkoutSetInput & {
@@ -12,6 +12,7 @@ export type WorkoutDraftMovement = {
   notes: string;
   machinePhotoIds: string[];
   machinePhotosInitialized: boolean;
+  machineSettings?: MachineSetting[];
   supersetKey: string | null;
   isComplete: boolean;
   sets: WorkoutDraftSet[];
@@ -30,6 +31,7 @@ export function restoreWorkoutDraftMovements(
     notes: movement.notes,
     machinePhotoIds: movement.machinePhotoIds,
     machinePhotosInitialized: true,
+    machineSettings: movement.machineSettings,
     supersetKey: movement.supersetKey,
     isComplete: movement.isComplete ?? false,
     sets: movement.sets,
@@ -48,6 +50,7 @@ export function replaceMovementExercise(
           exercise,
           machinePhotoIds: [],
           machinePhotosInitialized: false,
+          machineSettings: undefined,
           isComplete: false,
         }
       : movement,

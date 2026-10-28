@@ -91,7 +91,7 @@ async function releaseInbox(userId: string, secondHeader = false) {
   await act(async () => root.render(<ReleaseInbox userId={userId} secondHeader={secondHeader} />));
 }
 
-it('keeps the release unread on opening, opens its notes with View, and retains the read row across headers and remounts', async () => {
+it('keeps the release unread on opening, opens its notes with View, closes back to the page, and retains the read row across headers and remounts', async () => {
   await releaseInbox('inbox-view-sample', true);
   expect(host.querySelectorAll('[aria-label="Notifications, 1 unread"]')).toHaveLength(2);
   await click('Notifications, 1 unread');
@@ -112,9 +112,9 @@ it('keeps the release unread on opening, opens its notes with View, and retains 
   expect(document.querySelector('.release-announcement h3')?.textContent).toBe(metadata.title);
   expect(host.querySelectorAll('[aria-label="Notifications"]')).toHaveLength(2);
   await click(`Close Version ${formatReleaseVersion(metadata.version)}`);
-  expect(document.querySelectorAll('dialog')).toHaveLength(1);
-  expect(document.querySelector('.follow-notifications')).not.toBeNull();
-  await click('Close Notifications');
+  expect(document.querySelectorAll('dialog')).toHaveLength(0);
+  expect(document.querySelector('.follow-notifications')).toBeNull();
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('Notifications');
   await click('Notifications');
   expect(document.querySelector('.release-notification-row')).not.toBeNull();
   expect(document.querySelector('.release-notification-new')).toBeNull();
