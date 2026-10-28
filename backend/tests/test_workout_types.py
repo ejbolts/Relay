@@ -1,4 +1,5 @@
 from datetime import date
+from uuid import uuid4
 
 import pytest
 from conftest import TEST_PASSWORD
@@ -142,6 +143,22 @@ def test_removed_builtin_cannot_be_used_for_new_workout_but_history_is_editable(
     assert client.put(f"/api/workouts/{saved['id']}", json=body).status_code == 200
     assert client.patch("/api/workout-types/push", json={"archived": False}).status_code == 200
     assert client.post("/api/workouts", json=body).status_code == 201
+
+
+def test_rejected_removed_type_rolls_back_reserved_save_session(client):
+    body = {**payload(client, category="push"), "client_session_id": str(uuid4())}
+    assert client.delete("/api/workout-types/push").status_code == 204
+    assert client.post("/api/workouts", json=body).status_code == 422
+    assert client.get("/api/workouts").json() == []
+    # Restoring the type allows the same client session to retry successfully.
+    assert client.patch("/api/workout-types/push", json={"archived": False}).status_code == 200
+    saved = client.post("/api/workouts", json=body)
+    assert saved.status_code == 201
+    assert saved.json()["client_session_id"] == body["client_session_id"]
+    # Removing it again must still allow recovery of that already committed save.
+    assert client.delete("/api/workout-types/push").status_code == 204
+    assert client.post("/api/workouts", json=body).json()["id"] == saved.json()["id"]
+    assert len(client.get("/api/workouts").json()) == 1
 
 
 def test_shared_custom_metadata_and_filter_match_the_profile_owner(client, other_client):
