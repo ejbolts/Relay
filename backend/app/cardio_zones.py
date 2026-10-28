@@ -75,7 +75,28 @@ def session_zone(heart_rate: int | None, preferences: CardioPreferences) -> int 
     )
 
 
-def classify_session(session: CardioSession, preferences: CardioPreferences) -> None:
+def stored_zone(session: CardioSession) -> int | None:
+    label = (session.zone or "").removeprefix("Zone ").strip()
+    if label in {"1", "2", "3", "4", "5"}:
+        return int(label)
+    return 2 if session.qualifies_zone2 else None
+
+
+def effective_zone(session: CardioSession, preferences: CardioPreferences) -> int | None:
+    # Without personal ranges, keep each session's saved zone (new sessions default to Zone 2).
+    if not preferences.heart_rate_zones:
+        return stored_zone(session)
+    return session_zone(session.average_heart_rate_bpm, preferences)
+
+
+def classify_session(
+    session: CardioSession, preferences: CardioPreferences, *, new: bool = False
+) -> None:
+    if not preferences.heart_rate_zones:
+        if new and stored_zone(session) is None:
+            session.zone = "Zone 2"
+        session.qualifies_zone2 = stored_zone(session) == 2
+        return
     zone = session_zone(session.average_heart_rate_bpm, preferences)
     session.zone = f"Zone {zone}" if zone else None
     session.qualifies_zone2 = zone == 2
@@ -88,7 +109,7 @@ def cardio_goal_weeks(
     totals: dict[int, int] = {}
     for session in sessions:
         if week <= session.session_date <= end:
-            zone = session_zone(session.average_heart_rate_bpm, preferences)
+            zone = effective_zone(session, preferences)
             if zone is not None:
                 totals[zone] = totals.get(zone, 0) + session.duration_minutes
     return [

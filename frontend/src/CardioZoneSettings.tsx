@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from './api';
+import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import type { CardioPreferences } from './types';
 import './cardioZones.css';
@@ -73,12 +74,18 @@ export function CardioZoneSettings({
           <div className="cardio-zone-columns" aria-hidden="true">
             <span>Zone</span>
             <span>From</span>
+            <span />
             <span>To</span>
           </div>
           {zones.map((zone, index) => (
             <div className="cardio-zone-columns" key={zone.zone}>
               <strong>Zone {zone.zone}</strong>
-              {(['min', 'max'] as const).map((bound) => (
+              {(['min', 'max'] as const).map((bound) => [
+                bound === 'max' && (
+                  <span key="to" className="cardio-zone-dash" aria-hidden="true">
+                    –
+                  </span>
+                ),
                 <input
                   key={bound}
                   type="number"
@@ -95,75 +102,76 @@ export function CardioZoneSettings({
                       ),
                     )
                   }
-                />
-              ))}
+                />,
+              ])}
             </div>
           ))}
         </fieldset>
         <fieldset disabled={saving}>
-          <legend>Weekly zone goals</legend>
+          <legend>Weekly goals</legend>
+          <div className="cardio-goal-row" aria-hidden="true">
+            <span>Zone</span>
+            <span>Minutes</span>
+          </div>
           {goals.map((goal, index) => (
             <div className="cardio-goal-row" key={index}>
-              <label>
-                Zone
-                <select
-                  aria-label={`Goal ${index + 1} zone`}
-                  value={goal.zone}
-                  onChange={(event) =>
-                    setGoals(
-                      goals.map((item, row) =>
-                        row === index ? { ...item, zone: Number(event.target.value) } : item,
-                      ),
-                    )
-                  }
-                >
-                  {[1, 2, 3, 4, 5].map((zone) => (
-                    <option
-                      key={zone}
-                      value={zone}
-                      disabled={goals.some((other, row) => row !== index && other.zone === zone)}
-                    >
-                      Zone {zone}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Minutes
-                <input
-                  type="number"
-                  min="1"
-                  max="10080"
-                  step="1"
-                  required
-                  inputMode="numeric"
-                  aria-label={`Goal ${index + 1} minutes`}
-                  value={goal.minutes || ''}
-                  onChange={(event) =>
-                    setGoals(
-                      goals.map((item, row) =>
-                        row === index ? { ...item, minutes: Number(event.target.value) } : item,
-                      ),
-                    )
-                  }
-                />
-              </label>
+              <select
+                aria-label={`Goal ${index + 1} zone`}
+                value={goal.zone}
+                onChange={(event) =>
+                  setGoals(
+                    goals.map((item, row) =>
+                      row === index ? { ...item, zone: Number(event.target.value) } : item,
+                    ),
+                  )
+                }
+              >
+                {[1, 2, 3, 4, 5].map((zone) => (
+                  <option
+                    key={zone}
+                    value={zone}
+                    disabled={goals.some((other, row) => row !== index && other.zone === zone)}
+                  >
+                    Zone {zone}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="1"
+                max="10080"
+                step="1"
+                required
+                inputMode="numeric"
+                aria-label={`Goal ${index + 1} minutes`}
+                value={goal.minutes || ''}
+                onChange={(event) =>
+                  setGoals(
+                    goals.map((item, row) =>
+                      row === index ? { ...item, minutes: Number(event.target.value) } : item,
+                    ),
+                  )
+                }
+              />
               <button
                 type="button"
+                className="cardio-goal-remove"
                 disabled={goals.length === 1}
                 aria-label={`Remove Zone ${goal.zone} goal`}
                 onClick={() => setGoals(goals.filter((_, row) => row !== index))}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
           ))}
           {unusedZone && (
             <button
               type="button"
+              className="cardio-goal-add"
               onClick={() => setGoals([...goals, { zone: unusedZone, minutes: 30 }])}
             >
-              Add zone goal
+              <Icon name="plus" />
+              Add goal
             </button>
           )}
         </fieldset>

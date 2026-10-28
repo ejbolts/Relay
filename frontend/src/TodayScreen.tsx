@@ -472,14 +472,24 @@ export function TodayScreen({
       <button type="button" className="pulse-card pulse-mini" onClick={onOpenCardio}>
         <span>Cardio zone goals</span>
         {cardioGoals.map((goal) => (
-          <span className="home-cardio-goal" key={goal.zone}>
-            <b>Zone {goal.zone}</b> · {goal.completed_minutes} / {goal.goal_minutes} min
+          <span className={`home-cardio-goal${goal.complete ? ' complete' : ''}`} key={goal.zone}>
+            <b>Zone {goal.zone}</b>{' '}
             <small>
-              {' '}
-              · {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+              {goal.completed_minutes} / {goal.goal_minutes} min
             </small>
           </span>
         ))}
+        {cardioGoals.length > 0 && (
+          <p>
+            {cardioGoals.every((goal) => goal.complete)
+              ? cardioGoals.length === 1
+                ? 'Goal reached'
+                : 'All goals reached'
+              : cardioGoals.length === 1
+                ? `${cardioGoals[0].remaining_minutes} min to go`
+                : `${cardioGoals.filter((goal) => goal.complete).length} of ${cardioGoals.length} goals reached`}
+          </p>
+        )}
       </button>
     ),
     'bodyweight-trend': (

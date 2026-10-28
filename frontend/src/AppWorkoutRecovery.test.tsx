@@ -1269,7 +1269,12 @@ describe('cardio set editing defaults', () => {
         goals: [{ zone: 2, minutes: 150 }],
       },
       sessions: [
-        { source_workout_id: saved.id, average_heart_rate_bpm: 120, duration_minutes: 30 },
+        {
+          source_workout_id: saved.id,
+          zone: 'Zone 2',
+          average_heart_rate_bpm: 120,
+          duration_minutes: 30,
+        },
       ],
     } as import('./types').CardioOverview);
     vi.mocked(api.createWorkout).mockResolvedValue(saved);
@@ -1277,7 +1282,7 @@ describe('cardio set editing defaults', () => {
     await mount();
     await confirmFinish();
     expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Estimated Zone 2 from 120 bpm average (110–139 bpm). 30 min towards your Zone 2 goal.',
+      'Zone 2 · 120 bpm average (110–139 bpm). 30 min added to your Zone 2 goal.',
     );
     expect(document.querySelector('.app-notification-toast svg')).toBeNull();
   });

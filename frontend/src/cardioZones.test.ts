@@ -8,17 +8,25 @@ const preferences = {
   ],
   goals: [{ zone: 2, minutes: 150 }],
 };
+const session = (zone: string | null, heartRate: number | null) => ({
+  zone,
+  average_heart_rate_bpm: heartRate,
+  duration_minutes: 30,
+});
 describe('cardio zone notification', () => {
-  it('counts only the matching inclusive range and clearly estimates from average HR', () => {
-    expect(cardioZoneNotice(110, 30, preferences)).toContain('Estimated Zone 2');
-    expect(cardioZoneNotice(139, 30, preferences)).toContain('30 min towards your Zone 2 goal');
-    expect(cardioZoneNotice(140, 30, preferences)).toContain('No goal set for this zone');
-    expect(cardioZoneNotice(160, 30, preferences)).toContain('no goal credit');
+  it('reports the saved zone with its range and goal credit', () => {
+    expect(cardioZoneNotice(session('Zone 2', 110), preferences)).toBe(
+      'Zone 2 · 110 bpm average (110–139 bpm). 30 min added to your Zone 2 goal.',
+    );
+    expect(cardioZoneNotice(session('Zone 3', 140), preferences)).toContain(
+      'No goal set for Zone 3',
+    );
+    expect(cardioZoneNotice(session(null, 160), preferences)).toContain('no goal credit');
   });
-  it('explains missing HR or ranges without claiming goal credit', () => {
-    expect(cardioZoneNotice(null, 30, preferences)).toContain('Add average heart rate');
-    expect(cardioZoneNotice(120, 30, DEFAULT_CARDIO_PREFERENCES)).toContain(
-      'Set your heart-rate zones',
+  it('explains missing HR or ranges', () => {
+    expect(cardioZoneNotice(session(null, null), preferences)).toContain('without heart rate');
+    expect(cardioZoneNotice(session('Zone 2', 120), DEFAULT_CARDIO_PREFERENCES)).toBe(
+      'Logged as Zone 2. 30 min added to your Zone 2 goal. Set heart-rate zones to classify by heart rate.',
     );
   });
 });

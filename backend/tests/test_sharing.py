@@ -498,9 +498,8 @@ def test_shared_profile_includes_only_the_chosen_parts(client, other_client):
         {"measurement_date": date.today().isoformat(), "weight_kg": 82.5, "body_fat_pct": None}
     ]
     assert view["goals"]["body_weight"]["target_weight_kg"] == 78
-    # Unmeasured cardio cannot be assigned to a personal heart-rate zone.
-    assert view["goals"]["zone2"]["completed_minutes"] == 0
-    assert view["goals"]["cardio_goals"][0]["completed_minutes"] == 0
+    assert view["goals"]["zone2"]["completed_minutes"] == 40
+    assert view["goals"]["cardio_goals"][0]["completed_minutes"] == 40
     assert [session["notes"] for session in view["cardio_sessions"]] == ["Easy spin"]
 
     [shared] = other_client.get(f"/api/sharing/profiles/{owner_id}/workouts").json()["workouts"]

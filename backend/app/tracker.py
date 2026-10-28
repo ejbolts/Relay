@@ -36,7 +36,7 @@ from .cardio_zones import (
     cardio_goal_weeks,
     cardio_preferences,
     classify_session,
-    session_zone,
+    effective_zone,
 )
 from .config import Settings, get_settings
 from .database import get_db
@@ -625,6 +625,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             continue
         imported_indexes.add(movement.order_index)
         session = existing.get(movement.order_index)
+        created = session is None
         if session is None:
             session = CardioSession(
                 user_id=workout.user_id,
@@ -699,7 +700,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             )
         )
         session.intensity = "Imported from workout"
-        classify_session(session, cardio_preferences(db, workout.user_id))
+        classify_session(session, cardio_preferences(db, workout.user_id), new=created)
         session.notes = movement.notes
     for movement_index, session in existing.items():
         if movement_index not in imported_indexes:
@@ -1186,7 +1187,7 @@ def zone2_week(
     session_minutes = sum(
         item.duration_minutes
         for item in sessions
-        if session_zone(item.average_heart_rate_bpm, preferences) == 2
+        if effective_zone(item, preferences) == 2
         and week <= item.session_date <= min(end, date.today())
     )
     completed = session_minutes
@@ -1474,7 +1475,7 @@ def create_cardio_session(
             source_movement_index=0,
         )
         db.add(session)
-        classify_session(session, cardio_preferences(db, user.id))
+        classify_session(session, cardio_preferences(db, user.id), new=True)
         rebuild_personal_records(db, user.id)
         bump_workout_cache_revision(db, user.id)
         db.commit()
@@ -1482,7 +1483,7 @@ def create_cardio_session(
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
-    classify_session(session, cardio_preferences(db, user.id))
+    classify_session(session, cardio_preferences(db, user.id), new=True)
     db.add(session)
     bump_workout_cache_revision(db, user.id)
     db.commit()
@@ -1510,6 +1511,9 @@ def update_cardio_session(
     }
     for key, value in payload.model_dump(exclude={"exercise_id"}).items():
         if key in optional_metrics and key not in payload.model_fields_set:
+            continue
+        # Zones come from heart rate; only an explicit label replaces the saved zone.
+        if key in {"zone", "qualifies_zone2"} and payload.zone is None:
             continue
         setattr(session, key, value)
     classify_session(session, cardio_preferences(db, user.id))

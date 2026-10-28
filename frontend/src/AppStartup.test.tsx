@@ -331,9 +331,9 @@ describe('App startup', () => {
         ],
       } as DashboardData,
     });
-    expect(markup).toContain('<b>Zone 2</b> · 60 / 180 min');
-    expect(markup).toContain('<b>Zone 4</b> · 30 / 30 min');
-    expect(markup).toContain('Goal reached');
+    expect(markup).toContain('<b>Zone 2</b> <small>60 / 180 min</small>');
+    expect(markup).toContain('home-cardio-goal complete"><b>Zone 4</b> <small>30 / 30 min');
+    expect(markup).toContain('1 of 2 goals reached');
     expect(markup).not.toContain('300 /');
     expect(markup).not.toContain('pulse-meter');
   });

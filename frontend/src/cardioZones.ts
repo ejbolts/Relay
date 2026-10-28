@@ -1,4 +1,4 @@
-import type { CardioPreferences } from './types';
+import type { CardioPreferences, CardioSession } from './types';
 
 export const DEFAULT_CARDIO_PREFERENCES: CardioPreferences = {
   heart_rate_zones: [],
@@ -6,18 +6,22 @@ export const DEFAULT_CARDIO_PREFERENCES: CardioPreferences = {
 };
 
 export function cardioZoneNotice(
-  heartRate: number | null | undefined,
-  minutes: number,
+  session: Pick<CardioSession, 'zone' | 'average_heart_rate_bpm' | 'duration_minutes'>,
   preferences: CardioPreferences,
 ): string {
+  const zone = Number(session.zone?.replace('Zone ', '')) || null;
+  const credit = () =>
+    preferences.goals.some((goal) => goal.zone === zone)
+      ? `${session.duration_minutes} min added to your Zone ${zone} goal.`
+      : `No goal set for Zone ${zone}.`;
+  const heartRate = session.average_heart_rate_bpm;
   if (!preferences.heart_rate_zones.length)
-    return 'Session saved. Set your heart-rate zones in Cardio to count zone goals.';
-  if (heartRate == null)
-    return 'Session saved. Add average heart rate to count it towards a zone goal.';
-  const zone = preferences.heart_rate_zones.find(
-    (range) => heartRate >= range.min_bpm && heartRate <= range.max_bpm,
-  );
-  if (!zone) return `Session saved. ${heartRate} bpm is outside your zone ranges; no goal credit.`;
-  const goal = preferences.goals.find((item) => item.zone === zone.zone);
-  return `Estimated Zone ${zone.zone} from ${heartRate} bpm average (${zone.min_bpm}–${zone.max_bpm} bpm). ${goal ? `${minutes} min towards your Zone ${zone.zone} goal.` : 'No goal set for this zone.'}`;
+    return zone
+      ? `Logged as Zone ${zone}. ${credit()} Set heart-rate zones to classify by heart rate.`
+      : 'Session saved. Set heart-rate zones to classify by heart rate.';
+  if (heartRate == null) return 'Session saved without heart rate, so no zone goal credit.';
+  const range = preferences.heart_rate_zones.find((item) => item.zone === zone);
+  if (!zone || !range)
+    return `Session saved. ${heartRate} bpm is outside your zones, so no goal credit.`;
+  return `Zone ${zone} · ${heartRate} bpm average (${range.min_bpm}–${range.max_bpm} bpm). ${credit()}`;
 }

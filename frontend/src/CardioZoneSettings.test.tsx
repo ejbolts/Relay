@@ -51,7 +51,7 @@ afterEach(async () => {
 });
 it('adds, changes, removes and saves multiple account goals', async () => {
   const update = vi.spyOn(api, 'updateCardioPreferences').mockResolvedValue(preferences);
-  await click('Add zone goal');
+  await click('Add goal');
   await input('Goal 1 minutes', '180');
   expect(document.querySelectorAll('select')).toHaveLength(2);
   await act(async () =>
@@ -59,7 +59,7 @@ it('adds, changes, removes and saves multiple account goals', async () => {
       .querySelector('[aria-label="Remove Zone 1 goal"]')!
       .dispatchEvent(new MouseEvent('click', { bubbles: true })),
   );
-  await click('Add zone goal');
+  await click('Add goal');
   await click('Save zones & goals');
   expect(update).toHaveBeenCalledWith({
     ...preferences,

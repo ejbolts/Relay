@@ -1,100 +1,193 @@
 .cardio-zone-dialog {
-  width: min(460px, calc(100vw - 24px));
+  width: min(440px, calc(100vw - 24px));
 }
 .cardio-zone-dialog form {
+  display: grid;
+  gap: 20px;
   padding: 16px;
 }
-.cardio-zone-dialog form,
 .cardio-zone-dialog fieldset {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-}
-.cardio-zone-dialog fieldset {
   border: 0;
   padding: 0;
-  margin: 0 0 16px;
+  margin: 0;
 }
 .cardio-zone-dialog legend {
-  font-weight: 700;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  color: var(--p-ink);
+  font-size: 0.9375rem;
+  font-weight: 650;
 }
-.cardio-zone-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  align-items: center;
-}
-.cardio-zone-columns[aria-hidden] {
-  color: var(--muted-ink);
-  font-size: 12px;
-}
+.cardio-zone-columns,
 .cardio-goal-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 36px;
-  gap: 12px;
-  align-items: end;
+  gap: 8px;
+  align-items: center;
 }
-.cardio-goal-row label {
-  display: grid;
-  gap: 6px;
+.cardio-zone-columns {
+  grid-template-columns: 4.25rem minmax(0, 1fr) 0.5rem minmax(0, 1fr);
+}
+.cardio-goal-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+}
+.cardio-zone-columns[aria-hidden],
+.cardio-goal-row[aria-hidden] {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.cardio-zone-columns strong {
+  color: var(--p-ink-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.cardio-zone-dash {
+  color: var(--p-muted);
+  text-align: center;
 }
 .cardio-zone-dialog input,
 .cardio-zone-dialog select {
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
-  background: var(--paper);
-  color: var(--ink);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
   font: inherit;
+  font-variant-numeric: tabular-nums;
 }
-.cardio-zone-dialog button:not(.popup-dialog-close):not(.primary-action),
-.cardio-goals-summary header button {
+.cardio-zone-dialog input:focus-visible,
+.cardio-zone-dialog select:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+.cardio-goal-remove,
+.cardio-goal-add,
+.cardio-goals-edit {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cardio-goal-remove {
   min-height: 44px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--ink);
-  font: inherit;
+  background: transparent;
+  color: var(--p-muted);
 }
-.cardio-goals-summary header button {
-  font-size: 0.8rem;
+.cardio-goal-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
-.cardio-goals-summary h2 {
-  font-size: 1rem;
+.cardio-goal-add {
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 0.875rem;
 }
-.cardio-goal-row label,
-.cardio-zone-columns {
-  font-size: 0.85rem;
+:root[data-colour-mode='light'] .cardio-goal-add {
+  color: var(--p-accent);
+}
+.cardio-goal-remove svg,
+.cardio-goal-add svg,
+.cardio-goals-edit svg {
+  width: 1rem;
+  height: 1rem;
 }
 .cardio-zone-dialog .primary-action {
-  min-height: 44px;
+  min-height: 46px;
 }
-.cardio-goals-summary {
-  margin-bottom: 20px;
+
+.cardio-screen .cardio-goals-summary {
+  margin: 0.75rem 0;
+  padding: 1rem;
 }
 .cardio-goals-summary header {
   display: flex;
   gap: 12px;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 0.5rem;
 }
 .cardio-goals-summary h2 {
   margin: 0;
+  color: var(--p-ink);
+  font-size: 0.9375rem;
 }
-.cardio-goal-progress {
+.cardio-goals-edit {
+  min-height: 36px;
+  margin: -4px -6px -4px 0;
+  padding: 0 10px;
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+  font-size: 0.8125rem;
+}
+.cardio-goal-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cardio-goal-list li {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.625rem 0;
 }
-.cardio-goal-progress p {
-  margin-bottom: 0;
+.cardio-goal-list li + li {
+  border-top: 1px solid var(--p-line);
 }
+.cardio-goal-list li:last-child {
+  padding-bottom: 0;
+}
+.cardio-goal-list li > span {
+  display: grid;
+  gap: 2px;
+}
+.cardio-goal-list li > span:last-child {
+  text-align: right;
+}
+.cardio-goal-list strong,
+.cardio-goal-list b {
+  color: var(--p-ink);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.cardio-goal-list small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.cardio-goal-list li.complete span:last-child small {
+  color: var(--p-good);
+  font-weight: 600;
+}
+
 .home-cardio-goal {
-  display: block;
-  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.home-cardio-goal b {
+  color: var(--p-ink);
+  font-weight: 650;
+}
+.home-cardio-goal.complete small {
+  color: var(--p-good);
 }

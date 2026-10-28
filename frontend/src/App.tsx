@@ -1122,13 +1122,7 @@ function AppContent() {
           const preferences = overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES;
           const sessions = overview.sessions.filter((item) => item.source_workout_id === saved.id);
           if (sessions.length)
-            setMessage(
-              sessions
-                .map((item) =>
-                  cardioZoneNotice(item.average_heart_rate_bpm, item.duration_minutes, preferences),
-                )
-                .join(' '),
-            );
+            setMessage(sessions.map((item) => cardioZoneNotice(item, preferences)).join(' '));
         })
         .catch(() => undefined);
     }
@@ -8573,11 +8567,7 @@ export function CardioScreen({
         ? await api.updateCardio(editingId, payload)
         : await api.createCardio(payload);
       setZoneNotice(
-        cardioZoneNotice(
-          saved.average_heart_rate_bpm,
-          saved.duration_minutes,
-          overview?.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES,
-        ),
+        cardioZoneNotice(saved, overview?.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
       );
       setDraft(empty);
       setScanStatus(null);
@@ -8620,20 +8610,46 @@ export function CardioScreen({
           }}
         />
       )}
-      <section className="pulse-card cardio-goals-summary">
+      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
         <header>
-          <h2>Weekly zone goals</h2>
-          <button type="button" onClick={() => setZoneSettingsOpen(true)}>
-            Zones &amp; goals
+          <h2 id="cardio-goals-title">Weekly zone goals</h2>
+          <button
+            type="button"
+            className="cardio-goals-edit"
+            aria-label="Edit heart-rate zones and goals"
+            onClick={() => setZoneSettingsOpen(true)}
+          >
+            <Icon name="edit" />
+            Edit
           </button>
         </header>
-        <div className="cardio-goal-progress">
-          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => (
-            <p key={goal.zone}>
-              <strong>Zone {goal.zone}</strong> · {goal.completed_minutes} / {goal.goal_minutes} min
-            </p>
-          ))}
-        </div>
+        <ul className="cardio-goal-list">
+          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
+            const range = overview.cardio_preferences?.heart_rate_zones.find(
+              (item) => item.zone === goal.zone,
+            );
+            return (
+              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
+                <span>
+                  <strong>Zone {goal.zone}</strong>
+                  {range && (
+                    <small>
+                      {range.min_bpm}–{range.max_bpm} bpm
+                    </small>
+                  )}
+                </span>
+                <span>
+                  <b>
+                    {goal.completed_minutes} / {goal.goal_minutes} min
+                  </b>
+                  <small>
+                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </section>
       {error && <p className="inline-error">{error}</p>}
       {metricSession && (
@@ -8644,11 +8660,7 @@ export function CardioScreen({
           onSave={async (metrics) => {
             const saved = await api.updateCardioMetrics(metricSession.id, metrics);
             setZoneNotice(
-              cardioZoneNotice(
-                saved.average_heart_rate_bpm,
-                saved.duration_minutes,
-                overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES,
-              ),
+              cardioZoneNotice(saved, overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
             );
             await onDataChange();
             await load();

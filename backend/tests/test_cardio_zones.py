@@ -67,11 +67,13 @@ def test_classification_uses_average_not_manual_zone(client, heart_rate, zone):
     assert session["qualifies_zone2"] == (zone == 2)
 
 
-def test_unconfigured_does_not_count_and_settings_reclassify_existing_sessions(client):
-    session = log_session(client, average_heart_rate_bpm=130)
-    assert session["zone"] is None
-    assert client.get("/api/dashboard").json()["zone2"]["completed_minutes"] == 0
+def test_unconfigured_keeps_saved_zones_and_settings_reclassify_existing_sessions(client):
+    session = log_session(client, average_heart_rate_bpm=165, zone=None, qualifies_zone2=False)
+    assert session["zone"] == "Zone 2"
+    assert client.get("/api/dashboard").json()["zone2"]["completed_minutes"] == 30
     save_preferences(client)
+    assert client.get("/api/cardio").json()["goal_weeks"][0]["completed_minutes"] == 0
+    client.patch(f"/api/cardio/{session['id']}/metrics", json={"average_heart_rate_bpm": 130})
     assert client.get("/api/cardio").json()["goal_weeks"][0]["completed_minutes"] == 30
     changed = personal_preferences()
     changed["heart_rate_zones"][1]["max_bpm"] = 129
@@ -82,6 +84,24 @@ def test_unconfigured_does_not_count_and_settings_reclassify_existing_sessions(c
     assert overview["sessions"][0]["zone"] == "Zone 3"
     assert overview["goal_weeks"][0]["completed_minutes"] == 30
     assert [goal["zone"] for goal in client.get("/api/dashboard").json()["cardio_goals"]] == [3]
+
+
+def test_goal_only_settings_and_edits_preserve_legacy_zones(client):
+    legacy = log_session(client, zone="Zone 3", qualifies_zone2=False)
+    zone2 = log_session(client, average_heart_rate_bpm=120)
+    goals = {
+        "heart_rate_zones": [],
+        "goals": [{"zone": 2, "minutes": 60}, {"zone": 3, "minutes": 20}],
+    }
+    assert client.put("/api/cardio-preferences", json=goals).status_code == 200
+    edited = client.put(
+        f"/api/cardio/{zone2['id']}",
+        json={**zone2, "duration_minutes": 40, "zone": None, "qualifies_zone2": False},
+    ).json()
+    assert (edited["zone"], edited["qualifies_zone2"]) == ("Zone 2", True)
+    overview = client.get("/api/cardio").json()
+    assert {item["id"]: item["zone"] for item in overview["sessions"]}[legacy["id"]] == "Zone 3"
+    assert [goal["completed_minutes"] for goal in overview["goal_weeks"]] == [40, 30]
 
 
 def test_other_training_preferences_do_not_overwrite_personal_cardio_goals(client):
