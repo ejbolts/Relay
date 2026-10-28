@@ -113,6 +113,20 @@ const workouts = [
   workout('w1', '2026-09-26', 'pull', [{ exercise: deadlift, sets: [trackedSet(155, 5)] }]),
 ];
 
+it('keeps custom-type templates separate from other custom and built-in Other sessions', () => {
+  const a = {
+    ...workout('a', '2026-10-01', 'other', [{ exercise: row, sets: [trackedSet(40, 8)] }]),
+    workout_type_id: 'custom-a',
+  };
+  const b = { ...a, id: 'b', workout_date: '2026-10-02', workout_type_id: 'custom-b' };
+  const other = { ...a, id: 'other', workout_date: '2026-10-03', workout_type_id: null };
+  expect(
+    sessionTemplateFor([a, b, other], 'other', '2026-10-04', 'kg', 'custom-a')?.sourceWorkout.id,
+  ).toBe('a');
+  expect(sessionTemplateFor([a, b, other], 'other', '2026-10-04')?.sourceWorkout.id).toBe('other');
+  expect(sessionTemplateFor([b, other], 'other', '2026-10-04', 'kg', 'custom-a')).toBeNull();
+});
+
 describe('training summary helpers', () => {
   it('finds week starts for Monday and Sunday weeks', () => {
     expect(weekStartFor('2026-10-06', 1)).toBe('2026-10-05');

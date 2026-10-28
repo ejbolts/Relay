@@ -59,6 +59,7 @@ import type {
   WorkoutSnapshot,
   WorkoutSession,
   TrainingPreferences,
+  TrainingSplit,
   TrainingTime,
   WorkoutTypeColors,
   WorkoutType,
@@ -68,6 +69,7 @@ import { cachedWorkoutsForRevision, readWorkoutCache, writeWorkoutCache } from '
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
 import type { HomeLayout } from './homeLayout';
+import { localDate } from './utils';
 
 export class ApiError extends Error {
   constructor(
@@ -444,8 +446,15 @@ export const api = {
     request<void>(`/api/machine-photos/${photoId}`, { method: 'DELETE' }),
   dashboard: (calendarStart?: string) =>
     request<DashboardData>(
-      `/api/dashboard${calendarStart ? `?${new URLSearchParams({ calendar_start: calendarStart })}` : ''}`,
+      `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
     ),
+  getTrainingSplit: () => request<TrainingSplit | null>('/api/training-split'),
+  saveTrainingSplit: (payload: TrainingSplit) =>
+    request<TrainingSplit>('/api/training-split', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }),
   trainingTime: () => request<TrainingTime>('/api/training-time'),
   workoutRevision: () =>
     request<WorkoutCacheRevision>('/api/workouts/revision', {

@@ -2,8 +2,9 @@
   "version": "1.1.0",
   "date": "2026-10-26",
   "title": "Find friends and improve your workouts",
-  "summary": "Build your exercise library with individual muscle credits, discover public profiles, open your preloaded profile, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
+  "summary": "Plan your training and rest days, build your exercise library with individual muscle credits, discover public profiles, see who reacted to workouts, and enjoy clearer set colours and rest alerts.",
   "changes": [
+    "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
     "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
@@ -25,6 +26,14 @@
     "alt": "Social Find automatically listing eight fictional public profiles with usernames beneath their names, separate Add friend buttons, a 1-8 of 17 range and numbered pagination in a phone-sized view."
   },
   "highlights": [
+    {
+      "title": "Rest days in your split",
+      "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/fa42998b90e3cbb752032a0dc1018f35ae98c47d/docs/screenshots/releases/1.1.0-split-rest-days.png",
+        "alt": "Saved training split with Pull and Lower body workouts, consecutive Rest days, an Add rest day button and a seven-day calendar preview. Isolated sample data."
+      }
+    },
     {
       "title": "Profiles ready sooner, people behind reactions",
       "description": "Your profile loads quietly after sign-in. Tap a workout's reaction count to instantly open names and emojis in a bottom sheet; swipe down to close it.",

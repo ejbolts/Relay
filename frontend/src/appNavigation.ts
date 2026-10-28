@@ -9,6 +9,7 @@ export const APP_TABS = [
   'cardio',
   'videos',
   'settings',
+  'split',
   'profile',
   'shared-profile',
   'admin',

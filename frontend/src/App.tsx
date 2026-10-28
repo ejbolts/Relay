@@ -23,6 +23,7 @@ import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
+import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
@@ -60,6 +61,7 @@ import type {
   WorkoutHistorySummary,
   User,
   WorkoutTypeColors,
+  WorkoutType,
   WorkoutInput,
   WorkoutRecommendation,
   WorkoutSetInput,
@@ -589,6 +591,7 @@ function AppContent() {
   const refreshGenerationRef = useRef(0);
   const refreshingDataRef = useRef(0);
   const trainingRevisionRef = useRef<string | null>(null);
+  const dashboardDateRef = useRef(localDate());
   const [dataRevision, setDataRevision] = useState<string | null>(null);
   currentTabRef.current = tab;
   const [visitedTabs, setVisitedTabs] = useState(() => new Set<AppTab>([tab]));
@@ -668,6 +671,7 @@ function AppContent() {
   const [workoutTemplate, setWorkoutTemplate] = useState<SessionTemplate | null>(null);
   // The type chosen from the Start menu's Cardio option, before any exercise is added.
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
+  const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const notifyRestComplete = useCallback(
@@ -791,9 +795,11 @@ function AppContent() {
       const revision = await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
+      const dashboardRequestDate = localDate();
       const results = await Promise.allSettled([
         api.dashboard(windowStart).then((nextDashboard) => {
           if (!current()) return;
+          dashboardDateRef.current = dashboardRequestDate;
           startTransition(() =>
             setDashboard((current) => {
               const olderDays = keepLoadedBefore(
@@ -905,7 +911,7 @@ function AppContent() {
       if (
         generation !== refreshGenerationRef.current ||
         refreshingDataRef.current ||
-        revision === trainingRevisionRef.current
+        (revision === trainingRevisionRef.current && dashboardDateRef.current === localDate())
       )
         return;
       await refreshData({ silent: true, activityLabel: null });
@@ -1159,6 +1165,7 @@ function AppContent() {
     replaceActiveWorkout = false,
     template: SessionTemplate | null = null,
     category: WorkoutCategory | null = null,
+    startType: WorkoutType | null = null,
   ) {
     if (workoutSaving) return;
     if (replaceActiveWorkout) clearActiveWorkoutDraft();
@@ -1166,6 +1173,7 @@ function AppContent() {
     const freshStart = !storedDraft && activeWorkoutStartedAt === null;
     setWorkoutTemplate(freshStart ? template : null);
     setWorkoutStartCategory(freshStart ? category : null);
+    setWorkoutStartType(freshStart ? startType : null);
     const startedAt = storedDraft?.startedAt ?? Date.now();
     setEditingWorkout(null);
     setResumingWorkoutId(storedDraft?.resumingWorkoutId ?? null);
@@ -1267,21 +1275,23 @@ function AppContent() {
   }
 
   const nestedHeader =
-    tab === 'settings'
-      ? settingsGroup
-        ? { title: 'All settings', subtitle: null }
-        : { title: 'Settings', subtitle: 'Preferences • privacy • data' }
-      : tab === 'videos' && videosAllowed
-        ? { title: 'Videos', subtitle: 'Workout clips • uploads' }
-        : tab === 'profile'
-          ? { title: 'Profile', subtitle: user ? user.display_name : 'Account • security' }
-          : tab === 'shared-profile' && sharedProfile
-            ? { title: sharedProfile.name, subtitle: 'Shared profile' }
-            : tab === 'admin' && isAdmin
-              ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
-              : null;
+    tab === 'split'
+      ? { title: 'Your split', subtitle: null }
+      : tab === 'settings'
+        ? settingsGroup
+          ? { title: 'All settings', subtitle: null }
+          : { title: 'Settings', subtitle: 'Preferences • privacy • data' }
+        : tab === 'videos' && videosAllowed
+          ? { title: 'Videos', subtitle: 'Workout clips • uploads' }
+          : tab === 'profile'
+            ? { title: 'Profile', subtitle: user ? user.display_name : 'Account • security' }
+            : tab === 'shared-profile' && sharedProfile
+              ? { title: sharedProfile.name, subtitle: 'Shared profile' }
+              : tab === 'admin' && isAdmin
+                ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
+                : null;
   const activeMainTab = mainTabFor(tab);
-  const showTabBar = tab !== 'log';
+  const showTabBar = tab !== 'log' && tab !== 'split';
   // The home screen guide follows the release announcement, behind the same interruptions.
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
@@ -1526,6 +1536,16 @@ function AppContent() {
                   }
                   onStartTemplate={(template) => startWorkout(localDate(), false, template)}
                   onStartEmpty={() => startWorkout()}
+                  onStartRecommended={() =>
+                    startWorkout(
+                      localDate(),
+                      false,
+                      upNext.template,
+                      upNext.recommendation?.category ?? null,
+                      upNext.type ?? null,
+                    )
+                  }
+                  onEditSplit={() => setTab('split')}
                   onResumeWorkout={() => setTab('log')}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
@@ -1595,6 +1615,7 @@ function AppContent() {
                         recommendation={dashboard?.recommendation ?? null}
                         template={workoutTemplate}
                         startCategory={workoutStartCategory}
+                        startType={workoutStartType}
                         initialDate={workoutStartDate}
                         initialWorkout={viewedWorkout ?? editingWorkout}
                         readOnly={Boolean(viewedWorkout)}
@@ -1724,12 +1745,27 @@ function AppContent() {
               />
             </CachedTabPanel>
           )}
+          {!loading && tab === 'split' && (
+            <TrainingSplitEditor
+              onSaved={async (saved) => {
+                await refreshData({ silent: true, activityLabel: null });
+                setMessage(
+                  saved.enabled
+                    ? 'Training split saved.'
+                    : 'Automatic workout suggestions restored.',
+                );
+                if (currentTabRef.current === 'split') navigateBack();
+              }}
+            />
+          )}
           {!loading && (tab === 'settings' || visitedTabs.has('settings')) && (
             <CachedTabPanel active={tab === 'settings'}>
               <SettingsScreen
                 active={tab === 'settings'}
                 selectedGroup={settingsGroup}
                 onSelectGroup={setSettingsGroup}
+                onOpenSplit={() => setTab('split')}
+                splitName={dashboard?.recommendation?.split_name ?? null}
                 guideActive={prompt === 'tour'}
                 workouts={workouts}
                 historySummary={historySummary}
@@ -1844,7 +1880,10 @@ function AppContent() {
             }}
             onStart={() => startWorkout()}
             startMenu={{
-              upNextLabel: upNext.label ? `${upNext.label} day` : null,
+              upNextLabel:
+                upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
+                  ? `${upNext.label} day`
+                  : null,
               onCardio: () =>
                 startWorkout(
                   localDate(),
@@ -1852,7 +1891,14 @@ function AppContent() {
                   sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
                   'cardio',
                 ),
-              onUpNext: () => startWorkout(localDate(), false, upNext.template),
+              onUpNext: () =>
+                startWorkout(
+                  localDate(),
+                  false,
+                  upNext.template,
+                  upNext.recommendation?.category ?? null,
+                  upNext.type ?? null,
+                ),
               onEmpty: () => startWorkout(),
             }}
           />
@@ -2257,6 +2303,7 @@ function WorkoutLogger({
   recommendation,
   template,
   startCategory = null,
+  startType = null,
   initialDate,
   initialWorkout,
   readOnly = false,
@@ -2285,6 +2332,7 @@ function WorkoutLogger({
   template: SessionTemplate | null;
   /** A type chosen before starting, such as Cardio from the Start menu. */
   startCategory?: WorkoutCategory | null;
+  startType?: WorkoutType | null;
   initialDate: string;
   initialWorkout: TrackedWorkout | null;
   readOnly?: boolean;
@@ -2333,6 +2381,7 @@ function WorkoutLogger({
     initialWorkout?.workout_type_id ??
       restoredDraft?.workoutTypeId ??
       resumingWorkout?.workout_type_id ??
+      (startType?.is_custom ? startType.id : null) ??
       template?.sourceWorkout.workout_type_id ??
       null,
   );
@@ -3318,7 +3367,11 @@ function WorkoutLogger({
         }
       />
       {recommendation &&
-        !workoutTypes.types.find((type) => type.id === recommendation.category)?.archived &&
+        !recommendation.is_rest_day &&
+        !recommendation.needs_split_update &&
+        !workoutTypes.types.find(
+          (type) => type.id === (recommendation.workout_type?.id ?? recommendation.category),
+        )?.archived &&
         !initialWorkout &&
         !template &&
         !startCategory &&
@@ -3329,7 +3382,12 @@ function WorkoutLogger({
                 <p className="section-kicker">RECOMMENDED NEXT</p>
                 <h2>{recommendation.session_name.replace(' workout', '')}</h2>
               </div>
-              <span style={{ background: categoryColors[recommendation.category] }} />
+              <span
+                style={{
+                  background:
+                    recommendation.workout_type?.color ?? categoryColors[recommendation.category],
+                }}
+              />
             </div>
             <p>{recommendation.reason}</p>
             <div className="frequency-chips" aria-label="Seven-day muscle frequency">
@@ -3353,7 +3411,9 @@ function WorkoutLogger({
               type="button"
               onClick={() => {
                 setCategory(recommendation.category);
-                setCustomTypeId(null);
+                setCustomTypeId(
+                  recommendation.workout_type?.is_custom ? recommendation.workout_type.id : null,
+                );
                 setWorkoutTypeExplicit(true);
                 setName(recommendation.session_name);
               }}
@@ -6614,6 +6674,8 @@ function SettingsScreen({
   active,
   selectedGroup,
   onSelectGroup,
+  onOpenSplit,
+  splitName,
   guideActive,
   workouts,
   historySummary,
@@ -6644,6 +6706,8 @@ function SettingsScreen({
   active: boolean;
   selectedGroup: SettingsGroupId | null;
   onSelectGroup: (group: SettingsGroupId | null) => void;
+  onOpenSplit: () => void;
+  splitName: string | null;
   guideActive: boolean;
   releaseVersion: string;
   onOpenReleaseNotes: () => void;
@@ -6813,6 +6877,16 @@ function SettingsScreen({
             description: 'Units, weekly goals, rest timers and workout types.',
             content: (
               <>
+                <button
+                  id="training-split-settings"
+                  className="training-split-setting"
+                  type="button"
+                  onClick={onOpenSplit}
+                >
+                  <strong>Your split</strong>
+                  <span>{splitName ?? 'Automatic'}</span>
+                  <Icon name="chevron-right" />
+                </button>
                 <section
                   className="settings-panel panel"
                   aria-labelledby="training-preferences-title"
