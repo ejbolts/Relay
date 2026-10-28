@@ -1512,3 +1512,189 @@
   width: 0;
   flex: 1 1 100px;
 }
+
+/* Friend QR code: a button on your profile card and beside Search people, and its sheet. */
+.profile-identity-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.profile-identity-actions .profile-edit-button {
+  margin-left: 0;
+}
+
+.friend-invite-button {
+  width: 2.5rem;
+  padding: 0.5rem;
+}
+
+.friend-invite-button .pulse-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* With two actions beside the name, phones show both as matching icon buttons. */
+@media (max-width: 480px) {
+  .profile-identity-actions .profile-edit-button {
+    width: 2.5rem;
+    padding: 0.5rem;
+  }
+
+  .profile-identity-actions .profile-edit-button span {
+    display: none;
+  }
+}
+
+.people-search-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.people-search-heading h3 {
+  margin: 0;
+}
+
+.friend-invite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem 0.35rem 0.65rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.friend-invite-chip .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.friend-invite-dialog {
+  width: min(calc(100% - 2rem), 380px);
+}
+
+.friend-invite-body,
+.friend-invite-private {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.friend-invite-card {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+/* Always dark modules on white, the contrast camera apps expect, in either colour mode. */
+.friend-invite-code {
+  width: min(100%, 264px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.friend-invite-code[aria-busy='true'] {
+  background: var(--p-surface-2);
+}
+
+.qr-code {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.friend-invite-person {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.friend-invite-person .profile-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1rem;
+}
+
+.friend-invite-person > div {
+  display: grid;
+  min-width: 0;
+}
+
+.friend-invite-person strong,
+.friend-invite-person span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-invite-person strong {
+  color: var(--p-ink);
+  font-size: 1rem;
+}
+
+.friend-invite-person span {
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+
+.friend-invite-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 2.75rem;
+}
+
+.friend-invite-share .pulse-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.friend-invite-private {
+  padding-block: 1.75rem;
+  text-align: center;
+}
+
+.friend-invite-private-icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+}
+
+.friend-invite-private h3 {
+  margin: 0;
+  color: var(--p-ink);
+  font-size: 1rem;
+}
+
+.auth-invite-note {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.auth-invite-note .pulse-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--p-accent-text);
+}

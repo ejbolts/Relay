@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button](screenshots/releases/1.1.0-friend-qr-code.png)
+
+_Show your QR code from your profile or Social > Find. Scanning it opens your profile with Add friend, including after the other person signs in or creates an account. Isolated sample accounts._
+
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
 _A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
@@ -76,6 +80,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Add friends in person with a QR code. Tap the QR button on your profile, or **My QR code** in **Social > Find**, and the other person scans it with their phone camera. The link opens your profile with **Add friend**; someone signed out or new to Relay signs in or creates an account first, then continues to your profile. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

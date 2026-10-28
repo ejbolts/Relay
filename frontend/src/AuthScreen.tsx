@@ -8,6 +8,8 @@ import {
 } from './authForm';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
+import { pendingFriendInvite } from './friendInvite';
+import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { SampleProfileDialog } from './SampleProfileDialog';
 import type { AuthConfig, User } from './types';
@@ -149,6 +151,7 @@ export function AuthScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
+  const [invited] = useState(() => pendingFriendInvite() !== null);
 
   const screenRef = useRef<HTMLElement>(null);
   const shellTopRef = useRef<number | null>(null);
@@ -299,6 +302,17 @@ export function AuthScreen({
             <p className="auth-note">
               New accounts are closed on this server. Ask whoever runs it for access, then sign in
               here.
+            </p>
+          )}
+
+          {invited && !notice && (
+            <p className="auth-note auth-invite-note">
+              <Icon name="people" />
+              <span>
+                {registrationOpen
+                  ? 'Sign in or create an account to open your friend invite.'
+                  : 'Sign in to open your friend invite.'}
+              </span>
             </p>
           )}
 

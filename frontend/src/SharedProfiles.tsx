@@ -9,6 +9,8 @@ import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
+import { FriendInviteButton } from './FriendQrCode';
+import { useUserSession } from './userContext';
 import { SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
@@ -73,13 +75,19 @@ function avatarUser(member: { display_name: string; profile_photo_url: string | 
   };
 }
 
-export function SharingLocked({ onChooseSharing }: { onChooseSharing: () => void }) {
+export function SharingLocked({
+  onChooseSharing,
+  title = 'Share your profile to see others',
+}: {
+  onChooseSharing: () => void;
+  title?: string;
+}) {
   return (
     <section className="settings-panel panel sharing-locked" aria-labelledby="sharing-locked-title">
       <header>
         <div>
           <p className="section-kicker">SHARING</p>
-          <h2 id="sharing-locked-title">Share your profile to see others</h2>
+          <h2 id="sharing-locked-title">{title}</h2>
         </div>
       </header>
       <p>
@@ -439,12 +447,16 @@ export function PeopleSearch({
   refreshKey,
   onOpenProfile,
   onFriendChanged,
+  onChooseSharing,
 }: {
   active: boolean;
   refreshKey: string;
   onOpenProfile: (profile: SharedProfileSummary) => void;
   onFriendChanged: () => void;
+  /** Shows the account's own friend QR code beside the heading. */
+  onChooseSharing?: () => void;
 }) {
+  const { user } = useUserSession();
   const id = useId();
   const [input, setInput] = useState('');
   const [submitted, setSubmitted] = useState({ term: '', serial: 0 });
@@ -474,7 +486,12 @@ export function PeopleSearch({
   }, [active, submitted, refreshKey]);
   return (
     <div className="friend-group people-search">
-      <h3>Search people</h3>
+      <div className="people-search-heading">
+        <h3>Search people</h3>
+        {user && onChooseSharing && (
+          <FriendInviteButton user={user} onChooseSharing={onChooseSharing} labelled />
+        )}
+      </div>
       <form
         className="people-search-form"
         role="search"
@@ -861,6 +878,7 @@ export function FindPanel({
         refreshKey={`${searchVersion}:${people.map((person) => person.id).join(',')}`}
         onOpenProfile={onOpenProfile}
         onFriendChanged={onChanged}
+        onChooseSharing={onChooseSharing}
       />
       <SuggestedFriends
         active={active}
@@ -1170,12 +1188,17 @@ export function SharedProfileScreen({
   onChooseSharing,
   active = true,
   ownProfile,
+  invite = false,
+  onLoaded,
 }: {
   onOpenMember?: (person: { id: string; display_name: string }) => void;
   dataRevision?: string | null;
   profileId: string;
   active?: boolean;
   ownProfile?: { user: User; onSaved: (user: User) => void };
+  /** Opened from a friend QR code or invite link. */
+  invite?: boolean;
+  onLoaded?: (profile: SharedProfile) => void;
   /** The workout history list, drawn with the same cards as the account's own history. */
   renderWorkouts: (props: SharedWorkoutListProps) => ReactNode;
   onChooseSharing: () => void;
@@ -1208,6 +1231,8 @@ export function SharedProfileScreen({
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
   const preload = Boolean(ownProfile);
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
   const loadedFilters = useRef<string | null>(null);
   const filterKey = JSON.stringify(filters);
   const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
@@ -1248,6 +1273,7 @@ export function SharedProfileScreen({
       if (cancelled) return;
       loadedFilters.current = filterKey;
       setProfile(nextProfile);
+      onLoadedRef.current?.(nextProfile);
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
       setReactions('reactions' in page ? (page.reactions ?? {}) : {});
@@ -1306,7 +1332,11 @@ export function SharedProfileScreen({
 
   const ownIdentity =
     ownProfile?.user.id === profileId ? (
-      <ProfileIdentity user={ownProfile.user} onSaved={ownProfile.onSaved}>
+      <ProfileIdentity
+        user={ownProfile.user}
+        onSaved={ownProfile.onSaved}
+        onChooseSharing={onChooseSharing}
+      >
         {profile?.is_you && <ProfileStats profile={profile} />}
       </ProfileIdentity>
     ) : null;
@@ -1314,7 +1344,10 @@ export function SharedProfileScreen({
   if (state === 'locked') {
     return (
       <section className="settings-screen shared-profile-screen content-page">
-        <SharingLocked onChooseSharing={onChooseSharing} />
+        <SharingLocked
+          onChooseSharing={onChooseSharing}
+          title={invite ? 'Share your profile to add friends' : undefined}
+        />
       </section>
     );
   }
@@ -1341,11 +1374,15 @@ export function SharedProfileScreen({
         <section className="settings-panel panel">
           <header>
             <div>
-              <p className="section-kicker">SHARING</p>
-              <h2>This profile is no longer shared</h2>
+              <p className="section-kicker">{invite ? 'FRIEND INVITE' : 'SHARING'}</p>
+              <h2>{invite ? 'This invite can’t be opened' : 'This profile is no longer shared'}</h2>
             </div>
           </header>
-          <p>Its owner has made it private, so their training is hidden again.</p>
+          <p>
+            {invite
+              ? 'Its owner’s profile is private, or the link is no longer valid.'
+              : 'Its owner has made it private, so their training is hidden again.'}
+          </p>
         </section>
       </section>
     );

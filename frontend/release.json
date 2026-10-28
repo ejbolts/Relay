@@ -4,6 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Save machine setups, plan training and rest days, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
+    "Add friends in person with a QR code. Tap the QR button on your profile, or My QR code in Social > Find, and the other person scans it with their phone camera. The link opens your profile with Add friend; someone signed out or new to Relay signs in or creates an account first, then continues to your profile. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
     "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
