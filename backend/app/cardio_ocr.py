@@ -59,6 +59,7 @@ def _ocr_engine():
 
 
 async def read_cardio_screenshot(upload: UploadFile) -> bytes:
+    """Read a scan-only upload and discard its temporary file, including on failure."""
     chunks: list[bytes] = []
     total = 0
     try:
@@ -108,8 +109,12 @@ def _prepare_image(contents: bytes) -> Image.Image:
 
 def _recognize(contents: bytes) -> list[OcrLine]:
     image = _prepare_image(contents)
-    with _engine_lock:
-        result = _ocr_engine()(image)
+    try:
+        with _engine_lock:
+            result = _ocr_engine()(image)
+    finally:
+        # Only extracted text leaves OCR; release the decoded photo even if OCR fails.
+        image.close()
     texts = result.txts if result is not None and result.txts is not None else []
     scores = result.scores if result is not None and result.scores is not None else []
     boxes = result.boxes if result is not None and result.boxes is not None else []
