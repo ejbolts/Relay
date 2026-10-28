@@ -188,6 +188,7 @@ export interface TrackedMovement {
 }
 
 export interface TrackedWorkout {
+  client_session_id?: string | null;
   id: string;
   name: string;
   workout_date: string;
@@ -234,6 +235,7 @@ export interface WorkoutSetInput {
 }
 
 export interface WorkoutInput {
+  client_session_id?: string;
   name: string;
   workout_date: string;
   category: WorkoutCategory;

@@ -268,6 +268,7 @@ import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
 import { RestTimerToast, WorkoutHeaderMeta } from './WorkoutRestTimer';
 import {
+  ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
@@ -640,9 +641,7 @@ function AppContent() {
     () => readActiveWorkoutDraft()?.resumingWorkoutId ?? null,
   );
   const [activeWorkoutStartedAt, setActiveWorkoutStartedAt] = useState<number | null>(() => {
-    const storedDraft = readActiveWorkoutDraft();
-    if (storedDraft) return storedDraft.startedAt;
-    return window.location.hash === '#log' ? Date.now() : null;
+    return readActiveWorkoutDraft()?.startedAt ?? null;
   });
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
   // The opened shared profile; each opening refetches it, while Back reveals the cached screen.
@@ -680,6 +679,27 @@ function AppContent() {
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [workoutSaving, setWorkoutSaving] = useState(false);
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
+  useEffect(() => {
+    // A URL (including an old phone notification) is navigation, never a Start action.
+    if (tab !== 'log' || editingWorkout || activeWorkoutStartedAt !== null) return;
+    navigationActionRef.current = 'replace';
+    setTabState('dashboard');
+  }, [activeWorkoutStartedAt, editingWorkout, tab]);
+  useEffect(() => {
+    if (activeWorkoutStartedAt === null) return;
+    const reconcileDraft = () => {
+      const draft = readActiveWorkoutDraft();
+      if (draft?.startedAt === activeWorkoutStartedAt) return;
+      // Another tab finished, discarded or replaced this session. Do not erase its new draft.
+      setActiveWorkoutStartedAt(null);
+      setResumingWorkoutId(null);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === ACTIVE_WORKOUT_DRAFT_KEY || event.key === null) reconcileDraft();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [activeWorkoutStartedAt]);
   useEffect(() => {
     // Accounts without upload access never reach the video screen, even from an old #videos link.
     if (tab !== 'videos' || videosAllowed) return;
@@ -1079,7 +1099,8 @@ function AppContent() {
 
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
     if (!wasEditing) {
-      clearActiveWorkoutDraft();
+      const draft = readActiveWorkoutDraft();
+      if (draft?.startedAt === activeWorkoutStartedAt) clearActiveWorkoutDraft();
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
     }
@@ -1573,110 +1594,105 @@ function AppContent() {
               )}
             </CachedTabPanel>
           )}
-          {!loading &&
-            (tab === 'log' ||
-              activeWorkoutStartedAt !== null ||
-              (visitedTabs.has('log') && editingWorkout !== null)) && (
-              <CachedTabPanel active={tab === 'log'}>
-                {workoutCatalogueReady ? (
-                  <WorkoutBrowser
-                    key={
-                      editingWorkout
-                        ? `edit-${editingWorkout.id}`
-                        : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
-                    }
-                    workouts={workouts}
-                    initialWorkout={editingWorkout}
-                    resumedWorkoutId={resumingWorkoutId}
-                    hasOlder={olderHistoryAvailable}
-                  >
-                    {(navigation, viewedWorkout) => (
-                      <WorkoutLogger
-                        key={viewedWorkout?.id ?? 'original'}
-                        exercises={exercises}
-                        restoredDraftMovements={restoredDraftMovements}
-                        recommendation={dashboard?.recommendation ?? null}
-                        template={workoutTemplate}
-                        startCategory={workoutStartCategory}
-                        initialDate={workoutStartDate}
-                        initialWorkout={viewedWorkout ?? editingWorkout}
-                        readOnly={Boolean(viewedWorkout)}
-                        navigation={navigation}
-                        resumingWorkout={viewedWorkout ? null : resumingWorkout}
-                        currentBodyweight={
-                          viewedWorkout
-                            ? savedWorkoutBodyweight(viewedWorkout)
-                            : (measurements[0]?.weight_kg ?? null)
-                        }
-                        historicalWorkouts={workouts}
-                        historyBaselines={historyBaselines}
-                        restTimerEnabled={restTimerEnabled}
-                        showRestTimes={showRestTimes}
-                        categoryColors={workoutTypeColors}
-                        onExerciseHistory={(exerciseId) =>
-                          openHistorySection('progress', exerciseId)
-                        }
-                        onExerciseFavorite={updateExerciseFavorite}
-                        onCreateExercise={createExercise}
-                        onSave={saveWorkout}
-                        onAutoSaved={() =>
-                          setMessage(
-                            'Your inactive workout passed its time limit and was auto-saved.',
-                          )
-                        }
-                        activeStartedAt={activeWorkoutStartedAt}
-                        onRestTimerChange={
-                          editingWorkout || viewedWorkout ? undefined : setRestEndsAt
-                        }
-                        onRestTimerComplete={notifyRestComplete}
-                        onClose={navigateBack}
-                        onDelete={() => {
-                          if (workoutSaving) return;
-                          if (editingWorkout) {
-                            void deleteWorkout(editingWorkout);
-                            setTab('history');
-                          } else {
-                            clearActiveWorkoutDraft();
-                            setActiveWorkoutStartedAt(null);
-                            setResumingWorkoutId(null);
-                            setTab('dashboard');
-                          }
-                          setEditingWorkout(null);
-                        }}
-                      />
-                    )}
-                  </WorkoutBrowser>
-                ) : (
-                  <section className="logger-screen content-page" aria-live="polite">
-                    <OverlayScreenHeader
-                      title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
-                      subtitle={
-                        activeDraft
-                          ? 'Your workout is saved on this device'
-                          : 'Load your exercise library to start'
+          {!loading && (activeWorkoutStartedAt !== null || editingWorkout !== null) && (
+            <CachedTabPanel active={tab === 'log'}>
+              {workoutCatalogueReady ? (
+                <WorkoutBrowser
+                  key={
+                    editingWorkout
+                      ? `edit-${editingWorkout.id}`
+                      : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
+                  }
+                  workouts={workouts}
+                  initialWorkout={editingWorkout}
+                  resumedWorkoutId={resumingWorkoutId}
+                  hasOlder={olderHistoryAvailable}
+                >
+                  {(navigation, viewedWorkout) => (
+                    <WorkoutLogger
+                      key={viewedWorkout?.id ?? 'original'}
+                      exercises={exercises}
+                      restoredDraftMovements={restoredDraftMovements}
+                      recommendation={dashboard?.recommendation ?? null}
+                      template={workoutTemplate}
+                      startCategory={workoutStartCategory}
+                      initialDate={workoutStartDate}
+                      initialWorkout={viewedWorkout ?? editingWorkout}
+                      readOnly={Boolean(viewedWorkout)}
+                      navigation={navigation}
+                      resumingWorkout={viewedWorkout ? null : resumingWorkout}
+                      currentBodyweight={
+                        viewedWorkout
+                          ? savedWorkoutBodyweight(viewedWorkout)
+                          : (measurements[0]?.weight_kg ?? null)
                       }
-                      onBack={navigateBack}
+                      historicalWorkouts={workouts}
+                      historyBaselines={historyBaselines}
+                      restTimerEnabled={restTimerEnabled}
+                      showRestTimes={showRestTimes}
+                      categoryColors={workoutTypeColors}
+                      onExerciseHistory={(exerciseId) => openHistorySection('progress', exerciseId)}
+                      onExerciseFavorite={updateExerciseFavorite}
+                      onCreateExercise={createExercise}
+                      onSave={saveWorkout}
+                      onAutoSaved={() =>
+                        setMessage(
+                          'Your inactive workout passed its time limit and was auto-saved.',
+                        )
+                      }
+                      activeStartedAt={activeWorkoutStartedAt}
+                      onRestTimerChange={
+                        editingWorkout || viewedWorkout ? undefined : setRestEndsAt
+                      }
+                      onRestTimerComplete={notifyRestComplete}
+                      onClose={navigateBack}
+                      onDelete={() => {
+                        if (workoutSaving) return;
+                        if (editingWorkout) {
+                          void deleteWorkout(editingWorkout);
+                          setTab('history');
+                        } else {
+                          clearActiveWorkoutDraft();
+                          setActiveWorkoutStartedAt(null);
+                          setResumingWorkoutId(null);
+                          setTab('dashboard');
+                        }
+                        setEditingWorkout(null);
+                      }}
                     />
-                    <p>
-                      {exerciseCatalogue.error
-                        ? 'Your exercises could not be loaded.'
-                        : 'Some exercises in your saved workout are not available yet.'}{' '}
-                      {activeDraft
-                        ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
-                        : 'Reload the exercises to start your workout.'}
-                    </p>
-                    {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
-                    >
-                      Retry loading exercises
-                    </button>
-                  </section>
-                )}
-              </CachedTabPanel>
-            )}
+                  )}
+                </WorkoutBrowser>
+              ) : (
+                <section className="logger-screen content-page" aria-live="polite">
+                  <OverlayScreenHeader
+                    title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
+                    subtitle={
+                      activeDraft
+                        ? 'Your workout is saved on this device'
+                        : 'Load your exercise library to start'
+                    }
+                    onBack={navigateBack}
+                  />
+                  <p>
+                    {exerciseCatalogue.error
+                      ? 'Your exercises could not be loaded.'
+                      : 'Some exercises in your saved workout are not available yet.'}{' '}
+                    {activeDraft
+                      ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
+                      : 'Reload the exercises to start your workout.'}
+                  </p>
+                  {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                  >
+                    Retry loading exercises
+                  </button>
+                </section>
+              )}
+            </CachedTabPanel>
+          )}
           {!loading && (tab === 'body' || visitedTabs.has('body')) && (
             <CachedTabPanel active={tab === 'body'}>
               <BodyCompositionScreen
@@ -2476,6 +2492,16 @@ function WorkoutLogger({
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
+  const clientSessionId = useState(() => restoredDraft?.clientSessionId ?? crypto.randomUUID())[0];
+  const draftPersistedRef = useRef(Boolean(restoredDraft));
+  const isCurrentDraft = useCallback(() => {
+    if (!draftPersistedRef.current) return true;
+    const current = readActiveWorkoutDraft();
+    return (
+      current?.startedAt === startedAt &&
+      (!current.clientSessionId || current.clientSessionId === clientSessionId)
+    );
+  }, [clientSessionId, startedAt]);
   const resumedWorkoutId = restoredDraft?.resumingWorkoutId ?? resumingWorkout?.id ?? null;
   const previousDurationMinutes = useState(
     () => restoredDraft?.previousDurationMinutes ?? resumingWorkout?.duration_minutes ?? 0,
@@ -2537,8 +2563,11 @@ function WorkoutLogger({
     }
     let lastActivityWriteAt = 0;
     const persistDraft = () => {
-      return writeActiveWorkoutDraft({
+      // Read synchronously: a frozen tab can wake before its storage event is delivered.
+      if (savingRef.current || !isCurrentDraft()) return false;
+      const persisted = writeActiveWorkoutDraft({
         version: 1,
+        clientSessionId,
         startedAt,
         ...(resumedWorkoutId && {
           resumingWorkoutId: resumedWorkoutId,
@@ -2565,8 +2594,11 @@ function WorkoutLogger({
           sets: movement.sets,
         })),
       });
+      if (persisted) draftPersistedRef.current = true;
+      return persisted;
     };
     const recordActivity = () => {
+      if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();
       if (now >= inactiveFinishAtRef.current) {
         void finishWorkoutRef.current(inactiveFinishAtRef.current);
@@ -2616,6 +2648,8 @@ function WorkoutLogger({
     startedAt,
     workoutDate,
     durationOverrideMinutes,
+    clientSessionId,
+    isCurrentDraft,
   ]);
 
   useEffect(() => {
@@ -3063,6 +3097,7 @@ function WorkoutLogger({
 
   async function finishWorkout(automaticEndAt?: number) {
     if (savingRef.current) return;
+    if (!initialWorkout && !isCurrentDraft()) return;
     if (workoutTypes.loading) {
       setError('Workout types are still loading. Please try saving again in a moment.');
       return;
@@ -3136,6 +3171,7 @@ function WorkoutLogger({
     try {
       cancelRestTimer();
       await onSave({
+        ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
         name: completedIdentity.name,
         workout_date: workoutDate,
         category: completedIdentity.category,
