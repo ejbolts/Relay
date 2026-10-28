@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
@@ -211,6 +212,7 @@ class WorkoutTypeUpdate(BaseModel):
 
 
 class TrainingWorkoutCreate(BaseModel):
+    client_session_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     workout_date: date
     category: WorkoutCategory
@@ -292,6 +294,7 @@ class TrainingWorkoutRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    client_session_id: str | None = None
     name: str
     workout_date: date
     category: WorkoutCategory
