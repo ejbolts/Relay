@@ -1,0 +1,100 @@
+.cardio-zone-dialog {
+  width: min(460px, calc(100vw - 24px));
+}
+.cardio-zone-dialog form {
+  padding: 16px;
+}
+.cardio-zone-dialog form,
+.cardio-zone-dialog fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.cardio-zone-dialog fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.cardio-zone-dialog legend {
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.cardio-zone-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.cardio-zone-columns[aria-hidden] {
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+.cardio-goal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 36px;
+  gap: 12px;
+  align-items: end;
+}
+.cardio-goal-row label {
+  display: grid;
+  gap: 6px;
+}
+.cardio-zone-dialog input,
+.cardio-zone-dialog select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.cardio-zone-dialog button:not(.popup-dialog-close):not(.primary-action),
+.cardio-goals-summary header button {
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+}
+.cardio-goals-summary header button {
+  font-size: 0.8rem;
+}
+.cardio-goals-summary h2 {
+  font-size: 1rem;
+}
+.cardio-goal-row label,
+.cardio-zone-columns {
+  font-size: 0.85rem;
+}
+.cardio-zone-dialog .primary-action {
+  min-height: 44px;
+}
+.cardio-goals-summary {
+  margin-bottom: 20px;
+}
+.cardio-goals-summary header {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+}
+.cardio-goals-summary h2 {
+  margin: 0;
+}
+.cardio-goal-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.cardio-goal-progress p {
+  margin-bottom: 0;
+}
+.home-cardio-goal {
+  display: block;
+  margin-top: 8px;
+}

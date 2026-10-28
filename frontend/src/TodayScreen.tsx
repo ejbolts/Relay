@@ -10,7 +10,7 @@ import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
 import type { HomeSectionId } from './homeLayout';
-import { Meter, SparkBars, Sparkline } from './PulseCharts';
+import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
   daysBetween,
@@ -223,8 +223,7 @@ export function TodayScreen({
   const averageCardioSessions = averageOf(history.map((week) => week.cardioSessions));
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
   const zone2 = data?.zone2 ?? null;
-  const cardioMinutes = data?.cardio_minutes_this_week ?? zone2?.completed_minutes ?? null;
-  const zone2DaysLeft = zone2 ? Math.max(0, daysBetween(today, zone2.week_end) + 1) : null;
+  const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
   const latest = measurements[0] ?? null;
   const recentWeights = measurements
     .slice(0, 30)
@@ -471,25 +470,16 @@ export function TodayScreen({
     ),
     zone2: (
       <button type="button" className="pulse-card pulse-mini" onClick={onOpenCardio}>
-        <span>Zone 2 cardio</span>
-        <strong>
-          {cardioMinutes ?? '–'}
-          {zone2 && <small> / {zone2.goal_minutes} min</small>}
-        </strong>
-        {zone2 && (
-          <Meter
-            value={zone2.completed_minutes}
-            max={zone2.goal_minutes}
-            label="Zone 2 minutes this week"
-          />
-        )}
-        <p>
-          {zone2
-            ? zone2.complete
-              ? 'Weekly goal reached'
-              : `${zone2.remaining_minutes} min to go${zone2DaysLeft !== null ? ` · ${zone2DaysLeft} ${zone2DaysLeft === 1 ? 'day' : 'days'} left` : ''}`
-            : 'Minutes this week'}
-        </p>
+        <span>Cardio zone goals</span>
+        {cardioGoals.map((goal) => (
+          <span className="home-cardio-goal" key={goal.zone}>
+            <b>Zone {goal.zone}</b> · {goal.completed_minutes} / {goal.goal_minutes} min
+            <small>
+              {' '}
+              · {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+            </small>
+          </span>
+        ))}
       </button>
     ),
     'bodyweight-trend': (

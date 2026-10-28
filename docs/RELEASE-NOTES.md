@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Personal heart-rate ranges for five zones, plus separate weekly Zone 2 and Zone 4 goals](screenshots/releases/1.1.0-personal-heart-rate-zones.png)
+
+_Configure personal ranges and separate zone goals in **Training > Cardio > Zones & goals**. Synthetic sample ranges and goals; session results and goal totals use text._
+
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
 _A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
@@ -76,6 +80,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Set your own five heart-rate zone ranges in Training > Cardio > Zones & goals. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Average heart rate estimates each session's zone; only matching sessions count towards that zone's goal. A brief text notification shows the result. Missing heart rate or unconfigured/out-of-range zones receive no zone credit. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

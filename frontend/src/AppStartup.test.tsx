@@ -301,12 +301,41 @@ describe('App startup', () => {
     expect(markup).toContain('Quadriceps');
     expect(markup).not.toContain('Side delts</span>');
     expect(markup).toContain('1 muscles not trained yet');
-    expect(markup).toContain('120 min to go · 6 days left');
+    expect(markup).toContain('120 min to go');
     expect(markup).toContain('4 days');
     expect(markup).toContain('Bodyweight in kilograms');
     expect(markup).toContain('aria-label="Video logger"');
     expect(markup).toContain('aria-label="Settings"');
     expect(markup).not.toContain('live-workout-card');
+  });
+
+  it('shows each personal zone goal using only its qualifying minutes, without a graph', () => {
+    const markup = renderToday({
+      data: {
+        cardio_minutes_this_week: 300,
+        cardio_goals: [
+          {
+            zone: 2,
+            goal_minutes: 180,
+            completed_minutes: 60,
+            remaining_minutes: 120,
+            complete: false,
+          },
+          {
+            zone: 4,
+            goal_minutes: 30,
+            completed_minutes: 30,
+            remaining_minutes: 0,
+            complete: true,
+          },
+        ],
+      } as DashboardData,
+    });
+    expect(markup).toContain('<b>Zone 2</b> · 60 / 180 min');
+    expect(markup).toContain('<b>Zone 4</b> · 30 / 30 min');
+    expect(markup).toContain('Goal reached');
+    expect(markup).not.toContain('300 /');
+    expect(markup).not.toContain('pulse-meter');
   });
 
   it.each(['kg', 'lb'] as const)('uses %s for the Home Bodyweight axis', (unit) => {

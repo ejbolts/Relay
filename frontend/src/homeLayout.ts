@@ -52,7 +52,7 @@ export const HOME_SECTIONS = [
   },
   {
     id: 'zone2',
-    title: 'Zone 2 cardio',
+    title: 'Cardio zone goals',
     description: 'Minutes and weekly goal',
     icon: 'heart',
     size: 'half',

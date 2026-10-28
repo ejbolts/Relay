@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .cardio_zones import CardioGoalWeek, CardioPreferences
 from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
@@ -668,6 +669,8 @@ class Zone2WeekRead(BaseModel):
 
 
 class CardioOverviewRead(BaseModel):
+    cardio_preferences: CardioPreferences
+    goal_weeks: list[CardioGoalWeek]
     preferences: TrainingPreferencesRead
     current_week: Zone2WeekRead
     previous_weeks: list[Zone2WeekRead]
@@ -676,6 +679,7 @@ class CardioOverviewRead(BaseModel):
 
 
 class DashboardRead(BaseModel):
+    cardio_goals: list[CardioGoalWeek]
     workouts_this_week: int
     sets_this_week: int
     volume_this_week_kg: float
