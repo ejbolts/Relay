@@ -504,7 +504,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await click(tiles[0]);
     await click(tiles[1]);
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([travelGym.id]);
-    await click(button('Merge (2)', picker));
+    await click(button('Merge 2', picker));
     await act(async () =>
       picker
         .querySelector('form')!

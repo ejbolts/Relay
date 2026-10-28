@@ -62,21 +62,67 @@ async function select(index: number) {
   await click(container.querySelectorAll('.machine-merge-grid button')[index]);
 }
 
-it('shows Merge only for two or more selected photos and supports clear, select-all and cancel', async () => {
-  expect(container.textContent).toContain('0 selected');
-  expect(container.textContent).not.toContain('Merge (');
+function submitButton() {
+  return container.querySelector<HTMLButtonElement>('.machine-merge-submit')!;
+}
+
+it('enables Merge only for two or more selected photos and toggles select-all and cancel', async () => {
+  expect(container.textContent).toContain('Select duplicates');
+  expect(submitButton().disabled).toBe(true);
   await select(0);
   expect(container.textContent).toContain('1 selected');
-  expect(container.textContent).not.toContain('Merge (');
+  expect(submitButton().disabled).toBe(true);
   await select(1);
-  expect(button('Merge (2)')).toBeDefined();
+  expect(submitButton().disabled).toBe(false);
+  expect(submitButton().textContent).toBe('Merge 2');
   await select(0);
-  expect(container.textContent).not.toContain('Merge (');
+  expect(submitButton().disabled).toBe(true);
   await click(button('Select all'));
-  expect(button('Merge (3)')).toBeDefined();
-  await click(button('Clear'));
+  expect(submitButton().textContent).toBe('Merge 3');
+  await click(button('Deselect all'));
   expect(container.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
   await click(button('Cancel'));
+  expect(onCancel).toHaveBeenCalledOnce();
+});
+
+it('defaults the cover to the first machine tapped and keeps a typed name when the cover changes', async () => {
+  await select(2);
+  await select(0);
+  await click(submitButton());
+  const radios = container.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+  expect(radios[0].checked).toBe(true);
+  expect(container.querySelector('.chosen strong')?.textContent).toBe('Travel press');
+  const name = container.querySelector<HTMLInputElement>('input[maxlength="160"]')!;
+  expect(name.value).toBe('Travel press');
+  await click(radios[1]);
+  expect(name.value).toBe('Home press');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      name,
+      'Leg press',
+    );
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click(radios[0]);
+  expect(name.value).toBe('Leg press');
+  expect(container.querySelector('.chosen .machine-merge-cover')).not.toBeNull();
+});
+
+it('steps back from review and leaves selection mode with Escape', async () => {
+  await select(0);
+  await select(1);
+  await click(submitButton());
+  const escape = () =>
+    act(async () =>
+      container
+        .querySelector('section')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
+  await escape();
+  expect(container.querySelector('form')).toBeNull();
+  expect(container.querySelectorAll('[aria-pressed="true"]')).toHaveLength(2);
+  expect(onCancel).not.toHaveBeenCalled();
+  await escape();
   expect(onCancel).toHaveBeenCalledOnce();
 });
 
@@ -85,7 +131,7 @@ it('reviews only selected machines, chooses the retained setup and submits an ed
   vi.mocked(api.mergeMachinePhotos).mockResolvedValue(merged);
   await select(0);
   await select(1);
-  await click(button('Merge (2)'));
+  await click(submitButton());
   expect(container.querySelectorAll('input[type="radio"]')).toHaveLength(2);
   expect(container.textContent).not.toContain('Travel press');
   await click(container.querySelectorAll('input[type="radio"]')[1]);
@@ -117,7 +163,7 @@ it('keeps selection after an error, allows retry and prevents duplicate in-fligh
   vi.mocked(api.mergeMachinePhotos).mockRejectedValueOnce(new Error('Could not merge.'));
   await select(0);
   await select(1);
-  await click(button('Merge (2)'));
+  await click(submitButton());
   const submit = () =>
     container
       .querySelector('form')!
@@ -145,7 +191,7 @@ it('keeps selection after an error, allows retry and prevents duplicate in-fligh
 it('returns from review with its previous multi-selection intact', async () => {
   await select(0);
   await select(2);
-  await click(button('Merge (2)'));
+  await click(submitButton());
   await click(button('Back'));
   expect(container.querySelectorAll('[aria-pressed="true"]')).toHaveLength(2);
   expect(api.mergeMachinePhotos).not.toHaveBeenCalled();

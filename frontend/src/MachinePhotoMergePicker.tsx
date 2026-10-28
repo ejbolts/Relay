@@ -1,9 +1,14 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { Icon } from './Icon';
 import { machineUsedShort } from './machineHistory';
 import type { MachinePhotoUsage } from './types';
 import { localDate } from './utils';
 import './machinePhotoMerge.css';
+
+function photoCount(photo: MachinePhotoUsage) {
+  return Math.max(photo.images?.length ?? 1, 1);
+}
 
 export function MachinePhotoMergePicker({
   exerciseId,
@@ -16,6 +21,7 @@ export function MachinePhotoMergePicker({
   onMerged: (photo: MachinePhotoUsage, sourceIds: string[]) => void;
   onCancel: () => void;
 }) {
+  // Selection order is kept so the first machine tapped becomes the default cover.
   const [selected, setSelected] = useState<string[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [keepId, setKeepId] = useState('');
@@ -23,7 +29,17 @@ export function MachinePhotoMergePicker({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const busy = useRef(false);
-  const selectedPhotos = photos.filter((photo) => selected.includes(photo.id));
+  const sectionRef = useRef<HTMLElement>(null);
+  const selectedPhotos = selected
+    .map((id) => photos.find((photo) => photo.id === id))
+    .filter((photo): photo is MachinePhotoUsage => !!photo);
+  const allSelected = selected.length === photos.length;
+  const mergedPhotoCount = selectedPhotos.reduce((total, photo) => total + photoCount(photo), 0);
+  const today = localDate();
+
+  useEffect(() => {
+    sectionRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [reviewing]);
 
   function toggle(id: string) {
     setSelected((current) =>
@@ -39,6 +55,19 @@ export function MachinePhotoMergePicker({
     setCaption(keep.caption);
     setReviewing(true);
     setError('');
+  }
+
+  function chooseCover(photo: MachinePhotoUsage) {
+    const previous = selectedPhotos.find((item) => item.id === keepId);
+    // Follow the cover's name until the user types their own.
+    if (!previous || caption.trim() === previous.caption.trim()) setCaption(photo.caption);
+    setKeepId(photo.id);
+  }
+
+  function leave() {
+    if (saving) return;
+    if (reviewing) setReviewing(false);
+    else onCancel();
   }
 
   async function merge() {
@@ -57,30 +86,17 @@ export function MachinePhotoMergePicker({
   }
 
   return (
-    <section className="machine-merge" aria-label="Select machine photos to merge">
-      <div className="machine-merge-toolbar">
-        <strong role="status">{selected.length} selected</strong>
-        {!reviewing && (
-          <>
-            <button type="button" onClick={() => setSelected(photos.map((photo) => photo.id))}>
-              Select all
-            </button>
-            {selected.length > 0 && (
-              <button type="button" onClick={() => setSelected([])}>
-                Clear
-              </button>
-            )}
-          </>
-        )}
-        <button type="button" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-        {!reviewing && selected.length >= 2 && (
-          <button type="button" className="machine-merge-submit" onClick={review}>
-            Merge ({selected.length})
-          </button>
-        )}
-      </div>
+    <section
+      ref={sectionRef}
+      className="machine-merge"
+      aria-label={reviewing ? 'Review machine photo merge' : 'Select machine photos to merge'}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        leave();
+      }}
+    >
       {reviewing ? (
         <form
           className="machine-merge-review"
@@ -89,27 +105,36 @@ export function MachinePhotoMergePicker({
             void merge();
           }}
         >
-          <h3>Merge machine photos</h3>
+          <div className="machine-merge-header">
+            <button type="button" className="machine-merge-back" onClick={leave} disabled={saving}>
+              <Icon name="chevron-left" />
+              Back
+            </button>
+            <h3>Merge {selectedPhotos.length} machines</h3>
+          </div>
           <fieldset disabled={saving}>
-            <legend>Keep cover and future settings from</legend>
+            <legend>Cover and settings</legend>
             <div className="machine-merge-grid">
-              {selectedPhotos.map((photo) => (
-                <label className={keepId === photo.id ? 'chosen' : ''} key={photo.id}>
-                  <img src={photo.thumbnail_url} alt="" />
-                  <span>
+              {selectedPhotos.map((photo) => {
+                const chosen = keepId === photo.id;
+                return (
+                  <label className={chosen ? 'chosen' : ''} key={photo.id}>
                     <input
+                      className="sr-only"
                       type="radio"
                       name="keep-machine"
-                      checked={keepId === photo.id}
-                      onChange={() => {
-                        setKeepId(photo.id);
-                        setCaption(photo.caption);
-                      }}
+                      checked={chosen}
+                      onChange={() => chooseCover(photo)}
                     />
-                    {photo.caption}
-                  </span>
-                </label>
-              ))}
+                    <span className="machine-merge-thumb">
+                      <img src={photo.thumbnail_url} alt="" />
+                      {chosen && <span className="machine-merge-cover">Cover</span>}
+                    </span>
+                    <strong>{photo.caption}</strong>
+                    {photoCount(photo) > 1 && <small>{photoCount(photo)} photos</small>}
+                  </label>
+                );
+              })}
             </div>
             <label className="machine-merge-name">
               Machine name
@@ -122,35 +147,68 @@ export function MachinePhotoMergePicker({
               />
             </label>
             <div className="machine-merge-footer">
-              <button type="button" onClick={() => setReviewing(false)}>
-                Back
-              </button>
               <button type="submit" className="machine-merge-submit" disabled={!caption.trim()}>
-                {saving ? 'Merging…' : 'Merge photos'}
+                {saving ? 'Merging…' : `Merge into 1 machine · ${mergedPhotoCount} photos`}
               </button>
             </div>
           </fieldset>
         </form>
       ) : (
-        <div className="machine-merge-grid">
-          {photos.map((photo) => (
+        <>
+          <div className="machine-merge-header">
+            <button type="button" className="machine-merge-back" onClick={onCancel}>
+              Cancel
+            </button>
+            <strong role="status">
+              {selected.length ? `${selected.length} selected` : 'Select duplicates'}
+            </strong>
             <button
               type="button"
-              key={photo.id}
-              className={selected.includes(photo.id) ? 'chosen' : ''}
-              aria-label={`Select ${photo.caption} for merge`}
-              aria-pressed={selected.includes(photo.id)}
-              onClick={() => toggle(photo.id)}
+              className="machine-merge-all"
+              onClick={() => setSelected(allSelected ? [] : photos.map((photo) => photo.id))}
             >
-              <img src={photo.thumbnail_url} alt="" />
-              <span className="machine-merge-check" aria-hidden="true">
-                {selected.includes(photo.id) ? '✓' : ''}
-              </span>
-              <strong>{photo.caption}</strong>
-              <small>{machineUsedShort(photo.last_used_date, localDate())}</small>
+              {allSelected ? 'Deselect all' : 'Select all'}
             </button>
-          ))}
-        </div>
+          </div>
+          <div className="machine-merge-grid">
+            {photos.map((photo) => {
+              const order = selected.indexOf(photo.id);
+              const chosen = order >= 0;
+              return (
+                <button
+                  type="button"
+                  key={photo.id}
+                  className={chosen ? 'chosen' : ''}
+                  aria-label={`Select ${photo.caption} for merge`}
+                  aria-pressed={chosen}
+                  onClick={() => toggle(photo.id)}
+                >
+                  <span className="machine-merge-thumb">
+                    <img src={photo.thumbnail_url} alt="" />
+                    <span className="machine-merge-check" aria-hidden="true">
+                      {chosen && <Icon name="check" />}
+                    </span>
+                  </span>
+                  <strong>{photo.caption}</strong>
+                  <small>
+                    {photoCount(photo) > 1 && `${photoCount(photo)} photos · `}
+                    {machineUsedShort(photo.last_used_date, today)}
+                  </small>
+                </button>
+              );
+            })}
+          </div>
+          <div className="machine-merge-footer">
+            <button
+              type="button"
+              className="machine-merge-submit"
+              disabled={selected.length < 2}
+              onClick={review}
+            >
+              {selected.length < 2 ? 'Select 2 or more to merge' : `Merge ${selected.length}`}
+            </button>
+          </div>
+        </>
       )}
       {error && (
         <p className="machine-photo-error" role="alert">

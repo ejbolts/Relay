@@ -5569,22 +5569,6 @@ function MachinePhotoChooser({
           />
         ) : (
           <>
-            {photos.length >= 2 && (
-              <div className="machine-photo-library-actions">
-                <button
-                  type="button"
-                  disabled={uploading || !!pending}
-                  onClick={() => {
-                    setExpanded(null);
-                    setChoosingReplacement(false);
-                    setSelectingForMerge(true);
-                    setError(null);
-                  }}
-                >
-                  Select
-                </button>
-              </div>
-            )}
             <div className="machine-photo-actions">
               <label>
                 <span aria-hidden="true">
@@ -5626,6 +5610,23 @@ function MachinePhotoChooser({
                       ? 'Choose the machine you are using for this workout.'
                       : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
                   </p>
+                )}
+                {photos.length >= 2 && (
+                  <div className="machine-photo-library-actions">
+                    <span>Saved · {photos.length}</span>
+                    <button
+                      type="button"
+                      disabled={uploading || !!pending}
+                      onClick={() => {
+                        setExpanded(null);
+                        setChoosingReplacement(false);
+                        setSelectingForMerge(true);
+                        setError(null);
+                      }}
+                    >
+                      Select
+                    </button>
+                  </div>
                 )}
                 <div className="machine-photo-rail" ref={photoRailRef}>
                   {photos.map((photo) => {
