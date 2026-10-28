@@ -6,11 +6,11 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  border: 1.5px solid color-mix(in srgb, var(--p-accent) 40%, transparent);
+  border: 1.5px solid var(--p-axis);
   border-radius: 12px;
   padding: 0;
-  background: var(--p-accent-soft);
-  color: var(--p-accent-text);
+  background: transparent;
+  color: var(--p-muted);
   transition: transform 160ms var(--ease-out);
 }
 

@@ -83,6 +83,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 - The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.
 - Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.
 - RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
+- The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.
 - Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 
 ## 1.0.0

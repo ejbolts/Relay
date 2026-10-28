@@ -19,6 +19,7 @@
     "The top-right Settings icon always opens All settings, instead of returning to the last section. Settings search still opens the selected control and unfinished forms stay available.",
     "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.",
     "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
+    "The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.",
     "Workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
