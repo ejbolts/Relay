@@ -237,6 +237,11 @@ and creates an independent private routine; it never copies workout history or a
 a schedule. Unsharing does not remove copies already saved by others.
 
 `POST /api/routines/{id}/use` accepts a start date and replaces the active split.
+The split manager's **My splits** view lists all owned copies, including private imports.
+After copying, **View my splits** navigates to that copy and opens its card. The **Schedule**
+view retains unsaved edits while browsing the library and reloads after activation or
+editing/deleting the active routine. These views use the same account-owned routines as
+Profile; importing does not publish or activate a split automatically.
 Recommendations include that day's planned movements; the logger prefills them as
 unchecked suggestions. Editing an active routine updates its schedule while preserving
 the start date. Editing the schedule directly clears its routine link; deleting the

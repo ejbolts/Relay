@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import { WeightInput } from './WeightInput';
@@ -6,7 +6,7 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { formatWeight } from './weightUnits';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
-import type { Exercise, Routine, RoutineDay, RoutineSet } from './types';
+import type { Exercise, Routine, RoutineDay, RoutineSet, TrainingSplit } from './types';
 import './routines.css';
 
 const emptySet = (): RoutineSet => ({
@@ -25,12 +25,23 @@ export function RoutinePanel({
   own,
   active = true,
   revision,
+  heading = 'Routines',
+  initialOpenId,
+  onOpenSplits,
+  onUsed,
+  onChanged,
 }: {
   ownerId: string;
   own: boolean;
   active?: boolean;
   revision?: string | null;
+  heading?: string;
+  initialOpenId?: string;
+  onOpenSplits?: (routineId?: string) => void;
+  onUsed?: (split: TrainingSplit) => void;
+  onChanged?: (routineId: string) => void;
 }) {
+  const headingId = useId();
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [editing, setEditing] = useState<Routine | null>(null);
   const [using, setUsing] = useState<Routine | null>(null);
@@ -41,6 +52,7 @@ export function RoutinePanel({
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string[]>([]);
+  const [importedId, setImportedId] = useState<string | null>(null);
   const locked = useRef(false);
   const types = useWorkoutTypes();
   const unit = useWeightUnit();
@@ -82,16 +94,22 @@ export function RoutinePanel({
   async function copy(routine: Routine) {
     await run(async () => {
       const saved = await api.routines.copy(ownerId, routine.id);
+      setImportedId(saved.id);
       setCopied((ids) => [...ids, routine.id]);
       await types.reload();
       setEditing(saved);
-      setNotice('Saved to your routines.');
+      setNotice('Saved to My splits.');
     });
   }
   return (
-    <section className="pulse-card routine-panel" aria-labelledby={`routines-${ownerId}`}>
+    <section className="pulse-card routine-panel" aria-labelledby={headingId}>
       <header className="routine-heading">
-        <h2 id={`routines-${ownerId}`}>Routines</h2>
+        <h2 id={headingId}>{heading}</h2>
+        {own && onOpenSplits && (
+          <button type="button" onClick={() => onOpenSplits()}>
+            My splits
+          </button>
+        )}
         {own && (
           <button
             type="button"
@@ -136,13 +154,22 @@ export function RoutinePanel({
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
+      {!own && copied.length > 0 && onOpenSplits && (
+        <button type="button" onClick={() => onOpenSplits(importedId ?? undefined)}>
+          View my splits
+        </button>
+      )}
       {!routines && !error && <p role="status">Loading routines…</p>}
       {routines?.length === 0 && (
         <p className="shared-card-empty">{own ? 'No saved routines.' : 'No shared routines.'}</p>
       )}
       <div className="routine-list">
         {routines?.map((routine) => (
-          <details className="routine-card" key={routine.id}>
+          <details
+            className="routine-card"
+            key={routine.id}
+            open={routine.id === initialOpenId || undefined}
+          >
             <summary>
               <strong>{routine.name}</strong>
               <span>{routine.days.length} days</span>
@@ -240,6 +267,7 @@ export function RoutinePanel({
                 ]);
               setEditing(null);
               setNotice('Routine saved.');
+              onChanged?.(saved.id);
             })
           }
         />
@@ -256,7 +284,8 @@ export function RoutinePanel({
             onSubmit={(event) => {
               event.preventDefault();
               void run(async () => {
-                await api.routines.use(using.id, startDate);
+                const saved = await api.routines.use(using.id, startDate);
+                onUsed?.(saved);
                 setUsing(null);
                 setNotice(`${using.name} is your active split.`);
               });
@@ -307,6 +336,7 @@ export function RoutinePanel({
             onClick={() =>
               void run(async () => {
                 await api.routines.remove(deleting.id);
+                onChanged?.(deleting.id);
                 setRoutines((items) => items!.filter((item) => item.id !== deleting.id));
                 setDeleting(null);
               })

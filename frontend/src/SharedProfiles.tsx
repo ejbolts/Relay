@@ -1165,6 +1165,7 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
 
 export function SharedProfileScreen({
   onOpenMember,
+  onOpenSplits,
   dataRevision = null,
   profileId,
   renderWorkouts,
@@ -1173,6 +1174,7 @@ export function SharedProfileScreen({
   ownProfile,
 }: {
   onOpenMember?: (person: { id: string; display_name: string }) => void;
+  onOpenSplits?: (routineId?: string) => void;
   dataRevision?: string | null;
   profileId: string;
   active?: boolean;
@@ -1432,6 +1434,7 @@ export function SharedProfileScreen({
             own={profile.is_you}
             active={active}
             revision={dataRevision}
+            onOpenSplits={onOpenSplits}
           />
           {profile.consistency && (
             <SharedConsistencyCalendar

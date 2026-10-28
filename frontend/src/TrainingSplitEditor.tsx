@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from './api';
 import { HelpPopup } from './HelpPopup';
+import { RoutinePanel } from './RoutinePanel';
+import { useUserSession } from './userContext';
 import { Icon } from './Icon';
 import { addDays, parseLocalDate, shortDate } from './trainingSummary';
 import {
@@ -17,8 +19,66 @@ import './trainingSplit.css';
 
 export function TrainingSplitEditor({
   onSaved,
+  initialView = 'schedule',
+  initialRoutineId,
 }: {
   onSaved: (split: TrainingSplit) => Promise<void>;
+  initialView?: 'schedule' | 'saved';
+  initialRoutineId?: string;
+}) {
+  const [view, setView] = useState(initialView);
+  const [scheduleRevision, setScheduleRevision] = useState(0);
+  const [activeRoutineId, setActiveRoutineId] = useState<string | null>(null);
+  const { user } = useUserSession();
+  return (
+    <div className="split-manager">
+      <nav className="segmented-control split-manager-views" aria-label="Workout split views">
+        <button
+          type="button"
+          className={view === 'saved' ? 'active' : ''}
+          aria-pressed={view === 'saved'}
+          onClick={() => setView('saved')}
+        >
+          My splits
+        </button>
+        <button
+          type="button"
+          className={view === 'schedule' ? 'active' : ''}
+          aria-pressed={view === 'schedule'}
+          onClick={() => setView('schedule')}
+        >
+          Schedule
+        </button>
+      </nav>
+      {view === 'saved' && (
+        <RoutinePanel
+          ownerId={user?.id ?? 'my-splits'}
+          own
+          heading="My splits"
+          initialOpenId={initialRoutineId}
+          onUsed={() => setScheduleRevision((value) => value + 1)}
+          onChanged={(id) => {
+            if (id === activeRoutineId) setScheduleRevision((value) => value + 1);
+          }}
+        />
+      )}
+      <div hidden={view !== 'schedule'}>
+        <SplitScheduleEditor
+          key={scheduleRevision}
+          onSaved={onSaved}
+          onRoutineLoaded={setActiveRoutineId}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SplitScheduleEditor({
+  onSaved,
+  onRoutineLoaded,
+}: {
+  onSaved: (split: TrainingSplit) => Promise<void>;
+  onRoutineLoaded: (id: string | null) => void;
 }) {
   const workoutTypes = useWorkoutTypes();
   const [split, setSplit] = useState<TrainingSplit | null>(null);
@@ -37,7 +97,10 @@ export function TrainingSplitEditor({
     let active = true;
     api.getTrainingSplit().then(
       (saved) => {
-        if (active) setSplit(saved ?? splitFromTemplate('upper-lower', localDate()));
+        if (active) {
+          setSplit(saved ?? splitFromTemplate('upper-lower', localDate()));
+          onRoutineLoaded(saved?.routine_id ?? null);
+        }
       },
       (reason) => {
         if (active)
@@ -47,7 +110,7 @@ export function TrainingSplitEditor({
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [attempt, onRoutineLoaded]);
 
   if (!split) {
     return (

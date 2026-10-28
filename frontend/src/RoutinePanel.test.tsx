@@ -49,8 +49,10 @@ const original: Routine = {
 };
 let root: Root;
 let host: HTMLDivElement;
-async function mount(own = false) {
-  await act(async () => root.render(<RoutinePanel ownerId="friend" own={own} />));
+async function mount(own = false, onOpenSplits?: (id?: string) => void) {
+  await act(async () =>
+    root.render(<RoutinePanel ownerId="friend" own={own} onOpenSplits={onOpenSplits} />),
+  );
 }
 async function click(text: string) {
   const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -134,6 +136,17 @@ it('copies into an editable private routine and adapts exercise and weight indep
   expect(original.days[0].movements[0].sets[0].weight_kg).toBe(50);
   expect(api.routines.use).not.toHaveBeenCalled();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it('opens My splits at the imported copy after dismissing the editor', async () => {
+  const open = vi.fn();
+  await mount(false, open);
+  expect(host.textContent).not.toContain('View my splits');
+  await click('Save routine');
+  await click('Close Edit routine');
+  await click('View my splits');
+  expect(open).toHaveBeenCalledWith('copy');
+  expect(api.routines.use).not.toHaveBeenCalled();
 });
 
 it('keeps edits after a failed save and allows retry', async () => {

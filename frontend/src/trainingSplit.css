@@ -1,6 +1,17 @@
 .split-editor {
   max-width: 550px;
 }
+.split-manager {
+  max-width: 550px;
+  margin-inline: auto;
+}
+.split-manager-views {
+  margin: 0 14px 16px;
+}
+.split-manager > .routine-panel {
+  width: calc(100% - 28px);
+  margin: 12px 14px 40px;
+}
 .split-fields {
   display: grid;
   gap: 1.6rem;

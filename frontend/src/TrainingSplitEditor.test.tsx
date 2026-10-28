@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { splitFromTemplate } from './trainingSplit';
-import type { WorkoutType } from './types';
+import type { Routine, WorkoutType } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 import { WorkoutTypesContext } from './workoutTypesContext';
 
@@ -80,6 +80,112 @@ beforeEach(() => {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
+});
+
+const imported: Routine = {
+  id: 'imported-copy',
+  name: 'Friend upper split',
+  shared: false,
+  days: [
+    { workout_type_id: 'upper', workout_type: DEFAULT_WORKOUT_TYPES[0], movements: [] },
+    { workout_type_id: null, workout_type: null, movements: [] },
+  ],
+};
+
+it('lists imported private splits in My splits and retains unsaved schedule edits between views', async () => {
+  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
+  await mount();
+  await input('input[type="text"]', 'Unsaved schedule');
+  await click('My splits');
+  expect(api.routines.list).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain('Friend upper split');
+  expect(host.textContent).toContain('Only you');
+  await click('Schedule');
+  expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(
+    'Unsaved schedule',
+  );
+  expect(api.saveTrainingSplit).not.toHaveBeenCalled();
+});
+
+it('opens the imported split from navigation and reflects activation in Schedule', async () => {
+  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
+  const active = {
+    name: imported.name,
+    enabled: true,
+    start_date: '2026-10-26',
+    routine_id: imported.id,
+    steps: imported.days.map((day) => ({ workout_type_id: day.workout_type_id })),
+  };
+  vi.spyOn(api.routines, 'use').mockImplementation(async () => {
+    vi.mocked(api.getTrainingSplit).mockResolvedValue(active);
+    return active;
+  });
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
+  await act(async () =>
+    root.render(
+      <TrainingSplitEditor onSaved={saved} initialView="saved" initialRoutineId={imported.id} />,
+    ),
+  );
+  expect(host.querySelector<HTMLDetailsElement>('.routine-card')!.open).toBe(true);
+  await click('Use split');
+  expect(api.routines.use).not.toHaveBeenCalled();
+  await act(async () =>
+    document
+      .querySelector('.routine-use')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  expect(api.routines.use).toHaveBeenCalledWith(imported.id, '2026-10-26');
+  await click('Schedule');
+  expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(imported.name);
+  expect(host.querySelectorAll('.split-cycle > li')).toHaveLength(2);
+  expect(saved).not.toHaveBeenCalled();
+});
+
+it('refreshes Schedule after editing the active saved split', async () => {
+  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
+  const active = {
+    name: imported.name,
+    enabled: true,
+    start_date: '2026-10-26',
+    routine_id: imported.id,
+    steps: imported.days.map((day) => ({ workout_type_id: day.workout_type_id })),
+  };
+  vi.mocked(api.getTrainingSplit).mockResolvedValue(active);
+  vi.spyOn(api, 'listExercises').mockResolvedValue([]);
+  vi.spyOn(api.routines, 'save').mockImplementation(async (routine) => {
+    vi.mocked(api.getTrainingSplit).mockResolvedValue({ ...active, name: routine.name });
+    return routine;
+  });
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
+  await act(async () => root.render(<TrainingSplitEditor onSaved={saved} initialView="saved" />));
+  await click('Edit routine');
+  await act(async () => {
+    const name = document.querySelector<HTMLInputElement>('.routine-editor input')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      name,
+      'Adapted active split',
+    );
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () =>
+    document
+      .querySelector('.routine-editor')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  await click('Schedule');
+  expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(
+    'Adapted active split',
+  );
 });
 afterEach(async () => {
   await act(async () => root.unmount());

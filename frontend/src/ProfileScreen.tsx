@@ -5,12 +5,14 @@ import { useUserSession } from './userContext';
 
 export function ProfileScreen({
   onOpenMember,
+  onOpenSplits,
   dataRevision = null,
   active,
   renderWorkouts,
   onChooseSharing,
 }: {
   onOpenMember?: (person: { id: string; display_name: string }) => void;
+  onOpenSplits?: (routineId?: string) => void;
   dataRevision?: string | null;
   active: boolean;
   renderWorkouts: (props: SharedWorkoutListProps) => ReactNode;
@@ -24,6 +26,7 @@ export function ProfileScreen({
     <div className="profile-screen" data-settings-page="profile">
       <SharedProfileScreen
         onOpenMember={onOpenMember}
+        onOpenSplits={onOpenSplits}
         dataRevision={dataRevision}
         active={active}
         profileId={user.id}
