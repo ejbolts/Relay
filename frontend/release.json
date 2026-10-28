@@ -27,6 +27,14 @@
   },
   "highlights": [
     {
+      "title": "Rest days in your split",
+      "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/fa42998b90e3cbb752032a0dc1018f35ae98c47d/docs/screenshots/releases/1.1.0-split-rest-days.png",
+        "alt": "Saved training split with Pull and Lower body workouts, consecutive Rest days, an Add rest day button and a seven-day calendar preview. Isolated sample data."
+      }
+    },
+    {
       "title": "Profiles ready sooner, people behind reactions",
       "description": "Your profile loads quietly after sign-in. Tap a workout's reaction count to instantly open names and emojis in a bottom sheet; swipe down to close it.",
       "image": {
