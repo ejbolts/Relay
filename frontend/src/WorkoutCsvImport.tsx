@@ -3,6 +3,8 @@ import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import { WorkoutCsvGuide } from './WorkoutCsvGuide';
 import { WorkoutImportSource } from './WorkoutImportSource';
+import { ImportBatchHistory } from './ImportBatchHistory';
+import './importReview.css';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { CsvImportPreview, WorkoutImportOptions } from './types';
 
@@ -14,6 +16,10 @@ export function WorkoutImportReview({
   onCancel,
   onSave,
   options,
+  reviewing = false,
+  reviewStale = false,
+  onMappingChange,
+  onUpdateReview,
 }: {
   fileName: string;
   preview: CsvImportPreview;
@@ -22,6 +28,10 @@ export function WorkoutImportReview({
   onCancel: () => void;
   onSave: () => void;
   options?: WorkoutImportOptions;
+  reviewing?: boolean;
+  reviewStale?: boolean;
+  onMappingChange?: (name: string, id: string) => void;
+  onUpdateReview?: () => void;
 }) {
   return (
     <PopupDialog title="Review import" kicker="CSV IMPORT" onClose={onCancel}>
@@ -40,6 +50,36 @@ export function WorkoutImportReview({
               ? ` · Workout units: ${options.weight_unit}, ${options.distance_unit}. Measurement units come from the file.`
               : ''}
           </p>
+        )}
+        {!!preview.exercise_matches?.length && onMappingChange && (
+          <details className="import-mapping" open>
+            <summary>Exercise mapping ({preview.exercise_matches.length})</summary>
+            {preview.exercise_matches.map((match) => (
+              <label key={match.incoming_name}>
+                <span>{match.incoming_name}</span>
+                <select
+                  aria-label={`Map ${match.incoming_name}`}
+                  disabled={saving || reviewing}
+                  value={
+                    options?.exercise_mappings?.[match.incoming_name] ?? match.exercise_id ?? ''
+                  }
+                  onChange={(event) => onMappingChange(match.incoming_name, event.target.value)}
+                >
+                  <option value="">Automatic match / new exercise</option>
+                  {preview.available_exercises?.map((exercise) => (
+                    <option key={exercise.id} value={exercise.id}>
+                      {exercise.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            {reviewStale && (
+              <button type="button" disabled={reviewing} onClick={onUpdateReview}>
+                {reviewing ? 'Updating…' : 'Update review'}
+              </button>
+            )}
+          </details>
         )}
         {(preview.sessions.length > 0 ||
           !(
@@ -134,7 +174,10 @@ export function WorkoutImportReview({
             type="button"
             className="popup-primary-action"
             disabled={
-              saving || (preview.workouts_to_create === 0 && !preview.body_measurements_to_create)
+              saving ||
+              reviewing ||
+              reviewStale ||
+              (preview.workouts_to_create === 0 && !preview.body_measurements_to_create)
             }
             onClick={onSave}
           >
@@ -145,18 +188,19 @@ export function WorkoutImportReview({
     </PopupDialog>
   );
 }
-
 export function WorkoutCsvImport({
   onImport,
   guideOpen = false,
   onGuideOpenChange,
   onSourceChange,
+  onUndoImport,
 }: {
   onImport: (file: File, options?: WorkoutImportOptions) => Promise<void>;
   /** The CSV guide's recommendations, opened from onboarding or Settings. */
   guideOpen?: boolean;
   onGuideOpenChange?: (open: boolean) => void;
   onSourceChange?: (source: WorkoutImportOptions['source']) => void;
+  onUndoImport?: (id: string) => Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [review, setReview] = useState<{
@@ -165,6 +209,8 @@ export function WorkoutCsvImport({
     options: WorkoutImportOptions;
   } | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [reviewStale, setReviewStale] = useState(false);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unit = useWeightUnit();
@@ -173,36 +219,35 @@ export function WorkoutCsvImport({
     weight_unit: unit,
     distance_unit: 'km',
   });
-
   function changeOptions(value: WorkoutImportOptions) {
     setOptions(value);
     setError(null);
     onSourceChange?.(value.source);
   }
-
   async function selectFile(file: File, selected = options) {
     setError(null);
     setPreviewing(true);
     try {
       const preview = await api.previewWorkoutImport(file, selected);
       setReview({ file, preview, options: selected });
+      setReviewStale(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not review that CSV file.');
     } finally {
       setPreviewing(false);
     }
   }
-
   function cancel() {
-    if (saving) return;
+    if (saving || previewing) return;
     setReview(null);
     setError(null);
   }
-
   async function save() {
     if (
       !review ||
       saving ||
+      previewing ||
+      reviewStale ||
       (review.preview.workouts_to_create === 0 && !review.preview.body_measurements_to_create)
     )
       return;
@@ -211,13 +256,13 @@ export function WorkoutCsvImport({
     try {
       await onImport(review.file, review.options);
       setReview(null);
+      setHistoryRevision(historyRevision + 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save that import.');
     } finally {
       setSaving(false);
     }
   }
-
   return (
     <>
       <WorkoutImportSource
@@ -261,8 +306,23 @@ export function WorkoutCsvImport({
           }}
         />
       )}
+      {onUndoImport && <ImportBatchHistory key={historyRevision} onUndo={onUndoImport} />}
       {review && (
         <WorkoutImportReview
+          reviewing={previewing}
+          reviewStale={reviewStale}
+          onMappingChange={(name, id) => {
+            setReview({
+              ...review,
+              options: {
+                ...review.options,
+                exercise_mappings: { ...review.options.exercise_mappings, [name]: id },
+              },
+            });
+            setReviewStale(true);
+            setError(null);
+          }}
+          onUpdateReview={() => void selectFile(review.file, review.options)}
           options={review.options}
           fileName={review.file.name}
           preview={review.preview}

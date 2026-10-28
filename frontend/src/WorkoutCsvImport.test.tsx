@@ -83,6 +83,47 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('workout CSV review flow', () => {
+  it('requires an updated review after mapping and saves the reviewed mapping', async () => {
+    vi.mocked(api.previewWorkoutImport).mockResolvedValue(preview);
+    const onImport = vi.fn().mockResolvedValue(undefined);
+    const file = { name: 'mapping.csv' } as File;
+    select(render(onImport), file);
+    await vi.waitFor(() => expect(hooks.values[0]).not.toBeNull());
+    const current = () => render(onImport).find((node) => node.type === WorkoutImportReview)!;
+    (current().props.onMappingChange as (name: string, id: string) => void)(
+      'Safety Test Press',
+      'existing',
+    );
+    expect(current().props.reviewStale).toBe(true);
+    (current().props.onSave as () => void)();
+    expect(onImport).not.toHaveBeenCalled();
+    const mapped = { ...options, exercise_mappings: { 'Safety Test Press': 'existing' } };
+    (current().props.onUpdateReview as () => void)();
+    await vi.waitFor(() => expect(api.previewWorkoutImport).toHaveBeenLastCalledWith(file, mapped));
+    await vi.waitFor(() => expect(current().props.reviewStale).toBe(false));
+    (current().props.onSave as () => void)();
+    await vi.waitFor(() => expect(onImport).toHaveBeenCalledWith(file, mapped));
+  });
+
+  it('keeps saving disabled when an updated mapping is rejected', async () => {
+    vi.mocked(api.previewWorkoutImport)
+      .mockResolvedValueOnce(preview)
+      .mockRejectedValueOnce(new Error('Mapped exercise unavailable.'));
+    const onImport = vi.fn();
+    select(render(onImport), { name: 'mapping.csv' } as File);
+    await vi.waitFor(() => expect(hooks.values[0]).not.toBeNull());
+    const current = () => render(onImport).find((node) => node.type === WorkoutImportReview)!;
+    (current().props.onMappingChange as (name: string, id: string) => void)(
+      'Safety Test Press',
+      'missing',
+    );
+    (current().props.onUpdateReview as () => void)();
+    await vi.waitFor(() => expect(current().props.error).toBe('Mapped exercise unavailable.'));
+    expect(current().props.reviewStale).toBe(true);
+    (current().props.onSave as () => void)();
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
   it('notifies Settings of source changes from both the cards and guide', () => {
     const onSourceChange = vi.fn();
     const nodes = elements(
@@ -197,7 +238,7 @@ describe('workout CSV review flow', () => {
     await vi.waitFor(() => expect(hooks.values[0]).not.toBeNull());
     const review = render(onImport).find((element) => element.type === WorkoutImportReview)!;
     (review.props.onSave as () => void)();
-    await vi.waitFor(() => expect(hooks.values[3]).toBe('Nothing was saved.'));
+    await vi.waitFor(() => expect(hooks.values[5]).toBe('Nothing was saved.'));
     expect(onImport).toHaveBeenCalledWith(file, options);
     const failed = render(onImport).find((element) => element.type === WorkoutImportReview)!;
     expect(failed.props.error).toBe('Nothing was saved.');
@@ -210,7 +251,7 @@ describe('workout CSV review flow', () => {
     vi.mocked(api.previewWorkoutImport).mockRejectedValue(new Error('Row 2: invalid weight.'));
     const onImport = vi.fn();
     select(render(onImport), { name: 'bad.csv' } as File);
-    await vi.waitFor(() => expect(hooks.values[3]).toBe('Row 2: invalid weight.'));
+    await vi.waitFor(() => expect(hooks.values[5]).toBe('Row 2: invalid weight.'));
     const nodes = render(onImport);
     expect(nodes.some((element) => element.type === WorkoutImportReview)).toBe(false);
     expect(nodes.find((element) => element.props.role === 'alert')?.props.children).toBe(

@@ -1,0 +1,58 @@
+.import-mapping {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.import-mapping summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+.import-mapping label {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+.import-mapping label span {
+  overflow-wrap: anywhere;
+}
+.import-mapping select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--card);
+  color: inherit;
+  border: 1px solid var(--line);
+}
+.import-mapping > button {
+  margin-top: 12px;
+}
+.import-batches {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.import-batches li {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.import-batches strong {
+  overflow-wrap: anywhere;
+}
+.import-batches span {
+  font-size: 0.85rem;
+  color: var(--muted-ink);
+}
+.import-undo-confirm {
+  padding: 14px;
+  border: 1px solid var(--danger, #e86767);
+  border-radius: 12px;
+}
+.import-undo-confirm h3 {
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
