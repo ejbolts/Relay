@@ -517,6 +517,136 @@ describe('RPE and set type presentation', () => {
   });
 });
 
+describe('saved training splits on Home', () => {
+  const custom = {
+    id: 'custom-a',
+    name: 'Full body A',
+    color: '#123456',
+    is_custom: true,
+    archived: false,
+  };
+  const recommendation = {
+    category: 'other',
+    session_name: 'Full body A workout',
+    rotation_next: 'other',
+    reason: 'Day 1',
+    muscle_frequency: [],
+    workout_type: custom,
+    split_name: 'My split',
+    scheduled_date: '2026-10-26',
+  };
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#dashboard');
+    vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom]);
+    vi.mocked(api.dashboard).mockResolvedValue({ recommendation } as unknown as DashboardData);
+  });
+
+  it('opens the full editor from the Home shortcut', async () => {
+    vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(null);
+    await mount();
+    const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent === 'Edit split',
+    )!;
+    await act(async () => edit.click());
+    expect(window.location.hash).toBe('#split');
+    expect(container.querySelector('[aria-label="Training split editor"]')).not.toBeNull();
+    expect(container.querySelector('.tab-bar')).toBeNull();
+  });
+
+  it('preserves later navigation when a split save finishes in the background', async () => {
+    const split = {
+      name: 'My split',
+      enabled: true,
+      start_date: '2026-10-26',
+      steps: [{ workout_type_id: custom.id }],
+    };
+    vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(split);
+    let finish!: (value: typeof split) => void;
+    vi.spyOn(api, 'saveTrainingSplit').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await mount();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('button')]
+        .find((item) => item.textContent === 'Edit split')!
+        .click(),
+    );
+    await act(async () =>
+      container
+        .querySelector('.split-editor form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('.overlay-screen-header [aria-label="Settings"]')!
+        .click(),
+    );
+    expect(window.location.hash).toBe('#settings');
+    await act(async () => finish(split));
+    expect(window.location.hash).toBe('#settings');
+  });
+
+  it('starts the scheduled custom type even without a previous workout of that type', async () => {
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    expect(window.location.hash).toBe('#log');
+    expect(readActiveWorkoutDraft()).toMatchObject({
+      category: 'other',
+      workoutTypeId: 'custom-a',
+      workoutTypeExplicit: true,
+    });
+  });
+
+  it('shows a rest day without offering it as a workout in the Start menu', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: { ...recommendation, workout_type: null, is_rest_day: true },
+    } as unknown as DashboardData);
+    await mount();
+    expect(container.querySelector('#next-session-title')?.textContent).toBe('Rest day');
+    expect(container.querySelector('.next-session-exercises')).toBeNull();
+    const start = container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!;
+    await act(async () => start.click());
+    expect(container.querySelector('.start-menu')?.textContent).not.toContain('Rest day');
+  });
+
+  it('refreshes the scheduled day after local midnight even when training has not changed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T23:59:59'));
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    await mount();
+    const before = vi.mocked(api.dashboard).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(vi.mocked(api.dashboard).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('rechecks the day when a dashboard response crosses local midnight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T23:59:59'));
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    let finish!: (value: DashboardData) => void;
+    vi.mocked(api.dashboard).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await mount();
+    expect(api.dashboard).toHaveBeenCalledOnce();
+    vi.setSystemTime(new Date('2026-10-27T00:00:01'));
+    await act(async () => finish({ recommendation } as unknown as DashboardData));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(vi.mocked(api.dashboard).mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
 describe('rest time controls', () => {
   function restControl() {
     return (
@@ -1126,6 +1256,107 @@ describe('finishing workouts in the background', () => {
         .click(),
     );
     expect(document.querySelector('.workout-completion-toast')).toBeNull();
+  });
+});
+
+describe('cardio set editing defaults', () => {
+  const treadmill: Exercise = {
+    ...bench,
+    id: 'treadmill',
+    name: 'Incline Treadmill Walking',
+    kind: 'cardio',
+    category: 'cardio',
+    equipment: 'Treadmill',
+  };
+
+  it.each([treadmill, bench])(
+    'starts $kind suggestions with the expected editor and preserves uncompleted values',
+    async (exercise) => {
+      window.history.replaceState(null, '', '#dashboard');
+      const saved = remoteWorkout();
+      saved.category = exercise.category;
+      vi.mocked(api.dashboard).mockResolvedValue({
+        recommendation: { category: exercise.category, rotation_next: exercise.category },
+      } as unknown as DashboardData);
+      saved.movements[0].exercise = exercise;
+      Object.assign(saved.movements[0].sets[0], {
+        duration_seconds: 3120,
+        distance_km: 4.06,
+        calories_kcal: 613,
+        average_heart_rate_bpm: 133,
+        speed_kph: 4.7,
+        incline_percent: 15,
+      });
+      vi.mocked(api.listExercises).mockResolvedValue([exercise]);
+      vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+      await mount();
+      await act(async () => container.querySelector<HTMLButtonElement>('.app-tab-start')!.click());
+      const option = [...container.querySelectorAll<HTMLButtonElement>('.start-menu-option')].find(
+        (button) => button.textContent?.includes(exercise.kind === 'cardio' ? 'Cardio' : 'Up next'),
+      )!;
+      await act(async () => option.click());
+
+      const isCardio = exercise.kind === 'cardio';
+      expect(container.querySelector('.set-details')?.getAttribute('data-expanded')).toBe(
+        String(isCardio),
+      );
+      const set = readActiveWorkoutDraft()!.movements[0].sets[0];
+      expect(set).toMatchObject({ completed: false, fromPrevious: true });
+      if (isCardio) {
+        expect(
+          container.querySelector<HTMLInputElement>('[aria-label="Duration minutes"]')!.value,
+        ).toBe('52');
+        expect(
+          container.querySelector<HTMLInputElement>('[aria-label="Distance kilometres"]')!.value,
+        ).toBe('4.06');
+        expect(
+          container.querySelector('[aria-label="Upload cardio set screenshot"]'),
+        ).not.toBeNull();
+        expect(set).toMatchObject({ duration_seconds: 3120, distance_km: 4.06 });
+      }
+      expect(container.querySelector('.workout-summary-metrics')?.textContent).toContain('Sets0');
+      expect(api.createWorkout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('folds a completed cardio set and reopens it when unticked, including after recovery', async () => {
+    const draft = storedDraft({ category: 'cardio' });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: treadmill.id,
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'cardio-set',
+            duration_seconds: 3120,
+            distance_km: 4.06,
+            completed: false,
+            fromPrevious: true,
+          },
+        ],
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const expanded = () => container.querySelector('.set-details')?.getAttribute('data-expanded');
+    const tick = () => container.querySelector<HTMLButtonElement>('.row-complete-button')!;
+    expect(expanded()).toBe('true');
+    expect(tick().getAttribute('aria-pressed')).toBe('false');
+    await act(async () => tick().click());
+    expect(expanded()).toBe('false');
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].completed).toBe(true);
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(expanded()).toBe('false');
+    await act(async () => tick().click());
+    expect(expanded()).toBe('true');
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].completed).toBe(false);
   });
 });
 

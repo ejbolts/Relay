@@ -24,6 +24,14 @@ _An overnight workout stays on its starting day. This isolated sample starts at 
 
 _The exercise popup now contains only muscle credits. Isolated sample data._
 
+![Split planner showing a saved cycle with workouts, consecutive rest days and a seven-day preview](screenshots/releases/1.1.0-split-rest-days.png)
+
+_Add, move or change rest days as part of your repeating split. This phone-sized planner uses isolated sample data._
+
+![New cardio session with the suggested treadmill set expanded for editing](screenshots/releases/1.1.0-cardio-expanded.png)
+
+_Cardio sets open ready to edit or upload a screenshot, with previous-session values preserved and a blue row until completed. This phone-sized view uses isolated sample data._
+
 ![Add exercise form with multiple target muscles and separate Direct and Partial credits per working set](screenshots/releases/1.1.0-custom-exercise-muscle.png)
 
 _Add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit for each one when creating a strength exercise. This phone-sized form uses isolated sample data._
@@ -71,6 +79,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.
 - Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
+- Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.
+- Cardio sets open with their editable fields expanded, including suggestions from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately. Sets remain uncompleted until you tick them; completed sets still fold away.
 - Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.
@@ -84,7 +94,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 - Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.
 - RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
 - The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.
-- Workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
+- Strength workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
 
 ## 1.0.0
 

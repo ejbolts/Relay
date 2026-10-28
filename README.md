@@ -25,6 +25,7 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 - Choose from the exercise library, save favourites or create your own exercises.
 - Record sets, reps, weight and effort (RPE), with warmups, supersets and notes.
 - Add your own workout types and colours in Settings; remove or restore types while keeping saved history.
+- Build your own repeating training split in **Settings > Training > Your split**, with Upper / Lower, PPL, full body every other day and Cardio templates, custom workout types and rest days. **Edit split** on Home opens the editor; Up next follows your saved cycle.
 - Use previous-session suggestions to pick up where you left off.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
