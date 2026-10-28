@@ -951,6 +951,107 @@ describe('finishing workouts in the background', () => {
   });
 });
 
+describe('cardio set editing defaults', () => {
+  const treadmill: Exercise = {
+    ...bench,
+    id: 'treadmill',
+    name: 'Incline Treadmill Walking',
+    kind: 'cardio',
+    category: 'cardio',
+    equipment: 'Treadmill',
+  };
+
+  it.each([treadmill, bench])(
+    'starts $kind suggestions with the expected editor and preserves uncompleted values',
+    async (exercise) => {
+      window.history.replaceState(null, '', '#dashboard');
+      const saved = remoteWorkout();
+      saved.category = exercise.category;
+      vi.mocked(api.dashboard).mockResolvedValue({
+        recommendation: { category: exercise.category, rotation_next: exercise.category },
+      } as unknown as DashboardData);
+      saved.movements[0].exercise = exercise;
+      Object.assign(saved.movements[0].sets[0], {
+        duration_seconds: 3120,
+        distance_km: 4.06,
+        calories_kcal: 613,
+        average_heart_rate_bpm: 133,
+        speed_kph: 4.7,
+        incline_percent: 15,
+      });
+      vi.mocked(api.listExercises).mockResolvedValue([exercise]);
+      vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+      await mount();
+      await act(async () => container.querySelector<HTMLButtonElement>('.app-tab-start')!.click());
+      const option = [...container.querySelectorAll<HTMLButtonElement>('.start-menu-option')].find(
+        (button) => button.textContent?.includes(exercise.kind === 'cardio' ? 'Cardio' : 'Up next'),
+      )!;
+      await act(async () => option.click());
+
+      const isCardio = exercise.kind === 'cardio';
+      expect(container.querySelector('.set-details')?.getAttribute('data-expanded')).toBe(
+        String(isCardio),
+      );
+      const set = readActiveWorkoutDraft()!.movements[0].sets[0];
+      expect(set).toMatchObject({ completed: false, fromPrevious: true });
+      if (isCardio) {
+        expect(
+          container.querySelector<HTMLInputElement>('[aria-label="Duration minutes"]')!.value,
+        ).toBe('52');
+        expect(
+          container.querySelector<HTMLInputElement>('[aria-label="Distance kilometres"]')!.value,
+        ).toBe('4.06');
+        expect(
+          container.querySelector('[aria-label="Upload cardio set screenshot"]'),
+        ).not.toBeNull();
+        expect(set).toMatchObject({ duration_seconds: 3120, distance_km: 4.06 });
+      }
+      expect(container.querySelector('.workout-summary-metrics')?.textContent).toContain('Sets0');
+      expect(api.createWorkout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('folds a completed cardio set and reopens it when unticked, including after recovery', async () => {
+    const draft = storedDraft({ category: 'cardio' });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: treadmill.id,
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'cardio-set',
+            duration_seconds: 3120,
+            distance_km: 4.06,
+            completed: false,
+            fromPrevious: true,
+          },
+        ],
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const expanded = () => container.querySelector('.set-details')?.getAttribute('data-expanded');
+    const tick = () => container.querySelector<HTMLButtonElement>('.row-complete-button')!;
+    expect(expanded()).toBe('true');
+    expect(tick().getAttribute('aria-pressed')).toBe('false');
+    await act(async () => tick().click());
+    expect(expanded()).toBe('false');
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].completed).toBe(true);
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(expanded()).toBe('false');
+    await act(async () => tick().click());
+    expect(expanded()).toBe('true');
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].completed).toBe(false);
+  });
+});
+
 describe('inactive workout suggestions', () => {
   function expiredSuggestions(completedFirst: boolean) {
     const draft = storedDraft();
