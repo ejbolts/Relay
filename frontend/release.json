@@ -36,7 +36,7 @@
       "title": "Merge duplicate machine photos",
       "description": "Choose Select in Equipment photo, pick duplicates and review Merge. Keep every photo and saved workout link together; recorded workout settings stay unchanged.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/40c218ec79303f17e75b2245e6a380ec8f13aa30/docs/screenshots/releases/1.1.0-machine-photo-merge.gif",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b8fa2a3c26f582fcabaadaf981e149aae1ce6ca9/docs/screenshots/releases/1.1.0-machine-photo-merge.gif",
         "alt": "Select duplicate machine photos, review the retained setup, then merge and open both photos in one saved machine."
       }
     },
