@@ -46,6 +46,7 @@ from .notifications import (
     vapid_public_key,
 )
 from .processing import ProcessingValidationError, SessionProcessor, validate_batch_ready
+from .routines import router as routines_router
 from .schemas import (
     ActiveWorkoutReminderCreate,
     ClipPatch,
@@ -637,6 +638,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(protected)
     app.include_router(video)
     app.include_router(tracker_router)
+    app.include_router(routines_router)
     app.include_router(home_layout_router)
     app.include_router(machine_settings_router)
     app.include_router(youtube_router)

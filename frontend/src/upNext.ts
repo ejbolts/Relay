@@ -4,6 +4,7 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import type { TrackedWorkout, WorkoutRecommendation } from './types';
 import { localDate } from './utils';
 import { useWorkoutTypes } from './workoutTypesContext';
+import { routineSessionTemplate } from './routines';
 
 /**
  * The recommended next session shared by Home's Up next card and the Start menu: the
@@ -26,13 +27,15 @@ export function useUpNextSession(
   const template = useMemo(
     () =>
       active && !isRestDay && !needsSplitUpdate
-        ? sessionTemplateFor(
-            workouts,
-            active.category,
-            today,
-            weightUnit,
-            type?.is_custom ? type.id : null,
-          )
+        ? active.routine_day
+          ? routineSessionTemplate(active.routine_day, active.session_name, today, weightUnit)
+          : sessionTemplateFor(
+              workouts,
+              active.category,
+              today,
+              weightUnit,
+              type?.is_custom ? type.id : null,
+            )
         : null,
     [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type],
   );

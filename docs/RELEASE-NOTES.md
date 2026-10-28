@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Saving a friend's shared routine, adapting the starting weight and saving an independent private copy](screenshots/releases/1.1.0-share-copy-routines.gif)
+
+_Save a full routine from a profile, then adapt exercises, sets and starting weights in your own copy. Choose which saved routines appear on your profile; copying keeps them private until you publish them. Isolated synthetic accounts._
+
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
 _A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
@@ -76,6 +80,8 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- **Share and copy routines:** keep multiple full splits in **Profile > Routines**, with workout and rest days, exercises, sets and starting weights. Create a routine or capture your current split using the latest completed sets for each workout type. Choose **Show on my profile** for each routine. Friends can save independent private copies and adapt exercises and weights without changing the original. **Use split** replaces the active schedule from your chosen start date; Up next prefills planned sets and leaves them unchecked. Profile privacy, friends-only access and blocks also protect routine access. Unsharing or deleting an original stops future copies; friends keep copies they already saved.
+- New workouts cannot use removed workout types; previously saved workouts of those types remain editable.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

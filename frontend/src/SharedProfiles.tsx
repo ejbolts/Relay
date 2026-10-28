@@ -16,6 +16,7 @@ import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { TrainingTimeCard } from './TrainingTimeStats';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { PopupDialog } from './PopupDialog';
+import { RoutinePanel } from './RoutinePanel';
 import { formatMemberSince } from './profileDisplay';
 import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
@@ -1425,6 +1426,13 @@ export function SharedProfileScreen({
         </section>
       ) : (
         <>
+          <RoutinePanel
+            key={`routines:${profile.id}`}
+            ownerId={profile.id}
+            own={profile.is_you}
+            active={active}
+            revision={dataRevision}
+          />
           {profile.consistency && (
             <SharedConsistencyCalendar
               key={profile.id}

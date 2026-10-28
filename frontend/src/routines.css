@@ -1,0 +1,188 @@
+.routine-panel {
+  padding: 18px;
+}
+.routine-heading,
+.routine-actions,
+.routine-edit-day header,
+.routine-exercise-select,
+.routine-share {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.routine-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.routine-panel button,
+.routine-editor button,
+.routine-use button {
+  min-height: 38px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.routine-panel button:disabled,
+.routine-editor button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.routine-editor .popup-primary-action,
+.routine-use .popup-primary-action,
+.routine-card > .routine-actions > button:only-child {
+  background: var(--p-accent);
+  color: white;
+  border-color: transparent;
+}
+.routine-panel .danger-button {
+  color: var(--p-danger);
+}
+.routine-editor input,
+.routine-editor select,
+.routine-use input {
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.routine-editor :focus-visible,
+.routine-panel :focus-visible,
+.routine-use :focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+.routine-capture {
+  margin: 14px 0;
+  width: 100%;
+}
+.routine-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.routine-card {
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.routine-card > summary {
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.routine-card > summary strong {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.routine-card > summary span,
+.routine-card small,
+.routine-cycle > li > span {
+  color: var(--p-muted);
+  font-size: 12px;
+}
+.routine-card > .routine-actions {
+  padding: 0 14px 14px;
+}
+.routine-actions {
+  flex-wrap: wrap;
+}
+.routine-cycle {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 12px;
+}
+.routine-cycle > li {
+  border-left: 3px solid var(--p-muted);
+  padding: 0 0 0 12px;
+  display: grid;
+  gap: 5px;
+}
+.routine-exercise {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  font-size: 13px;
+}
+.routine-exercise > span {
+  color: var(--p-muted);
+}
+.routine-editor-dialog {
+  width: min(540px, calc(100vw - 24px));
+  max-height: 92dvh;
+  overflow: auto;
+}
+.routine-editor fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.routine-editor label,
+.routine-use label {
+  display: grid;
+  gap: 7px;
+}
+.routine-editor .routine-share {
+  display: flex;
+}
+.routine-edit-day {
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+.routine-edit-day header > div {
+  display: flex;
+  gap: 5px;
+}
+.routine-edit-day header button {
+  min-width: 32px;
+}
+.routine-editor select,
+.routine-editor input {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
+.routine-share input {
+  width: auto;
+}
+.routine-edit-exercise {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0;
+}
+.routine-set,
+.routine-set-labels {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+.routine-set-labels {
+  font-size: 12px;
+  color: var(--p-muted);
+}
+.routine-exercise-select select {
+  flex: 1;
+}
+.routine-use {
+  display: grid;
+  gap: 16px;
+}

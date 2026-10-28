@@ -339,7 +339,13 @@ export function TodayScreen({
             {recommendation?.scheduled_date && recommendation.scheduled_date > today ? (
               <small>{shortDate(recommendation.scheduled_date)}</small>
             ) : (
-              template && <small>Last: {shortDate(template.sourceWorkout.workout_date)}</small>
+              template && (
+                <small>
+                  {recommendation?.routine_day
+                    ? 'Routine'
+                    : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
+                </small>
+              )
             )}
           </div>
           {template ? (

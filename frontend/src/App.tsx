@@ -2508,7 +2508,7 @@ function WorkoutLogger({
         }))
       : restoredDraft
         ? restoredDraftMovements
-        : (template?.exercises ?? []).map(({ exercise }) => ({
+        : (template?.exercises ?? []).map(({ exercise, plannedSets }) => ({
             key: crypto.randomUUID(),
             exercise,
             notes: '',
@@ -2516,15 +2516,24 @@ function WorkoutLogger({
             machinePhotosInitialized: false,
             supersetKey: null,
             isComplete: false,
-            sets: suggestedSetsFromHistory(
-              historicalWorkouts,
-              exercise,
-              initialDate,
-              undefined,
-              historyBaselines && initialDate >= historyBaselines.before
-                ? historyBaselines.byExercise
-                : null,
-            ),
+            sets: plannedSets
+              ? plannedSets.map((set) => ({
+                  ...createWorkoutSet(exercise.kind),
+                  ...set,
+                  key: crypto.randomUUID(),
+                  warmup: set.set_type === 'warmup',
+                  completed: false,
+                  fromPrevious: true,
+                }))
+              : suggestedSetsFromHistory(
+                  historicalWorkouts,
+                  exercise,
+                  initialDate,
+                  undefined,
+                  historyBaselines && initialDate >= historyBaselines.before
+                    ? historyBaselines.byExercise
+                    : null,
+                ),
           })),
   );
   const [pickerOpen, setPickerOpen] = useState(false);

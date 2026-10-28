@@ -393,6 +393,73 @@ class WeeklyDayBreakdown(BaseModel):
     exercises: list[WeeklyExerciseBreakdown]
 
 
+class RoutineSet(BaseModel):
+    reps: int | None = Field(default=None, ge=0, le=10_000)
+    weight_kg: float | None = Field(default=None, ge=0, le=10_000)
+    duration_seconds: int | None = Field(default=None, ge=0, le=172_800)
+    distance_km: float | None = Field(default=None, ge=0, le=10_000)
+    rest_seconds: int | None = Field(default=None, ge=0, le=7_200)
+    set_type: SetType = SetType.NORMAL
+
+
+class RoutineMovement(BaseModel):
+    exercise_id: str
+    sets: list[RoutineSet] = Field(min_length=1, max_length=50)
+
+
+class RoutineMovementRead(RoutineMovement):
+    exercise: ExerciseRead
+
+
+class RoutineDay(BaseModel):
+    workout_type_id: str | None = None
+    movements: list[RoutineMovement] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def rest_has_no_exercises(self) -> RoutineDay:
+        if self.workout_type_id is None and self.movements:
+            raise ValueError("Rest days cannot contain exercises.")
+        return self
+
+
+class RoutineDayRead(RoutineDay):
+    workout_type: WorkoutTypeRead | None = None
+    movements: list[RoutineMovementRead] = []
+
+
+class RoutineInput(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    shared: bool = False
+    days: list[RoutineDay] = Field(min_length=1, max_length=28)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_routine_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def workout_days(self) -> RoutineInput:
+        workouts = [day for day in self.days if day.workout_type_id is not None]
+        if not workouts:
+            raise ValueError("Include at least one workout day.")
+        if self.shared and any(not day.movements for day in workouts):
+            raise ValueError("Add exercises to every workout day before sharing.")
+        if sum(len(day.movements) for day in self.days) > 200:
+            raise ValueError("A routine can contain at most 200 exercises.")
+        if sum(len(m.sets) for day in self.days for m in day.movements) > 1000:
+            raise ValueError("A routine can contain at most 1000 sets.")
+        return self
+
+
+class RoutineRead(RoutineInput):
+    id: str
+    days: list[RoutineDayRead]
+
+
+class RoutineActivation(BaseModel):
+    start_date: date
+
+
 class MuscleFrequencyRead(BaseModel):
     muscle_group: str
     sessions_last_7_days: int
@@ -410,6 +477,7 @@ class WorkoutRecommendationRead(BaseModel):
     needs_split_update: bool = False
     scheduled_date: date | None = None
     split_name: str | None = None
+    routine_day: RoutineDayRead | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):
@@ -623,6 +691,7 @@ class TrainingSplit(BaseModel):
     enabled: bool = True
     start_date: date
     steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
+    routine_id: str | None = None
 
     @field_validator("name", mode="before")
     @classmethod

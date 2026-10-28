@@ -601,6 +601,53 @@ describe('saved training splits on Home', () => {
     });
   });
 
+  it('prefills a saved routine with its adapted sets unchecked, rather than previous performance', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: {
+        ...recommendation,
+        routine_day: {
+          workout_type_id: custom.id,
+          workout_type: custom,
+          movements: [
+            {
+              exercise_id: bench.id,
+              exercise: bench,
+              sets: [
+                {
+                  reps: 10,
+                  weight_kg: 35,
+                  rest_seconds: 120,
+                  duration_seconds: null,
+                  distance_km: null,
+                  set_type: 'normal',
+                },
+                {
+                  reps: 8,
+                  weight_kg: 37.5,
+                  rest_seconds: 90,
+                  duration_seconds: null,
+                  distance_km: null,
+                  set_type: 'drop',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    } as unknown as DashboardData);
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    const draft = readActiveWorkoutDraft()!;
+    expect(draft.workoutTypeId).toBe(custom.id);
+    expect(draft.movements[0].exerciseId).toBe(bench.id);
+    expect(draft.movements[0].sets).toMatchObject([
+      { reps: 10, weight_kg: 35, rest_seconds: 120, completed: false, fromPrevious: true },
+      { reps: 8, weight_kg: 37.5, rest_seconds: 90, completed: false, set_type: 'drop' },
+    ]);
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
   it('shows a rest day without offering it as a workout in the Start menu', async () => {
     vi.mocked(api.dashboard).mockResolvedValue({
       recommendation: { ...recommendation, workout_type: null, is_rest_day: true },
