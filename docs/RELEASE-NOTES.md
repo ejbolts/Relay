@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Mixed sessions named Cardio + Upper body workout, Upper body + Cardio workout and Cardio + Upper body + Cardio workout, with the first session expanded in exercise order](screenshots/releases/1.1.0-mixed-session-timeline.png)
+
+_Mixed-session titles follow the exercise sequence. The expanded sample starts with cycling, then bench press and seated row; the other sessions finish with cardio or have cardio at both ends. Isolated synthetic data._
+
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
 _A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
@@ -76,6 +80,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+- Mixed strength and cardio sessions follow their exercise order: **Cardio + Upper body workout** when cardio comes first, **Upper body + Cardio workout** when it comes last, and both labels when it bookends strength work. Custom workout types and names follow the same order. Existing history titles update when viewed without rewriting records; reordering exercises updates the live and saved title. Consecutive exercises of the same kind share one segment label.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

@@ -4,6 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Save machine setups, plan training and rest days, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
+    "Mixed strength and cardio sessions follow their exercise order: Cardio + Upper body workout when cardio comes first, Upper body + Cardio workout when it comes last, and both labels when it bookends strength work. Custom workout types and names follow the same order. Existing history titles update when viewed; reordering exercises updates the live and saved title.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
     "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",

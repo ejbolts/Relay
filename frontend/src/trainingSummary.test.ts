@@ -205,6 +205,29 @@ describe('training summary helpers', () => {
     expect(workoutDisplayName({ name: 'Heavy pulls', category: 'pull' })).toBe('Heavy pulls');
   });
 
+  it('shows saved and imported mixed sessions in movement order without rewriting history', () => {
+    const bike = { ...exercise('bike', 'Exercise bike', 'cardio'), category: 'cardio' as const };
+    const bench = exercise('bench', 'Bench press');
+    const saved = workout(
+      'mixed',
+      '2026-10-28',
+      'upper',
+      [
+        { exercise: bike, sets: [trackedSet(0, 0)] },
+        { exercise: bench, sets: [trackedSet(80, 8)] },
+      ],
+      'Upper body + Cardio workout',
+    );
+    expect(workoutDisplayName(saved)).toBe('Cardio + Upper body workout');
+    expect(saved.name).toBe('Upper body + Cardio workout');
+    expect(workoutDisplayName({ ...saved, movements: [...saved.movements].reverse() })).toBe(
+      'Upper body + Cardio workout',
+    );
+    expect(workoutDisplayName({ ...saved, name: 'Imported workout · 2026-10-28' })).toBe(
+      'Cardio + Upper body',
+    );
+  });
+
   it('templates the next session from the newest workout of that type', () => {
     const template = sessionTemplateFor(workouts, 'pull', '2026-10-06');
 
