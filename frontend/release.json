@@ -33,6 +33,14 @@
   },
   "highlights": [
     {
+      "title": "Add friends with a QR code",
+      "description": "Show your QR code from Profile or Social > Find. A phone camera opens your profile with Add friend, even for someone who still needs to sign in or create an account.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/ee6d9993421df45e4ad1ac0ce347b53074f9775b/docs/screenshots/releases/1.1.0-friend-qr-code.png",
+        "alt": "My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button. Isolated sample accounts."
+      }
+    },
+    {
       "title": "Rest days in your split",
       "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
       "image": {
