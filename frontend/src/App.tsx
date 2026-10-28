@@ -8610,47 +8610,6 @@ export function CardioScreen({
           }}
         />
       )}
-      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
-        <header>
-          <h2 id="cardio-goals-title">Weekly zone goals</h2>
-          <button
-            type="button"
-            className="cardio-goals-edit"
-            aria-label="Edit heart-rate zones and goals"
-            onClick={() => setZoneSettingsOpen(true)}
-          >
-            <Icon name="edit" />
-            Edit
-          </button>
-        </header>
-        <ul className="cardio-goal-list">
-          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
-            const range = overview.cardio_preferences?.heart_rate_zones.find(
-              (item) => item.zone === goal.zone,
-            );
-            return (
-              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
-                <span>
-                  <strong>Zone {goal.zone}</strong>
-                  {range && (
-                    <small>
-                      {range.min_bpm}–{range.max_bpm} bpm
-                    </small>
-                  )}
-                </span>
-                <span>
-                  <b>
-                    {goal.completed_minutes} / {goal.goal_minutes} min
-                  </b>
-                  <small>
-                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
-                  </small>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
       {error && <p className="inline-error">{error}</p>}
       {metricSession && (
         <CardioMetricsEditor
@@ -9090,6 +9049,47 @@ export function CardioScreen({
           onPageChange={setHistoryPage}
           label="cardio history"
         />
+      </section>
+      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
+        <header>
+          <h2 id="cardio-goals-title">Weekly zone goals</h2>
+          <button
+            type="button"
+            className="cardio-goals-edit"
+            aria-label="Edit heart-rate zones and goals"
+            onClick={() => setZoneSettingsOpen(true)}
+          >
+            <Icon name="edit" />
+            Edit
+          </button>
+        </header>
+        <ul className="cardio-goal-list">
+          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
+            const range = overview.cardio_preferences?.heart_rate_zones.find(
+              (item) => item.zone === goal.zone,
+            );
+            return (
+              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
+                <span>
+                  <strong>Zone {goal.zone}</strong>
+                  {range && (
+                    <small>
+                      {range.min_bpm}–{range.max_bpm} bpm
+                    </small>
+                  )}
+                </span>
+                <span>
+                  <b>
+                    {goal.completed_minutes} / {goal.goal_minutes} min
+                  </b>
+                  <small>
+                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </section>
     </div>
   );

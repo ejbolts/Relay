@@ -172,7 +172,7 @@ describe('cardio weekly trend screen', () => {
     const notice = document.querySelector('.app-notification-toast')!;
     expect(notice.textContent).toContain('Zone 2 · 120 bpm average (110–139 bpm)');
     expect(notice.querySelector('svg, canvas')).toBeNull();
-    await click(named('Edit'));
+    await click(container.querySelector('[aria-label="Edit heart-rate zones and goals"]')!);
     expect(document.querySelector('dialog')!.textContent).toContain('Personal ranges (bpm)');
   });
   it.each(['en-AU', 'en-US'])(
