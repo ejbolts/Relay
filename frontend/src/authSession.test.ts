@@ -3,6 +3,7 @@ import { ApiError } from './api';
 import { resolveSession } from './authSession';
 import { LAST_USER_KEY, type CleanupStorage } from './sessionCleanup';
 import type { User } from './types';
+import { ACTIVE_WORKOUT_DRAFT_KEY } from './workoutDraft';
 
 class MemoryStorage implements CleanupStorage {
   values = new Map<string, string>();
@@ -31,6 +32,13 @@ function deps(me: () => Promise<User>, storage = new MemoryStorage()) {
 }
 
 describe('resolveSession', () => {
+  it('does not restore account data from a response superseded by sign-out', async () => {
+    const session = deps(() => Promise.resolve(user));
+    await resolveSession({ ...session, isCurrent: () => false });
+    expect(session.storage.getItem(LAST_USER_KEY)).toBeNull();
+    expect(session.clearCache).not.toHaveBeenCalled();
+  });
+
   it('authenticates when the server returns the user and remembers them', async () => {
     const session = deps(() => Promise.resolve(user));
 
@@ -46,6 +54,20 @@ describe('resolveSession', () => {
     );
 
     expect(state).toEqual({ status: 'signed-out' });
+  });
+
+  it('removes remembered account data after confirmed revocation, including at startup', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user));
+    storage.setItem(ACTIVE_WORKOUT_DRAFT_KEY, 'sample draft');
+    const session = deps(
+      () => Promise.reject(new ApiError('Sign in', 'not_authenticated', 401)),
+      storage,
+    );
+    expect(await resolveSession(session)).toEqual({ status: 'signed-out' });
+    expect(storage.getItem(LAST_USER_KEY)).toBeNull();
+    expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
+    expect(session.clearCache).toHaveBeenCalledOnce();
   });
 
   it('keeps a remembered user in the offline app instead of signing them out', async () => {

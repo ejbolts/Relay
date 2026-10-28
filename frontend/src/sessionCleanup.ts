@@ -122,7 +122,7 @@ function browserSignOutDeps(): SignOutDeps {
 
 /**
  * Detaches this device's push subscription (best effort, while the session is still valid),
- * ends the server session, then wipes the local per-user data. A network failure while logging
+ * ends all account sessions, then wipes the local per-user data. A network failure while logging
  * out is thrown and leaves local data untouched, so the user is never told they are signed out
  * while the server session is still alive. An already-expired session counts as signed out.
  */
