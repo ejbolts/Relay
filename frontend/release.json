@@ -24,7 +24,8 @@
     "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.",
     "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
     "The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.",
-    "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
+    "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour.",
+    "Removed workout types cannot be used for new sessions, including retry-safe saves. Existing workouts remain editable, and retrying an already saved session still returns the original workout."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {

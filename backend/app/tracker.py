@@ -520,9 +520,16 @@ def load_workout(db: Session, user_id: str, workout_id: str) -> TrainingWorkout:
 
 
 def replace_workout_contents(
-    db: Session, user_id: str, workout: TrainingWorkout, payload: TrainingWorkoutCreate
+    db: Session,
+    user_id: str,
+    workout: TrainingWorkout,
+    payload: TrainingWorkoutCreate,
+    *,
+    is_new: bool = False,
 ) -> None:
-    assign_workout_type(db, user_id, workout, payload)
+    # New saves already have a reserved ID for retry recovery; that does not
+    # make them historical workouts eligible to keep an archived type.
+    assign_workout_type(db, user_id, workout, payload, allow_archived=not is_new)
     workout.name = payload.name
     workout.workout_date = payload.workout_date
     workout.category = payload.category
@@ -1945,7 +1952,7 @@ def create_workout(
         if existing is not None:
             return existing
         raise
-    replace_workout_contents(db, user.id, workout, payload)
+    replace_workout_contents(db, user.id, workout, payload, is_new=True)
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
