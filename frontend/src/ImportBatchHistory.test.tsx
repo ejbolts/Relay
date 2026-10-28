@@ -55,11 +55,11 @@ it('loads batches on demand, cancels safely, and removes only the confirmed batc
   const onUndo = vi.fn().mockResolvedValue(undefined);
   click(render(onUndo), 'Import history');
   await vi.waitFor(() => expect(hooks.values[0]).not.toBeNull());
-  click(render(onUndo), 'Undo import');
+  click(render(onUndo), 'Undo');
   click(render(onUndo), 'Cancel');
   expect(onUndo).not.toHaveBeenCalled();
+  click(render(onUndo), 'Undo');
   click(render(onUndo), 'Undo import');
-  click(render(onUndo), 'Confirm undo');
   await vi.waitFor(() => expect(onUndo).toHaveBeenCalledWith('one'));
   expect(hooks.values[0]).toEqual([{ ...batch, id: 'two', file_name: 'other.csv' }]);
 });
@@ -69,8 +69,8 @@ it('keeps the batch and shows a retryable undo error', async () => {
   const onUndo = vi.fn().mockRejectedValue(new Error('Could not undo.'));
   click(render(onUndo), 'Import history');
   await vi.waitFor(() => expect(hooks.values[0]).not.toBeNull());
+  click(render(onUndo), 'Undo');
   click(render(onUndo), 'Undo import');
-  click(render(onUndo), 'Confirm undo');
   await vi.waitFor(() =>
     expect(render(onUndo).find((node) => node.props.role === 'alert')?.props.children).toBe(
       'Could not undo.',
