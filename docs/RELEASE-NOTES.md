@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Selecting two sample machine photos, choosing their cover and settings, then merging and viewing both retained images](screenshots/releases/1.1.0-machine-photo-merge.gif)
+
+_Choose **Select** in Equipment photo, select duplicates and review **Merge**. Both images stay available in one machine's gallery; saved workout links and recorded settings are preserved. Isolated synthetic data._
+
 ![Cardio History followed by weekly Zone 2 and Zone 4 goals with personal heart-rate ranges and minutes](screenshots/releases/1.1.0-personal-heart-rate-zones.png)
 
 _Weekly zone goals sit below History and show each personal range and progress. Edit ranges and goals from **Training > Cardio**. Logging a session reports its estimated zone in a brief text notification. Synthetic sample data._
@@ -32,9 +36,9 @@ _Select a body part to follow its own measurement history. Missing values are sk
 
 _Both existing Body measurements and FFMI question-marks show a short introduction. Learn more opens the full methodology inside the app, with Back to overview. The explanation is summarised without study names or external source links._
 
-![FFMI card with saved Male and Female icon controls, score 21.0 and Model reference 24.7](screenshots/releases/1.1.0-ffmi.png)
+![FFMI card with one sex icon button, score 21.0 and Model reference 24.7](screenshots/releases/1.1.0-ffmi.png)
 
-_Use the Male/Female icon toggle to save the active model and recalculate the comparison. Switching keeps saved measurements. Model reference is a trained-lifter benchmark adjusted using the selected profile, rather than a prediction of an individual genetic limit. Synthetic sample data._
+_Tap the single sex icon to switch models, save the selection and recalculate the comparison. Switching keeps saved measurements. Model reference is a trained-lifter benchmark adjusted using the selected profile, rather than a prediction of an individual genetic limit. Synthetic sample data._
 
 ![Import review mapping Flat bench (old app) to Barbell Bench Press with no new exercises](screenshots/releases/1.1.0-import-exercise-mapping.png)
 
@@ -116,8 +120,15 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _The circular Start button matches its workout choices. Isolated sample data._
 
+<<<<<<< HEAD
+
 - **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
-- Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links. Switch the Male/Female icons beside FFMI to save the active model to your account and recalculate the scale. Height, wrist, ankle and target body fat stay saved when switching models, including through Edit.
+- Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links. Tap the single sex icon beside FFMI to switch between male and female models, save the selection to your account and recalculate the scale. Height, wrist, ankle and target body fat stay saved when switching models, including through Edit.
+  \=======
+- In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
+
+> > > > > > > origin/main
+
 - Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.
 - Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.
 - Add friends in person with a QR code. Tap the QR button on your profile, or **QR code** in **Social > Find**, and the other person scans it with their phone camera or the **Scan** tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with **Undo** in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.

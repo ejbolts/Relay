@@ -43,10 +43,8 @@ function button(text: string): HTMLButtonElement {
   return match;
 }
 
-function modelButton(sex: 'Male' | 'Female'): HTMLButtonElement {
-  return [...host.querySelectorAll<HTMLButtonElement>('[aria-label="FFMI model"] button')].find(
-    (item) => item.textContent?.trim().endsWith(sex),
-  )!;
+function modelButton(): HTMLButtonElement {
+  return host.querySelector<HTMLButtonElement>('.ffmi-model-toggle')!;
 }
 
 function setInput(label: string, value: string) {
@@ -89,19 +87,22 @@ describe('FfmiCard', () => {
     await render(stored);
     vi.mocked(api.getFfmiProfile).mockImplementation(async () => stored);
     vi.mocked(api.updateFfmiProfile).mockImplementation(async (next) => (stored = next));
-    expect(modelButton('Male').getAttribute('aria-pressed')).toBe('true');
-    await act(async () => modelButton('Male').click());
-    expect(api.updateFfmiProfile).not.toHaveBeenCalled();
+    expect(modelButton().getAttribute('aria-label')).toContain(
+      'Male FFMI model. Switch to female.',
+    );
+    expect(host.querySelectorAll('.ffmi-model-toggle')).toHaveLength(1);
+    expect(modelButton().textContent?.trim()).toBe('\u2642');
 
-    await act(async () => modelButton('Female').click());
+    await act(async () => modelButton().click());
     expect(api.updateFfmiProfile).toHaveBeenLastCalledWith({ ...stored, sex: 'female' });
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Model reference 24.7');
-    expect(modelButton('Female').getAttribute('aria-pressed')).toBe('true');
+    expect(modelButton().getAttribute('aria-label')).toBe('Female FFMI model. Switch to male.');
+    expect(modelButton().textContent?.trim()).toBe('\u2640');
 
     await act(async () => root.render(null));
     await act(async () => root.render(<FfmiCard measurements={measurements} />));
-    expect(modelButton('Female').getAttribute('aria-pressed')).toBe('true');
-    await act(async () => modelButton('Male').click());
+    expect(modelButton().getAttribute('aria-label')).toBe('Female FFMI model. Switch to male.');
+    await act(async () => modelButton().click());
     expect(stored).toMatchObject({ sex: 'male', height_cm: 180, wrist_cm: 17.5, ankle_cm: 22.5 });
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2Model reference 24.7');
   });
@@ -115,32 +116,32 @@ describe('FfmiCard', () => {
         rejectSave = reject;
       }),
     );
-    await act(async () => modelButton('Female').click());
-    expect(modelButton('Male').disabled).toBe(true);
-    expect(modelButton('Female').disabled).toBe(true);
+    await act(async () => modelButton().click());
+    expect(modelButton().disabled).toBe(true);
     expect(button('Edit').disabled).toBe(true);
-    await act(async () => modelButton('Male').click());
+    await act(async () => modelButton().click());
     expect(api.updateFfmiProfile).toHaveBeenCalledTimes(1);
     await act(async () => rejectSave(new Error('Connection interrupted. Try again.')));
-    expect(modelButton('Male').getAttribute('aria-pressed')).toBe('true');
+    expect(modelButton().getAttribute('aria-label')).toBe('Male FFMI model. Switch to female.');
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(
       'Connection interrupted. Try again.',
     );
-    expect(modelButton('Female').disabled).toBe(false);
+    expect(modelButton().disabled).toBe(false);
     vi.mocked(api.updateFfmiProfile).mockResolvedValue({ ...profile, sex: 'female' });
-    await act(async () => modelButton('Female').click());
-    expect(modelButton('Female').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => modelButton().click());
+    expect(modelButton().getAttribute('aria-label')).toBe('Female FFMI model. Switch to male.');
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('can save the model before height is entered without showing a score', async () => {
     await render(emptyProfile);
-    vi.mocked(api.updateFfmiProfile).mockResolvedValue({ ...emptyProfile, sex: 'female' });
-    await act(async () => modelButton('Female').click());
-    expect(api.updateFfmiProfile).toHaveBeenCalledWith({ ...emptyProfile, sex: 'female' });
+    expect(modelButton().getAttribute('aria-label')).toBe('Select male FFMI model');
+    vi.mocked(api.updateFfmiProfile).mockResolvedValue({ ...emptyProfile, sex: 'male' });
+    await act(async () => modelButton().click());
+    expect(api.updateFfmiProfile).toHaveBeenCalledWith({ ...emptyProfile, sex: 'male' });
     expect(host.querySelector('.ffmi-score')).toBeNull();
     await act(async () => button('Add height and sex').click());
-    expect(button('Female').getAttribute('aria-checked')).toBe('true');
+    expect(button('Male').getAttribute('aria-checked')).toBe('true');
   });
 
   it('preserves saved frame measurements when editing the female model', async () => {

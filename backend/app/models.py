@@ -661,6 +661,9 @@ class MachinePhoto(Base):
         ForeignKey("exercises.id", ondelete="CASCADE"), index=True
     )
     caption: Mapped[str] = mapped_column(String(160))
+    merged_into_id: Mapped[str | None] = mapped_column(
+        ForeignKey("machine_photos.id", ondelete="CASCADE"), index=True
+    )
     original_filename: Mapped[str] = mapped_column(String(500))
     full_filename: Mapped[str] = mapped_column(String(200), unique=True)
     thumbnail_filename: Mapped[str] = mapped_column(String(200), unique=True)
@@ -673,6 +676,11 @@ class MachinePhoto(Base):
     )
 
     exercise: Mapped[Exercise] = relationship(back_populates="machine_photos")
+    merged_photos: Mapped[list[MachinePhoto]] = relationship(
+        foreign_keys=[merged_into_id],
+        cascade="all, delete-orphan",
+        order_by="MachinePhoto.created_at",
+    )
     movements: Mapped[list[WorkoutMovement]] = relationship(
         secondary=movement_machine_photos,
         back_populates="machine_photos",
@@ -685,6 +693,10 @@ class MachinePhoto(Base):
     @property
     def full_url(self) -> str:
         return f"/api/machine-photos/{self.id}/image?variant=full"
+
+    @property
+    def images(self) -> list[MachinePhoto]:
+        return [self, *self.merged_photos]
 
     __table_args__ = (
         CheckConstraint("file_size > 0", name="machine_photo_file_size_positive"),

@@ -123,6 +123,10 @@ export function FfmiCard({
       : null;
   const potential = measurement ? naturalPotential(profile, measurement) : null;
   const needsFrame = profile.sex === 'male' && (!profile.wrist_cm || !profile.ankle_cm);
+  const nextSex = profile.sex === 'male' ? 'female' : 'male';
+  const modelLabel = profile.sex
+    ? `${profile.sex === 'male' ? 'Male' : 'Female'} FFMI model. Switch to ${nextSex}.`
+    : 'Select male FFMI model';
 
   function openEditor() {
     const current = profile ?? DEFAULT_FFMI_PROFILE;
@@ -202,30 +206,19 @@ export function FfmiCard({
           FFMI <FfmiHelp />
         </h2>
         <div className="ffmi-header-actions">
-          <div
-            className="segmented-control ffmi-model-toggle"
-            role="group"
-            aria-label="FFMI model"
+          <button
+            type="button"
+            className="ffmi-model-toggle"
+            aria-label={modelLabel}
+            title={modelLabel}
             aria-busy={saving}
+            disabled={saving}
+            onClick={() => void switchModel(nextSex)}
           >
-            {(
-              [
-                ['male', 'Male', '♂'],
-                ['female', 'Female', '♀'],
-              ] as const
-            ).map(([sex, label, icon]) => (
-              <button
-                key={sex}
-                type="button"
-                aria-pressed={profile.sex === sex}
-                className={profile.sex === sex ? 'active' : ''}
-                disabled={saving}
-                onClick={() => void switchModel(sex)}
-              >
-                <span aria-hidden="true">{icon}</span> {label}
-              </button>
-            ))}
-          </div>
+            <span aria-hidden="true">
+              {profile.sex === 'male' ? '♂' : profile.sex === 'female' ? '♀' : '⚥'}
+            </span>
+          </button>
           {ready && (
             <button type="button" className="ffmi-edit" disabled={saving} onClick={openEditor}>
               Edit

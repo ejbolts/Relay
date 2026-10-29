@@ -544,6 +544,14 @@ def sample_workout_ids():
     return select(TrainingWorkout.id).where(TrainingWorkout.is_sample.is_(True))
 
 
+def shared_machine_photo(photo: MachinePhotoRead, user_id: str) -> MachinePhotoRead:
+    for image in [photo, *photo.images]:
+        base = f"/api/sharing/profiles/{user_id}/machine-photos/{image.id}"
+        image.thumbnail_url = f"{base}?variant=thumbnail"
+        image.full_url = f"{base}?variant=full"
+    return photo
+
+
 def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> TrainingWorkoutRead:
     """A workout with only what its owner shares: notes, body weight and photos on request."""
     shared = TrainingWorkoutRead.model_validate(workout)
@@ -553,9 +561,7 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
         movement.exercise.is_favorite = False
         if sharing.share_machine_photos:
             for photo in movement.machine_photos:
-                base = f"/api/sharing/profiles/{sharing.user_id}/machine-photos/{photo.id}"
-                photo.thumbnail_url = f"{base}?variant=thumbnail"
-                photo.full_url = f"{base}?variant=full"
+                shared_machine_photo(photo, sharing.user_id)
         else:
             movement.machine_photos = []
         if not sharing.share_notes:
@@ -927,9 +933,7 @@ def shared_workout_filters(user_id: str, user: CurrentUser, db: Db) -> SharedWor
         )
         for photo in photos:
             item = MachinePhotoRead.model_validate(photo)
-            base = f"/api/sharing/profiles/{member.id}/machine-photos/{photo.id}"
-            item.thumbnail_url = f"{base}?variant=thumbnail"
-            item.full_url = f"{base}?variant=full"
+            shared_machine_photo(item, member.id)
             machines.append(item)
     used_type_ids = set(db.scalars(select(TrainingWorkout.workout_type_id).where(*owned)))
     return SharedWorkoutFiltersRead(
@@ -974,7 +978,8 @@ def get_shared_machine_photo(
         .join(WorkoutMovement, WorkoutMovement.id == movement_machine_photos.c.movement_id)
         .join(TrainingWorkout, TrainingWorkout.id == WorkoutMovement.workout_id)
         .where(
-            movement_machine_photos.c.machine_photo_id == MachinePhoto.id,
+            movement_machine_photos.c.machine_photo_id
+            == func.coalesce(MachinePhoto.merged_into_id, MachinePhoto.id),
             TrainingWorkout.user_id == member.id,
             TrainingWorkout.is_sample.is_(False),
         )

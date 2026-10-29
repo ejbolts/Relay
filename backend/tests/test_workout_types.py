@@ -145,6 +145,27 @@ def test_removed_builtin_cannot_be_used_for_new_workout_but_history_is_editable(
     assert client.post("/api/workouts", json=body).status_code == 201
 
 
+@pytest.mark.parametrize("type_id", [None, "push", "omitted"])
+def test_archived_builtin_rejects_new_sessions_but_preserves_retry_recovery(client, type_id):
+    body = payload(client, category="push", type_id=type_id)
+    if type_id == "omitted":
+        del body["workout_type_id"]
+    body["client_session_id"] = str(uuid4())
+    response = client.post("/api/workouts", json=body)
+    assert response.status_code == 201
+    saved = response.json()
+    assert client.delete("/api/workout-types/push").status_code == 204
+    revision = client.get("/api/workouts/revision").json()
+
+    retry = client.post("/api/workouts", json=body)
+    assert retry.status_code == 201
+    assert retry.json()["id"] == saved["id"]
+    refused = client.post("/api/workouts", json={**body, "client_session_id": str(uuid4())})
+    assert refused.status_code == 422
+    assert client.get("/api/workouts/revision").json() == revision
+    assert [item["id"] for item in client.get("/api/workouts").json()] == [saved["id"]]
+
+
 def test_rejected_removed_type_rolls_back_reserved_save_session(client):
     body = {**payload(client, category="push"), "client_session_id": str(uuid4())}
     assert client.delete("/api/workout-types/push").status_code == 204

@@ -25,19 +25,18 @@ button.ffmi-methodology-link {
   margin-left: auto;
 }
 
-.ffmi-model-toggle.segmented-control {
-  margin: 0;
-}
-
-.ffmi-model-toggle.segmented-control button {
-  min-height: 2.5rem;
-  padding: 0 0.5rem;
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.ffmi-model-toggle button span {
-  font-size: 1rem;
+.ffmi-model-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+  font-size: 1.25rem;
 }
 
 .ffmi-card .ffmi-edit {

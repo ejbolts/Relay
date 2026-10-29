@@ -5,8 +5,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
@@ -257,22 +259,30 @@ def test_alembic_upgrade_head_works_on_an_empty_database(tmp_path):
     assert first.returncode == 0, first.stderr
     engine = create_engine(f"sqlite:///{database.as_posix()}")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-            "0044_import_batches"
-        )
+        head = ScriptDirectory.from_config(
+            Config(str(BACKEND.parent / "alembic.ini"))
+        ).get_current_head()
+        assert head is not None
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
         tables = set(inspect(connection).get_table_names())
         assert {"users", "user_sessions", "user_settings", "exercises", "account_backups"} <= tables
         assert "profile_sharing" in tables
         assert {"youtube_connections", "youtube_oauth_states"} <= tables
-        assert "workout_types" in tables
+        assert {"workout_types", "import_batches"} <= tables
         assert "workout_reactions" in tables
         assert "profile_blocks" in tables
         assert "friendships" in tables and "profile_follows" not in tables
         assert {"resolved_at", "resolved_by_id"} <= {
             item["name"] for item in inspect(connection).get_columns("app_feedback")
         }
-        assert "workout_type_id" in {
+        assert {"workout_type_id", "client_session_id"} <= {
             item["name"] for item in inspect(connection).get_columns("training_workouts")
+        }
+        assert "machine_settings" in {
+            item["name"] for item in inspect(connection).get_columns("workout_movements")
+        }
+        assert "merged_into_id" in {
+            item["name"] for item in inspect(connection).get_columns("machine_photos")
         }
 
     again = run_alembic(database, "upgrade", "head")
