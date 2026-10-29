@@ -29,6 +29,8 @@ from .account_limits import (
 )
 from .auth import CurrentUser, get_current_user
 from .body_measurement_csv import export_body_measurements, import_body_measurements
+from .body_sizes import PREFIX as BODY_SIZES_PREFIX
+from .body_sizes import BodySizeLog
 from .cardio_energy import cardio_energy_periods
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
 from .config import Settings, get_settings
@@ -49,6 +51,7 @@ from .models import (
     SupersetGroup,
     TrainingWorkout,
     User,
+    UserSetting,
     WorkoutCategory,
     WorkoutMovement,
     WorkoutSet,
@@ -1194,6 +1197,40 @@ def zone2_week(
 @router.get("/training-preferences", response_model=TrainingPreferencesRead)
 def get_training_preferences(db: DbSession, user: CurrentUser) -> TrainingPreferencesRead:
     return training_preferences(db, user.id)
+
+
+@router.get("/body-sizes", response_model=list[BodySizeLog])
+def list_body_sizes(db: DbSession, user: CurrentUser) -> list[BodySizeLog]:
+    rows = db.scalars(
+        select(UserSetting)
+        .where(UserSetting.user_id == user.id, UserSetting.key.startswith(BODY_SIZES_PREFIX))
+        .order_by(UserSetting.key.desc())
+    )
+    return [BodySizeLog.model_validate_json(row.value) for row in rows]
+
+
+@router.put("/body-sizes", response_model=BodySizeLog)
+def save_body_sizes(payload: BodySizeLog, db: DbSession, user: CurrentUser) -> BodySizeLog:
+    set_setting(
+        db,
+        user.id,
+        BODY_SIZES_PREFIX + payload.measurement_date.isoformat(),
+        payload.model_dump_json(),
+    )
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return payload
+
+
+@router.delete("/body-sizes/{measurement_date}", status_code=204)
+def delete_body_sizes(measurement_date: date, db: DbSession, user: CurrentUser) -> Response:
+    row = db.get(UserSetting, (user.id, BODY_SIZES_PREFIX + measurement_date.isoformat()))
+    if row is None:
+        raise api_error(404, "not_found", "Body measurements not found.")
+    db.delete(row)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return Response(status_code=204)
 
 
 FFMI_PROFILE_KEY = "ffmi_profile"

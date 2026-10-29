@@ -1,3 +1,4 @@
+import { BodySizesCard } from './BodySizesCard';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
 import {
   extendInactiveWorkoutFinishAt,
@@ -7845,6 +7846,7 @@ export function BodyCompositionScreen({
         </button>
       </div>
 
+      <BodySizesCard dataRevision={dataRevision} />
       <FfmiCard measurements={measurements} dataRevision={dataRevision} />
 
       {goalOpen && (

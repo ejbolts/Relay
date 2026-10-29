@@ -1,3 +1,4 @@
+import type { BodySizeLog } from './bodySizes';
 import type { NotificationReadReference } from './types';
 import type {
   SharedWorkoutFilters,
@@ -488,6 +489,14 @@ export const api = {
     request<ExerciseHistoryBaseline[]>(
       `/api/exercise-history-baselines?${new URLSearchParams({ before })}`,
     ),
+  listBodySizes: () => request<BodySizeLog[]>('/api/body-sizes'),
+  saveBodySizes: (payload: BodySizeLog) =>
+    request<BodySizeLog>('/api/body-sizes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  deleteBodySizes: (date: string) => request<void>(`/api/body-sizes/${date}`, { method: 'DELETE' }),
   listBodyMeasurements: () => request<BodyMeasurement[]>('/api/body-measurements'),
   saveBodyMeasurement: (payload: {
     measurement_date: string;

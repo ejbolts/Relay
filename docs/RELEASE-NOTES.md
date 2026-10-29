@@ -12,6 +12,10 @@ _Relay was called Gym Logger before version 1.0._
 
 _Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
 
+![Body measurements with dated circumference entries and editable history](screenshots/releases/1.1.0-body-measurements.png)
+
+_Log optional circumferences without a weigh-in, then review or edit dated history. Isolated synthetic measurements._
+
 ![Body's FFMI card with a normalized FFMI of 21.0 on a 17 to 29 comparison scale, a natural max of 24.7, reference levels and natural potential figures](screenshots/releases/1.1.0-ffmi.png)
 
 _Your FFMI from the latest check-in with body fat, compared with reference levels. Height, sex, wrist and ankle give an estimated natural max. Isolated sample data._
@@ -83,6 +87,8 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 ![Workout exercise card ending at Add set, without the Exercise note for next time field](screenshots/releases/1.0.1-no-exercise-note.png)
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
+
+- **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. View history, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
 
 - Body shows your FFMI on a 17 to 29 comparison scale with reference levels, from your latest check-in with body fat. Add your sex and height (plus wrist and ankle for men) to see your estimated natural max, maximum lean mass, weight at your target body fat and lean mass left to gain. These details are saved to your account.
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.

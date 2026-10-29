@@ -18,7 +18,7 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
   <a href="docs/screenshots/readme/today.png"><img src="docs/screenshots/readme/today.png" alt="Home dashboard with the next workout, activity calendar, cardio goal and body-weight trend" width="360"></a>
 </p>
 
-*Home: your next workout and training dashboard. Select the screenshot to view it full size.*
+_Home: your next workout and training dashboard. Select the screenshot to view it full size._
 
 ## Log strength workouts
 
@@ -46,7 +46,7 @@ Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose 
   <a href="docs/screenshots/readme/progress.png"><img src="docs/screenshots/readme/progress.png" alt="Exercise progress screen with estimated one-rep max, personal records and previous sessions" width="360"></a>
 </p>
 
-*Progress: exercise trends, personal records and previous sessions. Select the screenshot to view it full size.*
+_Progress: exercise trends, personal records and previous sessions. Select the screenshot to view it full size._
 
 ## Track cardio and body measurements
 
@@ -54,11 +54,13 @@ Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose 
 
 **Body** tracks body weight and optional body-fat measurements, with trends and a weight goal to help you follow changes over time. Home offers separate **Body weight check-in**, **Body fat check-in** and **Combined check-in** sections. Add, hide, resize and arrange them through **Edit Home layout**. Weight can be logged without body-fat percentage; logging body fat requires today’s weight.
 
+**Body measurements** records dated circumferences for neck, shoulders, chest, waist, hips, both upper arms, thighs and calves, wrist and ankle. Choose **Log measurements** on Body; enter any subset without a weigh-in, then review, edit or delete entries in **Measurement history**. Lengths follow your weight preference (cm with kg, inches with lb). These records stay private and are included in account backups; FFMI frame details remain separate.
+
 <p>
   <a href="docs/screenshots/readme/body.png"><img src="docs/screenshots/readme/body.png" alt="Body screen with a weight goal, trend chart and daily check-in history" width="360"></a>
 </p>
 
-*Body: weight trends, goals and daily check-ins. Select the screenshot to view it full size.*
+_Body: weight trends, goals and daily check-ins. Select the screenshot to view it full size._
 
 ## Keep workout videos together
 
@@ -74,7 +76,7 @@ configures Google once for the installation; users do not need API keys or crede
   <a href="docs/screenshots/readme/videos.png"><img src="docs/screenshots/readme/videos.png" alt="Video logger connected to a personal YouTube channel, with the Unlisted explanation and set-video upload form" width="360"></a>
 </p>
 
-*Videos: connect your channel and upload workout clips as Unlisted videos. Select the screenshot to view it full size.*
+_Videos: connect your channel and upload workout clips as Unlisted videos. Select the screenshot to view it full size._
 
 ## Your account and sharing
 

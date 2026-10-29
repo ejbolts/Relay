@@ -183,15 +183,15 @@ python -m app.manage import-legacy-backup --username yourname --source <backup f
 
 Limits stop one account from bloating the server. They sit far above real use (a six-year log peaks at 55 sets and 9 exercises in one workout), and people are never told they exist: anything over a limit gets a plain "couldn't be saved" message, and the server log records which limit was hit. The exception is the photo upload size, which people are told ("Photos can be up to 5 MB."). The app also shrinks photos before uploading them (to 1,800 px on the long side, as JPEG), so phone photos fit easily. Adjust them under **Settings → Help & about → Admin console → Account limits**; changes apply immediately.
 
-| Limit | Default | Applies to |
-|---|---|---|
-| Workouts, cardio sessions | 5,000 each | each account, except admins |
-| Custom exercises | 100 | each account, except admins |
-| Machine photos | 25 | each account, except admins |
-| Changes per minute | 60 | each account, except admins |
-| Exercises / sets in one workout | 20 / 100 | everyone |
-| Workout / exercise / set note | 2,000 / 1,000 / 500 characters | everyone |
-| Photo upload size | 5 MB (shown to people) | everyone |
+| Limit                           | Default                        | Applies to                  |
+| ------------------------------- | ------------------------------ | --------------------------- |
+| Workouts, cardio sessions       | 5,000 each                     | each account, except admins |
+| Custom exercises                | 100                            | each account, except admins |
+| Machine photos                  | 25                             | each account, except admins |
+| Changes per minute              | 60                             | each account, except admins |
+| Exercises / sets in one workout | 20 / 100                       | everyone                    |
+| Workout / exercise / set note   | 2,000 / 1,000 / 500 characters | everyone                    |
+| Photo upload size               | 5 MB (shown to people)         | everyone                    |
 
 CSV imports follow the same limits and save nothing if any is exceeded. A workout saved before a limit was lowered can still be edited, but not grown.
 
@@ -222,6 +222,10 @@ or absent splits use the existing muscle-frequency recommendations. A type remov
 saving produces an update-split state rather than substituting a different workout. Custom
 recommendations carry the account-owned type metadata, and previous-session templates match
 the custom type ID as well as the compatibility category.
+
+## Body measurements
+
+`GET /api/body-sizes` returns private dated circumference logs, newest first. `PUT /api/body-sizes` replaces the entry for `measurement_date`; omitted fields clear to null, and at least one finite circumference above 0 and up to 300 cm is required. `DELETE /api/body-sizes/{YYYY-MM-DD}` deletes only the signed-in account's entry. Each date is stored in its own `user_settings` row under `body_sizes:YYYY-MM-DD`, included in existing account backups and deletion. Writes change the training revision so other devices refresh Body. No schema migration is required. The UI converts inches to canonical cm and does not require a bodyweight record. These logs are separate from FFMI frame details and are excluded from shared profiles.
 
 ## Checks
 
