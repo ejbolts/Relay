@@ -17,6 +17,8 @@ import { localDate } from './utils';
 import { useWorkoutTypes } from './workoutTypesContext';
 import './trainingSplit.css';
 
+type ActiveRoutine = { id: string | null; enabled: boolean };
+
 export function TrainingSplitEditor({
   onSaved,
   initialView = 'schedule',
@@ -28,7 +30,7 @@ export function TrainingSplitEditor({
 }) {
   const [view, setView] = useState(initialView);
   const [scheduleRevision, setScheduleRevision] = useState(0);
-  const [activeRoutineId, setActiveRoutineId] = useState<string | null>(null);
+  const [activeRoutine, setActiveRoutine] = useState<ActiveRoutine>({ id: null, enabled: false });
   const { user } = useUserSession();
   return (
     <div className="split-manager">
@@ -55,10 +57,15 @@ export function TrainingSplitEditor({
           ownerId={user?.id ?? 'my-splits'}
           own
           heading="My splits"
+          embedded
+          activeId={activeRoutine.enabled ? activeRoutine.id : null}
           initialOpenId={initialRoutineId}
-          onUsed={() => setScheduleRevision((value) => value + 1)}
+          onUsed={(split) => {
+            setActiveRoutine({ id: split.routine_id ?? null, enabled: split.enabled });
+            setScheduleRevision((value) => value + 1);
+          }}
           onChanged={(id) => {
-            if (id === activeRoutineId) setScheduleRevision((value) => value + 1);
+            if (id === activeRoutine.id) setScheduleRevision((value) => value + 1);
           }}
         />
       )}
@@ -66,7 +73,7 @@ export function TrainingSplitEditor({
         <SplitScheduleEditor
           key={scheduleRevision}
           onSaved={onSaved}
-          onRoutineLoaded={setActiveRoutineId}
+          onRoutineLoaded={setActiveRoutine}
         />
       </div>
     </div>
@@ -78,7 +85,7 @@ function SplitScheduleEditor({
   onRoutineLoaded,
 }: {
   onSaved: (split: TrainingSplit) => Promise<void>;
-  onRoutineLoaded: (id: string | null) => void;
+  onRoutineLoaded: (routine: ActiveRoutine) => void;
 }) {
   const workoutTypes = useWorkoutTypes();
   const [split, setSplit] = useState<TrainingSplit | null>(null);
@@ -99,7 +106,7 @@ function SplitScheduleEditor({
       (saved) => {
         if (active) {
           setSplit(saved ?? splitFromTemplate('upper-lower', localDate()));
-          onRoutineLoaded(saved?.routine_id ?? null);
+          onRoutineLoaded({ id: saved?.routine_id ?? null, enabled: saved?.enabled ?? false });
         }
       },
       (reason) => {

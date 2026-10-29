@@ -5,8 +5,8 @@
   max-width: 550px;
   margin-inline: auto;
 }
-.split-manager-views {
-  margin: 0 14px 16px;
+.split-manager > .split-manager-views {
+  margin: 16px 14px 4px;
 }
 .split-manager > .routine-panel {
   width: calc(100% - 28px);

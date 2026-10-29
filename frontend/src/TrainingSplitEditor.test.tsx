@@ -132,6 +132,7 @@ it('opens the imported split from navigation and reflects activation in Schedule
     ),
   );
   expect(host.querySelector<HTMLDetailsElement>('.routine-card')!.open).toBe(true);
+  expect(host.querySelector('.routine-active')).toBeNull();
   await click('Use split');
   expect(api.routines.use).not.toHaveBeenCalled();
   await act(async () =>
@@ -140,6 +141,7 @@ it('opens the imported split from navigation and reflects activation in Schedule
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
   expect(api.routines.use).toHaveBeenCalledWith(imported.id, '2026-10-26');
+  expect(host.querySelector('.routine-active')?.textContent).toBe('Active');
   await click('Schedule');
   expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(imported.name);
   expect(host.querySelectorAll('.split-cycle > li')).toHaveLength(2);
@@ -186,6 +188,25 @@ it('refreshes Schedule after editing the active saved split', async () => {
   expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(
     'Adapted active split',
   );
+});
+it('marks a saved split active only while its schedule is switched on', async () => {
+  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
+  const linked = {
+    name: imported.name,
+    enabled: false,
+    start_date: '2026-10-26',
+    routine_id: imported.id,
+    steps: imported.days.map((day) => ({ workout_type_id: day.workout_type_id })),
+  };
+  vi.mocked(api.getTrainingSplit).mockResolvedValue(linked);
+  await act(async () => root.render(<TrainingSplitEditor onSaved={saved} initialView="saved" />));
+  expect(host.textContent).toContain('Friend upper split');
+  expect(host.querySelector('.routine-active')).toBeNull();
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  vi.mocked(api.getTrainingSplit).mockResolvedValue({ ...linked, enabled: true });
+  await act(async () => root.render(<TrainingSplitEditor onSaved={saved} initialView="saved" />));
+  expect(host.querySelector('.routine-active')?.textContent).toBe('Active');
 });
 afterEach(async () => {
   await act(async () => root.unmount());
