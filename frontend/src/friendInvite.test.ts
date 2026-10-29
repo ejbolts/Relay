@@ -1,9 +1,13 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import {
   captureFriendInvite,
   clearFriendInvite,
+  FRIEND_INVITE_EVENT,
   friendInviteIdFromHash,
+  friendInviteIdFromScan,
   friendInviteUrl,
+  openFriendInvite,
   pendingFriendInvite,
 } from './friendInvite';
 
@@ -73,5 +77,29 @@ describe('friend invite links', () => {
     expect(pendingFriendInvite(blocked)).toBe(id);
     clearFriendInvite(blocked);
     expect(pendingFriendInvite(blocked)).toBeNull();
+  });
+
+  it('reads friend links from scanned codes and ignores anything else', () => {
+    expect(friendInviteIdFromScan(`https://gym.example.com/#friend=${id}`)).toBe(id);
+    expect(
+      friendInviteIdFromScan(` http://127.0.0.1:8000/#friend=${id}
+`),
+    ).toBe(id);
+    expect(friendInviteIdFromScan('https://gym.example.com/#social')).toBeNull();
+    expect(friendInviteIdFromScan(`javascript:alert(1)//#friend=${id}`)).toBeNull();
+    expect(friendInviteIdFromScan('WIFI:S:gym;T:WPA;P:secret;;')).toBeNull();
+  });
+
+  it('starts the invite flow for a code scanned inside the app', () => {
+    const storage = memoryStorage();
+    const opened = vi.fn();
+    window.addEventListener(FRIEND_INVITE_EVENT, opened);
+    try {
+      openFriendInvite(id, storage);
+    } finally {
+      window.removeEventListener(FRIEND_INVITE_EVENT, opened);
+    }
+    expect(pendingFriendInvite(storage)).toBe(id);
+    expect(opened).toHaveBeenCalledOnce();
   });
 });

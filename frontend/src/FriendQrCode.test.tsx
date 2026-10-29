@@ -55,7 +55,7 @@ async function open(labelled = false) {
     ),
   );
   const button = host.querySelector<HTMLButtonElement>(
-    labelled ? '.friend-invite-chip' : '[aria-label="Show my QR code"]',
+    labelled ? '.friend-invite-chip' : '[aria-label="QR code"]',
   )!;
   await act(async () => button.click());
   return document.querySelector<HTMLDialogElement>('.friend-invite-dialog')!;
@@ -112,4 +112,19 @@ it('asks a private account to share its profile instead of showing a code that c
   await act(async () => choose.click());
   expect(chooseSharing).toHaveBeenCalledOnce();
   expect(document.querySelector('.friend-invite-dialog')).toBeNull();
+});
+
+it('switches to scanning a friend’s code', async () => {
+  sharing('public');
+  const dialog = await open();
+  const scanTab = [...dialog.querySelectorAll('[role="tab"]')].find(
+    (tab) => tab.textContent === 'Scan',
+  ) as HTMLButtonElement;
+  await act(async () => scanTab.click());
+
+  expect(scanTab.getAttribute('aria-selected')).toBe('true');
+  expect(dialog.querySelector('svg.qr-code')).toBeNull();
+  expect(dialog.querySelector('video')).not.toBeNull();
+  // This test browser has no camera.
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('No camera is available here.');
 });

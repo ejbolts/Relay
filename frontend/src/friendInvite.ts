@@ -68,3 +68,31 @@ export function clearFriendInvite(storage?: Pick<Storage, 'removeItem'>) {
     // Nothing stored.
   }
 }
+
+/** Dispatched on window when a code scanned inside the app has stored a new invitation. */
+export const FRIEND_INVITE_EVENT = 'relay:friend-invite';
+
+/**
+ * Reads a scanned QR code as a friend link. Any Relay address is accepted, so a code made on
+ * another of this server's addresses still works; an unknown account simply cannot be opened.
+ */
+export function friendInviteIdFromScan(text: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(text.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  return friendInviteIdFromHash(url.hash);
+}
+
+/** Starts the same flow as opening an invite link, for a code scanned inside the app. */
+export function openFriendInvite(id: string, storage?: Pick<Storage, 'setItem'>) {
+  try {
+    (storage ?? window.sessionStorage).setItem(STORAGE_KEY, id);
+  } catch {
+    memoryInvite = id;
+  }
+  window.dispatchEvent(new Event(FRIEND_INVITE_EVENT));
+}

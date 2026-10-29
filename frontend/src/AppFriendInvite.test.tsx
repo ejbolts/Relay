@@ -11,7 +11,7 @@ import {
   writeDashboardCache,
   writeWorkoutCache,
 } from './workoutCache';
-import { pendingFriendInvite } from './friendInvite';
+import { openFriendInvite, pendingFriendInvite } from './friendInvite';
 import type { DashboardData, FriendStatus, SharedProfile, User } from './types';
 import { UserContext, type UserSession } from './userContext';
 
@@ -180,6 +180,16 @@ it('sends the request from a link scanned while the app is already open', async 
   expect(window.location.hash).toBe('#shared-profile');
   expect(api.sharing.addFriend).toHaveBeenCalledWith(inviterId);
   expect(toast()?.textContent).toContain('Friend request sent to Sam Rivera');
+});
+
+it('sends the request for a code scanned inside the app', async () => {
+  await openLink('/#social');
+  await act(async () => openFriendInvite(inviterId));
+
+  expect(window.location.hash).toBe('#shared-profile');
+  expect(api.sharing.addFriend).toHaveBeenCalledWith(inviterId);
+  expect(toast()?.textContent).toContain('Friend request sent to Sam Rivera');
+  expect(pendingFriendInvite()).toBeNull();
 });
 
 it('accepts their request when the inviter already asked you', async () => {

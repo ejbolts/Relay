@@ -1698,3 +1698,63 @@
   height: 1.15rem;
   color: var(--p-accent-text);
 }
+
+.friend-invite-modes {
+  margin: 1rem 1.25rem 0;
+}
+
+/* The camera fills the same square the QR code uses, with a guide for where to hold a code. */
+.friend-scan-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(100%, 264px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--p-surface-2);
+}
+
+.friend-scan-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.friend-scan-guide {
+  position: absolute;
+  inset: 16%;
+  border: 2px solid rgb(255 255 255 / 85%);
+  border-radius: 14px;
+  box-shadow: 0 0 0 999px rgb(0 0 0 / 28%);
+}
+
+.friend-scan-problem {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  color: var(--p-ink-2);
+  text-align: center;
+}
+
+.friend-scan-problem p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.friend-scan-problem .pulse-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.friend-scan-notice {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  text-align: center;
+}

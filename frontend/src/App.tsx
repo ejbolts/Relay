@@ -304,7 +304,12 @@ import {
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
-import { captureFriendInvite, clearFriendInvite, pendingFriendInvite } from './friendInvite';
+import {
+  captureFriendInvite,
+  clearFriendInvite,
+  FRIEND_INVITE_EVENT,
+  pendingFriendInvite,
+} from './friendInvite';
 
 type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
@@ -774,8 +779,14 @@ function AppContent() {
       const id = captureFriendInvite();
       if (id) setFriendInvite(id);
     };
+    // A code scanned inside the app has already stored its invite.
+    const onScanned = () => setFriendInvite(pendingFriendInvite());
     window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    window.addEventListener(FRIEND_INVITE_EVENT, onScanned);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
+    };
   }, []);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.

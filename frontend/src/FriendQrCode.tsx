@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { encode } from 'uqr';
 import { api } from './api';
-import { friendInviteUrl } from './friendInvite';
+import { friendInviteUrl, openFriendInvite } from './friendInvite';
+import { FriendQrScanner } from './FriendQrScanner';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -34,6 +35,7 @@ export function QrCode({ value, label }: { value: string; label: string }) {
 }
 
 type Shareable = 'checking' | 'shared' | 'private';
+type SheetMode = 'code' | 'scan';
 
 export function FriendInviteDialog({
   user,
@@ -45,6 +47,7 @@ export function FriendInviteDialog({
   onChooseSharing: () => void;
 }) {
   const url = friendInviteUrl(user.id);
+  const [mode, setMode] = useState<SheetMode>('code');
   const [shareable, setShareable] = useState<Shareable>('checking');
   const [copied, setCopied] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -85,13 +88,39 @@ export function FriendInviteDialog({
   }
 
   return (
-    <PopupDialog
-      title="My QR code"
-      className="friend-invite-dialog"
-      swipeToDismiss
-      onClose={onClose}
-    >
-      {shareable === 'private' ? (
+    <PopupDialog title="QR code" className="friend-invite-dialog" swipeToDismiss onClose={onClose}>
+      <div
+        className="segmented-control friend-invite-modes"
+        role="tablist"
+        aria-label="QR code view"
+      >
+        {(
+          [
+            ['code', 'My code'],
+            ['scan', 'Scan'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={mode === value}
+            className={mode === value ? 'active' : ''}
+            onClick={() => setMode(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === 'scan' ? (
+        <FriendQrScanner
+          userId={user.id}
+          onScanned={(accountId) => {
+            onClose();
+            openFriendInvite(accountId);
+          }}
+        />
+      ) : shareable === 'private' ? (
         <div className="friend-invite-private">
           <span className="friend-invite-private-icon" aria-hidden="true">
             <Icon name="hide" />
@@ -147,7 +176,7 @@ export function FriendInviteDialog({
   );
 }
 
-/** Opens the account's friend QR code: an icon on the profile card, or a labelled chip. */
+/** Opens the friend QR code sheet: an icon on the profile card, or a labelled chip. */
 export function FriendInviteButton({
   user,
   onChooseSharing,
@@ -163,12 +192,12 @@ export function FriendInviteButton({
       <button
         type="button"
         className={labelled ? 'friend-invite-chip' : 'profile-edit-button friend-invite-button'}
-        aria-label={labelled ? undefined : 'Show my QR code'}
+        aria-label={labelled ? undefined : 'QR code'}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
         <Icon name="qr" />
-        {labelled && <span>My QR code</span>}
+        {labelled && <span>QR code</span>}
       </button>
       {open && (
         <FriendInviteDialog
