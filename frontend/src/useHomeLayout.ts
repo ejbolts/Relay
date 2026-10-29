@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { defaultHomeLayout } from './homeLayout';
+import { DEFAULT_HOME_SECTION_SETTINGS, defaultHomeLayout } from './homeLayout';
 import { useUserSession } from './userContext';
 
 export function useHomeLayout(active = true) {
@@ -61,6 +61,7 @@ export function useHomeLayout(active = true) {
       order: [...layout.order],
       hidden: [...layout.hidden],
       widths: { ...layout.widths },
+      settings: { ...DEFAULT_HOME_SECTION_SETTINGS, ...layout.settings },
     });
     setError(null);
     setMessage('');

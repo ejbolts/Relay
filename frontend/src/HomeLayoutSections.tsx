@@ -38,11 +38,14 @@ export function HomeLayoutSections({
   sections,
   edit,
   onStartEditing,
+  customisers = {},
 }: {
   layout: HomeLayout;
   sections: Record<HomeSectionId, ReactNode>;
   edit?: HomeEditActions;
   onStartEditing?: () => void;
+  /** Options shown from a section's Customise button while editing. */
+  customisers?: Partial<Record<HomeSectionId, ReactNode>>;
 }) {
   const holdHandlers = useHomeLongPress(edit ? undefined : onStartEditing);
   const visible = layout.order.filter((id) => !layout.hidden.includes(id) && sections[id] != null);
@@ -53,6 +56,7 @@ export function HomeLayoutSections({
   const [over, setOver] = useState<HomeSectionId | `space:${HomeSectionId}` | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [addingTo, setAddingTo] = useState<{ after: HomeSectionId; span: number } | null>(null);
+  const [customising, setCustomising] = useState<HomeSectionId | null>(null);
   const dragRef = useRef<CardDrag | null>(null);
   const titleFor = (id: HomeSectionId) => HOME_SECTIONS.find((section) => section.id === id)!.title;
 
@@ -286,6 +290,18 @@ export function HomeLayoutSections({
                     >
                       <Icon name="grip" />
                     </button>
+                    {customisers[id] && (
+                      <button
+                        className="home-card-customise"
+                        type="button"
+                        disabled={busy}
+                        aria-label={`Customise ${titleFor(id)}`}
+                        onClick={() => setCustomising(id)}
+                      >
+                        <Icon name="settings" />
+                        Customise
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -352,6 +368,24 @@ export function HomeLayoutSections({
                 </button>
               );
             })}
+          </div>
+        </PopupDialog>
+      )}
+      {edit && customising && customisers[customising] && (
+        <PopupDialog
+          title={`Customise ${titleFor(customising)}`}
+          className="home-section-customiser"
+          onClose={() => setCustomising(null)}
+        >
+          <div className="home-customiser-body">
+            {customisers[customising]}
+            <button
+              type="button"
+              className="pulse-button primary home-customiser-done"
+              onClick={() => setCustomising(null)}
+            >
+              Done
+            </button>
           </div>
         </PopupDialog>
       )}

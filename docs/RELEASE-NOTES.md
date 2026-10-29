@@ -12,6 +12,10 @@ _Relay was called Gym Logger before version 1.0._
 
 _Weekly zone goals sit below History and show each personal range and progress. Edit ranges and goals from **Training > Cardio**. Logging a session reports its estimated zone in a brief text notification. Synthetic sample data._
 
+![The Home cardio goal card in its progress bar and ring designs for Zone 2, and its ring and list designs for all goals](screenshots/releases/1.1.0-cardio-goal-card-designs.png)
+
+_Customise the Home cardio goal card to track one zone goal or all of them, using a progress bar, ring or list. Synthetic sample data._
+
 ![Desktop sign-out returns both the desktop and mobile sessions to sign-in](screenshots/releases/1.1.0-signout-all-devices.gif)
 
 _Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
@@ -85,6 +89,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
 - Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.
+- Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.
 
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
 - Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.

@@ -1,4 +1,5 @@
-import type { CardioPreferences, CardioSession } from './types';
+import type { CardioGoalCardSettings } from './homeLayout';
+import type { CardioGoalWeek, CardioPreferences, CardioSession } from './types';
 
 export const DEFAULT_CARDIO_PREFERENCES: CardioPreferences = {
   heart_rate_zones: [],
@@ -24,4 +25,10 @@ export function cardioZoneNotice(
   if (!zone || !range)
     return `Session saved. ${heartRate} bpm is outside your zones, so no goal credit.`;
   return `Zone ${zone} · ${heartRate} bpm average (${range.min_bpm}–${range.max_bpm} bpm). ${credit()}`;
+}
+
+/** The goals a card tracks; a removed goal falls back to every goal. */
+export function trackedCardioGoals(goals: CardioGoalWeek[], settings: CardioGoalCardSettings) {
+  const chosen = goals.filter((goal) => goal.zone === settings.zone);
+  return chosen.length ? chosen : goals;
 }

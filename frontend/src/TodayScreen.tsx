@@ -9,7 +9,9 @@ import { MuscleSetsCard } from './MuscleSetsCard';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
-import type { HomeSectionId } from './homeLayout';
+import { homeSectionSettings, updateHomeSectionSettings, type HomeSectionId } from './homeLayout';
+import { CardioGoalCard } from './CardioGoalCard';
+import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
 import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
@@ -469,28 +471,12 @@ export function TodayScreen({
       />
     ),
     zone2: (
-      <button type="button" className="pulse-card pulse-mini" onClick={onOpenCardio}>
-        <span>Cardio zone goals</span>
-        {cardioGoals.map((goal) => (
-          <span className={`home-cardio-goal${goal.complete ? ' complete' : ''}`} key={goal.zone}>
-            <b>Zone {goal.zone}</b>{' '}
-            <small>
-              {goal.completed_minutes} / {goal.goal_minutes} min
-            </small>
-          </span>
-        ))}
-        {cardioGoals.length > 0 && (
-          <p>
-            {cardioGoals.every((goal) => goal.complete)
-              ? cardioGoals.length === 1
-                ? 'Goal reached'
-                : 'All goals reached'
-              : cardioGoals.length === 1
-                ? `${cardioGoals[0].remaining_minutes} min to go`
-                : `${cardioGoals.filter((goal) => goal.complete).length} of ${cardioGoals.length} goals reached`}
-          </p>
-        )}
-      </button>
+      <CardioGoalCard
+        goals={cardioGoals}
+        settings={homeSectionSettings(home.editing ? home.draft : home.layout, 'zone2')}
+        daysLeft={zone2 ? Math.max(0, daysBetween(today, zone2.week_end) + 1) : null}
+        onOpen={onOpenCardio}
+      />
     ),
     'bodyweight-trend': (
       <button type="button" className="pulse-card pulse-mini" onClick={onOpenBody}>
@@ -651,6 +637,17 @@ export function TodayScreen({
         layout={home.editing ? home.draft : home.layout}
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
+        customisers={{
+          zone2: (
+            <CardioGoalCardSettingsForm
+              goals={cardioGoals.map((goal) => ({ zone: goal.zone, minutes: goal.goal_minutes }))}
+              value={homeSectionSettings(home.draft, 'zone2')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'zone2', change))
+              }
+            />
+          ),
+        }}
         edit={
           home.editing
             ? {

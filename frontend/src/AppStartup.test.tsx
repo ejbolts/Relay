@@ -309,7 +309,7 @@ describe('App startup', () => {
     expect(markup).not.toContain('live-workout-card');
   });
 
-  it('shows each personal zone goal using only its qualifying minutes, without a graph', () => {
+  it('shows each personal zone goal using only its qualifying minutes', () => {
     const markup = renderToday({
       data: {
         cardio_minutes_this_week: 300,
@@ -331,11 +331,12 @@ describe('App startup', () => {
         ],
       } as DashboardData,
     });
+    expect(markup).toContain('<span>Cardio zone goals</span>');
     expect(markup).toContain('<b>Zone 2</b> <small>60 / 180 min</small>');
     expect(markup).toContain('home-cardio-goal complete"><b>Zone 4</b> <small>30 / 30 min');
+    expect(markup).toContain('aria-label="Zone 4 minutes this week"');
     expect(markup).toContain('1 of 2 goals reached');
     expect(markup).not.toContain('300 /');
-    expect(markup).not.toContain('pulse-meter');
   });
 
   it.each(['kg', 'lb'] as const)('uses %s for the Home Bodyweight axis', (unit) => {

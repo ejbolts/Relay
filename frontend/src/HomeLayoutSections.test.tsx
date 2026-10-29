@@ -92,4 +92,27 @@ describe('Home layout rendering', () => {
     expect(markup).not.toContain('aria-label="Hide Next workout"');
     expect(markup).toContain('aria-label="Hide Consistency"');
   });
+
+  it('offers Customise only for sections with options, and only while editing', () => {
+    const customisers = { zone2: <p>Cardio options</p> };
+    const editing = renderToStaticMarkup(
+      <HomeLayoutSections
+        layout={defaultHomeLayout()}
+        sections={sections}
+        customisers={customisers}
+        edit={{ onChange: vi.fn(), saving: false }}
+      />,
+    );
+    expect(editing.match(/home-card-customise/g)).toHaveLength(1);
+    expect(editing).toContain('aria-label="Customise Cardio zone goals"');
+    expect(
+      renderToStaticMarkup(
+        <HomeLayoutSections
+          layout={defaultHomeLayout()}
+          sections={sections}
+          customisers={customisers}
+        />,
+      ),
+    ).not.toContain('Customise');
+  });
 });
