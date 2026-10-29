@@ -1367,6 +1367,10 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   stroke-width: 2.4;
 }
 
+.app-tab-navigation .app-tab-start-bubble {
+  border-radius: 50%;
+}
+
 .app-tab-start.live .app-tab-start-bubble {
   background: #1b3552;
   box-shadow: inset 0 0 0 1px rgb(57 135 229 / 55%);

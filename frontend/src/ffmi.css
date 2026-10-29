@@ -1,3 +1,8 @@
+.ffmi-methodology-link,
+.ffmi-methodology-link:visited {
+  color: var(--p-accent-text);
+}
+
 .ffmi-card .pulse-card-header {
   align-items: center;
 }

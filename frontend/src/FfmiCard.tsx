@@ -229,11 +229,12 @@ export function FfmiCard({
             </p>
             <p>
               <a
+                className="ffmi-methodology-link"
                 href="https://mennohenselmans.com/ffmi-calculator/"
                 target="_blank"
                 rel="noreferrer"
               >
-                Read Menno Henselmans&apos; methodology and research references
+                Learn more about FFMI methodology
               </a>
             </p>
           </HelpPopup>
