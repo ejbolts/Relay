@@ -437,6 +437,14 @@ export interface PersonalRecord {
   exercise_name: string | null;
 }
 
+export interface FfmiProfile {
+  sex: 'male' | 'female' | null;
+  height_cm: number | null;
+  wrist_cm: number | null;
+  ankle_cm: number | null;
+  target_body_fat_pct: number;
+}
+
 export interface TrainingPreferences {
   preferred_weight_unit: 'kg' | 'lb';
   week_start: 'monday' | 'sunday' | 'saturday';

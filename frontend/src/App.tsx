@@ -103,6 +103,7 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
+import { FfmiCard } from './FfmiCard';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -7843,6 +7844,8 @@ export function BodyCompositionScreen({
           {activeGoal ? 'New goal' : 'Set a goal'}
         </button>
       </div>
+
+      <FfmiCard measurements={measurements} dataRevision={dataRevision} />
 
       {goalOpen && (
         <PopupDialog

@@ -10,6 +10,7 @@ import type {
   BodyMeasurementCsvImportResult,
   BodyWeightGoal,
   BodyWeightGoalInput,
+  FfmiProfile,
   CardioOverview,
   CardioScreenshotScan,
   CardioSession,
@@ -511,6 +512,13 @@ export const api = {
       body: form,
     });
   },
+  getFfmiProfile: () => request<FfmiProfile>('/api/ffmi-profile'),
+  updateFfmiProfile: (payload: FfmiProfile) =>
+    request<FfmiProfile>('/api/ffmi-profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   listBodyWeightGoals: () => request<BodyWeightGoal[]>('/api/body-weight-goals'),
   createBodyWeightGoal: (payload: BodyWeightGoalInput) =>
     request<BodyWeightGoal>('/api/body-weight-goals', {
