@@ -563,7 +563,6 @@ export function RoutinePanel({
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
-                setNotice(`${using.name} is your active split.`);
               });
             }}
           >

@@ -205,9 +205,7 @@ it('requires an explicit date confirmation before replacing the active split', a
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
   expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02');
-  expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-    'is your active split',
-  );
+  expect(document.querySelector('.app-notification-toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
 });
 
