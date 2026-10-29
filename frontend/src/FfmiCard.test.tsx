@@ -72,6 +72,17 @@ afterEach(() => {
 });
 
 describe('FfmiCard', () => {
+  it('allows a current score above the estimated potential and distinguishes exceptional references', async () => {
+    await render({ ...emptyProfile, sex: 'male', height_cm: 180, wrist_cm: 17.5, ankle_cm: 22.5 }, [
+      { ...measurements[0], weight_kg: 94, body_fat_pct: 10 },
+    ]);
+    expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('26.1');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe(
+      'You 26.1Estimated potential 24.7',
+    );
+    expect(host.textContent).toContain('Exceptional reported natural case');
+    expect(host.textContent).not.toContain('Natural max');
+  });
   it('asks for height and sex, then saves them and shows the score', async () => {
     await render(emptyProfile);
     expect(host.textContent).toContain('Add height and sex');
@@ -96,9 +107,13 @@ describe('FfmiCard', () => {
 
     expect(api.updateFfmiProfile).toHaveBeenCalledWith(saved);
     expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('22.9');
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 22.9Natural max 26.9');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe(
+      'You 22.9Estimated potential 26.9',
+    );
     expect(host.querySelectorAll('.ffmi-legend li.reached')).toHaveLength(3);
-    expect(host.querySelector('.ffmi-potential')?.textContent).toContain('Max weight at 13% fat');
+    expect(host.querySelector('.ffmi-potential')?.textContent).toContain(
+      'Estimated weight at 13% fat',
+    );
   });
 
   it('keeps the editor open with an error for an invalid height', async () => {
@@ -123,14 +138,16 @@ describe('FfmiCard', () => {
     // 79.8 kg at 14.6% and 1.8 m scores exactly 21, shown with its decimal.
     await render(profile, [{ ...measurements[0], weight_kg: 79.8, body_fat_pct: 14.6 }]);
     expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('21.0');
-    expect(host.textContent).toContain('Add wrist and ankle for your natural max');
+    expect(host.textContent).toContain('Add wrist and ankle for a potential estimate');
   });
 
-  it('gives women a natural max from height alone', async () => {
+  it('gives women a model reference from height alone', async () => {
     await render({ ...emptyProfile, sex: 'female', height_cm: 165 }, [
       { ...measurements[0], weight_kg: 60, body_fat_pct: 22 },
     ]);
     expect(host.querySelector('.ffmi-score span')?.textContent).toBe('Gender-adjusted FFMI');
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Natural max 24.7');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe(
+      'You 21.2Estimated potential 24.7',
+    );
   });
 });

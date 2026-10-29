@@ -16,13 +16,13 @@ _Signing out on desktop also ends the mobile session and clears its unfinished w
 
 _Select a body part to follow its own measurement history. Missing values are skipped and changes use your displayed units. Isolated synthetic measurements._
 
-![FFMI methodology question-mark explaining the score and natural potential model](screenshots/releases/1.1.0-ffmi-methodology.png)
+![Existing Body measurements help with a short introduction and blue in-app Learn more about FFMI methodology link](screenshots/releases/1.1.0-ffmi-methodology.png)
 
-_Open the FFMI question-mark for a plain-language explanation of the method, research and limits, with a link to the source._
+_Both existing Body measurements and FFMI question-marks show a short introduction. Learn more opens the full methodology inside the app, with Back to overview and a source link._
 
-![Body's FFMI card with a normalized FFMI of 21.0 on a 17 to 29 comparison scale, a natural max of 24.7, reference levels and natural potential figures](screenshots/releases/1.1.0-ffmi.png)
+![Body FFMI card distinguishing Estimated potential at 24.7 from an exceptional reported natural reference at 28.0](screenshots/releases/1.1.0-ffmi.png)
 
-_Your FFMI from the latest check-in with body fat, compared with reference levels. Height, sex, wrist and ankle give an estimated natural max. Isolated sample data._
+_Estimated potential is a guide from the selected model and profile; exceptional reported comparison cases can exceed it. The calculation is unchanged. Synthetic sample data._
 
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
@@ -97,7 +97,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 _The circular Start button matches its workout choices. Isolated sample data._
 
 - **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
-- Body shows your FFMI on a 17 to 29 comparison scale with reference levels, from your latest check-in with body fat. Add your sex and height (plus wrist and ankle for men) to see your estimated natural max, maximum lean mass, weight at your target body fat and lean mass left to gain. These details are saved to your account. The FFMI question-mark explains the calculation, research basis, leanness assumptions and limits in plain language, with a source link.
+- Body shows your FFMI on a 17 to 29 comparison scale with research reference levels. Add sex and height (plus wrist and ankle for men) to estimate your potential, lean mass, bodyweight at a target body fat and lean mass remaining. The potential marker is a model estimate, while 28.0 is an exceptional reported natural case. Both existing Body measurements and FFMI question-marks show a short introduction and a blue Learn more about FFMI methodology link that opens the full explanation inside the app.
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
 - Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.

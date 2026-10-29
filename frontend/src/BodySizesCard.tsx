@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api';
 import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySizes';
 import { PopupDialog } from './PopupDialog';
-import { HelpPopup } from './HelpPopup';
+import { FfmiHelp } from './FfmiHelp';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { localDate } from './utils';
 import './bodySizes.css';
@@ -139,13 +139,13 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
       <header className="pulse-card-header">
         <div className="body-sizes-title">
           <h2>Body measurements</h2>
-          <HelpPopup title="Body measurements">
+          <FfmiHelp title="Body measurements">
             <p>
               Measure circumferences with a relaxed tape, using the same position each time. All
               fields are optional; enter at least one. Wrist and ankle measurements here are a
               history log. Set your frame measurements separately in FFMI details.
             </p>
-          </HelpPopup>
+          </FfmiHelp>
         </div>
         <button
           type="button"

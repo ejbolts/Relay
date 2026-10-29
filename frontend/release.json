@@ -2,10 +2,10 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Save machine setups, plan training and rest days, track body measurements and check your FFMI against natural limits, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
+  "summary": "Save machine setups, plan training and rest days, track body measurements and compare your FFMI and estimated natural potential, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
     "Body measurements: log dated circumferences for your neck, shoulders, chest, waist, hips, upper arms, thighs, calves, wrist and ankle without a weigh-in. Filter history by body part to see dated values and changes from the previous measurement; edit a date or delete an entry. Measurements use cm or inches with your unit preference and stay private to your account.",
-    "Body shows your FFMI on a 17 to 29 comparison scale with reference levels, from your latest check-in with body fat. Add your sex and height (plus wrist and ankle for men) to see your estimated natural max, maximum lean mass, weight at your target body fat and lean mass left to gain. These details are saved to your account. The FFMI question-mark explains the calculation, research basis, leanness assumptions and limits in plain language, with a link to the source methodology.",
+    "Body shows your FFMI on a 17 to 29 comparison scale with research reference levels. Add sex and height (plus wrist and ankle for men) to estimate your potential, lean mass, bodyweight at a target body fat and lean mass remaining. The potential marker is a model estimate, while 28.0 is an exceptional reported natural case. Both existing Body measurements and FFMI question-marks show a short introduction and a blue Learn more about FFMI methodology link that opens the full explanation inside the app.",
     "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
     "Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.",
     "Sign out ends your account's sessions on every device and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes sign out other devices; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts; connection failures alone keep them.",
@@ -38,10 +38,10 @@
   "highlights": [
     {
       "title": "FFMI and your natural potential",
-      "description": "See your fat-free mass index against reference levels from average to the largest natural trainee recorded. Add your frame sizes for an estimated natural max and the lean mass you could still gain.",
+      "description": "Compare your FFMI with research reference levels and estimate potential from your profile. The question-marks offer brief help, then an in-app methodology explanation. Estimates are guides rather than universal ceilings.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/67207e0fe9f6ea03cf4b4bab4513784827de13f5/docs/screenshots/releases/1.1.0-ffmi.png",
-        "alt": "Body's FFMI card: a normalized FFMI of 21.0 on a 17 to 29 scale with reference ticks, a natural max of 24.7, seven reference levels and maximum lean mass, weight at 10% fat and lean mass left. Isolated sample data."
+        "alt": "Body FFMI card showing 21.0, an Estimated potential marker at 24.7, exceptional reported natural reference at 28.0, and estimated body composition values. Synthetic sample data."
       }
     },
     {

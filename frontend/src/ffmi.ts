@@ -18,9 +18,9 @@ export const FFMI_COMPARISON: readonly { value: number; label: string }[] = [
   { value: 21.8, label: 'Competitive power athlete' },
   { value: 22.6, label: 'Internationally competitive bodybuilder' },
   { value: 24.8, label: 'Average steroid user' },
-  { value: 24.9, label: "Upper limit for most people's genetics" },
+  { value: 24.9, label: 'Upper-range natural reference' },
   { value: 25.4, label: 'World class natural pro bodybuilder' },
-  { value: 28.0, label: 'Largest natural trainee ever scientifically documented' },
+  { value: 28.0, label: 'Exceptional reported natural case' },
 ];
 
 /** 24.8 sits on top of 24.9, so only the legend names it. */
