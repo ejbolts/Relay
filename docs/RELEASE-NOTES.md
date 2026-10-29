@@ -16,6 +16,10 @@ _Weekly zone goals sit below History and show each personal range and progress. 
 
 _Customise the Home cardio goal card to track one zone goal or all of them, using a progress bar, ring or list. Synthetic sample data._
 
+![My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button](screenshots/releases/1.1.0-friend-qr-code.png)
+
+_Show your QR code from your profile or Social > Find, or switch to **Scan** to read a friend's code inside Relay. Scanning sends a friend request, including after the other person signs in or creates an account. Isolated sample accounts._
+
 ![Desktop sign-out returns both the desktop and mobile sessions to sign-in](screenshots/releases/1.1.0-signout-all-devices.gif)
 
 _Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
@@ -102,6 +106,7 @@ _The circular Start button matches its workout choices. Isolated sample data._
 
 - Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.
 - Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.
+- Add friends in person with a QR code. Tap the QR button on your profile, or **QR code** in **Social > Find**, and the other person scans it with their phone camera or the **Scan** tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with **Undo** in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.
 - Map incoming exercise names to existing entries during import review. Update the review to recalculate new exercises and duplicates before saving; mappings are checked again when saving.
 - Open **Import history** in **Settings > Data & connections > Import & export** to undo one tracked import. Confirmation removes that batch's sessions (including edits), linked cardio and unedited imported check-ins, then recalculates personal records. Existing check-ins, other sessions and edited imported check-ins are kept. Unused, unchanged custom exercises created by the batch are removed; reused or customised entries stay. Earlier imports cannot be undone as a batch.
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.

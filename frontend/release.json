@@ -6,6 +6,7 @@
   "changes": [
     "Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.",
     "Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.",
+    "Add friends in person with a QR code. Tap the QR button on your profile, or QR code in Social > Find, and the other person scans it with their phone camera or the Scan tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with Undo in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
     "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
     "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
     "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
@@ -38,6 +39,14 @@
     "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
+    {
+      "title": "Add friends with a QR code",
+      "description": "Show your QR code from Profile or Social > Find, or switch to Scan to read a friend's code inside Relay. Scanning sends a friend request, with Undo, even for someone who still needs to sign in or create an account.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/ee6d9993421df45e4ad1ac0ce347b53074f9775b/docs/screenshots/releases/1.1.0-friend-qr-code.png",
+        "alt": "My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button. Isolated sample accounts."
+      }
+    },
     {
       "title": "Map your imported exercises",
       "description": "Match incoming exercise names to existing entries, then update the review to recalculate duplicates and new exercises before saving.",

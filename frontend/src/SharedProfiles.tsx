@@ -1,7 +1,16 @@
 import { useWeightUnit } from './trainingPreferencesContext';
 import { bodyGoalKind } from './bodyMeasurementHistory';
 import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
 import { clipBodyWeightGoalPath } from './bodyTrend';
@@ -9,6 +18,8 @@ import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
+import { FriendInviteButton } from './FriendQrCode';
+import { useUserSession } from './userContext';
 import { SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
@@ -48,6 +59,22 @@ import type {
 import { formatMinutesDuration } from './utils';
 
 const BODY_WEIGHT_CHART_DAYS = 90;
+const INVITE_NOTICE_MS = 6000;
+
+/** What scanning a friend QR code did: sent a request, accepted theirs, or could not send. */
+type InviteResult = {
+  kind: 'sent' | 'friends' | 'failed' | 'undo-failed';
+  name: string;
+  serial: number;
+};
+
+function inviteMessage(result: InviteResult): string {
+  if (result.kind === 'sent') return `Friend request sent to ${result.name}`;
+  if (result.kind === 'friends') return `You and ${result.name} are now friends`;
+  if (result.kind === 'undo-failed')
+    return 'Could not cancel the request. Try again from the menu.';
+  return 'Could not send the friend request. Tap Add friend to try again.';
+}
 
 type LoadState = 'loading' | 'ready' | 'locked' | 'missing' | 'blocked' | 'error';
 
@@ -73,13 +100,19 @@ function avatarUser(member: { display_name: string; profile_photo_url: string | 
   };
 }
 
-export function SharingLocked({ onChooseSharing }: { onChooseSharing: () => void }) {
+export function SharingLocked({
+  onChooseSharing,
+  title = 'Share your profile to see others',
+}: {
+  onChooseSharing: () => void;
+  title?: string;
+}) {
   return (
     <section className="settings-panel panel sharing-locked" aria-labelledby="sharing-locked-title">
       <header>
         <div>
           <p className="section-kicker">SHARING</p>
-          <h2 id="sharing-locked-title">Share your profile to see others</h2>
+          <h2 id="sharing-locked-title">{title}</h2>
         </div>
       </header>
       <p>
@@ -439,12 +472,16 @@ export function PeopleSearch({
   refreshKey,
   onOpenProfile,
   onFriendChanged,
+  onChooseSharing,
 }: {
   active: boolean;
   refreshKey: string;
   onOpenProfile: (profile: SharedProfileSummary) => void;
   onFriendChanged: () => void;
+  /** Shows the account's own friend QR code beside the heading. */
+  onChooseSharing?: () => void;
 }) {
+  const { user } = useUserSession();
   const id = useId();
   const [input, setInput] = useState('');
   const [submitted, setSubmitted] = useState({ term: '', serial: 0 });
@@ -474,7 +511,12 @@ export function PeopleSearch({
   }, [active, submitted, refreshKey]);
   return (
     <div className="friend-group people-search">
-      <h3>Search people</h3>
+      <div className="people-search-heading">
+        <h3>Search people</h3>
+        {user && onChooseSharing && (
+          <FriendInviteButton user={user} onChooseSharing={onChooseSharing} labelled />
+        )}
+      </div>
       <form
         className="people-search-form"
         role="search"
@@ -861,6 +903,7 @@ export function FindPanel({
         refreshKey={`${searchVersion}:${people.map((person) => person.id).join(',')}`}
         onOpenProfile={onOpenProfile}
         onFriendChanged={onChanged}
+        onChooseSharing={onChooseSharing}
       />
       <SuggestedFriends
         active={active}
@@ -1171,12 +1214,17 @@ export function SharedProfileScreen({
   onChooseSharing,
   active = true,
   ownProfile,
+  invite = false,
+  onLoaded,
 }: {
   onOpenMember?: (person: { id: string; display_name: string }) => void;
   dataRevision?: string | null;
   profileId: string;
   active?: boolean;
   ownProfile?: { user: User; onSaved: (user: User) => void };
+  /** Opened from a friend QR code or invite link. */
+  invite?: boolean;
+  onLoaded?: (profile: SharedProfile) => void;
   /** The workout history list, drawn with the same cards as the account's own history. */
   renderWorkouts: (props: SharedWorkoutListProps) => ReactNode;
   onChooseSharing: () => void;
@@ -1209,6 +1257,27 @@ export function SharedProfileScreen({
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
   const preload = Boolean(ownProfile);
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
+  // Scanning a friend QR code sends the request once, before the profile first appears. Every
+  // load until one finishes waits for the same request, so a repeated load cannot show Add friend.
+  const inviteRequest = useRef<{ done: Promise<SharedProfile>; shown: boolean } | null>(null);
+  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  async function sendInviteRequest(scanned: SharedProfile): Promise<SharedProfile> {
+    try {
+      const sent = await api.sharing.addFriend(scanned.id);
+      // Accepting their request can open a friends-only profile, so read it again.
+      const updated = await api.sharing.profile(scanned.id);
+      const kind = sent.status === 'friends' ? 'friends' : 'sent';
+      setInviteResult({ kind, name: updated.display_name, serial: Date.now() });
+      return updated;
+    } catch {
+      setInviteResult({ kind: 'failed', name: scanned.display_name, serial: Date.now() });
+      return scanned;
+    }
+  }
+
   const loadedFilters = useRef<string | null>(null);
   const filterKey = JSON.stringify(filters);
   const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
@@ -1233,7 +1302,19 @@ export function SharedProfileScreen({
             api.sharing.workoutFilters(profileId),
           ])
         : null;
-      const nextProfile = initial?.[0] ?? (await api.sharing.profile(profileId));
+      let nextProfile = initial?.[0] ?? (await api.sharing.profile(profileId));
+      const status = nextProfile.friend_status;
+      if (
+        invite &&
+        !inviteRequest.current &&
+        !nextProfile.is_you &&
+        (status === 'none' || status === 'incoming')
+      ) {
+        inviteRequest.current = { done: sendInviteRequest(nextProfile), shown: false };
+      }
+      if (inviteRequest.current && !inviteRequest.current.shown) {
+        nextProfile = await inviteRequest.current.done;
+      }
       // A friends-only profile of a non-friend shares only its name and photo.
       const [page, options] = initial
         ? [initial[1], initial[2]]
@@ -1247,8 +1328,10 @@ export function SharedProfileScreen({
               { exercises: [], machines: [] },
             ];
       if (cancelled) return;
+      if (inviteRequest.current) inviteRequest.current.shown = true;
       loadedFilters.current = filterKey;
       setProfile(nextProfile);
+      onLoadedRef.current?.(nextProfile);
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
       setReactions('reactions' in page ? (page.reactions ?? {}) : {});
@@ -1269,7 +1352,7 @@ export function SharedProfileScreen({
     return () => {
       cancelled = true;
     };
-  }, [profileId, attempt, filters, filterKey, invalidDates, active, preload, dataRevision]);
+  }, [profileId, attempt, filters, filterKey, invalidDates, active, preload, dataRevision, invite]);
 
   async function loadMore() {
     if (loadingMore || loadingWorkouts || invalidDates) return;
@@ -1305,9 +1388,69 @@ export function SharedProfileScreen({
     setAttempt((count) => count + 1);
   }
 
+  useEffect(() => {
+    if (!inviteResult) return;
+    const timer = setTimeout(() => setInviteResult(null), INVITE_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [inviteResult]);
+
+  async function undoInviteRequest() {
+    if (undoing) return;
+    setUndoing(true);
+    try {
+      await api.sharing.removeFriend(profileId);
+      setInviteResult(null);
+      friendChanged('none');
+    } catch {
+      setInviteResult((current) =>
+        current ? { ...current, kind: 'undo-failed', serial: Date.now() } : current,
+      );
+    } finally {
+      setUndoing(false);
+    }
+  }
+
+  const inviteNotice =
+    inviteResult && active
+      ? createPortal(
+          <div
+            key={inviteResult.serial}
+            className="undo-toast top-toast friend-invite-toast"
+            role="status"
+            aria-atomic="true"
+            style={{ '--undo-toast-duration': `${INVITE_NOTICE_MS}ms` } as CSSProperties}
+          >
+            <span>{inviteMessage(inviteResult)}</span>
+            {inviteResult.kind === 'sent' && (
+              <button
+                className="undo-toast-action"
+                type="button"
+                disabled={undoing}
+                onClick={() => void undoInviteRequest()}
+              >
+                Undo
+              </button>
+            )}
+            <button
+              className="undo-toast-close"
+              type="button"
+              aria-label="Dismiss friend request notification"
+              onClick={() => setInviteResult(null)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+
   const ownIdentity =
     ownProfile?.user.id === profileId ? (
-      <ProfileIdentity user={ownProfile.user} onSaved={ownProfile.onSaved}>
+      <ProfileIdentity
+        user={ownProfile.user}
+        onSaved={ownProfile.onSaved}
+        onChooseSharing={onChooseSharing}
+      >
         {profile?.is_you && <ProfileStats profile={profile} />}
       </ProfileIdentity>
     ) : null;
@@ -1315,7 +1458,10 @@ export function SharedProfileScreen({
   if (state === 'locked') {
     return (
       <section className="settings-screen shared-profile-screen content-page">
-        <SharingLocked onChooseSharing={onChooseSharing} />
+        <SharingLocked
+          onChooseSharing={onChooseSharing}
+          title={invite ? 'Share your profile to add friends' : undefined}
+        />
       </section>
     );
   }
@@ -1342,11 +1488,15 @@ export function SharedProfileScreen({
         <section className="settings-panel panel">
           <header>
             <div>
-              <p className="section-kicker">SHARING</p>
-              <h2>This profile is no longer shared</h2>
+              <p className="section-kicker">{invite ? 'FRIEND INVITE' : 'SHARING'}</p>
+              <h2>{invite ? 'This invite can’t be opened' : 'This profile is no longer shared'}</h2>
             </div>
           </header>
-          <p>Its owner has made it private, so their training is hidden again.</p>
+          <p>
+            {invite
+              ? 'Its owner’s profile is private, or the link is no longer valid.'
+              : 'Its owner has made it private, so their training is hidden again.'}
+          </p>
         </section>
       </section>
     );
@@ -1377,6 +1527,7 @@ export function SharedProfileScreen({
 
   return (
     <section className="settings-screen shared-profile-screen content-page">
+      {inviteNotice}
       {ownIdentity ?? (
         <section className="settings-panel panel profile-summary" aria-label="Shared profile">
           <div className="profile-summary-main">

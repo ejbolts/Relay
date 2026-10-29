@@ -306,6 +306,12 @@ import {
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
+import {
+  captureFriendInvite,
+  clearFriendInvite,
+  FRIEND_INVITE_EVENT,
+  pendingFriendInvite,
+} from './friendInvite';
 
 type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
@@ -654,7 +660,10 @@ function AppContent() {
     id: string;
     name: string;
     opened: number;
+    /** Opened from a friend QR code, before its name has loaded. */
+    invite?: boolean;
   } | null>(null);
+  const [friendInvite, setFriendInvite] = useState(() => pendingFriendInvite());
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
   const [historyMovementId, setHistoryMovementId] = useState<string | null>(null);
   const [historyOpenCount, setHistoryOpenCount] = useState(0);
@@ -766,6 +775,38 @@ function AppContent() {
     setNavDirection('forward');
     setTabState(nextTab);
   }, []);
+  useEffect(() => {
+    // An invite link opened in an already-open app only changes the address's hash.
+    const onHashChange = () => {
+      const id = captureFriendInvite();
+      if (id) setFriendInvite(id);
+    };
+    // A code scanned inside the app has already stored its invite.
+    const onScanned = () => setFriendInvite(pendingFriendInvite());
+    window.addEventListener('hashchange', onHashChange);
+    window.addEventListener(FRIEND_INVITE_EVENT, onScanned);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
+    };
+  }, []);
+  useEffect(() => {
+    // A friend QR code opens the inviter's profile, which sends them a friend request.
+    if (!friendInvite || !user) return;
+    clearFriendInvite();
+    setFriendInvite(null);
+    if (friendInvite === user.id) {
+      setTab('profile');
+      return;
+    }
+    setSharedProfile((current) => ({
+      id: friendInvite,
+      name: 'Friend invite',
+      opened: (current?.opened ?? 0) + 1,
+      invite: true,
+    }));
+    setTab('shared-profile');
+  }, [friendInvite, user, setTab]);
 
   function navigateBack() {
     if (tab === 'settings' && settingsGroup !== null) {
@@ -1345,7 +1386,11 @@ function AppContent() {
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
     tab,
-    hasOtherDialog: message !== null || completionRecords.length > 0,
+    // Onboarding waits until a new member has seen the profile their invite opened.
+    hasOtherDialog:
+      message !== null ||
+      completionRecords.length > 0 ||
+      (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
   });
   const prompt = canShowPrompts
@@ -1888,6 +1933,14 @@ function AppContent() {
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
                   onOpenMember={openSharedProfile}
                   profileId={sharedProfile.id}
+                  invite={sharedProfile.invite}
+                  onLoaded={(profile) =>
+                    setSharedProfile((current) =>
+                      current?.invite && current.id === profile.id
+                        ? { ...current, name: profile.display_name }
+                        : current,
+                    )
+                  }
                   onChooseSharing={openSharingSettings}
                   renderWorkouts={(props) => (
                     <SharedWorkoutHistory
