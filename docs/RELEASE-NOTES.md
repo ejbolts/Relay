@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Finished sample workout with a fixed ten-minute duration, Saved on this device status and Retry sync](screenshots/releases/1.1.0-finished-workout-pending-sync.png)
+
+_After closing mid-save and reopening an hour later, the completed workout still shows **10 min** and waits safely for sync. Retrying stores one workout with the same sets, notes and duration. Isolated synthetic data._
+
 ![Selecting two sample machine photos, choosing their cover and settings, then merging and viewing both retained images](screenshots/releases/1.1.0-machine-photo-merge.gif)
 
 _Choose **Select** in Equipment photo, select duplicates and review **Merge**. Both images stay available in one machine's gallery; saved workout links and recorded settings are preserved. Isolated synthetic data._
@@ -107,6 +111,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 ![Circular Start button below the Cardio, Up next and Empty workout choices](screenshots/releases/1.1.0-circular-start.png)
 
 _The circular Start button matches its workout choices. Isolated sample data._
+
+- **Safe workout completion:** Finish stores the completed workout and its fixed duration on this device before syncing. If the app closes or goes offline mid-save, reopening or reconnecting retries the exact snapshot. Sets and notes are retained, timers stay stopped and new-workout retries keep the same session ID to prevent duplicates. Device-storage failures keep the workout open; a server rejection offers **Review workout**. One pending completion is retained until it syncs, before another workout can start. Confirmed sign-out or changing accounts clears it with the account's other local data.
 
 - In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
 

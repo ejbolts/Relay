@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
-import { api } from './api';
+import { api, ApiError } from './api';
+import { WORKOUT_SAVE_TIMEOUT_MS } from './usePendingWorkoutSave';
 import * as push from './push';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import {
@@ -1015,8 +1016,9 @@ describe('phantom workout prevention', () => {
     await confirmFinish();
     expect(window.location.hash).toBe('#dashboard');
     await act(async () => restoreOldLoggerLocation());
-    expect(window.location.hash).toBe('#log');
-    expect(readActiveWorkoutDraft()).not.toBeNull();
+    expect(window.location.hash).toBe('#dashboard');
+    expect(container.querySelector('.logger-screen')).toBeNull();
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
 
     await act(async () => finishSave(remoteWorkout()));
     expect(window.location.hash).toBe('#dashboard');
@@ -1082,11 +1084,9 @@ describe('phantom workout prevention', () => {
     expect(readActiveWorkoutDraft()?.clientSessionId).toBe(clientSessionId);
 
     await act(async () => root.unmount());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
     root = createRoot(container);
     await mount();
-    expect(readActiveWorkoutDraft()?.clientSessionId).toBe(clientSessionId);
-    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
-    await confirmFinish();
     expect(api.createWorkout).toHaveBeenCalledTimes(2);
     expect(vi.mocked(api.createWorkout).mock.calls[1][0].client_session_id).toBe(clientSessionId);
     expectNoActiveWorkout();
@@ -1145,16 +1145,16 @@ describe('finishing workouts in the background', () => {
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="Saving workout"]')?.disabled,
     ).toBe(true);
-    expect(container.querySelector<HTMLButtonElement>('.live-workout-card')?.disabled).toBe(true);
-    expect(container.querySelector('.live-workout-card')?.textContent).toContain(
+    expect(container.querySelector('.live-workout-card')).toBeNull();
+    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
       'Workout finished',
     );
-    expect(container.querySelector('.background-activity-bar')?.textContent).toContain(
-      'Saving workout',
+    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
+      'Syncing workout',
     );
     expectPreserved(draft);
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
-      false,
+      true,
     );
 
     const history =
@@ -1179,7 +1179,7 @@ describe('finishing workouts in the background', () => {
     expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
 
-  it('recovers the logger and all draft data after a failed background save, allowing a retry', async () => {
+  it('keeps a finished snapshot after a failed background save, allowing a retry', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
     let failSave!: (error: Error) => void;
@@ -1192,12 +1192,14 @@ describe('finishing workouts in the background', () => {
     await confirmFinish();
     expect(window.location.hash).toBe('#dashboard');
     await act(async () => failSave(new Error('Server unavailable; try again.')));
-    expect(window.location.hash).toBe('#log');
-    expect(container.textContent).toContain('Server unavailable; try again.');
+    expect(window.location.hash).toBe('#dashboard');
+    expect(container.textContent).toContain('Saved on this device. Waiting to sync.');
     expectPreserved(draft);
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise(() => {}));
-    await confirmFinish();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.pending-workout-actions button')!.click(),
+    );
     expect(api.createWorkout).toHaveBeenCalledTimes(2);
     expect(window.location.hash).toBe('#dashboard');
   });
@@ -1217,8 +1219,8 @@ describe('finishing workouts in the background', () => {
     await act(async () => fail(new Error('Connection lost.')));
     expect(window.location.hash).toBe('#training');
     expectPreserved(draft);
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'could not be saved',
+    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
+      'Saved on this device',
     );
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
   });
@@ -1256,6 +1258,191 @@ describe('finishing workouts in the background', () => {
         .click(),
     );
     expect(document.querySelector('.workout-completion-toast')).toBeNull();
+  });
+});
+
+describe('durable workout completion', () => {
+  beforeEach(() => vi.mocked(api.createWorkout).mockReset());
+
+  it('stores the exact completion before sending, closes mid-request, and replays it hours later without the catalogue', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockImplementation((_payload) => {
+      expect(readActiveWorkoutDraft()?.pendingSave?.payload).toEqual(_payload);
+      return new Promise(() => {});
+    });
+    await mount();
+    await confirmFinish();
+    const first = structuredClone(vi.mocked(api.createWorkout).mock.calls[0][0]);
+    expect(first.duration_minutes).toBe(10);
+    await act(async () => {
+      window.dispatchEvent(new Event('pagehide'));
+      root.unmount();
+    });
+    vi.setSystemTime(Date.now() + 8 * 60 * 60_000);
+    vi.mocked(api.listExercises).mockRejectedValue(new Error('Catalogue offline'));
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    root = createRoot(container);
+    await mount();
+    expect(api.createWorkout).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.createWorkout).mock.calls[1][0]).toEqual(first);
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.logger-screen')).toBeNull();
+  });
+
+  it('blocks Finish when local storage fails and preserves the editable workout', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage full');
+    });
+    await confirmFinish();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#log');
+    expect(container.textContent).toContain('free some storage');
+    expect(container.querySelector<HTMLElement>('.logger-screen')?.inert).not.toBe(true);
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeUndefined();
+  });
+
+  it('finishes offline, stops the logger, prevents replacement, then syncs once on reconnection', async () => {
+    writeActiveWorkoutDraft(storedDraft({ durationOverrideMinutes: 45 }));
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    await mount();
+    await confirmFinish();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expect(container.querySelector('.logger-screen')).toBeNull();
+    expect(container.querySelector('.pending-workout-save')?.textContent).toContain('45 min');
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="Start empty workout"]')?.disabled,
+    ).toBe(true);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Saving workout"]')!.click(),
+    );
+    expect(readActiveWorkoutDraft()?.pendingSave?.payload.duration_minutes).toBe(45);
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(readActiveWorkoutDraft()).toBeNull();
+  });
+
+  it('times out a hung request and retries the unchanged snapshot with backoff', async () => {
+    vi.useFakeTimers();
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout)
+      .mockImplementationOnce(
+        (_payload, signal) =>
+          new Promise((_resolve, reject) => {
+            signal!.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            );
+          }),
+      )
+      .mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    await confirmFinish();
+    const first = vi.mocked(api.createWorkout).mock.calls[0][0];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WORKOUT_SAVE_TIMEOUT_MS);
+    });
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
+    expect(container.textContent).toContain('Waiting to sync');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(api.createWorkout).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.createWorkout).mock.calls[1][0]).toEqual(first);
+    expect(readActiveWorkoutDraft()).toBeNull();
+  });
+
+  it('replays a resumed workout to its original ID with a fixed total duration', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    writeActiveWorkoutDraft(
+      storedDraft({ resumingWorkoutId: 'existing', previousDurationMinutes: 35 }),
+    );
+    vi.mocked(api.updateWorkout)
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    await confirmFinish();
+    const first = vi.mocked(api.updateWorkout).mock.calls[0];
+    expect(first[0]).toBe('existing');
+    expect(first[1].duration_minutes).toBe(45);
+    await act(async () => root.unmount());
+    vi.setSystemTime(Date.now() + 60 * 60_000);
+    root = createRoot(container);
+    await mount();
+    expect(vi.mocked(api.updateWorkout).mock.calls[1].slice(0, 2)).toEqual(first.slice(0, 2));
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('pauses rejected saves and opens a review with the original duration, sets and notes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(
+      new ApiError('Choose an available workout type.', 'invalid_type', 422),
+    );
+    await mount();
+    await confirmFinish();
+    await act(async () => window.dispatchEvent(new Event('online')));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Choose an available workout type.');
+    const review = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Review workout',
+    )!;
+    vi.setSystemTime(Date.now() + 8 * 60 * 60_000);
+    await act(async () => review.click());
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(window.location.hash).toBe('#log');
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeUndefined();
+    expect(readActiveWorkoutDraft()?.durationOverrideMinutes).toBe(10);
+    expectPreserved(draft);
+  });
+
+  it('does not replay another account’s completion even if old device metadata is missing', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockReturnValue(new Promise(() => {}));
+    await mount();
+    await confirmFinish();
+    await act(async () => root.unmount());
+    const draft = readActiveWorkoutDraft()!;
+    writeActiveWorkoutDraft({
+      ...draft,
+      pendingSave: { ...draft.pendingSave!, userId: 'other-account' },
+    });
+    root = createRoot(container);
+    await mount();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+  });
+
+  it('never clears a replacement draft when an old request completes after the app unmounts', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    let resolve!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    await act(async () => root.unmount());
+    const replacement = storedDraft({
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+      inactiveFinishAt: Date.now() + 3 * 60 * 60_000,
+      name: 'Replacement',
+    });
+    writeActiveWorkoutDraft(replacement);
+    await act(async () => resolve(remoteWorkout()));
+    expect(readActiveWorkoutDraft()).toEqual(replacement);
+    root = createRoot(container);
   });
 });
 
@@ -1448,7 +1635,7 @@ describe('inactive workout suggestions', () => {
     expect(window.location.hash).toBe('#dashboard');
     // An update cannot reload while the server save is still awaiting its response.
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
-      false,
+      true,
     );
     const payload = vi.mocked(api.createWorkout).mock.calls[0][0] as WorkoutInput;
     const sets = payload.movements.flatMap((movement) => movement.sets);

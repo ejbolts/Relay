@@ -665,14 +665,16 @@ export const api = {
   importBatches: () => request<ImportBatch[]>('/api/workouts/import/batches'),
   undoImportBatch: (id: string) =>
     request<ImportUndoResult>(`/api/workouts/import/batches/${id}`, { method: 'DELETE' }),
-  createWorkout: (payload: WorkoutInput) =>
+  createWorkout: (payload: WorkoutInput, signal?: AbortSignal) =>
     request<TrackedWorkout>('/api/workouts', {
+      signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
-  updateWorkout: (id: string, payload: WorkoutInput) =>
+  updateWorkout: (id: string, payload: WorkoutInput, signal?: AbortSignal) =>
     request<TrackedWorkout>(`/api/workouts/${id}`, {
+      signal,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

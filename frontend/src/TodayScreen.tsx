@@ -381,6 +381,7 @@ export function TodayScreen({
                   onStartRecommended ? onStartRecommended() : onStartTemplate(template)
                 }
                 aria-label={`Start ${recommendationLabel?.toLowerCase()} workout`}
+                disabled={workoutSaving}
               >
                 <Icon name="play" filled />
                 Start workout
@@ -394,6 +395,7 @@ export function TodayScreen({
                     ? onStartEmpty
                     : (onStartRecommended ?? onStartEmpty)
                 }
+                disabled={workoutSaving}
               >
                 <Icon name="plus" />
                 Start workout
@@ -404,6 +406,7 @@ export function TodayScreen({
               type="button"
               onClick={onStartEmpty}
               aria-label="Start empty workout"
+              disabled={workoutSaving}
             >
               Empty
             </button>
