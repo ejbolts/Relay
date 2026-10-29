@@ -9,6 +9,7 @@ import {
   MAX_SPLIT_DAYS,
   SPLIT_TEMPLATES,
   splitFromTemplate,
+  splitCalendarPreview,
   splitPreview,
   splitPreviewLabel,
 } from './trainingSplit';
@@ -96,6 +97,8 @@ function SplitScheduleEditor({
   const [creating, setCreating] = useState(false);
   const [typeName, setTypeName] = useState('');
   const [previewWeek, setPreviewWeek] = useState(0);
+  const [previewMonth, setPreviewMonth] = useState(0);
+  const [calendarView, setCalendarView] = useState(false);
   const busy = useRef(false);
   const nameInput = useRef<HTMLInputElement>(null);
   const page = useRef<HTMLElement>(null);
@@ -154,11 +157,13 @@ function SplitScheduleEditor({
       JSON.stringify(preset.types) ===
         JSON.stringify(split.steps.map((step) => step.workout_type_id)),
   );
-  const previewStart = addDays(
-    split.start_date > localDate() ? split.start_date : localDate(),
-    previewWeek * 7,
-  );
+  const today = localDate();
+  const previewAnchor = split.start_date > today ? split.start_date : today;
+  const previewStart = addDays(previewAnchor, previewWeek * 7);
   const preview = splitPreview(split, previewStart);
+  const months = calendarView ? splitCalendarPreview(split, previewAnchor, previewMonth) : [];
+  const monthLabel = (date: string) =>
+    parseLocalDate(date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
   const disabled = saving || creating;
 
   function update(next: TrainingSplit) {
@@ -288,6 +293,7 @@ function SplitScheduleEditor({
                 onClick={() => {
                   update(splitFromTemplate('custom', split.start_date));
                   setPreviewWeek(0);
+                  setPreviewMonth(0);
                   nameInput.current?.focus();
                 }}
               >
@@ -307,6 +313,7 @@ function SplitScheduleEditor({
                   onClick={() => {
                     update(splitFromTemplate(preset.id, split.start_date));
                     setPreviewWeek(0);
+                    setPreviewMonth(0);
                   }}
                 >
                   <span>
@@ -348,6 +355,7 @@ function SplitScheduleEditor({
                   if (event.target.value) {
                     update({ ...split, start_date: event.target.value });
                     setPreviewWeek(0);
+                    setPreviewMonth(0);
                   }
                 }}
               />
@@ -490,47 +498,116 @@ function SplitScheduleEditor({
             </details>
           </section>
           <section aria-labelledby="split-preview-title">
-            <div className="split-section-heading">
-              <h2 id="split-preview-title">Next 7 days</h2>
+            <div className="split-section-heading split-preview-heading">
+              <h2 id="split-preview-title">{calendarView ? 'Next 2 months' : 'Next 7 days'}</h2>
               <span className="split-preview-controls">
                 <button
                   type="button"
+                  className="split-icon-button split-calendar-toggle"
+                  aria-label="Two-month calendar"
+                  title={calendarView ? 'Show next 7 days' : 'Show two-month calendar'}
+                  aria-pressed={calendarView}
+                  onClick={() => setCalendarView((current) => !current)}
+                >
+                  <Icon name="calendar" />
+                </button>
+                <button
+                  type="button"
                   className="split-icon-button"
-                  aria-label="Previous preview week"
-                  disabled={previewWeek === 0}
-                  onClick={() => setPreviewWeek((week) => Math.max(0, week - 1))}
+                  aria-label={calendarView ? 'Previous two months' : 'Previous preview week'}
+                  disabled={calendarView ? previewMonth === 0 : previewWeek === 0}
+                  onClick={() =>
+                    calendarView
+                      ? setPreviewMonth((month) => Math.max(0, month - 2))
+                      : setPreviewWeek((week) => Math.max(0, week - 1))
+                  }
                 >
                   <Icon name="chevron-left" />
                 </button>
                 <span>
-                  {shortDate(previewStart)} – {shortDate(addDays(previewStart, 6))}
+                  {calendarView
+                    ? `${monthLabel(months[0].first)} – ${monthLabel(months[1].first)}`
+                    : `${shortDate(previewStart)} – ${shortDate(addDays(previewStart, 6))}`}
                 </span>
                 <button
                   type="button"
                   className="split-icon-button"
-                  aria-label="Next preview week"
-                  onClick={() => setPreviewWeek((week) => week + 1)}
+                  aria-label={calendarView ? 'Next two months' : 'Next preview week'}
+                  onClick={() =>
+                    calendarView
+                      ? setPreviewMonth((month) => month + 2)
+                      : setPreviewWeek((week) => week + 1)
+                  }
                 >
                   <Icon name="chevron-right" />
                 </button>
               </span>
             </div>
-            <ol className="split-preview">
-              {preview.map(({ date, typeId }) => (
-                <li
-                  key={date}
-                  style={{ '--split-type-colour': colourFor(typeId) } as CSSProperties}
-                  aria-label={`${parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}: ${labelFor(typeId)}`}
-                >
-                  <span>
-                    {parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'short' })}
-                  </span>
-                  <b>{parseLocalDate(date).getDate()}</b>
-                  <i aria-hidden="true" />
-                  <strong title={labelFor(typeId)}>{splitPreviewLabel(labelFor(typeId))}</strong>
-                </li>
-              ))}
-            </ol>
+            {calendarView ? (
+              <div className="split-calendar">
+                {months.map((month) => (
+                  <section
+                    className="split-calendar-month"
+                    key={month.first}
+                    aria-label={month.title}
+                  >
+                    <h3>{month.title}</h3>
+                    <div className="split-calendar-weekdays" aria-hidden="true">
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                        <span key={day}>{day}</span>
+                      ))}
+                    </div>
+                    <ol className="split-preview split-calendar-days">
+                      {month.cells.map((day, index) =>
+                        day ? (
+                          <li
+                            key={day.date}
+                            data-date={day.date}
+                            aria-current={day.date === today ? 'date' : undefined}
+                            className={day.typeId === undefined ? 'is-unstarted' : undefined}
+                            style={
+                              { '--split-type-colour': colourFor(day.typeId) } as CSSProperties
+                            }
+                            aria-label={`${parseLocalDate(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}: ${labelFor(day.typeId)}`}
+                          >
+                            <b>{parseLocalDate(day.date).getDate()}</b>
+                            <i aria-hidden="true" />
+                            <strong title={labelFor(day.typeId)}>
+                              {day.typeId === undefined
+                                ? '—'
+                                : splitPreviewLabel(labelFor(day.typeId))}
+                            </strong>
+                          </li>
+                        ) : (
+                          <li
+                            key={`blank-${index}`}
+                            className="split-calendar-blank"
+                            aria-hidden="true"
+                          />
+                        ),
+                      )}
+                    </ol>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <ol className="split-preview">
+                {preview.map(({ date, typeId }) => (
+                  <li
+                    key={date}
+                    style={{ '--split-type-colour': colourFor(typeId) } as CSSProperties}
+                    aria-label={`${parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}: ${labelFor(typeId)}`}
+                  >
+                    <span>
+                      {parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'short' })}
+                    </span>
+                    <b>{parseLocalDate(date).getDate()}</b>
+                    <i aria-hidden="true" />
+                    <strong title={labelFor(typeId)}>{splitPreviewLabel(labelFor(typeId))}</strong>
+                  </li>
+                ))}
+              </ol>
+            )}
           </section>
         </fieldset>
         <footer className="split-save">
