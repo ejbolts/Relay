@@ -540,6 +540,21 @@ class ActiveWorkoutReminder(Base):
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class ImportBatch(Base):
+    __tablename__ = "import_batches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str | None] = user_id_column()
+    file_name: Mapped[str] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(20))
+    workout_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    measurements: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    exercises: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+
 class BodyMeasurement(Base):
     __tablename__ = "body_measurements"
 

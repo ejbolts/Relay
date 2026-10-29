@@ -55,6 +55,7 @@ from .models import (
     Exercise,
     ExerciseMuscleContribution,
     Friendship,
+    ImportBatch,
     MachinePhoto,
     PersonalRecord,
     ProfileBlock,
@@ -101,6 +102,7 @@ REGISTRATION_LOCK = threading.Lock()
 # Every table that carries its own user_id. Rows with a NULL user_id predate accounts and are
 # claimed by the first account ever created.
 LEGACY_OWNED_MODELS = (
+    ImportBatch,
     WorkoutSession,
     PushSubscription,
     ActiveWorkoutReminder,
@@ -323,6 +325,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(Timestamp).where(Timestamp.session_id.in_(video_session_ids)),
         delete(Clip).where(Clip.session_id.in_(video_session_ids)),
         delete(WorkoutSession).where(WorkoutSession.user_id == user_id),
+        delete(ImportBatch).where(ImportBatch.user_id == user_id),
         delete(BodyMeasurement).where(BodyMeasurement.user_id == user_id),
         delete(BodyWeightGoal).where(BodyWeightGoal.user_id == user_id),
         delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id),

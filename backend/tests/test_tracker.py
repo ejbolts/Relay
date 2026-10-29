@@ -706,7 +706,9 @@ def test_csv_import_and_export_use_supplied_column_format(client):
     exported = client.get("/api/workouts/export.csv")
 
     assert imported.status_code == 201
-    assert imported.json() == {
+    summary = imported.json()
+    assert summary.pop("batch_id")
+    assert summary == {
         "workouts_created": 1,
         "workouts_skipped": 0,
         "exercises_created": 1,

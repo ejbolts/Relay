@@ -1146,6 +1146,17 @@ function AppContent() {
     }
   }
 
+  async function undoWorkoutImport(id: string) {
+    const result = await withBackgroundActivity('Undoing import…', async () => {
+      const undone = await api.undoImportBatch(id);
+      await refreshData({ activityLabel: null });
+      return undone;
+    });
+    setMessage(
+      `Import undone: removed ${plural(result.workouts_removed, 'session')} and ${plural(result.body_measurements_removed, 'check-in')}.${result.body_measurements_preserved ? ` Kept ${plural(result.body_measurements_preserved, 'edited check-in')}.` : ''}`,
+    );
+  }
+
   async function importWorkoutCsv(file: File, options?: WorkoutImportOptions) {
     const result = await withBackgroundActivity('Importing workouts…', async () => {
       const imported = await api.importWorkouts(file, options);
@@ -1798,6 +1809,7 @@ function AppContent() {
                 bodyTrendPreference={bodyTrendPreference}
                 onBodyTrendPreferenceChange={updateBodyTrendPreference}
                 onImportWorkouts={importWorkoutCsv}
+                onUndoImport={undoWorkoutImport}
                 csvGuideOpen={csvGuideOpen}
                 onCsvGuideOpenChange={setCsvGuideOpen}
                 onDeleteSamples={deleteSampleData}
@@ -6797,6 +6809,7 @@ function SettingsScreen({
   bodyTrendPreference,
   onBodyTrendPreferenceChange,
   onImportWorkouts,
+  onUndoImport,
   csvGuideOpen,
   onCsvGuideOpenChange,
   onDeleteSamples,
@@ -6839,6 +6852,7 @@ function SettingsScreen({
   bodyTrendPreference: BodyTrendPreference;
   onBodyTrendPreferenceChange: (preference: BodyTrendPreference) => void;
   onImportWorkouts: (file: File, options?: WorkoutImportOptions) => Promise<void>;
+  onUndoImport: (id: string) => Promise<void>;
   csvGuideOpen: boolean;
   onCsvGuideOpenChange: (open: boolean) => void;
   onDeleteSamples: () => Promise<void>;
@@ -7360,6 +7374,7 @@ function SettingsScreen({
                   <div className="settings-actions data-transfer-actions">
                     <WorkoutCsvImport
                       onImport={onImportWorkouts}
+                      onUndoImport={onUndoImport}
                       guideOpen={csvGuideOpen}
                       onGuideOpenChange={onCsvGuideOpenChange}
                     />

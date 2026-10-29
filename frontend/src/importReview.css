@@ -1,0 +1,85 @@
+.import-mapping {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.import-mapping summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+.import-mapping label {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+.import-mapping label span {
+  overflow-wrap: anywhere;
+}
+.import-mapping select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--card);
+  color: inherit;
+  border: 1px solid var(--line);
+}
+.import-mapping > button {
+  margin-top: 12px;
+}
+.import-history {
+  padding: 0.25rem 1rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.import-history-muted {
+  color: var(--muted-ink);
+}
+.import-batches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.import-batches li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
+}
+.import-batches li + li {
+  border-top: 1px solid var(--p-line);
+}
+.import-batch-info {
+  display: grid;
+  flex: 1;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.import-batch-info strong {
+  overflow-wrap: anywhere;
+}
+.import-batch-info span {
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+}
+.import-batches button {
+  flex: none;
+  min-height: 2.5rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 0.5rem 0.9rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-weight: 600;
+}
+.import-undo-confirm {
+  padding-top: 0.75rem;
+}
+.import-undo-confirm > p {
+  margin: 0.85rem 0 0;
+}
+.popup-dialog-actions .popup-primary-action.import-undo-action {
+  border: 0;
+  background: var(--p-danger);
+  color: #fff;
+}
