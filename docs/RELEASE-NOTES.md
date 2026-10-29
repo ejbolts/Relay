@@ -23,6 +23,13 @@ _Both existing Body measurements and FFMI question-marks show a short introducti
 ![Body FFMI card distinguishing Estimated potential at 24.7 from an exceptional reported natural reference at 28.0](screenshots/releases/1.1.0-ffmi.png)
 
 _Estimated potential is a guide from the selected model and profile; exceptional reported comparison cases can exceed it. The calculation is unchanged. Synthetic sample data._
+![Import review mapping Flat bench (old app) to Barbell Bench Press with no new exercises](screenshots/releases/1.1.0-import-exercise-mapping.png)
+
+_Map incoming names to your exercise library, then update the review before saving. Isolated sample data._
+
+![Import history asking to undo one sample batch of one session and one check-in](screenshots/releases/1.1.0-undo-import-batch.png)
+
+_Undo a tracked import while preserving other sessions and edited check-ins. Isolated sample data._
 
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
@@ -98,6 +105,8 @@ _The circular Start button matches its workout choices. Isolated sample data._
 
 - **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
 - Body shows your FFMI on a 17 to 29 comparison scale with research reference levels. Add sex and height (plus wrist and ankle for men) to estimate your potential, lean mass, bodyweight at a target body fat and lean mass remaining. The potential marker is a model estimate, while 28.0 is an exceptional reported natural case. Both existing Body measurements and FFMI question-marks show a short introduction and a blue Learn more about FFMI methodology link that opens the full explanation inside the app.
+- Map incoming exercise names to existing entries during import review. Update the review to recalculate new exercises and duplicates before saving; mappings are checked again when saving.
+- Open **Import history** in **Settings > Data & connections > Import & export** to undo one tracked import. Confirmation removes that batch's sessions (including edits), linked cardio and unedited imported check-ins, then recalculates personal records. Existing check-ins, other sessions and edited imported check-ins are kept. Unused, unchanged custom exercises created by the batch are removed; reused or customised entries stay. Earlier imports cannot be undone as a batch.
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
 - Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.

@@ -50,6 +50,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "sessions": _OWNED,
     "clips": f"session_id IN ({_SESSIONS})",
     "timestamps": f"session_id IN ({_SESSIONS})",
+    "import_batches": _OWNED,
     "body_measurements": _OWNED,
     "body_weight_goals": _OWNED,
     "exercises": _OWNED,
