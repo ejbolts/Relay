@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
+import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
 import { WeightInput } from './WeightInput';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -119,7 +120,6 @@ export function RoutinePanel({
       setCopied((ids) => [...ids, routine.id]);
       await types.reload();
       setEditing(saved);
-      setNotice('Saved to My splits.');
     });
   }
   const showView = !own && copied.length > 0 && onOpenSplits;
@@ -186,24 +186,17 @@ export function RoutinePanel({
           </button>
         </p>
       )}
-      {(notice || showView) && (
+      {notice && <NotificationDialog message={notice} onClose={() => setNotice(null)} />}
+      {showView && (
         <div className="routine-notice">
-          {notice && (
-            <p role="status">
-              <Icon name="check" />
-              {notice}
-            </p>
-          )}
-          {showView && (
-            <button
-              type="button"
-              className="routine-link"
-              onClick={() => onOpenSplits(importedId ?? undefined)}
-            >
-              View my splits
-              <Icon name="chevron-right" />
-            </button>
-          )}
+          <button
+            type="button"
+            className="routine-link"
+            onClick={() => onOpenSplits(importedId ?? undefined)}
+          >
+            View my splits
+            <Icon name="chevron-right" />
+          </button>
         </div>
       )}
       {!routines && !error && <p role="status">Loading routines…</p>}

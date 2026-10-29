@@ -163,6 +163,34 @@ it('keeps edits after a failed save and allows retry', async () => {
   expect(api.routines.save).toHaveBeenCalledTimes(2);
 });
 
+it('shows save feedback in a dismissible popup that clears automatically after repeated saves', async () => {
+  vi.useFakeTimers();
+  try {
+    await mount(true);
+    await click('Edit routine');
+    await save();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Routine saved.',
+    );
+    expect(host.textContent).not.toContain('Routine saved.');
+    await click('Close notification');
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+
+    await click('Edit routine');
+    await save();
+    await act(async () => vi.advanceTimersByTime(7000));
+    expect(document.querySelector('.app-notification-toast')).not.toBeNull();
+    await click('Edit routine');
+    await save();
+    await act(async () => vi.advanceTimersByTime(1000));
+    expect(document.querySelector('.app-notification-toast')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(7000));
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('requires an explicit date confirmation before replacing the active split', async () => {
   await mount(true);
   await click('Use split');
@@ -174,7 +202,10 @@ it('requires an explicit date confirmation before replacing the active split', a
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
   expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02');
-  expect(host.textContent).toContain('is your active split');
+  expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+    'is your active split',
+  );
+  expect(host.textContent).not.toContain('is your active split');
 });
 
 it('creates additional routines with workout and rest days and explicit publishing', async () => {
