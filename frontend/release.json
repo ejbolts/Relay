@@ -2,8 +2,9 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Save machine setups, plan training and rest days, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
+  "summary": "Save machine setups, plan training and rest days, check your FFMI against natural limits, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
+    "Body shows your FFMI on a 17 to 29 comparison scale with reference levels, from your latest check-in with body fat. Add your sex and height (plus wrist and ankle for men) to see your estimated natural max, maximum lean mass, weight at your target body fat and lean mass left to gain. These details are saved to your account.",
     "Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.",
     "Sign out ends your account's sessions on every device and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes sign out other devices; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts; connection failures alone keep them.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
@@ -33,6 +34,14 @@
     "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
+    {
+      "title": "FFMI and your natural potential",
+      "description": "See your fat-free mass index against reference levels from average to the largest natural trainee recorded. Add your frame sizes for an estimated natural max and the lean mass you could still gain.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/67207e0fe9f6ea03cf4b4bab4513784827de13f5/docs/screenshots/releases/1.1.0-ffmi.png",
+        "alt": "Body's FFMI card: a normalized FFMI of 21.0 on a 17 to 29 scale with reference ticks, a natural max of 24.7, seven reference levels and maximum lean mass, weight at 10% fat and lean mass left. Isolated sample data."
+      }
+    },
     {
       "title": "Rest days in your split",
       "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
