@@ -18,6 +18,8 @@ import type {
   CardioMetricsInput,
   Clip,
   CsvImportResult,
+  ImportBatch,
+  ImportUndoResult,
   CsvImportPreview,
   WorkoutImportOptions,
   DashboardData,
@@ -621,18 +623,37 @@ export const api = {
   importWorkouts: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);
-    if (options) Object.entries(options).forEach(([key, value]) => form.append(key, value));
+    if (options)
+      Object.entries(options).forEach(([key, value]) => {
+        form.append(
+          key,
+          key === 'exercise_mappings'
+            ? JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, id]) => id)))
+            : (value as string),
+        );
+      });
     return request<CsvImportResult>('/api/workouts/import', { method: 'POST', body: form });
   },
   previewWorkoutImport: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);
-    if (options) Object.entries(options).forEach(([key, value]) => form.append(key, value));
+    if (options)
+      Object.entries(options).forEach(([key, value]) => {
+        form.append(
+          key,
+          key === 'exercise_mappings'
+            ? JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, id]) => id)))
+            : (value as string),
+        );
+      });
     return request<CsvImportPreview>('/api/workouts/import/preview', {
       method: 'POST',
       body: form,
     });
   },
+  importBatches: () => request<ImportBatch[]>('/api/workouts/import/batches'),
+  undoImportBatch: (id: string) =>
+    request<ImportUndoResult>(`/api/workouts/import/batches/${id}`, { method: 'DELETE' }),
   createWorkout: (payload: WorkoutInput) =>
     request<TrackedWorkout>('/api/workouts', {
       method: 'POST',

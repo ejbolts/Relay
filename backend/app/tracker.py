@@ -27,7 +27,7 @@ from .account_limits import (
     load_account_limits,
     refuse,
 )
-from .auth import CurrentUser, get_current_user
+from .auth import CurrentUser, as_utc, get_current_user
 from .body_measurement_csv import export_body_measurements, import_body_measurements
 from .cardio_energy import cardio_energy_periods
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
@@ -50,6 +50,7 @@ from .models import (
     Exercise,
     ExerciseKind,
     ExerciseMuscleContribution,
+    ImportBatch,
     MachinePhoto,
     MuscleRole,
     PersonalRecord,
@@ -68,7 +69,15 @@ from .photo_storage import (
     store_machine_photo,
 )
 from .processing import backfill_completed_video_links
-from .tracker_csv import CsvImportError, ImportPlan, export_workouts, import_workouts, plan_import
+from .tracker_csv import (
+    CsvImportError,
+    ImportPlan,
+    exercise_snapshot,
+    export_workouts,
+    import_workouts,
+    measurement_snapshot,
+    plan_import,
+)
 from .tracker_schemas import (
     BodyMeasurementCreate,
     BodyMeasurementCsvImportRead,
@@ -96,6 +105,8 @@ from .tracker_schemas import (
     ExerciseRead,
     ExerciseTrendPointRead,
     HeatmapDay,
+    ImportBatchRead,
+    ImportUndoRead,
     MachinePhotoCaptionUpdate,
     MachinePhotoRead,
     MachinePhotoUsageRead,
@@ -2006,7 +2017,9 @@ async def read_workout_csv(file: UploadFile) -> bytes:
     return raw
 
 
-def check_import_plan(db: Session, user: User, limits: AccountLimits, plan: ImportPlan) -> None:
+def check_import_plan(
+    db: Session, user: User, limits: AccountLimits, plan: ImportPlan, *, reviewing: bool = False
+) -> None:
     additions = [session for session in plan.sessions if not session.duplicate]
     if additions and not user.is_admin:
         count = db.scalar(
@@ -2014,7 +2027,8 @@ def check_import_plan(db: Session, user: User, limits: AccountLimits, plan: Impo
         )
         if count + len(additions) > limits.workouts_per_account:
             raise refuse(user, "workouts_per_account", IMPORT_NOT_SAVED)
-    if plan.new_exercises and not user.is_admin:
+    # Review must remain available when mapping can avoid creating custom entries.
+    if plan.new_exercises and not user.is_admin and not reviewing:
         count = db.scalar(
             select(func.count(Exercise.id)).where(
                 Exercise.user_id == user.id, Exercise.is_custom.is_(True)
@@ -2023,11 +2037,108 @@ def check_import_plan(db: Session, user: User, limits: AccountLimits, plan: Impo
         if count + len(plan.new_exercises) > limits.custom_exercises_per_account:
             raise refuse(user, "custom_exercises_per_account", IMPORT_NOT_SAVED)
     for session in additions:
-        exercises = {canonical_exercise_name(row.exercise_name).casefold() for row in session.rows}
+        exercises = {
+            row.exercise_id or canonical_exercise_name(row.exercise_name).casefold()
+            for row in session.rows
+        }
         if len(exercises) > limits.exercises_per_workout:
             raise refuse(user, "exercises_per_workout", IMPORT_NOT_SAVED)
         if len(session.rows) > limits.sets_per_workout:
             raise refuse(user, "sets_per_workout", IMPORT_NOT_SAVED)
+
+
+def parse_exercise_mappings(raw: str) -> dict[str, str]:
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError) as error:
+        raise CsvImportError("Exercise mappings must be a JSON object.") from error
+    if not isinstance(value, dict) or any(
+        not isinstance(key, str) or not isinstance(target, str) for key, target in value.items()
+    ):
+        raise CsvImportError("Exercise mappings must contain exercise names and IDs.")
+    return value
+
+
+@router.get("/workouts/import/batches", response_model=list[ImportBatchRead])
+def list_import_batches(db: DbSession, user: CurrentUser) -> list[ImportBatchRead]:
+    batches = db.scalars(
+        select(ImportBatch)
+        .where(ImportBatch.user_id == user.id)
+        .order_by(ImportBatch.created_at.desc(), ImportBatch.id.desc())
+    )
+    workout_ids = set(
+        db.scalars(select(TrainingWorkout.id).where(TrainingWorkout.user_id == user.id))
+    )
+    measurement_ids = set(
+        db.scalars(select(BodyMeasurement.id).where(BodyMeasurement.user_id == user.id))
+    )
+    return [
+        ImportBatchRead(
+            id=batch.id,
+            file_name=batch.file_name,
+            source=batch.source,
+            created_at=as_utc(batch.created_at),
+            workouts=len(set(batch.workout_ids) & workout_ids),
+            body_measurements=sum(item["id"] in measurement_ids for item in batch.measurements),
+        )
+        for batch in batches
+    ]
+
+
+@router.delete("/workouts/import/batches/{batch_id}", response_model=ImportUndoRead)
+def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> ImportUndoRead:
+    # Serialize undo with imports so another batch cannot claim entries being removed.
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    batch = get_owned(db, ImportBatch, batch_id, user.id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Import batch was not found.")
+    workouts = list(
+        db.scalars(
+            select(TrainingWorkout).where(
+                TrainingWorkout.user_id == user.id, TrainingWorkout.id.in_(batch.workout_ids)
+            )
+        )
+    )
+    for workout in workouts:
+        db.execute(
+            delete(CardioSession).where(
+                CardioSession.user_id == user.id, CardioSession.source_workout_id == workout.id
+            )
+        )
+        db.delete(workout)
+    removed = preserved = exercises_removed = 0
+    for snapshot in batch.measurements:
+        item = get_owned(db, BodyMeasurement, snapshot["id"], user.id)
+        if item is not None:
+            if measurement_snapshot(item) == snapshot:
+                db.delete(item)
+                removed += 1
+            else:
+                preserved += 1
+    db.flush()
+    for snapshot in batch.exercises:
+        exercise = get_owned(db, Exercise, snapshot["id"], user.id)
+        if (
+            exercise is not None
+            and exercise_snapshot(exercise) == snapshot
+            and not exercise.is_favorite
+            and not exercise.movements
+            and not exercise.machine_photos
+            and not exercise.muscle_contributions
+        ):
+            db.delete(exercise)
+            exercises_removed += 1
+    db.delete(batch)
+    db.flush()
+    rebuild_personal_records(db, user.id)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return ImportUndoRead(
+        workouts_removed=len(workouts),
+        body_measurements_removed=removed,
+        body_measurements_preserved=preserved,
+        exercises_removed=exercises_removed,
+    )
 
 
 @router.post("/workouts/import/preview", response_model=CsvImportPreviewRead)
@@ -2039,16 +2150,30 @@ async def preview_workout_csv(
     source: Annotated[Literal["gym", "strengthlevel", "hevy", "strong"], Form()] = "gym",
     weight_unit: Annotated[Literal["kg", "lb"], Form()] = "kg",
     distance_unit: Annotated[Literal["km", "mi"], Form()] = "km",
+    exercise_mappings: Annotated[str, Form()] = "{}",
 ) -> CsvImportPreviewRead:
     raw = await read_workout_csv(file)
     try:
         plan = plan_import(
-            db, user.id, raw, source=source, weight_unit=weight_unit, distance_unit=distance_unit
+            db,
+            user.id,
+            raw,
+            source=source,
+            weight_unit=weight_unit,
+            distance_unit=distance_unit,
+            exercise_mappings=parse_exercise_mappings(exercise_mappings),
         )
     except CsvImportError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    check_import_plan(db, user, load_account_limits(db, settings), plan)
+    check_import_plan(db, user, load_account_limits(db, settings), plan, reviewing=True)
     return CsvImportPreviewRead(
+        exercise_matches=plan.exercise_matches,
+        available_exercises=[
+            {"id": item.id, "name": item.name, "kind": item.kind}
+            for item in db.scalars(
+                select(Exercise).where(Exercise.user_id == user.id).order_by(Exercise.name)
+            )
+        ],
         sessions=[
             CsvImportSessionRead(
                 workout_date=session.workout_date,
@@ -2082,19 +2207,35 @@ async def import_workout_csv(
     source: Annotated[Literal["gym", "strengthlevel", "hevy", "strong"], Form()] = "gym",
     weight_unit: Annotated[Literal["kg", "lb"], Form()] = "kg",
     distance_unit: Annotated[Literal["km", "mi"], Form()] = "km",
+    exercise_mappings: Annotated[str, Form()] = "{}",
 ) -> CsvImportRead:
     raw = await read_workout_csv(file)
     try:
         # Serialize comparison and writes, including two imports that finish together.
         db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         plan = plan_import(
-            db, user.id, raw, source=source, weight_unit=weight_unit, distance_unit=distance_unit
+            db,
+            user.id,
+            raw,
+            source=source,
+            weight_unit=weight_unit,
+            distance_unit=distance_unit,
+            exercise_mappings=parse_exercise_mappings(exercise_mappings),
         )
         check_import_plan(db, user, load_account_limits(db, settings), plan)
         summary = import_workouts(
-            db, user.id, raw, plan=plan, on_workout=sync_workout_cardio_sessions
+            db,
+            user.id,
+            raw,
+            plan=plan,
+            on_workout=sync_workout_cardio_sessions,
+            batch=ImportBatch(
+                user_id=user.id,
+                file_name=(file.filename or "Import").replace("\\", "/").split("/")[-1][:200],
+                source=source,
+            ),
         )
-        if summary.workouts_created:
+        if summary.workouts_created or summary.body_measurements_created:
             rebuild_personal_records(db, user.id)
             bump_workout_cache_revision(db, user.id)
         db.commit()

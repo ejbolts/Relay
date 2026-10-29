@@ -2,10 +2,13 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Save machine setups, personalise heart-rate zones and cardio goals, plan training and rest days, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
+  "summary": "Save machine setups, personalise heart-rate zones and cardio goals, plan training and rest days, map and undo imports, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
     "Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.",
     "Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.",
+    "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
+    "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
+    "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
     "Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.",
     "Sign out ends your account's sessions on every device and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes sign out other devices; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts; connection failures alone keep them.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
@@ -35,6 +38,22 @@
     "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
+    {
+      "title": "Map your imported exercises",
+      "description": "Match incoming exercise names to existing entries, then update the review to recalculate duplicates and new exercises before saving.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/03e635cefc31aa0193961bc2ed5ab43a80471793/docs/screenshots/releases/1.1.0-import-exercise-mapping.png",
+        "alt": "Import review mapping Flat bench (old app) to Barbell Bench Press, with one session and set to add and no new exercises. Isolated sample data."
+      }
+    },
+    {
+      "title": "Undo one import",
+      "description": "Import history removes one tracked batch while keeping other sessions and edited check-ins. Earlier imports cannot be undone as a batch.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/cdf2beea2fba8e624465ff788b6ad540626b76c4/docs/screenshots/releases/1.1.0-undo-import-batch.png",
+        "alt": "Import history asking to undo one sample batch of one session and one check-in, with Undo import and Cancel buttons. Isolated sample data."
+      }
+    },
     {
       "title": "Rest days in your split",
       "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
