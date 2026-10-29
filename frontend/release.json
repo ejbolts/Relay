@@ -2,10 +2,10 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Save machine setups, plan training and rest days, track body measurements and estimated natural potential, map and undo imports, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
+  "summary": "Save machine setups, plan training and rest days, track body measurements and FFMI model references, map and undo imports, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
     "Body measurements: log dated circumferences for your neck, shoulders, chest, waist, hips, upper arms, thighs, calves, wrist and ankle without a weigh-in. Filter history by body part to see dated values and changes from the previous measurement; edit a date or delete an entry. Measurements use cm or inches with your unit preference and stay private to your account.",
-    "Body shows your FFMI on a 17 to 29 comparison scale with research reference levels. Add sex and height (plus wrist and ankle for men) to estimate your potential, lean mass, bodyweight at a target body fat and lean mass remaining. The potential marker is a model estimate, while 28.0 is an exceptional reported natural case. Both existing Body measurements and FFMI question-marks show a short introduction and a blue Learn more about FFMI methodology link that opens the full explanation inside the app.",
+    "Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links.",
     "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
     "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
     "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
@@ -39,11 +39,11 @@
   },
   "highlights": [
     {
-      "title": "FFMI and your natural potential",
-      "description": "Compare your FFMI with research reference levels and estimate potential from your profile. The question-marks offer brief help, then an in-app methodology explanation. Estimates are guides rather than universal ceilings.",
+      "title": "FFMI and model references",
+      "description": "Compare your FFMI with a population-based model reference, rather than a personal prediction. The question-marks explain the calculation and limitations in a short in-app summary, without external source links.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/0909a70115f3035e9e9388cc4550cc7354482d39/docs/screenshots/releases/1.1.0-ffmi.png",
-        "alt": "Body FFMI card showing 21.0, an Estimated potential marker at 24.7, exceptional reported natural reference at 28.0, and estimated body composition values. Synthetic sample data."
+        "alt": "Body FFMI card showing 21.0, a Model reference marker at 24.7, and reference lean mass, reference weight and lean mass gap. Synthetic sample data."
       }
     },
     {

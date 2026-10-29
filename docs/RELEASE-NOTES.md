@@ -16,13 +16,14 @@ _Signing out on desktop also ends the mobile session and clears its unfinished w
 
 _Select a body part to follow its own measurement history. Missing values are skipped and changes use your displayed units. Isolated synthetic measurements._
 
-![Existing Body measurements help with a short introduction and blue in-app Learn more about FFMI methodology link](screenshots/releases/1.1.0-ffmi-methodology.png)
+![Short FFMI methodology summary explaining the model reference and measurement guidance](screenshots/releases/1.1.0-ffmi-methodology.png)
 
-_Both existing Body measurements and FFMI question-marks show a short introduction. Learn more opens the full methodology inside the app, with Back to overview and a source link._
+_Both existing Body measurements and FFMI question-marks show a short introduction. Learn more opens the full methodology inside the app, with Back to overview. The explanation is summarised without study names or external source links._
 
-![Body FFMI card distinguishing Estimated potential at 24.7 from an exceptional reported natural reference at 28.0](screenshots/releases/1.1.0-ffmi.png)
+![Body FFMI card showing a Model reference at 24.7 and an exceptional reported case at 28.0](screenshots/releases/1.1.0-ffmi.png)
 
-_Estimated potential is a guide from the selected model and profile; exceptional reported comparison cases can exceed it. The calculation is unchanged. Synthetic sample data._
+_Model reference is a population-based benchmark, adjusted using the selected profile, rather than a prediction of an individual genetic limit. Calculations are unchanged. Synthetic sample data._
+
 ![Import review mapping Flat bench (old app) to Barbell Bench Press with no new exercises](screenshots/releases/1.1.0-import-exercise-mapping.png)
 
 _Map incoming names to your exercise library, then update the review before saving. Isolated sample data._
@@ -104,7 +105,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 _The circular Start button matches its workout choices. Isolated sample data._
 
 - **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
-- Body shows your FFMI on a 17 to 29 comparison scale with research reference levels. Add sex and height (plus wrist and ankle for men) to estimate your potential, lean mass, bodyweight at a target body fat and lean mass remaining. The potential marker is a model estimate, while 28.0 is an exceptional reported natural case. Both existing Body measurements and FFMI question-marks show a short introduction and a blue Learn more about FFMI methodology link that opens the full explanation inside the app.
+- Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links.
 - Map incoming exercise names to existing entries during import review. Update the review to recalculate new exercises and duplicates before saving; mappings are checked again when saving.
 - Open **Import history** in **Settings > Data & connections > Import & export** to undo one tracked import. Confirmation removes that batch's sessions (including edits), linked cardio and unedited imported check-ins, then recalculates personal records. Existing check-ins, other sessions and edited imported check-ins are kept. Unused, unchanged custom exercises created by the batch are removed; reused or customised entries stay. Earlier imports cannot be undone as a batch.
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.

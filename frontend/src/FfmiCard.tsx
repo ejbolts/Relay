@@ -51,7 +51,7 @@ export function FfmiScale({ ffmi, maxFfmi }: { ffmi: number; maxFfmi: number | n
       <div
         className="ffmi-scale-track"
         role="img"
-        aria-label={`Your FFMI ${ffmi.toFixed(1)}${maxFfmi === null ? '' : `, estimated potential ${maxFfmi.toFixed(1)}`}, on a scale from 17 to 29`}
+        aria-label={`Your FFMI ${ffmi.toFixed(1)}${maxFfmi === null ? '' : `, model reference ${maxFfmi.toFixed(1)}`}, on a scale from 17 to 29`}
       >
         <span className="ffmi-scale-fill" style={{ width: `${ffmiScalePercent(ffmi)}%` }} />
         {FFMI_COMPARISON.map(({ value }) => (
@@ -63,7 +63,7 @@ export function FfmiScale({ ffmi, maxFfmi }: { ffmi: number; maxFfmi: number | n
       {labels(true)}
       <div className="ffmi-scale-key">
         <span className="you">You {ffmi.toFixed(1)}</span>
-        {maxFfmi !== null && <span className="max">Estimated potential {maxFfmi.toFixed(1)}</span>}
+        {maxFfmi !== null && <span className="max">Model reference {maxFfmi.toFixed(1)}</span>}
       </div>
     </div>
   );
@@ -219,22 +219,22 @@ export function FfmiCard({
           {potential && (
             <dl className="ffmi-potential">
               <div>
-                <dt>Estimated lean mass</dt>
+                <dt>Reference lean mass</dt>
                 <dd>{formatWeight(potential.maxLeanMassKg, weightUnit, 1)}</dd>
               </div>
               <div>
-                <dt>Estimated weight at {profile.target_body_fat_pct}% fat</dt>
+                <dt>Reference weight at {profile.target_body_fat_pct}% fat</dt>
                 <dd>{formatWeight(potential.maxBodyweightKg, weightUnit, 1)}</dd>
               </div>
               <div>
-                <dt>Lean mass left</dt>
+                <dt>Lean mass gap</dt>
                 <dd>{formatWeight(Math.max(0, potential.leanMassLeftKg), weightUnit, 1)}</dd>
               </div>
             </dl>
           )}
           {needsFrame && (
             <button type="button" className="ffmi-setup" onClick={openEditor}>
-              Add wrist and ankle for a potential estimate
+              Add wrist and ankle for a model reference
             </button>
           )}
         </>
