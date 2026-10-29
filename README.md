@@ -50,7 +50,7 @@ Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose 
 
 ## Track cardio and body measurements
 
-**Cardio** records sessions on their own or alongside a workout. Add duration and optional machine or watch metrics such as distance, calories, average heart rate, speed, incline and cycling power. Compare activity across date ranges and work towards a weekly Zone 2 target.
+**Cardio** records sessions on their own or alongside a workout. Add duration and optional machine or watch metrics such as distance, calories, average heart rate, speed, incline and cycling power. Compare activity across date ranges and set personal heart-rate ranges with **Edit** on **Training > Cardio > Weekly zone goals**. Start with a 150-minute weekly Zone 2 goal, change its minutes or zone, or add separate goals for other zones. Once ranges are set, sessions count only when average heart rate matches the personal range; until then they count as Zone 2. A brief text notification reports the zone.
 
 **Body** tracks body weight and optional body-fat measurements, with trends and a weight goal to help you follow changes over time. Home offers separate **Body weight check-in**, **Body fat check-in** and **Combined check-in** sections. Add, hide, resize and arrange them through **Edit Home layout**. Weight can be logged without body-fat percentage; logging body fat requires today’s weight.
 

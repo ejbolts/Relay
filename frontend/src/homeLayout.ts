@@ -52,7 +52,7 @@ export const HOME_SECTIONS = [
   },
   {
     id: 'zone2',
-    title: 'Zone 2 cardio',
+    title: 'Cardio zone goals',
     description: 'Minutes and weekly goal',
     icon: 'heart',
     size: 'half',
@@ -110,11 +110,48 @@ export const HOME_SECTIONS = [
 export type HomeSectionId = (typeof HOME_SECTIONS)[number]['id'];
 export type HomeSectionWidth = 'compact' | 'full' | 'third';
 export type HomeSectionWidths = Partial<Record<HomeSectionId, HomeSectionWidth>>;
+export type CardioGoalCardStyle = 'progress' | 'ring' | 'list';
+export interface CardioGoalCardSettings {
+  /** null tracks every configured goal. */
+  zone: number | null;
+  style: CardioGoalCardStyle;
+}
+/** Display options for configurable sections, keyed by section. */
+export interface HomeSectionSettings {
+  zone2: CardioGoalCardSettings;
+}
 export interface HomeLayout {
   order: HomeSectionId[];
   hidden: HomeSectionId[];
   /** Missing entries retain the original adaptive row packing. */
   widths?: HomeSectionWidths;
+  settings?: HomeSectionSettings;
+}
+
+export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
+  zone2: { zone: null, style: 'progress' },
+};
+
+export function homeSectionSettings<Id extends keyof HomeSectionSettings>(
+  layout: HomeLayout,
+  id: Id,
+): HomeSectionSettings[Id] {
+  return { ...DEFAULT_HOME_SECTION_SETTINGS[id], ...layout.settings?.[id] };
+}
+
+export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
+  layout: HomeLayout,
+  id: Id,
+  change: Partial<HomeSectionSettings[Id]>,
+): HomeLayout {
+  return {
+    ...layout,
+    settings: {
+      ...DEFAULT_HOME_SECTION_SETTINGS,
+      ...layout.settings,
+      [id]: { ...homeSectionSettings(layout, id), ...change },
+    },
+  };
 }
 
 export function defaultHomeLayout(): HomeLayout {
@@ -122,6 +159,7 @@ export function defaultHomeLayout(): HomeLayout {
     order: HOME_SECTIONS.map((section) => section.id),
     hidden: ['bodyweight-check-in', 'body-fat-check-in'],
     widths: {},
+    settings: DEFAULT_HOME_SECTION_SETTINGS,
   };
 }
 
