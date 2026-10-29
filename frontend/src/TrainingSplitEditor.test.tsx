@@ -265,8 +265,8 @@ it('toggles a two-month calendar, pages across years and preserves unsaved edits
   const weekStart = host.querySelector('.split-preview > li')?.getAttribute('aria-label');
   await click('Two-month calendar');
   expect(button('Two-month calendar').getAttribute('aria-pressed')).toBe('true');
-  expect(host.querySelectorAll('.split-calendar-month h3').length).toBe(2);
-  expect(host.querySelector('.split-calendar-month h3')?.textContent).toBe('October 2026');
+  expect(host.querySelectorAll('.calendar-month h3').length).toBe(2);
+  expect(host.querySelector('.calendar-month h3')?.textContent).toBe('October 2026');
   expect(host.querySelector('[data-date="2026-10-25"]')?.getAttribute('aria-label')).toContain(
     'Not started',
   );
@@ -274,11 +274,11 @@ it('toggles a two-month calendar, pages across years and preserves unsaved edits
   expect(host.querySelector('[data-date="2026-11-02"]')?.textContent).toContain('Rest');
   expect(button('Previous two months').disabled).toBe(true);
   await click('Next two months');
-  expect(host.querySelector('.split-calendar-month h3')?.textContent).toBe('December 2026');
-  expect(host.querySelectorAll('.split-calendar-month h3')[1].textContent).toBe('January 2027');
+  expect(host.querySelector('.calendar-month h3')?.textContent).toBe('December 2026');
+  expect(host.querySelectorAll('.calendar-month h3')[1].textContent).toBe('January 2027');
   await click('Previous two months');
   await click('Two-month calendar');
-  expect(host.querySelector('.split-calendar')).toBeNull();
+  expect(host.querySelector('.calendar-scroll')).toBeNull();
   expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toBe(weekStart);
   expect(api.saveTrainingSplit).not.toHaveBeenCalled();
   expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('Unsaved plan');
@@ -291,7 +291,7 @@ it('updates the month calendar immediately after cycle edits and resets paging f
   expect(host.querySelector('[data-date="2026-10-26"]')?.textContent).toContain('Cardio');
   await click('Next two months');
   await input('input[type="date"]', '2027-02-15');
-  expect(host.querySelector('.split-calendar-month h3')?.textContent).toBe('February 2027');
+  expect(host.querySelector('.calendar-month h3')?.textContent).toBe('February 2027');
   expect(button('Previous two months').disabled).toBe(true);
   expect(host.querySelector('[data-date="2027-02-14"]')?.getAttribute('aria-label')).toContain(
     'Not started',

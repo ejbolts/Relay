@@ -1,5 +1,5 @@
 import type { TrainingSplit } from './types';
-import { addDays, isoLocalDate, parseLocalDate } from './trainingSummary';
+import { addDays, parseLocalDate } from './trainingSummary';
 
 export const MAX_SPLIT_DAYS = 28;
 
@@ -39,26 +39,5 @@ export function splitPreview(split: TrainingSplit, from: string, count = 7) {
     const date = addDays(from, offset);
     const index = splitStepOnDate(split, date);
     return { date, typeId: index === null ? undefined : split.steps[index].workout_type_id };
-  });
-}
-
-/** Two complete, Monday-first months, using the same uninterrupted cycle as the week preview. */
-export function splitCalendarPreview(split: TrainingSplit, from: string, monthOffset = 0) {
-  const anchor = parseLocalDate(from);
-  return Array.from({ length: 2 }, (_, index) => {
-    const first = new Date(anchor.getFullYear(), anchor.getMonth() + monthOffset + index, 1, 12);
-    const days = new Date(first.getFullYear(), first.getMonth() + 1, 0, 12).getDate();
-    const leading = (first.getDay() + 6) % 7;
-    const preview = splitPreview(split, isoLocalDate(first), days);
-    const cells: Array<(typeof preview)[number] | null> = [
-      ...Array.from({ length: leading }, () => null),
-      ...preview,
-    ];
-    while (cells.length % 7) cells.push(null);
-    return {
-      first: isoLocalDate(first),
-      title: first.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }),
-      cells,
-    };
   });
 }

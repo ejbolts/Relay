@@ -4,12 +4,13 @@ import { HelpPopup } from './HelpPopup';
 import { RoutinePanel } from './RoutinePanel';
 import { useUserSession } from './userContext';
 import { Icon } from './Icon';
+import { WorkoutCalendar } from './WorkoutCalendar';
+import { calendarMonths } from './calendarRange';
 import { addDays, parseLocalDate, shortDate } from './trainingSummary';
 import {
   MAX_SPLIT_DAYS,
   SPLIT_TEMPLATES,
   splitFromTemplate,
-  splitCalendarPreview,
   splitPreview,
   splitPreviewLabel,
 } from './trainingSplit';
@@ -161,7 +162,17 @@ function SplitScheduleEditor({
   const previewAnchor = split.start_date > today ? split.start_date : today;
   const previewStart = addDays(previewAnchor, previewWeek * 7);
   const preview = splitPreview(split, previewStart);
-  const months = calendarView ? splitCalendarPreview(split, previewAnchor, previewMonth) : [];
+  const months = calendarView ? calendarMonths(previewAnchor, 2, previewMonth) : [];
+  const plannedDays = months.flatMap((month) =>
+    splitPreview(split, month.first, month.cells.filter(Boolean).length).map(
+      ({ date, typeId }) => ({
+        date,
+        label: labelFor(typeId),
+        shortLabel: typeId === undefined ? '—' : splitPreviewLabel(labelFor(typeId)),
+        color: typeId === undefined ? undefined : colourFor(typeId),
+      }),
+    ),
+  );
   const monthLabel = (date: string) =>
     parseLocalDate(date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
   const disabled = saving || creating;
@@ -544,51 +555,8 @@ function SplitScheduleEditor({
               </span>
             </div>
             {calendarView ? (
-              <div className="split-calendar">
-                {months.map((month) => (
-                  <section
-                    className="split-calendar-month"
-                    key={month.first}
-                    aria-label={month.title}
-                  >
-                    <h3>{month.title}</h3>
-                    <div className="split-calendar-weekdays" aria-hidden="true">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                        <span key={day}>{day}</span>
-                      ))}
-                    </div>
-                    <ol className="split-preview split-calendar-days">
-                      {month.cells.map((day, index) =>
-                        day ? (
-                          <li
-                            key={day.date}
-                            data-date={day.date}
-                            aria-current={day.date === today ? 'date' : undefined}
-                            className={day.typeId === undefined ? 'is-unstarted' : undefined}
-                            style={
-                              { '--split-type-colour': colourFor(day.typeId) } as CSSProperties
-                            }
-                            aria-label={`${parseLocalDate(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}: ${labelFor(day.typeId)}`}
-                          >
-                            <b>{parseLocalDate(day.date).getDate()}</b>
-                            <i aria-hidden="true" />
-                            <strong title={labelFor(day.typeId)}>
-                              {day.typeId === undefined
-                                ? '—'
-                                : splitPreviewLabel(labelFor(day.typeId))}
-                            </strong>
-                          </li>
-                        ) : (
-                          <li
-                            key={`blank-${index}`}
-                            className="split-calendar-blank"
-                            aria-hidden="true"
-                          />
-                        ),
-                      )}
-                    </ol>
-                  </section>
-                ))}
+              <div className="calendar-panel">
+                <WorkoutCalendar preview={{ from: months[0].first, days: plannedDays }} />
               </div>
             ) : (
               <ol className="split-preview">

@@ -1,37 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   splitFromTemplate,
-  splitCalendarPreview,
   splitPreview,
   splitPreviewLabel,
   splitStepOnDate,
 } from './trainingSplit';
 
 describe('training split calendar cycles', () => {
-  it('lays out two full months across year boundaries without resetting the cycle', () => {
-    const split = splitFromTemplate('ppl', '2026-12-30');
-    const months = splitCalendarPreview(split, '2026-12-31');
-    expect(months.map((month) => month.title)).toEqual(['December 2026', 'January 2027']);
-    expect(months[0].cells[0]).toBeNull(); // December starts on Tuesday.
-    const days = months.flatMap((month) => month.cells.filter((day) => day !== null));
-    expect(days).toHaveLength(62);
-    expect(days.find((day) => day.date === '2026-12-29')?.typeId).toBeUndefined();
-    expect(days.find((day) => day.date === '2026-12-30')?.typeId).toBe('push');
-    expect(days.find((day) => day.date === '2027-01-02')?.typeId).toBeNull();
-    expect(days.find((day) => day.date === '2027-01-03')?.typeId).toBe('push');
-    expect(splitCalendarPreview(split, '2026-12-31', 2)[0].first).toBe('2027-02-01');
-  });
-
-  it('includes leap day and aligns Sunday at the end of a Monday-first week', () => {
-    const months = splitCalendarPreview(splitFromTemplate('fbeod', '2028-02-01'), '2028-02-29');
-    const february = months[0].cells.filter((day) => day !== null);
-    expect(february).toHaveLength(29);
-    expect(february.at(-1)).toEqual({ date: '2028-02-29', typeId: 'full_body' });
-    const sunday = splitCalendarPreview(splitFromTemplate('custom', '2026-11-01'), '2026-11-01')[0];
-    expect(sunday.cells.slice(0, 6)).toEqual(Array(6).fill(null));
-    expect(sunday.cells[6]?.date).toBe('2026-11-01');
-    expect(sunday.cells.length % 7).toBe(0);
-  });
   it('keeps A/B workout labels distinct in compact previews', () => {
     expect(splitPreviewLabel('Full body A')).toBe('Full A');
     expect(splitPreviewLabel('Full body B')).toBe('Full B');

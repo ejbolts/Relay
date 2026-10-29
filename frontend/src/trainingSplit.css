@@ -339,52 +339,6 @@
   font-weight: 500;
   color: var(--p-ink-2);
 }
-.split-calendar {
-  display: grid;
-  gap: 1.1rem;
-}
-.split-calendar-month h3 {
-  margin: 0 0 0.6rem;
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: var(--p-ink);
-}
-.split-calendar-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.3rem;
-  margin-bottom: 0.4rem;
-  text-align: center;
-  font-size: 0.6rem;
-  color: var(--p-muted);
-}
-.split-calendar-days li {
-  min-height: 46px;
-  gap: 0.1rem;
-  padding: 0.3rem 0.1rem;
-  border-radius: 7px;
-}
-.split-calendar-days b {
-  font-size: 0.75rem;
-}
-.split-calendar-days i {
-  width: 16px;
-  margin: 0.1rem 0;
-}
-.split-calendar-days [aria-current='date'] {
-  border-color: var(--p-accent);
-  box-shadow: inset 0 0 0 1px var(--p-accent);
-}
-.split-calendar-days .is-unstarted {
-  color: var(--p-muted);
-}
-.split-calendar-days .is-unstarted i {
-  background: transparent;
-}
-.split-calendar-days .split-calendar-blank {
-  border: 0;
-  background: transparent;
-}
 .split-save {
   display: grid;
   gap: 0.6rem;
