@@ -40,7 +40,7 @@
       "title": "FFMI and your natural potential",
       "description": "Compare your FFMI with research reference levels and estimate potential from your profile. The question-marks offer brief help, then an in-app methodology explanation. Estimates are guides rather than universal ceilings.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/67207e0fe9f6ea03cf4b4bab4513784827de13f5/docs/screenshots/releases/1.1.0-ffmi.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/0909a70115f3035e9e9388cc4550cc7354482d39/docs/screenshots/releases/1.1.0-ffmi.png",
         "alt": "Body FFMI card showing 21.0, an Estimated potential marker at 24.7, exceptional reported natural reference at 28.0, and estimated body composition values. Synthetic sample data."
       }
     },
