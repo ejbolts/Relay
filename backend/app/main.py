@@ -60,6 +60,7 @@ from .schemas import (
     SessionCreate,
     SessionRead,
 )
+from .session_events import session_router
 from .sharing import sharing_router
 from .storage import (
     UploadValidationError,
@@ -629,6 +630,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return load_session(db, user.id, session.id)
 
     app.include_router(auth_router)
+    app.include_router(session_router)
     app.include_router(profile_router)
     app.include_router(admin_router)
     app.include_router(feedback_router)
