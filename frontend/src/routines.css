@@ -120,6 +120,10 @@
   border-radius: 14px;
   overflow: hidden;
 }
+.routine-card:has(> summary .routine-active) {
+  border-color: #3987e5;
+  box-shadow: inset 0 0 0 1px #3987e5;
+}
 .routine-panel-embedded .routine-card {
   border-radius: var(--p-radius);
   background: var(--p-surface);

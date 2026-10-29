@@ -10,7 +10,11 @@ _Relay was called Gym Logger before version 1.0._
 
 ![Importing a friend's shared routine, adapting its weight, finding the private copy in My splits and making it the active split](screenshots/releases/1.1.0-imported-splits.gif)
 
-_Save a full routine from a profile, then adapt it and choose **View my splits**. The imported copy appears in **Your splits > My splits**, where it can be edited or used; the split in use is marked **Active**. Saves and activation appear in temporary, dismissible popups. **Schedule** keeps the active cycle available. Isolated synthetic accounts._
+_Save a full routine from a profile, then adapt it and choose **View my splits**. The imported copy appears in **Your splits > My splits**, where it can be edited or used; the split in use is marked **Active** with a blue card border. Saves and activation appear in temporary, dismissible popups. **Schedule** keeps the active cycle available. Isolated synthetic accounts._
+
+![Saved splits with a blue border around the active plan](screenshots/releases/1.1.0-active-split.png)
+
+_The active split has a blue border as well as its Active badge, so it stands out when cards are collapsed. Isolated sample data._
 
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
@@ -84,7 +88,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- **Share and copy routines:** keep multiple full splits in **Profile > Routines**, with workout and rest days, exercises, sets and starting weights. Create a routine or capture your current split using the latest completed sets for each workout type. Choose **Show on my profile** for each routine. Friends can import independent private copies and adapt exercises and weights without changing the original. **View my splits** opens the imported copy in **Your splits > My splits**; find, edit and use all saved plans there, including private imports. **Schedule** shows the active cycle. **Use split** replaces the active schedule from your chosen start date and marks that routine **Active**. Routine saves and split activation show temporary, dismissible popups; Up next prefills planned sets and leaves them unchecked. Profile privacy, friends-only access and blocks also protect routine access. Unsharing or deleting an original stops future copies; friends keep copies they already saved.
+- **Share and copy routines:** keep multiple full splits in **Profile > Routines**, with workout and rest days, exercises, sets and starting weights. Create a routine or capture your current split using the latest completed sets for each workout type. Choose **Show on my profile** for each routine. Friends can import independent private copies and adapt exercises and weights without changing the original. **View my splits** opens the imported copy in **Your splits > My splits**; find, edit and use all saved plans there, including private imports. **Schedule** shows the active cycle. **Use split** replaces the active schedule from your chosen start date and marks that routine **Active** with a blue border. Routine saves and split activation show temporary, dismissible popups; Up next prefills planned sets and leaves them unchecked. Profile privacy, friends-only access and blocks also protect routine access. Unsharing or deleting an original stops future copies; friends keep copies they already saved.
 - New workouts cannot use removed workout types; previously saved workouts of those types remain editable.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
