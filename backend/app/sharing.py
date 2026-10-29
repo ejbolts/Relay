@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, selectinload
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
+from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
 from .models import (
@@ -163,6 +164,7 @@ class SharedBodyWeightGoal(BaseModel):
 
 
 class SharedGoals(BaseModel):
+    cardio_goals: list[CardioGoalWeek]
     body_weight: SharedBodyWeightGoal | None
     zone2: Zone2WeekRead
 
@@ -592,8 +594,13 @@ def shared_goals(db: Session, user_id: str) -> SharedGoals:
         )
     )
     return SharedGoals(
+        cardio_goals=cardio_goal_weeks(
+            sessions, week, cardio_preferences(db, user_id), date.today()
+        ),
         body_weight=SharedBodyWeightGoal.model_validate(goal) if goal else None,
-        zone2=zone2_week(sessions, week, preferences.zone2_goal_minutes),
+        zone2=zone2_week(
+            sessions, week, preferences.zone2_goal_minutes, cardio_preferences(db, user_id)
+        ),
     )
 
 
@@ -610,7 +617,11 @@ def shared_cardio(db: Session, user_id: str, sharing: ProfileSharing) -> list[Sh
         .order_by(CardioSession.session_date.desc(), CardioSession.created_at.desc())
         .limit(RECENT_CARDIO_SESSIONS)
     )
-    shared = [SharedCardioSession.model_validate(session) for session in sessions]
+    personal = cardio_preferences(db, user_id)
+    shared = []
+    for session in sessions:
+        classify_session(session, personal)
+        shared.append(SharedCardioSession.model_validate(session))
     if not sharing.share_notes:
         for session in shared:
             session.notes = None

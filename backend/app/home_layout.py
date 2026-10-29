@@ -32,6 +32,18 @@ OPTIONAL_CHECK_INS = ["bodyweight-check-in", "body-fat-check-in"]
 LAYOUT_KEY = "home_layout"
 
 
+class CardioGoalCardSettings(BaseModel):
+    # None tracks every configured goal; a zone tracks that zone's goal only.
+    zone: int | None = Field(default=None, ge=1, le=5)
+    style: Literal["progress", "ring", "list"] = "progress"
+
+
+class HomeSectionSettings(BaseModel):
+    """Per-section display options. Add a field here when a section becomes configurable."""
+
+    zone2: CardioGoalCardSettings = Field(default_factory=CardioGoalCardSettings)
+
+
 class HomeLayout(BaseModel):
     order: list[HomeSection] = Field(
         default_factory=lambda: SECTION_IDS.copy(), max_length=len(SECTION_IDS)
@@ -42,6 +54,7 @@ class HomeLayout(BaseModel):
     widths: dict[HomeSection, Literal["compact", "full", "third"]] = Field(
         default_factory=dict, max_length=len(SECTION_IDS)
     )
+    settings: HomeSectionSettings = Field(default_factory=HomeSectionSettings)
 
     @model_validator(mode="before")
     @classmethod

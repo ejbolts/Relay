@@ -31,6 +31,13 @@ from .auth import CurrentUser, as_utc, get_current_user
 from .body_measurement_csv import export_body_measurements, import_body_measurements
 from .cardio_energy import cardio_energy_periods
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
+from .cardio_zones import (
+    CardioPreferences,
+    cardio_goal_weeks,
+    cardio_preferences,
+    classify_session,
+    effective_zone,
+)
 from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
@@ -720,9 +727,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             )
         )
         session.intensity = "Imported from workout"
-        if created:
-            session.zone = "Zone 2"
-            session.qualifies_zone2 = True
+        classify_session(session, cardio_preferences(db, workout.user_id), new=created)
         session.notes = movement.notes
     for movement_index, session in existing.items():
         if movement_index not in imported_indexes:
@@ -1210,6 +1215,11 @@ def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
         zone2_goal = max(1, int(get_setting(db, user_id, "zone2_goal_minutes", "150")))
     except ValueError:
         zone2_goal = 150
+    if get_setting(db, user_id, "cardio_preferences", ""):
+        zone2_goal = next(
+            (goal.minutes for goal in cardio_preferences(db, user_id).goals if goal.zone == 2),
+            150,
+        )
     try:
         muscle_set_goal = int(get_setting(db, user_id, "weekly_muscle_set_goal", "10"))
         if not 1 <= muscle_set_goal <= 1000:
@@ -1228,12 +1238,14 @@ def zone2_week(
     sessions: list[CardioSession],
     week: date,
     goal: int,
+    preferences: CardioPreferences,
 ) -> Zone2WeekRead:
     end = week + timedelta(days=6)
     session_minutes = sum(
         item.duration_minutes
         for item in sessions
-        if item.qualifies_zone2 and week <= item.session_date <= min(end, date.today())
+        if effective_zone(item, preferences) == 2
+        and week <= item.session_date <= min(end, date.today())
     )
     completed = session_minutes
     return Zone2WeekRead(
@@ -1242,8 +1254,8 @@ def zone2_week(
         goal_minutes=goal,
         completed_minutes=completed,
         remaining_minutes=max(0, goal - completed),
-        percentage=round(min(completed / goal * 100, 100), 1),
-        complete=completed >= goal,
+        percentage=round(min(completed / goal * 100, 100), 1) if goal else 0,
+        complete=goal > 0 and completed >= goal,
     )
 
 
@@ -1379,6 +1391,25 @@ def update_training_preferences(
     return training_preferences(db, user.id)
 
 
+@router.get("/cardio-preferences", response_model=CardioPreferences)
+def get_cardio_preferences(db: DbSession, user: CurrentUser) -> CardioPreferences:
+    return cardio_preferences(db, user.id)
+
+
+@router.put("/cardio-preferences", response_model=CardioPreferences)
+def update_cardio_preferences(
+    payload: CardioPreferences, db: DbSession, user: CurrentUser
+) -> CardioPreferences:
+    set_setting(db, user.id, "cardio_preferences", payload.model_dump_json())
+    zone2_goal = next((goal.minutes for goal in payload.goals if goal.zone == 2), 150)
+    set_setting(db, user.id, "zone2_goal_minutes", str(zone2_goal))
+    for session in db.scalars(select(CardioSession).where(CardioSession.user_id == user.id)):
+        classify_session(session, payload)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return payload
+
+
 @router.get("/cardio", response_model=CardioOverviewRead)
 def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
     preferences = training_preferences(db, user.id)
@@ -1395,14 +1426,20 @@ def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
         )
     )
     current_start = start_of_week(date.today(), preferences.week_start)
+    personal = cardio_preferences(db, user.id)
+    for session in sessions:
+        classify_session(session, personal)
     return CardioOverviewRead(
+        cardio_preferences=personal,
+        goal_weeks=cardio_goal_weeks(sessions, current_start, personal, date.today()),
         preferences=preferences,
-        current_week=zone2_week(sessions, current_start, preferences.zone2_goal_minutes),
+        current_week=zone2_week(sessions, current_start, preferences.zone2_goal_minutes, personal),
         previous_weeks=[
             zone2_week(
                 sessions,
                 current_start - timedelta(days=7 * offset),
                 preferences.zone2_goal_minutes,
+                personal,
             )
             for offset in range(1, 9)
         ],
@@ -1495,6 +1532,7 @@ def create_cardio_session(
             source_movement_index=0,
         )
         db.add(session)
+        classify_session(session, cardio_preferences(db, user.id), new=True)
         rebuild_personal_records(db, user.id)
         bump_workout_cache_revision(db, user.id)
         db.commit()
@@ -1502,6 +1540,7 @@ def create_cardio_session(
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
+    classify_session(session, cardio_preferences(db, user.id), new=True)
     db.add(session)
     bump_workout_cache_revision(db, user.id)
     db.commit()
@@ -1530,7 +1569,11 @@ def update_cardio_session(
     for key, value in payload.model_dump(exclude={"exercise_id"}).items():
         if key in optional_metrics and key not in payload.model_fields_set:
             continue
+        # Zones come from heart rate; only an explicit label replaces the saved zone.
+        if key in {"zone", "qualifies_zone2"} and payload.zone is None:
+            continue
         setattr(session, key, value)
+    classify_session(session, cardio_preferences(db, user.id))
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
@@ -1630,6 +1673,7 @@ def update_cardio_metrics(
         raise HTTPException(status_code=404, detail="Cardio session was not found.")
     for key in payload.model_fields_set:
         setattr(session, key, getattr(payload, key))
+    classify_session(session, cardio_preferences(db, user.id))
     if sync_cardio_session_metrics_to_workout_sets(db, session, payload.model_fields_set):
         rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
@@ -2604,6 +2648,9 @@ def dashboard(
     )
     muscle_totals = muscle_volume(workouts, week_start, today)
     return DashboardRead(
+        cardio_goals=cardio_goal_weeks(
+            cardio_sessions, cardio_week_start, cardio_preferences(db, user.id), today
+        ),
         workouts_this_week=len(this_week),
         sets_this_week=sum(len(completed_working_sets(workout)) for workout in this_week),
         volume_this_week_kg=round(volume_this_week, 1),
@@ -2626,6 +2673,7 @@ def dashboard(
             cardio_sessions,
             cardio_week_start,
             preferences.zone2_goal_minutes,
+            cardio_preferences(db, user.id),
         ),
         recent_workouts=workouts[:5],
         history=workout_history_summary(db, user.id),
