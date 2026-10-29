@@ -42,7 +42,7 @@
       "title": "FFMI and model references",
       "description": "Compare your FFMI with a population-based model reference, rather than a personal prediction. The question-marks explain the calculation and limitations in a short in-app summary, without external source links.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/0909a70115f3035e9e9388cc4550cc7354482d39/docs/screenshots/releases/1.1.0-ffmi.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/76c85c179ed6d78f6f2e60850189a7aa37d4a627/docs/screenshots/releases/1.1.0-ffmi.png",
         "alt": "Body FFMI card showing 21.0, a Model reference marker at 24.7, and reference lean mass, reference weight and lean mass gap. Synthetic sample data."
       }
     },
