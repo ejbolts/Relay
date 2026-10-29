@@ -26,7 +26,7 @@ const CALENDAR_LOAD_OLDER_SCREENS = 1.5;
 
 type CalendarPreview = {
   from: string;
-  days: Array<{ date: string; label: string; shortLabel?: string; color?: string }>;
+  days: Array<{ date: string; label: string; color?: string }>;
 };
 const EMPTY_ENTRIES: DashboardData['heatmap'] = [];
 
@@ -265,11 +265,6 @@ export function WorkoutCalendar({
                               )
                             )}
                           </span>
-                          {planned && (
-                            <span className="calendar-day-label">
-                              {planned.shortLabel ?? planned.label}
-                            </span>
-                          )}
                         </button>
                       );
                     })}

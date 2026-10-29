@@ -1615,16 +1615,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .calendar-panel .calendar-preview .calendar-day.planned {
   color: var(--p-ink-2);
 }
-.calendar-day-label {
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-  font-size: 0.6rem;
-  line-height: 1;
-}
-
 .calendar-day-dots i {
   width: 0.375rem;
   height: 0.375rem;

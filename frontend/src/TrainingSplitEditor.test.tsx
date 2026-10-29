@@ -257,7 +257,7 @@ it('previews FBEOD into the following week without resetting it', async () => {
   );
 });
 
-it('toggles a two-month calendar, pages across years and preserves unsaved edits and week position', async () => {
+it('toggles the shared current/next-month calendar without paging or losing unsaved edits and week position', async () => {
   await mount();
   await click('Full body every other day (FBEOD)');
   await input('input[type="text"]', 'Unsaved plan');
@@ -265,18 +265,20 @@ it('toggles a two-month calendar, pages across years and preserves unsaved edits
   const weekStart = host.querySelector('.split-preview > li')?.getAttribute('aria-label');
   await click('Two-month calendar');
   expect(button('Two-month calendar').getAttribute('aria-pressed')).toBe('true');
-  expect(host.querySelectorAll('.calendar-month h3').length).toBe(2);
-  expect(host.querySelector('.calendar-month h3')?.textContent).toBe('October 2026');
+  expect([...host.querySelectorAll('.calendar-month h3')].map((el) => el.textContent)).toEqual([
+    'October 2026',
+    'November 2026',
+  ]);
   expect(host.querySelector('[data-date="2026-10-25"]')?.getAttribute('aria-label')).toContain(
     'Not started',
   );
   expect(host.querySelector('[aria-current="date"]')?.getAttribute('data-date')).toBe('2026-10-26');
-  expect(host.querySelector('[data-date="2026-11-02"]')?.textContent).toContain('Rest');
-  expect(button('Previous two months').disabled).toBe(true);
-  await click('Next two months');
-  expect(host.querySelector('.calendar-month h3')?.textContent).toBe('December 2026');
-  expect(host.querySelectorAll('.calendar-month h3')[1].textContent).toBe('January 2027');
-  await click('Previous two months');
+  expect(host.querySelector('[data-date="2026-11-02"]')?.getAttribute('aria-label')).toContain(
+    'Rest',
+  );
+  expect(
+    host.querySelector('[aria-label="Previous two months"], [aria-label="Next two months"]'),
+  ).toBeNull();
   await click('Two-month calendar');
   expect(host.querySelector('.calendar-scroll')).toBeNull();
   expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toBe(weekStart);
@@ -284,22 +286,36 @@ it('toggles a two-month calendar, pages across years and preserves unsaved edits
   expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('Unsaved plan');
 });
 
-it('updates the month calendar immediately after cycle edits and resets paging for a future start', async () => {
+it('updates planned dates after edits while keeping the preview anchored to the current and next month', async () => {
   await mount();
   await click('Two-month calendar');
   await input('[aria-label="Day 1 workout type"]', 'cardio');
-  expect(host.querySelector('[data-date="2026-10-26"]')?.textContent).toContain('Cardio');
-  await click('Next two months');
-  await input('input[type="date"]', '2027-02-15');
-  expect(host.querySelector('.calendar-month h3')?.textContent).toBe('February 2027');
-  expect(button('Previous two months').disabled).toBe(true);
-  expect(host.querySelector('[data-date="2027-02-14"]')?.getAttribute('aria-label')).toContain(
+  expect(host.querySelector('[data-date="2026-10-26"]')?.getAttribute('aria-label')).toContain(
+    'Cardio',
+  );
+  await input('input[type="date"]', '2026-10-28');
+  expect(host.querySelector('[data-date="2026-10-27"]')?.getAttribute('aria-label')).toContain(
     'Not started',
   );
-  expect(host.querySelector('[data-date="2027-02-15"]')?.textContent).toContain('Cardio');
+  expect(host.querySelector('[data-date="2026-10-28"]')?.getAttribute('aria-label')).toContain(
+    'Cardio',
+  );
   await click('Rest day');
-  expect(host.querySelector('[data-date="2027-02-18"]')?.textContent).toContain('Rest');
-  expect(host.querySelector('[data-date="2027-02-19"]')?.textContent).toContain('Cardio');
+  expect(host.querySelector('[data-date="2026-10-31"]')?.getAttribute('aria-label')).toContain(
+    'Rest',
+  );
+  expect(host.querySelector('[data-date="2026-11-01"]')?.getAttribute('aria-label')).toContain(
+    'Cardio',
+  );
+  await input('input[type="date"]', '2027-02-15');
+  expect([...host.querySelectorAll('.calendar-month h3')].map((el) => el.textContent)).toEqual([
+    'October 2026',
+    'November 2026',
+  ]);
+  expect(host.querySelector('[data-date="2027-02-15"]')).toBeNull();
+  expect(host.querySelector('[data-date="2026-11-30"]')?.getAttribute('aria-label')).toContain(
+    'Not started',
+  );
 });
 
 it('saves consecutive rest days, reopens them and lets a rest day become a workout', async () => {

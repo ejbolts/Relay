@@ -100,9 +100,9 @@ it('renders two future schedule months as planned dates, without workout creatio
         preview={{
           from: '2026-12-01',
           days: [
-            { date: '2026-12-30', label: 'Full body A', shortLabel: 'Full A', color: '#14b8a6' },
+            { date: '2026-12-30', label: 'Full body A', color: '#14b8a6' },
             { date: '2026-12-31', label: 'Rest', color: '#828b92' },
-            { date: '2027-01-01', label: 'Not started', shortLabel: '—' },
+            { date: '2027-01-01', label: 'Not started' },
           ],
         }}
       />,
@@ -118,9 +118,9 @@ it('renders two future schedule months as planned dates, without workout creatio
   expect(host.querySelector('[data-date="2026-12-30"]')?.getAttribute('aria-label')).toContain(
     'Full body A',
   );
-  expect(host.querySelector('[data-date="2026-12-30"] .calendar-day-label')?.textContent).toBe(
-    'Full A',
+  expect(host.querySelector('.calendar-day-label')).toBeNull();
+  expect(host.querySelector('[data-date="2026-12-31"]')?.getAttribute('aria-label')).toContain(
+    'Rest',
   );
-  expect(host.querySelector('[data-date="2026-12-31"]')?.textContent).toContain('Rest');
   expect(host.querySelector('[data-date="2027-01-01"] .calendar-day-dots i')).toBeNull();
 });

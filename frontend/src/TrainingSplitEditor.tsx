@@ -98,7 +98,6 @@ function SplitScheduleEditor({
   const [creating, setCreating] = useState(false);
   const [typeName, setTypeName] = useState('');
   const [previewWeek, setPreviewWeek] = useState(0);
-  const [previewMonth, setPreviewMonth] = useState(0);
   const [calendarView, setCalendarView] = useState(false);
   const busy = useRef(false);
   const nameInput = useRef<HTMLInputElement>(null);
@@ -162,13 +161,12 @@ function SplitScheduleEditor({
   const previewAnchor = split.start_date > today ? split.start_date : today;
   const previewStart = addDays(previewAnchor, previewWeek * 7);
   const preview = splitPreview(split, previewStart);
-  const months = calendarView ? calendarMonths(previewAnchor, 2, previewMonth) : [];
+  const months = calendarView ? calendarMonths(today, 2) : [];
   const plannedDays = months.flatMap((month) =>
     splitPreview(split, month.first, month.cells.filter(Boolean).length).map(
       ({ date, typeId }) => ({
         date,
         label: labelFor(typeId),
-        shortLabel: typeId === undefined ? '—' : splitPreviewLabel(labelFor(typeId)),
         color: typeId === undefined ? undefined : colourFor(typeId),
       }),
     ),
@@ -304,7 +302,6 @@ function SplitScheduleEditor({
                 onClick={() => {
                   update(splitFromTemplate('custom', split.start_date));
                   setPreviewWeek(0);
-                  setPreviewMonth(0);
                   nameInput.current?.focus();
                 }}
               >
@@ -324,7 +321,6 @@ function SplitScheduleEditor({
                   onClick={() => {
                     update(splitFromTemplate(preset.id, split.start_date));
                     setPreviewWeek(0);
-                    setPreviewMonth(0);
                   }}
                 >
                   <span>
@@ -366,7 +362,6 @@ function SplitScheduleEditor({
                   if (event.target.value) {
                     update({ ...split, start_date: event.target.value });
                     setPreviewWeek(0);
-                    setPreviewMonth(0);
                   }
                 }}
               />
@@ -510,7 +505,9 @@ function SplitScheduleEditor({
           </section>
           <section aria-labelledby="split-preview-title">
             <div className="split-section-heading split-preview-heading">
-              <h2 id="split-preview-title">{calendarView ? 'Next 2 months' : 'Next 7 days'}</h2>
+              <h2 id="split-preview-title" className={calendarView ? 'sr-only' : undefined}>
+                {calendarView ? 'Split calendar' : 'Next 7 days'}
+              </h2>
               <span className="split-preview-controls">
                 <button
                   type="button"
@@ -522,36 +519,32 @@ function SplitScheduleEditor({
                 >
                   <Icon name="calendar" />
                 </button>
-                <button
-                  type="button"
-                  className="split-icon-button"
-                  aria-label={calendarView ? 'Previous two months' : 'Previous preview week'}
-                  disabled={calendarView ? previewMonth === 0 : previewWeek === 0}
-                  onClick={() =>
-                    calendarView
-                      ? setPreviewMonth((month) => Math.max(0, month - 2))
-                      : setPreviewWeek((week) => Math.max(0, week - 1))
-                  }
-                >
-                  <Icon name="chevron-left" />
-                </button>
+                {!calendarView && (
+                  <button
+                    type="button"
+                    className="split-icon-button"
+                    aria-label="Previous preview week"
+                    disabled={previewWeek === 0}
+                    onClick={() => setPreviewWeek((week) => Math.max(0, week - 1))}
+                  >
+                    <Icon name="chevron-left" />
+                  </button>
+                )}
                 <span>
                   {calendarView
                     ? `${monthLabel(months[0].first)} – ${monthLabel(months[1].first)}`
                     : `${shortDate(previewStart)} – ${shortDate(addDays(previewStart, 6))}`}
                 </span>
-                <button
-                  type="button"
-                  className="split-icon-button"
-                  aria-label={calendarView ? 'Next two months' : 'Next preview week'}
-                  onClick={() =>
-                    calendarView
-                      ? setPreviewMonth((month) => month + 2)
-                      : setPreviewWeek((week) => week + 1)
-                  }
-                >
-                  <Icon name="chevron-right" />
-                </button>
+                {!calendarView && (
+                  <button
+                    type="button"
+                    className="split-icon-button"
+                    aria-label="Next preview week"
+                    onClick={() => setPreviewWeek((week) => week + 1)}
+                  >
+                    <Icon name="chevron-right" />
+                  </button>
+                )}
               </span>
             </div>
             {calendarView ? (

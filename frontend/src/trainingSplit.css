@@ -273,6 +273,7 @@
 }
 .split-preview-controls {
   display: flex;
+  margin-inline-start: auto;
   gap: 0.15rem;
   align-items: center;
 }
