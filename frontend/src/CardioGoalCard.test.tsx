@@ -32,7 +32,10 @@ describe('Home cardio goal card', () => {
 
   it('renders ring and list designs for every goal', () => {
     const rings = render({ zone: null, style: 'ring' });
-    expect(rings.match(/cardio-goal-ring\b/g)).toHaveLength(2);
+    expect(rings.match(/<svg class="cardio-goal-ring/g)).toHaveLength(2);
+    // Rings for several goals scale with the card instead of using a fixed size.
+    expect(rings).not.toMatch(/<svg[^>]*width=/);
+    expect(rings).toContain('<b>Z4</b>');
     expect(rings).toContain('cardio-goal-ring complete');
     expect(rings).toContain('1 of 2 goals reached');
     const list = render({ zone: null, style: 'list' });

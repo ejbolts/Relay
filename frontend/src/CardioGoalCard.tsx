@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { trackedCardioGoals } from './cardioZones';
 import { Meter } from './PulseCharts';
 import type { CardioGoalCardSettings } from './homeLayout';
@@ -14,15 +15,24 @@ function status(goals: CardioGoalWeek[], daysLeft: number | null) {
   return `${goals[0].remaining_minutes} min to go${days}`;
 }
 
-function Ring({ goal, size }: { goal: CardioGoalWeek; size: number }) {
+/** A fluid ring fills its cell; its viewBox keeps the stroke proportional. */
+function Ring({
+  goal,
+  size,
+  fluid = false,
+}: {
+  goal: CardioGoalWeek;
+  size: number;
+  fluid?: boolean;
+}) {
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const ratio = goal.goal_minutes ? Math.min(1, goal.completed_minutes / goal.goal_minutes) : 0;
   return (
     <svg
       className={`cardio-goal-ring${goal.complete ? ' complete' : ''}`}
-      width={size}
-      height={size}
+      width={fluid ? undefined : size}
+      height={fluid ? undefined : size}
       viewBox={`0 0 ${size} ${size}`}
       role="meter"
       aria-label={`Zone ${goal.zone} minutes this week`}
@@ -82,11 +92,23 @@ export function CardioGoalCard({
             <small>of {single.goal_minutes} min</small>
           </span>
         ) : (
-          <span className="cardio-goal-rings">
+          <span
+            className="cardio-goal-rings"
+            style={
+              {
+                '--ring-count': tracked.length,
+                // Compact cards balance rows: 4 as 2 × 2, 5 as 3 + 2.
+                '--ring-columns':
+                  tracked.length <= 3 ? tracked.length : Math.ceil(tracked.length / 2),
+              } as CSSProperties
+            }
+          >
             {tracked.map((goal) => (
               <span key={goal.zone}>
-                <Ring goal={goal} size={40} />
-                <b>Z{goal.zone}</b>
+                <span className="cardio-goal-ring-value">
+                  <Ring goal={goal} size={64} fluid />
+                  <b>Z{goal.zone}</b>
+                </span>
                 <small>
                   {goal.completed_minutes}/{goal.goal_minutes}
                 </small>

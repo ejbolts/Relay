@@ -247,25 +247,50 @@
   font-size: 0.8125rem;
   font-weight: 500;
 }
+/* Rings share the card width and grow with it: balanced rows in a compact card, one row when wide. */
 .cardio-goal-card .cardio-goal-rings {
+  --cols: var(--ring-columns);
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  margin-top: 0.5rem;
+  justify-content: center;
+  gap: 0.5rem 0.375rem;
+  margin-top: 0.625rem;
+  container: cardio-rings / inline-size;
+}
+@container cardio-rings (min-width: 15rem) {
+  .cardio-goal-card .cardio-goal-rings > span {
+    --cols: var(--ring-count);
+  }
 }
 .cardio-goal-card .cardio-goal-rings > span {
   display: grid;
+  flex: 0 0 calc((100% - (var(--cols) - 1) * 0.375rem) / var(--cols));
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
+  container-type: inline-size;
   font-variant-numeric: tabular-nums;
 }
+.cardio-goal-rings .cardio-goal-ring-value {
+  width: min(100%, 5rem);
+}
+.cardio-goal-rings .cardio-goal-ring {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
 .cardio-goal-rings b {
+  position: absolute;
   color: var(--p-ink);
-  font-size: 0.75rem;
+  font-size: clamp(0.75rem, 22cqi, 1.125rem);
+  font-weight: 650;
 }
 .cardio-goal-rings small {
   color: var(--p-muted);
-  font-size: 0.6875rem;
+  font-size: clamp(0.625rem, 17cqi, 0.8125rem);
+  white-space: nowrap;
 }
 
 .cardio-card-settings {
