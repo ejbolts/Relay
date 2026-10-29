@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
@@ -8,6 +8,7 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { formatWeight } from './weightUnits';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
+import { SPLIT_TEMPLATES } from './trainingSplit';
 import type { Exercise, Routine, RoutineDay, RoutineSet, TrainingSplit } from './types';
 import './routines.css';
 
@@ -20,7 +21,7 @@ const emptySet = (): RoutineSet => ({
   set_type: 'normal',
 });
 const failure = (reason: unknown) =>
-  reason instanceof Error ? reason.message : 'Could not save the routine. Try again.';
+  reason instanceof Error ? reason.message : 'Could not save the split. Try again.';
 const dayCount = (days: RoutineDay[]) => `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
 
 function RoutinePattern({ days }: { days: RoutineDay[] }) {
@@ -37,19 +38,62 @@ function RoutinePattern({ days }: { days: RoutineDay[] }) {
   );
 }
 
+function RoutineCycle({
+  routine,
+  unit,
+}: {
+  routine: Routine;
+  unit: ReturnType<typeof useWeightUnit>;
+}) {
+  return (
+    <ol className="routine-cycle">
+      {routine.days.map((day, index) => (
+        <li
+          key={index}
+          className={day.workout_type ? undefined : 'is-rest'}
+          style={day.workout_type ? { borderColor: day.workout_type.color } : undefined}
+        >
+          <span>Day {index + 1}</span>
+          <strong>
+            {day.workout_type?.name ?? (day.workout_type_id ? 'Removed type' : 'Rest')}
+          </strong>
+          {day.movements.map((movement, mi) => (
+            <div className="routine-exercise" key={mi}>
+              <strong>{movement.exercise.name}</strong>
+              <span>
+                {movement.sets
+                  .map((set) =>
+                    movement.exercise.kind === 'cardio'
+                      ? `${set.duration_seconds == null ? '–' : Number((set.duration_seconds / 60).toFixed(1))} min${set.distance_km == null ? '' : ` · ${set.distance_km} km`}`
+                      : `${set.reps ?? '–'} × ${set.weight_kg == null ? '–' : formatWeight(set.weight_kg, unit)}`,
+                  )
+                  .join(' / ')}
+              </span>
+            </div>
+          ))}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function RoutinePanel({
   ownerId,
   own,
   active = true,
   revision,
-  heading = 'Routines',
+  heading = 'Splits',
   embedded = false,
   activeId,
   initialOpenId,
   onOpenSplits,
   onUsed,
   onChanged,
+  trainingSplit,
+  renderPreview,
 }: {
+  trainingSplit?: TrainingSplit | null;
+  renderPreview?: (split: TrainingSplit) => ReactNode;
   ownerId: string;
   own: boolean;
   active?: boolean;
@@ -76,6 +120,26 @@ export function RoutinePanel({
   const [copied, setCopied] = useState<string[]>([]);
   const [importedId, setImportedId] = useState<string | null>(null);
   const locked = useRef(false);
+  const [expandedId, setExpandedId] = useState<string | null>(initialOpenId ?? activeId ?? null);
+  const previousActive = useRef(activeId);
+  const panelRef = useRef<HTMLElement>(null);
+  const focusCard = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeId !== previousActive.current) {
+      previousActive.current = activeId;
+      if (activeId) setExpandedId(activeId);
+    }
+  }, [activeId]);
+  useEffect(() => {
+    if (!embedded || !focusCard.current) return;
+    const card = [...(panelRef.current?.querySelectorAll<HTMLElement>('.routine-card') ?? [])].find(
+      (el) => el.dataset.routineId === focusCard.current,
+    );
+    if (!card) return;
+    card.querySelector<HTMLElement>('summary')?.focus({ preventScroll: true });
+    card.scrollIntoView?.({ block: 'nearest' });
+    focusCard.current = null;
+  }, [embedded, expandedId, routines, activeId]);
   const types = useWorkoutTypes();
   const unit = useWeightUnit();
   useEffect(() => {
@@ -122,16 +186,61 @@ export function RoutinePanel({
       setEditing(saved);
     });
   }
+  const legacy: Routine | null =
+    embedded && trainingSplit && !trainingSplit.routine_id
+      ? {
+          id: 'current-split',
+          name: trainingSplit.name,
+          shared: false,
+          days: trainingSplit.steps.map((step) => ({
+            workout_type_id: step.workout_type_id,
+            workout_type: types.types.find((t) => t.id === step.workout_type_id) ?? null,
+            movements: [],
+          })),
+        }
+      : null;
+  const items = [...(legacy ? [legacy] : []), ...(routines ?? [])];
+  // The active plan leads; stable ordering keeps the rest of the library in place.
+  const displayed = [...items].sort(
+    (a, b) => Number(b.id === activeId) - Number(a.id === activeId),
+  );
+  function template(id: string) {
+    const preset = SPLIT_TEMPLATES.find((t) => t.id === id) ?? {
+      name: 'My split',
+      types: [types.types.find((t) => !t.archived)?.id ?? 'upper'],
+    };
+    setError(null);
+    setEditing({
+      id: '',
+      name: preset.name === 'FBEOD' ? 'Full body / Rest' : preset.name,
+      shared: false,
+      days: preset.types.map((typeId) => ({
+        workout_type_id: typeId,
+        workout_type: types.types.find((t) => t.id === typeId) ?? null,
+        movements: [],
+      })),
+    });
+  }
   const showView = !own && copied.length > 0 && onOpenSplits;
   return (
     <section
       className={embedded ? 'routine-panel routine-panel-embedded' : 'pulse-card routine-panel'}
       aria-labelledby={headingId}
+      ref={panelRef}
     >
       {embedded ? (
-        <h2 id={headingId} className="sr-only">
-          {heading}
-        </h2>
+        <header className="routine-heading split-library-heading">
+          <h2 id={headingId}>{heading}</h2>
+          <button
+            type="button"
+            className="routine-link"
+            disabled={busy || types.loading}
+            onClick={() => template('custom')}
+          >
+            <Icon name="plus" />
+            New split
+          </button>
+        </header>
       ) : (
         <header className="routine-heading">
           <h2 id={headingId}>{heading}</h2>
@@ -143,24 +252,11 @@ export function RoutinePanel({
           )}
         </header>
       )}
-      {own && (
+      {own && !embedded && (
         <div className="routine-create">
-          <button
-            type="button"
-            disabled={busy || types.loading}
-            onClick={() => {
-              const type = types.types.find((item) => !item.archived);
-              if (type)
-                setEditing({
-                  id: '',
-                  name: 'My routine',
-                  shared: false,
-                  days: [{ workout_type_id: type.id, workout_type: type, movements: [] }],
-                });
-            }}
-          >
+          <button type="button" disabled={busy || types.loading} onClick={() => template('custom')}>
             <Icon name="plus" />
-            New routine
+            New split
           </button>
           <button
             type="button"
@@ -199,18 +295,28 @@ export function RoutinePanel({
           </button>
         </div>
       )}
-      {!routines && !error && <p role="status">Loading routines…</p>}
-      {routines?.length === 0 && (
-        <p className="shared-card-empty">{own ? 'No saved routines.' : 'No shared routines.'}</p>
+      {!routines && !error && <p role="status">Loading splits…</p>}
+      {routines && displayed.length === 0 && (
+        <p className="shared-card-empty">{own ? 'No saved splits.' : 'No shared splits.'}</p>
       )}
       <div className="routine-list">
-        {routines?.map((routine) => (
+        {displayed.map((routine) => (
           <details
             className="routine-card"
             key={routine.id}
-            open={routine.id === initialOpenId || undefined}
+            data-routine-id={routine.id}
+            open={embedded ? expandedId === routine.id : routine.id === initialOpenId || undefined}
           >
-            <summary>
+            <summary
+              onClick={
+                embedded
+                  ? (event) => {
+                      event.preventDefault();
+                      setExpandedId((current) => (current === routine.id ? null : routine.id));
+                    }
+                  : undefined
+              }
+            >
               <span className="routine-card-title">
                 <strong>{routine.name}</strong>
                 <span className="routine-card-meta">
@@ -222,45 +328,34 @@ export function RoutinePanel({
               <Icon name="chevron-down" />
               <RoutinePattern days={routine.days} />
             </summary>
-            <ol className="routine-cycle">
-              {routine.days.map((day, index) => (
-                <li
-                  key={index}
-                  className={day.workout_type ? undefined : 'is-rest'}
-                  style={day.workout_type ? { borderColor: day.workout_type.color } : undefined}
-                >
-                  <span>Day {index + 1}</span>
-                  <strong>{day.workout_type?.name ?? 'Rest'}</strong>
-                  {day.movements.map((movement, mi) => (
-                    <div className="routine-exercise" key={mi}>
-                      <strong>{movement.exercise.name}</strong>
-                      <span>
-                        {movement.sets
-                          .map((set) =>
-                            movement.exercise.kind === 'cardio'
-                              ? `${set.duration_seconds == null ? '–' : Number((set.duration_seconds / 60).toFixed(1))} min${set.distance_km == null ? '' : ` · ${set.distance_km} km`}`
-                              : `${set.reps ?? '–'} × ${set.weight_kg == null ? '–' : formatWeight(set.weight_kg, unit)}`,
-                          )
-                          .join(' / ')}
-                      </span>
-                    </div>
-                  ))}
-                </li>
-              ))}
-            </ol>
+            {embedded && routine.id === activeId && trainingSplit && renderPreview && (
+              <div className="split-card-preview">{renderPreview(trainingSplit)}</div>
+            )}
+            {embedded && routine.id === activeId ? (
+              routine.days.some((day) => day.movements.length > 0) && (
+                <details className="split-plan-exercises">
+                  <summary>Exercises &amp; sets</summary>{' '}
+                  <RoutineCycle routine={routine} unit={unit} />
+                </details>
+              )
+            ) : (
+              <RoutineCycle routine={routine} unit={unit} />
+            )}
             <div className="routine-actions">
               {own ? (
                 <>
-                  <button
-                    type="button"
-                    className="routine-delete"
-                    onClick={() => {
-                      setError(null);
-                      setDeleting(routine);
-                    }}
-                  >
-                    Delete
-                  </button>
+                  {routine.id !== activeId && routine.id !== 'current-split' && (
+                    <button
+                      type="button"
+                      className="routine-delete"
+                      onClick={() => {
+                        setError(null);
+                        setDeleting(routine);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -268,18 +363,22 @@ export function RoutinePanel({
                       setEditing(structuredClone(routine));
                     }}
                   >
-                    Edit routine
+                    Edit split
                   </button>
                   <button
                     type="button"
-                    className="routine-primary"
+                    className={routine.id === activeId ? 'routine-secondary' : 'routine-primary'}
                     onClick={() => {
                       setError(null);
-                      setStartDate(localDate());
+                      setStartDate(
+                        routine.id === activeId
+                          ? (trainingSplit?.start_date ?? localDate())
+                          : localDate(),
+                      );
                       setUsing(routine);
                     }}
                   >
-                    Use split
+                    {routine.id === activeId ? 'Change start' : 'Use split'}
                   </button>
                 </>
               ) : (
@@ -295,7 +394,7 @@ export function RoutinePanel({
                       Saved
                     </>
                   ) : (
-                    'Save routine'
+                    'Save split'
                   )}
                 </button>
               )}
@@ -303,10 +402,49 @@ export function RoutinePanel({
           </details>
         ))}
       </div>
+      {embedded && (
+        <section className="split-library-templates" aria-label="Split templates">
+          <h2>Templates</h2>
+          <div className="split-templates">
+            {SPLIT_TEMPLATES.map((preset) => (
+              <button
+                type="button"
+                key={preset.id}
+                className="split-template"
+                disabled={busy || types.loading || !!types.error}
+                onClick={() => template(preset.id)}
+              >
+                <span>
+                  <strong>{preset.id === 'fbeod' ? 'Full body / Rest' : preset.name}</strong>
+                  <Icon name="plus" />
+                </span>
+                <span className="split-template-pattern" aria-hidden="true">
+                  {preset.types.map((id, index) => (
+                    <i
+                      key={index}
+                      className={id === null ? 'is-rest' : ''}
+                      style={
+                        id
+                          ? { backgroundColor: types.types.find((t) => t.id === id)?.color }
+                          : undefined
+                      }
+                    />
+                  ))}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {editing && (
         <RoutineEditor
           key={editing.id || 'new'}
           routine={editing}
+          schedule={
+            editing.id === 'current-split' || editing.id === trainingSplit?.routine_id
+              ? (trainingSplit ?? undefined)
+              : undefined
+          }
           busy={busy}
           error={error}
           onClose={() => {
@@ -315,18 +453,32 @@ export function RoutinePanel({
               setError(null);
             }
           }}
-          onSave={(next) =>
+          onSave={(next, schedule) =>
             void run(async () => {
-              const saved = next.id
-                ? await api.routines.save(next)
-                : await api.routines.create(next);
+              const legacyEdit = next.id === 'current-split';
+              const content = { name: next.name, shared: next.shared, days: next.days };
+              const saved =
+                next.id && !legacyEdit
+                  ? await (schedule ? api.routines.save(next, schedule) : api.routines.save(next))
+                  : await (schedule
+                      ? api.routines.create(content, schedule)
+                      : api.routines.create(content));
               if (own)
                 setRoutines((items) => [
                   saved,
                   ...(items ?? []).filter((item) => item.id !== saved.id),
                 ]);
+              if (schedule)
+                onUsed?.({
+                  name: saved.name,
+                  routine_id: saved.id,
+                  ...schedule,
+                  steps: saved.days.map((day) => ({ workout_type_id: day.workout_type_id })),
+                });
+              focusCard.current = saved.id;
               setEditing(null);
-              setNotice('Routine saved.');
+              setExpandedId(saved.id);
+              setNotice('Split saved.');
               onChanged?.(saved.id);
             })
           }
@@ -344,7 +496,15 @@ export function RoutinePanel({
             onSubmit={(event) => {
               event.preventDefault();
               void run(async () => {
-                const saved = await api.routines.use(using.id, startDate);
+                const saved =
+                  using.id === 'current-split'
+                    ? await api.saveTrainingSplit({
+                        ...trainingSplit!,
+                        start_date: startDate,
+                        enabled: true,
+                      })
+                    : await api.routines.use(using.id, startDate);
+                focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
                 setNotice(`${using.name} is your active split.`);
@@ -366,9 +526,7 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
-            <p className="routine-note">
-              Replaces your active split. Saved routines stay available.
-            </p>
+            <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
                 {error}
@@ -382,7 +540,7 @@ export function RoutinePanel({
       )}
       {deleting && (
         <PopupDialog
-          title="Delete routine?"
+          title="Delete split?"
           onClose={() => {
             if (!busy) setDeleting(null);
           }}
@@ -414,7 +572,7 @@ export function RoutinePanel({
                   })
                 }
               >
-                {busy ? 'Deleting…' : 'Delete routine'}
+                {busy ? 'Deleting…' : 'Delete split'}
               </button>
             </div>
           </div>
@@ -426,17 +584,23 @@ export function RoutinePanel({
 
 function RoutineEditor({
   routine,
+  schedule,
   busy,
   error,
   onSave,
   onClose,
 }: {
   routine: Routine;
+  schedule?: TrainingSplit;
   busy: boolean;
   error: string | null;
-  onSave: (value: Routine) => void;
+  onSave: (value: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) => void;
   onClose: () => void;
 }) {
+  const [startDate, setStartDate] = useState(schedule?.start_date ?? localDate());
+  const [enabled, setEnabled] = useState(schedule?.enabled ?? false);
+  const [typeName, setTypeName] = useState('');
+  const [addingType, setAddingType] = useState(false);
   const [value, setValue] = useState(() => structuredClone(routine));
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -476,8 +640,9 @@ function RoutineEditor({
   }
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy || addingType || types.loading || types.error) return;
     if (!value.name.trim()) {
-      setValidation('Enter a routine name.');
+      setValidation('Enter a split name.');
       return;
     }
     const workoutDays = value.days.filter((item) => item.workout_type_id !== null);
@@ -500,14 +665,27 @@ function RoutineEditor({
       return;
     }
     setValidation(null);
-    onSave(value);
+    if (
+      value.days.some(
+        (day) =>
+          day.workout_type_id && types.types.find((t) => t.id === day.workout_type_id)?.archived,
+      )
+    ) {
+      setValidation('Choose an active workout type for every workout day.');
+      return;
+    }
+    onSave(value, schedule ? { start_date: startDate, enabled } : undefined);
   }
   return (
-    <PopupDialog title="Edit routine" className="routine-editor-dialog" onClose={onClose}>
+    <PopupDialog
+      title={routine.id ? 'Edit split' : 'New split'}
+      className="routine-editor-dialog"
+      onClose={onClose}
+    >
       <form onSubmit={submit} className="routine-editor">
         <fieldset disabled={busy}>
           <label>
-            Routine name
+            Split name
             <input
               required
               maxLength={40}
@@ -515,6 +693,28 @@ function RoutineEditor({
               onChange={(event) => setValue({ ...value, name: event.target.value })}
             />
           </label>
+          {schedule && (
+            <div className="split-editor-schedule">
+              <label>
+                Starts
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+              </label>
+              <label className="routine-share">
+                <span>Active split</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={enabled}
+                  onChange={(event) => setEnabled(event.target.checked)}
+                />
+              </label>
+            </div>
+          )}
           <label className="routine-share">
             <span>Show on my profile</span>
             <input
@@ -524,6 +724,14 @@ function RoutineEditor({
               onChange={(event) => setValue({ ...value, shared: event.target.checked })}
             />
           </label>
+          {types.error && (
+            <p className="inline-error" role="alert">
+              {types.error}{' '}
+              <button type="button" onClick={() => void types.reload()}>
+                Retry workout types
+              </button>
+            </p>
+          )}
           {loadError && (
             <p role="alert" className="inline-error">
               {loadError}{' '}
@@ -833,14 +1041,81 @@ function RoutineEditor({
               Add rest day
             </button>
           </div>
+          <details className="split-new-type">
+            <summary>New workout type</summary>
+            <div>
+              <input
+                aria-label="Workout type name"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    event.currentTarget.parentElement?.querySelector('button')?.click();
+                  }
+                }}
+                maxLength={40}
+                value={typeName}
+                onChange={(event) => setTypeName(event.target.value)}
+                placeholder="e.g. Full body A"
+              />
+              <button
+                type="button"
+                disabled={addingType || !typeName.trim()}
+                onClick={() =>
+                  void (async () => {
+                    if (
+                      types.types.some(
+                        (t) => t.name.toLocaleLowerCase() === typeName.trim().toLocaleLowerCase(),
+                      )
+                    ) {
+                      setValidation('That workout type already exists, including removed types.');
+                      return;
+                    }
+                    setAddingType(true);
+                    setValidation(null);
+                    try {
+                      const created = await api.createWorkoutType({
+                        name: typeName.trim(),
+                        color: '#a855f7',
+                      });
+                      types.applySaved([...types.types, created]);
+                      setValue((current) => ({
+                        ...current,
+                        days:
+                          current.days.length < 28
+                            ? [
+                                ...current.days,
+                                {
+                                  workout_type_id: created.id,
+                                  workout_type: created,
+                                  movements: [],
+                                },
+                              ]
+                            : current.days,
+                      }));
+                      setTypeName('');
+                    } catch (reason) {
+                      setValidation(failure(reason));
+                    } finally {
+                      setAddingType(false);
+                    }
+                  })()
+                }
+              >
+                {addingType ? 'Adding...' : 'Add type'}
+              </button>
+            </div>
+          </details>
           <div className="routine-editor-footer">
             {(validation || error) && (
               <p role="alert" className="inline-error">
                 {validation || error}
               </p>
             )}
-            <button className="popup-primary-action" disabled={busy || !!loadError}>
-              {busy ? 'Saving…' : 'Save routine'}
+            <button
+              className="popup-primary-action"
+              disabled={busy || addingType || types.loading || !!types.error || !!loadError}
+            >
+              {busy ? 'Saving…' : 'Save split'}
             </button>
           </div>
         </fieldset>

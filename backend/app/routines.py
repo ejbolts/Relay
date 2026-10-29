@@ -23,6 +23,8 @@ from .tracker_schemas import (
     RoutineMovement,
     RoutineMovementRead,
     RoutineRead,
+    RoutineSaveInput,
+    RoutineSchedule,
     RoutineSet,
     TrainingSplit,
     WorkoutTypeRead,
@@ -54,7 +56,7 @@ def routine_rows(db: Session, user_id: str) -> list[UserSetting]:
 def routine_content(db: Session, user_id: str, routine_id: str) -> RoutineInput:
     row = db.get(UserSetting, (user_id, PREFIX + routine_id))
     if row is None:
-        raise HTTPException(404, "Routine not found.")
+        raise HTTPException(404, "Split not found.")
     return RoutineInput.model_validate_json(row.value)
 
 
@@ -98,16 +100,29 @@ def validate_content(db: Session, user_id: str, content: RoutineInput) -> None:
 
 
 def save_routine(
-    db: Session, user_id: str, content: RoutineInput, routine_id: str | None = None
+    db: Session,
+    user_id: str,
+    content: RoutineInput,
+    routine_id: str | None = None,
+    schedule: RoutineSchedule | None = None,
 ) -> RoutineRead:
     if routine_id is None:
         if len(routine_rows(db, user_id)) >= MAX_ROUTINES:
-            raise HTTPException(422, "You can save up to 20 routines.")
+            raise HTTPException(422, "You can save up to 20 splits.")
         routine_id = str(uuid4())
     validate_content(db, user_id, content)
     set_setting(db, user_id, PREFIX + routine_id, content.model_dump_json())
     active = saved_training_split(db, user_id)
-    if active and active.routine_id == routine_id:
+    if schedule is not None:
+        active = TrainingSplit(
+            name=content.name,
+            routine_id=routine_id,
+            start_date=schedule.start_date,
+            enabled=schedule.enabled,
+            steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
+        )
+        set_setting(db, user_id, TRAINING_SPLIT_KEY, active.model_dump_json())
+    elif active and active.routine_id == routine_id:
         active.name = content.name
         active.steps = TrainingSplit(
             name=content.name,
@@ -142,8 +157,9 @@ def profile_routines(user_id: str, db: Db, user: CurrentUser):
 
 
 @router.post("", response_model=RoutineRead, status_code=201)
-def create_routine(payload: RoutineInput, db: Db, user: CurrentUser):
-    return save_routine(db, user.id, payload)
+def create_routine(payload: RoutineSaveInput, db: Db, user: CurrentUser):
+    content = RoutineInput.model_validate(payload.model_dump(exclude={"schedule"}))
+    return save_routine(db, user.id, content, schedule=payload.schedule)
 
 
 @router.post("/from-split", response_model=RoutineRead, status_code=201)
@@ -193,9 +209,10 @@ def capture_split(db: Db, user: CurrentUser):
 
 
 @router.put("/{routine_id}", response_model=RoutineRead)
-def update_routine(routine_id: str, payload: RoutineInput, db: Db, user: CurrentUser):
+def update_routine(routine_id: str, payload: RoutineSaveInput, db: Db, user: CurrentUser):
     routine_content(db, user.id, routine_id)
-    return save_routine(db, user.id, payload, routine_id)
+    content = RoutineInput.model_validate(payload.model_dump(exclude={"schedule"}))
+    return save_routine(db, user.id, content, routine_id, schedule=payload.schedule)
 
 
 @router.delete("/{routine_id}", status_code=204)
@@ -204,8 +221,11 @@ def delete_routine(routine_id: str, db: Db, user: CurrentUser):
     db.delete(db.get(UserSetting, (user.id, PREFIX + routine_id)))
     split = saved_training_split(db, user.id)
     if split and split.routine_id == routine_id:
-        split.routine_id = None
-        set_setting(db, user.id, TRAINING_SPLIT_KEY, split.model_dump_json())
+        if split.enabled:
+            split.routine_id = None
+            set_setting(db, user.id, TRAINING_SPLIT_KEY, split.model_dump_json())
+        else:
+            db.delete(db.get(UserSetting, (user.id, TRAINING_SPLIT_KEY)))
     bump_workout_cache_revision(db, user.id)
     db.commit()
 
@@ -214,8 +234,6 @@ def delete_routine(routine_id: str, db: Db, user: CurrentUser):
 def use_routine(routine_id: str, payload: RoutineActivation, db: Db, user: CurrentUser):
     content = routine_content(db, user.id, routine_id)
     validate_content(db, user.id, content)
-    if any(day.workout_type_id and not day.movements for day in content.days):
-        raise HTTPException(422, "Add exercises to every workout day before using this routine.")
     split = TrainingSplit(
         name=content.name,
         start_date=payload.start_date,
@@ -233,9 +251,9 @@ def copy_routine(user_id: str, routine_id: str, db: Db, user: CurrentUser):
     viewable_member(db, user, user_id)
     source = routine_content(db, user_id, routine_id)
     if not source.shared:
-        raise HTTPException(404, "Routine not found.")
+        raise HTTPException(404, "Split not found.")
     if len(routine_rows(db, user.id)) >= MAX_ROUTINES:
-        raise HTTPException(422, "You can save up to 20 routines.")
+        raise HTTPException(422, "You can save up to 20 splits.")
     copied = source.model_copy(deep=True)
     copied.shared = False
     own_types = workout_type_catalog(db, user.id)
@@ -257,7 +275,7 @@ def copy_routine(user_id: str, routine_id: str, db: Db, user: CurrentUser):
             if match is None:
                 if sum(item.is_custom for item in own_types) >= MAX_CUSTOM_TYPES:
                     raise HTTPException(
-                        422, "Remove a custom workout type before copying this routine."
+                        422, "Remove a custom workout type before copying this split."
                     )
                 name = original.name
                 index = 2

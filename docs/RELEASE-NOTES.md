@@ -8,13 +8,9 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
-![Importing a friend's shared routine, adapting its weight, finding the private copy in My splits and making it the active split](screenshots/releases/1.1.0-imported-splits.gif)
+![Your splits on one page with the active plan outlined in blue, its next seven days, saved splits and templates](screenshots/releases/1.1.0-your-splits.png)
 
-_Save a full routine from a profile, then adapt it and choose **View my splits**. The imported copy appears in **Your splits > My splits**, where it can be edited or used; the split in use is marked **Active** with a blue card border. Saves and activation appear in temporary, dismissible popups. **Schedule** keeps the active cycle available. Isolated synthetic accounts._
-
-![Saved splits with a blue border around the active plan](screenshots/releases/1.1.0-active-split.png)
-
-_The active split has a blue border as well as its Active badge, so it stands out when cards are collapsed. Isolated sample data._
+_The active split opens to its preview. Use the calendar icon to swipe between the current and next month. Saved splits and templates stay on the same page; edits and start-date changes use focused dialogs. Isolated sample data._
 
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
@@ -31,14 +27,6 @@ _An overnight workout stays on its starting day. This isolated sample starts at 
 ![Compact muscle set credits popup with Direct work and Partial credit lists](screenshots/releases/1.1.0-muscle-credits-only.png)
 
 _The exercise popup now contains only muscle credits. Isolated sample data._
-
-![Split planner showing a saved cycle with workouts, consecutive rest days and a seven-day preview](screenshots/releases/1.1.0-split-rest-days.png)
-
-_Add, move or change rest days as part of your repeating split. This phone-sized planner uses isolated sample data._
-
-![Shared split calendar showing one month without a redundant preview heading](screenshots/releases/1.1.0-split-calendar.png)
-
-_Use the calendar icon beside the preview dates to switch between seven days and two full months. The shared app calendar shows one month at a time with the same date grid and horizontal swipe as Home. Only the current and next month are loaded. Month names identify the calendar without an extra preview heading; the repeating cycle follows your unsaved edits. Isolated sample data._
 
 ![New cardio session with the suggested treadmill set expanded for editing](screenshots/releases/1.1.0-cardio-expanded.png)
 
@@ -88,7 +76,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- **Share and copy routines:** keep multiple full splits in **Profile > Routines**, with workout and rest days, exercises, sets and starting weights. Create a routine or capture your current split using the latest completed sets for each workout type. Choose **Show on my profile** for each routine. Friends can import independent private copies and adapt exercises and weights without changing the original. **View my splits** opens the imported copy in **Your splits > My splits**; find, edit and use all saved plans there, including private imports. **Schedule** shows the active cycle. **Use split** replaces the active schedule from your chosen start date and marks that routine **Active** with a blue border. Routine saves and split activation show temporary, dismissible popups; Up next prefills planned sets and leaves them unchecked. Profile privacy, friends-only access and blocks also protect routine access. Unsharing or deleting an original stops future copies; friends keep copies they already saved.
+- **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; its calendar uses the shared Home component and shows one month at a time, limited to the current and next month. Other cards expand to show days, exercises and starting weights. Templates create editable plans without replacing the active split. Use split confirms a start date; Edit split can change that date or pause the plan. Saving keeps you on the page with a temporary popup. Existing unlinked splits remain visible without automatic data changes and link to the library atomically on save. Private plans can be activated before adding exercises; sharing still requires exercises on every workout day. Profile > Splits and friends' profiles retain independent private copying, audience checks and blocks. Up next prefills planned sets unchecked; copies survive unsharing or deletion of the original.
 - New workouts cannot use removed workout types; previously saved workouts of those types remain editable.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.

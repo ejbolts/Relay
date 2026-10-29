@@ -115,6 +115,61 @@
   gap: 12px;
   margin-top: 12px;
 }
+.split-library-heading h2,
+.split-library-templates h2 {
+  margin: 0;
+  color: var(--p-ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+.split-library-templates {
+  margin-top: 26px;
+}
+.split-library-templates h2 {
+  margin-bottom: 12px;
+}
+.routine-panel .split-template {
+  min-height: 80px;
+  padding: 12px;
+  background: var(--p-surface);
+  border-style: dashed;
+  text-align: left;
+}
+.routine-panel .split-template strong {
+  font-size: 13px;
+}
+.split-card-preview {
+  border-top: 1px solid var(--p-line);
+  padding: 14px;
+}
+.split-plan-exercises > summary {
+  padding: 4px 14px 12px;
+  color: var(--p-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.split-plan-exercises .routine-cycle {
+  border-top: 0;
+}
+.split-editor-schedule {
+  display: grid;
+  gap: 12px;
+  border-block: 1px solid var(--p-line);
+  padding-block: 12px;
+}
+.routine-panel .routine-secondary {
+  background: transparent;
+  color: var(--p-ink-2);
+}
+.routine-card:has(> summary .routine-active) > .routine-actions {
+  justify-content: flex-start;
+}
+.routine-card > .routine-actions {
+  flex-wrap: wrap;
+}
+.split-card-preview .split-preview strong {
+  font-size: 10px;
+}
 .routine-card {
   border: 1px solid var(--p-line);
   border-radius: 14px;

@@ -1,18 +1,31 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
-import { splitFromTemplate } from './trainingSplit';
-import type { Routine, WorkoutType } from './types';
+import type { Routine, TrainingSplit, WorkoutType } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 import { WorkoutTypesContext } from './workoutTypesContext';
-
 let root: Root;
 let host: HTMLDivElement;
 const saved = vi.fn().mockResolvedValue(undefined);
-
+const plan: Routine = {
+  id: 'plan',
+  name: 'Upper / Rest',
+  shared: false,
+  days: [
+    { workout_type_id: 'upper', workout_type: DEFAULT_WORKOUT_TYPES[0], movements: [] },
+    { workout_type_id: null, workout_type: null, movements: [] },
+  ],
+};
+const current: TrainingSplit = {
+  name: plan.name,
+  enabled: true,
+  start_date: '2026-10-26',
+  routine_id: plan.id,
+  steps: plan.days.map((d) => ({ workout_type_id: d.workout_type_id })),
+};
 function Harness({ initial = DEFAULT_WORKOUT_TYPES }: { initial?: WorkoutType[] }) {
   const [types, setTypes] = useState(initial);
   return (
@@ -29,19 +42,22 @@ function Harness({ initial = DEFAULT_WORKOUT_TYPES }: { initial?: WorkoutType[] 
     </WorkoutTypesContext.Provider>
   );
 }
-function button(label: string) {
-  const match = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (item) => item.getAttribute('aria-label') === label || item.textContent === label,
-  );
-  if (!match) throw new Error(`Missing button ${label}`);
-  return match;
+async function mount(initial?: WorkoutType[]) {
+  await act(async () => root.render(<Harness initial={initial} />));
 }
-async function click(label: string) {
-  await act(async () => button(label).click());
+function button(text: string) {
+  const b = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+    (b) => b.textContent === text || b.getAttribute('aria-label') === text,
+  );
+  if (!b) throw new Error('Missing ' + text);
+  return b;
+}
+async function click(text: string) {
+  await act(async () => button(text).click());
 }
 async function input(selector: string, value: string) {
   await act(async () => {
-    const el = host.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
+    const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
     Object.getOwnPropertyDescriptor(
       el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype,
       'value',
@@ -50,163 +66,43 @@ async function input(selector: string, value: string) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
-async function submit() {
+async function submit(selector = '.routine-editor') {
   await act(async () =>
-    host
-      .querySelector('form')!
+    document
+      .querySelector(selector)!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
 }
-async function mount(initial?: WorkoutType[]) {
-  await act(async () => root.render(<Harness initial={initial} />));
-}
-
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-    callback(0);
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    cb(0);
     return 0;
   });
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-26T12:00:00'));
-  vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(null);
-  vi.spyOn(api, 'saveTrainingSplit').mockImplementation(async (split) => split);
-  vi.spyOn(api, 'createWorkoutType').mockImplementation(async (input) => ({
-    ...input,
-    id: 'custom-a',
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
+  vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(structuredClone(current));
+  vi.spyOn(api.routines, 'list').mockResolvedValue([structuredClone(plan)]);
+  vi.spyOn(api.routines, 'save').mockImplementation(async (r) => r);
+  vi.spyOn(api.routines, 'create').mockImplementation(async (r) => ({ ...r, id: 'new' }));
+  vi.spyOn(api.routines, 'use').mockResolvedValue(current);
+  vi.spyOn(api, 'listExercises').mockResolvedValue([]);
+  vi.spyOn(api, 'saveTrainingSplit').mockImplementation(async (s) => s);
+  vi.spyOn(api, 'createWorkoutType').mockImplementation(async (t) => ({
+    ...t,
+    id: 'custom',
     is_custom: true,
     archived: false,
   }));
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-});
-
-const imported: Routine = {
-  id: 'imported-copy',
-  name: 'Friend upper split',
-  shared: false,
-  days: [
-    { workout_type_id: 'upper', workout_type: DEFAULT_WORKOUT_TYPES[0], movements: [] },
-    { workout_type_id: null, workout_type: null, movements: [] },
-  ],
-};
-
-it('lists imported private splits in My splits and retains unsaved schedule edits between views', async () => {
-  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
-  await mount();
-  await input('input[type="text"]', 'Unsaved schedule');
-  await click('My splits');
-  expect(api.routines.list).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Friend upper split');
-  expect(host.textContent).toContain('Only you');
-  await click('Schedule');
-  expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(
-    'Unsaved schedule',
-  );
-  expect(api.saveTrainingSplit).not.toHaveBeenCalled();
-});
-
-it('opens the imported split from navigation and reflects activation in Schedule', async () => {
-  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
-  const active = {
-    name: imported.name,
-    enabled: true,
-    start_date: '2026-10-26',
-    routine_id: imported.id,
-    steps: imported.days.map((day) => ({ workout_type_id: day.workout_type_id })),
-  };
-  vi.spyOn(api.routines, 'use').mockImplementation(async () => {
-    vi.mocked(api.getTrainingSplit).mockResolvedValue(active);
-    return active;
-  });
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.open = false;
-  };
-  await act(async () =>
-    root.render(
-      <TrainingSplitEditor onSaved={saved} initialView="saved" initialRoutineId={imported.id} />,
-    ),
-  );
-  expect(host.querySelector<HTMLDetailsElement>('.routine-card')!.open).toBe(true);
-  expect(host.querySelector('.routine-active')).toBeNull();
-  await click('Use split');
-  expect(api.routines.use).not.toHaveBeenCalled();
-  await act(async () =>
-    document
-      .querySelector('.routine-use')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
-  expect(api.routines.use).toHaveBeenCalledWith(imported.id, '2026-10-26');
-  expect(host.querySelector('.routine-active')?.textContent).toBe('Active');
-  await click('Schedule');
-  expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(imported.name);
-  expect(host.querySelectorAll('.split-cycle > li')).toHaveLength(2);
-  expect(saved).not.toHaveBeenCalled();
-});
-
-it('refreshes Schedule after editing the active saved split', async () => {
-  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
-  const active = {
-    name: imported.name,
-    enabled: true,
-    start_date: '2026-10-26',
-    routine_id: imported.id,
-    steps: imported.days.map((day) => ({ workout_type_id: day.workout_type_id })),
-  };
-  vi.mocked(api.getTrainingSplit).mockResolvedValue(active);
-  vi.spyOn(api, 'listExercises').mockResolvedValue([]);
-  vi.spyOn(api.routines, 'save').mockImplementation(async (routine) => {
-    vi.mocked(api.getTrainingSplit).mockResolvedValue({ ...active, name: routine.name });
-    return routine;
-  });
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.open = false;
-  };
-  await act(async () => root.render(<TrainingSplitEditor onSaved={saved} initialView="saved" />));
-  await click('Edit routine');
-  await act(async () => {
-    const name = document.querySelector<HTMLInputElement>('.routine-editor input')!;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-      name,
-      'Adapted active split',
-    );
-    name.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await act(async () =>
-    document
-      .querySelector('.routine-editor')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
-  await click('Schedule');
-  expect(host.querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe(
-    'Adapted active split',
-  );
-});
-it('marks a saved split active only while its schedule is switched on', async () => {
-  vi.spyOn(api.routines, 'list').mockResolvedValue([imported]);
-  const linked = {
-    name: imported.name,
-    enabled: false,
-    start_date: '2026-10-26',
-    routine_id: imported.id,
-    steps: imported.days.map((day) => ({ workout_type_id: day.workout_type_id })),
-  };
-  vi.mocked(api.getTrainingSplit).mockResolvedValue(linked);
-  await act(async () => root.render(<TrainingSplitEditor onSaved={saved} initialView="saved" />));
-  expect(host.textContent).toContain('Friend upper split');
-  expect(host.querySelector('.routine-active')).toBeNull();
-  await act(async () => root.unmount());
-  root = createRoot(host);
-  vi.mocked(api.getTrainingSplit).mockResolvedValue({ ...linked, enabled: true });
-  await act(async () => root.render(<TrainingSplitEditor onSaved={saved} initialView="saved" />));
-  expect(host.querySelector('.routine-active')?.textContent).toBe('Active');
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -216,186 +112,207 @@ afterEach(async () => {
   vi.useRealTimers();
   saved.mockClear();
 });
-
-it('selects templates, edits/reorders cycle days and persists the user-defined split', async () => {
+it('shows one page with the active split expanded, preview and inline templates without tabs', async () => {
+  await mount();
+  expect(host.querySelector('[aria-label="Workout split views"]')).toBeNull();
+  expect(host.querySelector<HTMLDetailsElement>('.routine-card')?.open).toBe(true);
+  expect(host.querySelector('.routine-active')?.textContent).toBe('Active');
+  expect(host.querySelectorAll('.split-preview > li')).toHaveLength(7);
+  expect(host.querySelector('[aria-label="Split templates"]')).not.toBeNull();
+  expect(host.textContent).not.toMatch(/routine|Schedule/);
+  expect(api.routines.create).not.toHaveBeenCalled();
+});
+it('creates from a template without replacing the active split and retains edits after a failed save', async () => {
   await mount();
   await click('Push / Pull / Legs');
-  expect(host.querySelectorAll('.split-cycle > li')).toHaveLength(4);
-  await input('[aria-label="Day 2 workout type"]', 'upper');
-  await click('Move day 2 earlier');
-  await click('Rest day');
-  await click('Remove day 5');
-  await input('input[type="text"]', 'My training');
+  await input('.routine-editor input', 'My PPL');
+  await click('Add rest day');
+  await click('Move day 5 earlier');
+  vi.mocked(api.routines.create).mockRejectedValueOnce(new Error('Offline'));
   await submit();
-  expect(api.saveTrainingSplit).toHaveBeenCalledWith({
-    name: 'My training',
-    enabled: true,
-    start_date: '2026-10-26',
-    steps: [
-      { workout_type_id: 'upper' },
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('Offline');
+  expect(document.querySelector<HTMLInputElement>('.routine-editor input')?.value).toBe('My PPL');
+  await submit();
+  expect(vi.mocked(api.routines.create).mock.calls.at(-1)?.[0]).toMatchObject({
+    name: 'My PPL',
+    days: [
       { workout_type_id: 'push' },
+      { workout_type_id: 'pull' },
       { workout_type_id: 'lower' },
+      { workout_type_id: null },
       { workout_type_id: null },
     ],
   });
-  expect(saved).toHaveBeenCalledOnce();
-});
-
-it('previews FBEOD into the following week without resetting it', async () => {
-  await mount();
-  await click('Full body every other day (FBEOD)');
-  expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toContain(
-    'Full body',
-  );
-  await click('Next preview week');
-  expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toContain(
-    'Monday 2 November: Rest',
-  );
-  await input('input[type="date"]', '2026-11-03');
-  expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toContain(
-    'Tuesday 3 November: Full body',
+  expect(api.routines.use).not.toHaveBeenCalled();
+  expect(host.querySelectorAll('.routine-card')).toHaveLength(2);
+  expect(host.querySelector('.routine-active')?.closest('.routine-card')?.textContent).toContain(
+    'Upper / Rest',
   );
 });
-
-it('toggles the shared current/next-month calendar without paging or losing unsaved edits and week position', async () => {
-  await mount();
-  await click('Full body every other day (FBEOD)');
-  await input('input[type="text"]', 'Unsaved plan');
-  await click('Next preview week');
-  const weekStart = host.querySelector('.split-preview > li')?.getAttribute('aria-label');
-  await click('Two-month calendar');
-  expect(button('Two-month calendar').getAttribute('aria-pressed')).toBe('true');
-  expect([...host.querySelectorAll('.calendar-month h3')].map((el) => el.textContent)).toEqual([
-    'October 2026',
-    'November 2026',
-  ]);
-  expect(host.querySelector('[data-date="2026-10-25"]')?.getAttribute('aria-label')).toContain(
-    'Not started',
-  );
-  expect(host.querySelector('[aria-current="date"]')?.getAttribute('data-date')).toBe('2026-10-26');
-  expect(host.querySelector('[data-date="2026-11-02"]')?.getAttribute('aria-label')).toContain(
-    'Rest',
-  );
-  expect(
-    host.querySelector('[aria-label="Previous two months"], [aria-label="Next two months"]'),
-  ).toBeNull();
-  await click('Two-month calendar');
-  expect(host.querySelector('.calendar-scroll')).toBeNull();
-  expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toBe(weekStart);
-  expect(api.saveTrainingSplit).not.toHaveBeenCalled();
-  expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('Unsaved plan');
-});
-
-it('updates planned dates after edits while keeping the preview anchored to the current and next month', async () => {
-  await mount();
-  await click('Two-month calendar');
-  await input('[aria-label="Day 1 workout type"]', 'cardio');
-  expect(host.querySelector('[data-date="2026-10-26"]')?.getAttribute('aria-label')).toContain(
-    'Cardio',
-  );
-  await input('input[type="date"]', '2026-10-28');
-  expect(host.querySelector('[data-date="2026-10-27"]')?.getAttribute('aria-label')).toContain(
-    'Not started',
-  );
-  expect(host.querySelector('[data-date="2026-10-28"]')?.getAttribute('aria-label')).toContain(
-    'Cardio',
-  );
-  await click('Rest day');
-  expect(host.querySelector('[data-date="2026-10-31"]')?.getAttribute('aria-label')).toContain(
-    'Rest',
-  );
-  expect(host.querySelector('[data-date="2026-11-01"]')?.getAttribute('aria-label')).toContain(
-    'Cardio',
-  );
-  await input('input[type="date"]', '2027-02-15');
-  expect([...host.querySelectorAll('.calendar-month h3')].map((el) => el.textContent)).toEqual([
-    'October 2026',
-    'November 2026',
-  ]);
-  expect(host.querySelector('[data-date="2027-02-15"]')).toBeNull();
-  expect(host.querySelector('[data-date="2026-11-30"]')?.getAttribute('aria-label')).toContain(
-    'Not started',
-  );
-});
-
-it('saves consecutive rest days, reopens them and lets a rest day become a workout', async () => {
-  await mount();
-  await click('Rest day');
-  await click('Move day 4 earlier');
-  await submit();
-  const existing = vi.mocked(api.saveTrainingSplit).mock.calls[0][0];
-  expect(existing.steps.map((step) => step.workout_type_id)).toEqual([
-    'upper',
-    'lower',
-    null,
-    null,
-  ]);
-  vi.mocked(api.getTrainingSplit).mockResolvedValue(existing);
-  await act(async () => root.unmount());
-  root = createRoot(host);
-  await mount();
-  expect(host.querySelector<HTMLSelectElement>('[aria-label="Day 3 workout type"]')?.value).toBe(
-    '',
-  );
-  expect(host.querySelectorAll('.split-preview strong')[2].textContent).toBe('Rest');
-  expect(host.querySelectorAll('.split-preview strong')[3].textContent).toBe('Rest');
-  await input('[aria-label="Day 3 workout type"]', 'pull');
-  await submit();
-  expect(vi.mocked(api.saveTrainingSplit).mock.calls.at(-1)?.[0].steps[2]).toEqual({
-    workout_type_id: 'pull',
+it('activates a different split after date confirmation, expands it and refreshes Home without leaving', async () => {
+  const other = { ...structuredClone(plan), id: 'other', name: 'Another split' };
+  vi.mocked(api.routines.list).mockResolvedValue([plan, other]);
+  vi.mocked(api.routines.use).mockResolvedValue({
+    ...current,
+    routine_id: 'other',
+    name: other.name,
   });
-});
-
-it('adds a custom workout type and uses its ID in the saved cycle', async () => {
   await mount();
-  await input('#split-type-name', 'Full body A');
+  await act(async () => host.querySelectorAll<HTMLElement>('.routine-card > summary')[1].click());
+  await click('Use split');
+  await input('.routine-use input[type="date"]', '2026-11-02');
+  await submit('.routine-use');
+  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02');
+  expect(host.querySelector('.routine-active')?.closest('.routine-card')?.textContent).toContain(
+    'Another split',
+  );
+  expect(saved).toHaveBeenCalledOnce();
+  expect(host.querySelectorAll('.split-card-preview')).toHaveLength(1);
+});
+it('edits the active split and its start/enabled state in one save', async () => {
+  await mount();
+  await click('Edit split');
+  await input('.routine-editor input', 'Updated plan');
+  await input('.routine-editor input[type="date"]', '2026-11-03');
+  await act(async () =>
+    document.querySelector<HTMLInputElement>('.split-editor-schedule [role="switch"]')!.click(),
+  );
+  await submit();
+  expect(api.routines.save).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'Updated plan' }),
+    { start_date: '2026-11-03', enabled: false },
+  );
+  expect(host.querySelector('.routine-active')).toBeNull();
+  expect(saved).toHaveBeenCalledWith(
+    expect.objectContaining({ enabled: false, name: 'Updated plan' }),
+  );
+});
+it('preserves an existing unlinked split without writes and links it atomically only on save', async () => {
+  vi.mocked(api.getTrainingSplit).mockResolvedValue({ ...current, routine_id: null });
+  vi.mocked(api.routines.list).mockResolvedValue([]);
+  await mount();
+  expect(host.querySelector('.routine-active')).not.toBeNull();
+  expect(api.routines.create).not.toHaveBeenCalled();
+  await click('Edit split');
+  await submit();
+  expect(api.routines.create).toHaveBeenCalledWith(expect.objectContaining({ name: plan.name }), {
+    start_date: current.start_date,
+    enabled: true,
+  });
+  expect(host.querySelectorAll('.routine-card')).toHaveLength(1);
+  expect(saved).toHaveBeenCalledWith(
+    expect.objectContaining({ routine_id: 'new', start_date: current.start_date }),
+  );
+});
+it('toggles the shared two-month calendar without month paging and returns to the seven-day view', async () => {
+  await mount();
+  await click('Next preview week');
+  const first = host.querySelector('.split-preview > li')?.getAttribute('aria-label');
+  await click('Two-month calendar');
+  expect([...host.querySelectorAll('.calendar-month h3')].map((e) => e.textContent)).toEqual([
+    'October 2026',
+    'November 2026',
+  ]);
+  expect(host.textContent).not.toContain('Next 2 months');
+  expect(host.querySelector('.calendar-day:not(.empty):not(:disabled)')).toBeNull();
+  await click('Two-month calendar');
+  expect(host.querySelector('.split-preview > li')?.getAttribute('aria-label')).toBe(first);
+});
+it('creates custom types in the editor and preserves consecutive rest days when saved', async () => {
+  await mount();
+  await click('New split');
+  await input('[aria-label="Workout type name"]', 'Full body A');
   await click('Add type');
+  await click('Add rest day');
   await submit();
   expect(api.createWorkoutType).toHaveBeenCalledWith({ name: 'Full body A', color: '#a855f7' });
-  expect(vi.mocked(api.saveTrainingSplit).mock.calls[0][0].steps.at(-1)).toEqual({
-    workout_type_id: 'custom-a',
-  });
+  expect(vi.mocked(api.routines.create).mock.calls[0][0].days.at(-2)?.workout_type_id).toBe(
+    'custom',
+  );
+  expect(vi.mocked(api.routines.create).mock.calls[0][0].days.at(-1)?.workout_type_id).toBeNull();
 });
-
-it('loads a saved split and can disable it without deleting its pattern', async () => {
-  const existing = splitFromTemplate('fbeod', '2026-10-20');
-  vi.mocked(api.getTrainingSplit).mockResolvedValue(existing);
-  await mount();
-  await act(async () => host.querySelector<HTMLInputElement>('#split-enabled')!.click());
+it('blocks all-rest and archived types without losing editor values', async () => {
+  await mount(DEFAULT_WORKOUT_TYPES.map((t) => ({ ...t, archived: t.id === 'upper' })));
+  await click('Edit split');
   await submit();
-  expect(api.saveTrainingSplit).toHaveBeenCalledWith({ ...existing, enabled: false });
-});
-
-it('keeps unsaved edits after a failed save and allows a retry', async () => {
-  vi.mocked(api.saveTrainingSplit).mockRejectedValueOnce(new Error('Connection lost'));
-  await mount();
-  await input('input[type="text"]', 'My split');
-  await submit();
-  expect(host.querySelector('[role="alert"]')?.textContent).toBe('Connection lost');
-  expect(saved).not.toHaveBeenCalled();
-  expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('My split');
-  await submit();
-  expect(saved).toHaveBeenCalledOnce();
-});
-
-it('shows a load failure without saving over an unknown existing split', async () => {
-  vi.mocked(api.getTrainingSplit).mockRejectedValueOnce(new Error('Unable to load'));
-  await mount();
-  expect(host.querySelector('[role="alert"]')?.textContent).toBe('Unable to load');
-  expect(host.querySelector('form')).toBeNull();
-  await click('Try again');
-  expect(host.querySelector('form')).not.toBeNull();
-});
-
-it('blocks all-rest cycles and archived workout types without losing the form', async () => {
-  await mount(DEFAULT_WORKOUT_TYPES.map((type) => ({ ...type, archived: type.id === 'upper' })));
-  await submit();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('day 1');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('active workout type');
   await input('[aria-label="Day 1 workout type"]', '');
-  await input('[aria-label="Day 2 workout type"]', '');
   await submit();
-  expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(
     'Include at least one workout day.',
   );
-  expect(api.saveTrainingSplit).not.toHaveBeenCalled();
+  expect(api.routines.save).not.toHaveBeenCalled();
+});
+it('retries unknown split state before displaying editable plans', async () => {
+  vi.mocked(api.getTrainingSplit).mockRejectedValueOnce(new Error('Unavailable'));
+  await mount();
+  expect(host.textContent).toContain('Unavailable');
+  expect(host.querySelector('.routine-card')).toBeNull();
+  await click('Try again');
+  expect(host.querySelector('.routine-active')).not.toBeNull();
+});
+it('can collapse the active card and reopen it with keyboard-native summary semantics', async () => {
+  await mount();
+  const summary = host.querySelector<HTMLElement>('.routine-card > summary')!;
+  await act(async () => summary.click());
+  expect(host.querySelector<HTMLDetailsElement>('.routine-card')?.open).toBe(false);
+  await act(async () => summary.click());
+  expect(host.querySelector<HTMLDetailsElement>('.routine-card')?.open).toBe(true);
+});
+it('opens an imported split without forcing the existing active card open', async () => {
+  vi.mocked(api.routines.list).mockResolvedValue([
+    plan,
+    { ...plan, id: 'import', name: 'Imported split' },
+  ]);
+  await act(async () =>
+    root.render(<TrainingSplitEditor onSaved={saved} initialRoutineId="import" />),
+  );
+  expect(host.querySelector<HTMLDetailsElement>('[data-routine-id="import"]')?.open).toBe(true);
+  expect(host.querySelector<HTMLDetailsElement>('[data-routine-id="plan"]')?.open).toBe(false);
+});
+it('keeps the current active split after a failed activation and allows retry', async () => {
+  vi.mocked(api.routines.list).mockResolvedValue([
+    plan,
+    { ...plan, id: 'other', name: 'Other split' },
+  ]);
+  vi.mocked(api.routines.use).mockRejectedValueOnce(new Error('Connection lost'));
+  await mount();
+  await act(async () =>
+    host.querySelector<HTMLElement>('[data-routine-id="other"] > summary')!.click(),
+  );
+  await click('Use split');
+  await submit('.routine-use');
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('Connection lost');
+  expect(
+    host
+      .querySelector('.routine-active')
+      ?.closest('.routine-card')
+      ?.getAttribute('data-routine-id'),
+  ).toBe('plan');
+  vi.mocked(api.routines.use).mockResolvedValue({
+    ...current,
+    routine_id: 'other',
+    name: 'Other split',
+  });
+  await submit('.routine-use');
+  expect(
+    host
+      .querySelector('.routine-active')
+      ?.closest('.routine-card')
+      ?.getAttribute('data-routine-id'),
+  ).toBe('other');
+});
+it('Enter adds the named custom workout type without submitting the split', async () => {
+  await mount();
+  await click('New split');
+  await input('[aria-label="Workout type name"]', 'Full body B');
+  await act(async () =>
+    document
+      .querySelector<HTMLInputElement>('[aria-label="Workout type name"]')!
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      ),
+  );
+  expect(api.createWorkoutType).toHaveBeenCalledWith({ name: 'Full body B', color: '#a855f7' });
+  expect(api.routines.create).not.toHaveBeenCalled();
 });

@@ -672,9 +672,8 @@ function AppContent() {
     visitedTabs.has('cardio');
   const [workoutTemplate, setWorkoutTemplate] = useState<SessionTemplate | null>(null);
   const [splitDestination, setSplitDestination] = useState<{
-    view: 'schedule' | 'saved';
     routineId?: string;
-  }>({ view: 'schedule' });
+  }>({});
   // The type chosen from the Start menu's Cardio option, before any exercise is added.
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
@@ -1286,12 +1285,12 @@ function AppContent() {
   }
 
   function openSplits(routineId?: string) {
-    setSplitDestination({ view: 'saved', routineId });
+    setSplitDestination({ routineId });
     setTab('split');
   }
 
   function openSplitSchedule() {
-    setSplitDestination({ view: 'schedule' });
+    setSplitDestination({});
     setTab('split');
   }
 
@@ -1780,16 +1779,9 @@ function AppContent() {
           )}
           {!loading && tab === 'split' && (
             <TrainingSplitEditor
-              initialView={splitDestination.view}
               initialRoutineId={splitDestination.routineId}
-              onSaved={async (saved) => {
+              onSaved={async () => {
                 await refreshData({ silent: true, activityLabel: null });
-                setMessage(
-                  saved.enabled
-                    ? 'Training split saved.'
-                    : 'Automatic workout suggestions restored.',
-                );
-                if (currentTabRef.current === 'split') navigateBack();
               }}
             />
           )}

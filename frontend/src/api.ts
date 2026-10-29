@@ -471,20 +471,23 @@ export const api = {
     ),
   getTrainingSplit: () => request<TrainingSplit | null>('/api/training-split'),
   routines: {
-    create: (routine: Omit<Routine, 'id'>) =>
+    create: (
+      routine: Omit<Routine, 'id'>,
+      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>,
+    ) =>
       request<Routine>('/api/routines', {
         method: 'POST',
         headers: jsonHeaders,
-        body: JSON.stringify(routine),
+        body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
       }),
     list: () => request<Routine[]>('/api/routines'),
     profile: (id: string) => request<Routine[]>(`/api/routines/profile/${encodeURIComponent(id)}`),
     fromSplit: () => request<Routine>('/api/routines/from-split', { method: 'POST' }),
-    save: (routine: Routine) =>
+    save: (routine: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) =>
       request<Routine>(`/api/routines/${routine.id}`, {
         method: 'PUT',
         headers: jsonHeaders,
-        body: JSON.stringify(routine),
+        body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
       }),
     remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
     copy: (owner: string, id: string) =>

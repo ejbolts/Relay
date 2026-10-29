@@ -222,7 +222,7 @@ def test_validation_and_account_backup(client, other_client):
         client.post(
             f"/api/routines/{draft['id']}/use", json={"start_date": "2026-10-29"}
         ).status_code
-        == 422
+        == 200
     )
     original = create(client)
     with SessionLocal() as db:
@@ -257,3 +257,48 @@ def test_cardio_targets_copy_and_activate_without_logging_performance(client, ot
     assert recommendation["routine_day"]["movements"][0]["sets"][0]["duration_seconds"] == 930
     assert recommendation["routine_day"]["movements"][0]["sets"][0]["distance_km"] == 3.4
     assert other_client.get("/api/workouts").json() == []
+
+
+def test_split_save_links_legacy_schedule_and_updates_dates_atomically(client, other_client):
+    legacy = {
+        "name": "Old split",
+        "start_date": "2026-10-01",
+        "steps": [{"workout_type_id": "upper"}, {"workout_type_id": None}],
+    }
+    assert client.put("/api/training-split", json=legacy).status_code == 200
+    data = {
+        "name": "My split",
+        "days": [{"workout_type_id": "upper"}, {"workout_type_id": None}],
+        "schedule": {"start_date": "2026-10-01", "enabled": True},
+    }
+    created = client.post("/api/routines", json=data)
+    assert created.status_code == 201, created.text
+    plan = created.json()
+    assert "schedule" not in plan
+    active = client.get("/api/training-split").json()
+    assert active["routine_id"] == plan["id"]
+    assert active["start_date"] == "2026-10-01"
+    assert active["enabled"] is True
+    data["name"] = "Renamed"
+    data["schedule"] = {"start_date": "2026-11-03", "enabled": False}
+    assert client.put(f"/api/routines/{plan['id']}", json=data).status_code == 200
+    updated = client.get("/api/training-split").json()
+    assert updated["name"] == "Renamed" and updated["enabled"] is False
+    assert updated["start_date"] == "2026-11-03"
+    assert other_client.put(f"/api/routines/{plan['id']}", json=data).status_code == 404
+    assert other_client.get("/api/training-split").json() is None
+    before = client.get("/api/training-split").json()
+    data["days"][0]["workout_type_id"] = "missing-type"
+    assert client.put(f"/api/routines/{plan['id']}", json=data).status_code == 422
+    assert client.get("/api/training-split").json() == before
+    assert client.get("/api/routines").json()[0]["name"] == "Renamed"
+    assert client.get("/api/workouts").json() == []
+
+
+def test_deleting_paused_split_does_not_leave_a_ghost_saved_plan(client):
+    data = payload(client)
+    data["schedule"] = {"start_date": "2026-10-26", "enabled": False}
+    plan = create(client, data)
+    assert client.delete(f"/api/routines/{plan['id']}").status_code == 204
+    assert client.get("/api/training-split").json() is None
+    assert client.get("/api/routines").json() == []

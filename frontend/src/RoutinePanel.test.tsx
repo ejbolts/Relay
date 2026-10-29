@@ -119,7 +119,7 @@ afterEach(async () => {
 
 it('copies into an editable private routine and adapts exercise and weight independently', async () => {
   await mount();
-  await click('Save routine');
+  await click('Save split');
   expect(api.routines.copy).toHaveBeenCalledWith('friend', 'source');
   expect(document.querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
   await input('[aria-label="Day 1 exercise 1"]', 'row');
@@ -142,8 +142,8 @@ it('opens My splits at the imported copy after dismissing the editor', async () 
   const open = vi.fn();
   await mount(false, open);
   expect(host.textContent).not.toContain('View my splits');
-  await click('Save routine');
-  await click('Close Edit routine');
+  await click('Save split');
+  await click('Close Edit split');
   await click('View my splits');
   expect(open).toHaveBeenCalledWith('copy');
   expect(api.routines.use).not.toHaveBeenCalled();
@@ -151,7 +151,7 @@ it('opens My splits at the imported copy after dismissing the editor', async () 
 
 it('keeps edits after a failed save and allows retry', async () => {
   await mount(true);
-  await click('Edit routine');
+  await click('Edit split');
   await input('[aria-label="Day 1 exercise 1 set 1 reps"]', '10');
   vi.mocked(api.routines.save).mockRejectedValueOnce(new Error('Connection lost'));
   await save();
@@ -167,20 +167,20 @@ it('shows save feedback in a dismissible popup that clears automatically after r
   vi.useFakeTimers();
   try {
     await mount(true);
-    await click('Edit routine');
+    await click('Edit split');
     await save();
     expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Routine saved.',
+      'Split saved.',
     );
-    expect(host.textContent).not.toContain('Routine saved.');
+    expect(host.textContent).not.toContain('Split saved.');
     await click('Close notification');
     expect(document.querySelector('.app-notification-toast')).toBeNull();
 
-    await click('Edit routine');
+    await click('Edit split');
     await save();
     await act(async () => vi.advanceTimersByTime(7000));
     expect(document.querySelector('.app-notification-toast')).not.toBeNull();
-    await click('Edit routine');
+    await click('Edit split');
     await save();
     await act(async () => vi.advanceTimersByTime(1000));
     expect(document.querySelector('.app-notification-toast')).not.toBeNull();
@@ -210,7 +210,7 @@ it('requires an explicit date confirmation before replacing the active split', a
 
 it('creates additional routines with workout and rest days and explicit publishing', async () => {
   await mount(true);
-  await click('New routine');
+  await click('New split');
   await input('[aria-label="Add exercise to day 1"]', 'bench');
   await click('Add rest day');
   await act(async () => document.querySelector<HTMLInputElement>('[role="switch"]')!.click());
@@ -233,14 +233,14 @@ it('retries failed profile loading and does not open an editor after failed copy
   expect(host.textContent).toContain('Offline');
   await click('Try again');
   vi.mocked(api.routines.copy).mockRejectedValueOnce(new Error('Routine is no longer shared'));
-  await click('Save routine');
+  await click('Save split');
   expect(host.textContent).toContain('Routine is no longer shared');
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
 it('explains incomplete publishing and keeps the routine editable', async () => {
   await mount(true);
-  await click('New routine');
+  await click('New split');
   await act(async () => document.querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await save();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
@@ -279,7 +279,7 @@ it('edits cardio minutes and distance as planned targets', async () => {
   vi.mocked(api.routines.list).mockResolvedValue([routine]);
   vi.mocked(api.listExercises).mockResolvedValue([bench, row, cardio]);
   await mount(true);
-  await click('Edit routine');
+  await click('Edit split');
   await input('[aria-label="Day 1 exercise 1 set 1 minutes"]', '15.5');
   await input('[aria-label="Day 1 exercise 1 set 1 distance km"]', '3.4');
   await save();

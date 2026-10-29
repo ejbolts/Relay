@@ -445,10 +445,19 @@ class RoutineInput(BaseModel):
         if self.shared and any(not day.movements for day in workouts):
             raise ValueError("Add exercises to every workout day before sharing.")
         if sum(len(day.movements) for day in self.days) > 200:
-            raise ValueError("A routine can contain at most 200 exercises.")
+            raise ValueError("A split can contain at most 200 exercises.")
         if sum(len(m.sets) for day in self.days for m in day.movements) > 1000:
-            raise ValueError("A routine can contain at most 1000 sets.")
+            raise ValueError("A split can contain at most 1000 sets.")
         return self
+
+
+class RoutineSchedule(BaseModel):
+    start_date: date
+    enabled: bool = True
+
+
+class RoutineSaveInput(RoutineInput):
+    schedule: RoutineSchedule | None = None
 
 
 class RoutineRead(RoutineInput):

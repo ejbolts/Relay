@@ -2,12 +2,11 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Share full routines on your profile, save and adapt a friend's split, plan training and rest days, save machine setups, and discover friends and workout reactions.",
+  "summary": "Manage every saved split on one page, follow your active plan, share splits with friends, save machine setups, and discover friends and workout reactions.",
   "changes": [
     "New workouts cannot use removed workout types. Previously saved workouts of those types remain editable.",
-    "Save multiple full routines with workout and rest days, exercises, sets and starting weights. Choose which routines appear on your profile. Friends can import an independent private copy, then find, edit and use it in Your splits > My splits. View my splits opens the imported copy directly. Use split activates the plan from a chosen date and marks it Active with a blue card border. Routine saves and split activation show temporary, dismissible popups. Schedule shows its cycle, and Up next prefills unchecked sets. Changes never alter the original. Sharing follows your profile audience and blocks.",
+    "Your splits is one page with all saved plans and templates. The active split has a blue border and opens to its next seven days; the calendar icon shows the current and next month using the shared Home calendar, one month at a time. Create from a template, edit days, rest days, exercises and starting weights, or import a private copy from a friend. Use split confirms the start date; Edit split can change the date or pause the plan. Saving stays on the page with temporary popup feedback. Existing splits stay available without changes until you save them; legacy plans link to the library in the same operation. Sharing follows your profile audience and blocks, and copies remain independent.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
-    "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan. Tap the calendar icon beside the preview dates to switch between Next 7 days and two full months using the same calendar as Home, Sessions and shared profiles; view one month at a time and swipe between the current and next month without changing your split.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
     "Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save.",
     "Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.",
@@ -34,11 +33,11 @@
   },
   "highlights": [
     {
-      "title": "Rest days in your split",
-      "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
+      "title": "Your splits, one page",
+      "description": "Find saved splits and templates together. The blue-bordered active card contains the week and calendar preview; expand another split to inspect or use it. No separate Schedule tab.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/fa42998b90e3cbb752032a0dc1018f35ae98c47d/docs/screenshots/releases/1.1.0-split-rest-days.png",
-        "alt": "Saved training split with Pull and Lower body workouts, consecutive Rest days, an Add rest day button and a seven-day calendar preview. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/d94ea1cfc092826cdd31fbf019c2436356496eeb/docs/screenshots/releases/1.1.0-your-splits.png",
+        "alt": "Your splits page with a blue-bordered active PPL split, next seven days, a second saved split and four templates below. Isolated sample data."
       }
     },
     {
