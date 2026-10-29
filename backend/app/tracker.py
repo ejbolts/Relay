@@ -42,6 +42,7 @@ from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
 from .exercise_aliases import canonical_exercise_name
+from .machine_photos import canonical_photo, merge_machine_photos
 from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
     BodyMeasurement,
@@ -108,6 +109,7 @@ from .tracker_schemas import (
     ImportBatchRead,
     ImportUndoRead,
     MachinePhotoCaptionUpdate,
+    MachinePhotoMerge,
     MachinePhotoRead,
     MachinePhotoUsageRead,
     MuscleFrequencyRead,
@@ -517,7 +519,9 @@ def workout_options():
         .selectinload(WorkoutMovement.exercise)
         .selectinload(Exercise.muscle_contributions),
         selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.sets),
-        selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.machine_photos),
+        selectinload(TrainingWorkout.movements)
+        .selectinload(WorkoutMovement.machine_photos)
+        .selectinload(MachinePhoto.merged_photos),
         selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.superset_group),
     )
 
@@ -534,9 +538,16 @@ def load_workout(db: Session, user_id: str, workout_id: str) -> TrainingWorkout:
 
 
 def replace_workout_contents(
-    db: Session, user_id: str, workout: TrainingWorkout, payload: TrainingWorkoutCreate
+    db: Session,
+    user_id: str,
+    workout: TrainingWorkout,
+    payload: TrainingWorkoutCreate,
+    *,
+    is_new: bool = False,
 ) -> None:
-    assign_workout_type(db, user_id, workout, payload)
+    # New saves already have a reserved ID for retry recovery; that does not
+    # make them historical workouts eligible to keep an archived type.
+    assign_workout_type(db, user_id, workout, payload, allow_archived=not is_new)
     workout.name = payload.name
     workout.workout_date = payload.workout_date
     workout.category = payload.category
@@ -578,13 +589,15 @@ def replace_workout_contents(
         if movement_payload.machine_photo_ids:
             photos = list(
                 db.scalars(
-                    select(MachinePhoto).where(
+                    select(MachinePhoto)
+                    .where(
                         MachinePhoto.id.in_(movement_payload.machine_photo_ids),
                         MachinePhoto.user_id == user_id,
                     )
+                    .execution_options(populate_existing=True)
                 )
             )
-            photos_by_id = {photo.id: photo for photo in photos}
+            photos_by_id = {photo.id: canonical_photo(db, photo) for photo in photos}
             missing = [
                 photo_id
                 for photo_id in movement_payload.machine_photo_ids
@@ -597,9 +610,12 @@ def replace_workout_contents(
                     status_code=422,
                     detail="Machine photos must belong to the movement's exercise.",
                 )
-            movement.machine_photos = [
-                photos_by_id[photo_id] for photo_id in movement_payload.machine_photo_ids
-            ]
+            movement.machine_photos = list(
+                {
+                    photos_by_id[photo_id].id: photos_by_id[photo_id]
+                    for photo_id in movement_payload.machine_photo_ids
+                }.values()
+            )
         for set_index, set_payload in enumerate(movement_payload.sets):
             movement.sets.append(WorkoutSet(order_index=set_index, **set_payload.model_dump()))
         workout.movements.append(movement)
@@ -940,8 +956,8 @@ def list_all_machine_photos(db: DbSession, user: CurrentUser) -> list[MachinePho
     photos = list(
         db.scalars(
             select(MachinePhoto)
-            .where(MachinePhoto.user_id == user.id)
-            .options(selectinload(MachinePhoto.exercise))
+            .where(MachinePhoto.user_id == user.id, MachinePhoto.merged_into_id.is_(None))
+            .options(selectinload(MachinePhoto.exercise), selectinload(MachinePhoto.merged_photos))
             .order_by(MachinePhoto.created_at.desc())
         )
     )
@@ -956,8 +972,10 @@ def list_machine_photo_workouts(
     photo_id: str, db: DbSession, user: CurrentUser
 ) -> list[TrainingWorkout]:
     """Saved workouts where this machine was pinned, newest first."""
-    if not get_owned(db, MachinePhoto, photo_id, user.id):
+    photo = get_owned(db, MachinePhoto, photo_id, user.id)
+    if not photo:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    photo_id = canonical_photo(db, photo).id
     pinned_workout_ids = (
         select(WorkoutMovement.workout_id)
         .join(
@@ -985,8 +1003,12 @@ def list_machine_photos(
     photos = list(
         db.scalars(
             select(MachinePhoto)
-            .where(MachinePhoto.exercise_id == exercise_id, MachinePhoto.user_id == user.id)
-            .options(selectinload(MachinePhoto.exercise))
+            .where(
+                MachinePhoto.exercise_id == exercise_id,
+                MachinePhoto.user_id == user.id,
+                MachinePhoto.merged_into_id.is_(None),
+            )
+            .options(selectinload(MachinePhoto.exercise), selectinload(MachinePhoto.merged_photos))
             .order_by(MachinePhoto.created_at.desc())
         )
     )
@@ -1099,6 +1121,24 @@ async def upload_machine_photo(
         raise
 
 
+@router.post(
+    "/exercises/{exercise_id}/machine-photos/merge",
+    response_model=MachinePhotoUsageRead,
+    dependencies=[Depends(limit_save_rate)],
+)
+def merge_saved_machine_photos(
+    exercise_id: str, payload: MachinePhotoMerge, db: DbSession, user: CurrentUser
+) -> MachinePhotoUsageRead:
+    if not get_owned(db, Exercise, exercise_id, user.id):
+        raise HTTPException(404, "Exercise was not found.")
+    photo = merge_machine_photos(
+        db, user.id, exercise_id, payload.photo_ids, payload.keep_photo_id, payload.caption
+    )
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return machine_photo_usage(db, user.id, [photo])[0]
+
+
 @router.patch("/machine-photos/{photo_id}", response_model=MachinePhotoRead)
 def update_machine_photo_caption(
     photo_id: str, payload: MachinePhotoCaptionUpdate, db: DbSession, user: CurrentUser
@@ -1106,6 +1146,7 @@ def update_machine_photo_caption(
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    photo = canonical_photo(db, photo)
     photo.caption = payload.caption
     bump_workout_cache_revision(db, user.id)
     db.commit()
@@ -1143,9 +1184,14 @@ def delete_machine_photo(
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    if photo.merged_into_id is not None:
+        raise HTTPException(
+            409, "This photo belongs to a merged machine. Delete the machine instead."
+        )
+    images = photo.images
     reference = db.scalar(
         select(movement_machine_photos.c.movement_id)
-        .where(movement_machine_photos.c.machine_photo_id == photo_id)
+        .where(movement_machine_photos.c.machine_photo_id.in_([image.id for image in images]))
         .limit(1)
     )
     if reference:
@@ -1153,11 +1199,11 @@ def delete_machine_photo(
             status_code=409,
             detail="Remove this photo from its workouts before deleting it.",
         )
-    full_filename = photo.full_filename
-    thumbnail_filename = photo.thumbnail_filename
+    files = [(image.full_filename, image.thumbnail_filename) for image in images]
     db.delete(photo)
     db.commit()
-    delete_machine_photo_files(settings, full_filename, thumbnail_filename)
+    for full_filename, thumbnail_filename in files:
+        delete_machine_photo_files(settings, full_filename, thumbnail_filename)
 
 
 def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
@@ -1961,7 +2007,7 @@ def create_workout(
         if existing is not None:
             return existing
         raise
-    replace_workout_contents(db, user.id, workout, payload)
+    replace_workout_contents(db, user.id, workout, payload, is_new=True)
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)

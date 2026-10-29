@@ -426,6 +426,17 @@ export const api = {
     }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
+  mergeMachinePhotos: (
+    exerciseId: string,
+    photoIds: string[],
+    keepPhotoId: string,
+    caption: string,
+  ) =>
+    request<MachinePhotoUsage>(`/api/exercises/${exerciseId}/machine-photos/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo_ids: photoIds, keep_photo_id: keepPhotoId, caption }),
+    }),
   getMachineSettings: (exerciseId: string, machinePhotoId?: string) =>
     request<{ settings: MachineSetting[] }>(
       `/api/exercises/${exerciseId}/machine-settings${machinePhotoId ? `?${new URLSearchParams({ machine_photo_id: machinePhotoId })}` : ''}`,

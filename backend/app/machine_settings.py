@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .account_limits import limit_save_rate
 from .auth import CurrentUser
 from .database import get_db
+from .machine_photos import canonical_photo
 from .models import Exercise, MachinePhoto
 from .training_metrics import get_setting, set_setting
 
@@ -63,7 +64,7 @@ def settings_key(
     photo = db.get(MachinePhoto, machine_photo_id)
     if photo is None or photo.user_id != user_id or photo.exercise_id != exercise_id:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
-    return f"machine_settings:{exercise_id}:{machine_photo_id}"
+    return f"machine_settings:{exercise_id}:{canonical_photo(db, photo).id}"
 
 
 @router.get("/{exercise_id}/machine-settings", response_model=MachineSettings)

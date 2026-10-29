@@ -80,7 +80,12 @@ def ensure_unique_name(db: Session, user_id: str, name: str, excluding: str | No
 
 
 def assign_workout_type(
-    db: Session, user_id: str, workout: TrainingWorkout, payload: TrainingWorkoutCreate
+    db: Session,
+    user_id: str,
+    workout: TrainingWorkout,
+    payload: TrainingWorkoutCreate,
+    *,
+    allow_archived: bool = False,
 ) -> None:
     # Older clients that do not send the new field can still edit saved custom workouts.
     type_id = payload.workout_type_id
@@ -107,8 +112,8 @@ def assign_workout_type(
         workout.workout_type_id = custom.id
     else:
         unchanged = (
-            # New saves reserve an ID before assigning a type, but have no saved movements.
-            bool(workout.movements)
+            allow_archived
+            and bool(workout.id)
             and workout.workout_type_id is None
             and workout.category == payload.category
         )
