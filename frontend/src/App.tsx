@@ -9316,20 +9316,6 @@ function HistoryScreen({
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"
-            titleAction={
-              section === 'history' ? (
-                <button
-                  type="button"
-                  className="training-add-exercise"
-                  aria-label="Add exercise"
-                  title="Add exercise"
-                  aria-haspopup="dialog"
-                  onClick={openExerciseCreation}
-                >
-                  <Icon name="plus" />
-                </button>
-              ) : undefined
-            }
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
           />

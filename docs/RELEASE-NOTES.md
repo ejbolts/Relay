@@ -46,7 +46,11 @@ _Add multiple target muscles and choose Direct (1 set) or Partial (half a set) c
 
 ![Training's Exercises tab with a compact plus button beside exercise search and two newly created custom exercises](screenshots/releases/1.1.0-library-add-exercise.png)
 
-_The plus beside exercise search opens Add exercise. Sessions keeps a compact plus beside the Training heading. The library updates after saving; this view uses isolated sample data._
+_The plus beside exercise search opens Add exercise. The Training heading no longer has an add button. The library updates after saving; this view uses isolated sample data._
+
+![Training Sessions with the blue plus button removed from beside the Training heading](screenshots/releases/1.1.0-training-header.png)
+
+_The Training heading keeps its account and settings controls. Add exercises from the Exercises search toolbar. Isolated sample data._
 
 ![Opening a preloaded profile, viewing the people behind a workout's reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
 
@@ -92,7 +96,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 - Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
 - Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan. Tap the calendar icon beside the preview dates to switch between **Next 7 days** and two full months using the same calendar as Home, Sessions and shared profiles; view one month at a time and swipe between the current and next month without changing your split.
 - Cardio sets open with their editable fields expanded, including suggestions from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately. Sets remain uncompleted until you tick them; completed sets still fold away.
-- Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
+- Use the **+** beside **Search exercises** to add to your library without starting a workout. The **Training** heading no longer has an add button. The library shortcut opens the form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.
 - Tap a workout's reaction count to instantly open a bottom sheet showing who reacted and each person's emoji. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
