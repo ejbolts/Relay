@@ -34,10 +34,11 @@ from .auth import (
     get_current_user,
     get_login_throttle,
     hash_password,
+    hash_token,
     password_needs_rehash,
-    revoke_session_token,
     set_session_cookie,
     too_many_attempts,
+    utc_now,
     verify_password,
 )
 from .config import Settings
@@ -54,6 +55,7 @@ from .models import (
     Exercise,
     ExerciseMuscleContribution,
     Friendship,
+    ImportBatch,
     MachinePhoto,
     PersonalRecord,
     ProfileBlock,
@@ -81,6 +83,7 @@ from .photo_storage import (
     store_profile_photo,
 )
 from .server_settings import load_runtime_settings
+from .session_events import session_events
 from .storage import remove_session_files
 from .tracker import (
     bump_workout_cache_revision,
@@ -99,6 +102,7 @@ REGISTRATION_LOCK = threading.Lock()
 # Every table that carries its own user_id. Rows with a NULL user_id predate accounts and are
 # claimed by the first account ever created.
 LEGACY_OWNED_MODELS = (
+    ImportBatch,
     WorkoutSession,
     PushSubscription,
     ActiveWorkoutReminder,
@@ -321,6 +325,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(Timestamp).where(Timestamp.session_id.in_(video_session_ids)),
         delete(Clip).where(Clip.session_id.in_(video_session_ids)),
         delete(WorkoutSession).where(WorkoutSession.user_id == user_id),
+        delete(ImportBatch).where(ImportBatch.user_id == user_id),
         delete(BodyMeasurement).where(BodyMeasurement.user_id == user_id),
         delete(BodyWeightGoal).where(BodyWeightGoal.user_id == user_id),
         delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id),
@@ -342,6 +347,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
     for statement in statements:
         db.execute(statement)
     db.commit()
+    session_events.changed(user_id)
     if youtube_credentials:
         revoke_credentials(youtube_credentials)
 
@@ -474,7 +480,33 @@ def login(
 
 @auth_router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, db: DbDependency, settings: AppSettings) -> None:
-    revoke_session_token(db, request.cookies.get(settings.session_cookie))
+    token = request.cookies.get(settings.session_cookie)
+    user_id = (
+        db.scalar(
+            select(UserSession.user_id)
+            .join(User, User.id == UserSession.user_id)
+            .where(
+                UserSession.token_hash == hash_token(token),
+                UserSession.expires_at > utc_now(),
+                User.disabled_at.is_(None),
+            )
+        )
+        if token
+        else None
+    )
+    # A stale/replayed cookie cannot end a subsequent sign-in on another device.
+    if user_id is not None:
+        endpoints = list(
+            db.scalars(select(PushSubscription.endpoint).where(PushSubscription.user_id == user_id))
+        )
+        db.execute(delete(UserSession).where(UserSession.user_id == user_id))
+        db.execute(delete(PushSubscription).where(PushSubscription.user_id == user_id))
+        db.execute(delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id))
+        db.commit()
+        session_events.changed(user_id)
+        for endpoint in endpoints:
+            request.app.state.rest_timer_notifications.cancel_endpoint(endpoint)
+            request.app.state.workout_reminders.cancel(endpoint=endpoint, user_id=user_id)
     clear_session_cookie(response, settings)
 
 
@@ -588,6 +620,7 @@ def change_password(
         )
     )
     db.commit()
+    session_events.changed(user.id)
 
 
 @profile_router.delete("", status_code=204)

@@ -12,6 +12,18 @@ _Relay was called Gym Logger before version 1.0._
 
 _Show your QR code from your profile or Social > Find. Scanning it opens your profile with Add friend, including after the other person signs in or creates an account. Isolated sample accounts._
 
+![Desktop sign-out returns both the desktop and mobile sessions to sign-in](screenshots/releases/1.1.0-signout-all-devices.gif)
+
+_Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
+
+![Import review mapping Flat bench (old app) to Barbell Bench Press with no new exercises](screenshots/releases/1.1.0-import-exercise-mapping.png)
+
+_Map incoming names to your exercise library, then update the review before saving. Isolated sample data._
+
+![Import history asking to undo one sample batch of one session and one check-in](screenshots/releases/1.1.0-undo-import-batch.png)
+
+_Undo a tracked import while preserving other sessions and edited check-ins. Isolated sample data._
+
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
 _A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
@@ -80,7 +92,16 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
+![Circular Start button below the Cardio, Up next and Empty workout choices](screenshots/releases/1.1.0-circular-start.png)
+
+_The circular Start button matches its workout choices. Isolated sample data._
+
 - Add friends in person with a QR code. Tap the QR button on your profile, or **My QR code** in **Social > Find**, and the other person scans it with their phone camera. The link opens your profile with **Add friend**; someone signed out or new to Relay signs in or creates an account first, then continues to your profile. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.
+- Map incoming exercise names to existing entries during import review. Update the review to recalculate new exercises and duplicates before saving; mappings are checked again when saving.
+- Open **Import history** in **Settings > Data & connections > Import & export** to undo one tracked import. Confirmation removes that batch's sessions (including edits), linked cardio and unedited imported check-ins, then recalculates personal records. Existing check-ins, other sessions and edited imported check-ins are kept. Unused, unchanged custom exercises created by the batch are removed; reused or customised entries stay. Earlier imports cannot be undone as a batch.
+- The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.
+- Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
+- Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

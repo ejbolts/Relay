@@ -169,13 +169,10 @@ function SessionPanel() {
       <header>
         <div>
           <p className="section-kicker">SESSION</p>
-          <h2 id="profile-session-title">Sign out</h2>
+          <h2 id="profile-session-title">Sign out all devices</h2>
         </div>
       </header>
-      <p>
-        Signs you out on this device and clears the workout data and unfinished workout stored on
-        it.
-      </p>
+      <p>Clears cached data and unfinished workouts on each device when it next connects.</p>
       <button
         type="button"
         className="profile-secondary"
@@ -183,7 +180,7 @@ function SessionPanel() {
         onClick={() => void run()}
       >
         {signingOut && <Spinner />}
-        <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
+        <span>{signingOut ? 'Signing out…' : 'Sign out all devices'}</span>
       </button>
       <FormFeedback status={null} error={error} />
     </section>

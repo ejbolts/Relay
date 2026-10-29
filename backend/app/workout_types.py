@@ -107,7 +107,8 @@ def assign_workout_type(
         workout.workout_type_id = custom.id
     else:
         unchanged = (
-            bool(workout.id)
+            # New saves reserve an ID before assigning a type, but have no saved movements.
+            bool(workout.movements)
             and workout.workout_type_id is None
             and workout.category == payload.category
         )

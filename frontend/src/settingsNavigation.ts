@@ -224,7 +224,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'Sign out',
     page: 'settings',
     requiresAccount: true,
-    keywords: 'logout log out device session',
+    keywords: 'logout log out all devices session',
     selector: '#profile-session-title',
   },
   {
