@@ -10,7 +10,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ![My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button](screenshots/releases/1.1.0-friend-qr-code.png)
 
-_Show your QR code from your profile or Social > Find. Scanning it opens your profile with Add friend, including after the other person signs in or creates an account. Isolated sample accounts._
+_Show your QR code from your profile or Social > Find. Scanning it sends you a friend request, including after the other person signs in or creates an account. Isolated sample accounts._
 
 ![Desktop sign-out returns both the desktop and mobile sessions to sign-in](screenshots/releases/1.1.0-signout-all-devices.gif)
 
@@ -96,7 +96,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _The circular Start button matches its workout choices. Isolated sample data._
 
-- Add friends in person with a QR code. Tap the QR button on your profile, or **My QR code** in **Social > Find**, and the other person scans it with their phone camera. The link opens your profile with **Add friend**; someone signed out or new to Relay signs in or creates an account first, then continues to your profile. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.
+- Add friends in person with a QR code. Tap the QR button on your profile, or **My QR code** in **Social > Find**, and the other person scans it with their phone camera. Scanning sends you a friend request straight away and opens your profile, with **Undo** in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.
 - Map incoming exercise names to existing entries during import review. Update the review to recalculate new exercises and duplicates before saving; mappings are checked again when saving.
 - Open **Import history** in **Settings > Data & connections > Import & export** to undo one tracked import. Confirmation removes that batch's sessions (including edits), linked cardio and unedited imported check-ins, then recalculates personal records. Existing check-ins, other sessions and edited imported check-ins are kept. Unused, unchanged custom exercises created by the batch are removed; reused or customised entries stay. Earlier imports cannot be undone as a batch.
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.

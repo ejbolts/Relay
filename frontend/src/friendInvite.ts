@@ -1,7 +1,7 @@
 /**
  * Friend invitation links: a QR code holds an ordinary Relay URL, so it works from any phone
  * camera, with or without the app installed. Opening one while signed out keeps the invitation
- * through signing in or creating an account, then opens the inviter's profile.
+ * through signing in or creating an account, then sends the inviter a friend request.
  */
 
 const INVITE_HASH = /^#friend=([A-Za-z0-9-]{1,64})$/;

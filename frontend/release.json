@@ -4,7 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Save machine setups, plan training and rest days, map and undo imports, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
-    "Add friends in person with a QR code. Tap the QR button on your profile, or My QR code in Social > Find, and the other person scans it with their phone camera. The link opens your profile with Add friend; someone signed out or new to Relay signs in or creates an account first, then continues to your profile. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
+    "Add friends in person with a QR code. Tap the QR button on your profile, or My QR code in Social > Find, and the other person scans it with their phone camera. Scanning sends you a friend request straight away and opens your profile, with Undo in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
     "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
     "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
     "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
@@ -39,7 +39,7 @@
   "highlights": [
     {
       "title": "Add friends with a QR code",
-      "description": "Show your QR code from Profile or Social > Find. A phone camera opens your profile with Add friend, even for someone who still needs to sign in or create an account.",
+      "description": "Show your QR code from Profile or Social > Find. Scanning it sends you a friend request, with Undo, even for someone who still needs to sign in or create an account.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/ee6d9993421df45e4ad1ac0ce347b53074f9775b/docs/screenshots/releases/1.1.0-friend-qr-code.png",
         "alt": "My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button. Isolated sample accounts."

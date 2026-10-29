@@ -778,7 +778,7 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
   useEffect(() => {
-    // A friend QR code opens the inviter's profile, where Add friend sends the request.
+    // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;
     clearFriendInvite();
     setFriendInvite(null);

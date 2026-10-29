@@ -310,8 +310,8 @@ export function AuthScreen({
               <Icon name="people" />
               <span>
                 {registrationOpen
-                  ? 'Sign in or create an account to open your friend invite.'
-                  : 'Sign in to open your friend invite.'}
+                  ? 'Sign in or create an account to send your friend request.'
+                  : 'Sign in to send your friend request.'}
               </span>
             </p>
           )}

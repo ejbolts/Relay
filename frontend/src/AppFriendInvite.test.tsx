@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -12,7 +12,7 @@ import {
   writeWorkoutCache,
 } from './workoutCache';
 import { pendingFriendInvite } from './friendInvite';
-import type { DashboardData, SharedProfile, User } from './types';
+import type { DashboardData, FriendStatus, SharedProfile, User } from './types';
 import { UserContext, type UserSession } from './userContext';
 
 vi.mock('./workoutCache', () => ({
@@ -51,6 +51,8 @@ const inviter = {
 
 let root: Root;
 let host: HTMLDivElement;
+// The server's friendship state between the signed-in member and the inviter.
+let friendStatus: FriendStatus;
 
 beforeEach(() => {
   vi.mocked(readDashboardCache).mockResolvedValue(null);
@@ -85,9 +87,25 @@ beforeEach(() => {
     zone2_goal_minutes: 150,
     weekly_muscle_set_goal: 10,
   });
+  friendStatus = 'none';
   vi.spyOn(api.sharing, 'profile').mockImplementation(async (id) =>
-    id === inviterId ? inviter : Promise.reject(new Error('unexpected profile')),
+    id === inviterId
+      ? { ...inviter, friend_status: friendStatus, can_view: friendStatus === 'friends' }
+      : Promise.reject(new Error('unexpected profile')),
   );
+  vi.spyOn(api.sharing, 'workouts').mockResolvedValue({
+    workouts: [],
+    personal_records: [],
+    total: 0,
+  });
+  vi.spyOn(api.sharing, 'workoutFilters').mockResolvedValue({ exercises: [], machines: [] });
+  vi.spyOn(api.sharing, 'addFriend').mockImplementation(async () => {
+    friendStatus = friendStatus === 'incoming' ? 'friends' : 'outgoing';
+    return { status: friendStatus };
+  });
+  vi.spyOn(api.sharing, 'removeFriend').mockImplementation(async () => {
+    friendStatus = 'none';
+  });
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -100,7 +118,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function openLink(hash: string) {
+async function openLink(hash: string, strict = false) {
   window.history.replaceState(null, '', hash);
   const session: UserSession = {
     user: account,
@@ -110,30 +128,49 @@ async function openLink(hash: string) {
   };
   await act(async () =>
     root.render(
-      <UserContext.Provider value={session}>
-        <App />
-      </UserContext.Provider>,
+      strict ? (
+        <StrictMode>
+          <UserContext.Provider value={session}>
+            <App />
+          </UserContext.Provider>
+        </StrictMode>
+      ) : (
+        <UserContext.Provider value={session}>
+          <App />
+        </UserContext.Provider>
+      ),
     ),
   );
 }
 
-it('opens the inviter’s profile with Add friend once signed in', async () => {
+const toast = () => document.querySelector('.friend-invite-toast');
+const buttonNamed = (name: string) =>
+  [...document.querySelectorAll('button')].find((button) => button.textContent === name);
+
+it('sends the inviter a friend request once signed in, with Undo', async () => {
   // Captured before sign-in, as main.tsx does when the QR code's link opens.
   window.sessionStorage.setItem('relay.pendingFriendInvite', inviterId);
-  await openLink('/');
+  // Strict mode loads the profile twice; the request must still be sent only once.
+  await openLink('/', true);
 
   expect(window.location.hash).toBe('#shared-profile');
-  expect(api.sharing.profile).toHaveBeenCalledWith(inviterId);
+  expect(api.sharing.addFriend).toHaveBeenCalledOnce();
+  expect(api.sharing.addFriend).toHaveBeenCalledWith(inviterId);
   expect(host.querySelector('.overlay-header-copy')?.textContent).toContain('Sam Rivera');
-  expect(host.textContent).toContain('Add Sam Rivera as a friend to see their training');
-  expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Add friend')).toBe(
-    true,
-  );
+  expect(toast()?.textContent).toContain('Friend request sent to Sam Rivera');
+  expect(host.querySelector('.shared-profile-screen h2')?.textContent).toBe('Friend request sent');
+  expect(buttonNamed('Add friend')).toBeUndefined();
   // Used once: a reload or a later visit opens the app normally.
   expect(pendingFriendInvite()).toBeNull();
+
+  await act(async () => buttonNamed('Undo')!.click());
+  expect(api.sharing.removeFriend).toHaveBeenCalledWith(inviterId);
+  expect(toast()).toBeNull();
+  expect(buttonNamed('Add friend')).toBeDefined();
+  expect(api.sharing.addFriend).toHaveBeenCalledOnce();
 });
 
-it('opens a link scanned while the app is already open', async () => {
+it('sends the request from a link scanned while the app is already open', async () => {
   await openLink('/#dashboard');
   await act(async () => {
     window.history.replaceState(window.history.state, '', `/#friend=${inviterId}`);
@@ -141,7 +178,37 @@ it('opens a link scanned while the app is already open', async () => {
   });
 
   expect(window.location.hash).toBe('#shared-profile');
-  expect(host.textContent).toContain('Add Sam Rivera as a friend to see their training');
+  expect(api.sharing.addFriend).toHaveBeenCalledWith(inviterId);
+  expect(toast()?.textContent).toContain('Friend request sent to Sam Rivera');
+});
+
+it('accepts their request when the inviter already asked you', async () => {
+  friendStatus = 'incoming';
+  window.sessionStorage.setItem('relay.pendingFriendInvite', inviterId);
+  await openLink('/');
+
+  expect(toast()?.textContent).toContain('You and Sam Rivera are now friends');
+  expect(buttonNamed('Undo')).toBeUndefined();
+  expect(api.sharing.workouts).toHaveBeenCalled();
+});
+
+it('leaves existing friends and sent requests as they are', async () => {
+  friendStatus = 'friends';
+  window.sessionStorage.setItem('relay.pendingFriendInvite', inviterId);
+  await openLink('/');
+
+  expect(window.location.hash).toBe('#shared-profile');
+  expect(api.sharing.addFriend).not.toHaveBeenCalled();
+  expect(toast()).toBeNull();
+});
+
+it('falls back to Add friend when the request cannot be sent', async () => {
+  vi.mocked(api.sharing.addFriend).mockRejectedValue(new Error('offline'));
+  window.sessionStorage.setItem('relay.pendingFriendInvite', inviterId);
+  await openLink('/');
+
+  expect(toast()?.textContent).toContain('Could not send the friend request');
+  expect(buttonNamed('Add friend')).toBeDefined();
 });
 
 it('opens your own profile when you scan your own code', async () => {
@@ -156,4 +223,5 @@ it('opens your own profile when you scan your own code', async () => {
   await openLink('/');
 
   expect(window.location.hash).toBe('#profile');
+  expect(api.sharing.addFriend).not.toHaveBeenCalled();
 });

@@ -14,14 +14,14 @@ function render(config: AuthConfig | null, initialMode?: 'sign-in' | 'create-acc
 
 describe('AuthScreen', () => {
   it('explains a waiting friend invite only when one was opened', () => {
-    expect(render(open)).not.toContain('friend invite');
+    expect(render(open)).not.toContain('friend request');
     vi.stubGlobal('window', {
       sessionStorage: { getItem: () => 'd7131000-7937-40be-b8ee-8b02800f5a36' },
     });
     try {
-      expect(render(open)).toContain('sign in or create an account to open your friend invite.');
+      expect(render(open)).toContain('sign in or create an account to send your friend request.');
       expect(render({ ...open, registration_open: false })).toContain(
-        'sign in to open your friend invite.',
+        'sign in to send your friend request.',
       );
     } finally {
       vi.unstubAllGlobals();
