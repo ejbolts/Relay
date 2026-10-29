@@ -12,9 +12,13 @@ _Relay was called Gym Logger before version 1.0._
 
 _Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
 
-![Body measurements with dated circumference entries and editable history](screenshots/releases/1.1.0-body-measurements.png)
+![Waist history showing dated measurements and changes from the previous recorded value](screenshots/releases/1.1.0-body-part-history.png)
 
-_Log optional circumferences without a weigh-in, then review or edit dated history. Isolated synthetic measurements._
+_Select a body part to follow its own measurement history. Missing values are skipped and changes use your displayed units. Isolated synthetic measurements._
+
+![FFMI methodology question-mark explaining the score and natural potential model](screenshots/releases/1.1.0-ffmi-methodology.png)
+
+_Open the FFMI question-mark for a plain-language explanation of the method, research and limits, with a link to the source._
 
 ![Body's FFMI card with a normalized FFMI of 21.0 on a 17 to 29 comparison scale, a natural max of 24.7, reference levels and natural potential figures](screenshots/releases/1.1.0-ffmi.png)
 
@@ -88,9 +92,9 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. View history, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
+- **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
 
-- Body shows your FFMI on a 17 to 29 comparison scale with reference levels, from your latest check-in with body fat. Add your sex and height (plus wrist and ankle for men) to see your estimated natural max, maximum lean mass, weight at your target body fat and lean mass left to gain. These details are saved to your account.
+- Body shows your FFMI on a 17 to 29 comparison scale with reference levels, from your latest check-in with body fat. Add your sex and height (plus wrist and ankle for men) to see your estimated natural max, maximum lean mass, weight at your target body fat and lean mass left to gain. These details are saved to your account. The FFMI question-mark explains the calculation, research basis, leanness assumptions and limits in plain language, with a source link.
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
 - Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.

@@ -54,7 +54,7 @@ _Progress: exercise trends, personal records and previous sessions. Select the s
 
 **Body** tracks body weight and optional body-fat measurements, with trends and a weight goal to help you follow changes over time. Home offers separate **Body weight check-in**, **Body fat check-in** and **Combined check-in** sections. Add, hide, resize and arrange them through **Edit Home layout**. Weight can be logged without body-fat percentage; logging body fat requires today’s weight.
 
-**Body measurements** records dated circumferences for neck, shoulders, chest, waist, hips, both upper arms, thighs and calves, wrist and ankle. Choose **Log measurements** on Body; enter any subset without a weigh-in, then review, edit or delete entries in **Measurement history**. Lengths follow your weight preference (cm with kg, inches with lb). These records stay private and are included in account backups; FFMI frame details remain separate.
+**Body measurements** records dated circumferences for neck, shoulders, chest, waist, hips, both upper arms, thighs and calves, wrist and ankle. Choose **Log measurements** on Body; enter any subset without a weigh-in, then review, edit or delete entries in **Measurement history**. Use its **Body part** filter for individual dated values and changes since the previous recorded value. Lengths follow your weight preference (cm with kg, inches with lb). These records stay private and are included in account backups; FFMI frame details remain separate.
 
 <p>
   <a href="docs/screenshots/readme/body.png"><img src="docs/screenshots/readme/body.png" alt="Body screen with a weight goal, trend chart and daily check-in history" width="360"></a>

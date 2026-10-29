@@ -34,6 +34,13 @@ function input(label: string, value: string) {
   target.dispatchEvent(new Event('input', { bubbles: true }));
   target.dispatchEvent(new Event('change', { bubbles: true }));
 }
+async function selectPart(value: string) {
+  await act(async () => {
+    const select = host.querySelector('select')!;
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
 async function render(rows: BodySizeLog[] = []) {
   vi.mocked(api.listBodySizes).mockResolvedValue(rows);
   await act(async () => root.render(<BodySizesCard />));
@@ -59,6 +66,62 @@ afterEach(() => {
 });
 
 describe('BodySizesCard', () => {
+  it('shows an individual part, skipping missing dates and comparing its previous measurement', async () => {
+    await render([
+      row('2026-10-25', { waist_cm: 81, chest_cm: 103, left_arm_cm: 35, right_arm_cm: 36 }),
+      row('2026-10-24', { chest_cm: 102 }),
+      row('2026-10-23', { waist_cm: 82 }),
+      row('2026-10-22', { waist_cm: 82 }),
+    ]);
+    await selectPart('waist_cm');
+    const history = host.querySelector('.body-sizes-history')!;
+    expect(history.querySelectorAll('article')).toHaveLength(3);
+    expect(
+      [...history.querySelectorAll('.body-sizes-part-value')].map((item) => item.textContent),
+    ).toEqual(['81 cm−1 cm', '82 cmNo change', '82 cmFirst measurement']);
+    expect(history.querySelector('[datetime="2026-10-24"]')).toBeNull();
+    expect(history.textContent).not.toContain('103 cm');
+    expect(
+      [...history.querySelectorAll('button')].some((item) => item.textContent === 'Delete'),
+    ).toBe(false);
+    await act(async () => history.querySelector('button')!.click());
+    await act(async () => input('Waist', '80.5'));
+    await act(async () => button('Update measurements').click());
+    expect(history.querySelector('.body-sizes-part-value')?.textContent).toBe('80.5 cm−1.5 cm');
+    await selectPart('right_arm_cm');
+    expect(history.querySelector('.body-sizes-part-value')?.textContent).toBe(
+      '36 cmFirst measurement',
+    );
+    await selectPart('left_arm_cm');
+    expect(history.querySelector('.body-sizes-part-value')?.textContent).toBe(
+      '35 cmFirst measurement',
+    );
+  });
+  it('paginates the selected part and resets pagination on switching parts, with an empty state', async () => {
+    await render(
+      Array.from({ length: 7 }, (_, index) =>
+        row(`2026-10-${25 - index}`, { waist_cm: 80 + index }),
+      ),
+    );
+    await selectPart('waist_cm');
+    const history = host.querySelector('.body-sizes-history')!;
+    expect(history.querySelectorAll('article')).toHaveLength(5);
+    expect(history.textContent).not.toContain('First measurement');
+    await act(async () => button('Show more').click());
+    expect(history.querySelectorAll('article')).toHaveLength(7);
+    expect(history.textContent).toContain('First measurement');
+    await selectPart('neck_cm');
+    expect(history.querySelectorAll('article')).toHaveLength(0);
+    expect(history.textContent).toContain('No neck measurements yet.');
+    await selectPart('all');
+    expect(history.querySelectorAll('article')).toHaveLength(5);
+  });
+  it('reports changes using the displayed inch values', async () => {
+    unit = 'lb';
+    await render([row('2026-10-25', { waist_cm: 82 }), row('2026-10-23', { waist_cm: 80 })]);
+    await selectPart('waist_cm');
+    expect(host.querySelector('.body-sizes-part-value')?.textContent).toBe('32.3 in+0.8 in');
+  });
   it('retries a failed load and refreshes when the account revision changes', async () => {
     vi.mocked(api.listBodySizes).mockRejectedValueOnce(new Error('Offline'));
     await act(async () => root.render(<BodySizesCard />));

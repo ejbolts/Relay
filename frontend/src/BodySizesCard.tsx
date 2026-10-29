@@ -28,6 +28,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [visible, setVisible] = useState(5);
+  const [historyPart, setHistoryPart] = useState<BodySizeField | 'all'>('all');
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
@@ -118,7 +119,16 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   }
 
   const latest = logs?.[0];
+  const history = (logs ?? []).filter((row) => historyPart === 'all' || row[historyPart] !== null);
+  const partLabel = BODY_SIZE_FIELDS.find(([key]) => key === historyPart)?.[1];
   const format = (cm: number) => `${Number((cm / factor).toFixed(1))} ${unit}`;
+  function changeFromPrevious(index: number): string {
+    if (historyPart === 'all' || !history[index + 1]) return 'First measurement';
+    const current = Number((history[index][historyPart]! / factor).toFixed(1));
+    const previous = Number((history[index + 1][historyPart]! / factor).toFixed(1));
+    const change = Number((current - previous).toFixed(1));
+    return change === 0 ? 'No change' : `${change > 0 ? '+' : '−'}${Math.abs(change)} ${unit}`;
+  }
   const open = (day: string) => {
     chooseDate(day);
     setEditing(true);
@@ -175,9 +185,27 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
           </dl>
           <details className="body-sizes-history">
             <summary>
-              Measurement history <span>{logs.length}</span>
+              Measurement history <span>{history.length}</span>
             </summary>
-            {logs.slice(0, visible).map((row) => (
+            <label className="body-sizes-history-filter">
+              Body part
+              <select
+                value={historyPart}
+                onChange={(event) => {
+                  setHistoryPart(event.target.value as BodySizeField | 'all');
+                  setVisible(5);
+                }}
+              >
+                <option value="all">All measurements</option>
+                {BODY_SIZE_FIELDS.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {history.length === 0 && <p>No {partLabel?.toLowerCase()} measurements yet.</p>}
+            {history.slice(0, visible).map((row, index) => (
               <article key={row.measurement_date}>
                 <div className="body-sizes-history-heading">
                   <time dateTime={row.measurement_date}>{shortDate(row.measurement_date)}</time>
@@ -189,26 +217,39 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     >
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete measurements ${row.measurement_date}`}
-                      onClick={() => {
-                        setError(null);
-                        setDeleting(row.measurement_date);
-                      }}
-                    >
-                      Delete
-                    </button>
+                    {historyPart === 'all' && (
+                      <button
+                        type="button"
+                        aria-label={`Delete measurements ${row.measurement_date}`}
+                        onClick={() => {
+                          setError(null);
+                          setDeleting(row.measurement_date);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
-                <p>
-                  {BODY_SIZE_FIELDS.filter(([key]) => row[key] !== null)
-                    .map(([key, label]) => `${label} ${format(row[key]!)}`)
-                    .join(' · ')}
-                </p>
+                {historyPart !== 'all' ? (
+                  <div className="body-sizes-part-value">
+                    <strong>{format(row[historyPart]!)}</strong>
+                    <span
+                      aria-label={`Change from previous measurement: ${changeFromPrevious(index)}`}
+                    >
+                      {changeFromPrevious(index)}
+                    </span>
+                  </div>
+                ) : (
+                  <p>
+                    {BODY_SIZE_FIELDS.filter(([key]) => row[key] !== null)
+                      .map(([key, label]) => `${label} ${format(row[key]!)}`)
+                      .join(' · ')}
+                  </p>
+                )}
               </article>
             ))}
-            {logs.length > visible && (
+            {history.length > visible && (
               <button type="button" onClick={() => setVisible((count) => count + 5)}>
                 Show more
               </button>

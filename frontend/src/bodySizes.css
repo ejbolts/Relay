@@ -59,6 +59,41 @@
 .body-sizes-history article {
   padding-top: 16px;
 }
+.body-sizes-history-filter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--p-muted);
+  font-size: 12px;
+}
+.body-sizes-history-filter select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+}
+.body-sizes-part-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0 14px;
+  border-bottom: 1px solid var(--p-line);
+}
+.body-sizes-part-value strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.body-sizes-part-value span {
+  color: var(--p-muted);
+  font-size: 12px;
+}
 .body-sizes-history-heading {
   display: flex;
   align-items: center;

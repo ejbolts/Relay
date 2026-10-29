@@ -183,20 +183,58 @@ export function FfmiCard({
       <header className="pulse-card-header">
         <h2 className="profile-help-row">
           FFMI{' '}
-          <HelpPopup title="FFMI">
+          <HelpPopup title="FFMI methodology">
             <p>
-              Fat-free mass index is your lean mass in kg divided by your height in metres squared.
-              Men&apos;s scores are normalised to 1.8 m; women&apos;s are divided by 0.81 so they
-              compare on the same scale.
+              <strong>Your score.</strong> FFMI relates fat-free mass to height. Fat-free mass
+              includes muscle, bone, organs and water. We use your latest weigh-in with body fat,
+              divide lean mass in kg by height in metres squared, then adjust men to 1.8 m and
+              divide women&apos;s scores by 0.81 for the comparison scale.
             </p>
             <p>
-              It uses your latest check-in with a body fat estimate. Natural max follows Casey
-              Butt&apos;s wrist and ankle model for men and a maximum FFMI of 20 for women, at your
-              target body fat.
+              <strong>Men&apos;s natural potential.</strong> Height, wrist and ankle size estimate
+              the lean mass a fully developed natural lifter might carry. We follow the reference
+              calculator&apos;s Casey Butt model, which draws on the larger sample and revised
+              formulas in the fourth edition of <em>Your Muscular Potential</em>. Earlier online
+              formulas can give higher estimates because they relied on fewer, unusually gifted
+              athletes. Target body fat adjusts the estimate and converts lean mass to bodyweight.
             </p>
             <p>
-              Measure your wrist just below the hand, above the bone on the outside, and your ankle
-              at its narrowest point above the ankle bones.
+              <strong>Women&apos;s estimate.</strong> We use a raw FFMI ceiling of 20, informed by
+              Chappell et al. (2018), or about 24.7 on this adjusted scale. The 0.81 adjustment
+              reflects average female-to-male FFMI ratios in the reference research. Evidence is
+              more limited for women; the reference calculator provides whole-body estimates for
+              women rather than individual body-part potential. Relay&apos;s circumference histories
+              show your recorded measurements separately from its whole-body potential estimate.
+            </p>
+            <p>
+              <strong>Research behind the reference.</strong> The source&apos;s probability model
+              pools experienced, drug-tested bodybuilders studied by Kouri (1995), Mäestu (2010) and
+              Chappell (2018). It combines the studies&apos; height-adjusted FFMI averages and
+              spread, corrects for body-composition measurement error, and fits a bell curve to
+              estimate how common a score could be among natural lifters. Relay shows reference
+              levels and whole-body potential; it does not calculate this probability.
+            </p>
+            <p>
+              <strong>How to interpret it.</strong> These are population-based estimates, not a
+              personal genetic ceiling. The men&apos;s model is intended for very lean physiques,
+              roughly 4–12% body fat; a higher body-fat target does not make it reliable outside
+              that range. Body-fat and tape-measure errors affect the result. An FFMI score cannot
+              establish whether someone uses performance-enhancing drugs.
+            </p>
+            <p>
+              <strong>Taking measurements.</strong> Measure your wrist just below the hand, above
+              the bone on the outside, and your ankle at its narrowest point above the ankle bones.
+              Use a tape without compressing the skin. Height and these frame measurements belong in
+              FFMI details.
+            </p>
+            <p>
+              <a
+                href="https://mennohenselmans.com/ffmi-calculator/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Read Menno Henselmans&apos; methodology and research references
+              </a>
             </p>
           </HelpPopup>
         </h2>
