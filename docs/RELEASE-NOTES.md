@@ -8,9 +8,17 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
-![Your splits on one page with the active plan outlined in blue, its next seven days, saved splits and templates](screenshots/releases/1.1.0-your-splits.png)
+![Your splits with centred calendar and week icons and saved PPL and full-body templates greyed out](screenshots/releases/1.1.0-split-controls.png)
 
-_The active split opens to its preview. Use the calendar icon to swipe between the current and next month. Saved splits and templates stay on the same page; edits and start-date changes use focused dialogs. Isolated sample data._
+_Templates already saved with the same workout/rest cycle are disabled. Changing their saved days or deleting the copy makes them available again. The blue active card keeps its seven-day/calendar preview. Isolated sample data._
+
+![Split editor with name, workout and rest days and Save split, without a profile-sharing switch](screenshots/releases/1.1.0-split-editor.png)
+
+_Sharing lives in the saved split's options instead of the editor. Isolated sample data._
+
+![Profile with My splits beside Last 12 weeks in the Consistency header and no repeated split list](screenshots/releases/1.1.0-profile-split-link.png)
+
+_Open My splits directly from the consistency header. The profile no longer repeats saved plans or offers Save current split. Isolated sample data._
 
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
@@ -76,7 +84,7 @@ _Equipment photo opens directly to its controls in this isolated sample workout.
 
 _The exercise card ends at Add set. Set notes and workout notes remain available. Isolated sample data._
 
-- **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; its calendar uses the shared Home component and shows one month at a time, limited to the current and next month. Other cards expand to show days, exercises and starting weights. Templates create editable plans without replacing the active split. Use split confirms a start date; Edit split can change that date or pause the plan. Saving keeps you on the page with a temporary popup. Existing unlinked splits remain visible without automatic data changes and link to the library atomically on save. Private plans can be activated before adding exercises; sharing still requires exercises on every workout day. Profile > Splits and friends' profiles retain independent private copying, audience checks and blocks. Up next prefills planned sets unchecked; copies survive unsharing or deletion of the original.
+- **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
 - New workouts cannot use removed workout types; previously saved workouts of those types remain editable.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.

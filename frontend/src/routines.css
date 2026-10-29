@@ -100,6 +100,56 @@
   background: transparent;
   color: var(--p-ink-2);
 }
+.routine-panel .routine-create {
+  grid-template-columns: 1fr;
+}
+.routine-panel .routine-options-button {
+  order: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 38px;
+  padding: 0;
+  margin-left: auto;
+  background: transparent;
+}
+.routine-options {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.routine-options > strong {
+  overflow-wrap: anywhere;
+  margin-bottom: 4px;
+}
+.routine-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+}
+.routine-options button .pulse-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.routine-options .routine-delete {
+  color: var(--p-danger);
+}
+.routine-options .inline-error {
+  margin: 0;
+}
 .routine-notice {
   display: flex;
   align-items: center;
@@ -137,6 +187,9 @@
 }
 .routine-panel .split-template strong {
   font-size: 13px;
+}
+.routine-panel .split-template:disabled {
+  filter: grayscale(1);
 }
 .split-card-preview {
   border-top: 1px solid var(--p-line);

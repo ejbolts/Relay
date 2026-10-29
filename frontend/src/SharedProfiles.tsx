@@ -1109,14 +1109,20 @@ export interface SharedWorkoutListProps {
 function SharedConsistencyCalendar({
   data,
   onDayClick,
+  onOpenSplits,
 }: {
   data: SharedConsistency;
   onDayClick: (date: string) => void;
+  onOpenSplits?: () => void;
 }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const colors = builtinTypeColors(data.workout_types);
   return (
-    <ConsistencyCard streak={data.current_streak} trainingDays={data.training_days}>
+    <ConsistencyCard
+      streak={data.current_streak}
+      trainingDays={data.training_days}
+      onOpenSplits={onOpenSplits}
+    >
       <WorkoutCalendar
         entries={data.heatmap}
         types={data.workout_types}
@@ -1428,18 +1434,21 @@ export function SharedProfileScreen({
         </section>
       ) : (
         <>
-          <RoutinePanel
-            key={`routines:${profile.id}`}
-            ownerId={profile.id}
-            own={profile.is_you}
-            active={active}
-            revision={dataRevision}
-            onOpenSplits={onOpenSplits}
-          />
+          {!profile.is_you && (
+            <RoutinePanel
+              key={`routines:${profile.id}`}
+              ownerId={profile.id}
+              own={profile.is_you}
+              active={active}
+              revision={dataRevision}
+              onOpenSplits={onOpenSplits}
+            />
+          )}
           {profile.consistency && (
             <SharedConsistencyCalendar
               key={profile.id}
               data={profile.consistency}
+              onOpenSplits={profile.is_you ? onOpenSplits : undefined}
               onDayClick={(date) => {
                 setFilters({
                   category: '',

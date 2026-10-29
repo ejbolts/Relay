@@ -121,7 +121,10 @@ it('copies into an editable private routine and adapts exercise and weight indep
   await mount();
   await click('Save split');
   expect(api.routines.copy).toHaveBeenCalledWith('friend', 'source');
-  expect(document.querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
+  expect(document.querySelector('[role="switch"]')).toBeNull();
+  expect(document.querySelector('.routine-editor')?.textContent).not.toContain(
+    'Show on my profile',
+  );
   await input('[aria-label="Day 1 exercise 1"]', 'row');
   await input('[aria-label="Day 1 exercise 1 set 1 weight kg"]', '35');
   await save();
@@ -208,16 +211,16 @@ it('requires an explicit date confirmation before replacing the active split', a
   expect(host.textContent).not.toContain('is your active split');
 });
 
-it('creates additional routines with workout and rest days and explicit publishing', async () => {
+it('creates private splits without a publishing switch and shares from split options', async () => {
   await mount(true);
   await click('New split');
   await input('[aria-label="Add exercise to day 1"]', 'bench');
   await click('Add rest day');
-  await act(async () => document.querySelector<HTMLInputElement>('[role="switch"]')!.click());
+  expect(document.querySelector('.routine-editor [role="switch"]')).toBeNull();
   await save();
   expect(api.routines.create).toHaveBeenCalledWith(
     expect.objectContaining({
-      shared: true,
+      shared: false,
       days: [
         expect.objectContaining({ movements: [expect.objectContaining({ exercise_id: 'bench' })] }),
         expect.objectContaining({ workout_type_id: null }),
@@ -225,6 +228,19 @@ it('creates additional routines with workout and rest days and explicit publishi
     }),
   );
   expect(host.querySelectorAll('.routine-card')).toHaveLength(2);
+  await click('Close notification');
+  await click('Options for My split');
+  await click('Show on my profile');
+  expect(api.routines.save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ id: 'new', shared: true }),
+  );
+  expect(host.querySelector('.routine-card-meta')?.textContent).toContain('On profile');
+  await click('Close notification');
+  await click('Options for My split');
+  await click('Hide from my profile');
+  expect(api.routines.save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ id: 'new', shared: false }),
+  );
 });
 
 it('retries failed profile loading and does not open an editor after failed copying', async () => {
@@ -238,18 +254,30 @@ it('retries failed profile loading and does not open an editor after failed copy
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
-it('explains incomplete publishing and keeps the routine editable', async () => {
+it('keeps failed publishing in split options and preserves the saved privacy state', async () => {
   await mount(true);
   await click('New split');
-  await act(async () => document.querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await save();
+  await click('Close notification');
+  await click('Options for My split');
+  vi.mocked(api.routines.save).mockRejectedValueOnce(
+    new Error('Add exercises to every workout day before sharing.'),
+  );
+  await click('Show on my profile');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
     'Add exercises to every workout day before sharing.',
   );
-  expect(api.routines.create).not.toHaveBeenCalled();
-  await input('[aria-label="Add exercise to day 1"]', 'bench');
-  await save();
+  expect(document.querySelector('dialog[open]')?.textContent).toContain('Split options');
+  expect(host.querySelector('.routine-card-meta')?.textContent).toContain('Only you');
   expect(api.routines.create).toHaveBeenCalledOnce();
+});
+
+it('preserves an existing shared split when editing without a publishing control', async () => {
+  await mount(true);
+  await click('Edit split');
+  expect(document.querySelector('.routine-editor [role="switch"]')).toBeNull();
+  await save();
+  expect(api.routines.save).toHaveBeenCalledWith(expect.objectContaining({ shared: true }));
 });
 
 it('edits cardio minutes and distance as planned targets', async () => {

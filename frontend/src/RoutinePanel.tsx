@@ -112,6 +112,7 @@ export function RoutinePanel({
   const [editing, setEditing] = useState<Routine | null>(null);
   const [using, setUsing] = useState<Routine | null>(null);
   const [deleting, setDeleting] = useState<Routine | null>(null);
+  const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -204,7 +205,15 @@ export function RoutinePanel({
   const displayed = [...items].sort(
     (a, b) => Number(b.id === activeId) - Number(a.id === activeId),
   );
+  const hasTemplate = (preset: (typeof SPLIT_TEMPLATES)[number]) =>
+    (routines ?? []).some(
+      (routine) =>
+        routine.days.length === preset.types.length &&
+        routine.days.every((day, index) => day.workout_type_id === preset.types[index]),
+    );
   function template(id: string) {
+    const existing = SPLIT_TEMPLATES.find((t) => t.id === id);
+    if (existing && hasTemplate(existing)) return;
     const preset = SPLIT_TEMPLATES.find((t) => t.id === id) ?? {
       name: 'My split',
       types: [types.types.find((t) => !t.archived)?.id ?? 'upper'],
@@ -258,23 +267,9 @@ export function RoutinePanel({
             <Icon name="plus" />
             New split
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                const saved = await api.routines.fromSplit();
-                setRoutines((items) => [saved, ...(items ?? [])]);
-                setEditing(saved);
-              })
-            }
-          >
-            <Icon name="calendar" />
-            Save current split
-          </button>
         </div>
       )}
-      {error && !editing && !using && !deleting && (
+      {error && !editing && !using && !deleting && !options && (
         <p className="inline-error" role="alert">
           {error}{' '}
           <button type="button" onClick={() => setAttempt((x) => x + 1)}>
@@ -344,18 +339,6 @@ export function RoutinePanel({
             <div className="routine-actions">
               {own ? (
                 <>
-                  {routine.id !== activeId && routine.id !== 'current-split' && (
-                    <button
-                      type="button"
-                      className="routine-delete"
-                      onClick={() => {
-                        setError(null);
-                        setDeleting(routine);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -365,6 +348,19 @@ export function RoutinePanel({
                   >
                     Edit split
                   </button>
+                  {routine.id !== 'current-split' && (
+                    <button
+                      type="button"
+                      className="routine-options-button"
+                      aria-label={`Options for ${routine.name}`}
+                      onClick={() => {
+                        setError(null);
+                        setOptions(routine);
+                      }}
+                    >
+                      <Icon name="more" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={routine.id === activeId ? 'routine-secondary' : 'routine-primary'}
@@ -411,12 +407,15 @@ export function RoutinePanel({
                 type="button"
                 key={preset.id}
                 className="split-template"
-                disabled={busy || types.loading || !!types.error}
+                disabled={
+                  busy || !routines || types.loading || !!types.error || hasTemplate(preset)
+                }
+                title={hasTemplate(preset) ? 'Already in My splits' : undefined}
                 onClick={() => template(preset.id)}
               >
                 <span>
                   <strong>{preset.id === 'fbeod' ? 'Full body / Rest' : preset.name}</strong>
-                  <Icon name="plus" />
+                  <Icon name={hasTemplate(preset) ? 'check' : 'plus'} />
                 </span>
                 <span className="split-template-pattern" aria-hidden="true">
                   {preset.types.map((id, index) => (
@@ -435,6 +434,63 @@ export function RoutinePanel({
             ))}
           </div>
         </section>
+      )}
+      {options && (
+        <PopupDialog
+          title="Split options"
+          onClose={() => {
+            if (!busy) {
+              setOptions(null);
+              setError(null);
+            }
+          }}
+        >
+          <div className="routine-options">
+            <strong>{options.name}</strong>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const saved = await api.routines.save({ ...options, shared: !options.shared });
+                  setRoutines((items) =>
+                    items!.map((item) => (item.id === saved.id ? saved : item)),
+                  );
+                  setOptions(null);
+                  setNotice(
+                    saved.shared
+                      ? 'Split shown on your profile.'
+                      : 'Split hidden from your profile.',
+                  );
+                  onChanged?.(saved.id);
+                })
+              }
+            >
+              <Icon name={options.shared ? 'hide' : 'people'} />
+              {options.shared ? 'Hide from my profile' : 'Show on my profile'}
+            </button>
+            {options.id !== activeId && (
+              <button
+                type="button"
+                className="routine-delete"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setDeleting(options);
+                  setOptions(null);
+                }}
+              >
+                <Icon name="close" />
+                Delete split
+              </button>
+            )}
+            {error && (
+              <p className="inline-error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </PopupDialog>
       )}
       {editing && (
         <RoutineEditor
@@ -715,15 +771,6 @@ function RoutineEditor({
               </label>
             </div>
           )}
-          <label className="routine-share">
-            <span>Show on my profile</span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={value.shared}
-              onChange={(event) => setValue({ ...value, shared: event.target.checked })}
-            />
-          </label>
           {types.error && (
             <p className="inline-error" role="alert">
               {types.error}{' '}

@@ -5,7 +5,7 @@
   "summary": "Manage every saved split on one page, follow your active plan, share splits with friends, save machine setups, and discover friends and workout reactions.",
   "changes": [
     "New workouts cannot use removed workout types. Previously saved workouts of those types remain editable.",
-    "Your splits is one page with all saved plans and templates. The active split has a blue border and opens to its next seven days; the calendar icon shows the current and next month using the shared Home calendar, one month at a time. Create from a template, edit days, rest days, exercises and starting weights, or import a private copy from a friend. Use split confirms the start date; Edit split can change the date or pause the plan. Saving stays on the page with temporary popup feedback. Existing splits stay available without changes until you save them; legacy plans link to the library in the same operation. Sharing follows your profile audience and blocks, and copies remain independent.",
+    "Your splits is one page with all saved plans and templates. The active split has a blue border and opens to its next seven days; centred calendar and week buttons switch the preview using the shared Home calendar. Saved template cycles are greyed out to prevent duplicates, and become available when their saved days change or the copy is deleted. Edit days, exercises and starting weights in a focused editor; sharing and deletion live in the split options. My splits sits beside Last 12 weeks on your profile instead of repeating the saved list. Use split confirms a start date; Edit split can change the date or pause the plan. Saving stays on the page with temporary popup feedback. Existing unlinked plans remain available and link to the library atomically on save. Sharing follows your profile audience and blocks, and copies remain independent.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
     "Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save.",
@@ -34,10 +34,10 @@
   "highlights": [
     {
       "title": "Your splits, one page",
-      "description": "Find saved splits and templates together. The blue-bordered active card contains the week and calendar preview; expand another split to inspect or use it. No separate Schedule tab.",
+      "description": "Find saved splits and templates together. The blue-bordered active card contains the week and calendar preview. Saved template cycles are greyed out; sharing lives in split options. Open My splits beside Last 12 weeks on your profile.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/d94ea1cfc092826cdd31fbf019c2436356496eeb/docs/screenshots/releases/1.1.0-your-splits.png",
-        "alt": "Your splits page with a blue-bordered active PPL split, next seven days, a second saved split and four templates below. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/676b21eb56af7bfdc2fd01efc1278a81b4fcdf6b/docs/screenshots/releases/1.1.0-split-controls.png",
+        "alt": "Your splits with centred calendar controls and greyed-out saved PPL and full-body templates. Isolated sample data."
       }
     },
     {

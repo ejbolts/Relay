@@ -281,16 +281,24 @@
   font-size: 0.65rem;
   color: var(--p-muted);
 }
-.split-preview-controls .split-icon-button {
-  width: 24px;
-  height: 25px;
+.routine-panel .split-preview-controls .split-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--p-ink-2);
 }
-.split-preview-controls .split-calendar-toggle {
-  width: 30px;
-  height: 30px;
+.routine-panel .split-preview-controls .split-calendar-toggle {
   margin-right: 0.2rem;
 }
-.split-calendar-toggle[aria-pressed='true'] {
+.routine-panel .split-calendar-toggle[aria-pressed='true'] {
   background: var(--p-accent-soft);
   color: var(--p-accent-text);
 }

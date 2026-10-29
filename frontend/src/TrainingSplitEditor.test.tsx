@@ -149,6 +149,73 @@ it('creates from a template without replacing the active split and retains edits
     'Upper / Rest',
   );
 });
+it('blocks an unchanged saved template, including after renaming and reloading', async () => {
+  await mount();
+  await click('Full body / Rest');
+  await input('.routine-editor input', 'My full body plan');
+  await submit();
+  expect(button('Full body / Rest').disabled).toBe(true);
+  await click('Close notification');
+  await click('Full body / Rest');
+  expect(document.querySelector('.routine-editor')).toBeNull();
+  expect(api.routines.create).toHaveBeenCalledTimes(1);
+  const copy = { ...vi.mocked(api.routines.create).mock.calls[0][0], id: 'new' };
+  vi.mocked(api.routines.list).mockResolvedValue([plan, copy]);
+  await act(async () => root.render(<Harness key="reload" />));
+  expect(button('Full body / Rest').disabled).toBe(true);
+});
+it('makes templates available only after a saved day change and blocks them again if restored', async () => {
+  async function editCopy() {
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>('[data-routine-id="new"] .routine-actions button')!
+        .click(),
+    );
+  }
+  await mount();
+  await click('Full body / Rest');
+  await submit();
+  await click('Close notification');
+  await editCopy();
+  await click('Add rest day');
+  expect(button('Full body / Rest').disabled).toBe(true);
+  await click('Close Edit split');
+  expect(button('Full body / Rest').disabled).toBe(true);
+  await editCopy();
+  await click('Add rest day');
+  await submit();
+  expect(button('Full body / Rest').disabled).toBe(false);
+  await click('Close notification');
+  await editCopy();
+  await click('Remove day 3');
+  await submit();
+  expect(button('Full body / Rest').disabled).toBe(true);
+});
+it('does not reserve a template after cancelling or a failed save, and releases a deleted copy', async () => {
+  vi.spyOn(api.routines, 'remove').mockResolvedValue(undefined);
+  await mount();
+  await click('Full body / Rest');
+  await click('Close New split');
+  expect(button('Full body / Rest').disabled).toBe(false);
+  await click('Full body / Rest');
+  vi.mocked(api.routines.create).mockRejectedValueOnce(new Error('Offline'));
+  await submit();
+  await click('Close New split');
+  expect(button('Full body / Rest').disabled).toBe(false);
+  await click('Full body / Rest');
+  await submit();
+  await click('Close notification');
+  expect(button('Full body / Rest').disabled).toBe(true);
+  await click('Options for Full body / Rest');
+  await click('Delete split');
+  await click('Cancel');
+  expect(button('Full body / Rest').disabled).toBe(true);
+  await click('Options for Full body / Rest');
+  await click('Delete split');
+  await click('Delete split');
+  expect(api.routines.remove).toHaveBeenCalledWith('new');
+  expect(button('Full body / Rest').disabled).toBe(false);
+});
 it('activates a different split after date confirmation, expands it and refreshes Home without leaving', async () => {
   const other = { ...structuredClone(plan), id: 'other', name: 'Another split' };
   vi.mocked(api.routines.list).mockResolvedValue([plan, other]);
