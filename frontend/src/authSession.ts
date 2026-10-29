@@ -1,6 +1,11 @@
 import { ApiError } from './api';
 import { isNetworkFailure } from './authForm';
-import { reconcileSignedInUser, readLastUser, type CleanupDeps } from './sessionCleanup';
+import {
+  clearUserDeviceData,
+  reconcileSignedInUser,
+  readLastUser,
+  type CleanupDeps,
+} from './sessionCleanup';
 import type { User } from './types';
 
 export type AuthState =
@@ -11,6 +16,7 @@ export type AuthState =
 
 export interface SessionDeps extends CleanupDeps {
   me: () => Promise<User>;
+  isCurrent?: () => boolean;
 }
 
 /**
@@ -21,10 +27,15 @@ export interface SessionDeps extends CleanupDeps {
 export async function resolveSession(deps: SessionDeps): Promise<AuthState> {
   try {
     const user = await deps.me();
+    if (deps.isCurrent && !deps.isCurrent()) return { status: 'loading' };
     await reconcileSignedInUser(user, deps);
     return { status: 'authenticated', user, offline: false };
   } catch (reason) {
-    if (reason instanceof ApiError && reason.status === 401) return { status: 'signed-out' };
+    if (deps.isCurrent && !deps.isCurrent()) return { status: 'loading' };
+    if (reason instanceof ApiError && reason.status === 401) {
+      await clearUserDeviceData(deps).catch(() => undefined);
+      return { status: 'signed-out' };
+    }
     const cached = readLastUser(deps.storage);
     if (cached) return { status: 'authenticated', user: cached, offline: true };
     return {
