@@ -85,11 +85,6 @@ button.ffmi-methodology-link {
   line-height: 1;
 }
 
-.ffmi-score span {
-  color: var(--p-muted);
-  font-size: 0.8125rem;
-}
-
 .ffmi-scale {
   margin-top: 0.75rem;
 }
@@ -138,6 +133,16 @@ button.ffmi-methodology-link {
   width: 2px;
   transform: translateX(-50%);
   background: var(--p-axis);
+}
+
+.ffmi-scale-line.gym {
+  width: 3px;
+  background: var(--p-accent-text);
+}
+
+.ffmi-scale-tick.gym i,
+.ffmi-legend li.gym strong {
+  color: var(--p-accent-text);
 }
 
 .ffmi-scale-marker {

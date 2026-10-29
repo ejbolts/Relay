@@ -92,12 +92,28 @@ describe('FfmiCard', () => {
     );
     expect(host.querySelectorAll('.ffmi-model-toggle')).toHaveLength(1);
     expect(modelButton().textContent?.trim()).toBe('\u2642');
+    expect(host.querySelector('.ffmi-legend .gym')?.textContent).toBe(
+      '22.1Average gym-goer (sample)',
+    );
+    expect(
+      parseFloat((host.querySelector('.ffmi-scale-line.gym') as HTMLElement).style.left),
+    ).toBeCloseTo(42.5);
+    expect(host.querySelector('.ffmi-score span')).toBeNull();
 
     await act(async () => modelButton().click());
     expect(api.updateFfmiProfile).toHaveBeenLastCalledWith({ ...stored, sex: 'female' });
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Model reference 24.7');
     expect(modelButton().getAttribute('aria-label')).toBe('Female FFMI model. Switch to male.');
     expect(modelButton().textContent?.trim()).toBe('\u2640');
+    expect(host.querySelector('.ffmi-legend .gym')?.textContent).toBe(
+      '20.6Average gym-goer (sample)',
+    );
+    expect(
+      parseFloat((host.querySelector('.ffmi-scale-line.gym') as HTMLElement).style.left),
+    ).toBeCloseTo(30);
+    expect(host.querySelector('.ffmi-scale-track')?.getAttribute('aria-label')).toContain(
+      'average female gym-goer sample 20.6',
+    );
 
     await act(async () => root.render(null));
     await act(async () => root.render(<FfmiCard measurements={measurements} />));
@@ -202,7 +218,7 @@ describe('FfmiCard', () => {
     expect(api.updateFfmiProfile).toHaveBeenCalledWith(saved);
     expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('22.9');
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 22.9Model reference 26.9');
-    expect(host.querySelectorAll('.ffmi-legend li.reached')).toHaveLength(3);
+    expect(host.querySelectorAll('.ffmi-legend li.reached')).toHaveLength(4);
     expect(host.querySelector('.ffmi-potential')?.textContent).toContain(
       'Reference weight at 13% fat',
     );
@@ -237,7 +253,7 @@ describe('FfmiCard', () => {
     await render({ ...emptyProfile, sex: 'female', height_cm: 165 }, [
       { ...measurements[0], weight_kg: 60, body_fat_pct: 22 },
     ]);
-    expect(host.querySelector('.ffmi-score span')?.textContent).toBe('Gender-adjusted FFMI');
+    expect(host.querySelector('.ffmi-score span')).toBeNull();
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Model reference 24.7');
   });
 });

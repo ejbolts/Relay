@@ -4,11 +4,11 @@ import { FfmiHelp } from './FfmiHelp';
 import { PopupDialog } from './PopupDialog';
 import {
   DEFAULT_FFMI_PROFILE,
-  FFMI_COMPARISON,
   FFMI_TICK_LABELS_BELOW,
   FFMI_UNLABELLED_TICKS,
   ffmiScalePercent,
   ffmiScore,
+  ffmiComparisons,
   latestBodyFatMeasurement,
   lengthFromCm,
   lengthToCm,
@@ -31,18 +31,37 @@ function inputValue(cm: number | null, unit: 'kg' | 'lb'): string {
   return cm === null ? '' : String(lengthFromCm(cm, unit));
 }
 
-export function FfmiScale({ ffmi, maxFfmi }: { ffmi: number; maxFfmi: number | null }) {
+export function FfmiScale({
+  ffmi,
+  maxFfmi,
+  sex,
+}: {
+  ffmi: number;
+  maxFfmi: number | null;
+  sex: 'male' | 'female';
+}) {
+  const comparisons = ffmiComparisons(sex);
+  const gym = comparisons.find((point) => point.gym)!;
   const position = (value: number) => ({ left: `${ffmiScalePercent(value)}%` }) as CSSProperties;
   const labels = (below: boolean) => (
     <div className={`ffmi-scale-ticks${below ? ' below' : ''}`} aria-hidden="true">
-      {FFMI_COMPARISON.filter(
-        ({ value }) =>
-          !FFMI_UNLABELLED_TICKS.has(value) && FFMI_TICK_LABELS_BELOW.has(value) === below,
-      ).map(({ value }) => (
-        <span key={value} className="ffmi-scale-tick" style={position(value)}>
-          <i>{value.toFixed(1)}</i>
-        </span>
-      ))}
+      {comparisons
+        .filter(
+          ({ value }) =>
+            !FFMI_UNLABELLED_TICKS.has(value) &&
+            // The new male 22.1 label is too close to 21.8; both points stay in the legend.
+            !(sex === 'male' && value === 21.8) &&
+            FFMI_TICK_LABELS_BELOW.has(value) === below,
+        )
+        .map(({ value, gym }) => (
+          <span
+            key={value}
+            className={`ffmi-scale-tick${gym ? ' gym' : ''}`}
+            style={position(value)}
+          >
+            <i>{value.toFixed(1)}</i>
+          </span>
+        ))}
     </div>
   );
   return (
@@ -51,11 +70,15 @@ export function FfmiScale({ ffmi, maxFfmi }: { ffmi: number; maxFfmi: number | n
       <div
         className="ffmi-scale-track"
         role="img"
-        aria-label={`Your FFMI ${ffmi.toFixed(1)}${maxFfmi === null ? '' : `, model reference ${maxFfmi.toFixed(1)}`}, on a scale from 17 to 29`}
+        aria-label={`Your FFMI ${ffmi.toFixed(1)}${maxFfmi === null ? '' : `, model reference ${maxFfmi.toFixed(1)}`}, average ${sex} gym-goer sample ${gym.value.toFixed(1)}, on a scale from 17 to 29`}
       >
         <span className="ffmi-scale-fill" style={{ width: `${ffmiScalePercent(ffmi)}%` }} />
-        {FFMI_COMPARISON.map(({ value }) => (
-          <span key={value} className="ffmi-scale-line" style={position(value)} />
+        {comparisons.map(({ value, gym }) => (
+          <span
+            key={value}
+            className={`ffmi-scale-line${gym ? ' gym' : ''}`}
+            style={position(value)}
+          />
         ))}
         {maxFfmi !== null && <span className="ffmi-scale-marker max" style={position(maxFfmi)} />}
         <span className="ffmi-scale-marker you" style={position(ffmi)} />
@@ -247,12 +270,11 @@ export function FfmiCard({
         <>
           <div className="ffmi-score">
             <strong>{ffmi.toFixed(1)}</strong>
-            <span>{profile.sex === 'male' ? 'Normalized FFMI' : 'Gender-adjusted FFMI'}</span>
           </div>
-          <FfmiScale ffmi={ffmi} maxFfmi={potential?.maxFfmi ?? null} />
+          <FfmiScale ffmi={ffmi} maxFfmi={potential?.maxFfmi ?? null} sex={profile.sex!} />
           <ol className="ffmi-legend">
-            {FFMI_COMPARISON.map(({ value, label }) => (
-              <li key={value} className={ffmi >= value ? 'reached' : ''}>
+            {ffmiComparisons(profile.sex!).map(({ value, label, gym }) => (
+              <li key={value} className={`${ffmi >= value ? 'reached' : ''}${gym ? ' gym' : ''}`}>
                 <strong>{value.toFixed(1)}</strong>
                 <span>{label}</span>
               </li>
