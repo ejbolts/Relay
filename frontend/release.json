@@ -46,7 +46,7 @@
       "title": "FFMI and model references",
       "description": "Tap the single sex icon on the FFMI card to switch between male and female models. Your choice saves to your account, updates the score and model reference, and keeps your measurements. The chart adds a gym-goer sample average for the selected model; the question-marks explain its limits without external source links.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2859c0fee3d975f578097e41c8f7c2c344914979/docs/screenshots/releases/1.1.0-ffmi.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3e7405005ab6965577419689347eb1f0bf2f90ce/docs/screenshots/releases/1.1.0-ffmi.png",
         "alt": "FFMI card with one saved sex icon, score 21.0, a blue male gym-goer sample-average point at 22.1, Model reference 24.7 and reference body composition figures. Synthetic sample data."
       }
     },
