@@ -15,6 +15,29 @@ button.ffmi-methodology-link {
 
 .ffmi-card .pulse-card-header {
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.ffmi-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.ffmi-model-toggle.segmented-control {
+  margin: 0;
+}
+
+.ffmi-model-toggle.segmented-control button {
+  min-height: 2.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.ffmi-model-toggle button span {
+  font-size: 1rem;
 }
 
 .ffmi-card .ffmi-edit {

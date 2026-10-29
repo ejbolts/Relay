@@ -5,7 +5,8 @@
   "summary": "Save machine setups, plan training and rest days, track body measurements and FFMI model references, map and undo imports, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
   "changes": [
     "Body measurements: log dated circumferences for your neck, shoulders, chest, waist, hips, upper arms, thighs, calves, wrist and ankle without a weigh-in. Filter history by body part to see dated values and changes from the previous measurement; edit a date or delete an entry. Measurements use cm or inches with your unit preference and stay private to your account.",
-    "Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links.",
+    "Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links. Switch the Male/Female icons beside FFMI to save the active model to your account and recalculate the scale. Height, wrist, ankle and target body fat stay saved when switching models, including through Edit.",
+    "Add friends in person with a QR code. Tap the QR button on your profile, or QR code in Social > Find, and the other person scans it with their phone camera or the Scan tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with Undo in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
     "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
     "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
     "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
@@ -40,10 +41,18 @@
   "highlights": [
     {
       "title": "FFMI and model references",
-      "description": "Compare your FFMI with a population-based model reference, rather than a personal prediction. The question-marks explain the calculation and limitations in a short in-app summary, without external source links.",
+      "description": "Switch between Male and Female directly on the FFMI card. Your choice saves to your account, updates the score and model reference, and keeps your measurements. The question-marks explain the benchmark and limitations in a short in-app summary.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/76c85c179ed6d78f6f2e60850189a7aa37d4a627/docs/screenshots/releases/1.1.0-ffmi.png",
-        "alt": "Body FFMI card showing 21.0, a Model reference marker at 24.7, and reference lean mass, reference weight and lean mass gap. Synthetic sample data."
+        "alt": "Body FFMI card with a saved Male/Female icon toggle, score 21.0, Model reference 24.7, and reference body composition figures. Synthetic sample data."
+      }
+    },
+    {
+      "title": "Add friends with a QR code",
+      "description": "Show your QR code from Profile or Social > Find, or switch to Scan to read a friend's code inside Relay. Scanning sends a friend request, with Undo, even for someone who still needs to sign in or create an account.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/ee6d9993421df45e4ad1ac0ce347b53074f9775b/docs/screenshots/releases/1.1.0-friend-qr-code.png",
+        "alt": "My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button. Isolated sample accounts."
       }
     },
     {

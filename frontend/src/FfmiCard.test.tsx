@@ -43,6 +43,12 @@ function button(text: string): HTMLButtonElement {
   return match;
 }
 
+function modelButton(sex: 'Male' | 'Female'): HTMLButtonElement {
+  return [...host.querySelectorAll<HTMLButtonElement>('[aria-label="FFMI model"] button')].find(
+    (item) => item.textContent?.trim().endsWith(sex),
+  )!;
+}
+
 function setInput(label: string, value: string) {
   const input = [...document.querySelectorAll('label')]
     .find((item) => item.textContent?.startsWith(label))!
@@ -72,6 +78,95 @@ afterEach(() => {
 });
 
 describe('FfmiCard', () => {
+  it('saves model switches, recalculates the scale and retains frame measurements after reloading', async () => {
+    let stored: FfmiProfile = {
+      ...emptyProfile,
+      sex: 'male',
+      height_cm: 180,
+      wrist_cm: 17.5,
+      ankle_cm: 22.5,
+    };
+    await render(stored);
+    vi.mocked(api.getFfmiProfile).mockImplementation(async () => stored);
+    vi.mocked(api.updateFfmiProfile).mockImplementation(async (next) => (stored = next));
+    expect(modelButton('Male').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => modelButton('Male').click());
+    expect(api.updateFfmiProfile).not.toHaveBeenCalled();
+
+    await act(async () => modelButton('Female').click());
+    expect(api.updateFfmiProfile).toHaveBeenLastCalledWith({ ...stored, sex: 'female' });
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Model reference 24.7');
+    expect(modelButton('Female').getAttribute('aria-pressed')).toBe('true');
+
+    await act(async () => root.render(null));
+    await act(async () => root.render(<FfmiCard measurements={measurements} />));
+    expect(modelButton('Female').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => modelButton('Male').click());
+    expect(stored).toMatchObject({ sex: 'male', height_cm: 180, wrist_cm: 17.5, ankle_cm: 22.5 });
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2Model reference 24.7');
+  });
+
+  it('locks switches while saving, retains the saved model after failure and supports retry', async () => {
+    const profile = { ...emptyProfile, sex: 'male' as const, height_cm: 180 };
+    await render(profile);
+    let rejectSave!: (error: Error) => void;
+    vi.mocked(api.updateFfmiProfile).mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectSave = reject;
+      }),
+    );
+    await act(async () => modelButton('Female').click());
+    expect(modelButton('Male').disabled).toBe(true);
+    expect(modelButton('Female').disabled).toBe(true);
+    expect(button('Edit').disabled).toBe(true);
+    await act(async () => modelButton('Male').click());
+    expect(api.updateFfmiProfile).toHaveBeenCalledTimes(1);
+    await act(async () => rejectSave(new Error('Connection interrupted. Try again.')));
+    expect(modelButton('Male').getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'Connection interrupted. Try again.',
+    );
+    expect(modelButton('Female').disabled).toBe(false);
+    vi.mocked(api.updateFfmiProfile).mockResolvedValue({ ...profile, sex: 'female' });
+    await act(async () => modelButton('Female').click());
+    expect(modelButton('Female').getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('can save the model before height is entered without showing a score', async () => {
+    await render(emptyProfile);
+    vi.mocked(api.updateFfmiProfile).mockResolvedValue({ ...emptyProfile, sex: 'female' });
+    await act(async () => modelButton('Female').click());
+    expect(api.updateFfmiProfile).toHaveBeenCalledWith({ ...emptyProfile, sex: 'female' });
+    expect(host.querySelector('.ffmi-score')).toBeNull();
+    await act(async () => button('Add height and sex').click());
+    expect(button('Female').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('preserves saved frame measurements when editing the female model', async () => {
+    const profile: FfmiProfile = {
+      ...emptyProfile,
+      sex: 'male',
+      height_cm: 180,
+      wrist_cm: 17.5,
+      ankle_cm: 22.5,
+    };
+    await render(profile);
+    await act(async () => button('Edit').click());
+    await act(async () => button('Female').click());
+    await act(async () => setInput('Height', '175'));
+    const saved = { ...profile, sex: 'female' as const, height_cm: 175 };
+    vi.mocked(api.updateFfmiProfile).mockResolvedValue(saved);
+    await act(async () => button('Save').click());
+    expect(api.updateFfmiProfile).toHaveBeenCalledWith(saved);
+    await act(async () => button('Edit').click());
+    await act(async () => button('Male').click());
+    const values = [...document.querySelectorAll<HTMLInputElement>('.ffmi-profile-form input')].map(
+      (input) => input.value,
+    );
+    expect(values).toEqual(['175', '17.5', '22.5', '10']);
+  });
+
   it('allows a current score above the model reference and distinguishes exceptional references', async () => {
     await render({ ...emptyProfile, sex: 'male', height_cm: 180, wrist_cm: 17.5, ankle_cm: 22.5 }, [
       { ...measurements[0], weight_kg: 94, body_fat_pct: 10 },

@@ -91,6 +91,7 @@ export function FfmiCard({
   const [targetBodyFat, setTargetBodyFat] = useState('10');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +134,23 @@ export function FfmiCard({
     });
     setTargetBodyFat(String(current.target_body_fat_pct));
     setError(null);
+    setModelError(null);
     setEditing(true);
+  }
+
+  async function switchModel(sex: 'male' | 'female') {
+    if (!profile || saving || profile.sex === sex) return;
+    setSaving(true);
+    setModelError(null);
+    try {
+      setProfile(await api.updateFfmiProfile({ ...profile, sex }));
+    } catch (saveError) {
+      setModelError(
+        saveError instanceof Error ? saveError.message : 'Could not save the FFMI model.',
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   function parseLength(field: LengthField): number | null | undefined {
@@ -147,8 +164,8 @@ export function FfmiCard({
   async function save() {
     const height = parseLength('height_cm');
     const male = draft.sex === 'male';
-    const wrist = male ? parseLength('wrist_cm') : null;
-    const ankle = male ? parseLength('ankle_cm') : null;
+    const wrist = male ? parseLength('wrist_cm') : draft.wrist_cm;
+    const ankle = male ? parseLength('ankle_cm') : draft.ankle_cm;
     const target = Number(targetBodyFat);
     if (!draft.sex) return setError('Choose male or female.');
     if (height === null || height === undefined)
@@ -184,15 +201,47 @@ export function FfmiCard({
         <h2 className="profile-help-row">
           FFMI <FfmiHelp />
         </h2>
-        {ready && (
-          <button type="button" className="ffmi-edit" onClick={openEditor}>
-            Edit
-          </button>
-        )}
+        <div className="ffmi-header-actions">
+          <div
+            className="segmented-control ffmi-model-toggle"
+            role="group"
+            aria-label="FFMI model"
+            aria-busy={saving}
+          >
+            {(
+              [
+                ['male', 'Male', '♂'],
+                ['female', 'Female', '♀'],
+              ] as const
+            ).map(([sex, label, icon]) => (
+              <button
+                key={sex}
+                type="button"
+                aria-pressed={profile.sex === sex}
+                className={profile.sex === sex ? 'active' : ''}
+                disabled={saving}
+                onClick={() => void switchModel(sex)}
+              >
+                <span aria-hidden="true">{icon}</span> {label}
+              </button>
+            ))}
+          </div>
+          {ready && (
+            <button type="button" className="ffmi-edit" disabled={saving} onClick={openEditor}>
+              Edit
+            </button>
+          )}
+        </div>
       </header>
 
+      {modelError && (
+        <p className="inline-error" role="alert">
+          {modelError}
+        </p>
+      )}
+
       {!ready && (
-        <button type="button" className="ffmi-setup" onClick={openEditor}>
+        <button type="button" className="ffmi-setup" disabled={saving} onClick={openEditor}>
           Add height and sex
         </button>
       )}

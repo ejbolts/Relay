@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button](screenshots/releases/1.1.0-friend-qr-code.png)
+
+_Show your QR code from your profile or Social > Find, or switch to **Scan** to read a friend's code inside Relay. Scanning sends a friend request, including after the other person signs in or creates an account. Isolated sample accounts._
+
 ![Desktop sign-out returns both the desktop and mobile sessions to sign-in](screenshots/releases/1.1.0-signout-all-devices.gif)
 
 _Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
@@ -20,9 +24,9 @@ _Select a body part to follow its own measurement history. Missing values are sk
 
 _Both existing Body measurements and FFMI question-marks show a short introduction. Learn more opens the full methodology inside the app, with Back to overview. The explanation is summarised without study names or external source links._
 
-![Body FFMI card showing a Model reference at 24.7 and an exceptional reported case at 28.0](screenshots/releases/1.1.0-ffmi.png)
+![FFMI card with saved Male and Female icon controls, score 21.0 and Model reference 24.7](screenshots/releases/1.1.0-ffmi.png)
 
-_Model reference is a population-based benchmark, adjusted using the selected profile, rather than a prediction of an individual genetic limit. Calculations are unchanged. Synthetic sample data._
+_Use the Male/Female icon toggle to save the active model and recalculate the comparison. Switching keeps saved measurements. Model reference is a trained-lifter benchmark adjusted using the selected profile, rather than a prediction of an individual genetic limit. Synthetic sample data._
 
 ![Import review mapping Flat bench (old app) to Barbell Bench Press with no new exercises](screenshots/releases/1.1.0-import-exercise-mapping.png)
 
@@ -105,7 +109,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 _The circular Start button matches its workout choices. Isolated sample data._
 
 - **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
-- Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links.
+- Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links. Switch the Male/Female icons beside FFMI to save the active model to your account and recalculate the scale. Height, wrist, ankle and target body fat stay saved when switching models, including through Edit.
+- Add friends in person with a QR code. Tap the QR button on your profile, or **QR code** in **Social > Find**, and the other person scans it with their phone camera or the **Scan** tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with **Undo** in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.
 - Map incoming exercise names to existing entries during import review. Update the review to recalculate new exercises and duplicates before saving; mappings are checked again when saving.
 - Open **Import history** in **Settings > Data & connections > Import & export** to undo one tracked import. Confirmation removes that batch's sessions (including edits), linked cardio and unedited imported check-ins, then recalculates personal records. Existing check-ins, other sessions and edited imported check-ins are kept. Unused, unchanged custom exercises created by the batch are removed; reused or customised entries stay. Earlier imports cannot be undone as a batch.
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.
