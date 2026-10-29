@@ -378,6 +378,7 @@ export interface TrainingTime {
 }
 
 export interface DashboardData {
+  cardio_goals?: CardioGoalWeek[];
   workouts_this_week: number;
   sets_this_week: number;
   volume_this_week_kg: number;
@@ -452,6 +453,30 @@ export interface TrainingPreferences {
   weekly_muscle_set_goal: number;
 }
 
+export interface HeartRateZone {
+  zone: number;
+  min_bpm: number;
+  max_bpm: number;
+}
+
+export interface CardioGoal {
+  zone: number;
+  minutes: number;
+}
+
+export interface CardioPreferences {
+  heart_rate_zones: HeartRateZone[];
+  goals: CardioGoal[];
+}
+
+export interface CardioGoalWeek {
+  zone: number;
+  goal_minutes: number;
+  completed_minutes: number;
+  remaining_minutes: number;
+  complete: boolean;
+}
+
 export interface Zone2Week {
   week_start: string;
   week_end: string;
@@ -503,6 +528,8 @@ export interface CardioScreenshotScan {
 }
 
 export interface CardioOverview {
+  cardio_preferences?: CardioPreferences;
+  goal_weeks?: CardioGoalWeek[];
   preferences: TrainingPreferences;
   current_week: Zone2Week;
   previous_weeks: Zone2Week[];
@@ -927,6 +954,7 @@ export interface SharedBodyMeasurement {
 }
 
 export interface SharedGoals {
+  cardio_goals?: CardioGoalWeek[];
   body_weight: Omit<BodyWeightGoalInput, 'active'> | null;
   zone2: Zone2Week;
 }

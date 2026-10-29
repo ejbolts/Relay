@@ -8,6 +8,8 @@ import {
   moveHomeSection,
   toggleHomeSection,
   toggleHomeSectionWidth,
+  homeSectionSettings,
+  updateHomeSectionSettings,
 } from './homeLayout';
 
 describe('Home layout edits', () => {
@@ -144,5 +146,17 @@ describe('Home layout edits', () => {
     expect(homeSectionSpans(['workouts', 'cardio-sessions'], shrunk.widths)).toEqual([2, 4]);
     expect(homeSectionSpans(['cardio-sessions', 'workouts'], shrunk.widths)).toEqual([4, 2]);
     expect(homeSectionSpans(['workouts', 'consistency'], shrunk.widths)).toEqual([2, 6]);
+  });
+});
+
+describe('Home section settings', () => {
+  it('defaults older layouts and updates one option without losing the others', () => {
+    const older = { order: defaultHomeLayout().order, hidden: [] };
+    expect(homeSectionSettings(older, 'zone2')).toEqual({ zone: null, style: 'progress' });
+    const ring = updateHomeSectionSettings(older, 'zone2', { style: 'ring' });
+    const zone4 = updateHomeSectionSettings(ring, 'zone2', { zone: 4 });
+    expect(zone4.settings?.zone2).toEqual({ zone: 4, style: 'ring' });
+    expect(zone4.order).toBe(older.order);
+    expect(older).not.toHaveProperty('settings');
   });
 });

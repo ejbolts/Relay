@@ -13,6 +13,7 @@ import type {
   BodyWeightGoalInput,
   FfmiProfile,
   CardioOverview,
+  CardioPreferences,
   CardioScreenshotScan,
   CardioSession,
   CardioSessionInput,
@@ -558,6 +559,13 @@ export const api = {
     return request<MuscleVolume[]>(`/api/muscle-volume${query.size ? `?${query}` : ''}`);
   },
   cardioOverview: () => request<CardioOverview>('/api/cardio'),
+  getCardioPreferences: () => request<CardioPreferences>('/api/cardio-preferences'),
+  updateCardioPreferences: (payload: CardioPreferences) =>
+    request<CardioPreferences>('/api/cardio-preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   scanCardioScreenshot: (file: File) => {
     const form = new FormData();
     form.append('file', file, file.name);

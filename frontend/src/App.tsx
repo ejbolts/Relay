@@ -141,6 +141,8 @@ import { BackgroundActivityBar } from './BackgroundActivityBar';
 import { CardioTrendCard } from './CardioTrendCard';
 import { groupCardioHistory } from './cardioTrend';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
+import { CardioZoneSettings } from './CardioZoneSettings';
+import { cardioZoneNotice, DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { useBackdropDismiss } from './backdropDismiss';
@@ -1155,6 +1157,18 @@ function AppContent() {
     }
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     setEditingWorkout(null);
+
+    if (saved.movements.some((movement) => movement.exercise.kind === 'cardio')) {
+      void api
+        .cardioOverview()
+        .then((overview) => {
+          const preferences = overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES;
+          const sessions = overview.sessions.filter((item) => item.source_workout_id === saved.id);
+          if (sessions.length)
+            setMessage(sessions.map((item) => cardioZoneNotice(item, preferences)).join(' '));
+        })
+        .catch(() => undefined);
+    }
 
     if (!wasEditing) {
       const signature = (record: PersonalRecord) =>
@@ -8504,11 +8518,13 @@ export function CardioScreen({
     average_power_watts: null,
     average_mets: null,
     intensity: null,
-    zone: 'Zone 2',
-    qualifies_zone2: true,
+    zone: null,
+    qualifies_zone2: false,
     notes: null,
   };
   const [overview, setOverview] = useState<CardioOverview | null>(null);
+  const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
+  const [zoneNotice, setZoneNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
   const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
   const [saving, setSaving] = useState(false);
@@ -8616,11 +8632,16 @@ export function CardioScreen({
       const payload = {
         ...draft,
         intensity: null,
-        qualifies_zone2: draft.zone === 'Zone 2',
+        zone: null,
+        qualifies_zone2: false,
       };
       setSaving(true);
-      if (editingId) await api.updateCardio(editingId, payload);
-      else await api.createCardio(payload);
+      const saved = editingId
+        ? await api.updateCardio(editingId, payload)
+        : await api.createCardio(payload);
+      setZoneNotice(
+        cardioZoneNotice(saved, overview?.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
+      );
       setDraft(empty);
       setScanStatus(null);
       setEditingId(null);
@@ -8649,6 +8670,19 @@ export function CardioScreen({
   const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
   return (
     <div className="cardio-screen">
+      {zoneNotice && (
+        <NotificationDialog message={zoneNotice} onClose={() => setZoneNotice(null)} />
+      )}
+      {zoneSettingsOpen && (
+        <CardioZoneSettings
+          preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
+          onClose={() => setZoneSettingsOpen(false)}
+          onSaved={async () => {
+            await onDataChange();
+            await load();
+          }}
+        />
+      )}
       {error && <p className="inline-error">{error}</p>}
       {metricSession && (
         <CardioMetricsEditor
@@ -8656,7 +8690,10 @@ export function CardioScreen({
           session={metricSession}
           onClose={() => setMetricSession(null)}
           onSave={async (metrics) => {
-            await api.updateCardioMetrics(metricSession.id, metrics);
+            const saved = await api.updateCardioMetrics(metricSession.id, metrics);
+            setZoneNotice(
+              cardioZoneNotice(saved, overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
+            );
             await onDataChange();
             await load();
           }}
@@ -8769,23 +8806,6 @@ export function CardioScreen({
                   setDraft({ ...draft, duration_minutes: Number(event.target.value) })
                 }
               />
-            </label>
-            <label>
-              Zone
-              <select
-                value={draft.zone ?? ''}
-                onChange={(event) => {
-                  const zone = event.target.value || null;
-                  setDraft({ ...draft, zone, qualifies_zone2: zone === 'Zone 2' });
-                }}
-              >
-                <option value="">Not set</option>
-                {[1, 2, 3, 4, 5].map((zone) => (
-                  <option key={zone} value={`Zone ${zone}`}>
-                    Zone {zone}
-                  </option>
-                ))}
-              </select>
             </label>
             <label>
               Calories burned (kcal)
@@ -9103,6 +9123,47 @@ export function CardioScreen({
           label="cardio history"
         />
       </section>
+      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
+        <header>
+          <h2 id="cardio-goals-title">Weekly zone goals</h2>
+          <button
+            type="button"
+            className="cardio-goals-edit"
+            aria-label="Edit heart-rate zones and goals"
+            onClick={() => setZoneSettingsOpen(true)}
+          >
+            <Icon name="edit" />
+            Edit
+          </button>
+        </header>
+        <ul className="cardio-goal-list">
+          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
+            const range = overview.cardio_preferences?.heart_rate_zones.find(
+              (item) => item.zone === goal.zone,
+            );
+            return (
+              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
+                <span>
+                  <strong>Zone {goal.zone}</strong>
+                  {range && (
+                    <small>
+                      {range.min_bpm}–{range.max_bpm} bpm
+                    </small>
+                  )}
+                </span>
+                <span>
+                  <b>
+                    {goal.completed_minutes} / {goal.goal_minutes} min
+                  </b>
+                  <small>
+                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </div>
   );
 }
@@ -9366,7 +9427,7 @@ function HistoryScreen({
               section === 'progress'
                 ? 'Exercise charts · records · sessions'
                 : section === 'cardio'
-                  ? 'Zone 2 · energy · sessions'
+                  ? 'Zones · energy · sessions'
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"

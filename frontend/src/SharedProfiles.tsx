@@ -1086,11 +1086,12 @@ function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: 
         )}
       </div>
       <div className="shared-goal">
-        <strong>Weekly Zone 2 cardio</strong>
-        <span>
-          {goals.zone2.completed_minutes} of {goals.zone2.goal_minutes} min this week
-        </span>
-        <ProgressBar value={goals.zone2.percentage / 100} label="Weekly Zone 2 cardio progress" />
+        <strong>Weekly cardio zone goals</strong>
+        {(goals.cardio_goals ?? [{ zone: 2, ...goals.zone2 }]).map((goal) => (
+          <span key={goal.zone}>
+            Zone {goal.zone} · {goal.completed_minutes} of {goal.goal_minutes} min this week
+          </span>
+        ))}
       </div>
     </section>
   );

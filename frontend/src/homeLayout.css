@@ -437,3 +437,39 @@ html[data-reduce-motion] .home-sections.is-editing .home-edit-card {
     animation: none !important;
   }
 }
+.home-card-customise {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+  height: 1.875rem;
+  margin: 0;
+  padding: 0 0.625rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  background: var(--p-surface-3);
+  color: var(--p-accent-text);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 15%);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.home-card-customise .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.home-card-customise:disabled {
+  opacity: 0.45;
+}
+:root[data-colour-mode='light'] .home-card-customise {
+  color: var(--p-accent);
+}
+.home-customiser-body {
+  padding: 1rem;
+}
+.home-customiser-done {
+  width: 100%;
+  margin-top: 1.25rem;
+}
