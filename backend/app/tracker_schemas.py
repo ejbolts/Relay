@@ -752,6 +752,7 @@ class ExerciseLibrarySummaryRead(BaseModel):
 
 
 class CsvImportRead(BaseModel):
+    batch_id: str | None = None
     workouts_created: int
     workouts_skipped: int
     exercises_created: int
@@ -769,7 +770,37 @@ class CsvImportSessionRead(BaseModel):
     duplicate: bool
 
 
+class ImportExerciseMatch(BaseModel):
+    incoming_name: str
+    exercise_id: str | None
+    exercise_name: str
+
+
+class ImportExerciseChoice(BaseModel):
+    id: str
+    name: str
+    kind: ExerciseKind
+
+
+class ImportBatchRead(BaseModel):
+    id: str
+    file_name: str
+    source: str
+    created_at: datetime
+    workouts: int
+    body_measurements: int
+
+
+class ImportUndoRead(BaseModel):
+    workouts_removed: int
+    body_measurements_removed: int
+    body_measurements_preserved: int
+    exercises_removed: int
+
+
 class CsvImportPreviewRead(BaseModel):
+    exercise_matches: list[ImportExerciseMatch] = []
+    available_exercises: list[ImportExerciseChoice] = []
     sessions: list[CsvImportSessionRead]
     workouts_to_create: int
     workouts_to_skip: int

@@ -586,6 +586,7 @@ export interface ExerciseLibrarySummary {
 }
 
 export interface CsvImportResult {
+  batch_id?: string | null;
   workouts_created: number;
   workouts_skipped: number;
   exercises_created: number;
@@ -595,13 +596,30 @@ export interface CsvImportResult {
   warnings: string[];
 }
 
+export interface ImportBatch {
+  id: string;
+  file_name: string;
+  source: string;
+  created_at: string;
+  workouts: number;
+  body_measurements: number;
+}
+export interface ImportUndoResult {
+  workouts_removed: number;
+  body_measurements_removed: number;
+  body_measurements_preserved: number;
+  exercises_removed: number;
+}
 export interface WorkoutImportOptions {
+  exercise_mappings?: Record<string, string>;
   source: 'gym' | 'strengthlevel' | 'hevy' | 'strong';
   weight_unit: 'kg' | 'lb';
   distance_unit: 'km' | 'mi';
 }
 
 export interface CsvImportPreview {
+  exercise_matches?: { incoming_name: string; exercise_id: string | null; exercise_name: string }[];
+  available_exercises?: { id: string; name: string; kind: string }[];
   sessions: {
     workout_date: string;
     name: string;

@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0044_merged_machine_photos"
-down_revision = "0043_workout_save_sessions"
+revision = "0045_merged_machine_photos"
+down_revision = "0044_import_batches"
 branch_labels = None
 depends_on = None
 

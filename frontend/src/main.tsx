@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { AuthGate } from './AuthGate';
 import { registerAppUpdates } from './appUpdates';
+import { captureFriendInvite } from './friendInvite';
 import { applyReduceMotion, reduceMotionPreference } from './motion';
 import {
   applyColourMode,
@@ -24,6 +25,8 @@ import './WorkoutBrowser.css';
 import './cardioPage.css';
 import './exerciseList.css';
 
+// Before the app reads its screen from the address, keep any friend invite through sign-in.
+captureFriendInvite();
 registerAppUpdates();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());

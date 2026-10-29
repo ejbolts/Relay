@@ -170,12 +170,6 @@ def create_user_session(
     return token
 
 
-def revoke_session_token(db: Session, token: str | None) -> None:
-    if token:
-        db.execute(delete(UserSession).where(UserSession.token_hash == hash_token(token)))
-        db.commit()
-
-
 def get_app_settings(request: Request) -> Settings:
     return request.app.state.settings
 

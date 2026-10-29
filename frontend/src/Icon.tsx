@@ -54,6 +54,8 @@ const PATHS = {
   // A smiling face with a plus, for adding a reaction.
   react:
     'M16.5 4A8.5 8.5 0 1 0 20.4 9.5M9 10h.01M14.5 10h.01M8.2 14a4.4 4.4 0 0 0 7.6 0M19.5 2v6M16.5 5h6',
+  // Three finder squares and a few modules, for a QR code.
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM7 7h.01M17 7h.01M7 17h.01M14 14h3v3h-3zM20 14v.01M20 20h-3M14 20h.01',
   external:
     'M14 3.5h6.5V10M20.5 3.5l-10 10M10 4H5.5A2 2 0 0 0 3.5 6v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4.5',
 } as const;

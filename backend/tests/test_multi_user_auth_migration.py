@@ -268,7 +268,7 @@ def test_alembic_upgrade_head_works_on_an_empty_database(tmp_path):
         assert {"users", "user_sessions", "user_settings", "exercises", "account_backups"} <= tables
         assert "profile_sharing" in tables
         assert {"youtube_connections", "youtube_oauth_states"} <= tables
-        assert "workout_types" in tables
+        assert {"workout_types", "import_batches"} <= tables
         assert "workout_reactions" in tables
         assert "profile_blocks" in tables
         assert "friendships" in tables and "profile_follows" not in tables

@@ -166,6 +166,22 @@ def test_archived_builtin_rejects_new_sessions_but_preserves_retry_recovery(clie
     assert [item["id"] for item in client.get("/api/workouts").json()] == [saved["id"]]
 
 
+def test_rejected_removed_type_rolls_back_reserved_save_session(client):
+    body = {**payload(client, category="push"), "client_session_id": str(uuid4())}
+    assert client.delete("/api/workout-types/push").status_code == 204
+    assert client.post("/api/workouts", json=body).status_code == 422
+    assert client.get("/api/workouts").json() == []
+    # Restoring the type allows the same client session to retry successfully.
+    assert client.patch("/api/workout-types/push", json={"archived": False}).status_code == 200
+    saved = client.post("/api/workouts", json=body)
+    assert saved.status_code == 201
+    assert saved.json()["client_session_id"] == body["client_session_id"]
+    # Removing it again must still allow recovery of that already committed save.
+    assert client.delete("/api/workout-types/push").status_code == 204
+    assert client.post("/api/workouts", json=body).json()["id"] == saved.json()["id"]
+    assert len(client.get("/api/workouts").json()) == 1
+
+
 def test_shared_custom_metadata_and_filter_match_the_profile_owner(client, other_client):
     for owner in [client, other_client]:
         assert owner.put("/api/sharing", json={"visibility": "public"}).status_code == 200

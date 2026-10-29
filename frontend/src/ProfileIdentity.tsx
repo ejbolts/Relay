@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage, USERNAME_HINT, validateUsername } from './authForm';
+import { FriendInviteButton } from './FriendQrCode';
 import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -29,10 +30,13 @@ const PHOTO_ERRORS = new Set([
 export function ProfileIdentity({
   user,
   onSaved,
+  onChooseSharing,
   children,
 }: {
   user: User;
   onSaved: (user: User) => void;
+  /** Shows the friend QR code button, which can lead to the sharing choices. */
+  onChooseSharing?: () => void;
   children?: ReactNode;
 }) {
   const id = useId();
@@ -226,16 +230,21 @@ export function ProfileIdentity({
           {joined && <small>Joined {joined}</small>}
         </div>
         {!editing && (
-          <button
-            ref={editButton}
-            className="profile-edit-button"
-            type="button"
-            aria-label="Edit profile"
-            onClick={edit}
-          >
-            <Icon name="edit" />
-            <span>Edit profile</span>
-          </button>
+          <div className="profile-identity-actions">
+            {onChooseSharing && (
+              <FriendInviteButton user={user} onChooseSharing={onChooseSharing} />
+            )}
+            <button
+              ref={editButton}
+              className="profile-edit-button"
+              type="button"
+              aria-label="Edit profile"
+              onClick={edit}
+            >
+              <Icon name="edit" />
+              <span>Edit profile</span>
+            </button>
+          </div>
         )}
       </div>
       {editing && (

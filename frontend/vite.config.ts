@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import releaseHistory from './release-history.json';
@@ -133,7 +133,7 @@ export default defineConfig({
     }),
   ],
   server: {
-    allowedHosts: ['mainpc.tail494810.ts.net'],
-    proxy: { '/api': 'http://127.0.0.1:8000' },
+    allowedHosts: [loadEnv('development', '.', 'GYM_DEV_HOST').GYM_DEV_HOST].filter(Boolean),
+    proxy: { '/api': { target: 'http://127.0.0.1:8000', ws: true } },
   },
 });

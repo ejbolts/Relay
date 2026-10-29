@@ -2,9 +2,15 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Merge duplicate machine photos, save machine setups, plan training and rest days, and discover friends and workout reactions.",
+  "summary": "Merge duplicate machine photos, save machine setups, map and undo imports, plan training and rest days, and connect with friends through QR codes and workout reactions.",
   "changes": [
     "In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.",
+    "Add friends in person with a QR code. Tap the QR button on your profile, or QR code in Social > Find, and the other person scans it with their phone camera or the Scan tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with Undo in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
+    "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
+    "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
+    "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
+    "Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.",
+    "Sign out ends your account's sessions on every device and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes sign out other devices; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts; connection failures alone keep them.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
     "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
@@ -24,8 +30,7 @@
     "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.",
     "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
     "The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.",
-    "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour.",
-    "Removed workout types cannot be used for new sessions, including retry-safe saves. Existing workouts remain editable, and retrying an already saved session still returns the original workout."
+    "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
@@ -39,6 +44,30 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/b8fa2a3c26f582fcabaadaf981e149aae1ce6ca9/docs/screenshots/releases/1.1.0-machine-photo-merge.gif",
         "alt": "Select duplicate machine photos, review the retained setup, then merge and open both photos in one saved machine."
+      }
+    },
+    {
+      "title": "Add friends with a QR code",
+      "description": "Show your QR code from Profile or Social > Find, or switch to Scan to read a friend's code inside Relay. Scanning sends a friend request, with Undo, even for someone who still needs to sign in or create an account.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/ee6d9993421df45e4ad1ac0ce347b53074f9775b/docs/screenshots/releases/1.1.0-friend-qr-code.png",
+        "alt": "My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button. Isolated sample accounts."
+      }
+    },
+    {
+      "title": "Map your imported exercises",
+      "description": "Match incoming exercise names to existing entries, then update the review to recalculate duplicates and new exercises before saving.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/03e635cefc31aa0193961bc2ed5ab43a80471793/docs/screenshots/releases/1.1.0-import-exercise-mapping.png",
+        "alt": "Import review mapping Flat bench (old app) to Barbell Bench Press, with one session and set to add and no new exercises. Isolated sample data."
+      }
+    },
+    {
+      "title": "Undo one import",
+      "description": "Import history removes one tracked batch while keeping other sessions and edited check-ins. Earlier imports cannot be undone as a batch.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/cdf2beea2fba8e624465ff788b6ad540626b76c4/docs/screenshots/releases/1.1.0-undo-import-batch.png",
+        "alt": "Import history asking to undo one sample batch of one session and one check-in, with Undo import and Cancel buttons. Isolated sample data."
       }
     },
     {

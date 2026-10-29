@@ -41,6 +41,7 @@ from .server_settings import (
     load_runtime_settings,
     save_runtime_setting,
 )
+from .session_events import session_events
 
 DbDependency = Annotated[Session, Depends(get_db)]
 
@@ -220,6 +221,7 @@ def update_user(
     for endpoint in endpoints:
         request.app.state.rest_timer_notifications.cancel_endpoint(endpoint)
         request.app.state.workout_reminders.cancel(endpoint=endpoint, user_id=user.id)
+    session_events.changed(user.id)
     db.refresh(user)
     return _admin_user_reads(db, settings, [user])[0]
 
