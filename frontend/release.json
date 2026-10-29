@@ -46,7 +46,7 @@
       "title": "FFMI and model references",
       "description": "Tap the single sex icon on the FFMI card to switch between male and female models. Your choice saves to your account, updates the score and model reference, and keeps your measurements. The question-marks explain the benchmark and limitations in a short in-app summary.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/0d2270aa6d41ca0bda8a07ec2504846c34f238bb/docs/screenshots/releases/1.1.0-ffmi.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2859c0fee3d975f578097e41c8f7c2c344914979/docs/screenshots/releases/1.1.0-ffmi.png",
         "alt": "Body FFMI card with a single saved sex icon button, score 21.0, Model reference 24.7, and reference body composition figures. Synthetic sample data."
       }
     },
