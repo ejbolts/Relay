@@ -254,29 +254,36 @@ button.ffmi-methodology-link {
 
 .ffmi-potential {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
   margin: 0.5rem 0 0;
 }
 
 .ffmi-potential div {
-  border-radius: 13px;
-  padding: 0.625rem;
-  background: var(--p-surface-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 1rem;
+  border-bottom: 1px solid var(--p-line);
+  padding: 0.5rem 0;
+}
+
+.ffmi-potential div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 
 .ffmi-potential dt {
   color: var(--p-muted);
-  font-size: 0.6875rem;
-  line-height: 1.35;
-  min-height: 4.05em;
+  font-size: 0.8125rem;
+  line-height: 1.4;
 }
 
 .ffmi-potential dd {
-  margin: 0.25rem 0 0;
+  margin: 0;
   font-size: 0.9375rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .ffmi-profile-form .segmented-control {
