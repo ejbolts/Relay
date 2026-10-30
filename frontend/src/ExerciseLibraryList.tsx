@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api';
+import { useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
 import { ExerciseCustomFilter } from './ExerciseCustomFilter';
@@ -8,6 +7,7 @@ import { exerciseSearchScore } from './exerciseSearch';
 import type { Exercise, ExerciseLibrarySummary } from './types';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { formatWeightNumber, weightFromKg } from './weightUnits';
+import type { ExerciseLibraryState } from './useExerciseLibrary';
 
 const sorts = ['Recent first', 'A–Z', 'Most improved'] as const;
 function Sparkline({ summary }: { summary: ExerciseLibrarySummary | undefined }) {
@@ -40,12 +40,12 @@ function Sparkline({ summary }: { summary: ExerciseLibrarySummary | undefined })
 
 export function ExerciseLibraryList({
   exercises,
-  dataRevision,
+  library,
   onOpen,
   onCreate,
 }: {
   exercises: Exercise[];
-  dataRevision: string | null;
+  library: ExerciseLibraryState;
   onOpen: (id: string) => void;
   onCreate?: () => void;
 }) {
@@ -55,33 +55,10 @@ export function ExerciseLibraryList({
   const [equipment, setEquipment] = useState('');
   const [customOnly, setCustomOnly] = useState(false);
   const [sort, setSort] = useState(0);
-  const [summaries, setSummaries] = useState<ExerciseLibrarySummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+  const { summaries, loading, error, retry } = library;
   const input = useRef<HTMLInputElement>(null);
-  const ids = exercises.map((exercise) => exercise.id).join(',');
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    void api
-      .exerciseLibrary()
-      .then((result) => {
-        if (!cancelled) setSummaries(result);
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dataRevision, ids, attempt]);
   const byId = useMemo(
-    () => new Map(summaries.map((item) => [item.exercise_id, item])),
+    () => new Map(summaries?.map((item) => [item.exercise_id, item])),
     [summaries],
   );
   const muscles = [
@@ -179,7 +156,7 @@ export function ExerciseLibraryList({
           <Icon name="chevron-down" />
         </button>
       </div>
-      {loading && (
+      {loading && summaries === null && (
         <p className="exercise-list-status" role="status">
           Loading trends…
         </p>
@@ -187,11 +164,7 @@ export function ExerciseLibraryList({
       {error && (
         <div className="exercise-progress-error" role="alert">
           Could not load exercise trends.{' '}
-          <button
-            type="button"
-            className="text-link"
-            onClick={() => setAttempt((value) => value + 1)}
-          >
+          <button type="button" className="text-link" onClick={retry}>
             Retry
           </button>
         </div>

@@ -150,6 +150,7 @@ import { optimisePhoto } from './photoOptimise';
 import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
+import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
 import {
@@ -692,6 +693,7 @@ function AppContent() {
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
+  const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
   const notifyRestComplete = useCallback(
     () => setMessage('Rest complete. Time for your next set.'),
@@ -1817,6 +1819,7 @@ function AppContent() {
           {!loading && historyGroupVisited && (
             <CachedTabPanel active={sectionFromTab !== null}>
               <HistoryScreen
+                exerciseLibrary={exerciseLibrary}
                 dataRevision={dataRevision}
                 key={`${historyOpenId ?? 'history'}-${historyExerciseId ?? 'all'}-${historyMovementId ?? 'any'}-${historyOpenCount}`}
                 workouts={workouts}
@@ -6494,6 +6497,7 @@ interface ExerciseDetailHeader {
 }
 
 export function ProgressScreen({
+  exerciseLibrary,
   dataRevision = null,
   exercises,
   measurements,
@@ -6507,6 +6511,7 @@ export function ProgressScreen({
   onDetailChange,
   onCreateExercise,
 }: {
+  exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
   exercises: Exercise[];
   measurements: BodyMeasurement[];
@@ -6689,7 +6694,7 @@ export function ProgressScreen({
         <div ref={libraryRoot} hidden={!libraryMode}>
           <ExerciseLibraryList
             exercises={strengthExercises}
-            dataRevision={dataRevision}
+            library={exerciseLibrary}
             onCreate={onCreateExercise}
             onOpen={(id) => {
               libraryScroll.current = window.scrollY;
@@ -9284,6 +9289,7 @@ export function CardioScreen({
 }
 
 function HistoryScreen({
+  exerciseLibrary,
   dataRevision,
   workouts,
   categoryColors,
@@ -9314,6 +9320,7 @@ function HistoryScreen({
   onOpenSettings,
   accountActions,
 }: {
+  exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
   workouts: TrackedWorkout[];
   categoryColors: WorkoutTypeColors;
@@ -9608,6 +9615,7 @@ function HistoryScreen({
       {visitedSections.has('progress') && (
         <CachedTabPanel active={section === 'progress'}>
           <ProgressScreen
+            exerciseLibrary={exerciseLibrary}
             dataRevision={dataRevision}
             exercises={exercises}
             personalRecords={personalRecords}
