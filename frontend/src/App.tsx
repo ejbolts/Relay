@@ -216,7 +216,6 @@ import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import {
-  compactSetSummary,
   dayMonth,
   formatVolume,
   groupWorkoutsByWeek,
@@ -4338,8 +4337,6 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
-  const lastSessionSummary =
-    !cardio && history[0] ? compactSetSummary(history[0].sets, weightUnit) : '';
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
@@ -5046,10 +5043,8 @@ function MovementCard({
               .filter(Boolean)
               .join(' · ')}
           </p>
-          {lastSessionSummary && (
-            <p className="movement-last-session">
-              Last {shortDate(history[0].workoutDate)} · {lastSessionSummary} ({weightUnit})
-            </p>
+          {!cardio && history[0] && (
+            <p className="movement-last-session">Last {shortDate(history[0].workoutDate)}</p>
           )}
           {!expanded && (
             <span className="movement-completed-summary">
@@ -5609,7 +5604,7 @@ function MachinePhotoChooser({
     ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
     : photos.length > 0
       ? `${photos.length} saved · none pinned`
-      : 'Take or choose a photo';
+      : '';
 
   return (
     <details
@@ -5637,7 +5632,7 @@ function MachinePhotoChooser({
         )}
         <span className="machine-photo-summary-copy">
           <strong>Equipment photo</strong>
-          <small>{photoSummary}</small>
+          {photoSummary && <small>{photoSummary}</small>}
         </span>
         {selectedIds.length > 0 && <b>{selectedIds.length} pinned</b>}
         <span className="machine-photo-chevron" aria-hidden="true">
