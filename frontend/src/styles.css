@@ -9126,7 +9126,7 @@ body,
 }
 
 @media (min-width: 700px) {
-  .calendar-panel .calendar-scroll {
+  .calendar-panel .calendar-scroll:not(.calendar-preview) {
     /* Two months exactly fill the card; minmax() would settle on the 310px minimum. */
     grid-auto-columns: max(310px, calc(50% - 0.3rem));
   }

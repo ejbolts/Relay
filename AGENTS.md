@@ -4,6 +4,13 @@ Follow this repository's README and checks, together with the user's shared veri
 
 Keep server release runbooks and private operator notes local. Do not commit them or include their contents in pull requests. Consult the operator's local instructions before an explicitly authorized deployment.
 
+## Temporary UI feedback
+
+- Show brief action confirmations, such as "Routine saved", "Copied" or "Split updated", in a non-blocking popup/toast using the app's existing feedback components. Prefer a dismissible popup that clears automatically; do not add temporary success text inline beside buttons, above cards or beneath controls, where it persists or shifts the layout.
+- Keep durable state in the relevant control or badge, such as **Active**, **Saved** or an enabled switch. Avoid adding a separate inline confirmation that repeats a button or state change.
+- Keep validation errors, required input instructions and information needed to recover from a failure beside the affected field or action. Use a confirmation dialog when an action requires a decision; routine success feedback should not interrupt the user or take focus.
+- Apply this to UI created or changed by the task; do not sweep unrelated screens without a request.
+
 ## Efficient development verification
 
 - **Do not run the full frontend or backend suites locally.** GitHub's **Checks** workflow runs them on every PR and `main` push, and is the gate for full-suite regressions. Accept that a CI failure may need a follow-up fix and push.

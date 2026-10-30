@@ -66,6 +66,7 @@ import type {
   WorkoutSession,
   TrainingPreferences,
   TrainingSplit,
+  Routine,
   TrainingTime,
   WorkoutTypeColors,
   WorkoutType,
@@ -485,6 +486,35 @@ export const api = {
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
     ),
   getTrainingSplit: () => request<TrainingSplit | null>('/api/training-split'),
+  routines: {
+    create: (
+      routine: Omit<Routine, 'id'>,
+      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>,
+    ) =>
+      request<Routine>('/api/routines', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
+      }),
+    list: () => request<Routine[]>('/api/routines'),
+    profile: (id: string) => request<Routine[]>(`/api/routines/profile/${encodeURIComponent(id)}`),
+    fromSplit: () => request<Routine>('/api/routines/from-split', { method: 'POST' }),
+    save: (routine: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) =>
+      request<Routine>(`/api/routines/${routine.id}`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
+      }),
+    remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
+    copy: (owner: string, id: string) =>
+      request<Routine>(`/api/routines/profile/${owner}/${id}/copy`, { method: 'POST' }),
+    use: (id: string, start_date: string) =>
+      request<TrainingSplit>(`/api/routines/${id}/use`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ start_date }),
+      }),
+  },
   saveTrainingSplit: (payload: TrainingSplit) =>
     request<TrainingSplit>('/api/training-split', {
       method: 'PUT',

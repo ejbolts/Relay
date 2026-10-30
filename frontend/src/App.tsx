@@ -685,6 +685,9 @@ function AppContent() {
     visitedTabs.has('progress') ||
     visitedTabs.has('cardio');
   const [workoutTemplate, setWorkoutTemplate] = useState<SessionTemplate | null>(null);
+  const [splitDestination, setSplitDestination] = useState<{
+    routineId?: string;
+  }>({});
   // The type chosen from the Start menu's Cardio option, before any exercise is added.
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
@@ -1350,6 +1353,16 @@ function AppContent() {
     setTab(destination.page);
   }
 
+  function openSplits(routineId?: string) {
+    setSplitDestination({ routineId });
+    setTab('split');
+  }
+
+  function openSplitSchedule() {
+    setSplitDestination({});
+    setTab('split');
+  }
+
   function openAllSettings() {
     setSettingsJump(null);
     setSettingsGroup(null);
@@ -1369,7 +1382,7 @@ function AppContent() {
 
   const nestedHeader =
     tab === 'split'
-      ? { title: 'Your split', subtitle: null }
+      ? { title: 'Your splits', subtitle: null }
       : tab === 'settings'
         ? settingsGroup
           ? { title: 'All settings', subtitle: null }
@@ -1642,7 +1655,7 @@ function AppContent() {
                       upNext.type ?? null,
                     )
                   }
-                  onEditSplit={() => setTab('split')}
+                  onEditSplit={openSplitSchedule}
                   onResumeWorkout={() => setTab('log')}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
@@ -1839,14 +1852,9 @@ function AppContent() {
           )}
           {!loading && tab === 'split' && (
             <TrainingSplitEditor
-              onSaved={async (saved) => {
+              initialRoutineId={splitDestination.routineId}
+              onSaved={async () => {
                 await refreshData({ silent: true, activityLabel: null });
-                setMessage(
-                  saved.enabled
-                    ? 'Training split saved.'
-                    : 'Automatic workout suggestions restored.',
-                );
-                if (currentTabRef.current === 'split') navigateBack();
               }}
             />
           )}
@@ -1856,7 +1864,7 @@ function AppContent() {
                 active={tab === 'settings'}
                 selectedGroup={settingsGroup}
                 onSelectGroup={setSettingsGroup}
-                onOpenSplit={() => setTab('split')}
+                onOpenSplit={openSplitSchedule}
                 splitName={dashboard?.recommendation?.split_name ?? null}
                 guideActive={prompt === 'tour'}
                 workouts={workouts}
@@ -1915,6 +1923,7 @@ function AppContent() {
               <ProfileScreen
                 key={user.id}
                 onOpenMember={openSharedProfile}
+                onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
                 onChooseSharing={openSharingSettings}
@@ -1935,6 +1944,7 @@ function AppContent() {
                 <SharedProfileScreen
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
                   onOpenMember={openSharedProfile}
+                  onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
                   invite={sharedProfile.invite}
                   onLoaded={(profile) =>
@@ -2590,7 +2600,7 @@ function WorkoutLogger({
         }))
       : restoredDraft
         ? restoredDraftMovements
-        : (template?.exercises ?? []).map(({ exercise }) => ({
+        : (template?.exercises ?? []).map(({ exercise, plannedSets }) => ({
             key: crypto.randomUUID(),
             exercise,
             notes: '',
@@ -2598,15 +2608,24 @@ function WorkoutLogger({
             machinePhotosInitialized: false,
             supersetKey: null,
             isComplete: false,
-            sets: suggestedSetsFromHistory(
-              historicalWorkouts,
-              exercise,
-              initialDate,
-              undefined,
-              historyBaselines && initialDate >= historyBaselines.before
-                ? historyBaselines.byExercise
-                : null,
-            ),
+            sets: plannedSets
+              ? plannedSets.map((set) => ({
+                  ...createWorkoutSet(exercise.kind),
+                  ...set,
+                  key: crypto.randomUUID(),
+                  warmup: set.set_type === 'warmup',
+                  completed: false,
+                  fromPrevious: true,
+                }))
+              : suggestedSetsFromHistory(
+                  historicalWorkouts,
+                  exercise,
+                  initialDate,
+                  undefined,
+                  historyBaselines && initialDate >= historyBaselines.before
+                    ? historyBaselines.byExercise
+                    : null,
+                ),
           })),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -9517,20 +9536,6 @@ function HistoryScreen({
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"
-            titleAction={
-              section === 'history' ? (
-                <button
-                  type="button"
-                  className="training-add-exercise"
-                  aria-label="Add exercise"
-                  title="Add exercise"
-                  aria-haspopup="dialog"
-                  onClick={openExerciseCreation}
-                >
-                  <Icon name="plus" />
-                </button>
-              ) : undefined
-            }
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
           />

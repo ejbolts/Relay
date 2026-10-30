@@ -792,6 +792,29 @@ button.pulse-card:hover {
   margin-top: 0.625rem;
 }
 
+.consistency-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: auto;
+}
+.consistency-header-actions > span {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+.consistency-header-actions .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+.consistency-header-actions .pulse-icon {
+  width: 14px;
+  height: 14px;
+}
 .consistency-stats {
   display: flex;
   gap: 1.25rem;
@@ -1615,6 +1638,10 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   gap: 2px;
 }
 
+/* Planned dates reuse the calendar without completed-workout borders or faded future days. */
+.calendar-panel .calendar-preview .calendar-day.planned {
+  color: var(--p-ink-2);
+}
 .calendar-day-dots i {
   width: 0.375rem;
   height: 0.375rem;

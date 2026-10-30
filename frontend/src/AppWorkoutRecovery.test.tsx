@@ -537,11 +537,12 @@ describe('saved training splits on Home', () => {
   };
   beforeEach(() => {
     window.history.replaceState(null, '', '#dashboard');
+    vi.spyOn(api.routines, 'list').mockResolvedValue([]);
     vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom]);
     vi.mocked(api.dashboard).mockResolvedValue({ recommendation } as unknown as DashboardData);
   });
 
-  it('opens the full editor from the Home shortcut', async () => {
+  it('opens the unified splits page from the Home shortcut', async () => {
     vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(null);
     await mount();
     const edit = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -549,7 +550,7 @@ describe('saved training splits on Home', () => {
     )!;
     await act(async () => edit.click());
     expect(window.location.hash).toBe('#split');
-    expect(container.querySelector('[aria-label="Training split editor"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Your splits"]')).not.toBeNull();
     expect(container.querySelector('.tab-bar')).toBeNull();
   });
 
@@ -561,8 +562,14 @@ describe('saved training splits on Home', () => {
       steps: [{ workout_type_id: custom.id }],
     };
     vi.spyOn(api, 'getTrainingSplit').mockResolvedValue(split);
-    let finish!: (value: typeof split) => void;
-    vi.spyOn(api, 'saveTrainingSplit').mockImplementation(
+    const plan = {
+      id: 'saved-plan',
+      name: split.name,
+      shared: false,
+      days: [{ workout_type_id: custom.id, workout_type: custom, movements: [] }],
+    };
+    let finish!: (value: typeof plan) => void;
+    vi.spyOn(api.routines, 'create').mockImplementation(
       () =>
         new Promise((resolve) => {
           finish = resolve;
@@ -575,8 +582,11 @@ describe('saved training splits on Home', () => {
         .click(),
     );
     await act(async () =>
-      container
-        .querySelector('.split-editor form')!
+      container.querySelector<HTMLButtonElement>('.routine-actions button')!.click(),
+    );
+    await act(async () =>
+      document
+        .querySelector('.routine-editor')!
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
     await act(async () =>
@@ -585,7 +595,7 @@ describe('saved training splits on Home', () => {
         .click(),
     );
     expect(window.location.hash).toBe('#settings');
-    await act(async () => finish(split));
+    await act(async () => finish(plan));
     expect(window.location.hash).toBe('#settings');
   });
 
@@ -599,6 +609,53 @@ describe('saved training splits on Home', () => {
       workoutTypeId: 'custom-a',
       workoutTypeExplicit: true,
     });
+  });
+
+  it('prefills a saved routine with its adapted sets unchecked, rather than previous performance', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: {
+        ...recommendation,
+        routine_day: {
+          workout_type_id: custom.id,
+          workout_type: custom,
+          movements: [
+            {
+              exercise_id: bench.id,
+              exercise: bench,
+              sets: [
+                {
+                  reps: 10,
+                  weight_kg: 35,
+                  rest_seconds: 120,
+                  duration_seconds: null,
+                  distance_km: null,
+                  set_type: 'normal',
+                },
+                {
+                  reps: 8,
+                  weight_kg: 37.5,
+                  rest_seconds: 90,
+                  duration_seconds: null,
+                  distance_km: null,
+                  set_type: 'drop',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    } as unknown as DashboardData);
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    const draft = readActiveWorkoutDraft()!;
+    expect(draft.workoutTypeId).toBe(custom.id);
+    expect(draft.movements[0].exerciseId).toBe(bench.id);
+    expect(draft.movements[0].sets).toMatchObject([
+      { reps: 10, weight_kg: 35, rest_seconds: 120, completed: false, fromPrevious: true },
+      { reps: 8, weight_kg: 37.5, rest_seconds: 90, completed: false, set_type: 'drop' },
+    ]);
+    expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
   it('shows a rest day without offering it as a workout in the Start menu', async () => {

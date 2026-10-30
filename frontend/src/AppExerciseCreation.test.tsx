@@ -126,11 +126,14 @@ it.each(['history', 'progress'] as const)(
   async (section) => {
     await render(section);
     expect(host.querySelector('.training-exercise-actions')).toBeNull();
-    const shortcut = host.querySelector(
-      section === 'history'
-        ? '.page-header-title-row [aria-label="Add exercise"]'
-        : '.exercise-list-toolbar [aria-label="Add exercise"]',
-    )!;
+    expect(host.querySelector('.training-add-exercise')).toBeNull();
+    if (section === 'history') {
+      expect(host.querySelector('.page-header-title-row [aria-label="Add exercise"]')).toBeNull();
+      await click(
+        [...host.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'Exercises')!,
+      );
+    }
+    const shortcut = host.querySelector('.exercise-list-toolbar [aria-label="Add exercise"]')!;
     expect(shortcut).not.toBeNull();
     await click(shortcut);
     const dialog = document.querySelector<HTMLDialogElement>('.create-exercise-dialog')!;
@@ -161,13 +164,8 @@ it.each(['history', 'progress'] as const)(
     );
     expect(
       host.querySelector('[aria-label="Training sections"] [aria-selected="true"]')?.textContent,
-    ).toBe(section === 'history' ? 'Sessions' : 'Exercises');
+    ).toBe('Exercises');
     expect(readActiveWorkoutDraft()).toBeNull();
-    if (section === 'history') {
-      await click(
-        [...host.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'Exercises')!,
-      );
-    }
     expect(host.querySelector('[data-exercise-id="custom"]')?.textContent).toContain(
       'Custom press',
     );
