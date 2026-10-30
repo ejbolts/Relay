@@ -208,7 +208,10 @@ describe('FfmiCard', () => {
     ]);
     expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('26.1');
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 26.1');
-    expect(host.querySelector('.ffmi-frame-estimate')?.textContent).toContain('Model FFMI24.7');
+    expect(host.querySelector('.ffmi-frame-estimate')?.textContent).toContain('Estimated FFMI24.7');
+    expect(host.querySelector('.ffmi-frame-estimate summary')?.textContent).toBe(
+      'Estimated natural muscular potential',
+    );
     expect(host.querySelector('.ffmi-scale-marker.max')).toBeNull();
     expect(host.textContent).not.toMatch(/steroid user|Competitive|Exceptional reported/);
     expect(host.querySelector<HTMLDetailsElement>('.ffmi-frame-estimate')?.open).toBe(false);
@@ -245,7 +248,7 @@ describe('FfmiCard', () => {
     expect(host.querySelectorAll('.ffmi-legend li')).toHaveLength(3);
     expect(host.querySelectorAll('.ffmi-legend li.reached')).toHaveLength(0);
     expect(host.querySelector('.ffmi-potential')?.textContent).toContain(
-      'Reference weight at 13% fat',
+      'Estimated weight at 13% fat',
     );
   });
 
@@ -291,7 +294,10 @@ describe('FfmiCard', () => {
       { ...measurements[0], weight_kg: 60, body_fat_pct: 22 },
     ]);
     expect(host.querySelector('.ffmi-score span')).toBeNull();
-    expect(host.querySelector('.ffmi-frame-estimate')?.textContent).toContain('Model FFMI20.0');
+    expect(host.querySelector('.ffmi-frame-estimate')?.textContent).toContain('Estimated FFMI20.0');
+    expect(host.querySelector('.ffmi-frame-estimate summary')?.textContent).toBe(
+      'Estimated natural muscular potential',
+    );
     expect(host.querySelector('.ffmi-score-details')?.textContent).not.toContain('Height-adjusted');
     expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2');
   });

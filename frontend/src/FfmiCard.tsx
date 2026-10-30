@@ -298,22 +298,22 @@ export function FfmiCard({
             </dl>
           </details>
           <details className="ffmi-details ffmi-frame-estimate">
-            <summary>{profile.sex === 'male' ? 'Frame-based estimate' : 'Model estimate'}</summary>
+            <summary>Estimated natural muscular potential</summary>
             {profile.sex === 'male' && (
               <p className="ffmi-model-assumption">Model assumes 4–12% body fat.</p>
             )}
             {estimate && (
               <dl className="ffmi-potential">
                 <div>
-                  <dt>Model FFMI</dt>
+                  <dt>Estimated FFMI</dt>
                   <dd>{estimate.ffmi.toFixed(1)}</dd>
                 </div>
                 <div>
-                  <dt>Reference lean mass</dt>
+                  <dt>Estimated lean mass</dt>
                   <dd>{formatWeight(estimate.leanMassKg, weightUnit, 1)}</dd>
                 </div>
                 <div>
-                  <dt>Reference weight at {profile.target_body_fat_pct}% fat</dt>
+                  <dt>Estimated weight at {profile.target_body_fat_pct}% fat</dt>
                   <dd>{formatWeight(estimate.bodyweightKg, weightUnit, 1)}</dd>
                 </div>
                 <div>

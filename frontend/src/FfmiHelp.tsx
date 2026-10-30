@@ -72,11 +72,11 @@ export function FfmiHelp({ title = 'FFMI', children }: { title?: string; childre
                 range. Track changes with a consistent measurement method.
               </p>
               <p>
-                <strong>Model estimates.</strong> The separate model uses height, wrist, ankle and
-                target body fat for men, assuming roughly 4–12% body fat. The women's model assumes
-                FFMI 20. Both are rough model assumptions, not predictions of your genetic limit.
-                People can exceed them. FFMI cannot establish drug use, and 25 is not a universal
-                natural ceiling.
+                <strong>Estimated natural muscular potential.</strong> The separate model uses
+                height, wrist, ankle and target body fat for men, assuming roughly 4–12% body fat.
+                The women's model assumes FFMI 20. Both are rough model assumptions, not predictions
+                of your genetic limit. People can exceed them. FFMI cannot establish drug use, and
+                25 is not a universal natural ceiling.
               </p>
               <p>
                 <strong>Taking measurements.</strong> Keep tape positions consistent without
