@@ -331,6 +331,7 @@ export interface WorkoutRecommendation {
   needs_split_update?: boolean;
   scheduled_date?: string | null;
   split_name?: string | null;
+  routine_day?: RoutineDay | null;
 }
 
 export interface TrainingSplit {
@@ -338,6 +339,29 @@ export interface TrainingSplit {
   enabled: boolean;
   start_date: string;
   steps: { workout_type_id: string | null }[];
+  routine_id?: string | null;
+}
+
+export interface RoutineSet {
+  reps: number | null;
+  weight_kg: number | null;
+  duration_seconds: number | null;
+  distance_km: number | null;
+  rest_seconds: number | null;
+  set_type: SetType;
+}
+
+export interface RoutineDay {
+  workout_type_id: string | null;
+  workout_type: WorkoutType | null;
+  movements: { exercise_id: string; exercise: Exercise; sets: RoutineSet[] }[];
+}
+
+export interface Routine {
+  id: string;
+  name: string;
+  shared: boolean;
+  days: RoutineDay[];
 }
 
 export interface WeeklyMuscleContribution {

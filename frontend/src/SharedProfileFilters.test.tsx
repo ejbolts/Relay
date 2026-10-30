@@ -76,6 +76,7 @@ function renderProfile(
   ownProfile?: { user: User; onSaved: (user: User) => void },
   active = true,
   dataRevision: string | null = null,
+  onOpenSplits?: () => void,
 ) {
   return act(async () =>
     root.render(
@@ -84,6 +85,7 @@ function renderProfile(
         profileId={profileId}
         ownProfile={ownProfile}
         active={active}
+        onOpenSplits={onOpenSplits}
         onChooseSharing={() => {}}
         renderWorkouts={({ workouts, renderWorkoutAction }) => (
           <ul>
@@ -279,6 +281,31 @@ describe('own profile', () => {
 });
 
 describe('shared history filtering', () => {
+  it('links My splits beside the own consistency range instead of listing saved plans on the profile', async () => {
+    const user: User = {
+      id: 'owner',
+      username: 'sample.owner',
+      display_name: 'Sample Owner',
+      is_admin: false,
+      can_upload_videos: false,
+      created_at: '2026-10-01T12:00:00Z',
+    };
+    vi.mocked(api.sharing.profile).mockResolvedValue({ ...profile, id: user.id, is_you: true });
+    const open = vi.fn();
+    await renderProfile(user.id, { user, onSaved: vi.fn() }, true, null, open);
+    expect(container.querySelector('.routine-panel')).toBeNull();
+    const header = container.querySelector('.calendar-panel .pulse-card-header')!;
+    expect(header.textContent).toContain('Last 12 weeks');
+    const link = header.querySelector<HTMLButtonElement>('button')!;
+    expect(link.textContent).toContain('My splits');
+    await act(async () => link.click());
+    expect(open).toHaveBeenCalledOnce();
+    expect(container.textContent).not.toContain('Save current split');
+    vi.mocked(api.sharing.profile).mockResolvedValue(profile);
+    await renderProfile('friend', undefined, true, null, open);
+    expect(container.querySelector('.routine-panel')).not.toBeNull();
+    expect(container.querySelector('.calendar-panel .pulse-card-header button')).toBeNull();
+  });
   it('requests matching server results and resets to the first unfiltered page', async () => {
     await chooseType('push');
     expect(api.sharing.workouts).toHaveBeenLastCalledWith(

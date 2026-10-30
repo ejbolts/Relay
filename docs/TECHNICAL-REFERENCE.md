@@ -235,6 +235,36 @@ saving produces an update-split state rather than substituting a different worko
 recommendations carry the account-owned type metadata, and previous-session templates match
 the custom type ID as well as the compatibility category.
 
+## Saved and shared routines
+
+`/api/routines` stores up to 20 account-owned routines, with 1–28 workout/rest days,
+planned exercises and sets. Each routine has its own `routine:<uuid>` user-setting row,
+so existing account backups and deletion include it without a schema migration. A routine
+contains planned fields only; capturing a split omits workout/set notes, body weight,
+photos, credentials and incomplete performance. Limits are 200 exercises and 1000 sets
+per routine, with 20 exercises per day and 50 sets per exercise.
+
+`/api/routines/profile/{user_id}` lists only explicitly shared routines and uses the
+existing profile audience, friendship, block and disabled-account checks. Copying through
+that profile rechecks access, maps exercises and types into the recipient's account,
+and creates an independent private routine; it never copies workout history or activates
+a schedule. Unsharing does not remove copies already saved by others.
+
+`POST /api/routines/{id}/use` accepts a start date and replaces the active split.
+The unified **Your splits** page lists all owned copies, including private imports, with
+the active plan's week/calendar preview and inline templates. After copying, **View my splits**
+navigates to that copy and opens its card. The own profile links to this page from its
+consistency header; other profiles show only their shared plans. Importing does not publish
+or activate a split automatically. Templates remain disabled while a saved plan matches
+their ordered workout/rest days. Sharing is a separate saved-plan option, outside the editor.
+Recommendations include that day's planned movements; the logger prefills them as
+unchecked suggestions. Editing an active routine updates its schedule while preserving
+the start date, unless a schedule change is explicitly included in the same atomic save.
+Editing the schedule directly clears its routine link; deleting the
+routine keeps the schedule and restores history-based suggestions. Mutations invalidate
+the account's training revision. Test with `backend/tests/test_routines.py` and the
+frontend `RoutinePanel` and workout recovery tests.
+
 ## Checks
 
 While developing, run the tests for the behaviour you changed. From the repository root,

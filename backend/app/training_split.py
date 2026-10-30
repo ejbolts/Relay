@@ -61,6 +61,13 @@ def split_recommendation(
     else:
         name = f"{workout_type.name} workout"
         reason = f"Day {index + 1} of your {len(split.steps)}-day {split.name} cycle."
+    routine_day = None
+    if split.routine_id and not is_rest and not unavailable:
+        from .routines import read_routine, routine_content
+
+        content = routine_content(db, user_id, split.routine_id)
+        if index < len(content.days) and content.days[index].workout_type_id == type_id:
+            routine_day = read_routine(db, user_id, split.routine_id, content).days[index]
     return WorkoutRecommendationRead(
         category=category,
         session_name=name,
@@ -72,4 +79,5 @@ def split_recommendation(
         needs_split_update=unavailable,
         scheduled_date=scheduled_date,
         split_name=split.name,
+        routine_day=routine_day,
     )
