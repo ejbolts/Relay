@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
+import { useExerciseLibrary } from './useExerciseLibrary';
 import type { Exercise, ExerciseLibrarySummary, ExerciseProgress, TrackedWorkout } from './types';
 
 const pec: Exercise = {
@@ -67,20 +68,29 @@ const onOpenWorkout = vi.fn();
 const named = (name: string) =>
   [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === name)!;
 const click = async (element: Element) => act(async () => (element as HTMLElement).click());
-async function render(revision: string | null = null, exercises: Exercise[] = catalogue) {
-  await act(async () =>
-    root.render(
-      <ProgressScreen
-        exercises={exercises}
-        measurements={[]}
-        personalRecords={[]}
-        onOpenWorkout={onOpenWorkout}
-        embedded
-        browseFirst
-        dataRevision={revision}
-      />,
-    ),
+function LibraryScreen({
+  revision,
+  exercises,
+}: {
+  revision: string | null;
+  exercises: Exercise[];
+}) {
+  const exerciseLibrary = useExerciseLibrary(exercises, revision);
+  return (
+    <ProgressScreen
+      exerciseLibrary={exerciseLibrary}
+      exercises={exercises}
+      measurements={[]}
+      personalRecords={[]}
+      onOpenWorkout={onOpenWorkout}
+      embedded
+      browseFirst
+      dataRevision={revision}
+    />
   );
+}
+async function render(revision: string | null = null, exercises: Exercise[] = catalogue) {
+  await act(async () => root.render(<LibraryScreen revision={revision} exercises={exercises} />));
 }
 async function search(value: string) {
   const input = host.querySelector<HTMLInputElement>('[aria-label="Search exercises"]')!;
@@ -290,6 +300,41 @@ it('ignores stale detail responses after returning to the list and choosing anot
   expect(host.querySelector('.progress-hero-value')).toBeNull();
   await act(async () => finishRow(progress(row, 90)));
   expect(host.querySelector('.progress-hero-value')?.textContent).toContain('89');
+});
+
+it('keeps loaded graphs and ordering visible during a refresh and ignores an older response', async () => {
+  await render('initial');
+  const points = host.querySelector('.exercise-list-spark polyline')!.getAttribute('points');
+  let finishOld!: (value: ExerciseLibrarySummary[]) => void;
+  let finishNew!: (value: ExerciseLibrarySummary[]) => void;
+  vi.mocked(api.exerciseLibrary)
+    .mockImplementationOnce(() => new Promise((resolve) => (finishOld = resolve)))
+    .mockImplementationOnce(() => new Promise((resolve) => (finishNew = resolve)));
+  await search('Pec');
+  await render('older');
+  expect(host.querySelector('.exercise-list-spark polyline')?.getAttribute('points')).toBe(points);
+  expect(host.textContent).not.toContain('Loading trends');
+  await render('newer');
+  await act(async () => finishNew([{ ...summaries[0], latest_estimated_1rm: 130 }]));
+  await act(async () => finishOld(summaries));
+  expect(host.querySelector('.exercise-list-value b')?.textContent).toContain('130');
+  expect(host.querySelector<HTMLInputElement>('[aria-label="Search exercises"]')?.value).toBe(
+    'Pec',
+  );
+});
+
+it('refreshes trends after adding an exercise and keeps the previous graphs if the refresh fails', async () => {
+  await render();
+  vi.mocked(api.exerciseLibrary).mockRejectedValueOnce(new Error('Offline'));
+  await render(null, [...catalogue, { ...pec, id: 'new', name: 'New press' }]);
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('.exercise-list-spark polyline')).not.toBeNull();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load exercise trends',
+  );
+  await click(named('Retry'));
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(3);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 
 it('retries a failed session read and keeps the workout action unavailable until it loads', async () => {

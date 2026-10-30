@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Opening Training Exercises with preloaded sparklines and estimated 1RM values, then returning with the same graphs ready](screenshots/releases/1.1.0-training-preload.gif)
+
+_Exercise trends load while Home is open. The first Exercises view already has its graphs and recent-first ordering; returning reuses them. This recording uses isolated sample data._
+
 ![Lying Leg Curl showing only Last Sun 25 Oct beneath its name, followed by Equipment photo without a helper line](screenshots/releases/1.1.0-exercise-date-only.png)
 
 _Workout exercise headers keep the last-performed date without repeating previous weights and reps. Equipment photo omits the Take or choose a photo prompt. Isolated synthetic workout._
@@ -147,6 +151,7 @@ _The circular Start button matches its workout choices. Isolated sample data._
 - The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
 - Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.
+- Training exercise trends load quietly after sign-in, so sparklines, estimated 1RM values and recent-first ordering are ready when you open Exercises. Loaded graphs stay visible while workout changes refresh in the background. Trends stay in memory for the signed-in account and are cleared when accounts change.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

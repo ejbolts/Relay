@@ -12,7 +12,7 @@ import {
   writeDashboardCache,
   writeWorkoutCache,
 } from './workoutCache';
-import type { DashboardData, Exercise } from './types';
+import type { DashboardData, Exercise, ExerciseLibrarySummary } from './types';
 
 vi.mock('./workoutCache', () => ({
   readDashboardCache: vi.fn().mockResolvedValue(null),
@@ -99,7 +99,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render(section: 'history' | 'progress') {
+async function render(section: 'dashboard' | 'history' | 'progress') {
   window.history.replaceState(null, '', `#${section}`);
   await act(async () => root.render(<App />));
 }
@@ -184,4 +184,88 @@ it('cancels without a write or changing the current exercise filters', async () 
     'Sample',
   );
   expect(readActiveWorkoutDraft()).toBeNull();
+});
+
+const trends: ExerciseLibrarySummary[] = [
+  {
+    exercise_id: press.id,
+    session_count: 2,
+    last_date: '2026-10-29',
+    latest_estimated_1rm: 100,
+    change_kg: 20,
+    change_percent: 25,
+    trend: [
+      { date: '2026-10-22', estimated_1rm: 80 },
+      { date: '2026-10-29', estimated_1rm: 100 },
+    ],
+  },
+];
+
+const namedButton = (name: string) =>
+  [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === name)!;
+
+it('preloads trends on Home without holding up startup and reuses them on the first Training visit', async () => {
+  let finish!: (value: ExerciseLibrarySummary[]) => void;
+  vi.mocked(api.exerciseLibrary).mockImplementation(
+    () => new Promise((resolve) => (finish = resolve)),
+  );
+  await render('dashboard');
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('.today-screen')).not.toBeNull();
+  expect(host.querySelector('.exercise-list-library')).toBeNull();
+  expect(host.textContent).not.toContain('Loading trends');
+  await act(async () => finish(trends));
+  await click(namedButton('Training'));
+  await click(namedButton('Exercises'));
+  expect(host.querySelector('.exercise-list-spark polyline')).not.toBeNull();
+  expect(host.querySelector('.exercise-list-value b')?.textContent).toContain('100');
+  expect(host.textContent).not.toContain('Loading trends');
+  await click(namedButton('Home'));
+  await click(namedButton('Training'));
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(1);
+});
+
+it('shares an in-flight background request when Exercises opens early and supports retry after failure', async () => {
+  let fail!: (error: Error) => void;
+  vi.mocked(api.exerciseLibrary).mockImplementationOnce(
+    () => new Promise((_resolve, reject) => (fail = reject)),
+  );
+  await render('dashboard');
+  await click(namedButton('Training'));
+  await click(namedButton('Exercises'));
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(1);
+  expect(host.textContent).toContain('Loading trends');
+  await act(async () => fail(new Error('Offline')));
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load exercise trends',
+  );
+  vi.mocked(api.exerciseLibrary).mockResolvedValue(trends);
+  await click(namedButton('Retry'));
+  expect(host.querySelector('.exercise-list-spark polyline')).not.toBeNull();
+});
+
+it('refreshes preloaded trends after a remote workout change while Home is still open', async () => {
+  vi.mocked(api.exerciseLibrary).mockResolvedValue(trends);
+  await render('dashboard');
+  vi.mocked(api.workoutRevision).mockResolvedValue({ revision: 'remote-update' });
+  vi.mocked(api.exerciseLibrary).mockResolvedValue([{ ...trends[0], latest_estimated_1rm: 120 }]);
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('.exercise-list-library')).toBeNull();
+  await click(namedButton('Training'));
+  await click(namedButton('Exercises'));
+  expect(host.querySelector('.exercise-list-value b')?.textContent).toContain('120');
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(2);
+});
+
+it('drops preloaded trends when the signed-in app remounts for a different account', async () => {
+  vi.mocked(api.exerciseLibrary).mockResolvedValue(trends);
+  await render('dashboard');
+  vi.mocked(api.exerciseLibrary).mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => root.render(<App key="different-account" />));
+  await click(namedButton('Training'));
+  await click(namedButton('Exercises'));
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('.exercise-list-spark polyline')).toBeNull();
+  expect(host.querySelector('.exercise-list-value b')?.textContent).not.toContain('100');
 });
