@@ -48,7 +48,7 @@
       "title": "FFMI with clear references",
       "description": "Standard FFMI for both sexes, with sex-specific population reference points and a question-mark beside each one to explain it. Open Score details for height adjustment and sensitivity, or Estimated natural muscular potential for the separate model. Your dimensions and sex preference stay saved.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a94bb1883f9b6b851d8544bbca5a498d62b8d492/docs/screenshots/releases/1.1.0-ffmi.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a1b5bec9c24e83703f06783db834cba3f3f8a64b/docs/screenshots/releases/1.1.0-ffmi.png",
         "alt": "Standard FFMI card with sex-specific population percentile references, one sex icon, Score details and a separate Estimated natural muscular potential. Synthetic sample data."
       }
     },
