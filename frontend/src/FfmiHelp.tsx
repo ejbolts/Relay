@@ -64,14 +64,6 @@ export function FfmiHelp({ title = 'FFMI', children }: { title?: string; childre
                 be above or below these model assumptions.
               </p>
               <p>
-                <strong>Gym-goer comparison.</strong> The extra point shows a training-sample
-                average: 22.1 for men, or 20.6 for women on this app's adjusted scale (16.7 before
-                adjustment). These come from separate, mostly young training groups, not a
-                representative survey of all gym members or a drug-free standard. The male sample
-                used self-reported body measurements; the female sample used scans. Training
-                experience, age and measurement method affect comparisons.
-              </p>
-              <p>
                 <strong>Reading the comparison.</strong> A model reference of 24.7 and the
                 exceptional reported case at 28.0 are different comparisons, not guaranteed
                 outcomes. The men's model assumes roughly 4 to 12% body fat. Measurement errors

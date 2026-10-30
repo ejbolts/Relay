@@ -135,16 +135,6 @@ button.ffmi-methodology-link {
   background: var(--p-axis);
 }
 
-.ffmi-scale-line.gym {
-  width: 3px;
-  background: var(--p-accent-text);
-}
-
-.ffmi-scale-tick.gym i,
-.ffmi-legend li.gym strong {
-  color: var(--p-accent-text);
-}
-
 .ffmi-scale-marker {
   position: absolute;
   top: 50%;

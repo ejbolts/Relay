@@ -58,9 +58,7 @@ it.each(['FFMI', 'Body measurements'])(
       'not the general-public average or a prediction of your genetic limit.',
     );
     expect(document.querySelector('dialog a')).toBeNull();
-    expect(document.querySelectorAll('dialog p')).toHaveLength(6);
-    expect(document.body.textContent).toContain('22.1 for men, or 20.6 for women');
-    expect(document.body.textContent).toContain('not a representative survey of all gym members');
+    expect(document.querySelectorAll('dialog p')).toHaveLength(5);
     await act(async () => button('Back to overview').click());
     expect(document.querySelector('dialog h2')?.textContent).toBe(title);
     expect(document.body.textContent).not.toContain('Your score.');

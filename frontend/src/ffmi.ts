@@ -23,23 +23,11 @@ export const FFMI_COMPARISON: readonly { value: number; label: string }[] = [
   { value: 28.0, label: 'Exceptional reported natural case' },
 ];
 
-/** Training-sample means, not representative gym-member norms. See docs/FFMI-BENCHMARKS.md. */
-export function ffmiComparisons(sex: 'male' | 'female') {
-  const gym = {
-    value: sex === 'male' ? roundOne(22.09) : roundOne(16.7 / 0.81),
-    label: 'Average gym-goer (sample)',
-    gym: true,
-  };
-  return [...FFMI_COMPARISON.map((point) => ({ ...point, gym: false })), gym].sort(
-    (a, b) => a.value - b.value,
-  );
-}
-
 /** 24.8 sits on top of 24.9, so only the legend names it. */
 export const FFMI_UNLABELLED_TICKS = new Set([24.8]);
 
 /** Neighbours too close to label on the same side of a phone-width scale. */
-export const FFMI_TICK_LABELS_BELOW = new Set([20.6, 22.6, 25.4]);
+export const FFMI_TICK_LABELS_BELOW = new Set([22.6, 25.4]);
 
 export const DEFAULT_FFMI_PROFILE: FfmiProfile = {
   sex: null,

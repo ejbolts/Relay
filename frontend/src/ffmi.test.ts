@@ -3,7 +3,6 @@ import {
   DEFAULT_FFMI_PROFILE,
   ffmiScalePercent,
   ffmiScore,
-  ffmiComparisons,
   latestBodyFatMeasurement,
   lengthFromCm,
   lengthToCm,
@@ -81,22 +80,6 @@ describe('naturalPotential', () => {
 });
 
 describe('FFMI helpers', () => {
-  it('plots training-sample means in the same units as each sex model, in scale order', () => {
-    for (const [sex, expected] of [
-      ['male', 22.1],
-      ['female', 20.6],
-    ] as const) {
-      const points = ffmiComparisons(sex);
-      expect(points.filter((point) => point.gym)).toEqual([
-        { value: expected, label: 'Average gym-goer (sample)', gym: true },
-      ]);
-      expect(points.map((point) => point.value)).toEqual(
-        points.map((point) => point.value).sort((a, b) => a - b),
-      );
-      expect(points).toHaveLength(8);
-    }
-  });
-
   it('uses the newest check-in that has body fat', () => {
     const measurements = [
       checkIn('2026-10-20', null),
