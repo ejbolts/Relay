@@ -188,7 +188,7 @@ button.ffmi-methodology-link {
 
 .ffmi-legend li {
   display: grid;
-  grid-template-columns: 2.5rem 1fr;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
   gap: 0.5rem;
   align-items: baseline;
   border-bottom: 1px solid var(--p-line);
@@ -203,6 +203,11 @@ button.ffmi-methodology-link {
 
 .ffmi-legend strong {
   font-variant-numeric: tabular-nums;
+}
+
+.ffmi-legend .auth-help-button {
+  width: 2rem;
+  height: 2rem;
 }
 
 .ffmi-details {

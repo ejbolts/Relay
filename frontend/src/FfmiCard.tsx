@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { api } from './api';
 import { FfmiHelp } from './FfmiHelp';
+import { HelpPopup } from './HelpPopup';
 import { PopupDialog } from './PopupDialog';
 import {
   DEFAULT_FFMI_PROFILE,
@@ -254,10 +255,22 @@ export function FfmiCard({
           </div>
           <FfmiScale ffmi={ffmi} sex={profile.sex!} />
           <ol className="ffmi-legend">
-            {ffmiComparisons(profile.sex!).map(({ value, label }) => (
+            {ffmiComparisons(profile.sex!).map(({ value, label, percentile }) => (
               <li key={value}>
                 <strong>{value.toFixed(1)}</strong>
                 <span>{label}</span>
+                <HelpPopup title={label}>
+                  <p>
+                    {percentile === 50
+                      ? `The median is the middle value. About half of the ${profile.sex} reference sample had an FFMI at or below ${value.toFixed(1)}, and half had a higher value.`
+                      : `About ${percentile}% of the ${profile.sex} reference sample had an FFMI at or below ${value.toFixed(1)}, and about ${100 - percentile}% had a higher value.`}
+                  </p>
+                  <p>
+                    These figures describe a study sample of Swiss adults aged 18–34. They are
+                    reference points, not training targets, health grades or genetic limits. A
+                    percentile is a position within that sample, not a body-fat percentage.
+                  </p>
+                </HelpPopup>
               </li>
             ))}
           </ol>

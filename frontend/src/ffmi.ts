@@ -11,6 +11,7 @@ export function ffmiComparisons(sex: Sex) {
   const values = sex === 'male' ? [16.8, 18.9, 21.1] : [13.8, 15.4, 17.6];
   return values.map((value, index) => ({
     value,
+    percentile: [5, 50, 95][index],
     label: ['Population 5th percentile', 'Population median', 'Population 95th percentile'][index],
   }));
 }

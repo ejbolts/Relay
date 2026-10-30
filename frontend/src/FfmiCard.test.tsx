@@ -76,6 +76,37 @@ afterEach(() => {
 });
 
 describe('FfmiCard', () => {
+  it.each([
+    ['male', 'Population 5th percentile', 'About 5%', '16.8', '95%'],
+    ['male', 'Population median', 'About half', '18.9', 'half'],
+    ['male', 'Population 95th percentile', 'About 95%', '21.1', '5%'],
+    ['female', 'Population 5th percentile', 'About 5%', '13.8', '95%'],
+    ['female', 'Population median', 'About half', '15.4', 'half'],
+    ['female', 'Population 95th percentile', 'About 95%', '17.6', '5%'],
+  ] as const)(
+    'explains %s %s using the selected reference values',
+    async (sex, label, portion, value, higher) => {
+      await render({ ...emptyProfile, sex, height_cm: 180 });
+      const trigger = host.querySelector<HTMLButtonElement>(
+        `[aria-label="About ${label.toLowerCase()}"]`,
+      )!;
+      expect(trigger).not.toBeNull();
+      await act(async () => trigger.click());
+      const dialog = document.querySelector('dialog')!;
+      expect(dialog.querySelector('h2')?.textContent).toBe(label);
+      expect(dialog.textContent).toContain(portion);
+      expect(dialog.textContent).toContain(`${sex} reference sample`);
+      expect(dialog.textContent).toContain(value);
+      expect(dialog.textContent).toContain(`${higher} had a higher value`);
+      expect(dialog.textContent).toContain('not a body-fat percentage');
+      expect(dialog.querySelector('a')).toBeNull();
+      await act(async () =>
+        dialog.dispatchEvent(new Event('cancel', { bubbles: true, cancelable: true })),
+      );
+      expect(document.querySelector('dialog')).toBeNull();
+    },
+  );
+
   it('saves model switches, recalculates the scale and retains frame measurements after reloading', async () => {
     let stored: FfmiProfile = {
       ...emptyProfile,
