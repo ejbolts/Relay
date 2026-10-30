@@ -216,7 +216,6 @@ import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import {
-  compactSetSummary,
   dayMonth,
   formatVolume,
   groupWorkoutsByWeek,
@@ -4338,8 +4337,6 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
-  const lastSessionSummary =
-    !cardio && history[0] ? compactSetSummary(history[0].sets, weightUnit) : '';
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
@@ -5046,10 +5043,8 @@ function MovementCard({
               .filter(Boolean)
               .join(' · ')}
           </p>
-          {lastSessionSummary && (
-            <p className="movement-last-session">
-              Last {shortDate(history[0].workoutDate)} · {lastSessionSummary} ({weightUnit})
-            </p>
+          {!cardio && history[0] && (
+            <p className="movement-last-session">Last {shortDate(history[0].workoutDate)}</p>
           )}
           {!expanded && (
             <span className="movement-completed-summary">
