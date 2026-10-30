@@ -335,9 +335,22 @@ By default, the original uploads and stitched output are retained while YouTube 
 
 Each clip is also trimmed by 5 seconds at its start and end before it is normalized and stitched. Change `GYM_TRIM_START_SECONDS` or `GYM_TRIM_END_SECONDS` to adjust this (set both to `0` to disable it). Clips always retain at least 3 seconds, so very short videos are trimmed proportionally rather than made empty.
 
+## Offline mode
+
+Relay keeps working without a connection once an account has signed in on the device.
+
+- The service worker precaches the app shell, Inter font, exercise icons and in-app images, about 1.8 MB in total. Exercise icons are WebP files of roughly 6 KB each. Release videos and release-note media hosted on GitHub stay online-only.
+- Account reads are saved on the device as they load: the exercise library, workout types and colours, training and cardio preferences, split, Home layout, dashboard, recent workout history, personal records, body measurements and goals, cardio, training time, progress and machine-photo lists. The saved copy answers when the device reports no connection, the server cannot be reached (including 502-504 proxy errors), or the server has not answered within 4 seconds. Screen titles then show **Offline**. A late answer refreshes the copy, and the first successful request clears the indicator.
+- Startup opens the remembered account offline when the session check fails or takes longer than 4 seconds. A first visit on a device still needs the server.
+- Saved copies live in IndexedDB. Each record is gzip-compressed, then AES-GCM encrypted with a non-extractable Web Crypto key stored beside it and bound to the owning account and record name. Sign-out, account changes and confirmed revocation delete the records and the key. Encryption protects copied storage files; the device lock protects an unlocked browser. Origins without Web Crypto (plain HTTP other than localhost) store compressed records without encryption. Passwords are never stored on the device.
+- Stored workouts take about 0.9 KB each, and the default exercise library about 3 KB. A year at three workouts a week, with its dashboard and personal records, is roughly 0.2 MB. History beyond the startup window is saved only after it has been opened.
+- Finishing a workout offline stores it on the device; it syncs when the server is reachable. When a session expires, an unsynced finished workout is kept for the same account and discarded if a different account signs in.
+- Sign-in, Social, notifications, sharing, settings changes, imports, exports, video uploads, machine-photo images and older history need a connection.
+
 ## Limitations and sensible next steps
 
 - Uploads are not resumable and mobile browsers can suspend a backgrounded PWA.
+- Offline, one finished workout can wait to sync at a time; starting another workout waits until it reaches the server. Settings and custom exercises cannot be changed offline.
 - A processing job cannot be cancelled once ffmpeg work begins; cancellation is supported during upload.
 - Video processing handles one session at a time.
 - Real YouTube uploads need credentials and internet access; mock mode remains ideal for local verification.

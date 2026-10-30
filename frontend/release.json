@@ -2,9 +2,10 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Merge duplicate machine photos, save machine setups, personalise cardio zones and goals, map and undo imports, plan training and rest days, and connect with friends through QR codes and workout reactions.",
+  "summary": "Keep logging workouts offline, merge duplicate machine photos, save machine setups, personalise cardio zones and goals, map and undo imports, plan training and rest days, and connect with friends through QR codes and workout reactions.",
   "changes": [
     "Finish workout stores a completed snapshot on your device before syncing, including its fixed duration, sets and notes. Interrupted and offline saves retry automatically when you reopen or reconnect, without restarting the timer or creating duplicate workouts. Storage failures keep the workout open; server rejections offer Review workout.",
+    "Relay works offline once you have signed in on a device. It opens from an encrypted copy of your exercises, settings, recent history and stats saved on the device, shows Offline by the screen title, and lets you start, log and finish workouts. A finished workout syncs when the server is reachable again, including after an expired session once you sign back in. Exercise icons are about 14 times smaller and load offline. Signing in, Social and changing settings still need a connection.",
     "In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.",
     "Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.",
     "Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.",
@@ -41,6 +42,14 @@
     "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
+    {
+      "title": "Keep logging offline",
+      "description": "After signing in once, Relay opens from an encrypted copy saved on your device when the server can't be reached. Log and finish workouts while Offline shows; they sync when it reconnects.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b5508096d20c7142eb37d740749f94dcc76e5853/docs/screenshots/releases/1.1.0-offline-mode.png",
+        "alt": "Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats. Isolated sample data."
+      }
+    },
     {
       "title": "Merge duplicate machine photos",
       "description": "Choose Select in Equipment photo, pick duplicates and review Merge. Keep every photo and saved workout link together; recorded workout settings stay unchanged.",

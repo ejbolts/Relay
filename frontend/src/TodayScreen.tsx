@@ -50,6 +50,8 @@ import {
   weightUnitName,
 } from './weightUnits';
 import { formatElapsed, useElapsedSeconds } from './elapsed';
+import { useOffline } from './connectionStatus';
+import { OfflineBadge } from './OfflineBadge';
 
 export function PageHeader({
   eyebrow,
@@ -69,14 +71,16 @@ export function PageHeader({
   headingLevel?: 1 | 2;
 }) {
   const Heading = headingLevel === 1 ? 'h1' : 'h2';
+  const offline = useOffline();
   return (
     <header className="page-header">
       <div>
         {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
-        {titleAction ? (
+        {titleAction || offline ? (
           <div className="page-header-title-row">
             <Heading>{title}</Heading>
             {titleAction}
+            {offline && <OfflineBadge />}
           </div>
         ) : (
           <Heading>{title}</Heading>
