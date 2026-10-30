@@ -356,3 +356,7 @@ New accounts see a guided feature tour before the release announcement. Use **Ne
 Open **Settings > Help & about > Feedback & feature requests** to send feedback, report problems or suggest improvements at any time. Messages are stored in the app database with your username and appear for administrators in **Settings > Help & about > Admin console > App feedback**. No email or GitHub issue is created.
 
 Open **Settings > Help & about > App guide > Replay guide** to see the tour again, or **Add to Home Screen > Show steps** for the illustrated installation instructions. Both remain available from the installed app. Settings and the closing screen link to [contribution instructions](../CONTRIBUTING.md). Upgrade existing databases with `alembic upgrade head` for `0031_app_feedback` before serving this frontend.
+
+## Exercise catalogue upgrades
+
+Default seeding matches each account's exercises by case-insensitive name or the explicit aliases in `exercise_aliases.py`. A matched custom exercise keeps its ID, name, custom flag, favourites, muscle credits and explicit equipment; only blank equipment is filled from a recognised default. This invalidates cached workout snapshots once. Manual creation and CSV imports recognise the same aliases, preventing a second entry when an older custom name is retained. Unknown or ambiguous names are left alone, and equipment variants retain separate histories. The Custom pill combines with search and equipment filters in the library and workout picker.

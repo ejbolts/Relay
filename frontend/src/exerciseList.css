@@ -7,6 +7,29 @@
 .exercise-list-library {
   margin-top: 0.75rem;
 }
+.exercise-library-equipment {
+  margin-top: 0.65rem;
+}
+.exercise-picker-equipment {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem 0.8rem;
+}
+.exercise-library-equipment select,
+.exercise-picker-equipment select {
+  min-width: 0;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+}
 
 .page-header-title-row {
   display: flex;
@@ -123,7 +146,18 @@
   padding: 0.65rem 0 0.25rem;
   scrollbar-width: none;
 }
-.exercise-muscle-filters button {
+.exercise-library-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.65rem;
+}
+.exercise-library-filter-row .exercise-muscle-filters {
+  min-width: 0;
+  padding-top: 0;
+}
+.exercise-muscle-filters button,
+.exercise-custom-filter {
   flex-shrink: 0;
   margin: 0;
   min-height: 2.2rem;
@@ -135,7 +169,8 @@
   font-size: 0.8125rem;
   font-weight: 600;
 }
-.exercise-muscle-filters button[aria-pressed='true'] {
+.exercise-muscle-filters button[aria-pressed='true'],
+.exercise-custom-filter[aria-pressed='true'] {
   background: var(--p-surface-3);
   border-color: transparent;
   color: var(--p-ink);

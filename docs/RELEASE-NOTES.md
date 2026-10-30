@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Exercise library with Custom and Cable filters showing a sample custom cable curl](screenshots/releases/1.1.0-exercise-equipment.png)
+
+_Combine the **Custom** pill, equipment filter and search to find your exercises. The library includes 83 strength exercises across ten equipment types; each variant keeps separate progress. Isolated synthetic account._
+
 ![Selecting two sample machine photos, choosing their cover and settings, then merging and viewing both retained images](screenshots/releases/1.1.0-machine-photo-merge.gif)
 
 _Choose **Select** in Equipment photo, select duplicates and review **Merge**. Both images stay available in one machine's gallery; saved workout links and recorded settings are preserved. Isolated synthetic data._
@@ -107,6 +111,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 ![Circular Start button below the Cardio, Up next and Empty workout choices](screenshots/releases/1.1.0-circular-start.png)
 
 _The circular Start button matches its workout choices. Isolated sample data._
+
+- **Find the right equipment variant:** Filter by equipment in Training > Exercises and the workout picker. Search `bicep curl cable`, `dumbbells curl` or `DB curl` in any word order. Equipment, muscle, workout category, favourites and recent filters work together. Added 44 common strength exercises (83 total), covering barbell, dumbbell, cable, machine, Smith machine, EZ bar, trap bar, kettlebell, resistance band and bodyweight. Existing IDs, custom exercises, favourites and history are preserved; each variant has its own progress. The **Custom** pill works alongside the other filters in both lists. Exact-name and recognised-alias custom entries are reused; only missing equipment is filled, leaving explicit equipment and muscle credits intact. Ambiguous names stay separate.
 
 - In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
 

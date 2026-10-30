@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
+import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
+import { ExerciseCustomFilter } from './ExerciseCustomFilter';
+import { exerciseEquipment } from './exerciseEquipment';
+import { exerciseSearchScore } from './exerciseSearch';
 import type { Exercise, ExerciseLibrarySummary } from './types';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { formatWeightNumber, weightFromKg } from './weightUnits';
@@ -48,6 +52,8 @@ export function ExerciseLibraryList({
   const weightUnit = useWeightUnit();
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState('All');
+  const [equipment, setEquipment] = useState('');
+  const [customOnly, setCustomOnly] = useState(false);
   const [sort, setSort] = useState(0);
   const [summaries, setSummaries] = useState<ExerciseLibrarySummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,10 +90,10 @@ export function ExerciseLibraryList({
   const list = exercises
     .filter(
       (exercise) =>
+        (!customOnly || exercise.is_custom) &&
         (muscle === 'All' || exercise.muscle_group === muscle) &&
-        `${exercise.name} ${exercise.equipment ?? ''}`
-          .toLocaleLowerCase()
-          .includes(query.trim().toLocaleLowerCase()),
+        (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
+        exerciseSearchScore(exercise, query) !== null,
     )
     .sort((a, b) => {
       const first = byId.get(a.id),
@@ -141,17 +147,23 @@ export function ExerciseLibraryList({
           </button>
         )}
       </div>
-      <div className="exercise-muscle-filters" role="group" aria-label="Muscle group">
-        {['All', ...muscles].map((name) => (
-          <button
-            type="button"
-            key={name}
-            aria-pressed={muscle === name}
-            onClick={() => setMuscle(name)}
-          >
-            {name}
-          </button>
-        ))}
+      <div className="exercise-library-equipment">
+        <ExerciseEquipmentFilter exercises={exercises} value={equipment} onChange={setEquipment} />
+      </div>
+      <div className="exercise-library-filter-row">
+        <ExerciseCustomFilter active={customOnly} onChange={setCustomOnly} />
+        <div className="exercise-muscle-filters" role="group" aria-label="Muscle group">
+          {['All', ...muscles].map((name) => (
+            <button
+              type="button"
+              key={name}
+              aria-pressed={muscle === name}
+              onClick={() => setMuscle(name)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="exercise-list-meta">
         <span>

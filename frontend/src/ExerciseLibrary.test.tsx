@@ -17,7 +17,7 @@ const pec: Exercise = {
   is_favorite: false,
   muscle_contributions: [],
 };
-const row = { ...pec, id: 'row', name: 'Cable Row', muscle_group: 'Back' };
+const row = { ...pec, id: 'row', name: 'Cable Row', muscle_group: 'Back', equipment: 'Cable' };
 const empty = { ...pec, id: 'empty', name: 'Untrained Press' };
 const catalogue = [pec, row, empty];
 function progress(exercise: Exercise, value = 100): ExerciseProgress {
@@ -67,11 +67,11 @@ const onOpenWorkout = vi.fn();
 const named = (name: string) =>
   [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === name)!;
 const click = async (element: Element) => act(async () => (element as HTMLElement).click());
-async function render(revision: string | null = null) {
+async function render(revision: string | null = null, exercises: Exercise[] = catalogue) {
   await act(async () =>
     root.render(
       <ProgressScreen
-        exercises={catalogue}
+        exercises={exercises}
         measurements={[]}
         personalRecords={[]}
         onOpenWorkout={onOpenWorkout}
@@ -125,6 +125,52 @@ it('opens on a full list, with one summary request and no automatically selected
     true,
   );
   expect(host.querySelector('.exercise-list-rows button')?.textContent).toContain('Pec Deck');
+});
+it('combines equipment, muscle and reordered search, retaining equipment after detail', async () => {
+  await render();
+  const equipment = host.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
+  await act(async () => {
+    equipment.value = 'Cable';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await click(named('Back'));
+  await search('back cable row');
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
+  await click(host.querySelector('[data-exercise-id="row"]')!);
+  await click(host.querySelector('.training-back')!);
+  expect(equipment.value).toBe('Cable');
+  await search('machine');
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(0);
+  expect(host.querySelector('[role="status"]')?.textContent).toContain('No exercises match');
+});
+it('combines the Custom pill with equipment and muscle filters and preserves it after detail', async () => {
+  await render(
+    null,
+    catalogue.map((exercise) => ({ ...exercise, is_custom: exercise.id === 'row' })),
+  );
+  const custom = host.querySelector('[aria-label="Custom exercises"]')!;
+  expect(custom.getAttribute('aria-pressed')).toBe('false');
+  await click(custom);
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
+  await click(named('Back'));
+  const equipment = host.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
+  await act(async () => {
+    equipment.value = 'Cable';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await search('row');
+  await click(host.querySelector('[data-exercise-id="row"]')!);
+  await click(host.querySelector('.training-back')!);
+  expect(custom.getAttribute('aria-pressed')).toBe('true');
+  await click(host.querySelector('[aria-label="Clear search"]')!);
+  await act(async () => {
+    equipment.value = 'Machine';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(0);
+  await click(custom);
+  await click(named('All'));
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(2);
 });
 it('searches, filters, clears and cycles through recent, alphabetical and improvement ordering', async () => {
   await render();

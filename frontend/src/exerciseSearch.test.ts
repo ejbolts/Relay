@@ -4,11 +4,79 @@ import {
   fuzzyMatchIndices,
   fuzzyMatchesFields,
   fuzzyScoreFields,
+  exerciseSearchScore,
   progressExerciseMatches,
   rankExerciseSearchMatches,
 } from './exerciseSearch';
 
 describe('exercise fuzzy search', () => {
+  const curls = [
+    { id: 'db', name: 'Dumbbell Curl', muscle_group: 'Biceps', equipment: 'Dumbbell' },
+    { id: 'cable', name: 'Cable Biceps Curl', muscle_group: 'Biceps', equipment: 'Cable' },
+    {
+      id: 'machine',
+      name: 'Machine Bicep Preacher Curl',
+      muscle_group: 'Biceps',
+      equipment: 'Machine',
+    },
+  ];
+
+  it.each(['bicep curl cable', 'cables biceps curl', 'curl (cable)'])(
+    'finds the cable variant with %s',
+    (query) => {
+      expect(progressExerciseMatches(curls, query).map((exercise) => exercise.id)).toEqual([
+        'cable',
+      ]);
+    },
+  );
+
+  it.each(['db curl', 'dumbbells bicep curl', 'curl dumbbell'])(
+    'finds the dumbbell variant with %s',
+    (query) => {
+      expect(progressExerciseMatches(curls, query).map((exercise) => exercise.id)).toEqual(['db']);
+    },
+  );
+
+  it('finds the entire curl family without collapsing variants', () => {
+    expect(progressExerciseMatches(curls, 'bicep curl')).toHaveLength(3);
+  });
+
+  it('still finds custom and imported names with singular muscles or missing equipment', () => {
+    expect(
+      exerciseSearchScore(
+        { id: 'custom', name: 'My Bicep Curl', muscle_group: 'Other', equipment: null },
+        'biceps curl',
+      ),
+    ).not.toBeNull();
+    expect(exerciseSearchScore({ ...curls[0], equipment: null }, 'db curl')).not.toBeNull();
+    expect(
+      exerciseSearchScore({ ...curls[1], equipment: 'Cable stack' }, 'cable curl'),
+    ).not.toBeNull();
+  });
+
+  it('never fuzzily matches an equipment word against the wrong variant', () => {
+    expect(
+      exerciseSearchScore(
+        { id: 'x', name: 'Cable Lateral Raise', muscle_group: 'Shoulders', equipment: 'Dumbbell' },
+        'cable',
+      ),
+    ).toBeNull();
+    expect(progressExerciseMatches(curls, 'barbell curl')).toEqual([]);
+    expect(progressExerciseMatches(curls, 'cable dumbbell curl')).toEqual([]);
+  });
+
+  it.each([
+    ['smith machine squat', 'Smith Machine Squat', 'Smith machine'],
+    ['ez-bar curl', 'EZ Bar Curl', 'EZ curl bar'],
+    ['hex bar deadlift', 'Trap Bar Deadlift', 'Trap bar'],
+    ['resistance bands curl', 'Band Biceps Curl', 'Resistance band'],
+    ['kb squat', 'Kettlebell Goblet Squat', 'Kettlebell'],
+  ])('recognises %s', (query, name, equipment) => {
+    expect(
+      exerciseSearchScore({ id: 'x', name, equipment, muscle_group: 'Biceps' }, query),
+    ).not.toBeNull();
+  });
+
   it('prefers a contiguous match for highlighting', () => {
     expect(fuzzyMatchIndices('Single-Arm Lat Pulldown (Machine)', 'lat')).toEqual([11, 12, 13]);
     expect(fuzzyMatchIndices('Plate Lat Pulldown', 'lat')).toEqual([6, 7, 8]);

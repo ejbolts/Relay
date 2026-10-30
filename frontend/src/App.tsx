@@ -238,6 +238,9 @@ import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHist
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
 import { fuzzyHighlightIndices, rankExerciseSearchMatches } from './exerciseSearch';
+import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
+import { ExerciseCustomFilter } from './ExerciseCustomFilter';
+import { exerciseEquipment } from './exerciseEquipment';
 import {
   formatMinutesDuration,
   formatSeconds,
@@ -5915,8 +5918,6 @@ function MachinePhotoDetail({
   );
 }
 
-type ExercisePickerFilter = WorkoutCategory | 'all' | 'favorites' | 'recent';
-
 function FuzzyHighlightedText({ value, query }: { value: string; query: string }) {
   const highlighted = new Set(fuzzyHighlightIndices(value, query));
   if (!highlighted.size) return value;
@@ -5936,7 +5937,7 @@ function FuzzyHighlightedText({ value, query }: { value: string; query: string }
   );
 }
 
-function ExercisePicker({
+export function ExercisePicker({
   exercises,
   excludedIds,
   recentExerciseIds,
@@ -5958,7 +5959,10 @@ function ExercisePicker({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<ExercisePickerFilter>('all');
+  const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
+  const [customOnly, setCustomOnly] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'favorites' | 'recent'>('all');
+  const [equipment, setEquipment] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteSavingIds, setFavoriteSavingIds] = useState<string[]>([]);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
@@ -5977,7 +5981,15 @@ function ExercisePicker({
   const backdropDismiss = useBackdropDismiss(onClose);
   const initialViewportHeightRef = useRef(window.visualViewport?.height ?? window.innerHeight);
   const query = search.trim();
-  const available = exercises.filter((exercise) => !excludedIds.includes(exercise.id));
+  const available = exercises.filter(
+    (exercise) =>
+      !excludedIds.includes(exercise.id) &&
+      (!customOnly || exercise.is_custom) &&
+      (bodyPart === 'all' || exercise.category === bodyPart) &&
+      (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
+      (filter !== 'favorites' || exercise.is_favorite) &&
+      (filter !== 'recent' || recentExerciseIds.slice(0, 10).includes(exercise.id)),
+  );
   const recent = recentExerciseIds
     .slice(0, 10)
     .map((id) => available.find((exercise) => exercise.id === id))
@@ -5994,7 +6006,7 @@ function ExercisePicker({
   } else if (filter === 'recent') {
     sections.push({ title: 'Recently used', exercises: recent });
   } else {
-    const scoped = available.filter((exercise) => filter === 'all' || exercise.category === filter);
+    const scoped = available;
     const favorites = scoped.filter((exercise) => exercise.is_favorite);
     const favoriteIds = new Set(favorites.map((exercise) => exercise.id));
     const recentlyUsed = recent.filter(
@@ -6007,7 +6019,7 @@ function ExercisePicker({
     if (favorites.length) sections.push({ title: 'Favorites', exercises: favorites });
     if (recentlyUsed.length) sections.push({ title: 'Recently used', exercises: recentlyUsed });
     sections.push({
-      title: filter === 'all' ? 'All exercises' : `${categoryNames[filter]} exercises`,
+      title: bodyPart === 'all' ? 'All exercises' : `${categoryNames[bodyPart]} exercises`,
       exercises: scoped.filter((exercise) => !featuredIds.has(exercise.id)),
     });
   }
@@ -6080,7 +6092,7 @@ function ExercisePicker({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
-  }, [search, filter]);
+  }, [search, filter, bodyPart, equipment, customOnly]);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -6175,8 +6187,8 @@ function ExercisePicker({
         <div className="exercise-filter-selects">
           <select
             aria-label="Body part"
-            value={filter === 'favorites' || filter === 'recent' ? 'all' : filter}
-            onChange={(event) => setFilter(event.target.value as WorkoutCategory | 'all')}
+            value={bodyPart}
+            onChange={(event) => setBodyPart(event.target.value as WorkoutCategory | 'all')}
           >
             <option value="all">Any Body Part</option>
             {(
@@ -6197,7 +6209,7 @@ function ExercisePicker({
           </select>
           <select
             aria-label="Exercise category"
-            value={filter === 'favorites' || filter === 'recent' ? filter : 'all'}
+            value={filter}
             onChange={(event) => setFilter(event.target.value as 'all' | 'favorites' | 'recent')}
           >
             <option value="all">Any Category</option>
@@ -6214,6 +6226,14 @@ function ExercisePicker({
             +
           </button>
         </div>
+        <div className="exercise-picker-equipment">
+          <ExerciseCustomFilter active={customOnly} onChange={setCustomOnly} />
+          <ExerciseEquipmentFilter
+            exercises={exercises}
+            value={equipment}
+            onChange={setEquipment}
+          />
+        </div>
         <div className="exercise-list" ref={listRef}>
           {sections.map(
             (section) =>
@@ -6226,9 +6246,9 @@ function ExercisePicker({
           )}
           {!visibleExerciseCount && (
             <p className="muted-empty">
-              {filter === 'favorites' && !query
+              {filter === 'favorites' && !query && !equipment && !customOnly && bodyPart === 'all'
                 ? 'Tap the bookmark beside an exercise to add a favorite.'
-                : filter === 'recent' && !query
+                : filter === 'recent' && !query && !equipment && !customOnly && bodyPart === 'all'
                   ? 'Exercises from completed workouts will appear here.'
                   : 'No exercises match that search.'}
             </p>
@@ -6267,9 +6287,7 @@ function ExercisePicker({
           exercises={exercises}
           categoryLabels={categoryNames}
           initialName={query}
-          initialCategory={
-            filter === 'all' || filter === 'favorites' || filter === 'recent' ? '' : filter
-          }
+          initialCategory={bodyPart === 'all' ? '' : bodyPart}
           viewportHeight={viewport.height}
           viewportTop={viewport.top}
           onCreate={onCreateExercise}
@@ -6277,6 +6295,8 @@ function ExercisePicker({
             setCreateExerciseOpen(false);
             setPickerError(null);
             setFilter('all');
+            setBodyPart('all');
+            setEquipment('');
             setSearch(exercise.name);
             setSelectedIds((current) =>
               singleSelect ? [exercise.id] : [...new Set([...current, exercise.id])],
