@@ -32,7 +32,7 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
 - Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.
-- Keep logging without a connection. After you have signed in once on a device, Relay opens from the data it saved there, shows **Offline** beside the screen title, and syncs a finished workout when the server is reachable again.
+- Keep logging without a connection. After you have signed in once on a device, Relay opens from the data it saved there, shows **Offline** by the screen title, and syncs a finished workout when the server is reachable again.
 
 Choose kilograms or pounds for weight entry and display.
 
