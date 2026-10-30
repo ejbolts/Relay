@@ -14,7 +14,7 @@ export const FFMI_SCALE_MIN = 17;
 export const FFMI_SCALE_MAX = 29;
 
 export const FFMI_COMPARISON: readonly { value: number; label: string }[] = [
-  { value: 18.9, label: 'Average Caucasian' },
+  { value: 18.9, label: 'Population sample average' },
   { value: 21.8, label: 'Competitive power athlete' },
   { value: 22.6, label: 'Internationally competitive bodybuilder' },
   { value: 24.8, label: 'Average steroid user' },
