@@ -32,6 +32,7 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
 - Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.
+- Keep logging without a connection. After you have signed in once on a device, Relay opens from the data it saved there, shows **Offline** beside the screen title, and syncs a finished workout when the server is reachable again.
 
 Choose kilograms or pounds for weight entry and display.
 
@@ -81,7 +82,7 @@ configures Google once for the installation; users do not need API keys or crede
 
 Sign in with a username and password, personalise your name and profile photo, and keep your profile **Private** or choose **Friends only** or **Public** sharing within the app's sharing community.
 
-**Sign out all devices** in Settings ends every session for your account. Connected devices return to sign-in immediately; sleeping or offline devices check when they reconnect. Sign-out clears cached account data and unfinished workouts, and stops phone alerts. Temporary connection failures alone do not sign you out.
+**Sign out all devices** in Settings ends every session for your account. Connected devices return to sign-in immediately; sleeping or offline devices check when they reconnect. Sign-out clears cached account data and unfinished workouts, and stops phone alerts. When a session simply expires, a finished workout that has not synced yet is kept and syncs after you sign back in. Temporary connection failures alone do not sign you out.
 
 Shared profiles include workouts and your profile photo. You choose separately whether to share machine photos, body measurements, goals, cardio and notes. Friendships are mutual: send a friend request, and once it is accepted you both see each other's shared training. Requests always need accepting, even for public profiles. **Recent Friends Activity** on Home shows the latest workout or cardio session from each friend; tap the smiley to react with 👍, ❤️, 💪, 🔥, 👏 or 🏆, and react to individual workouts on their shared profile too. Shared profiles show lifetime workout, cardio and combined training time. Reactions to your workouts appear in the compact notification bell; opening it marks displayed notices read automatically. Search shared accounts by display name, username or the account UUID shown on Profile. Shared profiles do not display usernames or uploaded videos.
 

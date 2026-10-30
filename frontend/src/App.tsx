@@ -307,6 +307,7 @@ import {
   workoutSetForAutoSave,
 } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
+import { isUsingSavedData } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import {
@@ -867,8 +868,9 @@ function AppContent() {
     const generation = ++refreshGenerationRef.current;
     const current = () => generation === refreshGenerationRef.current;
     const refresh = async () => {
-      // Read before the data: a change during this refresh must trigger another pass.
-      const revision = await api.workoutRevision().catch(() => null);
+      // Read before the data: a change during this refresh must trigger another pass. Offline,
+      // there is no revision to confirm and saved copies answer the reads straight away.
+      const revision = isUsingSavedData() ? null : await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();

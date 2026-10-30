@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { api } from './api';
 import { AuthBrand, AuthScreen } from './AuthScreen';
 import { subscribeAuthExpired } from './authEvents';
+import { reportSavedDataUsed } from './connectionStatus';
 import { adoptSignedInUser, resolveSession, type AuthState } from './authSession';
 import {
   browserDeps,
@@ -121,7 +122,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
       me: api.auth.me,
       isCurrent: () => !cancelled && generation.current === started,
     }).then((next) => {
-      if (!cancelled && generation.current === started) setState(next);
+      if (cancelled || generation.current !== started) return;
+      if (next.status === 'authenticated' && next.offline) reportSavedDataUsed();
+      setState(next);
     });
     return () => {
       cancelled = true;
@@ -132,9 +135,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     () =>
       subscribeAuthExpired(() => {
         generation.current += 1;
-        // Drop the app's in-memory state and its offline account data together.
+        // Drop the app's in-memory state and its offline account data together, keeping only
+        // a finished workout that still has to reach the server.
         setState({ status: 'signed-out' });
-        cleanup.current = clearUserDeviceData().catch(() => undefined);
+        cleanup.current = clearUserDeviceData(browserDeps(), { keepUnsyncedWorkout: true }).catch(
+          () => undefined,
+        );
       }),
     [],
   );
