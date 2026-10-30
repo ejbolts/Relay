@@ -92,19 +92,22 @@ describe('FfmiCard', () => {
     );
     expect(host.querySelectorAll('.ffmi-model-toggle')).toHaveLength(1);
     expect(modelButton().textContent?.trim()).toBe('\u2642');
+    expect(host.querySelector('.ffmi-legend')?.textContent).toContain('18.9Population median');
 
     await act(async () => modelButton().click());
     expect(api.updateFfmiProfile).toHaveBeenLastCalledWith({ ...stored, sex: 'female' });
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Model reference 24.7');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2');
     expect(modelButton().getAttribute('aria-label')).toBe('Female FFMI model. Switch to male.');
     expect(modelButton().textContent?.trim()).toBe('\u2640');
+    expect(host.querySelector('.ffmi-legend')?.textContent).toContain('15.4Population median');
+    expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('17.2');
 
     await act(async () => root.render(null));
     await act(async () => root.render(<FfmiCard measurements={measurements} />));
     expect(modelButton().getAttribute('aria-label')).toBe('Female FFMI model. Switch to male.');
     await act(async () => modelButton().click());
     expect(stored).toMatchObject({ sex: 'male', height_cm: 180, wrist_cm: 17.5, ankle_cm: 22.5 });
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2Model reference 24.7');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2');
   });
 
   it('locks switches while saving, retains the saved model after failure and supports retry', async () => {
@@ -168,13 +171,19 @@ describe('FfmiCard', () => {
     expect(values).toEqual(['175', '17.5', '22.5', '10']);
   });
 
-  it('allows a current score above the model reference and distinguishes exceptional references', async () => {
+  it('keeps a high score separate from the frame estimate and removes drug-use and athlete ranks', async () => {
     await render({ ...emptyProfile, sex: 'male', height_cm: 180, wrist_cm: 17.5, ankle_cm: 22.5 }, [
       { ...measurements[0], weight_kg: 94, body_fat_pct: 10 },
     ]);
     expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('26.1');
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 26.1Model reference 24.7');
-    expect(host.textContent).toContain('Exceptional reported natural case');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 26.1');
+    expect(host.querySelector('.ffmi-frame-estimate')?.textContent).toContain('Model FFMI24.7');
+    expect(host.querySelector('.ffmi-scale-marker.max')).toBeNull();
+    expect(host.textContent).not.toMatch(/steroid user|Competitive|Exceptional reported/);
+    expect(host.querySelector<HTMLDetailsElement>('.ffmi-frame-estimate')?.open).toBe(false);
+    expect(host.querySelector('.ffmi-scale-track')?.getAttribute('aria-label')).toContain(
+      'Male population reference',
+    );
     expect(host.textContent).not.toContain('Natural max');
   });
   it('asks for height and sex, then saves them and shows the score', async () => {
@@ -200,9 +209,10 @@ describe('FfmiCard', () => {
     await act(async () => button('Save').click());
 
     expect(api.updateFfmiProfile).toHaveBeenCalledWith(saved);
-    expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('22.9');
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 22.9Model reference 26.9');
-    expect(host.querySelectorAll('.ffmi-legend li.reached')).toHaveLength(3);
+    expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('21.7');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.7');
+    expect(host.querySelectorAll('.ffmi-legend li')).toHaveLength(3);
+    expect(host.querySelectorAll('.ffmi-legend li.reached')).toHaveLength(0);
     expect(host.querySelector('.ffmi-potential')?.textContent).toContain(
       'Reference weight at 13% fat',
     );
@@ -233,11 +243,25 @@ describe('FfmiCard', () => {
     expect(host.textContent).toContain('Add wrist and ankle for a model reference');
   });
 
+  it('shows optional male height adjustment and sensitivity without changing the chart score', async () => {
+    await render({ ...emptyProfile, sex: 'male', height_cm: 200 }, [
+      { ...measurements[0], weight_kg: 100, body_fat_pct: 20 },
+    ]);
+    expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('20.0');
+    expect(host.querySelector('.ffmi-score-details')?.textContent).toContain(
+      'Height-adjusted FFMI18.8',
+    );
+    expect(host.querySelector('.ffmi-score-details')?.textContent).toContain('19.3');
+    expect(host.querySelector('.ffmi-score-details')?.textContent).toContain('20.8');
+  });
+
   it('gives women a model reference from height alone', async () => {
     await render({ ...emptyProfile, sex: 'female', height_cm: 165 }, [
       { ...measurements[0], weight_kg: 60, body_fat_pct: 22 },
     ]);
     expect(host.querySelector('.ffmi-score span')).toBeNull();
-    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 21.2Model reference 24.7');
+    expect(host.querySelector('.ffmi-frame-estimate')?.textContent).toContain('Model FFMI20.0');
+    expect(host.querySelector('.ffmi-score-details')?.textContent).not.toContain('Height-adjusted');
+    expect(host.querySelector('.ffmi-scale-key')?.textContent).toBe('You 17.2');
   });
 });

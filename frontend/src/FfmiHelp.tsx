@@ -34,9 +34,9 @@ export function FfmiHelp({ title = 'FFMI', children }: { title?: string; childre
             <>
               {children ?? (
                 <p>
-                  FFMI compares fat-free mass with height. The model reference is a benchmark based
-                  on groups of trained lifters. It uses the selected profile for comparison, rather
-                  than predicting your personal genetic limit.
+                  FFMI compares estimated fat-free mass with height. The score uses the same formula
+                  for men and women; the icon selects population reference points. These comparisons
+                  describe a study sample, not training levels or personal limits.
                 </p>
               )}
               <p>
@@ -53,21 +53,30 @@ export function FfmiHelp({ title = 'FFMI', children }: { title?: string; childre
             <>
               <p>
                 <strong>Your score.</strong> FFMI is estimated fat-free mass in kg divided by height
-                in metres squared, with height and sex adjustments. Fat-free mass is estimated from
-                weight and body fat; it includes muscle, bone, organs and water.
+                in metres squared, without a sex multiplier or extra height adjustment. The same
+                measurements produce the same score for either sex. Fat-free mass includes muscle,
+                bone, organs and water. Previously displayed adjusted scores may therefore differ.
               </p>
               <p>
-                <strong>Model reference.</strong> This is a benchmark based on groups of trained
-                lifters, not the general-public average or a prediction of your genetic limit. The
-                men's model uses height, wrist, ankle and target body fat. The women's model uses a
-                raw FFMI reference of 20, about 24.7 on the adjusted scale. Individual outcomes can
-                be above or below these model assumptions.
+                <strong>Population references.</strong> The chart uses male or female 5th, 50th and
+                95th percentiles from a non-random sample of white Swiss adults aged 18–34. The
+                median is the middle of that sample: 18.9 for men and 15.4 for women. These are not
+                worldwide averages, gym-goer norms, health cutoffs or achievement levels. We do not
+                assign you a percentile from these three points.
               </p>
               <p>
-                <strong>Reading the comparison.</strong> A model reference of 24.7 and the
-                exceptional reported case at 28.0 are different comparisons, not guaranteed
-                outcomes. The men's model assumes roughly 4 to 12% body fat. Measurement errors
-                affect results; FFMI cannot establish drug use.
+                <strong>Score details.</strong> The optional male height-adjusted figure adds 6.1 ×
+                (1.8 − height in metres) and is separate from the raw score on the chart. The
+                sensitivity range shows what your FFMI would be if body fat were 3 percentage points
+                higher or lower. This is an example, not a confidence interval or a measured error
+                range. Track changes with a consistent measurement method.
+              </p>
+              <p>
+                <strong>Model estimates.</strong> The separate model uses height, wrist, ankle and
+                target body fat for men, assuming roughly 4–12% body fat. The women's model assumes
+                FFMI 20. Both are rough model assumptions, not predictions of your genetic limit.
+                People can exceed them. FFMI cannot establish drug use, and 25 is not a universal
+                natural ceiling.
               </p>
               <p>
                 <strong>Taking measurements.</strong> Keep tape positions consistent without

@@ -54,11 +54,11 @@ it.each(['FFMI', 'Body measurements'])(
     expect(more.tagName).toBe('BUTTON');
     await act(async () => more.click());
     expect(document.querySelector('dialog h2')?.textContent).toBe('FFMI methodology');
-    expect(document.body.textContent).toContain(
-      'not the general-public average or a prediction of your genetic limit.',
-    );
+    expect(document.body.textContent).toContain('not predictions of your genetic limit.');
     expect(document.querySelector('dialog a')).toBeNull();
-    expect(document.querySelectorAll('dialog p')).toHaveLength(5);
+    expect(document.querySelectorAll('dialog p')).toHaveLength(6);
+    expect(document.body.textContent).toContain('without a sex multiplier');
+    expect(document.body.textContent).toContain('not a confidence interval');
     await act(async () => button('Back to overview').click());
     expect(document.querySelector('dialog h2')?.textContent).toBe(title);
     expect(document.body.textContent).not.toContain('Your score.');

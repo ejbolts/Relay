@@ -150,10 +150,11 @@ button.ffmi-methodology-link {
   box-shadow: 0 0 0 2px var(--p-accent);
 }
 
-.ffmi-scale-marker.max {
-  border-radius: 3px;
-  background: var(--p-gold);
-  transform: translate(-50%, -50%) rotate(45deg);
+.ffmi-axis-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--p-muted);
+  font-size: 0.6875rem;
 }
 
 .ffmi-scale-key {
@@ -176,13 +177,6 @@ button.ffmi-methodology-link {
   background: var(--p-ink);
   box-shadow: 0 0 0 2px var(--p-accent);
   vertical-align: 0.0625rem;
-}
-
-.ffmi-scale-key .max::before {
-  border-radius: 2px;
-  background: var(--p-gold);
-  box-shadow: none;
-  transform: rotate(45deg);
 }
 
 .ffmi-legend {
@@ -211,13 +205,51 @@ button.ffmi-methodology-link {
   font-variant-numeric: tabular-nums;
 }
 
-.ffmi-legend li.reached {
-  color: var(--p-ink);
+.ffmi-details {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--p-line);
+  padding-top: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.ffmi-details summary {
+  cursor: pointer;
+  color: var(--p-ink-2);
+  font-weight: 600;
+}
+
+.ffmi-score-details {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+}
+
+.ffmi-score-details div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ffmi-score-details dt,
+.ffmi-model-assumption {
+  color: var(--p-muted);
+}
+
+.ffmi-score-details dd {
+  margin: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ffmi-model-assumption {
+  margin: 0.75rem 0;
+  font-size: 0.75rem;
 }
 
 .ffmi-potential {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   margin: 0.5rem 0 0;
 }

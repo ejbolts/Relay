@@ -237,6 +237,8 @@ the custom type ID as well as the compatibility category.
 
 ## Body measurements
 
+FFMI uses conventional fat-free mass / height² for both sexes. Sex selects matched population references, while optional male height adjustment, body-fat sensitivity and frame-based estimates remain separate. See [FFMI references](FFMI-REFERENCES.md) for formulas, reference cohorts and limitations. Saved profile dimensions and check-ins are unchanged.
+
 `GET /api/body-sizes` returns private dated circumference logs, newest first. `PUT /api/body-sizes` replaces the entry for `measurement_date`; omitted fields clear to null, and at least one finite circumference above 0 and up to 300 cm is required. `DELETE /api/body-sizes/{YYYY-MM-DD}` deletes only the signed-in account's entry. Each date is stored in its own `user_settings` row under `body_sizes:YYYY-MM-DD`, included in existing account backups and deletion. Writes change the training revision so other devices refresh Body. No schema migration is required. The UI converts inches to canonical cm and does not require a bodyweight record. These logs are separate from FFMI frame details and are excluded from shared profiles.
 
 ## Saved and shared routines

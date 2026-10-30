@@ -1,33 +1,28 @@
 import type { BodyMeasurement, FfmiProfile } from './types';
 
-/**
- * Fat-free mass index and natural muscular potential, matching Menno Henselmans' FFMI
- * calculator. Men use the height-normalised FFMI (Kouri et al. 1995); women use FFMI / 0.81.
- * Men's natural maximum lean mass follows Casey Butt's wrist and ankle model; women's uses a
- * maximum FFMI of 20 (Chappell et al. 2018).
- */
-
+/** Standard FFMI and optional model estimates. Reference provenance: docs/FFMI-REFERENCES.md. */
 const KG_TO_LB = 2.20462;
 const CM_PER_INCH = 2.54;
 
-export const FFMI_SCALE_MIN = 17;
-export const FFMI_SCALE_MAX = 29;
+type Sex = 'male' | 'female';
 
-export const FFMI_COMPARISON: readonly { value: number; label: string }[] = [
-  { value: 18.9, label: 'Population average' },
-  { value: 21.8, label: 'Competitive power athlete' },
-  { value: 22.6, label: 'Competitive bodybuilder' },
-  { value: 24.8, label: 'Average steroid user' },
-  { value: 24.9, label: 'Upper-range natural reference' },
-  { value: 25.4, label: 'World class natural pro bodybuilder' },
-  { value: 28.0, label: 'Exceptional reported natural case' },
-];
+/** Raw FFMI percentiles from the same young-adult population sample, not training levels. */
+export function ffmiComparisons(sex: Sex) {
+  const values = sex === 'male' ? [16.8, 18.9, 21.1] : [13.8, 15.4, 17.6];
+  return values.map((value, index) => ({
+    value,
+    label: ['Population 5th percentile', 'Population median', 'Population 95th percentile'][index],
+  }));
+}
 
-/** 24.8 sits on top of 24.9, so only the legend names it. */
-export const FFMI_UNLABELLED_TICKS = new Set([24.8]);
-
-/** Neighbours too close to label on the same side of a phone-width scale. */
-export const FFMI_TICK_LABELS_BELOW = new Set([22.6, 25.4]);
+/** Display limits, not biological thresholds; expand to include scores outside the usual view. */
+export function ffmiScaleRange(sex: Sex, score: number) {
+  const [low, high] = sex === 'male' ? [14, 28] : [11, 23];
+  return {
+    min: Math.max(0, Math.floor(Math.min(low, score - 1))),
+    max: Math.ceil(Math.max(high, score + 1)),
+  };
+}
 
 export const DEFAULT_FFMI_PROFILE: FfmiProfile = {
   sex: null,
@@ -41,20 +36,34 @@ export function roundOne(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-/** Normalised FFMI for men, gender-adjusted FFMI for women. */
-export function ffmiScore(
-  sex: 'male' | 'female',
+function rawFfmi(heightCm: number, weightKg: number, bodyFatPct: number): number {
+  return (weightKg * (1 - bodyFatPct / 100)) / (heightCm / 100) ** 2;
+}
+
+/** Conventional, unadjusted FFMI for either sex. Sex selects reference data only. */
+export function ffmiScore(heightCm: number, weightKg: number, bodyFatPct: number): number {
+  return roundOne(rawFfmi(heightCm, weightKg, bodyFatPct));
+}
+
+/** Optional male height adjustment. Never substituted for the chart's standard FFMI. */
+export function maleHeightAdjustedFfmi(
   heightCm: number,
   weightKg: number,
   bodyFatPct: number,
 ): number {
-  const heightM = heightCm / 100;
-  const raw = (weightKg * (1 - bodyFatPct / 100)) / (heightM * heightM);
-  return roundOne(sex === 'male' ? raw + 6.1 * (1.8 - heightM) : raw / 0.81);
+  return roundOne(rawFfmi(heightCm, weightKg, bodyFatPct) + 6.1 * (1.8 - heightCm / 100));
 }
 
-/** Maximum natural lean body mass in kg at the target body fat, or null without frame sizes. */
-export function maxLeanMassKg(profile: FfmiProfile): number | null {
+/** Illustrative sensitivity, not a confidence interval or a measurement-error estimate. */
+export function ffmiSensitivity(heightCm: number, weightKg: number, bodyFatPct: number) {
+  return {
+    min: ffmiScore(heightCm, weightKg, Math.min(100, bodyFatPct + 3)),
+    max: ffmiScore(heightCm, weightKg, Math.max(0, bodyFatPct - 3)),
+  };
+}
+
+/** Optional lean-mass model in kg at target body fat; not a personal genetic ceiling. */
+export function referenceLeanMassKg(profile: FfmiProfile): number | null {
   const { sex, height_cm: height, wrist_cm: wrist, ankle_cm: ankle } = profile;
   if (!sex || !height) return null;
   const heightM = height / 100;
@@ -67,27 +76,27 @@ export function maxLeanMassKg(profile: FfmiProfile): number | null {
   return roundOne(leanLb / KG_TO_LB);
 }
 
-export interface FfmiPotential {
-  maxFfmi: number;
-  maxLeanMassKg: number;
-  maxBodyweightKg: number;
-  leanMassLeftKg: number;
+export interface FfmiFrameEstimate {
+  ffmi: number;
+  leanMassKg: number;
+  bodyweightKg: number;
+  leanMassGapKg: number;
 }
 
-export function naturalPotential(
+export function frameEstimate(
   profile: FfmiProfile,
   measurement: Pick<BodyMeasurement, 'weight_kg' | 'body_fat_pct'>,
-): FfmiPotential | null {
-  const lean = maxLeanMassKg(profile);
+): FfmiFrameEstimate | null {
+  const lean = referenceLeanMassKg(profile);
   if (lean === null || !profile.sex || !profile.height_cm) return null;
   const heightM = profile.height_cm / 100;
   const raw = lean / (heightM * heightM);
   const currentLean = measurement.weight_kg * (1 - (measurement.body_fat_pct ?? 0) / 100);
   return {
-    maxFfmi: roundOne(profile.sex === 'male' ? raw + 6.1 * (1.8 - heightM) : raw / 0.81),
-    maxLeanMassKg: lean,
-    maxBodyweightKg: roundOne(lean / (1 - profile.target_body_fat_pct / 100)),
-    leanMassLeftKg: roundOne(lean - currentLean),
+    ffmi: roundOne(raw),
+    leanMassKg: lean,
+    bodyweightKg: roundOne(lean / (1 - profile.target_body_fat_pct / 100)),
+    leanMassGapKg: roundOne(lean - currentLean),
   };
 }
 
@@ -104,8 +113,8 @@ export function latestBodyFatMeasurement(measurements: BodyMeasurement[]): BodyM
 }
 
 /** Position on the comparison scale, clamped to its ends. */
-export function ffmiScalePercent(value: number): number {
-  const percent = ((value - FFMI_SCALE_MIN) / (FFMI_SCALE_MAX - FFMI_SCALE_MIN)) * 100;
+export function ffmiScalePercent(value: number, range: { min: number; max: number }): number {
+  const percent = ((value - range.min) / (range.max - range.min)) * 100;
   return Math.min(100, Math.max(0, percent));
 }
 

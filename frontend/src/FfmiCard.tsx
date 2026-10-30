@@ -4,15 +4,16 @@ import { FfmiHelp } from './FfmiHelp';
 import { PopupDialog } from './PopupDialog';
 import {
   DEFAULT_FFMI_PROFILE,
-  FFMI_COMPARISON,
-  FFMI_TICK_LABELS_BELOW,
-  FFMI_UNLABELLED_TICKS,
+  ffmiComparisons,
+  ffmiScaleRange,
+  ffmiSensitivity,
+  maleHeightAdjustedFfmi,
   ffmiScalePercent,
   ffmiScore,
   latestBodyFatMeasurement,
   lengthFromCm,
   lengthToCm,
-  naturalPotential,
+  frameEstimate,
 } from './ffmi';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { BodyMeasurement, FfmiProfile } from './types';
@@ -31,18 +32,20 @@ function inputValue(cm: number | null, unit: 'kg' | 'lb'): string {
   return cm === null ? '' : String(lengthFromCm(cm, unit));
 }
 
-export function FfmiScale({ ffmi, maxFfmi }: { ffmi: number; maxFfmi: number | null }) {
-  const position = (value: number) => ({ left: `${ffmiScalePercent(value)}%` }) as CSSProperties;
+export function FfmiScale({ ffmi, sex }: { ffmi: number; sex: 'male' | 'female' }) {
+  const comparisons = ffmiComparisons(sex);
+  const range = ffmiScaleRange(sex, ffmi);
+  const position = (value: number) =>
+    ({ left: `${ffmiScalePercent(value, range)}%` }) as CSSProperties;
   const labels = (below: boolean) => (
     <div className={`ffmi-scale-ticks${below ? ' below' : ''}`} aria-hidden="true">
-      {FFMI_COMPARISON.filter(
-        ({ value }) =>
-          !FFMI_UNLABELLED_TICKS.has(value) && FFMI_TICK_LABELS_BELOW.has(value) === below,
-      ).map(({ value }) => (
-        <span key={value} className="ffmi-scale-tick" style={position(value)}>
-          <i>{value.toFixed(1)}</i>
-        </span>
-      ))}
+      {comparisons
+        .filter((_, index) => (index === 1) === below)
+        .map(({ value }) => (
+          <span key={value} className="ffmi-scale-tick" style={position(value)}>
+            <i>{value.toFixed(1)}</i>
+          </span>
+        ))}
     </div>
   );
   return (
@@ -51,19 +54,21 @@ export function FfmiScale({ ffmi, maxFfmi }: { ffmi: number; maxFfmi: number | n
       <div
         className="ffmi-scale-track"
         role="img"
-        aria-label={`Your FFMI ${ffmi.toFixed(1)}${maxFfmi === null ? '' : `, model reference ${maxFfmi.toFixed(1)}`}, on a scale from 17 to 29`}
+        aria-label={`Your FFMI ${ffmi.toFixed(1)}. ${sex === 'male' ? 'Male' : 'Female'} population reference points: ${comparisons.map((p) => `${p.label} ${p.value.toFixed(1)}`).join(', ')}. Scale ${range.min} to ${range.max}.`}
       >
-        <span className="ffmi-scale-fill" style={{ width: `${ffmiScalePercent(ffmi)}%` }} />
-        {FFMI_COMPARISON.map(({ value }) => (
+        <span className="ffmi-scale-fill" style={{ width: `${ffmiScalePercent(ffmi, range)}%` }} />
+        {comparisons.map(({ value }) => (
           <span key={value} className="ffmi-scale-line" style={position(value)} />
         ))}
-        {maxFfmi !== null && <span className="ffmi-scale-marker max" style={position(maxFfmi)} />}
         <span className="ffmi-scale-marker you" style={position(ffmi)} />
       </div>
       {labels(true)}
+      <div className="ffmi-axis-ends" aria-hidden="true">
+        <span>{range.min}</span>
+        <span>{range.max}</span>
+      </div>
       <div className="ffmi-scale-key">
         <span className="you">You {ffmi.toFixed(1)}</span>
-        {maxFfmi !== null && <span className="max">Model reference {maxFfmi.toFixed(1)}</span>}
       </div>
     </div>
   );
@@ -114,14 +119,13 @@ export function FfmiCard({
   const ready = profile.sex !== null && profile.height_cm !== null;
   const ffmi =
     ready && measurement
-      ? ffmiScore(
-          profile.sex!,
-          profile.height_cm!,
-          measurement.weight_kg,
-          measurement.body_fat_pct!,
-        )
+      ? ffmiScore(profile.height_cm!, measurement.weight_kg, measurement.body_fat_pct!)
       : null;
-  const potential = measurement ? naturalPotential(profile, measurement) : null;
+  const estimate = measurement ? frameEstimate(profile, measurement) : null;
+  const sensitivity =
+    ready && measurement
+      ? ffmiSensitivity(profile.height_cm!, measurement.weight_kg, measurement.body_fat_pct!)
+      : null;
   const needsFrame = profile.sex === 'male' && (!profile.wrist_cm || !profile.ankle_cm);
   const nextSex = profile.sex === 'male' ? 'female' : 'male';
   const modelLabel = profile.sex
@@ -248,36 +252,69 @@ export function FfmiCard({
           <div className="ffmi-score">
             <strong>{ffmi.toFixed(1)}</strong>
           </div>
-          <FfmiScale ffmi={ffmi} maxFfmi={potential?.maxFfmi ?? null} />
+          <FfmiScale ffmi={ffmi} sex={profile.sex!} />
           <ol className="ffmi-legend">
-            {FFMI_COMPARISON.map(({ value, label }) => (
-              <li key={value} className={ffmi >= value ? 'reached' : ''}>
+            {ffmiComparisons(profile.sex!).map(({ value, label }) => (
+              <li key={value}>
                 <strong>{value.toFixed(1)}</strong>
                 <span>{label}</span>
               </li>
             ))}
           </ol>
-          {potential && (
-            <dl className="ffmi-potential">
+          <details className="ffmi-details">
+            <summary>Score details</summary>
+            <dl className="ffmi-score-details">
+              {profile.sex === 'male' && (
+                <div>
+                  <dt>Height-adjusted FFMI</dt>
+                  <dd>
+                    {maleHeightAdjustedFfmi(
+                      profile.height_cm!,
+                      measurement.weight_kg,
+                      measurement.body_fat_pct!,
+                    ).toFixed(1)}
+                  </dd>
+                </div>
+              )}
               <div>
-                <dt>Reference lean mass</dt>
-                <dd>{formatWeight(potential.maxLeanMassKg, weightUnit, 1)}</dd>
-              </div>
-              <div>
-                <dt>Reference weight at {profile.target_body_fat_pct}% fat</dt>
-                <dd>{formatWeight(potential.maxBodyweightKg, weightUnit, 1)}</dd>
-              </div>
-              <div>
-                <dt>Lean mass gap</dt>
-                <dd>{formatWeight(Math.max(0, potential.leanMassLeftKg), weightUnit, 1)}</dd>
+                <dt>Body fat ±3 points</dt>
+                <dd>
+                  {sensitivity!.min.toFixed(1)}–{sensitivity!.max.toFixed(1)}
+                </dd>
               </div>
             </dl>
-          )}
-          {needsFrame && (
-            <button type="button" className="ffmi-setup" onClick={openEditor}>
-              Add wrist and ankle for a model reference
-            </button>
-          )}
+          </details>
+          <details className="ffmi-details ffmi-frame-estimate">
+            <summary>{profile.sex === 'male' ? 'Frame-based estimate' : 'Model estimate'}</summary>
+            {profile.sex === 'male' && (
+              <p className="ffmi-model-assumption">Model assumes 4–12% body fat.</p>
+            )}
+            {estimate && (
+              <dl className="ffmi-potential">
+                <div>
+                  <dt>Model FFMI</dt>
+                  <dd>{estimate.ffmi.toFixed(1)}</dd>
+                </div>
+                <div>
+                  <dt>Reference lean mass</dt>
+                  <dd>{formatWeight(estimate.leanMassKg, weightUnit, 1)}</dd>
+                </div>
+                <div>
+                  <dt>Reference weight at {profile.target_body_fat_pct}% fat</dt>
+                  <dd>{formatWeight(estimate.bodyweightKg, weightUnit, 1)}</dd>
+                </div>
+                <div>
+                  <dt>Lean mass gap</dt>
+                  <dd>{formatWeight(Math.max(0, estimate.leanMassGapKg), weightUnit, 1)}</dd>
+                </div>
+              </dl>
+            )}
+            {needsFrame && (
+              <button type="button" className="ffmi-setup" disabled={saving} onClick={openEditor}>
+                Add wrist and ankle for a model reference
+              </button>
+            )}
+          </details>
         </>
       )}
 
