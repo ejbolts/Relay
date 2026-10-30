@@ -250,6 +250,51 @@ DEFAULT_EXERCISES = (
     ("Seated Ab Crunch Machine", WorkoutCategory.FULL_BODY, "Core", "Machine"),
     ("Plank", WorkoutCategory.FULL_BODY, "Core", "Bodyweight"),
     ("Hanging Leg Raise", WorkoutCategory.FULL_BODY, "Core", "Bodyweight"),
+    # Equipment variants remain separate exercises, with independent history and PRs.
+    ("Dumbbell Bench Press", WorkoutCategory.PUSH, "Chest", "Dumbbell"),
+    ("Incline Barbell Bench Press", WorkoutCategory.PUSH, "Chest", "Barbell"),
+    ("Machine Chest Press", WorkoutCategory.PUSH, "Chest", "Machine"),
+    ("Smith Machine Bench Press", WorkoutCategory.PUSH, "Chest", "Smith machine"),
+    ("Push-up", WorkoutCategory.PUSH, "Chest", "Bodyweight"),
+    ("Dumbbell Fly", WorkoutCategory.PUSH, "Chest", "Dumbbell"),
+    ("Cable Lateral Raise", WorkoutCategory.PUSH, "Shoulders", "Cable"),
+    ("Machine Lateral Raise", WorkoutCategory.PUSH, "Shoulders", "Machine"),
+    ("Machine Shoulder Press", WorkoutCategory.PUSH, "Shoulders", "Machine"),
+    ("Smith Machine Shoulder Press", WorkoutCategory.PUSH, "Shoulders", "Smith machine"),
+    ("Dumbbell Triceps Extension", WorkoutCategory.PUSH, "Triceps", "Dumbbell"),
+    ("Overhead Cable Triceps Extension", WorkoutCategory.PUSH, "Triceps", "Cable"),
+    ("EZ Bar Skullcrusher", WorkoutCategory.PUSH, "Triceps", "EZ bar"),
+    ("Dumbbell Row", WorkoutCategory.PULL, "Mid / Upper Back", "Dumbbell"),
+    ("Chest-Supported Dumbbell Row", WorkoutCategory.PULL, "Mid / Upper Back", "Dumbbell"),
+    ("Single-Arm Cable Lat Pulldown", WorkoutCategory.PULL, "Lats", "Cable"),
+    ("Machine Lat Pulldown", WorkoutCategory.PULL, "Lats", "Machine"),
+    ("Chin-up", WorkoutCategory.PULL, "Lats", "Bodyweight"),
+    ("Straight-Arm Cable Pulldown", WorkoutCategory.PULL, "Lats", "Cable"),
+    ("Dumbbell Pullover", WorkoutCategory.PULL, "Lats", "Dumbbell"),
+    ("Dumbbell Reverse Fly", WorkoutCategory.PULL, "Rear Delts", "Dumbbell"),
+    ("Reverse Pec Deck", WorkoutCategory.PULL, "Rear Delts", "Machine"),
+    ("Dumbbell Curl", WorkoutCategory.PULL, "Biceps", "Dumbbell"),
+    ("Incline Dumbbell Curl", WorkoutCategory.PULL, "Biceps", "Dumbbell"),
+    ("Cable Biceps Curl", WorkoutCategory.PULL, "Biceps", "Cable"),
+    ("Single-Arm Cable Biceps Curl", WorkoutCategory.PULL, "Biceps", "Cable"),
+    ("Cable Hammer Curl", WorkoutCategory.PULL, "Biceps", "Cable"),
+    ("EZ Bar Curl", WorkoutCategory.PULL, "Biceps", "EZ bar"),
+    ("Band Biceps Curl", WorkoutCategory.PULL, "Biceps", "Resistance band"),
+    ("Trap Bar Deadlift", WorkoutCategory.PULL, "Posterior chain", "Trap bar"),
+    ("Dumbbell Romanian Deadlift", WorkoutCategory.LOWER, "Hamstrings", "Dumbbell"),
+    ("Dumbbell Goblet Squat", WorkoutCategory.LOWER, "Quads", "Dumbbell"),
+    ("Kettlebell Goblet Squat", WorkoutCategory.LOWER, "Quads", "Kettlebell"),
+    ("Bodyweight Squat", WorkoutCategory.LOWER, "Quads", "Bodyweight"),
+    ("Smith Machine Squat", WorkoutCategory.LOWER, "Quads", "Smith machine"),
+    ("Hack Squat", WorkoutCategory.LOWER, "Quads", "Machine"),
+    ("Dumbbell Lunge", WorkoutCategory.LOWER, "Quads", "Dumbbell"),
+    ("Machine Hip Thrust", WorkoutCategory.LOWER, "Glutes", "Machine"),
+    ("Cable Glute Kickback", WorkoutCategory.LOWER, "Glutes", "Cable"),
+    ("Hip Abduction Machine", WorkoutCategory.LOWER, "Glutes", "Machine"),
+    ("Seated Calf Raise", WorkoutCategory.LOWER, "Calves", "Machine"),
+    ("Cable Crunch", WorkoutCategory.FULL_BODY, "Core", "Cable"),
+    ("Crunch", WorkoutCategory.FULL_BODY, "Core", "Bodyweight"),
+    ("Band Row", WorkoutCategory.PULL, "Mid / Upper Back", "Resistance band"),
 )
 
 DEFAULT_CARDIO = (
@@ -460,6 +505,7 @@ def seed_default_exercises(db: Session, user_id: str) -> None:
         for item in db.scalars(select(Exercise).where(Exercise.user_id == user_id))
     }
     renamed_default = False
+    equipment_backfilled = False
     legacy_leg_curl = existing.get("leg curl")
     seated_leg_curl = existing.get("seated leg curl")
     if legacy_leg_curl and not legacy_leg_curl.is_custom and not seated_leg_curl:
@@ -488,13 +534,23 @@ def seed_default_exercises(db: Session, user_id: str) -> None:
             for name, muscle_group, equipment in DEFAULT_CARDIO
         ),
     )
+    existing_aliases = {
+        canonical_exercise_name(exercise.name).casefold(): exercise
+        for exercise in existing.values()
+    }
     for name, category, kind, muscle_group, equipment in defaults:
-        exercise = existing.get(name.casefold())
+        exercise = existing.get(name.casefold()) or existing_aliases.get(name.casefold())
         if exercise and not exercise.is_custom:
             exercise.category = category
             exercise.kind = kind
             exercise.muscle_group = muscle_group
             exercise.equipment = equipment
+        elif exercise:
+            # Imported/custom entries keep their identity and user choices. Only fill
+            # absent equipment when an exact name or an explicit alias identifies it.
+            if not exercise.equipment or not exercise.equipment.strip():
+                exercise.equipment = equipment
+                equipment_backfilled = True
         elif not exercise:
             db.add(
                 Exercise(
@@ -506,7 +562,7 @@ def seed_default_exercises(db: Session, user_id: str) -> None:
                     equipment=equipment,
                 )
             )
-    if renamed_default:
+    if renamed_default or equipment_backfilled:
         bump_workout_cache_revision(db, user_id)
     db.commit()
     seed_muscle_mappings(db, user_id)
@@ -875,6 +931,12 @@ def create_exercise(
     )
     exercise_data = payload.model_dump(exclude={"muscle_set_credit", "muscle_set_credits"})
     exercise_data["name"] = canonical_exercise_name(payload.name)
+    canonical_name = exercise_data["name"].casefold()
+    if any(
+        canonical_exercise_name(name).casefold() == canonical_name
+        for name in db.scalars(select(Exercise.name).where(Exercise.user_id == user.id))
+    ):
+        raise HTTPException(status_code=409, detail="An exercise with that name already exists.")
     exercise = Exercise(user_id=user.id, **exercise_data, is_custom=True)
     if payload.kind != ExerciseKind.CARDIO and payload.category != WorkoutCategory.CARDIO:
         credits = payload.muscle_set_credits or [

@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Exercise library with Custom and Cable filters showing a sample custom cable curl](screenshots/releases/1.1.0-exercise-equipment.png)
+
+_Combine the **Custom** pill, equipment filter and search to find your exercises. The library includes 83 strength exercises across ten equipment types; each variant keeps separate progress. Isolated synthetic account._
+
 ![Your splits after activating a plan, showing its Active badge and blue border without a success popup](screenshots/releases/1.1.0-split-activation.png)
 
 _Templates already saved with the same workout/rest cycle are disabled. Changing their saved days or deleting the copy makes them available again. Activation updates the badge and blue border without a success popup; the active card keeps its seven-day/calendar preview. Isolated sample data._
@@ -119,6 +123,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 ![Circular Start button below the Cardio, Up next and Empty workout choices](screenshots/releases/1.1.0-circular-start.png)
 
 _The circular Start button matches its workout choices. Isolated sample data._
+
+- **Find the right equipment variant:** Filter by equipment in Training > Exercises and the workout picker. Search `bicep curl cable`, `dumbbells curl` or `DB curl` in any word order. Equipment, muscle, workout category, favourites and recent filters work together. Added 44 common strength exercises (83 total), covering barbell, dumbbell, cable, machine, Smith machine, EZ bar, trap bar, kettlebell, resistance band and bodyweight. Existing IDs, custom exercises, favourites and history are preserved; each variant has its own progress. The **Custom** pill works alongside the other filters in both lists. Exact-name and recognised-alias custom entries are reused; only missing equipment is filled, leaving explicit equipment and muscle credits intact. Ambiguous names stay separate.
 
 - **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
 
