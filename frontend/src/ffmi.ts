@@ -16,7 +16,7 @@ export const FFMI_SCALE_MAX = 29;
 export const FFMI_COMPARISON: readonly { value: number; label: string }[] = [
   { value: 18.9, label: 'Population average' },
   { value: 21.8, label: 'Competitive power athlete' },
-  { value: 22.6, label: 'Internationally competitive bodybuilder' },
+  { value: 22.6, label: 'Competitive bodybuilder' },
   { value: 24.8, label: 'Average steroid user' },
   { value: 24.9, label: 'Upper-range natural reference' },
   { value: 25.4, label: 'World class natural pro bodybuilder' },
