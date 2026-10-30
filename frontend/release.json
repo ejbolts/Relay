@@ -48,7 +48,7 @@
       "title": "FFMI with clear references",
       "description": "Standard FFMI for both sexes, with sex-specific population reference points. Open Score details for height adjustment and sensitivity, or Frame-based estimate for the separate model. Your dimensions and sex preference stay saved.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e8c4daa5fa7c7e3c4be92c5362c3f98fea06f84d/docs/screenshots/releases/1.1.0-ffmi.png",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/d72fb8c70970e285a1fbc2dd0a5fe4b3e5c6fd38/docs/screenshots/releases/1.1.0-ffmi.png",
         "alt": "Standard FFMI card with sex-specific population percentile references, one sex icon, Score details and a separate Frame-based estimate. Synthetic sample data."
       }
     },
