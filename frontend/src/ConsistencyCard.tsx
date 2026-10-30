@@ -1,19 +1,29 @@
 import { useId, type ReactNode } from 'react';
+import { Icon } from './Icon';
 export function ConsistencyCard({
   streak,
   trainingDays,
   children,
+  onOpenSplits,
 }: {
   streak: number;
   trainingDays: number;
   children: ReactNode;
+  onOpenSplits?: () => void;
 }) {
   const titleId = useId();
   return (
     <section className="calendar-panel pulse-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
         <h2 id={titleId}>Consistency</h2>
-        <span>Last 12 weeks</span>
+        <div className="consistency-header-actions">
+          <span>Last 12 weeks</span>
+          {onOpenSplits && (
+            <button type="button" className="text-link" onClick={onOpenSplits}>
+              My splits <Icon name="chevron-right" />
+            </button>
+          )}
+        </div>
       </header>
       <div className="consistency-stats">
         <div>

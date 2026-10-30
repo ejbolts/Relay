@@ -1274,6 +1274,8 @@ def update_training_split(
     payload: TrainingSplit, db: DbSession, user: CurrentUser
 ) -> TrainingSplit:
     validate_split_types(db, user.id, payload)
+    # Editing the schedule directly returns it to history-based workout suggestions.
+    payload.routine_id = None
     set_setting(db, user.id, TRAINING_SPLIT_KEY, payload.model_dump_json())
     bump_workout_cache_revision(db, user.id)
     db.commit()

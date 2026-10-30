@@ -2,6 +2,7 @@ import { formatWeight, formatWeightNumber, weightFromKg, type WeightUnit } from 
 import type {
   Exercise,
   PersonalRecord,
+  RoutineSet,
   TrackedSet,
   TrackedWorkout,
   WorkoutCategory,
@@ -263,6 +264,7 @@ export function setLabel(
 
 export interface SessionTemplateExercise {
   exercise: Exercise;
+  plannedSets?: RoutineSet[];
   topSet: TrackedSet | null;
   /** “157.5 kg × 5” for strength, “30 min · 4.8 km” for cardio. */
   summary: string;

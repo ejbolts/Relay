@@ -8,6 +8,18 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Your splits after activating a plan, showing its Active badge and blue border without a success popup](screenshots/releases/1.1.0-split-activation.png)
+
+_Templates already saved with the same workout/rest cycle are disabled. Changing their saved days or deleting the copy makes them available again. Activation updates the badge and blue border without a success popup; the active card keeps its seven-day/calendar preview. Isolated sample data._
+
+![Split editor with name, workout and rest days and Save split, without a profile-sharing switch](screenshots/releases/1.1.0-split-editor.png)
+
+_Sharing lives in the saved split's options instead of the editor. Isolated sample data._
+
+![Profile with My splits beside Last 12 weeks in the Consistency header and no repeated split list](screenshots/releases/1.1.0-profile-split-link.png)
+
+_Open My splits directly from the consistency header. The profile no longer repeats saved plans or offers Save current split. Isolated sample data._
+
 ![Selecting two sample machine photos, choosing their cover and settings, then merging and viewing both retained images](screenshots/releases/1.1.0-machine-photo-merge.gif)
 
 _Choose **Select** in Equipment photo, select duplicates and review **Merge**. Both images stay available in one machine's gallery; saved workout links and recorded settings are preserved. Isolated synthetic data._
@@ -52,10 +64,6 @@ _An overnight workout stays on its starting day. This isolated sample starts at 
 
 _The exercise popup now contains only muscle credits. Isolated sample data._
 
-![Split planner showing a saved cycle with workouts, consecutive rest days and a seven-day preview](screenshots/releases/1.1.0-split-rest-days.png)
-
-_Add, move or change rest days as part of your repeating split. This phone-sized planner uses isolated sample data._
-
 ![New cardio session with the suggested treadmill set expanded for editing](screenshots/releases/1.1.0-cardio-expanded.png)
 
 _Cardio sets open ready to edit or upload a screenshot, with previous-session values preserved and a blue row until completed. This phone-sized view uses isolated sample data._
@@ -66,7 +74,11 @@ _Add multiple target muscles and choose Direct (1 set) or Partial (half a set) c
 
 ![Training's Exercises tab with a compact plus button beside exercise search and two newly created custom exercises](screenshots/releases/1.1.0-library-add-exercise.png)
 
-_The plus beside exercise search opens Add exercise. Sessions keeps a compact plus beside the Training heading. The library updates after saving; this view uses isolated sample data._
+_The plus beside exercise search opens Add exercise. The Training heading no longer has an add button. The library updates after saving; this view uses isolated sample data._
+
+![Training Sessions with the blue plus button removed from beside the Training heading](screenshots/releases/1.1.0-training-header.png)
+
+_The Training heading keeps its account and settings controls. Add exercises from the Exercises search toolbar. Isolated sample data._
 
 ![Opening a preloaded profile, viewing the people behind a workout's reactions, and swiping the bottom sheet down to close it](screenshots/releases/1.1.0-profile-reactions.gif)
 
@@ -108,6 +120,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _The circular Start button matches its workout choices. Isolated sample data._
 
+- **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
+
 - In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
 
 - Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.
@@ -122,9 +136,8 @@ _The circular Start button matches its workout choices. Isolated sample data._
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.
 - Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.
-- Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.
 - Cardio sets open with their editable fields expanded, including suggestions from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately. Sets remain uncompleted until you tick them; completed sets still fold away.
-- Use the **+** beside **Search exercises** to add to your library without starting a workout. **Sessions** has a compact **+** beside the **Training** heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.
+- Use the **+** beside **Search exercises** to add to your library without starting a workout. The **Training** heading no longer has an add button. The library shortcut opens the form for multiple target muscles and their individual credits; saving keeps you on the current tab.
 - When adding a custom strength exercise, add multiple target muscles and choose **Direct (1 set)** or **Partial (half a set)** credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.
 - Your profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, reducing the Loading profile screen when you open it. Cached profile content stays in memory for the signed-in account and is cleared when accounts change.
 - Tap a workout's reaction count to instantly open a bottom sheet showing who reacted and each person's emoji. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction has a separate control. Reaction lists respect current workout access and exclude blocked or disabled accounts.
