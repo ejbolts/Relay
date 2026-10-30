@@ -499,6 +499,7 @@ def test_shared_profile_includes_only_the_chosen_parts(client, other_client):
     ]
     assert view["goals"]["body_weight"]["target_weight_kg"] == 78
     assert view["goals"]["zone2"]["completed_minutes"] == 40
+    assert view["goals"]["cardio_goals"][0]["completed_minutes"] == 40
     assert [session["notes"] for session in view["cardio_sessions"]] == ["Easy spin"]
 
     [shared] = other_client.get(f"/api/sharing/profiles/{owner_id}/workouts").json()["workouts"]

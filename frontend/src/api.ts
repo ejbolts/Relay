@@ -11,12 +11,15 @@ import type {
   BodyWeightGoal,
   BodyWeightGoalInput,
   CardioOverview,
+  CardioPreferences,
   CardioScreenshotScan,
   CardioSession,
   CardioSessionInput,
   CardioMetricsInput,
   Clip,
   CsvImportResult,
+  ImportBatch,
+  ImportUndoResult,
   CsvImportPreview,
   WorkoutImportOptions,
   DashboardData,
@@ -424,6 +427,17 @@ export const api = {
     }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
+  mergeMachinePhotos: (
+    exerciseId: string,
+    photoIds: string[],
+    keepPhotoId: string,
+    caption: string,
+  ) =>
+    request<MachinePhotoUsage>(`/api/exercises/${exerciseId}/machine-photos/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo_ids: photoIds, keep_photo_id: keepPhotoId, caption }),
+    }),
   getMachineSettings: (exerciseId: string, machinePhotoId?: string) =>
     request<{ settings: MachineSetting[] }>(
       `/api/exercises/${exerciseId}/machine-settings${machinePhotoId ? `?${new URLSearchParams({ machine_photo_id: machinePhotoId })}` : ''}`,
@@ -569,6 +583,13 @@ export const api = {
     return request<MuscleVolume[]>(`/api/muscle-volume${query.size ? `?${query}` : ''}`);
   },
   cardioOverview: () => request<CardioOverview>('/api/cardio'),
+  getCardioPreferences: () => request<CardioPreferences>('/api/cardio-preferences'),
+  updateCardioPreferences: (payload: CardioPreferences) =>
+    request<CardioPreferences>('/api/cardio-preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   scanCardioScreenshot: (file: File) => {
     const form = new FormData();
     form.append('file', file, file.name);
@@ -643,18 +664,37 @@ export const api = {
   importWorkouts: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);
-    if (options) Object.entries(options).forEach(([key, value]) => form.append(key, value));
+    if (options)
+      Object.entries(options).forEach(([key, value]) => {
+        form.append(
+          key,
+          key === 'exercise_mappings'
+            ? JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, id]) => id)))
+            : (value as string),
+        );
+      });
     return request<CsvImportResult>('/api/workouts/import', { method: 'POST', body: form });
   },
   previewWorkoutImport: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);
-    if (options) Object.entries(options).forEach(([key, value]) => form.append(key, value));
+    if (options)
+      Object.entries(options).forEach(([key, value]) => {
+        form.append(
+          key,
+          key === 'exercise_mappings'
+            ? JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, id]) => id)))
+            : (value as string),
+        );
+      });
     return request<CsvImportPreview>('/api/workouts/import/preview', {
       method: 'POST',
       body: form,
     });
   },
+  importBatches: () => request<ImportBatch[]>('/api/workouts/import/batches'),
+  undoImportBatch: (id: string) =>
+    request<ImportUndoResult>(`/api/workouts/import/batches/${id}`, { method: 'DELETE' }),
   createWorkout: (payload: WorkoutInput) =>
     request<TrackedWorkout>('/api/workouts', {
       method: 'POST',

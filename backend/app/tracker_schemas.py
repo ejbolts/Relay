@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .cardio_zones import CardioGoalWeek, CardioPreferences
 from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
@@ -105,7 +106,7 @@ class MachinePhotoCaptionUpdate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
-class MachinePhotoRead(BaseModel):
+class MachinePhotoImageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -116,6 +117,22 @@ class MachinePhotoRead(BaseModel):
     width: int
     height: int
     created_at: datetime
+
+
+class MachinePhotoRead(MachinePhotoImageRead):
+    images: list[MachinePhotoImageRead] = Field(default_factory=list)
+
+
+class MachinePhotoMerge(MachinePhotoCaptionUpdate):
+    photo_ids: list[str] = Field(min_length=2, max_length=100)
+    keep_photo_id: str
+
+    @field_validator("photo_ids")
+    @classmethod
+    def unique_photo_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("Select different machine photos.")
+        return value
 
 
 class MachinePhotoUsageRead(MachinePhotoRead):
@@ -746,6 +763,8 @@ class Zone2WeekRead(BaseModel):
 
 
 class CardioOverviewRead(BaseModel):
+    cardio_preferences: CardioPreferences
+    goal_weeks: list[CardioGoalWeek]
     preferences: TrainingPreferencesRead
     current_week: Zone2WeekRead
     previous_weeks: list[Zone2WeekRead]
@@ -754,6 +773,7 @@ class CardioOverviewRead(BaseModel):
 
 
 class DashboardRead(BaseModel):
+    cardio_goals: list[CardioGoalWeek]
     workouts_this_week: int
     sets_this_week: int
     volume_this_week_kg: float
@@ -814,6 +834,7 @@ class ExerciseLibrarySummaryRead(BaseModel):
 
 
 class CsvImportRead(BaseModel):
+    batch_id: str | None = None
     workouts_created: int
     workouts_skipped: int
     exercises_created: int
@@ -831,7 +852,37 @@ class CsvImportSessionRead(BaseModel):
     duplicate: bool
 
 
+class ImportExerciseMatch(BaseModel):
+    incoming_name: str
+    exercise_id: str | None
+    exercise_name: str
+
+
+class ImportExerciseChoice(BaseModel):
+    id: str
+    name: str
+    kind: ExerciseKind
+
+
+class ImportBatchRead(BaseModel):
+    id: str
+    file_name: str
+    source: str
+    created_at: datetime
+    workouts: int
+    body_measurements: int
+
+
+class ImportUndoRead(BaseModel):
+    workouts_removed: int
+    body_measurements_removed: int
+    body_measurements_preserved: int
+    exercises_removed: int
+
+
 class CsvImportPreviewRead(BaseModel):
+    exercise_matches: list[ImportExerciseMatch] = []
+    available_exercises: list[ImportExerciseChoice] = []
     sessions: list[CsvImportSessionRead]
     workouts_to_create: int
     workouts_to_skip: int

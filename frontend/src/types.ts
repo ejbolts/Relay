@@ -129,7 +129,7 @@ export type ExerciseCreateInput = Pick<
   'name' | 'category' | 'kind' | 'muscle_group' | 'equipment'
 > & { muscle_set_credit?: 0.5 | 1; muscle_set_credits?: MuscleSetCreditInput[] };
 
-export interface MachinePhoto {
+export interface MachinePhotoImage {
   id: string;
   exercise_id: string;
   caption: string;
@@ -138,6 +138,10 @@ export interface MachinePhoto {
   width: number;
   height: number;
   created_at: string;
+}
+
+export interface MachinePhoto extends MachinePhotoImage {
+  images?: MachinePhotoImage[];
 }
 
 /** A saved machine with when, and how often, saved workouts have pinned it. */
@@ -402,6 +406,7 @@ export interface TrainingTime {
 }
 
 export interface DashboardData {
+  cardio_goals?: CardioGoalWeek[];
   workouts_this_week: number;
   sets_this_week: number;
   volume_this_week_kg: number;
@@ -468,6 +473,30 @@ export interface TrainingPreferences {
   weekly_muscle_set_goal: number;
 }
 
+export interface HeartRateZone {
+  zone: number;
+  min_bpm: number;
+  max_bpm: number;
+}
+
+export interface CardioGoal {
+  zone: number;
+  minutes: number;
+}
+
+export interface CardioPreferences {
+  heart_rate_zones: HeartRateZone[];
+  goals: CardioGoal[];
+}
+
+export interface CardioGoalWeek {
+  zone: number;
+  goal_minutes: number;
+  completed_minutes: number;
+  remaining_minutes: number;
+  complete: boolean;
+}
+
 export interface Zone2Week {
   week_start: string;
   week_end: string;
@@ -519,6 +548,8 @@ export interface CardioScreenshotScan {
 }
 
 export interface CardioOverview {
+  cardio_preferences?: CardioPreferences;
+  goal_weeks?: CardioGoalWeek[];
   preferences: TrainingPreferences;
   current_week: Zone2Week;
   previous_weeks: Zone2Week[];
@@ -606,6 +637,7 @@ export interface ExerciseLibrarySummary {
 }
 
 export interface CsvImportResult {
+  batch_id?: string | null;
   workouts_created: number;
   workouts_skipped: number;
   exercises_created: number;
@@ -615,13 +647,30 @@ export interface CsvImportResult {
   warnings: string[];
 }
 
+export interface ImportBatch {
+  id: string;
+  file_name: string;
+  source: string;
+  created_at: string;
+  workouts: number;
+  body_measurements: number;
+}
+export interface ImportUndoResult {
+  workouts_removed: number;
+  body_measurements_removed: number;
+  body_measurements_preserved: number;
+  exercises_removed: number;
+}
 export interface WorkoutImportOptions {
+  exercise_mappings?: Record<string, string>;
   source: 'gym' | 'strengthlevel' | 'hevy' | 'strong';
   weight_unit: 'kg' | 'lb';
   distance_unit: 'km' | 'mi';
 }
 
 export interface CsvImportPreview {
+  exercise_matches?: { incoming_name: string; exercise_id: string | null; exercise_name: string }[];
+  available_exercises?: { id: string; name: string; kind: string }[];
   sessions: {
     workout_date: string;
     name: string;
@@ -925,6 +974,7 @@ export interface SharedBodyMeasurement {
 }
 
 export interface SharedGoals {
+  cardio_goals?: CardioGoalWeek[];
   body_weight: Omit<BodyWeightGoalInput, 'active'> | null;
   zone2: Zone2Week;
 }

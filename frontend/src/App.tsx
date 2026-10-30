@@ -18,6 +18,7 @@ import {
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
@@ -139,6 +140,8 @@ import { BackgroundActivityBar } from './BackgroundActivityBar';
 import { CardioTrendCard } from './CardioTrendCard';
 import { groupCardioHistory } from './cardioTrend';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
+import { CardioZoneSettings } from './CardioZoneSettings';
+import { cardioZoneNotice, DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { useBackdropDismiss } from './backdropDismiss';
@@ -304,6 +307,12 @@ import {
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
+import {
+  captureFriendInvite,
+  clearFriendInvite,
+  FRIEND_INVITE_EVENT,
+  pendingFriendInvite,
+} from './friendInvite';
 
 type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
@@ -652,7 +661,10 @@ function AppContent() {
     id: string;
     name: string;
     opened: number;
+    /** Opened from a friend QR code, before its name has loaded. */
+    invite?: boolean;
   } | null>(null);
+  const [friendInvite, setFriendInvite] = useState(() => pendingFriendInvite());
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
   const [historyMovementId, setHistoryMovementId] = useState<string | null>(null);
   const [historyOpenCount, setHistoryOpenCount] = useState(0);
@@ -767,6 +779,38 @@ function AppContent() {
     setNavDirection('forward');
     setTabState(nextTab);
   }, []);
+  useEffect(() => {
+    // An invite link opened in an already-open app only changes the address's hash.
+    const onHashChange = () => {
+      const id = captureFriendInvite();
+      if (id) setFriendInvite(id);
+    };
+    // A code scanned inside the app has already stored its invite.
+    const onScanned = () => setFriendInvite(pendingFriendInvite());
+    window.addEventListener('hashchange', onHashChange);
+    window.addEventListener(FRIEND_INVITE_EVENT, onScanned);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
+    };
+  }, []);
+  useEffect(() => {
+    // A friend QR code opens the inviter's profile, which sends them a friend request.
+    if (!friendInvite || !user) return;
+    clearFriendInvite();
+    setFriendInvite(null);
+    if (friendInvite === user.id) {
+      setTab('profile');
+      return;
+    }
+    setSharedProfile((current) => ({
+      id: friendInvite,
+      name: 'Friend invite',
+      opened: (current?.opened ?? 0) + 1,
+      invite: true,
+    }));
+    setTab('shared-profile');
+  }, [friendInvite, user, setTab]);
 
   function navigateBack() {
     if (tab === 'settings' && settingsGroup !== null) {
@@ -1116,6 +1160,18 @@ function AppContent() {
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     setEditingWorkout(null);
 
+    if (saved.movements.some((movement) => movement.exercise.kind === 'cardio')) {
+      void api
+        .cardioOverview()
+        .then((overview) => {
+          const preferences = overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES;
+          const sessions = overview.sessions.filter((item) => item.source_workout_id === saved.id);
+          if (sessions.length)
+            setMessage(sessions.map((item) => cardioZoneNotice(item, preferences)).join(' '));
+        })
+        .catch(() => undefined);
+    }
+
     if (!wasEditing) {
       const signature = (record: PersonalRecord) =>
         `${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
@@ -1147,6 +1203,17 @@ function AppContent() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not delete that workout.');
     }
+  }
+
+  async function undoWorkoutImport(id: string) {
+    const result = await withBackgroundActivity('Undoing import…', async () => {
+      const undone = await api.undoImportBatch(id);
+      await refreshData({ activityLabel: null });
+      return undone;
+    });
+    setMessage(
+      `Import undone: removed ${plural(result.workouts_removed, 'session')} and ${plural(result.body_measurements_removed, 'check-in')}.${result.body_measurements_preserved ? ` Kept ${plural(result.body_measurements_preserved, 'edited check-in')}.` : ''}`,
+    );
   }
 
   async function importWorkoutCsv(file: File, options?: WorkoutImportOptions) {
@@ -1333,7 +1400,11 @@ function AppContent() {
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
     tab,
-    hasOtherDialog: message !== null || completionRecords.length > 0,
+    // Onboarding waits until a new member has seen the profile their invite opened.
+    hasOtherDialog:
+      message !== null ||
+      completionRecords.length > 0 ||
+      (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
   });
   const prompt = canShowPrompts
@@ -1806,6 +1877,7 @@ function AppContent() {
                 bodyTrendPreference={bodyTrendPreference}
                 onBodyTrendPreferenceChange={updateBodyTrendPreference}
                 onImportWorkouts={importWorkoutCsv}
+                onUndoImport={undoWorkoutImport}
                 csvGuideOpen={csvGuideOpen}
                 onCsvGuideOpenChange={setCsvGuideOpen}
                 onDeleteSamples={deleteSampleData}
@@ -1872,6 +1944,14 @@ function AppContent() {
                   onOpenMember={openSharedProfile}
                   onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
+                  invite={sharedProfile.invite}
+                  onLoaded={(profile) =>
+                    setSharedProfile((current) =>
+                      current?.invite && current.id === profile.id
+                        ? { ...current, name: profile.display_name }
+                        : current,
+                    )
+                  }
                   onChooseSharing={openSharingSettings}
                   renderWorkouts={(props) => (
                     <SharedWorkoutHistory
@@ -5133,6 +5213,7 @@ function MovementCard({
           id={photoPanelId}
           exercise={movement.exercise}
           selectedIds={movement.machinePhotoIds}
+          settings={movement.machineSettings}
           autoPinLastUsed={!movement.machinePhotosInitialized}
           onChange={onMachinePhotos}
         />
@@ -5360,15 +5441,18 @@ function MachinePhotoChooser({
   id,
   exercise,
   selectedIds,
+  settings,
   autoPinLastUsed,
   onChange,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
+  settings?: MachineSetting[];
   autoPinLastUsed: boolean;
   onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
 }) {
+  const [selectingForMerge, setSelectingForMerge] = useState(false);
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [caption, setCaption] = useState('');
@@ -5381,11 +5465,13 @@ function MachinePhotoChooser({
   const autoPinLastUsedRef = useRef(autoPinLastUsed);
   const onChangeRef = useRef(onChange);
   const selectedIdsRef = useRef(selectedIds);
+  const settingsRef = useRef(settings);
 
   useEffect(() => {
     onChangeRef.current = onChange;
     selectedIdsRef.current = selectedIds;
-  }, [onChange, selectedIds]);
+    settingsRef.current = settings;
+  }, [onChange, selectedIds, settings]);
 
   useEffect(() => {
     let active = true;
@@ -5398,6 +5484,19 @@ function MachinePhotoChooser({
       .then(([items, lastUsed]) => {
         if (!active) return;
         setPhotos(items);
+        const canonicalIds = [
+          ...new Set(
+            selectedIdsRef.current.map(
+              (id) =>
+                items.find(
+                  (photo) => photo.id === id || photo.images?.some((image) => image.id === id),
+                )?.id ?? id,
+            ),
+          ),
+        ];
+        if (canonicalIds.join(',') !== selectedIdsRef.current.join(',')) {
+          onChangeRef.current(canonicalIds, settingsRef.current);
+        }
         if (autoPinLastUsedRef.current && selectedIdsRef.current.length === 0) {
           onChangeRef.current(lastUsed.map((photo) => photo.id));
         }
@@ -5422,6 +5521,7 @@ function MachinePhotoChooser({
 
   function stagePhoto(file: File | undefined) {
     if (!file) return;
+    setSelectingForMerge(false);
     setError(null);
     setCaption('');
     setExpanded(null);
@@ -5542,90 +5642,137 @@ function MachinePhotoChooser({
         </span>
       </summary>
       <div className="machine-photo-content">
-        <div className="machine-photo-actions">
-          <label>
-            <span aria-hidden="true">
-              <Icon name="camera" />
-            </span>
-            Take photo
-            <input
-              className="sr-only"
-              type="file"
-              disabled={uploading}
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              capture="environment"
-              onChange={(event) => {
-                stagePhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-          <label>
-            <span aria-hidden="true">＋</span>
-            Choose photo
-            <input
-              className="sr-only"
-              type="file"
-              disabled={uploading}
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              onChange={(event) => {
-                stagePhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-        {photos.length > 0 && (
+        {selectingForMerge ? (
+          <MachinePhotoMergePicker
+            exerciseId={exercise.id}
+            photos={photos}
+            onCancel={() => setSelectingForMerge(false)}
+            onMerged={(merged, sourceIds) => {
+              const sourceSet = new Set(sourceIds);
+              const nextIds = [
+                ...new Set(
+                  selectedIdsRef.current.map((id) => (sourceSet.has(id) ? merged.id : id)),
+                ),
+              ];
+              setPhotos((current) => [
+                merged,
+                ...current.filter((photo) => !sourceSet.has(photo.id)),
+              ]);
+              if (nextIds.join(',') !== selectedIdsRef.current.join(',')) {
+                onChange(nextIds, settingsRef.current);
+              }
+              setSelectingForMerge(false);
+              setExpanded(merged);
+            }}
+          />
+        ) : (
           <>
-            {choosingReplacement && (
-              <p className="machine-photo-choice-prompt" role="status">
-                {photos.length > 1
-                  ? 'Choose the machine you are using for this workout.'
-                  : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
-              </p>
-            )}
-            <div className="machine-photo-rail" ref={photoRailRef}>
-              {photos.map((photo) => {
-                const selected = selectedIds.includes(photo.id);
-                return (
-                  <article className={selected ? 'selected' : ''} key={photo.id}>
-                    <button
-                      type="button"
-                      className="machine-thumbnail"
-                      onClick={() => setExpanded(photo)}
-                      aria-label={`Expand ${photo.caption}`}
-                    >
-                      <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
-                    </button>
-                    <strong title={photo.caption}>{photo.caption}</strong>
-                    <small
-                      className="machine-last-used"
-                      title={
-                        photo.last_used_date
-                          ? `Last used ${machineDate(photo.last_used_date)}`
-                          : undefined
-                      }
-                    >
-                      {machineUsedShort(photo.last_used_date, today)}
-                    </small>
-                    <button
-                      type="button"
-                      className="machine-pin"
-                      onClick={() => togglePhoto(photo.id)}
-                      disabled={uploading}
-                    >
-                      {choosingReplacement
-                        ? selected
-                          ? 'Currently pinned'
-                          : 'Use this machine'
-                        : selected
-                          ? '✓ Pinned'
-                          : 'Pin to sets'}
-                    </button>
-                  </article>
-                );
-              })}
+            <div className="machine-photo-actions">
+              <label>
+                <span aria-hidden="true">
+                  <Icon name="camera" />
+                </span>
+                Take photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  capture="environment"
+                  onChange={(event) => {
+                    stagePhoto(event.target.files?.[0]);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              <label>
+                <span aria-hidden="true">＋</span>
+                Choose photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  onChange={(event) => {
+                    stagePhoto(event.target.files?.[0]);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
             </div>
+            {photos.length > 0 && (
+              <>
+                {choosingReplacement && (
+                  <p className="machine-photo-choice-prompt" role="status">
+                    {photos.length > 1
+                      ? 'Choose the machine you are using for this workout.'
+                      : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
+                  </p>
+                )}
+                {photos.length >= 2 && (
+                  <div className="machine-photo-library-actions">
+                    <span>Saved · {photos.length}</span>
+                    <button
+                      type="button"
+                      disabled={uploading || !!pending}
+                      onClick={() => {
+                        setExpanded(null);
+                        setChoosingReplacement(false);
+                        setSelectingForMerge(true);
+                        setError(null);
+                      }}
+                    >
+                      Select
+                    </button>
+                  </div>
+                )}
+                <div className="machine-photo-rail" ref={photoRailRef}>
+                  {photos.map((photo) => {
+                    const selected = selectedIds.includes(photo.id);
+                    return (
+                      <article className={selected ? 'selected' : ''} key={photo.id}>
+                        <button
+                          type="button"
+                          className="machine-thumbnail"
+                          onClick={() => setExpanded(photo)}
+                          aria-label={`Expand ${photo.caption}`}
+                        >
+                          <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
+                        </button>
+                        <strong title={photo.caption}>{photo.caption}</strong>
+                        {(photo.images?.length ?? 0) > 1 && (
+                          <span className="machine-photo-count">{photo.images!.length} photos</span>
+                        )}
+                        <small
+                          className="machine-last-used"
+                          title={
+                            photo.last_used_date
+                              ? `Last used ${machineDate(photo.last_used_date)}`
+                              : undefined
+                          }
+                        >
+                          {machineUsedShort(photo.last_used_date, today)}
+                        </small>
+                        <button
+                          type="button"
+                          className="machine-pin"
+                          onClick={() => togglePhoto(photo.id)}
+                          disabled={uploading}
+                        >
+                          {choosingReplacement
+                            ? selected
+                              ? 'Currently pinned'
+                              : 'Use this machine'
+                            : selected
+                              ? '✓ Pinned'
+                              : 'Pin to sets'}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </>
         )}
         {error && <p className="machine-photo-error">{error}</p>}
@@ -5688,6 +5835,9 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [imageIndex, setImageIndex] = useState(0);
+  const images = photo.images?.length ? photo.images : [photo];
+  const image = images[Math.min(imageIndex, images.length - 1)];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -5726,7 +5876,22 @@ function MachinePhotoDetail({
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
         </button>
-        <img src={photo.full_url} alt={photo.caption} />
+        <img src={image.full_url} alt={photo.caption} />
+        {images.length > 1 && (
+          <div className="machine-photo-gallery" aria-label="Merged machine photos">
+            {images.map((item, index) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-label={`View photo ${index + 1} of ${images.length}`}
+                aria-pressed={imageIndex === index}
+                onClick={() => setImageIndex(index)}
+              >
+                <img src={item.thumbnail_url} alt="" />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="photo-detail-caption">
           {onUpdate ? (
             <input
@@ -5756,8 +5921,8 @@ function MachinePhotoDetail({
           {onDelete && (
             <InlineConfirmButton
               className="photo-delete"
-              label="Delete"
-              confirmLabel="Delete photo"
+              label={images.length > 1 ? 'Delete machine' : 'Delete'}
+              confirmLabel={images.length > 1 ? 'Delete machine and all photos' : 'Delete photo'}
               onConfirm={removePhoto}
               disabled={saving}
             />
@@ -6816,6 +6981,7 @@ function SettingsScreen({
   bodyTrendPreference,
   onBodyTrendPreferenceChange,
   onImportWorkouts,
+  onUndoImport,
   csvGuideOpen,
   onCsvGuideOpenChange,
   onDeleteSamples,
@@ -6858,6 +7024,7 @@ function SettingsScreen({
   bodyTrendPreference: BodyTrendPreference;
   onBodyTrendPreferenceChange: (preference: BodyTrendPreference) => void;
   onImportWorkouts: (file: File, options?: WorkoutImportOptions) => Promise<void>;
+  onUndoImport: (id: string) => Promise<void>;
   csvGuideOpen: boolean;
   onCsvGuideOpenChange: (open: boolean) => void;
   onDeleteSamples: () => Promise<void>;
@@ -7379,6 +7546,7 @@ function SettingsScreen({
                   <div className="settings-actions data-transfer-actions">
                     <WorkoutCsvImport
                       onImport={onImportWorkouts}
+                      onUndoImport={onUndoImport}
                       guideOpen={csvGuideOpen}
                       onGuideOpenChange={onCsvGuideOpenChange}
                     />
@@ -8450,11 +8618,13 @@ export function CardioScreen({
     average_power_watts: null,
     average_mets: null,
     intensity: null,
-    zone: 'Zone 2',
-    qualifies_zone2: true,
+    zone: null,
+    qualifies_zone2: false,
     notes: null,
   };
   const [overview, setOverview] = useState<CardioOverview | null>(null);
+  const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
+  const [zoneNotice, setZoneNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
   const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
   const [saving, setSaving] = useState(false);
@@ -8562,11 +8732,16 @@ export function CardioScreen({
       const payload = {
         ...draft,
         intensity: null,
-        qualifies_zone2: draft.zone === 'Zone 2',
+        zone: null,
+        qualifies_zone2: false,
       };
       setSaving(true);
-      if (editingId) await api.updateCardio(editingId, payload);
-      else await api.createCardio(payload);
+      const saved = editingId
+        ? await api.updateCardio(editingId, payload)
+        : await api.createCardio(payload);
+      setZoneNotice(
+        cardioZoneNotice(saved, overview?.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
+      );
       setDraft(empty);
       setScanStatus(null);
       setEditingId(null);
@@ -8595,6 +8770,19 @@ export function CardioScreen({
   const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
   return (
     <div className="cardio-screen">
+      {zoneNotice && (
+        <NotificationDialog message={zoneNotice} onClose={() => setZoneNotice(null)} />
+      )}
+      {zoneSettingsOpen && (
+        <CardioZoneSettings
+          preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
+          onClose={() => setZoneSettingsOpen(false)}
+          onSaved={async () => {
+            await onDataChange();
+            await load();
+          }}
+        />
+      )}
       {error && <p className="inline-error">{error}</p>}
       {metricSession && (
         <CardioMetricsEditor
@@ -8602,7 +8790,10 @@ export function CardioScreen({
           session={metricSession}
           onClose={() => setMetricSession(null)}
           onSave={async (metrics) => {
-            await api.updateCardioMetrics(metricSession.id, metrics);
+            const saved = await api.updateCardioMetrics(metricSession.id, metrics);
+            setZoneNotice(
+              cardioZoneNotice(saved, overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
+            );
             await onDataChange();
             await load();
           }}
@@ -8715,23 +8906,6 @@ export function CardioScreen({
                   setDraft({ ...draft, duration_minutes: Number(event.target.value) })
                 }
               />
-            </label>
-            <label>
-              Zone
-              <select
-                value={draft.zone ?? ''}
-                onChange={(event) => {
-                  const zone = event.target.value || null;
-                  setDraft({ ...draft, zone, qualifies_zone2: zone === 'Zone 2' });
-                }}
-              >
-                <option value="">Not set</option>
-                {[1, 2, 3, 4, 5].map((zone) => (
-                  <option key={zone} value={`Zone ${zone}`}>
-                    Zone {zone}
-                  </option>
-                ))}
-              </select>
             </label>
             <label>
               Calories burned (kcal)
@@ -9049,6 +9223,47 @@ export function CardioScreen({
           label="cardio history"
         />
       </section>
+      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
+        <header>
+          <h2 id="cardio-goals-title">Weekly zone goals</h2>
+          <button
+            type="button"
+            className="cardio-goals-edit"
+            aria-label="Edit heart-rate zones and goals"
+            onClick={() => setZoneSettingsOpen(true)}
+          >
+            <Icon name="edit" />
+            Edit
+          </button>
+        </header>
+        <ul className="cardio-goal-list">
+          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
+            const range = overview.cardio_preferences?.heart_rate_zones.find(
+              (item) => item.zone === goal.zone,
+            );
+            return (
+              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
+                <span>
+                  <strong>Zone {goal.zone}</strong>
+                  {range && (
+                    <small>
+                      {range.min_bpm}–{range.max_bpm} bpm
+                    </small>
+                  )}
+                </span>
+                <span>
+                  <b>
+                    {goal.completed_minutes} / {goal.goal_minutes} min
+                  </b>
+                  <small>
+                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </div>
   );
 }
@@ -9312,7 +9527,7 @@ function HistoryScreen({
               section === 'progress'
                 ? 'Exercise charts · records · sessions'
                 : section === 'cardio'
-                  ? 'Zone 2 · energy · sessions'
+                  ? 'Zones · energy · sessions'
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"

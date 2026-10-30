@@ -129,6 +129,52 @@ afterEach(async () => {
 });
 
 describe('cardio weekly trend screen', () => {
+  it('automatically classifies saved cardio and shows a text-only result', async () => {
+    vi.mocked(api.cardioOverview).mockResolvedValue({
+      ...overview,
+      cardio_preferences: {
+        heart_rate_zones: [{ zone: 2, min_bpm: 110, max_bpm: 139 }],
+        goals: [{ zone: 2, minutes: 150 }],
+      },
+      goal_weeks: [
+        {
+          zone: 2,
+          goal_minutes: 150,
+          completed_minutes: 30,
+          remaining_minutes: 120,
+          complete: false,
+        },
+      ],
+    });
+    await act(async () =>
+      root.render(
+        <CardioScreen
+          dataRevision="zones"
+          exercises={[{ id: 'bike', name: 'Cycling', kind: 'cardio' } as Exercise]}
+          onDataChange={vi.fn().mockResolvedValue(undefined)}
+          onOpenWorkout={vi.fn()}
+        />,
+      ),
+    );
+    const create = vi
+      .spyOn(api, 'createCardio')
+      .mockResolvedValue(session({ zone: 'Zone 2', average_heart_rate_bpm: 120 }));
+    await click(named('Log session'));
+    expect(
+      [...container.querySelectorAll('label')].some(
+        (label) => label.textContent?.trim() === 'Zone',
+      ),
+    ).toBe(false);
+    await click(named('Add cardio session'));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ zone: null, qualifies_zone2: false }),
+    );
+    const notice = document.querySelector('.app-notification-toast')!;
+    expect(notice.textContent).toContain('Zone 2 · 120 bpm average (110–139 bpm)');
+    expect(notice.querySelector('svg, canvas')).toBeNull();
+    await click(container.querySelector('[aria-label="Edit heart-rate zones and goals"]')!);
+    expect(document.querySelector('dialog')!.textContent).toContain('Personal ranges (bpm)');
+  });
   it.each(['en-AU', 'en-US'])(
     'switches metrics and selected weeks together, with the current week as the default (%s)',
     async (locale) => {

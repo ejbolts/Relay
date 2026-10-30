@@ -6,7 +6,7 @@ import math
 import re
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from statistics import median
 
@@ -18,6 +18,7 @@ from .models import (
     BodyMeasurement,
     Exercise,
     ExerciseKind,
+    ImportBatch,
     SetType,
     TrainingWorkout,
     WorkoutCategory,
@@ -92,6 +93,7 @@ class ParsedRow:
     workout_notes: str | None = None
     duration_minutes: int | None = None
     detailed: bool = False
+    exercise_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,7 @@ class ImportPlan:
     body_measurements_to_create: int = 0
     body_measurements_to_skip: int = 0
     body_details: dict[date, tuple[float | None, str | None]] = field(default_factory=dict)
+    exercise_matches: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -122,6 +125,7 @@ class ImportSummary:
     body_measurements_created: int
     body_measurements_updated: int
     warnings: list[str]
+    batch_id: str | None = None
 
 
 def plural(count: int, noun: str) -> str:
@@ -392,6 +396,7 @@ def sync_imported_bodyweights(
     user_id: str,
     bodyweights: dict[date, list[float]],
     details: dict[date, tuple[float | None, str | None]] | None = None,
+    created_entries: list[BodyMeasurement] | None = None,
 ) -> tuple[int, int]:
     """Create missing graph check-ins without replacing any existing entries."""
     if not bodyweights:
@@ -414,16 +419,17 @@ def sync_imported_bodyweights(
             body_fat, notes = (details or {}).get(
                 measurement_date, (None, IMPORTED_BODYWEIGHT_NOTE)
             )
-            db.add(
-                BodyMeasurement(
-                    user_id=user_id,
-                    measurement_date=measurement_date,
-                    weight_kg=weight_kg,
-                    body_fat_pct=body_fat,
-                    notes=notes,
-                    is_sample=False,
-                )
+            measurement = BodyMeasurement(
+                user_id=user_id,
+                measurement_date=measurement_date,
+                weight_kg=weight_kg,
+                body_fat_pct=body_fat,
+                notes=notes,
+                is_sample=False,
             )
+            db.add(measurement)
+            if created_entries is not None:
+                created_entries.append(measurement)
             created += 1
     return created, updated
 
@@ -450,9 +456,11 @@ def matching_session(rows: list[ParsedRow], workout: TrainingWorkout) -> bool:
     for movement in workout.movements:
         completed = [item for item in movement.sets if item.completed]
         if completed:
-            existing[canonical_exercise_name(movement.exercise.name).casefold()].extend(completed)
+            existing[movement.exercise_id].extend(completed)
     for row in rows:
-        incoming[canonical_exercise_name(row.exercise_name).casefold()].append(row)
+        incoming[row.exercise_id or canonical_exercise_name(row.exercise_name).casefold()].append(
+            row
+        )
     if existing.keys() != incoming.keys():
         return False
     for name, set_rows in incoming.items():
@@ -518,6 +526,7 @@ def plan_import(
     source: str = "gym",
     weight_unit: str = "kg",
     distance_unit: str = "km",
+    exercise_mappings: dict[str, str] | None = None,
 ) -> ImportPlan:
     """Read and compare only; no pending database writes, even on a rejected file."""
     try:
@@ -540,10 +549,37 @@ def plan_import(
             rows, warnings = parse_rows(raw)
     except csv.Error as error:
         raise CsvImportError("The CSV has malformed quoting or an oversized field.") from error
-    exercises = {
-        canonical_exercise_name(item.name).casefold(): item
-        for item in db.scalars(select(Exercise).where(Exercise.user_id == user_id))
-    }
+    owned_exercises = list(db.scalars(select(Exercise).where(Exercise.user_id == user_id)))
+    exercises = {canonical_exercise_name(item.name).casefold(): item for item in owned_exercises}
+    by_id = {item.id: item for item in owned_exercises}
+    mappings = exercise_mappings or {}
+    incoming_names = {row.exercise_name for row in rows}
+    if mappings.keys() - incoming_names:
+        raise CsvImportError("An exercise mapping does not belong to this file. Review it again.")
+    matches = {}
+    resolved_rows = []
+    for row in rows:
+        target = exercises.get(canonical_exercise_name(row.exercise_name).casefold())
+        if row.exercise_name in mappings:
+            target = by_id.get(mappings[row.exercise_name])
+            if target is None:
+                raise CsvImportError("A mapped exercise is unavailable. Review the import again.")
+            kind = infer_exercise(row.exercise_name)[1]
+            if row.duration_seconds is not None or row.distance_km is not None:
+                kind = ExerciseKind.CARDIO
+            if target.kind != kind:
+                raise CsvImportError(
+                    "Map strength exercises to strength entries and cardio to cardio entries."
+                )
+        matches[row.exercise_name] = {
+            "incoming_name": row.exercise_name,
+            "exercise_id": target.id if target else None,
+            "exercise_name": target.name if target else canonical_exercise_name(row.exercise_name),
+        }
+        resolved_rows.append(
+            replace(row, exercise_name=target.name, exercise_id=target.id) if target else row
+        )
+    rows = resolved_rows
     grouped: dict[tuple[date, str], list[ParsedRow]] = defaultdict(list)
     for row in rows:
         grouped[(row.workout_date, row.session_id)].append(row)
@@ -616,6 +652,7 @@ def plan_import(
         len(bodyweights.keys() - existing_dates),
         len(existing_dates),
         body_details,
+        list(matches.values()),
     )
 
 
@@ -626,13 +663,16 @@ def import_workouts(
     *,
     plan: ImportPlan | None = None,
     on_workout: Callable[[Session, TrainingWorkout], None] | None = None,
+    batch: ImportBatch | None = None,
 ) -> ImportSummary:
     # Always build a fresh plan at commit, never accept a client-supplied preview.
     plan = plan or plan_import(db, user_id, raw)
-    exercises = {
-        canonical_exercise_name(item.name).casefold(): item
-        for item in db.scalars(select(Exercise).where(Exercise.user_id == user_id))
-    }
+    owned_exercises = list(db.scalars(select(Exercise).where(Exercise.user_id == user_id)))
+    exercises = {canonical_exercise_name(item.name).casefold(): item for item in owned_exercises}
+    by_id = {item.id: item for item in owned_exercises}
+    created_exercises = []
+    created_workouts = []
+    created_measurements = []
     exercises_created = 0
     workout_types = {
         item.name.casefold(): item
@@ -643,7 +683,9 @@ def import_workouts(
     for session in sessions:
         movement_groups: dict[str, list[ParsedRow]] = defaultdict(list)
         for row in session.rows:
-            movement_groups[canonical_exercise_name(row.exercise_name).casefold()].append(row)
+            movement_groups[
+                row.exercise_id or canonical_exercise_name(row.exercise_name).casefold()
+            ].append(row)
         movement_categories: list[WorkoutCategory] = []
         workout = TrainingWorkout(
             user_id=user_id,
@@ -661,9 +703,10 @@ def import_workouts(
             is_sample=False,
         )
         db.add(workout)
+        created_workouts.append(workout)
         for movement_index, (exercise_key, set_rows) in enumerate(movement_groups.items()):
             exercise_name = canonical_exercise_name(set_rows[0].exercise_name)
-            exercise = exercises.get(exercise_key)
+            exercise = by_id.get(exercise_key) or exercises.get(exercise_key)
             if not exercise:
                 category, kind, muscle_group, equipment = infer_exercise(exercise_name)
                 exercise = Exercise(
@@ -676,6 +719,7 @@ def import_workouts(
                     is_custom=True,
                 )
                 db.add(exercise)
+                created_exercises.append(exercise)
                 exercises[exercise_name.casefold()] = exercise
                 exercises_created += 1
             movement_categories.append(exercise.category)
@@ -730,10 +774,17 @@ def import_workouts(
             db.flush()
             on_workout(db, workout)
     body_measurements_created, body_measurements_updated = sync_imported_bodyweights(
-        db, user_id, bodyweights, plan.body_details
+        db, user_id, bodyweights, plan.body_details, created_measurements
     )
     db.flush()
+    if batch is not None and (created_workouts or created_measurements):
+        batch.workout_ids = [item.id for item in created_workouts]
+        batch.measurements = [measurement_snapshot(item) for item in created_measurements]
+        batch.exercises = [exercise_snapshot(item) for item in created_exercises]
+        db.add(batch)
+        db.flush()
     return ImportSummary(
+        batch_id=batch.id if batch is not None else None,
         workouts_created=len(sessions),
         workouts_skipped=len(plan.sessions) - len(sessions),
         exercises_created=exercises_created,
@@ -785,3 +836,25 @@ def export_workouts(workouts: list[TrainingWorkout]) -> str:
                     )
                 )
     return output.getvalue()
+
+
+def measurement_snapshot(item: BodyMeasurement) -> dict:
+    return {
+        "id": item.id,
+        "measurement_date": item.measurement_date.isoformat(),
+        "weight_kg": item.weight_kg,
+        "body_fat_pct": item.body_fat_pct,
+        "notes": item.notes,
+    }
+
+
+def exercise_snapshot(item: Exercise) -> dict:
+    return {
+        "id": item.id,
+        "name": item.name,
+        "category": item.category.value,
+        "kind": item.kind.value,
+        "muscle_group": item.muscle_group,
+        "equipment": item.equipment,
+        "is_favorite": item.is_favorite,
+    }

@@ -1317,6 +1317,33 @@ describe('finishing workouts in the background', () => {
 });
 
 describe('cardio set editing defaults', () => {
+  it('shows a personal-zone text result after saving cardio inside a workout', async () => {
+    const saved = remoteWorkout();
+    saved.movements[0].exercise = { ...bench, kind: 'cardio' };
+    vi.spyOn(api, 'cardioOverview').mockResolvedValue({
+      cardio_preferences: {
+        heart_rate_zones: [{ zone: 2, min_bpm: 110, max_bpm: 139 }],
+        goals: [{ zone: 2, minutes: 150 }],
+      },
+      sessions: [
+        {
+          source_workout_id: saved.id,
+          zone: 'Zone 2',
+          average_heart_rate_bpm: 120,
+          duration_minutes: 30,
+        },
+      ],
+    } as import('./types').CardioOverview);
+    vi.mocked(api.createWorkout).mockResolvedValue(saved);
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    await confirmFinish();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Zone 2 · 120 bpm average (110–139 bpm). 30 min added to your Zone 2 goal.',
+    );
+    expect(document.querySelector('.app-notification-toast svg')).toBeNull();
+  });
+
   const treadmill: Exercise = {
     ...bench,
     id: 'treadmill',

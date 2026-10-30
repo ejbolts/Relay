@@ -27,14 +27,22 @@ from .account_limits import (
     load_account_limits,
     refuse,
 )
-from .auth import CurrentUser, get_current_user
+from .auth import CurrentUser, as_utc, get_current_user
 from .body_measurement_csv import export_body_measurements, import_body_measurements
 from .cardio_energy import cardio_energy_periods
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
+from .cardio_zones import (
+    CardioPreferences,
+    cardio_goal_weeks,
+    cardio_preferences,
+    classify_session,
+    effective_zone,
+)
 from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
 from .exercise_aliases import canonical_exercise_name
+from .machine_photos import canonical_photo, merge_machine_photos
 from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
     BodyMeasurement,
@@ -43,6 +51,7 @@ from .models import (
     Exercise,
     ExerciseKind,
     ExerciseMuscleContribution,
+    ImportBatch,
     MachinePhoto,
     MuscleRole,
     PersonalRecord,
@@ -61,7 +70,15 @@ from .photo_storage import (
     store_machine_photo,
 )
 from .processing import backfill_completed_video_links
-from .tracker_csv import CsvImportError, ImportPlan, export_workouts, import_workouts, plan_import
+from .tracker_csv import (
+    CsvImportError,
+    ImportPlan,
+    exercise_snapshot,
+    export_workouts,
+    import_workouts,
+    measurement_snapshot,
+    plan_import,
+)
 from .tracker_schemas import (
     BodyMeasurementCreate,
     BodyMeasurementCsvImportRead,
@@ -89,7 +106,10 @@ from .tracker_schemas import (
     ExerciseRead,
     ExerciseTrendPointRead,
     HeatmapDay,
+    ImportBatchRead,
+    ImportUndoRead,
     MachinePhotoCaptionUpdate,
+    MachinePhotoMerge,
     MachinePhotoRead,
     MachinePhotoUsageRead,
     MuscleFrequencyRead,
@@ -499,7 +519,9 @@ def workout_options():
         .selectinload(WorkoutMovement.exercise)
         .selectinload(Exercise.muscle_contributions),
         selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.sets),
-        selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.machine_photos),
+        selectinload(TrainingWorkout.movements)
+        .selectinload(WorkoutMovement.machine_photos)
+        .selectinload(MachinePhoto.merged_photos),
         selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.superset_group),
     )
 
@@ -516,9 +538,16 @@ def load_workout(db: Session, user_id: str, workout_id: str) -> TrainingWorkout:
 
 
 def replace_workout_contents(
-    db: Session, user_id: str, workout: TrainingWorkout, payload: TrainingWorkoutCreate
+    db: Session,
+    user_id: str,
+    workout: TrainingWorkout,
+    payload: TrainingWorkoutCreate,
+    *,
+    is_new: bool = False,
 ) -> None:
-    assign_workout_type(db, user_id, workout, payload)
+    # New saves already have a reserved ID for retry recovery; that does not
+    # make them historical workouts eligible to keep an archived type.
+    assign_workout_type(db, user_id, workout, payload, allow_archived=not is_new)
     workout.name = payload.name
     workout.workout_date = payload.workout_date
     workout.category = payload.category
@@ -560,13 +589,15 @@ def replace_workout_contents(
         if movement_payload.machine_photo_ids:
             photos = list(
                 db.scalars(
-                    select(MachinePhoto).where(
+                    select(MachinePhoto)
+                    .where(
                         MachinePhoto.id.in_(movement_payload.machine_photo_ids),
                         MachinePhoto.user_id == user_id,
                     )
+                    .execution_options(populate_existing=True)
                 )
             )
-            photos_by_id = {photo.id: photo for photo in photos}
+            photos_by_id = {photo.id: canonical_photo(db, photo) for photo in photos}
             missing = [
                 photo_id
                 for photo_id in movement_payload.machine_photo_ids
@@ -579,9 +610,12 @@ def replace_workout_contents(
                     status_code=422,
                     detail="Machine photos must belong to the movement's exercise.",
                 )
-            movement.machine_photos = [
-                photos_by_id[photo_id] for photo_id in movement_payload.machine_photo_ids
-            ]
+            movement.machine_photos = list(
+                {
+                    photos_by_id[photo_id].id: photos_by_id[photo_id]
+                    for photo_id in movement_payload.machine_photo_ids
+                }.values()
+            )
         for set_index, set_payload in enumerate(movement_payload.sets):
             movement.sets.append(WorkoutSet(order_index=set_index, **set_payload.model_dump()))
         workout.movements.append(movement)
@@ -693,9 +727,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             )
         )
         session.intensity = "Imported from workout"
-        if created:
-            session.zone = "Zone 2"
-            session.qualifies_zone2 = True
+        classify_session(session, cardio_preferences(db, workout.user_id), new=created)
         session.notes = movement.notes
     for movement_index, session in existing.items():
         if movement_index not in imported_indexes:
@@ -924,8 +956,8 @@ def list_all_machine_photos(db: DbSession, user: CurrentUser) -> list[MachinePho
     photos = list(
         db.scalars(
             select(MachinePhoto)
-            .where(MachinePhoto.user_id == user.id)
-            .options(selectinload(MachinePhoto.exercise))
+            .where(MachinePhoto.user_id == user.id, MachinePhoto.merged_into_id.is_(None))
+            .options(selectinload(MachinePhoto.exercise), selectinload(MachinePhoto.merged_photos))
             .order_by(MachinePhoto.created_at.desc())
         )
     )
@@ -940,8 +972,10 @@ def list_machine_photo_workouts(
     photo_id: str, db: DbSession, user: CurrentUser
 ) -> list[TrainingWorkout]:
     """Saved workouts where this machine was pinned, newest first."""
-    if not get_owned(db, MachinePhoto, photo_id, user.id):
+    photo = get_owned(db, MachinePhoto, photo_id, user.id)
+    if not photo:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    photo_id = canonical_photo(db, photo).id
     pinned_workout_ids = (
         select(WorkoutMovement.workout_id)
         .join(
@@ -969,8 +1003,12 @@ def list_machine_photos(
     photos = list(
         db.scalars(
             select(MachinePhoto)
-            .where(MachinePhoto.exercise_id == exercise_id, MachinePhoto.user_id == user.id)
-            .options(selectinload(MachinePhoto.exercise))
+            .where(
+                MachinePhoto.exercise_id == exercise_id,
+                MachinePhoto.user_id == user.id,
+                MachinePhoto.merged_into_id.is_(None),
+            )
+            .options(selectinload(MachinePhoto.exercise), selectinload(MachinePhoto.merged_photos))
             .order_by(MachinePhoto.created_at.desc())
         )
     )
@@ -1083,6 +1121,24 @@ async def upload_machine_photo(
         raise
 
 
+@router.post(
+    "/exercises/{exercise_id}/machine-photos/merge",
+    response_model=MachinePhotoUsageRead,
+    dependencies=[Depends(limit_save_rate)],
+)
+def merge_saved_machine_photos(
+    exercise_id: str, payload: MachinePhotoMerge, db: DbSession, user: CurrentUser
+) -> MachinePhotoUsageRead:
+    if not get_owned(db, Exercise, exercise_id, user.id):
+        raise HTTPException(404, "Exercise was not found.")
+    photo = merge_machine_photos(
+        db, user.id, exercise_id, payload.photo_ids, payload.keep_photo_id, payload.caption
+    )
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return machine_photo_usage(db, user.id, [photo])[0]
+
+
 @router.patch("/machine-photos/{photo_id}", response_model=MachinePhotoRead)
 def update_machine_photo_caption(
     photo_id: str, payload: MachinePhotoCaptionUpdate, db: DbSession, user: CurrentUser
@@ -1090,6 +1146,7 @@ def update_machine_photo_caption(
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    photo = canonical_photo(db, photo)
     photo.caption = payload.caption
     bump_workout_cache_revision(db, user.id)
     db.commit()
@@ -1127,9 +1184,14 @@ def delete_machine_photo(
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
         raise HTTPException(status_code=404, detail="Machine photo was not found.")
+    if photo.merged_into_id is not None:
+        raise HTTPException(
+            409, "This photo belongs to a merged machine. Delete the machine instead."
+        )
+    images = photo.images
     reference = db.scalar(
         select(movement_machine_photos.c.movement_id)
-        .where(movement_machine_photos.c.machine_photo_id == photo_id)
+        .where(movement_machine_photos.c.machine_photo_id.in_([image.id for image in images]))
         .limit(1)
     )
     if reference:
@@ -1137,11 +1199,11 @@ def delete_machine_photo(
             status_code=409,
             detail="Remove this photo from its workouts before deleting it.",
         )
-    full_filename = photo.full_filename
-    thumbnail_filename = photo.thumbnail_filename
+    files = [(image.full_filename, image.thumbnail_filename) for image in images]
     db.delete(photo)
     db.commit()
-    delete_machine_photo_files(settings, full_filename, thumbnail_filename)
+    for full_filename, thumbnail_filename in files:
+        delete_machine_photo_files(settings, full_filename, thumbnail_filename)
 
 
 def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
@@ -1153,6 +1215,11 @@ def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
         zone2_goal = max(1, int(get_setting(db, user_id, "zone2_goal_minutes", "150")))
     except ValueError:
         zone2_goal = 150
+    if get_setting(db, user_id, "cardio_preferences", ""):
+        zone2_goal = next(
+            (goal.minutes for goal in cardio_preferences(db, user_id).goals if goal.zone == 2),
+            150,
+        )
     try:
         muscle_set_goal = int(get_setting(db, user_id, "weekly_muscle_set_goal", "10"))
         if not 1 <= muscle_set_goal <= 1000:
@@ -1171,12 +1238,14 @@ def zone2_week(
     sessions: list[CardioSession],
     week: date,
     goal: int,
+    preferences: CardioPreferences,
 ) -> Zone2WeekRead:
     end = week + timedelta(days=6)
     session_minutes = sum(
         item.duration_minutes
         for item in sessions
-        if item.qualifies_zone2 and week <= item.session_date <= min(end, date.today())
+        if effective_zone(item, preferences) == 2
+        and week <= item.session_date <= min(end, date.today())
     )
     completed = session_minutes
     return Zone2WeekRead(
@@ -1185,8 +1254,8 @@ def zone2_week(
         goal_minutes=goal,
         completed_minutes=completed,
         remaining_minutes=max(0, goal - completed),
-        percentage=round(min(completed / goal * 100, 100), 1),
-        complete=completed >= goal,
+        percentage=round(min(completed / goal * 100, 100), 1) if goal else 0,
+        complete=goal > 0 and completed >= goal,
     )
 
 
@@ -1324,6 +1393,25 @@ def update_training_preferences(
     return training_preferences(db, user.id)
 
 
+@router.get("/cardio-preferences", response_model=CardioPreferences)
+def get_cardio_preferences(db: DbSession, user: CurrentUser) -> CardioPreferences:
+    return cardio_preferences(db, user.id)
+
+
+@router.put("/cardio-preferences", response_model=CardioPreferences)
+def update_cardio_preferences(
+    payload: CardioPreferences, db: DbSession, user: CurrentUser
+) -> CardioPreferences:
+    set_setting(db, user.id, "cardio_preferences", payload.model_dump_json())
+    zone2_goal = next((goal.minutes for goal in payload.goals if goal.zone == 2), 150)
+    set_setting(db, user.id, "zone2_goal_minutes", str(zone2_goal))
+    for session in db.scalars(select(CardioSession).where(CardioSession.user_id == user.id)):
+        classify_session(session, payload)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return payload
+
+
 @router.get("/cardio", response_model=CardioOverviewRead)
 def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
     preferences = training_preferences(db, user.id)
@@ -1340,14 +1428,20 @@ def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
         )
     )
     current_start = start_of_week(date.today(), preferences.week_start)
+    personal = cardio_preferences(db, user.id)
+    for session in sessions:
+        classify_session(session, personal)
     return CardioOverviewRead(
+        cardio_preferences=personal,
+        goal_weeks=cardio_goal_weeks(sessions, current_start, personal, date.today()),
         preferences=preferences,
-        current_week=zone2_week(sessions, current_start, preferences.zone2_goal_minutes),
+        current_week=zone2_week(sessions, current_start, preferences.zone2_goal_minutes, personal),
         previous_weeks=[
             zone2_week(
                 sessions,
                 current_start - timedelta(days=7 * offset),
                 preferences.zone2_goal_minutes,
+                personal,
             )
             for offset in range(1, 9)
         ],
@@ -1440,6 +1534,7 @@ def create_cardio_session(
             source_movement_index=0,
         )
         db.add(session)
+        classify_session(session, cardio_preferences(db, user.id), new=True)
         rebuild_personal_records(db, user.id)
         bump_workout_cache_revision(db, user.id)
         db.commit()
@@ -1447,6 +1542,7 @@ def create_cardio_session(
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
+    classify_session(session, cardio_preferences(db, user.id), new=True)
     db.add(session)
     bump_workout_cache_revision(db, user.id)
     db.commit()
@@ -1475,7 +1571,11 @@ def update_cardio_session(
     for key, value in payload.model_dump(exclude={"exercise_id"}).items():
         if key in optional_metrics and key not in payload.model_fields_set:
             continue
+        # Zones come from heart rate; only an explicit label replaces the saved zone.
+        if key in {"zone", "qualifies_zone2"} and payload.zone is None:
+            continue
         setattr(session, key, value)
+    classify_session(session, cardio_preferences(db, user.id))
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
@@ -1575,6 +1675,7 @@ def update_cardio_metrics(
         raise HTTPException(status_code=404, detail="Cardio session was not found.")
     for key in payload.model_fields_set:
         setattr(session, key, getattr(payload, key))
+    classify_session(session, cardio_preferences(db, user.id))
     if sync_cardio_session_metrics_to_workout_sets(db, session, payload.model_fields_set):
         rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
@@ -1908,7 +2009,7 @@ def create_workout(
         if existing is not None:
             return existing
         raise
-    replace_workout_contents(db, user.id, workout, payload)
+    replace_workout_contents(db, user.id, workout, payload, is_new=True)
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
@@ -1964,7 +2065,9 @@ async def read_workout_csv(file: UploadFile) -> bytes:
     return raw
 
 
-def check_import_plan(db: Session, user: User, limits: AccountLimits, plan: ImportPlan) -> None:
+def check_import_plan(
+    db: Session, user: User, limits: AccountLimits, plan: ImportPlan, *, reviewing: bool = False
+) -> None:
     additions = [session for session in plan.sessions if not session.duplicate]
     if additions and not user.is_admin:
         count = db.scalar(
@@ -1972,7 +2075,8 @@ def check_import_plan(db: Session, user: User, limits: AccountLimits, plan: Impo
         )
         if count + len(additions) > limits.workouts_per_account:
             raise refuse(user, "workouts_per_account", IMPORT_NOT_SAVED)
-    if plan.new_exercises and not user.is_admin:
+    # Review must remain available when mapping can avoid creating custom entries.
+    if plan.new_exercises and not user.is_admin and not reviewing:
         count = db.scalar(
             select(func.count(Exercise.id)).where(
                 Exercise.user_id == user.id, Exercise.is_custom.is_(True)
@@ -1981,11 +2085,108 @@ def check_import_plan(db: Session, user: User, limits: AccountLimits, plan: Impo
         if count + len(plan.new_exercises) > limits.custom_exercises_per_account:
             raise refuse(user, "custom_exercises_per_account", IMPORT_NOT_SAVED)
     for session in additions:
-        exercises = {canonical_exercise_name(row.exercise_name).casefold() for row in session.rows}
+        exercises = {
+            row.exercise_id or canonical_exercise_name(row.exercise_name).casefold()
+            for row in session.rows
+        }
         if len(exercises) > limits.exercises_per_workout:
             raise refuse(user, "exercises_per_workout", IMPORT_NOT_SAVED)
         if len(session.rows) > limits.sets_per_workout:
             raise refuse(user, "sets_per_workout", IMPORT_NOT_SAVED)
+
+
+def parse_exercise_mappings(raw: str) -> dict[str, str]:
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError) as error:
+        raise CsvImportError("Exercise mappings must be a JSON object.") from error
+    if not isinstance(value, dict) or any(
+        not isinstance(key, str) or not isinstance(target, str) for key, target in value.items()
+    ):
+        raise CsvImportError("Exercise mappings must contain exercise names and IDs.")
+    return value
+
+
+@router.get("/workouts/import/batches", response_model=list[ImportBatchRead])
+def list_import_batches(db: DbSession, user: CurrentUser) -> list[ImportBatchRead]:
+    batches = db.scalars(
+        select(ImportBatch)
+        .where(ImportBatch.user_id == user.id)
+        .order_by(ImportBatch.created_at.desc(), ImportBatch.id.desc())
+    )
+    workout_ids = set(
+        db.scalars(select(TrainingWorkout.id).where(TrainingWorkout.user_id == user.id))
+    )
+    measurement_ids = set(
+        db.scalars(select(BodyMeasurement.id).where(BodyMeasurement.user_id == user.id))
+    )
+    return [
+        ImportBatchRead(
+            id=batch.id,
+            file_name=batch.file_name,
+            source=batch.source,
+            created_at=as_utc(batch.created_at),
+            workouts=len(set(batch.workout_ids) & workout_ids),
+            body_measurements=sum(item["id"] in measurement_ids for item in batch.measurements),
+        )
+        for batch in batches
+    ]
+
+
+@router.delete("/workouts/import/batches/{batch_id}", response_model=ImportUndoRead)
+def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> ImportUndoRead:
+    # Serialize undo with imports so another batch cannot claim entries being removed.
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    batch = get_owned(db, ImportBatch, batch_id, user.id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Import batch was not found.")
+    workouts = list(
+        db.scalars(
+            select(TrainingWorkout).where(
+                TrainingWorkout.user_id == user.id, TrainingWorkout.id.in_(batch.workout_ids)
+            )
+        )
+    )
+    for workout in workouts:
+        db.execute(
+            delete(CardioSession).where(
+                CardioSession.user_id == user.id, CardioSession.source_workout_id == workout.id
+            )
+        )
+        db.delete(workout)
+    removed = preserved = exercises_removed = 0
+    for snapshot in batch.measurements:
+        item = get_owned(db, BodyMeasurement, snapshot["id"], user.id)
+        if item is not None:
+            if measurement_snapshot(item) == snapshot:
+                db.delete(item)
+                removed += 1
+            else:
+                preserved += 1
+    db.flush()
+    for snapshot in batch.exercises:
+        exercise = get_owned(db, Exercise, snapshot["id"], user.id)
+        if (
+            exercise is not None
+            and exercise_snapshot(exercise) == snapshot
+            and not exercise.is_favorite
+            and not exercise.movements
+            and not exercise.machine_photos
+            and not exercise.muscle_contributions
+        ):
+            db.delete(exercise)
+            exercises_removed += 1
+    db.delete(batch)
+    db.flush()
+    rebuild_personal_records(db, user.id)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return ImportUndoRead(
+        workouts_removed=len(workouts),
+        body_measurements_removed=removed,
+        body_measurements_preserved=preserved,
+        exercises_removed=exercises_removed,
+    )
 
 
 @router.post("/workouts/import/preview", response_model=CsvImportPreviewRead)
@@ -1997,16 +2198,30 @@ async def preview_workout_csv(
     source: Annotated[Literal["gym", "strengthlevel", "hevy", "strong"], Form()] = "gym",
     weight_unit: Annotated[Literal["kg", "lb"], Form()] = "kg",
     distance_unit: Annotated[Literal["km", "mi"], Form()] = "km",
+    exercise_mappings: Annotated[str, Form()] = "{}",
 ) -> CsvImportPreviewRead:
     raw = await read_workout_csv(file)
     try:
         plan = plan_import(
-            db, user.id, raw, source=source, weight_unit=weight_unit, distance_unit=distance_unit
+            db,
+            user.id,
+            raw,
+            source=source,
+            weight_unit=weight_unit,
+            distance_unit=distance_unit,
+            exercise_mappings=parse_exercise_mappings(exercise_mappings),
         )
     except CsvImportError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    check_import_plan(db, user, load_account_limits(db, settings), plan)
+    check_import_plan(db, user, load_account_limits(db, settings), plan, reviewing=True)
     return CsvImportPreviewRead(
+        exercise_matches=plan.exercise_matches,
+        available_exercises=[
+            {"id": item.id, "name": item.name, "kind": item.kind}
+            for item in db.scalars(
+                select(Exercise).where(Exercise.user_id == user.id).order_by(Exercise.name)
+            )
+        ],
         sessions=[
             CsvImportSessionRead(
                 workout_date=session.workout_date,
@@ -2040,19 +2255,35 @@ async def import_workout_csv(
     source: Annotated[Literal["gym", "strengthlevel", "hevy", "strong"], Form()] = "gym",
     weight_unit: Annotated[Literal["kg", "lb"], Form()] = "kg",
     distance_unit: Annotated[Literal["km", "mi"], Form()] = "km",
+    exercise_mappings: Annotated[str, Form()] = "{}",
 ) -> CsvImportRead:
     raw = await read_workout_csv(file)
     try:
         # Serialize comparison and writes, including two imports that finish together.
         db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         plan = plan_import(
-            db, user.id, raw, source=source, weight_unit=weight_unit, distance_unit=distance_unit
+            db,
+            user.id,
+            raw,
+            source=source,
+            weight_unit=weight_unit,
+            distance_unit=distance_unit,
+            exercise_mappings=parse_exercise_mappings(exercise_mappings),
         )
         check_import_plan(db, user, load_account_limits(db, settings), plan)
         summary = import_workouts(
-            db, user.id, raw, plan=plan, on_workout=sync_workout_cardio_sessions
+            db,
+            user.id,
+            raw,
+            plan=plan,
+            on_workout=sync_workout_cardio_sessions,
+            batch=ImportBatch(
+                user_id=user.id,
+                file_name=(file.filename or "Import").replace("\\", "/").split("/")[-1][:200],
+                source=source,
+            ),
         )
-        if summary.workouts_created:
+        if summary.workouts_created or summary.body_measurements_created:
             rebuild_personal_records(db, user.id)
             bump_workout_cache_revision(db, user.id)
         db.commit()
@@ -2419,6 +2650,9 @@ def dashboard(
     )
     muscle_totals = muscle_volume(workouts, week_start, today)
     return DashboardRead(
+        cardio_goals=cardio_goal_weeks(
+            cardio_sessions, cardio_week_start, cardio_preferences(db, user.id), today
+        ),
         workouts_this_week=len(this_week),
         sets_this_week=sum(len(completed_working_sets(workout)) for workout in this_week),
         volume_this_week_kg=round(volume_this_week, 1),
@@ -2441,6 +2675,7 @@ def dashboard(
             cardio_sessions,
             cardio_week_start,
             preferences.zone2_goal_minutes,
+            cardio_preferences(db, user.id),
         ),
         recent_workouts=workouts[:5],
         history=workout_history_summary(db, user.id),
