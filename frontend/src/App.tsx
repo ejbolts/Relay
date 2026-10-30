@@ -5604,7 +5604,7 @@ function MachinePhotoChooser({
     ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
     : photos.length > 0
       ? `${photos.length} saved · none pinned`
-      : 'Take or choose a photo';
+      : '';
 
   return (
     <details
@@ -5632,7 +5632,7 @@ function MachinePhotoChooser({
         )}
         <span className="machine-photo-summary-copy">
           <strong>Equipment photo</strong>
-          <small>{photoSummary}</small>
+          {photoSummary && <small>{photoSummary}</small>}
         </span>
         {selectedIds.length > 0 && <b>{selectedIds.length} pinned</b>}
         <span className="machine-photo-chevron" aria-hidden="true">
