@@ -43,6 +43,14 @@
   },
   "highlights": [
     {
+      "title": "Keep logging offline",
+      "description": "After signing in once, Relay opens from an encrypted copy saved on your device when the server can't be reached. Log and finish workouts while Offline shows; they sync when it reconnects.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b5508096d20c7142eb37d740749f94dcc76e5853/docs/screenshots/releases/1.1.0-offline-mode.png",
+        "alt": "Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats. Isolated sample data."
+      }
+    },
+    {
       "title": "Merge duplicate machine photos",
       "description": "Choose Select in Equipment photo, pick duplicates and review Merge. Keep every photo and saved workout link together; recorded workout settings stay unchanged.",
       "image": {
