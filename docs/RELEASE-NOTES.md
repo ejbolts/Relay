@@ -8,6 +8,18 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Find friends and improve your workouts
 
+![Lying Leg Curl showing only Last Sun 25 Oct beneath its name, followed by Equipment photo without a helper line](screenshots/releases/1.1.0-exercise-date-only.png)
+
+_Workout exercise headers keep the last-performed date without repeating previous weights and reps. Equipment photo omits the Take or choose a photo prompt. Isolated synthetic workout._
+
+![Equipment photo with a grey 1 pinned pill beside the sample machine name](screenshots/releases/1.1.0-grey-pinned-photo.png)
+
+_The pinned-count pill uses a grey background that follows light and dark mode. Isolated sample machine with an exercise-library illustration._
+
+![Exercise library with Custom and Cable filters showing a sample custom cable curl](screenshots/releases/1.1.0-exercise-equipment.png)
+
+_Combine the **Custom** pill, equipment filter and search to find your exercises. The library includes 83 strength exercises across ten equipment types; each variant keeps separate progress. Isolated synthetic account._
+
 ![Your splits after activating a plan, showing its Active badge and blue border without a success popup](screenshots/releases/1.1.0-split-activation.png)
 
 _Templates already saved with the same workout/rest cycle are disabled. Changing their saved days or deleting the copy makes them available again. Activation updates the badge and blue border without a success popup; the active card keeps its seven-day/calendar preview. Isolated sample data._
@@ -132,9 +144,13 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _The circular Start button matches its workout choices. Isolated sample data._
 
+- **Find the right equipment variant:** Filter by equipment in Training > Exercises and the workout picker. Search `bicep curl cable`, `dumbbells curl` or `DB curl` in any word order. Equipment, muscle, workout category, favourites and recent filters work together. Added 44 common strength exercises (83 total), covering barbell, dumbbell, cable, machine, Smith machine, EZ bar, trap bar, kettlebell, resistance band and bodyweight. Existing IDs, custom exercises, favourites and history are preserved; each variant has its own progress. The **Custom** pill works alongside the other filters in both lists. Exact-name and recognised-alias custom entries are reused; only missing equipment is filled, leaving explicit equipment and muscle credits intact. Ambiguous names stay separate.
+
 - **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
 - **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
 - The 18.9 comparison is labelled Population average and 22.6 is labelled Competitive bodybuilder. Body shows your FFMI on a 17 to 29 comparison scale alongside a Model reference benchmark. The reference is based on groups of trained lifters and uses the selected profile; it is not a prediction of your genetic limit or a general-public average. Reference lean mass, reference weight at your target body fat and the lean mass gap use the same model. Both existing question-marks offer brief help and an in-app Learn more explanation, now summarised without named studies or external source links. Tap the single sex icon beside FFMI to switch between male and female models, save the selection to your account and recalculate the scale. Height, wrist, ankle and target body fat stay saved when switching models, including through Edit.
+
+- Workout exercise headers show only the last-performed date, without the previous weights and reps beside it. **Equipment photo** no longer shows **Take or choose a photo** when no photos are saved, and its pinned-count pill has a grey background.
 - In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
 
 - Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.

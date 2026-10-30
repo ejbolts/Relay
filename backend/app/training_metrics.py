@@ -202,6 +202,60 @@ DEFAULT_MUSCLE_MAPPING: dict[str, tuple[tuple[str, MuscleRole, float], ...]] = {
     ),
 }
 
+# Equivalent movements on different equipment keep the same muscle-set accounting.
+DEFAULT_MUSCLE_MAPPING["Dumbbell Bench Press"] = DEFAULT_MUSCLE_MAPPING["Barbell Bench Press"]
+DEFAULT_MUSCLE_MAPPING["Incline Barbell Bench Press"] = DEFAULT_MUSCLE_MAPPING[
+    "Barbell Bench Press"
+]
+DEFAULT_MUSCLE_MAPPING["Machine Chest Press"] = DEFAULT_MUSCLE_MAPPING["Barbell Bench Press"]
+DEFAULT_MUSCLE_MAPPING["Smith Machine Bench Press"] = DEFAULT_MUSCLE_MAPPING["Barbell Bench Press"]
+DEFAULT_MUSCLE_MAPPING["Push-up"] = DEFAULT_MUSCLE_MAPPING["Barbell Bench Press"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Fly"] = DEFAULT_MUSCLE_MAPPING["Cable Fly"]
+DEFAULT_MUSCLE_MAPPING["Cable Lateral Raise"] = DEFAULT_MUSCLE_MAPPING["Lateral Raise"]
+DEFAULT_MUSCLE_MAPPING["Machine Lateral Raise"] = DEFAULT_MUSCLE_MAPPING["Lateral Raise"]
+DEFAULT_MUSCLE_MAPPING["Machine Shoulder Press"] = DEFAULT_MUSCLE_MAPPING["Dumbbell Shoulder Press"]
+DEFAULT_MUSCLE_MAPPING["Smith Machine Shoulder Press"] = DEFAULT_MUSCLE_MAPPING[
+    "Dumbbell Shoulder Press"
+]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Triceps Extension"] = DEFAULT_MUSCLE_MAPPING["Triceps Pushdown"]
+DEFAULT_MUSCLE_MAPPING["Overhead Cable Triceps Extension"] = DEFAULT_MUSCLE_MAPPING[
+    "Triceps Pushdown"
+]
+DEFAULT_MUSCLE_MAPPING["EZ Bar Skullcrusher"] = DEFAULT_MUSCLE_MAPPING["Triceps Pushdown"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Row"] = DEFAULT_MUSCLE_MAPPING["Barbell Row"]
+DEFAULT_MUSCLE_MAPPING["Chest-Supported Dumbbell Row"] = DEFAULT_MUSCLE_MAPPING[
+    "Seated Machine Row"
+]
+DEFAULT_MUSCLE_MAPPING["Band Row"] = DEFAULT_MUSCLE_MAPPING["Seated Cable Row"]
+DEFAULT_MUSCLE_MAPPING["Single-Arm Cable Lat Pulldown"] = DEFAULT_MUSCLE_MAPPING["Lat Pulldown"]
+DEFAULT_MUSCLE_MAPPING["Machine Lat Pulldown"] = DEFAULT_MUSCLE_MAPPING["Lat Pulldown"]
+DEFAULT_MUSCLE_MAPPING["Chin-up"] = DEFAULT_MUSCLE_MAPPING["Lat Pulldown"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Reverse Fly"] = DEFAULT_MUSCLE_MAPPING["Face Pull"]
+DEFAULT_MUSCLE_MAPPING["Reverse Pec Deck"] = DEFAULT_MUSCLE_MAPPING["Face Pull"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["Incline Dumbbell Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["Cable Biceps Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["Single-Arm Cable Biceps Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["Cable Hammer Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["EZ Bar Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["Band Biceps Curl"] = DEFAULT_MUSCLE_MAPPING["Barbell Curl"]
+DEFAULT_MUSCLE_MAPPING["Trap Bar Deadlift"] = DEFAULT_MUSCLE_MAPPING["Deadlift"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Romanian Deadlift"] = DEFAULT_MUSCLE_MAPPING["Romanian Deadlift"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Goblet Squat"] = DEFAULT_MUSCLE_MAPPING["Back Squat"]
+DEFAULT_MUSCLE_MAPPING["Kettlebell Goblet Squat"] = DEFAULT_MUSCLE_MAPPING["Back Squat"]
+DEFAULT_MUSCLE_MAPPING["Bodyweight Squat"] = DEFAULT_MUSCLE_MAPPING["Back Squat"]
+DEFAULT_MUSCLE_MAPPING["Smith Machine Squat"] = DEFAULT_MUSCLE_MAPPING["Back Squat"]
+DEFAULT_MUSCLE_MAPPING["Hack Squat"] = DEFAULT_MUSCLE_MAPPING["Back Squat"]
+DEFAULT_MUSCLE_MAPPING["Dumbbell Lunge"] = DEFAULT_MUSCLE_MAPPING["Bulgarian Split Squat"]
+DEFAULT_MUSCLE_MAPPING["Machine Hip Thrust"] = DEFAULT_MUSCLE_MAPPING["Hip Thrust"]
+DEFAULT_MUSCLE_MAPPING["Seated Calf Raise"] = DEFAULT_MUSCLE_MAPPING["Standing Calf Raise"]
+DEFAULT_MUSCLE_MAPPING["Cable Crunch"] = DEFAULT_MUSCLE_MAPPING["Plank"]
+DEFAULT_MUSCLE_MAPPING["Crunch"] = DEFAULT_MUSCLE_MAPPING["Plank"]
+DEFAULT_MUSCLE_MAPPING["Straight-Arm Cable Pulldown"] = (("Lats", MuscleRole.PRIMARY, 1.0),)
+DEFAULT_MUSCLE_MAPPING["Dumbbell Pullover"] = (("Lats", MuscleRole.PRIMARY, 1.0),)
+DEFAULT_MUSCLE_MAPPING["Cable Glute Kickback"] = (("Glutes", MuscleRole.PRIMARY, 1.0),)
+DEFAULT_MUSCLE_MAPPING["Hip Abduction Machine"] = (("Glutes", MuscleRole.PRIMARY, 1.0),)
+
 MUSCLE_GROUP_ALIASES = {
     "Upper back": "Mid / Upper Back",
     "Upper pectorals": "Pectorals",
