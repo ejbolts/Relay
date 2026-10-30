@@ -12,6 +12,10 @@ _Relay was called Gym Logger before version 1.0._
 
 _Workout exercise headers keep the last-performed date without repeating previous weights and reps. Equipment photo omits the Take or choose a photo prompt. Isolated synthetic workout._
 
+![Equipment photo with a grey 1 pinned pill beside the sample machine name](screenshots/releases/1.1.0-grey-pinned-photo.png)
+
+_The pinned-count pill uses a grey background that follows light and dark mode. Isolated sample machine with an exercise-library illustration._
+
 ![Exercise library with Custom and Cable filters showing a sample custom cable curl](screenshots/releases/1.1.0-exercise-equipment.png)
 
 _Combine the **Custom** pill, equipment filter and search to find your exercises. The library includes 83 strength exercises across ten equipment types; each variant keeps separate progress. Isolated synthetic account._
@@ -132,7 +136,7 @@ _The circular Start button matches its workout choices. Isolated sample data._
 
 - **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
 
-- Workout exercise headers show only the last-performed date, without the previous weights and reps beside it. **Equipment photo** no longer shows **Take or choose a photo** when no photos are saved.
+- Workout exercise headers show only the last-performed date, without the previous weights and reps beside it. **Equipment photo** no longer shows **Take or choose a photo** when no photos are saved, and its pinned-count pill has a grey background.
 - In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
 
 - Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.
