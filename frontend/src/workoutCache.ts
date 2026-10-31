@@ -1,112 +1,83 @@
+import { readLastUser } from './deviceAccount';
+import { clearOffline, deleteOffline, readOffline, writeOffline } from './offlineStore';
 import type { DashboardData, TrackedWorkout } from './types';
 
-const DATABASE_NAME = 'gym-video-logger-cache';
-const DATABASE_VERSION = 1;
-const STORE_NAME = 'snapshots';
-const WORKOUT_CACHE_KEY = 'workouts-v1';
-const DASHBOARD_CACHE_KEY = 'dashboard-v1';
+const WORKOUT_CACHE_KEY = 'workouts-v2';
+export const DASHBOARD_CACHE_KEY = 'dashboard-v2';
+/** Unencrypted snapshots written by earlier releases. */
+const LEGACY_CACHE_KEYS = ['workouts-v1', 'dashboard-v1'];
 
 export interface CachedWorkoutSnapshot {
   revision: string;
   workouts: TrackedWorkout[];
-  /** The oldest workout date the snapshot covers; caches from earlier releases hold everything. */
-  since?: string;
+  /** The oldest workout date the snapshot covers. */
+  since: string;
 }
 
-async function readCacheValue<T>(key: string): Promise<T | null> {
-  try {
-    const database = await openCacheDatabase();
-    if (!database) return null;
-    return await new Promise((resolve, reject) => {
-      const transaction = database.transaction(STORE_NAME, 'readonly');
-      const request = transaction.objectStore(STORE_NAME).get(key);
-      request.onsuccess = () => resolve((request.result as T | undefined) ?? null);
-      request.onerror = () => reject(request.error);
-      transaction.oncomplete = () => database.close();
-    });
-  } catch {
-    return null;
+let legacyRemoved = false;
+
+async function readAccountValue<T>(key: string): Promise<T | null> {
+  const owner = readLastUser()?.id;
+  if (!owner) return null;
+  return (await readOffline<T>(key, owner))?.value ?? null;
+}
+
+async function writeAccountValue(key: string, value: unknown): Promise<void> {
+  const owner = readLastUser()?.id;
+  if (!owner) return;
+  if (!legacyRemoved) {
+    legacyRemoved = true;
+    await deleteOffline(LEGACY_CACHE_KEYS);
   }
+  await writeOffline(key, value, owner);
 }
 
-async function writeCacheValue<T>(key: string, value: T): Promise<void> {
-  try {
-    const database = await openCacheDatabase();
-    if (!database) return;
-    await new Promise<void>((resolve, reject) => {
-      const transaction = database.transaction(STORE_NAME, 'readwrite');
-      transaction.objectStore(STORE_NAME).put(value, key);
-      transaction.oncomplete = () => {
-        database.close();
-        resolve();
-      };
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
-  } catch {
-    // IndexedDB can be unavailable or full. The API remains the safe fallback.
-  }
-}
-
-function openCacheDatabase(): Promise<IDBDatabase | null> {
-  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+function isWorkoutSnapshot(value: unknown): value is CachedWorkoutSnapshot {
+  if (typeof value !== 'object' || value === null) return false;
+  const snapshot = value as Partial<CachedWorkoutSnapshot>;
+  return (
+    typeof snapshot.revision === 'string' &&
+    typeof snapshot.since === 'string' &&
+    Array.isArray(snapshot.workouts)
+  );
 }
 
 export async function readWorkoutCache(): Promise<CachedWorkoutSnapshot | null> {
-  return readCacheValue<CachedWorkoutSnapshot>(WORKOUT_CACHE_KEY);
+  const cached = await readAccountValue<unknown>(WORKOUT_CACHE_KEY);
+  return isWorkoutSnapshot(cached) ? cached : null;
 }
 
 export async function writeWorkoutCache(snapshot: CachedWorkoutSnapshot): Promise<void> {
-  return writeCacheValue(WORKOUT_CACHE_KEY, snapshot);
+  return writeAccountValue(WORKOUT_CACHE_KEY, snapshot);
 }
 
 export async function readDashboardCache(): Promise<DashboardData | null> {
-  return readCacheValue<DashboardData>(DASHBOARD_CACHE_KEY);
+  return readAccountValue<DashboardData>(DASHBOARD_CACHE_KEY);
 }
 
 export async function writeDashboardCache(dashboard: DashboardData): Promise<void> {
-  return writeCacheValue(DASHBOARD_CACHE_KEY, dashboard);
+  return writeAccountValue(DASHBOARD_CACHE_KEY, dashboard);
 }
 
-/** Removes every cached snapshot. Used when the signed-in account changes on this device. */
+/** Removes every saved record and its key. Used on sign-out and when the account changes. */
 export async function clearWorkoutCache(): Promise<void> {
-  try {
-    const database = await openCacheDatabase();
-    if (!database) return;
-    await new Promise<void>((resolve, reject) => {
-      const transaction = database.transaction(STORE_NAME, 'readwrite');
-      transaction.objectStore(STORE_NAME).clear();
-      transaction.oncomplete = () => {
-        database.close();
-        resolve();
-      };
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
-  } catch {
-    // Nothing to clear when IndexedDB is unavailable.
-  }
+  return clearOffline();
+}
+
+/** Cached workouts from `since` onwards, whatever their revision, when the cache reaches that far. */
+export function cachedWorkoutsSince(
+  cached: CachedWorkoutSnapshot | null,
+  since: string,
+): TrackedWorkout[] | null {
+  if (!cached || cached.since > since) return null;
+  return cached.workouts.filter((workout) => workout.workout_date >= since);
 }
 
 /** Cached workouts from `since` onwards, when the cache is current and reaches back that far. */
 export function cachedWorkoutsForRevision(
   cached: CachedWorkoutSnapshot | null,
   revision: string,
-  since?: string,
+  since: string,
 ): TrackedWorkout[] | null {
-  if (cached?.revision !== revision) return null;
-  if (since === undefined) return cached.since === undefined ? cached.workouts : null;
-  if (cached.since !== undefined && cached.since > since) return null;
-  return cached.workouts.filter((workout) => workout.workout_date >= since);
+  return cached?.revision === revision ? cachedWorkoutsSince(cached, since) : null;
 }

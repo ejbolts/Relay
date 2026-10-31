@@ -278,11 +278,11 @@ def test_login_logout_and_me(client):
     assert browser.post("/api/auth/logout").status_code == 204
     assert browser.get("/api/auth/me").status_code == 401
     with SessionLocal() as db:
-        assert db.scalar(select(func.count(UserSession.id))) == 1  # only the original browser
+        assert db.scalar(select(func.count(UserSession.id))) == 0
     # Logging out again, or while signed out, is harmless.
     assert browser.post("/api/auth/logout").status_code == 204
-    # The first browser is unaffected.
-    assert client.get("/api/auth/me").status_code == 200
+    # Signing out ends the account's sessions on every browser/device.
+    assert client.get("/api/auth/me").status_code == 401
 
 
 def test_logout_revokes_the_server_side_session_even_if_the_cookie_is_replayed(client):
@@ -825,6 +825,7 @@ ACCOUNT_TABLES = {
     "workout_reactions",
     "workout_comments",
     "comment_reactions",
+    "live_workouts",
 }
 
 

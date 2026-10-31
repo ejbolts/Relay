@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .cardio_zones import CardioGoalWeek, CardioPreferences
 from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
@@ -14,7 +15,7 @@ from .models import (
     SetType,
     WorkoutCategory,
 )
-from .training_metrics import MUSCLE_GROUP_ALIASES, muscle_credits
+from .training_metrics import MUSCLE_GROUP_ALIASES, muscle_credits, partial_sets_enabled_on
 
 
 class MuscleContributionRead(BaseModel):
@@ -70,6 +71,12 @@ class MuscleSetCreditRead(BaseModel):
     sets: float
 
 
+class ExercisePartialSetWeekRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    week_start: date
+    enabled: bool
+
+
 class ExerciseRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -81,7 +88,14 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
+    partial_set_weeks: list[ExercisePartialSetWeekRead] = []
     muscle_contributions: list[MuscleContributionRead] = []
+
+    @computed_field
+    @property
+    def partial_sets_enabled(self) -> bool:
+        return partial_sets_enabled_on(self, date.today())
 
     @computed_field
     @property
@@ -90,6 +104,19 @@ class ExerciseRead(BaseModel):
         return [
             MuscleSetCreditRead(muscle_name=name, sets=sets) for name, sets in muscle_credits(self)
         ]
+
+    @computed_field
+    @property
+    def default_muscle_set_credits(self) -> list[MuscleSetCreditRead]:
+        return [
+            MuscleSetCreditRead(muscle_name=name, sets=sets)
+            for name, sets in muscle_credits(self, include_partial=True)
+        ]
+
+
+class ExercisePartialSetsUpdate(BaseModel):
+    partial_sets_enabled: bool
+    week_start: date | None = None
 
 
 class ExerciseFavoriteUpdate(BaseModel):
@@ -105,7 +132,7 @@ class MachinePhotoCaptionUpdate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
-class MachinePhotoRead(BaseModel):
+class MachinePhotoImageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -116,6 +143,22 @@ class MachinePhotoRead(BaseModel):
     width: int
     height: int
     created_at: datetime
+
+
+class MachinePhotoRead(MachinePhotoImageRead):
+    images: list[MachinePhotoImageRead] = Field(default_factory=list)
+
+
+class MachinePhotoMerge(MachinePhotoCaptionUpdate):
+    photo_ids: list[str] = Field(min_length=2, max_length=100)
+    keep_photo_id: str
+
+    @field_validator("photo_ids")
+    @classmethod
+    def unique_photo_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("Select different machine photos.")
+        return value
 
 
 class MachinePhotoUsageRead(MachinePhotoRead):
@@ -393,6 +436,82 @@ class WeeklyDayBreakdown(BaseModel):
     exercises: list[WeeklyExerciseBreakdown]
 
 
+class RoutineSet(BaseModel):
+    reps: int | None = Field(default=None, ge=0, le=10_000)
+    weight_kg: float | None = Field(default=None, ge=0, le=10_000)
+    duration_seconds: int | None = Field(default=None, ge=0, le=172_800)
+    distance_km: float | None = Field(default=None, ge=0, le=10_000)
+    rest_seconds: int | None = Field(default=None, ge=0, le=7_200)
+    set_type: SetType = SetType.NORMAL
+
+
+class RoutineMovement(BaseModel):
+    exercise_id: str
+    sets: list[RoutineSet] = Field(min_length=1, max_length=50)
+
+
+class RoutineMovementRead(RoutineMovement):
+    exercise: ExerciseRead
+
+
+class RoutineDay(BaseModel):
+    workout_type_id: str | None = None
+    movements: list[RoutineMovement] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def rest_has_no_exercises(self) -> RoutineDay:
+        if self.workout_type_id is None and self.movements:
+            raise ValueError("Rest days cannot contain exercises.")
+        return self
+
+
+class RoutineDayRead(RoutineDay):
+    workout_type: WorkoutTypeRead | None = None
+    movements: list[RoutineMovementRead] = []
+
+
+class RoutineInput(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    shared: bool = False
+    days: list[RoutineDay] = Field(min_length=1, max_length=28)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_routine_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def workout_days(self) -> RoutineInput:
+        workouts = [day for day in self.days if day.workout_type_id is not None]
+        if not workouts:
+            raise ValueError("Include at least one workout day.")
+        if self.shared and any(not day.movements for day in workouts):
+            raise ValueError("Add exercises to every workout day before sharing.")
+        if sum(len(day.movements) for day in self.days) > 200:
+            raise ValueError("A split can contain at most 200 exercises.")
+        if sum(len(m.sets) for day in self.days for m in day.movements) > 1000:
+            raise ValueError("A split can contain at most 1000 sets.")
+        return self
+
+
+class RoutineSchedule(BaseModel):
+    start_date: date
+    enabled: bool = True
+
+
+class RoutineSaveInput(RoutineInput):
+    schedule: RoutineSchedule | None = None
+
+
+class RoutineRead(RoutineInput):
+    id: str
+    days: list[RoutineDayRead]
+
+
+class RoutineActivation(BaseModel):
+    start_date: date
+
+
 class MuscleFrequencyRead(BaseModel):
     muscle_group: str
     sessions_last_7_days: int
@@ -410,6 +529,7 @@ class WorkoutRecommendationRead(BaseModel):
     needs_split_update: bool = False
     scheduled_date: date | None = None
     split_name: str | None = None
+    routine_day: RoutineDayRead | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):
@@ -623,6 +743,7 @@ class TrainingSplit(BaseModel):
     enabled: bool = True
     start_date: date
     steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
+    routine_id: str | None = None
 
     @field_validator("name", mode="before")
     @classmethod
@@ -647,6 +768,16 @@ class TrainingPreferencesRead(TrainingPreferencesUpdate):
     weekly_muscle_set_goal: int = 10
 
 
+class FfmiProfile(BaseModel):
+    """Body frame inputs for FFMI and natural muscular potential estimates."""
+
+    sex: Literal["male", "female"] | None = None
+    height_cm: float | None = Field(default=None, ge=100, le=250)
+    wrist_cm: float | None = Field(default=None, ge=10, le=30)
+    ankle_cm: float | None = Field(default=None, ge=12, le=40)
+    target_body_fat_pct: float = Field(default=10, ge=3, le=40)
+
+
 class WorkoutTypeColors(BaseModel):
     upper: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
     lower: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
@@ -668,6 +799,8 @@ class Zone2WeekRead(BaseModel):
 
 
 class CardioOverviewRead(BaseModel):
+    cardio_preferences: CardioPreferences
+    goal_weeks: list[CardioGoalWeek]
     preferences: TrainingPreferencesRead
     current_week: Zone2WeekRead
     previous_weeks: list[Zone2WeekRead]
@@ -676,6 +809,7 @@ class CardioOverviewRead(BaseModel):
 
 
 class DashboardRead(BaseModel):
+    cardio_goals: list[CardioGoalWeek]
     workouts_this_week: int
     sets_this_week: int
     volume_this_week_kg: float
@@ -736,6 +870,7 @@ class ExerciseLibrarySummaryRead(BaseModel):
 
 
 class CsvImportRead(BaseModel):
+    batch_id: str | None = None
     workouts_created: int
     workouts_skipped: int
     exercises_created: int
@@ -753,7 +888,37 @@ class CsvImportSessionRead(BaseModel):
     duplicate: bool
 
 
+class ImportExerciseMatch(BaseModel):
+    incoming_name: str
+    exercise_id: str | None
+    exercise_name: str
+
+
+class ImportExerciseChoice(BaseModel):
+    id: str
+    name: str
+    kind: ExerciseKind
+
+
+class ImportBatchRead(BaseModel):
+    id: str
+    file_name: str
+    source: str
+    created_at: datetime
+    workouts: int
+    body_measurements: int
+
+
+class ImportUndoRead(BaseModel):
+    workouts_removed: int
+    body_measurements_removed: int
+    body_measurements_preserved: int
+    exercises_removed: int
+
+
 class CsvImportPreviewRead(BaseModel):
+    exercise_matches: list[ImportExerciseMatch] = []
+    available_exercises: list[ImportExerciseChoice] = []
     sessions: list[CsvImportSessionRead]
     workouts_to_create: int
     workouts_to_skip: int

@@ -19,6 +19,7 @@ from .models import (
     WorkoutReaction,
     utc_now,
 )
+from .presence import hub
 from .sharing import (
     Db,
     FeedFriend,
@@ -209,6 +210,7 @@ def create_comment(workout_id: str, payload: CommentCreate, user: CurrentUser, d
     for recipient in recipients:
         notify(db, row, user.id, recipient, "reply" if target else "comment")
     db.commit()
+    hub.notifications_changed(*(recipients - {user.id}))
     return read_comment(db, user, row)
 
 
@@ -219,6 +221,7 @@ def edit_comment(comment_id: str, payload: CommentBody, user: CurrentUser, db: D
         raise api_error(403, "comment_owner_required", "You can only edit your own comments.")
     row.body, row.edited_at = payload.body, utc_now()
     db.commit()
+    hub.notifications_changed(*notice_recipients(db, row.workout_id))
     return read_comment(db, user, row)
 
 
@@ -227,8 +230,10 @@ def delete_comment(comment_id: str, user: CurrentUser, db: Db):
     row = checked_comment(db, user, comment_id)
     if row.user_id != user.id and db.get(TrainingWorkout, row.workout_id).user_id != user.id:
         raise api_error(403, "comment_owner_required", "You cannot delete that comment.")
+    recipients = notice_recipients(db, row.workout_id)
     db.delete(row)
     db.commit()
+    hub.notifications_changed(*recipients)
 
 
 @sharing_router.put("/comments/{comment_id}/reaction")
@@ -252,6 +257,8 @@ def react(comment_id: str, payload: ReactionChoice, user: CurrentUser, db: Db):
         notify(db, row, user.id, row.user_id, "comment_reaction", payload.reaction)
         try:
             db.commit()
+            if row.user_id != user.id:
+                hub.notifications_changed(row.user_id)
         except IntegrityError:
             db.rollback()
     return read_comment(db, user, row)
@@ -273,7 +280,20 @@ def unreact(comment_id: str, user: CurrentUser, db: Db):
         )
     )
     db.commit()
+    if row.user_id != user.id:
+        hub.notifications_changed(row.user_id)
     return read_comment(db, user, row)
+
+
+def notice_recipients(db, workout_id):
+    """Include reply recipients whose notices change when a thread is edited or deleted."""
+    return set(
+        db.scalars(
+            select(CommentNotification.recipient_id)
+            .join(WorkoutComment, WorkoutComment.id == CommentNotification.comment_id)
+            .where(WorkoutComment.workout_id == workout_id)
+        )
+    )
 
 
 def comment_notices(db, user):

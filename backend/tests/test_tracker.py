@@ -706,7 +706,9 @@ def test_csv_import_and_export_use_supplied_column_format(client):
     exported = client.get("/api/workouts/export.csv")
 
     assert imported.status_code == 201
-    assert imported.json() == {
+    summary = imported.json()
+    assert summary.pop("batch_id")
+    assert summary == {
         "workouts_created": 1,
         "workouts_skipped": 0,
         "exercises_created": 1,
@@ -1320,7 +1322,25 @@ def test_multiple_exercises_reordering_sets_and_supersets(client):
     assert client.post("/api/workouts", json=duplicate).status_code == 422
 
 
+def configure_cardio_zones(client):
+    ranges = [(80, 109), (110, 139), (140, 159), (160, 179), (180, 220)]
+    assert (
+        client.put(
+            "/api/cardio-preferences",
+            json={
+                "heart_rate_zones": [
+                    dict(zone=i + 1, min_bpm=low, max_bpm=high)
+                    for i, (low, high) in enumerate(ranges)
+                ],
+                "goals": [dict(zone=2, minutes=150)],
+            },
+        ).status_code
+        == 200
+    )
+
+
 def test_zone2_week_boundaries_edit_and_delete(client):
+    configure_cardio_zones(client)
     from datetime import timedelta
 
     today = date.today()
@@ -1330,6 +1350,7 @@ def test_zone2_week_boundaries_edit_and_delete(client):
         "activity_type": "Cycling",
         "duration_minutes": 60,
         "intensity": "Easy",
+        "average_heart_rate_bpm": 120,
         "zone": "Zone 2",
         "qualifies_zone2": True,
         "notes": None,
@@ -1339,7 +1360,13 @@ def test_zone2_week_boundaries_edit_and_delete(client):
         "session_date": (monday - timedelta(days=1)).isoformat(),
         "duration_minutes": 90,
     }
-    other = {**current, "duration_minutes": 40, "qualifies_zone2": False, "zone": "Zone 3"}
+    other = {
+        **current,
+        "duration_minutes": 40,
+        "qualifies_zone2": False,
+        "zone": "Zone 3",
+        "average_heart_rate_bpm": 150,
+    }
     current_id = client.post("/api/cardio", json=current).json()["id"]
     assert client.post("/api/cardio", json=previous).status_code == 201
     other_id = client.post("/api/cardio", json=other).json()["id"]
@@ -1359,6 +1386,7 @@ def test_zone2_week_boundaries_edit_and_delete(client):
 
 
 def test_cardio_form_session_creates_a_calendar_workout(client):
+    configure_cardio_zones(client)
     exercise = next(
         item
         for item in client.get("/api/exercises").json()
@@ -1370,6 +1398,7 @@ def test_cardio_form_session_creates_a_calendar_workout(client):
         "activity_type": exercise["name"],
         "duration_minutes": 35,
         "intensity": "This should not be stored",
+        "average_heart_rate_bpm": 150,
         "zone": "Zone 3",
         "qualifies_zone2": True,
         "notes": "Steady incline",
@@ -1402,6 +1431,7 @@ def test_cardio_form_session_creates_a_calendar_workout(client):
 
 
 def test_completed_treadmill_walking_workout_counts_toward_zone2(client):
+    configure_cardio_zones(client)
     exercise = next(
         item
         for item in client.get("/api/exercises").json()
@@ -1420,6 +1450,7 @@ def test_completed_treadmill_walking_workout_counts_toward_zone2(client):
                 "sets": [
                     {
                         "duration_seconds": 1_800,
+                        "average_heart_rate_bpm": 120,
                         "distance_km": 2.7,
                         "incline_percent": 12.5,
                         "speed_kph": 5.4,
@@ -1443,6 +1474,7 @@ def test_completed_treadmill_walking_workout_counts_toward_zone2(client):
 
 
 def test_completed_indoor_cycling_is_imported_as_read_only_cardio_session(client):
+    configure_cardio_zones(client)
     exercise = next(
         item for item in client.get("/api/exercises").json() if item["name"] == "Cycling (Indoor)"
     )
@@ -1459,6 +1491,7 @@ def test_completed_indoor_cycling_is_imported_as_read_only_cardio_session(client
                 "sets": [
                     {
                         "duration_seconds": 2_400,
+                        "average_heart_rate_bpm": 120,
                         "distance_km": 17.68,
                         "completed": True,
                     }

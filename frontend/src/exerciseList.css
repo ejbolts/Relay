@@ -7,11 +7,35 @@
 .exercise-list-library {
   margin-top: 0.75rem;
 }
-
-.page-header-title-row {
+.exercise-library-equipment {
+  margin-top: 0.65rem;
+}
+.exercise-picker-equipment {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0 1rem 0.8rem;
+}
+.exercise-library-equipment select,
+.exercise-picker-equipment select {
+  min-width: 0;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.page-header-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
 }
 
 .training-exercise-notice {
@@ -27,7 +51,6 @@
   gap: 0.5rem;
 }
 
-.training-add-exercise,
 .exercise-library-add {
   display: grid;
   place-items: center;
@@ -42,24 +65,15 @@
   color: #fff;
 }
 
-.training-add-exercise {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 10px;
-}
-
-.training-add-exercise .pulse-icon,
 .exercise-library-add .pulse-icon {
   width: 1.25rem;
   height: 1.25rem;
 }
 
-.training-add-exercise:hover,
 .exercise-library-add:hover {
   background: var(--p-accent-hover);
 }
 
-.training-add-exercise:focus-visible,
 .exercise-library-add:focus-visible {
   outline: 2px solid var(--p-accent-text);
   outline-offset: 3px;
@@ -123,7 +137,18 @@
   padding: 0.65rem 0 0.25rem;
   scrollbar-width: none;
 }
-.exercise-muscle-filters button {
+.exercise-library-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.65rem;
+}
+.exercise-library-filter-row .exercise-muscle-filters {
+  min-width: 0;
+  padding-top: 0;
+}
+.exercise-muscle-filters button,
+.exercise-custom-filter {
   flex-shrink: 0;
   margin: 0;
   min-height: 2.2rem;
@@ -135,7 +160,8 @@
   font-size: 0.8125rem;
   font-weight: 600;
 }
-.exercise-muscle-filters button[aria-pressed='true'] {
+.exercise-muscle-filters button[aria-pressed='true'],
+.exercise-custom-filter[aria-pressed='true'] {
   background: var(--p-surface-3);
   border-color: transparent;
   color: var(--p-ink);
@@ -148,6 +174,36 @@
   margin: 0.8rem 0 0.3rem;
   color: var(--p-muted);
   font-size: 0.6875rem;
+}
+.exercise-list-meta > span {
+  flex: 1;
+}
+.exercise-list-meta .exercise-list-options {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  background: var(--p-surface);
+  color: var(--p-ink-2);
+}
+.exercise-list-meta .exercise-list-options .pulse-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.exercise-page-size {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.25rem;
+}
+.exercise-page-size select {
+  width: auto;
+  min-width: 5rem;
 }
 .exercise-list-meta button {
   display: inline-flex;
@@ -165,10 +221,10 @@
   margin: 0;
   padding: 0;
 }
-.exercise-list-rows li + li {
+.exercise-list-rows > li + li {
   border-top: 1px solid var(--p-line);
 }
-.exercise-list-rows li > button {
+.exercise-list-rows > li {
   display: flex;
   align-items: center;
   gap: 0.65rem;
@@ -177,13 +233,55 @@
   margin: 0;
   padding: 0.85rem 0;
   border: 0;
-  border-radius: 8px;
+  position: relative;
   background: transparent;
   color: var(--p-ink);
   text-align: left;
 }
-.exercise-list-rows li > button:hover {
+.exercise-list-rows > li:hover {
   background: var(--p-surface);
+}
+.exercise-list-name {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+.exercise-list-open {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+.exercise-list-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+}
+.exercise-list-name > .exercise-muscle-help {
+  position: relative;
+  z-index: 1;
+}
+.exercise-list-name .exercise-muscle-help-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -0.5rem 0;
+}
+.exercise-list-name .exercise-muscle-help-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+.exercise-list-open:focus-visible {
+  outline: none;
+}
+.exercise-list-open:focus-visible::after {
+  outline: 2px solid var(--p-accent-text);
+}
+.exercise-list-library .pagination-controls {
+  margin-top: 1rem;
 }
 .exercise-list-icon {
   display: grid;
@@ -333,7 +431,7 @@
     flex-basis: 2rem;
     width: 2rem;
   }
-  .exercise-list-rows li > button {
+  .exercise-list-rows > li {
     gap: 0.45rem;
   }
 }

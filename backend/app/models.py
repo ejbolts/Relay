@@ -165,6 +165,10 @@ class ProfileSharing(Base):
     share_body_weight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_goals: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_machine_photos: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Friends see whether you are online now and when you were last active.
+    share_online_status: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    # Friends see the name of the workout you are doing while it is in progress.
+    share_live_workouts: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), onupdate=utc_now
     )
@@ -529,6 +533,33 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text)
 
 
+class LiveWorkout(Base):
+    """The workout an account is doing now, as its friends see it.
+
+    The app reports it while the workout is in progress and clears it when the workout ends.
+    ``expires_at`` follows the app's inactivity auto-finish, so a workout that is never finished
+    stops showing. ``device_id`` lets another of the member's devices, which has no workout open,
+    leave it alone.
+    """
+
+    __tablename__ = "live_workouts"
+    __table_args__ = (
+        CheckConstraint("kind IN ('strength', 'cardio')", name="live_workout_kind_known"),
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    device_id: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(20))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now(), onupdate=utc_now
+    )
+
+
 class ActiveWorkoutReminder(Base):
     __tablename__ = "active_workout_reminders"
 
@@ -538,6 +569,21 @@ class ActiveWorkoutReminder(Base):
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     delivered: Mapped[bool] = mapped_column(Boolean, default=False)
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ImportBatch(Base):
+    __tablename__ = "import_batches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str | None] = user_id_column()
+    file_name: Mapped[str] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(20))
+    workout_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    measurements: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    exercises: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
 
 
 class BodyMeasurement(Base):
@@ -600,6 +646,7 @@ class Exercise(Base):
     equipment: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    partial_sets_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     movements: Mapped[list[WorkoutMovement]] = relationship(back_populates="exercise")
@@ -611,8 +658,25 @@ class Exercise(Base):
         cascade="all, delete-orphan",
         order_by="ExerciseMuscleContribution.muscle_name",
     )
+    partial_set_weeks: Mapped[list[ExercisePartialSetWeek]] = relationship(
+        back_populates="exercise",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ExercisePartialSetWeek.week_start",
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_exercise_user_name"),)
+
+
+class ExercisePartialSetWeek(Base):
+    __tablename__ = "exercise_partial_set_weeks"
+
+    exercise_id: Mapped[str] = mapped_column(
+        ForeignKey("exercises.id", ondelete="CASCADE"), primary_key=True
+    )
+    week_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exercise: Mapped[Exercise] = relationship(back_populates="partial_set_weeks")
 
 
 class ExerciseMuscleContribution(Base):
@@ -646,6 +710,9 @@ class MachinePhoto(Base):
         ForeignKey("exercises.id", ondelete="CASCADE"), index=True
     )
     caption: Mapped[str] = mapped_column(String(160))
+    merged_into_id: Mapped[str | None] = mapped_column(
+        ForeignKey("machine_photos.id", ondelete="CASCADE"), index=True
+    )
     original_filename: Mapped[str] = mapped_column(String(500))
     full_filename: Mapped[str] = mapped_column(String(200), unique=True)
     thumbnail_filename: Mapped[str] = mapped_column(String(200), unique=True)
@@ -658,6 +725,11 @@ class MachinePhoto(Base):
     )
 
     exercise: Mapped[Exercise] = relationship(back_populates="machine_photos")
+    merged_photos: Mapped[list[MachinePhoto]] = relationship(
+        foreign_keys=[merged_into_id],
+        cascade="all, delete-orphan",
+        order_by="MachinePhoto.created_at",
+    )
     movements: Mapped[list[WorkoutMovement]] = relationship(
         secondary=movement_machine_photos,
         back_populates="machine_photos",
@@ -670,6 +742,10 @@ class MachinePhoto(Base):
     @property
     def full_url(self) -> str:
         return f"/api/machine-photos/{self.id}/image?variant=full"
+
+    @property
+    def images(self) -> list[MachinePhoto]:
+        return [self, *self.merged_photos]
 
     __table_args__ = (
         CheckConstraint("file_size > 0", name="machine_photo_file_size_positive"),

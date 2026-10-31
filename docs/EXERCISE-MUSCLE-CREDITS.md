@@ -155,3 +155,7 @@ classification is the app's judgment, not an exercise-specific result claimed by
 [R]: https://www.nsca.com/education/articles/kinetic-select/romanian-deadlift-rdl/
 [A]: https://www.acefitness.org/images/webcontent/SAP-Reports/Core_SAP_Reports.pdf
 [T]: https://pmc.ncbi.nlm.nih.gov/articles/PMC10593473/
+
+## Equipment variants
+
+The expanded catalogue uses the existing movement estimates for equivalent equipment variants; each variant retains its own exercise ID and progress. These remain bookkeeping estimates. Chest-supported dumbbell rows and band rows use the supported/cable row mapping, without spinal-erector credit. Straight-arm pulldowns and dumbbell pullovers give one direct lat credit without curl/biceps credit. Cable kickbacks and hip abduction give one direct glute credit. All 83 built-in strength exercises have explicit mappings.

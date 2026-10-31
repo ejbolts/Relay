@@ -37,7 +37,11 @@ EXERCISE_ALIAS_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Single-Arm Cable Pullover",
         ("Single Arm Cable Pull Over", "One Arm Side Straight Arm Pulldown"),
     ),
-    ("Dumbbell Curl", ("Seated Dumbbell Curl",)),
+    ("Dumbbell Curl", ("Seated Dumbbell Curl", "Dumbbell Bicep Curl", "Dumbbell Biceps Curl")),
+    ("Cable Biceps Curl", ("Cable Curl", "Cable Bicep Curl")),
+    ("Barbell Curl", ("Barbell Bicep Curl", "Barbell Biceps Curl")),
+    ("Push-up", ("Push Up", "Push Ups", "Pushups")),
+    ("EZ Bar Curl", ("EZ-Bar Curl", "EZ Bar Biceps Curl")),
     ("Face Pull", ("Cable Crossover Face Pull",)),
 )
 

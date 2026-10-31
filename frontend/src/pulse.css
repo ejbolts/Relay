@@ -135,6 +135,27 @@ body {
   line-height: 1.1;
 }
 
+.offline-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem 0.25rem 0.45rem;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.offline-badge .pulse-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke-width: 2;
+}
+
 .page-header-actions {
   display: flex;
   flex-shrink: 0;
@@ -153,6 +174,42 @@ body {
 
 .page-header:has(.account-header-actions) > div:first-child {
   flex: 1 1 7.5rem;
+}
+
+.today-screen > header.page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.125rem 0.5rem;
+}
+
+.today-screen > header.page-header > div:first-child {
+  display: contents;
+}
+
+.today-screen > header.page-header .page-eyebrow {
+  grid-column: 1 / -1;
+}
+
+.today-screen > header.page-header h1 {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.today-screen > header.page-header .page-header-actions {
+  grid-column: 2;
+  grid-row: 2;
+  gap: 0.375rem;
+}
+
+@media (max-width: 359px) {
+  .today-screen > header.page-header .page-header-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+    margin-left: 0;
+    margin-top: 0.375rem;
+  }
 }
 
 .icon-button-pulse {
@@ -792,6 +849,29 @@ button.pulse-card:hover {
   margin-top: 0.625rem;
 }
 
+.consistency-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: auto;
+}
+.consistency-header-actions > span {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+.consistency-header-actions .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+.consistency-header-actions .pulse-icon {
+  width: 14px;
+  height: 14px;
+}
 .consistency-stats {
   display: flex;
   gap: 1.25rem;
@@ -1367,6 +1447,10 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   stroke-width: 2.4;
 }
 
+.app-tab-navigation .app-tab-start-bubble {
+  border-radius: 50%;
+}
+
 .app-tab-start.live .app-tab-start-bubble {
   background: #1b3552;
   box-shadow: inset 0 0 0 1px rgb(57 135 229 / 55%);
@@ -1611,6 +1695,10 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   gap: 2px;
 }
 
+/* Planned dates reuse the calendar without completed-workout borders or faded future days. */
+.calendar-panel .calendar-preview .calendar-day.planned {
+  color: var(--p-ink-2);
+}
 .calendar-day-dots i {
   width: 0.375rem;
   height: 0.375rem;
@@ -1969,6 +2057,47 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-size: 0.75rem;
 }
 
+.history-set-pill[data-set-type='normal'] {
+  --history-set-rgb: 35 166 62;
+  --history-set-ink: #7fdc92;
+}
+
+.history-set-pill[data-set-type='warmup'] {
+  --history-set-rgb: 240 140 40;
+  --history-set-ink: #f59a3c;
+}
+
+.history-set-pill[data-set-type='drop'] {
+  --history-set-rgb: 150 110 240;
+  --history-set-ink: #b597ff;
+}
+
+.history-set-pill[data-set-type='failure'] {
+  --history-set-rgb: 230 103 103;
+  --history-set-ink: #ff7a7a;
+}
+
+.history-set-pill[data-set-type] {
+  border-color: rgb(var(--history-set-rgb) / 30%);
+  background: rgb(var(--history-set-rgb) / 12%);
+}
+
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='normal'] {
+  --history-set-ink: #256b39;
+}
+
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='warmup'] {
+  --history-set-ink: #955013;
+}
+
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='drop'] {
+  --history-set-ink: #6940ae;
+}
+
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='failure'] {
+  --history-set-ink: #a62736;
+}
+
 .history-set-pill b {
   color: var(--p-muted);
   font-size: 0.625rem;
@@ -1990,6 +2119,11 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .history-set-pill em:empty {
   display: none;
+}
+
+.history-set-pill[data-set-type] > b,
+.history-set-pill[data-set-type] > em {
+  color: var(--history-set-ink);
 }
 
 .history-set-pill .pr-badge {
@@ -3180,6 +3314,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .movement-card {
+  min-width: 0;
   margin-bottom: 0.75rem;
   overflow: visible;
 }

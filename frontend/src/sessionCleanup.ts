@@ -1,18 +1,20 @@
 import { clearActiveWorkoutReminderKey } from './activeWorkoutReminder';
 import { api, ApiError } from './api';
 import { releasePhonePushSubscription } from './push';
+import {
+  browserAccountStorage,
+  LAST_USER_KEY,
+  readLastUser,
+  rememberUser,
+  type AccountStorage,
+} from './deviceAccount';
 import type { User } from './types';
-import { clearActiveWorkoutDraft } from './workoutDraft';
+import { clearActiveWorkoutDraft, readActiveWorkoutDraft } from './workoutDraft';
 import { clearWorkoutCache } from './workoutCache';
 
-/** Remembers which account last used this device so a different account never sees its data. */
-export const LAST_USER_KEY = 'gym-logger-last-user';
+export { LAST_USER_KEY, readLastUser, rememberUser } from './deviceAccount';
 
-export interface CleanupStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-}
+export type CleanupStorage = AccountStorage;
 
 export interface CleanupDeps {
   storage: CleanupStorage | null;
@@ -20,45 +22,26 @@ export interface CleanupDeps {
 }
 
 export function browserDeps(): CleanupDeps {
-  let storage: CleanupStorage | null = null;
-  try {
-    storage = typeof window === 'undefined' ? null : window.localStorage;
-  } catch {
-    storage = null;
-  }
-  return { storage, clearCache: clearWorkoutCache };
-}
-
-/** The account that last signed in on this device, kept so the app can start while offline. */
-export function readLastUser(storage: CleanupStorage | null = browserDeps().storage): User | null {
-  if (!storage) return null;
-  try {
-    const parsed = JSON.parse(storage.getItem(LAST_USER_KEY) ?? 'null') as Partial<User> | null;
-    return parsed && typeof parsed.id === 'string' && typeof parsed.display_name === 'string'
-      ? (parsed as User)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-export function rememberUser(user: User, storage: CleanupStorage | null = browserDeps().storage) {
-  try {
-    storage?.setItem(LAST_USER_KEY, JSON.stringify(user));
-  } catch {
-    // Storage can be unavailable or full; the cleanup check just runs again next time.
-  }
+  return { storage: browserAccountStorage(), clearCache: clearWorkoutCache };
 }
 
 /**
- * Removes everything this device stored on behalf of an account: the IndexedDB workout and
- * dashboard cache, the unfinished-workout draft, and the active-workout reminder record. Device
+ * Removes everything this device stored on behalf of an account: the encrypted offline copy of
+ * its data, the unfinished-workout draft, and the active-workout reminder record. Device
  * preferences such as reduced motion and the rest-timer toggle are intentionally kept.
+ *
+ * When a session merely expires, `keepUnsyncedWorkout` keeps a finished workout that has not
+ * reached the server yet, so it syncs after the same account signs in again. It stays tied to
+ * that account and is discarded if a different account signs in.
  */
-export async function clearUserDeviceData(deps: CleanupDeps = browserDeps()): Promise<void> {
+export async function clearUserDeviceData(
+  deps: CleanupDeps = browserDeps(),
+  { keepUnsyncedWorkout = false }: { keepUnsyncedWorkout?: boolean } = {},
+): Promise<void> {
   const { storage } = deps;
   if (storage) {
-    clearActiveWorkoutDraft(storage);
+    if (!keepUnsyncedWorkout || !readActiveWorkoutDraft(storage)?.pendingSave)
+      clearActiveWorkoutDraft(storage);
     clearActiveWorkoutReminderKey(storage);
     try {
       storage.removeItem(LAST_USER_KEY);
@@ -122,7 +105,7 @@ function browserSignOutDeps(): SignOutDeps {
 
 /**
  * Detaches this device's push subscription (best effort, while the session is still valid),
- * ends the server session, then wipes the local per-user data. A network failure while logging
+ * ends all account sessions, then wipes the local per-user data. A network failure while logging
  * out is thrown and leaves local data untouched, so the user is never told they are signed out
  * while the server session is still alive. An already-expired session counts as signed out.
  */

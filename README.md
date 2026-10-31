@@ -18,19 +18,21 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
   <a href="docs/screenshots/readme/today.png"><img src="docs/screenshots/readme/today.png" alt="Home dashboard with the next workout, activity calendar, cardio goal and body-weight trend" width="360"></a>
 </p>
 
-*Home: your next workout and training dashboard. Select the screenshot to view it full size.*
+_Home: your next workout and training dashboard. Select the screenshot to view it full size._
 
 ## Log strength workouts
 
 - Choose from the exercise library, save favourites or create your own exercises.
 - Record sets, reps, weight and effort (RPE), with warmups, supersets and notes.
 - Add your own workout types and colours in Settings; remove or restore types while keeping saved history.
-- Build your own repeating training split in **Settings > Training > Your split**, with Upper / Lower, PPL, full body every other day and Cardio templates, custom workout types and rest days. **Edit split** on Home opens the editor; Up next follows your saved cycle.
+- Build your own repeating training split in **Settings > Training > Your split**, with Upper / Lower, PPL, full body every other day and Cardio templates, custom workout types and rest days. **Edit split** on Home and **My splits** beside your profile's **Last 12 weeks** open one page with saved plans and templates. The blue-bordered active card contains its seven-day/calendar preview. Saved template cycles are disabled until their days change or the copy is deleted; sharing lives in each split's options. Up next follows your saved cycle.
 - Use previous-session suggestions to pick up where you left off.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
+- Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
 - Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.
+- Keep logging without a connection. After you have signed in once on a device, Relay opens from the data it saved there, shows **Offline** by the screen title, and syncs a finished workout when the server is reachable again.
 
 Choose kilograms or pounds for weight entry and display.
 
@@ -38,27 +40,29 @@ Choose kilograms or pounds for weight entry and display.
 
 **Training > Sessions** lets you revisit and edit saved workouts, read notes and open machine photos. The existing calendar stays above the latest three weeks of sessions; **Show more** reveals older workouts.
 
-**Training > Exercises** opens on a searchable exercise list with muscle filters, Recent first, A-Z and Most improved sorting, and eight-week estimated 1RM trends. Tap a lift for its chart, personal bests and session history. Open a session to see its completed sets before opening the workout. Return to **Exercises** with your search, filter, sort, list position, metric and range intact. A **Weight PR** celebrates a heavier completed working set; a **Volume PR** celebrates more reps in a set at a weight you have used before. You can also follow estimated one-rep max and weekly muscle-group set totals. **Cardio** remains in Training alongside Sessions and Exercises.
+**Training > Exercises** opens on a searchable exercise list with muscle filters, Recent first, A-Z and Most improved sorting, and eight-week estimated 1RM trends. Tap a lift for its chart, personal bests and session history. Open a session to see its completed sets before opening the workout. Return to **Exercises** with your search, filter, sort, list position, metric and range intact. A **Weight PR** celebrates a heavier completed working set; a **Volume PR** celebrates more reps in a set at a weight you have used before. You can also follow estimated one-rep max and weekly muscle-group set totals. **Cardio** remains in Training alongside Sessions and Exercises. The exercise list starts at 10 lifts per page; its three-line options button changes the page size. Muscle filters include direct and enabled partial credits. Use the question mark beside a lift to inspect its credits and choose a week and switch **Count partial sets** off or on. Choices carry forward until changed again; earlier weeks keep their settings. **Sets per muscle** is also at the bottom of Training. Weekly totals use each workout’s saved setting; **Show more** reveals remaining trained and untrained muscles on both Home and Training.
 
-Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose the app in **Settings > Data & connections > Import & export**, select its export, then review before saving. Strong body-weight measurement exports work there too and keep existing check-ins. Relay workout and bodyweight CSVs, including those exported as Gym Logger, use the same picker, preserving check-in notes and body-fat values and skipping existing dates. You can also import a spreadsheet. Choose **Export data** beside any import source to select workout history, bodyweight check-ins or both, and a date range; both downloads two CSVs. A built-in CSV guide shows the columns and one-row-per-set layout and offers a template; files you make yourself need only date, exercise and reps columns, plus weight for weighted sets. Workout CSVs are for set history rather than a full backup of notes, photos, videos and other account data.
+Import original **Strength Level**, **Hevy** or **Strong** workout CSVs: choose the app in **Settings > Data & connections > Import & export**, select its export, then review before saving. Strong body-weight measurement exports work there too and keep existing check-ins. Relay workout and bodyweight CSVs, including those exported as Gym Logger, use the same picker, preserving check-in notes and body-fat values and skipping existing dates. Map incoming exercise names to your existing library during review, then update the review before saving. **Import history** lets you undo a newly tracked batch while keeping unrelated sessions and edited check-ins; earlier imports cannot be undone as a batch. You can also import a spreadsheet. Choose **Export data** beside any import source to select workout history, bodyweight check-ins or both, and a date range; both downloads two CSVs. A built-in CSV guide shows the columns and one-row-per-set layout and offers a template; files you make yourself need only date, exercise and reps columns, plus weight for weighted sets. Workout CSVs are for set history rather than a full backup of notes, photos, videos and other account data.
 
 <p>
   <a href="docs/screenshots/readme/progress.png"><img src="docs/screenshots/readme/progress.png" alt="Exercise progress screen with estimated one-rep max, personal records and previous sessions" width="360"></a>
 </p>
 
-*Progress: exercise trends, personal records and previous sessions. Select the screenshot to view it full size.*
+_Progress: exercise trends, personal records and previous sessions. Select the screenshot to view it full size._
 
 ## Track cardio and body measurements
 
-**Cardio** records sessions on their own or alongside a workout. Add duration and optional machine or watch metrics such as distance, calories, average heart rate, speed, incline and cycling power. Compare activity across date ranges and work towards a weekly Zone 2 target.
+**Cardio** records sessions on their own or alongside a workout. Add duration and optional machine or watch metrics such as distance, calories, average heart rate, speed, incline and cycling power. Compare activity across date ranges and set personal heart-rate ranges with **Edit** on **Training > Cardio > Weekly zone goals**. Start with a 150-minute weekly Zone 2 goal, change its minutes or zone, or add separate goals for other zones. Once ranges are set, sessions count only when average heart rate matches the personal range; until then they count as Zone 2. A brief text notification reports the zone.
 
 **Body** tracks body weight and optional body-fat measurements, with trends and a weight goal to help you follow changes over time. Home offers separate **Body weight check-in**, **Body fat check-in** and **Combined check-in** sections. Add, hide, resize and arrange them through **Edit Home layout**. Weight can be logged without body-fat percentage; logging body fat requires today’s weight.
+
+**Body measurements** records dated circumferences for neck, shoulders, chest, waist, hips, both upper arms, thighs and calves, wrist and ankle. Choose **Log measurements** on Body; enter any subset without a weigh-in, then review, edit or delete entries in **Measurement history**. Use its **Body part** filter for individual dated values and changes since the previous recorded value. Lengths follow your weight preference (cm with kg, inches with lb). These records stay private and are included in account backups; FFMI frame details remain separate.
 
 <p>
   <a href="docs/screenshots/readme/body.png"><img src="docs/screenshots/readme/body.png" alt="Body screen with a weight goal, trend chart and daily check-in history" width="360"></a>
 </p>
 
-*Body: weight trends, goals and daily check-ins. Select the screenshot to view it full size.*
+_Body: weight trends, goals and daily check-ins. Select the screenshot to view it full size._
 
 ## Keep workout videos together
 
@@ -74,15 +78,17 @@ configures Google once for the installation; users do not need API keys or crede
   <a href="docs/screenshots/readme/videos.png"><img src="docs/screenshots/readme/videos.png" alt="Video logger connected to a personal YouTube channel, with the Unlisted explanation and set-video upload form" width="360"></a>
 </p>
 
-*Videos: connect your channel and upload workout clips as Unlisted videos. Select the screenshot to view it full size.*
+_Videos: connect your channel and upload workout clips as Unlisted videos. Select the screenshot to view it full size._
 
 ## Your account and sharing
 
 Sign in with a username and password, personalise your name and profile photo, and keep your profile **Private** or choose **Friends only** or **Public** sharing within the app's sharing community.
 
+**Sign out all devices** in Settings ends every session for your account. Connected devices return to sign-in immediately; sleeping or offline devices check when they reconnect. Sign-out clears cached account data and unfinished workouts, and stops phone alerts. When a session simply expires, a finished workout that has not synced yet is kept and syncs after you sign back in. Temporary connection failures alone do not sign you out.
+
 Shared profiles include workouts and your profile photo. You choose separately whether to share machine photos, body measurements, goals, cardio and notes. Friendships are mutual: send a friend request, and once it is accepted you both see each other's shared training. Requests always need accepting, even for public profiles. **Recent Friends Activity** on Home shows the latest workout or cardio session from each friend; tap the smiley to react with 👍, ❤️, 💪, 🔥, 👏 or 🏆, and react to individual workouts on their shared profile too. Shared profiles show lifetime workout, cardio and combined training time. Reactions to your workouts appear in the compact notification bell; opening it marks displayed notices read automatically. Search shared accounts by display name, username or the account UUID shown on Profile. Shared profiles do not display usernames or uploaded videos.
 
-The **Social** tab has two parts. **Friends** lists each friend once with their latest session, a seven-day activity strip and a reaction button. **Find** holds friend requests, people search, requests you sent and blocked members. Profiles offer **Add friend**, **Accept** or **Decline**, and a menu to cancel a request, remove a friend or block. Your profile-sharing choices still apply, and Home keeps a compact friends preview; **+N more** shows a spinner and adds three friends inline, keeping the expanded list during refreshes.
+The **Social** tab has two parts. **Friends** lists each friend once with their latest session, a seven-day activity strip and a reaction button. **Find** holds friend requests, people search, requests you sent and blocked members. To add someone in person, tap the QR button on your Profile or **QR code** beside people search; scanning it with a phone camera, or with **Scan** in the same sheet, sends you a friend request (with **Undo**), after signing in or creating an account if needed. Profiles offer **Add friend**, **Accept** or **Decline**, and a menu to cancel a request, remove a friend or block. Your profile-sharing choices still apply, and Home keeps a compact friends preview; **+N more** shows a spinner and adds three friends inline, keeping the expanded list during refreshes.
 
 Administrators can manage accounts, registration, video access and private app feedback from the admin console.
 

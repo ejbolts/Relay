@@ -1,5 +1,29 @@
+import { equipmentSearchTerms, exerciseEquipment } from './exerciseEquipment';
+
 function searchTokens(query: string): string[] {
-  return query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const aliases: Record<string, string> = {
+    db: 'dumbbell',
+    dumbbells: 'dumbbell',
+    bb: 'barbell',
+    barbells: 'barbell',
+    kb: 'kettlebell',
+    kettlebells: 'kettlebell',
+    cables: 'cable',
+    machines: 'machine',
+    bands: 'band',
+    bicep: 'biceps',
+    tricep: 'triceps',
+  };
+  return query
+    .toLocaleLowerCase()
+    .replace(/ez[ -]+(?:curl[ -]+)?bar/g, 'ezbar')
+    .replace(/(?:trap|hex)[ -]+bar/g, 'trapbar')
+    .replace(/smith[ -]+machine/g, 'smith')
+    .replace(/resistance[ -]+bands?/g, 'band')
+    .replace(/body[ -]+weight/g, 'bodyweight')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .map((token) => aliases[token] ?? token);
 }
 
 interface FuzzyMatch {
@@ -94,6 +118,35 @@ interface SearchableExercise {
   equipment: string | null;
 }
 
+export function exerciseSearchScore(exercise: SearchableExercise, query: string): number | null {
+  const equipment = exerciseEquipment(exercise.equipment);
+  const tokens = searchTokens(query);
+  // Equipment words are constraints, so fuzzy letters cannot select another variant.
+  const namedEquipment = searchTokens(exercise.name).filter((token) => equipmentSearchTerms[token]);
+  const equipmentWords = searchTokens(exercise.equipment ?? '');
+  if (
+    tokens.some(
+      (token) =>
+        equipmentSearchTerms[token] &&
+        equipmentSearchTerms[token] !== equipment &&
+        !equipmentWords.includes(token) &&
+        !(equipment === 'Unspecified' && namedEquipment.includes(token)) &&
+        !(token === 'machine' && equipment === 'Smith machine'),
+    )
+  )
+    return null;
+  const words = tokens.filter((token) => !equipmentSearchTerms[token]);
+  return fuzzyScoreFields(
+    [
+      exercise.name,
+      exercise.muscle_group,
+      exercise.equipment ?? '',
+      searchTokens(`${exercise.name} ${exercise.muscle_group}`).join(' '),
+    ],
+    words.join(' '),
+  );
+}
+
 export function rankExerciseSearchMatches<T extends SearchableExercise>(
   exercises: T[],
   query: string,
@@ -106,10 +159,7 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
       exercise,
       originalIndex,
       recency: recencyById.get(exercise.id),
-      score: fuzzyScoreFields(
-        [exercise.name, exercise.muscle_group, exercise.equipment ?? ''],
-        query,
-      ),
+      score: exerciseSearchScore(exercise, query),
     }))
     .filter(
       (

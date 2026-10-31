@@ -4,14 +4,22 @@ from app.database import SessionLocal
 from app.home_layout import OPTIONAL_CHECK_INS, SECTION_IDS
 from app.training_metrics import set_setting
 
+DEFAULT_SETTINGS = {"zone2": {"zone": None, "style": "progress"}}
+
 
 def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client):
-    default = {"order": SECTION_IDS, "hidden": OPTIONAL_CHECK_INS, "widths": {}}
+    default = {
+        "order": SECTION_IDS,
+        "hidden": OPTIONAL_CHECK_INS,
+        "widths": {},
+        "settings": DEFAULT_SETTINGS,
+    }
     assert client.get("/api/home-layout").json() == default
     layout = {
         "order": list(reversed(SECTION_IDS)),
         "hidden": ["consistency", "workouts"],
         "widths": {"combined-check-in": "compact", "workouts": "full", "friends": "third"},
+        "settings": {"zone2": {"zone": 4, "style": "ring"}},
     }
     response = client.put("/api/home-layout", json=layout)
     assert response.status_code == 200
@@ -44,6 +52,9 @@ def test_invalid_layout_does_not_overwrite_saved_layout(client):
         {"widths": {"records": "wide"}},
         {"widths": {"records": 3}},
         {"widths": []},
+        {"settings": {"zone2": {"style": "chart"}}},
+        {"settings": {"zone2": {"zone": 6}}},
+        {"settings": {"zone2": {"zone": 0}}},
     ):
         assert client.put("/api/home-layout", json=invalid).status_code == 422
         assert client.get("/api/home-layout").json() == saved
@@ -75,6 +86,7 @@ def test_corrupt_saved_layout_recovers_to_default(client):
         "order": SECTION_IDS,
         "hidden": OPTIONAL_CHECK_INS,
         "widths": {},
+        "settings": DEFAULT_SETTINGS,
     }
 
 
@@ -121,3 +133,16 @@ def test_older_client_can_save_the_legacy_check_in_identifier(client):
     assert layout["order"][:3] == ["profile", "combined-check-in", "records"]
     assert layout["widths"] == {"combined-check-in": "third"}
     assert layout["hidden"] == OPTIONAL_CHECK_INS
+
+
+def test_section_settings_default_for_older_layouts_and_update_independently(client):
+    with SessionLocal() as db:
+        set_setting(db, client.user["id"], "home_layout", json.dumps({"hidden": ["records"]}))
+        db.commit()
+    layout = client.get("/api/home-layout").json()
+    assert layout["settings"] == DEFAULT_SETTINGS
+    assert layout["hidden"] == ["records"]
+    layout["settings"]["zone2"] = {"zone": 2, "style": "list"}
+    assert client.put("/api/home-layout", json=layout).json() == layout
+    partial = client.put("/api/home-layout", json={"settings": {"zone2": {"style": "ring"}}})
+    assert partial.json()["settings"]["zone2"] == {"zone": None, "style": "ring"}

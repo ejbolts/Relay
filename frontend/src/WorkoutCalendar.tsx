@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef } fr
 import type { DashboardData, WorkoutCategory, WorkoutType, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { calendarDayTypes } from './workoutTypes';
-import { monthCountFromOldestWorkout } from './calendarRange';
+import { calendarMonths, monthCountFromOldestWorkout } from './calendarRange';
 import { Icon } from './Icon';
 import { isoLocalDate as localCalendarDate } from './trainingSummary';
 const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
@@ -24,8 +24,40 @@ export type OlderHistoryProps = {
 /** Scrolling within this many screen widths of the oldest loaded month loads older ones. */
 const CALENDAR_LOAD_OLDER_SCREENS = 1.5;
 
+type CalendarPreview = {
+  from: string;
+  days: Array<{ date: string; label: string; color?: string }>;
+};
+const EMPTY_ENTRIES: DashboardData['heatmap'] = [];
+
+type WorkoutCalendarProps = {
+  /** Workout types switched off in the legend; their dots and day borders are greyed out. */
+  hiddenCategories?: ReadonlySet<string>;
+  activeWorkoutDate?: string | null;
+  onActiveWorkoutClick?: () => void;
+  olderHistory?: OlderHistoryProps;
+  types?: WorkoutType[];
+  readOnly?: boolean;
+} & (
+  | {
+      preview: CalendarPreview;
+      entries?: never;
+      categoryColors?: never;
+      onDayClick?: never;
+    }
+  | {
+      preview?: undefined;
+      entries: DashboardData['heatmap'];
+      categoryColors: WorkoutTypeColors;
+      onDayClick: (
+        workoutDate: string,
+        entry: DashboardData['heatmap'][number] | undefined,
+      ) => void;
+    }
+);
+
 export function WorkoutCalendar({
-  entries,
+  entries = EMPTY_ENTRIES,
   categoryColors,
   hiddenCategories,
   activeWorkoutDate = null,
@@ -34,28 +66,25 @@ export function WorkoutCalendar({
   olderHistory,
   types: suppliedTypes,
   readOnly = false,
-}: {
-  entries: DashboardData['heatmap'];
-  categoryColors: WorkoutTypeColors;
-  /** Workout types switched off in the legend; their dots and day borders are greyed out. */
-  hiddenCategories?: ReadonlySet<string>;
-  activeWorkoutDate?: string | null;
-  onActiveWorkoutClick?: () => void;
-  onDayClick: (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => void;
-  olderHistory?: OlderHistoryProps;
-  types?: WorkoutType[];
-  readOnly?: boolean;
-}) {
+  preview,
+}: WorkoutCalendarProps) {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const { types: ownTypes } = useWorkoutTypes();
   const types = suppliedTypes ?? ownTypes;
   const historyStart = olderHistory?.historyStart ?? null;
   const hasOlder = olderHistory?.hasOlder ?? false;
+  const previewMode = !!preview;
+  const previewFrom = preview?.from;
+  const previewMap = useMemo(
+    () => new Map(preview?.days.map((day) => [day.date, day])),
+    [preview?.days],
+  );
   const map = useMemo(
     () => new Map(entries.map((entry) => [entry.workout_date, entry])),
     [entries],
   );
   const months = useMemo(() => {
+    if (previewFrom) return calendarMonths(previewFrom, 2);
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     // Days before the loaded window (from a dashboard cached by an earlier release) are left out,
@@ -70,25 +99,9 @@ export function WorkoutCalendar({
       ...(hasOlder && historyStart ? [{ workout_date: historyStart }] : []),
     ];
     const allMonthCount = monthCountFromOldestWorkout(datedEntries, today);
-    return Array.from({ length: Math.max(allMonthCount, 1) }, (_, offset) => {
-      const first = new Date(today.getFullYear(), today.getMonth() - offset, 1, 12);
-      const dayCount = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-      const leading = (first.getDay() + 6) % 7;
-      const cells: Array<Date | null> = [
-        ...Array.from({ length: leading }, () => null),
-        ...Array.from(
-          { length: dayCount },
-          (_, index) => new Date(first.getFullYear(), first.getMonth(), index + 1, 12),
-        ),
-      ];
-      while (cells.length < 42) cells.push(null);
-      return {
-        key: `${first.getFullYear()}-${first.getMonth()}`,
-        title: first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
-        cells,
-      };
-    }).reverse();
-  }, [activeWorkoutDate, entries, hasOlder, historyStart]);
+    const oldest = new Date(today.getFullYear(), today.getMonth() - allMonthCount + 1, 1, 12);
+    return calendarMonths(localCalendarDate(oldest), allMonthCount);
+  }, [activeWorkoutDate, entries, hasOlder, historyStart, previewFrom]);
   const todayKey = localCalendarDate(new Date());
   // Taps read the latest handlers from a ref, so the memoised grid below never calls a stale one.
   const handlersRef = useRef({ onDayClick, onActiveWorkoutClick, olderHistory });
@@ -109,7 +122,7 @@ export function WorkoutCalendar({
       : null;
     restoringScrollRef.current = true;
     if (!anchor || !month) {
-      calendar.scrollLeft = calendar.scrollWidth - calendar.clientWidth;
+      calendar.scrollLeft = previewMode ? 0 : calendar.scrollWidth - calendar.clientWidth;
     } else {
       const monthBox = month.getBoundingClientRect();
       const gap = parseFloat(getComputedStyle(calendar).columnGap) || 0;
@@ -122,7 +135,7 @@ export function WorkoutCalendar({
     window.requestAnimationFrame(() => {
       restoringScrollRef.current = false;
     });
-  }, []);
+  }, [previewMode]);
 
   useLayoutEffect(restoreScroll, [months, hasOlder, restoreScroll]);
 
@@ -150,7 +163,7 @@ export function WorkoutCalendar({
       }
       const atNewest = calendar.scrollLeft >= calendar.scrollWidth - calendar.clientWidth - 2;
       anchorRef.current =
-        closest && !atNewest ? { key: closest.key, before: closest.before } : null;
+        closest && (previewMode || !atNewest) ? { key: closest.key, before: closest.before } : null;
     }
     const older = handlersRef.current.olderHistory;
     if (
@@ -161,7 +174,7 @@ export function WorkoutCalendar({
     ) {
       older.onLoadOlder();
     }
-  }, []);
+  }, [previewMode]);
 
   // Each tab switch re-renders the cached screens, and redrawing thousands of day cells was most
   // of that cost. The grid now only rebuilds when its data changes.
@@ -190,6 +203,7 @@ export function WorkoutCalendar({
                       }
                       const key = localCalendarDate(day);
                       const entry = map.get(key);
+                      const planned = previewMap.get(key);
                       const inProgress = key === activeWorkoutDate;
                       const dayTypes = entry ? calendarDayTypes(entry, types) : [];
                       const filteredOut =
@@ -198,34 +212,41 @@ export function WorkoutCalendar({
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
-                          disabled={readOnly && !entry}
+                          data-date={key}
+                          disabled={previewMode || (readOnly && !entry)}
                           onClick={() => {
                             const handlers = handlersRef.current;
                             if (inProgress && handlers.onActiveWorkoutClick) {
                               handlers.onActiveWorkoutClick();
-                            } else handlers.onDayClick(key, entry);
+                            } else handlers.onDayClick?.(key, entry);
                           }}
                           aria-current={key === todayKey ? 'date' : undefined}
                           aria-label={
-                            inProgress
-                              ? `Resume workout in progress for ${prettyDate(key)}`
-                              : entry
-                                ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                                : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}`
+                            previewMode
+                              ? `${prettyDate(key)}: ${planned?.label ?? 'Not started'}`
+                              : inProgress
+                                ? `Resume workout in progress for ${prettyDate(key)}`
+                                : entry
+                                  ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
+                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}`
                           }
                           title={
-                            inProgress
-                              ? `${prettyDate(key)}: workout in progress`
-                              : entry
-                                ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} sets`
-                                : prettyDate(key)
+                            previewMode
+                              ? `${prettyDate(key)}: ${planned?.label ?? 'Not started'}`
+                              : inProgress
+                                ? `${prettyDate(key)}: workout in progress`
+                                : entry
+                                  ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} sets`
+                                  : prettyDate(key)
                           }
                         >
                           <span className="calendar-day-number">{day.getDate()}</span>
                           <span className="calendar-day-dots" aria-hidden="true">
-                            {inProgress ? (
+                            {planned ? (
+                              planned.color && <i style={{ backgroundColor: planned.color }} />
+                            ) : inProgress ? (
                               <i className="calendar-live-dot" />
                             ) : (
                               dayTypes.map((type, dotIndex) =>
@@ -237,7 +258,7 @@ export function WorkoutCalendar({
                                     style={{
                                       backgroundColor: type.is_custom
                                         ? type.color
-                                        : categoryColors[type.id as WorkoutCategory],
+                                        : categoryColors?.[type.id as WorkoutCategory],
                                     }}
                                   />
                                 ),
@@ -254,11 +275,26 @@ export function WorkoutCalendar({
           </div>
         </article>
       )),
-    [activeWorkoutDate, categoryColors, hiddenCategories, map, months, todayKey, types, readOnly],
+    [
+      activeWorkoutDate,
+      categoryColors,
+      hiddenCategories,
+      map,
+      months,
+      todayKey,
+      types,
+      readOnly,
+      previewMap,
+      previewMode,
+    ],
   );
 
   return (
-    <div className="calendar-scroll" ref={calendarScrollRef} onScroll={handleScroll}>
+    <div
+      className={`calendar-scroll${previewMode ? ' calendar-preview' : ''}`}
+      ref={calendarScrollRef}
+      onScroll={handleScroll}
+    >
       {hasOlder && olderHistory && (
         <div className="calendar-month calendar-month-older" aria-live="polite">
           {olderHistory.olderError ? (

@@ -117,6 +117,10 @@ export interface Exercise {
   is_favorite: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
+  default_muscle_set_credits?: { muscle_name: string; sets: number }[];
+  partial_sets_enabled?: boolean;
+  partial_sets_default?: boolean;
+  partial_set_weeks?: { week_start: string; enabled: boolean }[];
 }
 
 export interface MuscleSetCreditInput {
@@ -129,7 +133,7 @@ export type ExerciseCreateInput = Pick<
   'name' | 'category' | 'kind' | 'muscle_group' | 'equipment'
 > & { muscle_set_credit?: 0.5 | 1; muscle_set_credits?: MuscleSetCreditInput[] };
 
-export interface MachinePhoto {
+export interface MachinePhotoImage {
   id: string;
   exercise_id: string;
   caption: string;
@@ -138,6 +142,10 @@ export interface MachinePhoto {
   width: number;
   height: number;
   created_at: string;
+}
+
+export interface MachinePhoto extends MachinePhotoImage {
+  images?: MachinePhotoImage[];
 }
 
 /** A saved machine with when, and how often, saved workouts have pinned it. */
@@ -327,6 +335,7 @@ export interface WorkoutRecommendation {
   needs_split_update?: boolean;
   scheduled_date?: string | null;
   split_name?: string | null;
+  routine_day?: RoutineDay | null;
 }
 
 export interface TrainingSplit {
@@ -334,6 +343,29 @@ export interface TrainingSplit {
   enabled: boolean;
   start_date: string;
   steps: { workout_type_id: string | null }[];
+  routine_id?: string | null;
+}
+
+export interface RoutineSet {
+  reps: number | null;
+  weight_kg: number | null;
+  duration_seconds: number | null;
+  distance_km: number | null;
+  rest_seconds: number | null;
+  set_type: SetType;
+}
+
+export interface RoutineDay {
+  workout_type_id: string | null;
+  workout_type: WorkoutType | null;
+  movements: { exercise_id: string; exercise: Exercise; sets: RoutineSet[] }[];
+}
+
+export interface Routine {
+  id: string;
+  name: string;
+  shared: boolean;
+  days: RoutineDay[];
 }
 
 export interface WeeklyMuscleContribution {
@@ -378,6 +410,7 @@ export interface TrainingTime {
 }
 
 export interface DashboardData {
+  cardio_goals?: CardioGoalWeek[];
   workouts_this_week: number;
   sets_this_week: number;
   volume_this_week_kg: number;
@@ -437,11 +470,43 @@ export interface PersonalRecord {
   exercise_name: string | null;
 }
 
+export interface FfmiProfile {
+  sex: 'male' | 'female' | null;
+  height_cm: number | null;
+  wrist_cm: number | null;
+  ankle_cm: number | null;
+  target_body_fat_pct: number;
+}
+
 export interface TrainingPreferences {
   preferred_weight_unit: 'kg' | 'lb';
   week_start: 'monday' | 'sunday' | 'saturday';
   zone2_goal_minutes: number;
   weekly_muscle_set_goal: number;
+}
+
+export interface HeartRateZone {
+  zone: number;
+  min_bpm: number;
+  max_bpm: number;
+}
+
+export interface CardioGoal {
+  zone: number;
+  minutes: number;
+}
+
+export interface CardioPreferences {
+  heart_rate_zones: HeartRateZone[];
+  goals: CardioGoal[];
+}
+
+export interface CardioGoalWeek {
+  zone: number;
+  goal_minutes: number;
+  completed_minutes: number;
+  remaining_minutes: number;
+  complete: boolean;
 }
 
 export interface Zone2Week {
@@ -495,6 +560,8 @@ export interface CardioScreenshotScan {
 }
 
 export interface CardioOverview {
+  cardio_preferences?: CardioPreferences;
+  goal_weeks?: CardioGoalWeek[];
   preferences: TrainingPreferences;
   current_week: Zone2Week;
   previous_weeks: Zone2Week[];
@@ -582,6 +649,7 @@ export interface ExerciseLibrarySummary {
 }
 
 export interface CsvImportResult {
+  batch_id?: string | null;
   workouts_created: number;
   workouts_skipped: number;
   exercises_created: number;
@@ -591,13 +659,30 @@ export interface CsvImportResult {
   warnings: string[];
 }
 
+export interface ImportBatch {
+  id: string;
+  file_name: string;
+  source: string;
+  created_at: string;
+  workouts: number;
+  body_measurements: number;
+}
+export interface ImportUndoResult {
+  workouts_removed: number;
+  body_measurements_removed: number;
+  body_measurements_preserved: number;
+  exercises_removed: number;
+}
 export interface WorkoutImportOptions {
+  exercise_mappings?: Record<string, string>;
   source: 'gym' | 'strengthlevel' | 'hevy' | 'strong';
   weight_unit: 'kg' | 'lb';
   distance_unit: 'km' | 'mi';
 }
 
 export interface CsvImportPreview {
+  exercise_matches?: { incoming_name: string; exercise_id: string | null; exercise_name: string }[];
+  available_exercises?: { id: string; name: string; kind: string }[];
   sessions: {
     workout_date: string;
     name: string;
@@ -726,6 +811,10 @@ export interface SharingChoices {
   share_body_weight: boolean;
   share_goals: boolean;
   share_machine_photos: boolean;
+  /** Friends see whether you are online and when you were last active. */
+  share_online_status: boolean;
+  /** Friends see the name of a workout while you are doing it. */
+  share_live_workouts: boolean;
 }
 
 export interface SharingSettings extends SharingChoices {
@@ -785,12 +874,28 @@ export interface SharingConnection {
 }
 
 /** A friend, `since` the friendship began, with their latest session and recent training. */
+/** A friend's workout in progress. */
+export interface LiveWorkout {
+  name: string;
+  kind: 'strength' | 'cardio';
+  started_at: string;
+}
+
+/** What a friend shares live. Online fields are null when they hide their online status. */
+export interface FriendPresence {
+  online: boolean | null;
+  last_active_at: string | null;
+  workout: LiveWorkout | null;
+}
+
 export interface FriendActivity extends SharingConnection {
   latest: { workout: TrackedWorkout; reactions: WorkoutReactions } | null;
   /** Workouts in the last 30 days. */
   recent_workout_count: number;
   /** Dates with a workout in roughly the last week, oldest first. */
   training_dates: string[];
+  /** Absent when the friend shares no live activity. */
+  presence?: FriendPresence | null;
 }
 
 export interface FriendConnections {
@@ -858,7 +963,9 @@ export interface CommentNotice extends SharingConnection {
 
 /** A friend's latest workout or cardio session. */
 export interface FriendFeedItem {
-  friend: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'>;
+  friend: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+    presence?: FriendPresence | null;
+  };
   workout: TrackedWorkout;
   reactions: WorkoutReactions;
 }
@@ -901,6 +1008,7 @@ export interface SharedBodyMeasurement {
 }
 
 export interface SharedGoals {
+  cardio_goals?: CardioGoalWeek[];
   body_weight: Omit<BodyWeightGoalInput, 'active'> | null;
   zone2: Zone2Week;
 }
@@ -936,9 +1044,15 @@ export interface SharedProfile extends SharedProfileSummary {
   body_weight: SharedBodyMeasurement[] | null;
   goals: SharedGoals | null;
   cardio_sessions: SharedCardioSession[] | null;
+  cardio_total?: number | null;
   training_time?: TrainingTime | null;
   /** The same totals from this day last year onwards. */
   training_time_past_year?: TrainingTime | null;
+}
+
+export interface SharedCardioPage {
+  total: number;
+  sessions: SharedCardioSession[];
 }
 
 export interface SharedWorkoutPage {

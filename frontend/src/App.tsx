@@ -1,3 +1,4 @@
+import { BodySizesCard } from './BodySizesCard';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
 import {
   extendInactiveWorkoutFinishAt,
@@ -15,9 +16,16 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
+import type {
+  ContextType,
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  RefObject,
+} from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
@@ -103,9 +111,12 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
+import { FfmiCard } from './FfmiCard';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
+import { MuscleSetsCard } from './MuscleSetsCard';
 import {
   MachineFilterBanner,
   MachineFilterPicker,
@@ -114,6 +125,7 @@ import {
 import { machineDate, machineUsedShort } from './machineHistory';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { useReleaseAnnouncement } from './useReleaseAnnouncement';
+import { usePresenceConnection } from './presence';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
@@ -139,6 +151,8 @@ import { BackgroundActivityBar } from './BackgroundActivityBar';
 import { CardioTrendCard } from './CardioTrendCard';
 import { groupCardioHistory } from './cardioTrend';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
+import { CardioZoneSettings } from './CardioZoneSettings';
+import { cardioZoneNotice, DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { useBackdropDismiss } from './backdropDismiss';
@@ -147,6 +161,7 @@ import { optimisePhoto } from './photoOptimise';
 import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
+import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
 import {
@@ -213,7 +228,6 @@ import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import {
-  compactSetSummary,
   dayMonth,
   formatVolume,
   groupWorkoutsByWeek,
@@ -235,6 +249,9 @@ import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHist
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
 import { fuzzyHighlightIndices, rankExerciseSearchMatches } from './exerciseSearch';
+import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
+import { ExerciseCustomFilter } from './ExerciseCustomFilter';
+import { exerciseEquipment } from './exerciseEquipment';
 import {
   formatMinutesDuration,
   formatSeconds,
@@ -268,6 +285,8 @@ import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
+import { usePendingWorkoutSave } from './usePendingWorkoutSave';
+import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { RestTimerToast, WorkoutHeaderMeta } from './WorkoutRestTimer';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
@@ -302,8 +321,15 @@ import {
   workoutSetForAutoSave,
 } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
+import { isUsingSavedData } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
+import {
+  captureFriendInvite,
+  clearFriendInvite,
+  FRIEND_INVITE_EVENT,
+  pendingFriendInvite,
+} from './friendInvite';
 
 type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
@@ -472,7 +498,7 @@ function prettyDate(value: string): string {
 function recordTypeLabel(type: PersonalRecord['record_type']): string {
   return {
     weight: 'Weight PR',
-    reps_at_weight: 'Volume PR',
+    reps_at_weight: 'Volume PR for this weight',
     estimated_1rm: 'estimated 1RM PR',
     duration: 'duration PR',
     distance: 'distance PR',
@@ -547,6 +573,26 @@ export function App() {
   );
 }
 
+function AppContentProviders({
+  exercises,
+  updatePartialSets,
+  settingsNavigation,
+  children,
+}: {
+  exercises: Exercise[];
+  updatePartialSets: (id: string, enabled: boolean, weekStart: string) => Promise<Exercise>;
+  settingsNavigation: ContextType<typeof SettingsNavigationContext>;
+  children: ReactNode;
+}) {
+  return (
+    <ExerciseCreditsContext.Provider value={{ exercises, updatePartialSets }}>
+      <SettingsNavigationContext.Provider value={settingsNavigation}>
+        {children}
+      </SettingsNavigationContext.Provider>
+    </ExerciseCreditsContext.Provider>
+  );
+}
+
 function AppContent() {
   const [settingsJump, setSettingsJump] = useState<SettingsJump | null>(null);
   const settingsJumpSerial = useRef(0);
@@ -554,6 +600,7 @@ function AppContent() {
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
   const { user, signingIn = false } = useUserSession();
+  usePresenceConnection(user?.id ?? null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
@@ -640,11 +687,13 @@ function AppContent() {
   );
   const [workoutStartDate, setWorkoutStartDate] = useState(localDate());
   const [editingWorkout, setEditingWorkout] = useState<TrackedWorkout | null>(null);
-  const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(
-    () => readActiveWorkoutDraft()?.resumingWorkoutId ?? null,
-  );
+  const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(() => {
+    const draft = readActiveWorkoutDraft();
+    return draft?.pendingSave ? null : (draft?.resumingWorkoutId ?? null);
+  });
   const [activeWorkoutStartedAt, setActiveWorkoutStartedAt] = useState<number | null>(() => {
-    return readActiveWorkoutDraft()?.startedAt ?? null;
+    const draft = readActiveWorkoutDraft();
+    return draft?.pendingSave ? null : (draft?.startedAt ?? null);
   });
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
   // The opened shared profile; each opening refetches it, while Back reveals the cached screen.
@@ -652,7 +701,10 @@ function AppContent() {
     id: string;
     name: string;
     opened: number;
+    /** Opened from a friend QR code, before its name has loaded. */
+    invite?: boolean;
   } | null>(null);
+  const [friendInvite, setFriendInvite] = useState(() => pendingFriendInvite());
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
   const [historyMovementId, setHistoryMovementId] = useState<string | null>(null);
   const [historyOpenCount, setHistoryOpenCount] = useState(0);
@@ -671,17 +723,26 @@ function AppContent() {
     visitedTabs.has('progress') ||
     visitedTabs.has('cardio');
   const [workoutTemplate, setWorkoutTemplate] = useState<SessionTemplate | null>(null);
+  const [splitDestination, setSplitDestination] = useState<{
+    routineId?: string;
+  }>({});
   // The type chosen from the Start menu's Cardio option, before any exercise is added.
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
+  const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
   const notifyRestComplete = useCallback(
     () => setMessage('Rest complete. Time for your next set.'),
     [],
   );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
-  const [workoutSaving, setWorkoutSaving] = useState(false);
+  const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
+  const pendingWorkout = usePendingWorkoutSave(user?.id ?? null, (saved, resumedId) =>
+    completeWorkoutSave(saved, false, resumedId),
+  );
+  const workoutSaving = editingWorkoutSaving || pendingWorkout.saving;
+  const workoutSaveBlocked = workoutSaving || pendingWorkout.pending !== null;
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
   useEffect(() => {
     // A URL (including an old phone notification) is navigation, never a Start action.
@@ -764,6 +825,38 @@ function AppContent() {
     setNavDirection('forward');
     setTabState(nextTab);
   }, []);
+  useEffect(() => {
+    // An invite link opened in an already-open app only changes the address's hash.
+    const onHashChange = () => {
+      const id = captureFriendInvite();
+      if (id) setFriendInvite(id);
+    };
+    // A code scanned inside the app has already stored its invite.
+    const onScanned = () => setFriendInvite(pendingFriendInvite());
+    window.addEventListener('hashchange', onHashChange);
+    window.addEventListener(FRIEND_INVITE_EVENT, onScanned);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
+    };
+  }, []);
+  useEffect(() => {
+    // A friend QR code opens the inviter's profile, which sends them a friend request.
+    if (!friendInvite || !user) return;
+    clearFriendInvite();
+    setFriendInvite(null);
+    if (friendInvite === user.id) {
+      setTab('profile');
+      return;
+    }
+    setSharedProfile((current) => ({
+      id: friendInvite,
+      name: 'Friend invite',
+      opened: (current?.opened ?? 0) + 1,
+      invite: true,
+    }));
+    setTab('shared-profile');
+  }, [friendInvite, user, setTab]);
 
   function navigateBack() {
     if (tab === 'settings' && settingsGroup !== null) {
@@ -814,8 +907,9 @@ function AppContent() {
     const generation = ++refreshGenerationRef.current;
     const current = () => generation === refreshGenerationRef.current;
     const refresh = async () => {
-      // Read before the data: a change during this refresh must trigger another pass.
-      const revision = await api.workoutRevision().catch(() => null);
+      // Read before the data: a change during this refresh must trigger another pass. Offline,
+      // there is no revision to confirm and saved copies answer the reads straight away.
+      const revision = isUsingSavedData() ? null : await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
@@ -1076,9 +1170,16 @@ function AppContent() {
   async function saveWorkout(payload: WorkoutInput) {
     const wasEditing = editingWorkout !== null;
     const resumedId = resumingWorkoutId;
+    if (!wasEditing) {
+      pendingWorkout.queue(payload);
+      setActiveWorkoutStartedAt(null);
+      setResumingWorkoutId(null);
+      setTab('dashboard', { replace: true });
+      return;
+    }
     setWorkoutSaving(true);
     ++refreshGenerationRef.current;
-    // Keep the logger and its recovery draft mounted until the server confirms the save.
+    // Existing-workout edits stay mounted until confirmed; active completions use the durable snapshot.
     setTab(wasEditing ? 'history' : 'dashboard', { replace: true });
     let saved: TrackedWorkout;
     try {
@@ -1103,15 +1204,29 @@ function AppContent() {
       setWorkoutSaving(false);
     }
 
+    completeWorkoutSave(saved, wasEditing, resumedId);
+  }
+
+  function completeWorkoutSave(
+    saved: TrackedWorkout,
+    wasEditing: boolean,
+    resumedId: string | null,
+  ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
-    if (!wasEditing) {
-      const draft = readActiveWorkoutDraft();
-      if (draft?.startedAt === activeWorkoutStartedAt) clearActiveWorkoutDraft();
-      setActiveWorkoutStartedAt(null);
-      setResumingWorkoutId(null);
-    }
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     setEditingWorkout(null);
+
+    if (saved.movements.some((movement) => movement.exercise.kind === 'cardio')) {
+      void api
+        .cardioOverview()
+        .then((overview) => {
+          const preferences = overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES;
+          const sessions = overview.sessions.filter((item) => item.source_workout_id === saved.id);
+          if (sessions.length)
+            setMessage(sessions.map((item) => cardioZoneNotice(item, preferences)).join(' '));
+        })
+        .catch(() => undefined);
+    }
 
     if (!wasEditing) {
       const signature = (record: PersonalRecord) =>
@@ -1130,7 +1245,7 @@ function AppContent() {
   }
 
   async function deleteWorkout(workout: TrackedWorkout) {
-    if (workoutSaving) return;
+    if (workoutSaveBlocked) return;
     try {
       await withBackgroundActivity('Deleting workout…', async () => {
         await api.deleteWorkout(workout.id);
@@ -1144,6 +1259,17 @@ function AppContent() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not delete that workout.');
     }
+  }
+
+  async function undoWorkoutImport(id: string) {
+    const result = await withBackgroundActivity('Undoing import…', async () => {
+      const undone = await api.undoImportBatch(id);
+      await refreshData({ activityLabel: null });
+      return undone;
+    });
+    setMessage(
+      `Import undone: removed ${plural(result.workouts_removed, 'session')} and ${plural(result.body_measurements_removed, 'check-in')}.${result.body_measurements_preserved ? ` Kept ${plural(result.body_measurements_preserved, 'edited check-in')}.` : ''}`,
+    );
   }
 
   async function importWorkoutCsv(file: File, options?: WorkoutImportOptions) {
@@ -1191,7 +1317,7 @@ function AppContent() {
     category: WorkoutCategory | null = null,
     startType: WorkoutType | null = null,
   ) {
-    if (workoutSaving) return;
+    if (workoutSaveBlocked) return;
     if (replaceActiveWorkout) clearActiveWorkoutDraft();
     const storedDraft = replaceActiveWorkout ? null : readActiveWorkoutDraft();
     const freshStart = !storedDraft && activeWorkoutStartedAt === null;
@@ -1208,14 +1334,14 @@ function AppContent() {
   }
 
   function editWorkout(workout: TrackedWorkout) {
-    if (workoutSaving) return;
+    if (workoutSaveBlocked) return;
     setEditingWorkout(workout);
     setWorkoutStartDate(workout.workout_date);
     setTab('log');
   }
 
   function resumeWorkout(workout: TrackedWorkout) {
-    if (workoutSaving || activeWorkoutStartedAt !== null) return;
+    if (workoutSaveBlocked || activeWorkoutStartedAt !== null) return;
     clearActiveWorkoutDraft();
     setEditingWorkout(null);
     setResumingWorkoutId(workout.id);
@@ -1258,6 +1384,19 @@ function AppContent() {
     );
   }
 
+  async function updateExercisePartialSets(
+    exerciseId: string,
+    enabled: boolean,
+    weekStart: string,
+  ) {
+    const updated = await api.updateExercisePartialSets(exerciseId, enabled, weekStart);
+    setExercises((current) =>
+      current.map((exercise) => (exercise.id === updated.id ? updated : exercise)),
+    );
+    await refreshData({ silent: true, activityLabel: null });
+    return updated;
+  }
+
   async function createExercise(input: ExerciseCreateInput): Promise<Exercise> {
     const exercise = await withBackgroundActivity('Creating exercise…', () =>
       api.createExercise(input),
@@ -1281,6 +1420,16 @@ function AppContent() {
     setTab(destination.page);
   }
 
+  function openSplits(routineId?: string) {
+    setSplitDestination({ routineId });
+    setTab('split');
+  }
+
+  function openSplitSchedule() {
+    setSplitDestination({});
+    setTab('split');
+  }
+
   function openAllSettings() {
     setSettingsJump(null);
     setSettingsGroup(null);
@@ -1300,7 +1449,7 @@ function AppContent() {
 
   const nestedHeader =
     tab === 'split'
-      ? { title: 'Your split', subtitle: null }
+      ? { title: 'Your splits', subtitle: null }
       : tab === 'settings'
         ? settingsGroup
           ? { title: 'All settings', subtitle: null }
@@ -1320,7 +1469,11 @@ function AppContent() {
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
     tab,
-    hasOtherDialog: message !== null || completionRecords.length > 0,
+    // Onboarding waits until a new member has seen the profile their invite opened.
+    hasOtherDialog:
+      message !== null ||
+      completionRecords.length > 0 ||
+      (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
   });
   const prompt = canShowPrompts
@@ -1423,7 +1576,11 @@ function AppContent() {
   }
 
   return (
-    <SettingsNavigationContext.Provider value={{ request: settingsJump, navigate: openSetting }}>
+    <AppContentProviders
+      exercises={exercises}
+      updatePartialSets={updateExercisePartialSets}
+      settingsNavigation={{ request: settingsJump, navigate: openSetting }}
+    >
       <div
         className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
@@ -1504,6 +1661,26 @@ function AppContent() {
           className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || tab === 'log' ? 'with-overlay-header' : ''}`}
           data-nav-direction={navDirection}
         >
+          {pendingWorkout.pending && (
+            <PendingWorkoutSaveCard
+              completion={pendingWorkout.pending}
+              saving={pendingWorkout.saving}
+              error={pendingWorkout.error}
+              onRetry={pendingWorkout.retry}
+              onReview={
+                pendingWorkout.needsReview
+                  ? () => {
+                      const draft = pendingWorkout.review();
+                      if (!draft) return;
+                      setActiveWorkoutStartedAt(draft.startedAt);
+                      setResumingWorkoutId(draft.resumingWorkoutId ?? null);
+                      setWorkoutStartDate(draft.workoutDate);
+                      setTab('log');
+                    }
+                  : undefined
+              }
+            />
+          )}
           {loading &&
             tab !== 'dashboard' &&
             tab !== 'videos' &&
@@ -1523,7 +1700,7 @@ function AppContent() {
                   personalRecords={personalRecords}
                   categoryColors={workoutTypeColors}
                   workoutStartedAt={activeWorkoutStartedAt}
-                  workoutSaving={workoutSaving}
+                  workoutSaving={workoutSaveBlocked}
                   todayBodyweight={todayMeasurement?.weight_kg ?? null}
                   todayBodyFat={todayMeasurement?.body_fat_pct ?? null}
                   onSaveBodyFat={(bodyFat) =>
@@ -1569,7 +1746,7 @@ function AppContent() {
                       upNext.type ?? null,
                     )
                   }
-                  onEditSplit={() => setTab('split')}
+                  onEditSplit={openSplitSchedule}
                   onResumeWorkout={() => setTab('log')}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
@@ -1668,7 +1845,7 @@ function AppContent() {
                       onRestTimerComplete={notifyRestComplete}
                       onClose={navigateBack}
                       onDelete={() => {
-                        if (workoutSaving) return;
+                        if (workoutSaveBlocked) return;
                         if (editingWorkout) {
                           void deleteWorkout(editingWorkout);
                           setTab('history');
@@ -1731,6 +1908,7 @@ function AppContent() {
           {!loading && historyGroupVisited && (
             <CachedTabPanel active={sectionFromTab !== null}>
               <HistoryScreen
+                exerciseLibrary={exerciseLibrary}
                 dataRevision={dataRevision}
                 key={`${historyOpenId ?? 'history'}-${historyExerciseId ?? 'all'}-${historyMovementId ?? 'any'}-${historyOpenCount}`}
                 workouts={workouts}
@@ -1754,6 +1932,8 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
+                weeklySets={dashboard?.weekly_sets}
+                onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -1766,14 +1946,9 @@ function AppContent() {
           )}
           {!loading && tab === 'split' && (
             <TrainingSplitEditor
-              onSaved={async (saved) => {
+              initialRoutineId={splitDestination.routineId}
+              onSaved={async () => {
                 await refreshData({ silent: true, activityLabel: null });
-                setMessage(
-                  saved.enabled
-                    ? 'Training split saved.'
-                    : 'Automatic workout suggestions restored.',
-                );
-                if (currentTabRef.current === 'split') navigateBack();
               }}
             />
           )}
@@ -1783,7 +1958,7 @@ function AppContent() {
                 active={tab === 'settings'}
                 selectedGroup={settingsGroup}
                 onSelectGroup={setSettingsGroup}
-                onOpenSplit={() => setTab('split')}
+                onOpenSplit={openSplitSchedule}
                 splitName={dashboard?.recommendation?.split_name ?? null}
                 guideActive={prompt === 'tour'}
                 workouts={workouts}
@@ -1798,6 +1973,7 @@ function AppContent() {
                 bodyTrendPreference={bodyTrendPreference}
                 onBodyTrendPreferenceChange={updateBodyTrendPreference}
                 onImportWorkouts={importWorkoutCsv}
+                onUndoImport={undoWorkoutImport}
                 csvGuideOpen={csvGuideOpen}
                 onCsvGuideOpenChange={setCsvGuideOpen}
                 onDeleteSamples={deleteSampleData}
@@ -1841,6 +2017,7 @@ function AppContent() {
               <ProfileScreen
                 key={user.id}
                 onOpenMember={openSharedProfile}
+                onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
                 onChooseSharing={openSharingSettings}
@@ -1861,7 +2038,16 @@ function AppContent() {
                 <SharedProfileScreen
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
                   onOpenMember={openSharedProfile}
+                  onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
+                  invite={sharedProfile.invite}
+                  onLoaded={(profile) =>
+                    setSharedProfile((current) =>
+                      current?.invite && current.id === profile.id
+                        ? { ...current, name: profile.display_name }
+                        : current,
+                    )
+                  }
                   onChooseSharing={openSharingSettings}
                   renderWorkouts={(props) => (
                     <SharedWorkoutHistory
@@ -1891,7 +2077,7 @@ function AppContent() {
             active={activeMainTab}
             workoutStartedAt={activeWorkoutStartedAt}
             restEndsAt={restEndsAt}
-            workoutSaving={workoutSaving}
+            workoutSaving={workoutSaveBlocked}
             onSelect={(nextTab) => {
               if (nextTab === 'training')
                 setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
@@ -1923,7 +2109,7 @@ function AppContent() {
           />
         )}
       </div>
-    </SettingsNavigationContext.Provider>
+    </AppContentProviders>
   );
 }
 
@@ -2508,7 +2694,7 @@ function WorkoutLogger({
         }))
       : restoredDraft
         ? restoredDraftMovements
-        : (template?.exercises ?? []).map(({ exercise }) => ({
+        : (template?.exercises ?? []).map(({ exercise, plannedSets }) => ({
             key: crypto.randomUUID(),
             exercise,
             notes: '',
@@ -2516,15 +2702,24 @@ function WorkoutLogger({
             machinePhotosInitialized: false,
             supersetKey: null,
             isComplete: false,
-            sets: suggestedSetsFromHistory(
-              historicalWorkouts,
-              exercise,
-              initialDate,
-              undefined,
-              historyBaselines && initialDate >= historyBaselines.before
-                ? historyBaselines.byExercise
-                : null,
-            ),
+            sets: plannedSets
+              ? plannedSets.map((set) => ({
+                  ...createWorkoutSet(exercise.kind),
+                  ...set,
+                  key: crypto.randomUUID(),
+                  warmup: set.set_type === 'warmup',
+                  completed: false,
+                  fromPrevious: true,
+                }))
+              : suggestedSetsFromHistory(
+                  historicalWorkouts,
+                  exercise,
+                  initialDate,
+                  undefined,
+                  historyBaselines && initialDate >= historyBaselines.before
+                    ? historyBaselines.byExercise
+                    : null,
+                ),
           })),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -4236,8 +4431,6 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
-  const lastSessionSummary =
-    !cardio && history[0] ? compactSetSummary(history[0].sets, weightUnit) : '';
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
@@ -4944,10 +5137,8 @@ function MovementCard({
               .filter(Boolean)
               .join(' · ')}
           </p>
-          {lastSessionSummary && (
-            <p className="movement-last-session">
-              Last {shortDate(history[0].workoutDate)} · {lastSessionSummary} ({weightUnit})
-            </p>
+          {!cardio && history[0] && (
+            <p className="movement-last-session">Last {shortDate(history[0].workoutDate)}</p>
           )}
           {!expanded && (
             <span className="movement-completed-summary">
@@ -5114,6 +5305,7 @@ function MovementCard({
           id={photoPanelId}
           exercise={movement.exercise}
           selectedIds={movement.machinePhotoIds}
+          settings={movement.machineSettings}
           autoPinLastUsed={!movement.machinePhotosInitialized}
           onChange={onMachinePhotos}
         />
@@ -5341,15 +5533,18 @@ function MachinePhotoChooser({
   id,
   exercise,
   selectedIds,
+  settings,
   autoPinLastUsed,
   onChange,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
+  settings?: MachineSetting[];
   autoPinLastUsed: boolean;
   onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
 }) {
+  const [selectingForMerge, setSelectingForMerge] = useState(false);
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [caption, setCaption] = useState('');
@@ -5362,11 +5557,13 @@ function MachinePhotoChooser({
   const autoPinLastUsedRef = useRef(autoPinLastUsed);
   const onChangeRef = useRef(onChange);
   const selectedIdsRef = useRef(selectedIds);
+  const settingsRef = useRef(settings);
 
   useEffect(() => {
     onChangeRef.current = onChange;
     selectedIdsRef.current = selectedIds;
-  }, [onChange, selectedIds]);
+    settingsRef.current = settings;
+  }, [onChange, selectedIds, settings]);
 
   useEffect(() => {
     let active = true;
@@ -5379,6 +5576,19 @@ function MachinePhotoChooser({
       .then(([items, lastUsed]) => {
         if (!active) return;
         setPhotos(items);
+        const canonicalIds = [
+          ...new Set(
+            selectedIdsRef.current.map(
+              (id) =>
+                items.find(
+                  (photo) => photo.id === id || photo.images?.some((image) => image.id === id),
+                )?.id ?? id,
+            ),
+          ),
+        ];
+        if (canonicalIds.join(',') !== selectedIdsRef.current.join(',')) {
+          onChangeRef.current(canonicalIds, settingsRef.current);
+        }
         if (autoPinLastUsedRef.current && selectedIdsRef.current.length === 0) {
           onChangeRef.current(lastUsed.map((photo) => photo.id));
         }
@@ -5403,6 +5613,7 @@ function MachinePhotoChooser({
 
   function stagePhoto(file: File | undefined) {
     if (!file) return;
+    setSelectingForMerge(false);
     setError(null);
     setCaption('');
     setExpanded(null);
@@ -5465,7 +5676,7 @@ function MachinePhotoChooser({
   }
 
   async function deletePhoto(photo: MachinePhoto) {
-    await api.deleteMachinePhoto(photo.id);
+    await api.deleteMachinePhoto(photo.id, true);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
     onChange(selectedIds.filter((id) => id !== photo.id));
     setExpanded(null);
@@ -5487,7 +5698,7 @@ function MachinePhotoChooser({
     ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
     : photos.length > 0
       ? `${photos.length} saved · none pinned`
-      : 'Take or choose a photo';
+      : '';
 
   return (
     <details
@@ -5515,7 +5726,7 @@ function MachinePhotoChooser({
         )}
         <span className="machine-photo-summary-copy">
           <strong>Equipment photo</strong>
-          <small>{photoSummary}</small>
+          {photoSummary && <small>{photoSummary}</small>}
         </span>
         {selectedIds.length > 0 && <b>{selectedIds.length} pinned</b>}
         <span className="machine-photo-chevron" aria-hidden="true">
@@ -5523,90 +5734,143 @@ function MachinePhotoChooser({
         </span>
       </summary>
       <div className="machine-photo-content">
-        <div className="machine-photo-actions">
-          <label>
-            <span aria-hidden="true">
-              <Icon name="camera" />
-            </span>
-            Take photo
-            <input
-              className="sr-only"
-              type="file"
-              disabled={uploading}
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              capture="environment"
-              onChange={(event) => {
-                stagePhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-          <label>
-            <span aria-hidden="true">＋</span>
-            Choose photo
-            <input
-              className="sr-only"
-              type="file"
-              disabled={uploading}
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              onChange={(event) => {
-                stagePhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-        {photos.length > 0 && (
+        {selectingForMerge ? (
+          <MachinePhotoMergePicker
+            exerciseId={exercise.id}
+            photos={photos}
+            onCancel={() => setSelectingForMerge(false)}
+            onMerged={(merged, sourceIds) => {
+              const sourceSet = new Set(sourceIds);
+              const nextIds = [
+                ...new Set(
+                  selectedIdsRef.current.map((id) => (sourceSet.has(id) ? merged.id : id)),
+                ),
+              ];
+              setPhotos((current) => [
+                merged,
+                ...current.filter((photo) => !sourceSet.has(photo.id)),
+              ]);
+              if (nextIds.join(',') !== selectedIdsRef.current.join(',')) {
+                onChange(nextIds, settingsRef.current);
+              }
+              setSelectingForMerge(false);
+              setExpanded(merged);
+            }}
+          />
+        ) : (
           <>
-            {choosingReplacement && (
-              <p className="machine-photo-choice-prompt" role="status">
-                {photos.length > 1
-                  ? 'Choose the machine you are using for this workout.'
-                  : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
-              </p>
-            )}
-            <div className="machine-photo-rail" ref={photoRailRef}>
-              {photos.map((photo) => {
-                const selected = selectedIds.includes(photo.id);
-                return (
-                  <article className={selected ? 'selected' : ''} key={photo.id}>
-                    <button
-                      type="button"
-                      className="machine-thumbnail"
-                      onClick={() => setExpanded(photo)}
-                      aria-label={`Expand ${photo.caption}`}
-                    >
-                      <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
-                    </button>
-                    <strong title={photo.caption}>{photo.caption}</strong>
-                    <small
-                      className="machine-last-used"
-                      title={
-                        photo.last_used_date
-                          ? `Last used ${machineDate(photo.last_used_date)}`
-                          : undefined
-                      }
-                    >
-                      {machineUsedShort(photo.last_used_date, today)}
-                    </small>
-                    <button
-                      type="button"
-                      className="machine-pin"
-                      onClick={() => togglePhoto(photo.id)}
-                      disabled={uploading}
-                    >
-                      {choosingReplacement
-                        ? selected
-                          ? 'Currently pinned'
-                          : 'Use this machine'
-                        : selected
-                          ? '✓ Pinned'
-                          : 'Pin to sets'}
-                    </button>
-                  </article>
-                );
-              })}
+            <div className="machine-photo-actions">
+              <label>
+                <span aria-hidden="true">
+                  <Icon name="camera" />
+                </span>
+                Take photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  capture="environment"
+                  onChange={(event) => {
+                    stagePhoto(event.target.files?.[0]);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              <label>
+                <span aria-hidden="true">＋</span>
+                Choose photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  onChange={(event) => {
+                    stagePhoto(event.target.files?.[0]);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
             </div>
+            {photos.length > 0 && (
+              <>
+                {choosingReplacement && (
+                  <p className="machine-photo-choice-prompt" role="status">
+                    {photos.length > 1
+                      ? 'Choose the machine you are using for this workout.'
+                      : 'No other saved photos yet. Use Take photo or Choose photo above to add another machine.'}
+                  </p>
+                )}
+                {photos.length >= 2 && (
+                  <div className="machine-photo-library-actions">
+                    <span>Saved · {photos.length}</span>
+                    <button
+                      type="button"
+                      disabled={uploading || !!pending}
+                      onClick={() => {
+                        setExpanded(null);
+                        setChoosingReplacement(false);
+                        setSelectingForMerge(true);
+                        setError(null);
+                      }}
+                    >
+                      Select
+                    </button>
+                  </div>
+                )}
+                <div
+                  className="machine-photo-rail"
+                  ref={photoRailRef}
+                  role="region"
+                  aria-label={`Saved equipment photos for ${exercise.name}`}
+                  tabIndex={0}
+                >
+                  {photos.map((photo) => {
+                    const selected = selectedIds.includes(photo.id);
+                    return (
+                      <article className={selected ? 'selected' : ''} key={photo.id}>
+                        <button
+                          type="button"
+                          className="machine-thumbnail"
+                          onClick={() => setExpanded(photo)}
+                          aria-label={`Expand ${photo.caption}`}
+                        >
+                          <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
+                        </button>
+                        <strong title={photo.caption}>{photo.caption}</strong>
+                        {(photo.images?.length ?? 0) > 1 && (
+                          <span className="machine-photo-count">{photo.images!.length} photos</span>
+                        )}
+                        <small
+                          className="machine-last-used"
+                          title={
+                            photo.last_used_date
+                              ? `Last used ${machineDate(photo.last_used_date)}`
+                              : undefined
+                          }
+                        >
+                          {machineUsedShort(photo.last_used_date, today)}
+                        </small>
+                        <button
+                          type="button"
+                          className="machine-pin"
+                          onClick={() => togglePhoto(photo.id)}
+                          disabled={uploading}
+                        >
+                          {choosingReplacement
+                            ? selected
+                              ? 'Currently pinned'
+                              : 'Use this machine'
+                            : selected
+                              ? '✓ Pinned'
+                              : 'Pin to sets'}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </>
         )}
         {error && <p className="machine-photo-error">{error}</p>}
@@ -5669,6 +5933,9 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [imageIndex, setImageIndex] = useState(0);
+  const images = photo.images?.length ? photo.images : [photo];
+  const image = images[Math.min(imageIndex, images.length - 1)];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -5695,7 +5962,7 @@ function MachinePhotoDetail({
       setError(
         deleteError instanceof Error
           ? deleteError.message
-          : 'Could not delete a photo that is used by a workout.',
+          : 'Could not delete the photo. Try again.',
       );
       setSaving(false);
     }
@@ -5707,7 +5974,22 @@ function MachinePhotoDetail({
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
         </button>
-        <img src={photo.full_url} alt={photo.caption} />
+        <img src={image.full_url} alt={photo.caption} />
+        {images.length > 1 && (
+          <div className="machine-photo-gallery" aria-label="Merged machine photos">
+            {images.map((item, index) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-label={`View photo ${index + 1} of ${images.length}`}
+                aria-pressed={imageIndex === index}
+                onClick={() => setImageIndex(index)}
+              >
+                <img src={item.thumbnail_url} alt="" />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="photo-detail-caption">
           {onUpdate ? (
             <input
@@ -5737,20 +6019,23 @@ function MachinePhotoDetail({
           {onDelete && (
             <InlineConfirmButton
               className="photo-delete"
-              label="Delete"
-              confirmLabel="Delete photo"
+              label={images.length > 1 ? 'Delete machine' : 'Delete'}
+              confirmLabel={images.length > 1 ? 'Delete machine and all photos' : 'Delete photo'}
+              confirmationMessage={
+                images.length > 1
+                  ? 'Also removes these photos from saved workouts.'
+                  : 'Also removes this photo from saved workouts.'
+              }
               onConfirm={removePhoto}
               disabled={saving}
             />
           )}
-          {error && <p>{error}</p>}
+          {error && <p role="alert">{error}</p>}
         </div>
       </div>
     </section>
   );
 }
-
-type ExercisePickerFilter = WorkoutCategory | 'all' | 'favorites' | 'recent';
 
 function FuzzyHighlightedText({ value, query }: { value: string; query: string }) {
   const highlighted = new Set(fuzzyHighlightIndices(value, query));
@@ -5771,7 +6056,7 @@ function FuzzyHighlightedText({ value, query }: { value: string; query: string }
   );
 }
 
-function ExercisePicker({
+export function ExercisePicker({
   exercises,
   excludedIds,
   recentExerciseIds,
@@ -5793,7 +6078,10 @@ function ExercisePicker({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<ExercisePickerFilter>('all');
+  const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
+  const [customOnly, setCustomOnly] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'favorites' | 'recent'>('all');
+  const [equipment, setEquipment] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteSavingIds, setFavoriteSavingIds] = useState<string[]>([]);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
@@ -5812,7 +6100,15 @@ function ExercisePicker({
   const backdropDismiss = useBackdropDismiss(onClose);
   const initialViewportHeightRef = useRef(window.visualViewport?.height ?? window.innerHeight);
   const query = search.trim();
-  const available = exercises.filter((exercise) => !excludedIds.includes(exercise.id));
+  const available = exercises.filter(
+    (exercise) =>
+      !excludedIds.includes(exercise.id) &&
+      (!customOnly || exercise.is_custom) &&
+      (bodyPart === 'all' || exercise.category === bodyPart) &&
+      (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
+      (filter !== 'favorites' || exercise.is_favorite) &&
+      (filter !== 'recent' || recentExerciseIds.slice(0, 10).includes(exercise.id)),
+  );
   const recent = recentExerciseIds
     .slice(0, 10)
     .map((id) => available.find((exercise) => exercise.id === id))
@@ -5829,7 +6125,7 @@ function ExercisePicker({
   } else if (filter === 'recent') {
     sections.push({ title: 'Recently used', exercises: recent });
   } else {
-    const scoped = available.filter((exercise) => filter === 'all' || exercise.category === filter);
+    const scoped = available;
     const favorites = scoped.filter((exercise) => exercise.is_favorite);
     const favoriteIds = new Set(favorites.map((exercise) => exercise.id));
     const recentlyUsed = recent.filter(
@@ -5842,7 +6138,7 @@ function ExercisePicker({
     if (favorites.length) sections.push({ title: 'Favorites', exercises: favorites });
     if (recentlyUsed.length) sections.push({ title: 'Recently used', exercises: recentlyUsed });
     sections.push({
-      title: filter === 'all' ? 'All exercises' : `${categoryNames[filter]} exercises`,
+      title: bodyPart === 'all' ? 'All exercises' : `${categoryNames[bodyPart]} exercises`,
       exercises: scoped.filter((exercise) => !featuredIds.has(exercise.id)),
     });
   }
@@ -5915,7 +6211,7 @@ function ExercisePicker({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
-  }, [search, filter]);
+  }, [search, filter, bodyPart, equipment, customOnly]);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -6010,8 +6306,8 @@ function ExercisePicker({
         <div className="exercise-filter-selects">
           <select
             aria-label="Body part"
-            value={filter === 'favorites' || filter === 'recent' ? 'all' : filter}
-            onChange={(event) => setFilter(event.target.value as WorkoutCategory | 'all')}
+            value={bodyPart}
+            onChange={(event) => setBodyPart(event.target.value as WorkoutCategory | 'all')}
           >
             <option value="all">Any Body Part</option>
             {(
@@ -6032,7 +6328,7 @@ function ExercisePicker({
           </select>
           <select
             aria-label="Exercise category"
-            value={filter === 'favorites' || filter === 'recent' ? filter : 'all'}
+            value={filter}
             onChange={(event) => setFilter(event.target.value as 'all' | 'favorites' | 'recent')}
           >
             <option value="all">Any Category</option>
@@ -6049,6 +6345,14 @@ function ExercisePicker({
             +
           </button>
         </div>
+        <div className="exercise-picker-equipment">
+          <ExerciseCustomFilter active={customOnly} onChange={setCustomOnly} />
+          <ExerciseEquipmentFilter
+            exercises={exercises}
+            value={equipment}
+            onChange={setEquipment}
+          />
+        </div>
         <div className="exercise-list" ref={listRef}>
           {sections.map(
             (section) =>
@@ -6061,9 +6365,9 @@ function ExercisePicker({
           )}
           {!visibleExerciseCount && (
             <p className="muted-empty">
-              {filter === 'favorites' && !query
+              {filter === 'favorites' && !query && !equipment && !customOnly && bodyPart === 'all'
                 ? 'Tap the bookmark beside an exercise to add a favorite.'
-                : filter === 'recent' && !query
+                : filter === 'recent' && !query && !equipment && !customOnly && bodyPart === 'all'
                   ? 'Exercises from completed workouts will appear here.'
                   : 'No exercises match that search.'}
             </p>
@@ -6102,9 +6406,7 @@ function ExercisePicker({
           exercises={exercises}
           categoryLabels={categoryNames}
           initialName={query}
-          initialCategory={
-            filter === 'all' || filter === 'favorites' || filter === 'recent' ? '' : filter
-          }
+          initialCategory={bodyPart === 'all' ? '' : bodyPart}
           viewportHeight={viewport.height}
           viewportTop={viewport.top}
           onCreate={onCreateExercise}
@@ -6112,6 +6414,8 @@ function ExercisePicker({
             setCreateExerciseOpen(false);
             setPickerError(null);
             setFilter('all');
+            setBodyPart('all');
+            setEquipment('');
             setSearch(exercise.name);
             setSelectedIds((current) =>
               singleSelect ? [exercise.id] : [...new Set([...current, exercise.id])],
@@ -6295,6 +6599,7 @@ interface ExerciseDetailHeader {
 }
 
 export function ProgressScreen({
+  exerciseLibrary,
   dataRevision = null,
   exercises,
   measurements,
@@ -6308,6 +6613,7 @@ export function ProgressScreen({
   onDetailChange,
   onCreateExercise,
 }: {
+  exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
   exercises: Exercise[];
   measurements: BodyMeasurement[];
@@ -6490,7 +6796,7 @@ export function ProgressScreen({
         <div ref={libraryRoot} hidden={!libraryMode}>
           <ExerciseLibraryList
             exercises={strengthExercises}
-            dataRevision={dataRevision}
+            library={exerciseLibrary}
             onCreate={onCreateExercise}
             onOpen={(id) => {
               libraryScroll.current = window.scrollY;
@@ -6797,6 +7103,7 @@ function SettingsScreen({
   bodyTrendPreference,
   onBodyTrendPreferenceChange,
   onImportWorkouts,
+  onUndoImport,
   csvGuideOpen,
   onCsvGuideOpenChange,
   onDeleteSamples,
@@ -6839,6 +7146,7 @@ function SettingsScreen({
   bodyTrendPreference: BodyTrendPreference;
   onBodyTrendPreferenceChange: (preference: BodyTrendPreference) => void;
   onImportWorkouts: (file: File, options?: WorkoutImportOptions) => Promise<void>;
+  onUndoImport: (id: string) => Promise<void>;
   csvGuideOpen: boolean;
   onCsvGuideOpenChange: (open: boolean) => void;
   onDeleteSamples: () => Promise<void>;
@@ -7360,6 +7668,7 @@ function SettingsScreen({
                   <div className="settings-actions data-transfer-actions">
                     <WorkoutCsvImport
                       onImport={onImportWorkouts}
+                      onUndoImport={onUndoImport}
                       guideOpen={csvGuideOpen}
                       onGuideOpenChange={onCsvGuideOpenChange}
                     />
@@ -7843,6 +8152,9 @@ export function BodyCompositionScreen({
           {activeGoal ? 'New goal' : 'Set a goal'}
         </button>
       </div>
+
+      <BodySizesCard dataRevision={dataRevision} />
+      <FfmiCard measurements={measurements} dataRevision={dataRevision} />
 
       {goalOpen && (
         <PopupDialog
@@ -8431,11 +8743,13 @@ export function CardioScreen({
     average_power_watts: null,
     average_mets: null,
     intensity: null,
-    zone: 'Zone 2',
-    qualifies_zone2: true,
+    zone: null,
+    qualifies_zone2: false,
     notes: null,
   };
   const [overview, setOverview] = useState<CardioOverview | null>(null);
+  const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
+  const [zoneNotice, setZoneNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
   const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
   const [saving, setSaving] = useState(false);
@@ -8543,11 +8857,16 @@ export function CardioScreen({
       const payload = {
         ...draft,
         intensity: null,
-        qualifies_zone2: draft.zone === 'Zone 2',
+        zone: null,
+        qualifies_zone2: false,
       };
       setSaving(true);
-      if (editingId) await api.updateCardio(editingId, payload);
-      else await api.createCardio(payload);
+      const saved = editingId
+        ? await api.updateCardio(editingId, payload)
+        : await api.createCardio(payload);
+      setZoneNotice(
+        cardioZoneNotice(saved, overview?.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
+      );
       setDraft(empty);
       setScanStatus(null);
       setEditingId(null);
@@ -8576,6 +8895,19 @@ export function CardioScreen({
   const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
   return (
     <div className="cardio-screen">
+      {zoneNotice && (
+        <NotificationDialog message={zoneNotice} onClose={() => setZoneNotice(null)} />
+      )}
+      {zoneSettingsOpen && (
+        <CardioZoneSettings
+          preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
+          onClose={() => setZoneSettingsOpen(false)}
+          onSaved={async () => {
+            await onDataChange();
+            await load();
+          }}
+        />
+      )}
       {error && <p className="inline-error">{error}</p>}
       {metricSession && (
         <CardioMetricsEditor
@@ -8583,7 +8915,10 @@ export function CardioScreen({
           session={metricSession}
           onClose={() => setMetricSession(null)}
           onSave={async (metrics) => {
-            await api.updateCardioMetrics(metricSession.id, metrics);
+            const saved = await api.updateCardioMetrics(metricSession.id, metrics);
+            setZoneNotice(
+              cardioZoneNotice(saved, overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
+            );
             await onDataChange();
             await load();
           }}
@@ -8696,23 +9031,6 @@ export function CardioScreen({
                   setDraft({ ...draft, duration_minutes: Number(event.target.value) })
                 }
               />
-            </label>
-            <label>
-              Zone
-              <select
-                value={draft.zone ?? ''}
-                onChange={(event) => {
-                  const zone = event.target.value || null;
-                  setDraft({ ...draft, zone, qualifies_zone2: zone === 'Zone 2' });
-                }}
-              >
-                <option value="">Not set</option>
-                {[1, 2, 3, 4, 5].map((zone) => (
-                  <option key={zone} value={`Zone ${zone}`}>
-                    Zone {zone}
-                  </option>
-                ))}
-              </select>
             </label>
             <label>
               Calories burned (kcal)
@@ -9030,11 +9348,53 @@ export function CardioScreen({
           label="cardio history"
         />
       </section>
+      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
+        <header>
+          <h2 id="cardio-goals-title">Weekly zone goals</h2>
+          <button
+            type="button"
+            className="cardio-goals-edit"
+            aria-label="Edit heart-rate zones and goals"
+            onClick={() => setZoneSettingsOpen(true)}
+          >
+            <Icon name="edit" />
+            Edit
+          </button>
+        </header>
+        <ul className="cardio-goal-list">
+          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
+            const range = overview.cardio_preferences?.heart_rate_zones.find(
+              (item) => item.zone === goal.zone,
+            );
+            return (
+              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
+                <span>
+                  <strong>Zone {goal.zone}</strong>
+                  {range && (
+                    <small>
+                      {range.min_bpm}–{range.max_bpm} bpm
+                    </small>
+                  )}
+                </span>
+                <span>
+                  <b>
+                    {goal.completed_minutes} / {goal.goal_minutes} min
+                  </b>
+                  <small>
+                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </div>
   );
 }
 
 function HistoryScreen({
+  exerciseLibrary,
   dataRevision,
   workouts,
   categoryColors,
@@ -9055,6 +9415,8 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
+  weeklySets,
+  onOpenMuscleWorkout,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -9065,6 +9427,7 @@ function HistoryScreen({
   onOpenSettings,
   accountActions,
 }: {
+  exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
   workouts: TrackedWorkout[];
   categoryColors: WorkoutTypeColors;
@@ -9085,6 +9448,8 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
+  weeklySets: DashboardData['weekly_sets'] | undefined;
+  onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -9103,6 +9468,7 @@ function HistoryScreen({
     setCreatedExerciseName(null);
     setCreateExerciseOpen(true);
   };
+  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -9293,24 +9659,10 @@ function HistoryScreen({
               section === 'progress'
                 ? 'Exercise charts · records · sessions'
                 : section === 'cardio'
-                  ? 'Zone 2 · energy · sessions'
+                  ? 'Zones · energy · sessions'
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
             }
             title="Training"
-            titleAction={
-              section === 'history' ? (
-                <button
-                  type="button"
-                  className="training-add-exercise"
-                  aria-label="Add exercise"
-                  title="Add exercise"
-                  aria-haspopup="dialog"
-                  onClick={openExerciseCreation}
-                >
-                  <Icon name="plus" />
-                </button>
-              ) : undefined
-            }
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
           />
@@ -9373,6 +9725,7 @@ function HistoryScreen({
       {visitedSections.has('progress') && (
         <CachedTabPanel active={section === 'progress'}>
           <ProgressScreen
+            exerciseLibrary={exerciseLibrary}
             dataRevision={dataRevision}
             exercises={exercises}
             personalRecords={personalRecords}
@@ -9512,6 +9865,13 @@ function HistoryScreen({
             />
           )}
         </CachedTabPanel>
+      )}
+      {!exerciseHeader && (
+        <MuscleSetsCard
+          weeklySets={weeklySets}
+          goal={muscleSetGoal}
+          onOpenWorkout={onOpenMuscleWorkout}
+        />
       )}
     </section>
   );
@@ -9830,12 +10190,12 @@ function HistorySetFlow({
     <div className="history-set-flow">
       {sets.map((item, index) => (
         <Fragment key={item.id}>
-          <div className={`history-set-pill ${item.failed ? 'failed-set' : ''}`}>
+          <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
             {item.rpe !== null && <small>RPE {item.rpe}</small>}
             <em>
-              {item.set_type === 'warmup'
+              {item.set_type === 'warmup' || item.warmup
                 ? 'Warm-up'
                 : item.set_type === 'drop'
                   ? 'Drop'

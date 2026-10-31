@@ -4,9 +4,19 @@ Setup, maintenance and detailed behavior for contributors and administrators. Fo
 
 ## Detailed app behavior
 
+Per-exercise partial-set choices are saved in `exercise_partial_set_weeks` (migration `0047_weekly_partial_sets`). `PATCH /api/exercises/{id}/partial-sets` accepts `partial_sets_enabled` and optional `week_start`; dates normalize to the account's week start, default to this week and cannot be in future weeks. Each change carries forward until a later explicit change; the original `exercises.partial_sets_enabled` is retained as the legacy baseline. Responses expose that baseline as `partial_sets_default`, the dated changes as `partial_set_weeks`, and the effective current choice as `partial_sets_enabled`. Weekly totals, contribution details, recommendations and muscle-volume date ranges resolve the choice on each workout date. Backups include the account-owned history. `default_muscle_set_credits` retains the full mapping for help and filter choices; exercise filters use current effective credits, and pagination starts at ten rows. Direct credits and original logged sets are preserved.
+
 A private, multi-user mobile PWA for batching individual gym-set videos, stitching them locally, and uploading one unlisted workout video to YouTube by default. Each person signs in with their own account and a cookie session, and new accounts share their workouts and cardio publicly with sharing members by default; existing accounts retain their visibility choices. The first account created becomes the admin and claims any existing data. The admin console (Settings → Help & about → Admin console) lets the admin disable accounts, see each account's activity and storage, check disk space and the video queue, and switch video uploads (off, admins only, or everyone) and new sign-ups on or off without a restart. Video uploads are admin-only by default.
 
 The app also includes a structured, dark, mobile-first workout tracker: an exercise library, set/reps/weight logging, RPE and rest tracking, per-set notes, a live rest timer, workout history, a colour-coded training heatmap, weekly muscle-set tracking, and per-exercise progression charts. Reusable machine photos can be captured from a phone, captioned, pinned to an exercise in a particular workout, and expanded from History. Workout records and photo metadata live in the local SQLite database independently of the optional video workflow; processed photo files live under `data/machine-photos/`.
+
+**Equipment photo > Select** opens a multi-select grid. Merge at least two saved machines from
+one exercise, choose the cover and future settings to keep, then confirm the name. Migration
+`0045_merged_machine_photos` retains all original image rows and files under one canonical machine.
+Merging transfers and deduplicates workout links without altering recorded workout settings;
+older draft photo IDs resolve to that canonical machine when saved. Repeated merges flatten
+existing groups, and account backups retain the group and every image. Shared group images
+follow the owner's existing machine-photo visibility and access checks.
 
 Weekly muscle-set tracking excludes warmups and cardio, reports raw and RPE-aware effective sets for each active muscle group, and shows unrated or lower-effort sets separately. Today's bars compare raw working-set credits with one account-owned weekly goal per muscle, configurable in Settings > Training > Units & weekly goals and defaulting to 10. Primary and secondary muscle credits keep their existing weighting; the goal does not change set counting or workout recommendations.
 
@@ -47,7 +57,9 @@ custom dots and legend controls; the calendar uses seven day columns without wee
 
 Accounts use a username and password; no account email is collected. Usernames are case-insensitive, 3–32 ASCII letters, numbers, dots, underscores or hyphens, and start with a letter or number. The separate Name field is how you appear in the app. You can change both in Profile, where you can also add, change or remove a profile photo. Photos are cropped to a 512 px square, stored under `data/profile-photos/`, visible according to profile sharing choices, included in account backups and deleted with the account; run migration `0032_profile_photos` before restarting the backend. An admin can reset a forgotten password with `python -m app.manage reset-password --username yourname`.
 
-Each account chooses who can see its profile in **Settings > Account & privacy > Profile sharing**: **Private**, **Friends only** (its friends; stored as `followers`) or **Public** (every sharing member; the default for newly created accounts). Existing accounts without stored choices remain private. Only accounts that share can open **Shared profiles**, send friend requests, and accept, decline or remove friends. Workouts, cardio and the profile photo are always part of a shared profile; a friends-only profile shows only its name and photo until the two members are friends. Machine photos (those pinned to shared workouts), body weight (including body weight logged with sets), goals (the active body-weight goal and weekly Zone 2 target) and notes are separate opt-ins. Usernames, videos and sample data are never shared. Going private hides the profile from other members and hides other profiles immediately while keeping choices and friendships. The owner can still view their own training profile without enabling sharing; the shared content choices also apply to this preview. Profile retains name, username and photo editing, the calendar, training totals and workouts. Settings holds sharing choices, account UUID, password, sign-out and account deletion. Friend requests always need accepting, including for public profiles. Disabled accounts are hidden and admins have no extra access. Migration `0033_profile_sharing` (release 0.5.3) adds the `profile_sharing` table, which account backups include, and `profile_follows`, which they leave out because follows involve other accounts. Both are deleted with the account. Migration `0037_follow_notifications` adds a per-follow dismissed flag. Migration `0040_friendships` (release 0.10.0) replaces `profile_follows` with `friendships`: one row per pair, stored with the lower account id first, plus the requester, status, dates and a notification flag. An accepted follow in either direction becomes a friendship; pairs with only pending follows keep the earliest request. Friendships are excluded from account snapshots and deleted with either account. The notification bell shows friend requests waiting for you and your requests that were accepted, refreshes every 30 seconds while visible and on focus, and lets you accept or decline. Existing friendships are marked seen during upgrade; accepting a request notifies only the requester.
+Each account chooses who can see its profile in **Settings > Account & privacy > Profile sharing**: **Private**, **Friends only** (its friends; stored as `followers`) or **Public** (every sharing member; the default for newly created accounts). Existing accounts without stored choices remain private. Only accounts that share can open **Shared profiles**, send friend requests, and accept, decline or remove friends. Workouts, cardio and the profile photo are always part of a shared profile; a friends-only profile shows only its name and photo until the two members are friends. Machine photos (those pinned to shared workouts), body weight (including body weight logged with sets), goals (the active body-weight goal and weekly Zone 2 target) and notes are separate opt-ins. Usernames, videos and sample data are never shared. Going private hides the profile from other members and hides other profiles immediately while keeping choices and friendships. The owner can still view their own training profile without enabling sharing; the shared content choices also apply to this preview. Profile retains name, username and photo editing, the calendar, training totals and workouts. Settings holds sharing choices, account UUID, password, sign-out and account deletion. Friend requests always need accepting, including for public profiles. Disabled accounts are hidden and admins have no extra access. Migration `0033_profile_sharing` (release 0.5.3) adds the `profile_sharing` table, which account backups include, and `profile_follows`, which they leave out because follows involve other accounts. Both are deleted with the account. Migration `0037_follow_notifications` adds a per-follow dismissed flag. Migration `0040_friendships` (release 0.10.0) replaces `profile_follows` with `friendships`: one row per pair, stored with the lower account id first, plus the requester, status, dates and a notification flag. An accepted follow in either direction becomes a friendship; pairs with only pending follows keep the earliest request. Friendships are excluded from account snapshots and deleted with either account. The notification bell shows friend requests waiting for you and your requests that were accepted, refreshes immediately through the signed-in WebSocket while connected, on focus and reconnection, and every 30 seconds while visible as a fallback, and lets you accept or decline. Existing friendships are marked seen during upgrade; accepting a request notifies only the requester.
+
+Friend QR codes hold an ordinary app link, `https://gym.example.com/#friend=<account id>`, so any phone camera can open them without the app installed. The account id is used because usernames can change. On load (and on `hashchange` in an open app) the frontend moves the invite into this tab's `sessionStorage` and removes it from the address bar, so it survives a reload, signing in and creating an account. Once signed in, the app sends that member a friend request (the normal `POST /api/sharing/friends/{id}`, which accepts their request if they had already asked) before opening their profile, and shows a toast with **Undo** that cancels the request. Existing friends and sent requests are left unchanged; if sending fails, the profile keeps **Add friend**. Scanning your own code opens your Profile. The invite is used once, and onboarding prompts wait until the member leaves the opened profile. The QR sheet checks the owner's sharing choice: a private profile cannot be found, so it offers the sharing settings instead of a code. No backend change is involved; profile visibility, blocks and request acceptance apply as usual. QR codes are generated in the browser with `uqr`. The sheet's **Scan** tab reads codes with the device camera (`getUserMedia`, back camera preferred) and `jsqr`, which is loaded only when scanning starts. It accepts any `http(s)` link with a `#friend=` hash, ignores other codes and your own, then hands the account id to the same invite flow (`openFriendInvite` and the `relay:friend-invite` window event). The camera stops when a code is read, the tab changes or the sheet closes. In-app scanning exists because an installed web app on iPhone cannot receive links from the system camera: they open in Safari, which has its own sign-in. **Native app note:** if Relay becomes a native app with universal or app links, the system camera can open friend links directly in the app and this scanner may no longer be needed. Keep the `#friend=<account id>` link format so codes already shared keep working.
 
 When upgrading an email-based account database, migration `0030_username_accounts` derives usernames from the old address's part before `@`, replaces unsupported characters with hyphens, and adds numeric suffixes for duplicates. Short or unusable names become `user`. Account IDs, passwords, sessions, preferences and workout ownership are preserved. Run `python -m app.manage list-users` after migration to see the assigned usernames. The account email column is removed; rolling back requires the pre-upgrade database backup and previous app version. Existing backup archives stay unchanged; new account snapshots use manifest format 2 with an owner username.
 
@@ -63,6 +75,31 @@ deletion removes blocks in both directions.
 Home's Friends card refreshes its latest-workout feed every 30 seconds while visible, on
 focus, when the page becomes visible and on reconnection. Each member contributes one latest
 session, sorted by workout date and creation time; reactions do not affect this order.
+
+Live friend activity shows whether each friend is working out, active now or when they were last
+active. Each signed-in, open window keeps a WebSocket to `/api/presence/ws`, authenticated by the
+session cookie and rejected from other origins, and reports whether it is visible and which
+workout this device is doing. A member is online while any of their windows is visible. Online
+status lives in memory, so the backend must run as a single process (the provided systemd unit
+does); a reverse proxy must pass WebSocket upgrades, which Caddy does by default. The workout in
+progress is stored in `live_workouts`, so it stays visible while a phone is locked between sets.
+It clears when the logging device finishes or discards the workout, or when the app's inactivity
+auto-finish time passes; another device without that workout open cannot clear it. The Friends
+and feed responses include each friend's `presence`, Friends lists friends working out first,
+then those online, and the feed puts friends working out first. Changes are pushed to friends'
+open windows immediately, with the existing 30-second refreshes as a fallback. Only accepted
+friends who could see the member on their Friends list receive it. **Online status** and **Live
+workouts** in **Settings > Account & privacy > Profile sharing > Live activity** turn each part
+off separately; both start on. Migration `0048_live_activity` adds both choices to
+`profile_sharing` and creates `live_workouts`, which account backups leave out and account
+deletion removes.
+
+The same socket sends a content-free `notifications` invalidation only to the affected account's
+open windows after notification mutations commit. These events include requests from non-friends
+and do not depend on live-activity sharing choices. Each window fetches its authenticated inbox
+snapshot; reading notices invalidates that account's other windows too. Initial connection,
+reconnection, focus, visibility and network return refresh the bell. Events arriving during a
+fetch are coalesced into a follow-up fetch, and 30-second visible polling remains the fallback.
 
 ## Project structure
 
@@ -139,9 +176,11 @@ Open `http://127.0.0.1:8000`. To create the first (admin) account, either set `G
 
 On Windows, `./start-app.ps1` builds and starts a local copy. Use `./start-app.ps1 -Dev` to include Vite for frontend development.
 
+Vite forwards HTTP and WebSocket `/api` requests to FastAPI. For access through a private development hostname, set the `GYM_DEV_HOST` environment variable to that hostname before starting Vite; localhost works without it.
+
 The menu has one current dark/blue theme, with three total stats above three weekly/bodyweight-trend stats. The old powerlifting stars menu is retired. Building replaces the previous `frontend/dist` assets. The server revalidates HTML, the service worker, and the manifest; fingerprinted assets may be cached. Release information is checked every minute while visible and online, and when returning or reconnecting. A new release displays a top notification with a refresh arrow; **Settings > What's new > Check for updates** also checks the worker. Replacement workers download in the background and wait, preserving the current cached assets. No screen reloads automatically, including when another tab activates an update. The refresh arrow waits for installation and activation, then reloads. An active workout flushes its local draft first; storage failure, an in-flight workout save or editing a previously saved workout blocks the refresh until the work is saved. Release popups describe the loaded version and remember dismissal per account/version in this browser. The Vite development server replaces any installed production worker with a cache-clearing pass-through worker while preserving push support. Workout data, drafts, settings, and push subscriptions are retained. A local workout draft needs the exercise catalogue to reload successfully before it can be restored; failed or incomplete requests preserve the draft for retry.
 
-Choose the pencil on **Today** to customise the Home Screen directly. The cards gently wiggle and show a drag handle at the top right, a width button beside it and a minus button at the top left. Drag a handle to move its card, or focus it and use the keyboard arrow keys; use the width button to expand or shrink a card, minus to hide a card and **Add sections** to restore it. **Save layout** stores order, widths and visibility in your account across devices; **Cancel**, choosing the highlighted pencil again or switching away from Today discards unsaved edits, and **Reset layout** restores the original arrangement and sizing before saving. An active workout's Resume card always stays visible. Card actions pause while editing, and reduced-motion settings disable the wiggle. These preferences use the existing account settings table and need no migration.
+Choose the pencil on **Today** to customise the Home Screen directly. The cards gently wiggle and show a drag handle at the top right, a width button beside it and a minus button at the top left. Drag a handle to move its card, or focus it and use the keyboard arrow keys; use the width button to expand or shrink a card, minus to hide a card and **Add sections** to restore it. Sections with display options also show **Customise**; the cardio goal card can track one zone goal or every goal, with a progress bar, ring or list design. **Save layout** stores order, widths, visibility and these options in your account across devices; **Cancel**, choosing the highlighted pencil again or switching away from Today discards unsaved edits, and **Reset layout** restores the original arrangement and sizing before saving. An active workout's Resume card always stays visible. Card actions pause while editing, and reduced-motion settings disable the wiggle. These preferences use the existing account settings table and need no migration.
 
 Cardio sessions accept optional whole-number calories (kcal), average heart rate, distance, average speed, incline, average indoor-cycling power, and average METs. Prefer active calories from the machine or watch. **Log metrics / Edit metrics** works for both standalone sessions and cardio linked to a workout. Blank means unknown; zero is a recorded value where valid. The Cardio screen compares calories, fat-energy equivalent, average heart rate, distance, average speed, average incline, average METs, and MET-minutes across This week, This month, 3 months, 6 months, This year, and All time. MET-minutes are calculated as average METs × session minutes, while period-average METs are weighted by duration. Each range except All time is compared with its immediately preceding equivalent period. The week follows the saved week-start preference; month/year are calendar periods to today, and 3/6 months are rolling periods anchored to today. Future sessions are excluded and metric coverage counts make partial data clear.
 
@@ -159,7 +198,9 @@ The workout logger uses the same subscription for rest-timer alerts. Start a res
 
 With Phone alerts enabled, an active workout also schedules one reminder at two hours. The server stores this reminder so it survives restarts and can notify a backgrounded phone. Saving or cancelling the workout cancels its reminder; if the phone is offline, cancellation retries when it reconnects. Open the updated app once to register an existing workout's reminder. Upgrade to migration `0019_active_workout_reminders` before restarting the backend. A workout left running can be saved with **Actual duration (minutes)**; the correction stays in its local draft until saved.
 
-**Weekly cardio** includes every cardio session. Weekly dashboard totals and goals follow the saved week-start preference and exclude future entries. A Sunday start means Sunday through Saturday.
+**Weekly cardio** totals include every cardio session. Personal zone goals count only sessions whose average heart rate falls within that account's inclusive zone range. Configure all five ordered, non-overlapping ranges and one or more zone-specific minute targets with **Edit** on **Training > Cardio > Weekly zone goals**; the default target is 150 minutes in Zone 2. Until ranges are configured, each session keeps its saved zone label (new sessions default to Zone 2, matching earlier releases), and saving goals alone does not change saved labels. Once ranges exist, missing or out-of-range heart rate receives no zone credit, even when an older client sends a manual zone label. The average estimates a session's zone rather than measuring time spent in it. Cardio from completed workout sets uses their duration-weighted average heart rate. Editing metrics or personal ranges recalculates goal totals, including existing sessions. Goal progress and the short session notification use text.
+
+`GET/PUT /api/cardio-preferences` reads and validates the account-owned `cardio_preferences` JSON setting, which is included in account backups without a schema migration. Saves bump the training revision so other devices refresh. The cardio overview returns `goal_weeks`; Home and shared goals return `cardio_goals`. Shared goals retain existing sharing permissions. Weekly totals and goals follow the saved week-start preference and exclude future entries. A Sunday start means Sunday through Saturday.
 
 Mixed portrait and landscape clips are normalized to a shared 1920x1080, 30 FPS MP4 canvas before stitching. Each clip retains its original aspect ratio: portrait clips are pillarboxed and wide clips are letterboxed where necessary. This avoids distortion and makes the concat step reliable; a single YouTube video cannot safely change its encoded frame dimensions mid-playback.
 
@@ -181,15 +222,15 @@ python -m app.manage import-legacy-backup --username yourname --source <backup f
 
 Limits stop one account from bloating the server. They sit far above real use (a six-year log peaks at 55 sets and 9 exercises in one workout), and people are never told they exist: anything over a limit gets a plain "couldn't be saved" message, and the server log records which limit was hit. The exception is the photo upload size, which people are told ("Photos can be up to 5 MB."). The app also shrinks photos before uploading them (to 1,800 px on the long side, as JPEG), so phone photos fit easily. Adjust them under **Settings → Help & about → Admin console → Account limits**; changes apply immediately.
 
-| Limit | Default | Applies to |
-|---|---|---|
-| Workouts, cardio sessions | 5,000 each | each account, except admins |
-| Custom exercises | 100 | each account, except admins |
-| Machine photos | 25 | each account, except admins |
-| Changes per minute | 60 | each account, except admins |
-| Exercises / sets in one workout | 20 / 100 | everyone |
-| Workout / exercise / set note | 2,000 / 1,000 / 500 characters | everyone |
-| Photo upload size | 5 MB (shown to people) | everyone |
+| Limit                           | Default                        | Applies to                  |
+| ------------------------------- | ------------------------------ | --------------------------- |
+| Workouts, cardio sessions       | 5,000 each                     | each account, except admins |
+| Custom exercises                | 100                            | each account, except admins |
+| Machine photos                  | 25                             | each account, except admins |
+| Changes per minute              | 60                             | each account, except admins |
+| Exercises / sets in one workout | 20 / 100                       | everyone                    |
+| Workout / exercise / set note   | 2,000 / 1,000 / 500 characters | everyone                    |
+| Photo upload size               | 5 MB (shown to people)         | everyone                    |
 
 CSV imports follow the same limits and save nothing if any is exceeded. A workout saved before a limit was lowered can still be edited, but not grown.
 
@@ -220,6 +261,42 @@ or absent splits use the existing muscle-frequency recommendations. A type remov
 saving produces an update-split state rather than substituting a different workout. Custom
 recommendations carry the account-owned type metadata, and previous-session templates match
 the custom type ID as well as the compatibility category.
+
+## Body measurements
+
+FFMI uses conventional fat-free mass / height² for both sexes. Sex selects matched population references, while optional male height adjustment, body-fat sensitivity and frame-based estimates remain separate. See [FFMI references](FFMI-REFERENCES.md) for formulas, reference cohorts and limitations. Saved profile dimensions and check-ins are unchanged.
+
+`GET /api/body-sizes` returns private dated circumference logs, newest first. `PUT /api/body-sizes` replaces the entry for `measurement_date`; omitted fields clear to null, and at least one finite circumference above 0 and up to 300 cm is required. `DELETE /api/body-sizes/{YYYY-MM-DD}` deletes only the signed-in account's entry. Each date is stored in its own `user_settings` row under `body_sizes:YYYY-MM-DD`, included in existing account backups and deletion. Writes change the training revision so other devices refresh Body. No schema migration is required. The UI converts inches to canonical cm and does not require a bodyweight record. These logs are separate from FFMI frame details and are excluded from shared profiles.
+
+## Saved and shared routines
+
+`/api/routines` stores up to 20 account-owned routines, with 1–28 workout/rest days,
+planned exercises and sets. Each routine has its own `routine:<uuid>` user-setting row,
+so existing account backups and deletion include it without a schema migration. A routine
+contains planned fields only; capturing a split omits workout/set notes, body weight,
+photos, credentials and incomplete performance. Limits are 200 exercises and 1000 sets
+per routine, with 20 exercises per day and 50 sets per exercise.
+
+`/api/routines/profile/{user_id}` lists only explicitly shared routines and uses the
+existing profile audience, friendship, block and disabled-account checks. Copying through
+that profile rechecks access, maps exercises and types into the recipient's account,
+and creates an independent private routine; it never copies workout history or activates
+a schedule. Unsharing does not remove copies already saved by others.
+
+`POST /api/routines/{id}/use` accepts a start date and replaces the active split.
+The unified **Your splits** page lists all owned copies, including private imports, with
+the active plan's week/calendar preview and inline templates. After copying, **View my splits**
+navigates to that copy and opens its card. The own profile links to this page from its
+consistency header; other profiles show only their shared plans. Importing does not publish
+or activate a split automatically. Templates remain disabled while a saved plan matches
+their ordered workout/rest days. Sharing is a separate saved-plan option, outside the editor.
+Recommendations include that day's planned movements; the logger prefills them as
+unchecked suggestions. Editing an active routine updates its schedule while preserving
+the start date, unless a schedule change is explicitly included in the same atomic save.
+Editing the schedule directly clears its routine link; deleting the
+routine keeps the schedule and restores history-based suggestions. Mutations invalidate
+the account's training revision. Test with `backend/tests/test_routines.py` and the
+frontend `RoutinePanel` and workout recovery tests.
 
 ## Checks
 
@@ -321,9 +398,22 @@ By default, the original uploads and stitched output are retained while YouTube 
 
 Each clip is also trimmed by 5 seconds at its start and end before it is normalized and stitched. Change `GYM_TRIM_START_SECONDS` or `GYM_TRIM_END_SECONDS` to adjust this (set both to `0` to disable it). Clips always retain at least 3 seconds, so very short videos are trimmed proportionally rather than made empty.
 
+## Offline mode
+
+Relay keeps working without a connection once an account has signed in on the device.
+
+- The service worker precaches the app shell, Inter font, exercise icons and in-app images, about 1.8 MB in total. Exercise icons are WebP files of roughly 6 KB each. Release videos and release-note media hosted on GitHub stay online-only.
+- Account reads are saved on the device as they load: the exercise library, workout types and colours, training and cardio preferences, split, Home layout, dashboard, recent workout history, personal records, body measurements and goals, cardio, training time, progress and machine-photo lists. The saved copy answers when the device reports no connection, the server cannot be reached (including 502-504 proxy errors), or the server has not answered within 4 seconds. Screen titles then show **Offline**. A late answer refreshes the copy, and the first successful request clears the indicator.
+- Startup opens the remembered account offline when the session check fails or takes longer than 4 seconds. A first visit on a device still needs the server.
+- Saved copies live in IndexedDB. Each record is gzip-compressed, then AES-GCM encrypted with a non-extractable Web Crypto key stored beside it and bound to the owning account and record name. Sign-out, account changes and confirmed revocation delete the records and the key. Encryption protects copied storage files; the device lock protects an unlocked browser. Origins without Web Crypto (plain HTTP other than localhost) store compressed records without encryption. Passwords are never stored on the device.
+- Stored workouts take about 0.9 KB each, and the default exercise library about 3 KB. A year at three workouts a week, with its dashboard and personal records, is roughly 0.2 MB. History beyond the startup window is saved only after it has been opened.
+- Finishing a workout offline stores it on the device; it syncs when the server is reachable. When a session expires, an unsynced finished workout is kept for the same account and discarded if a different account signs in.
+- Sign-in, Social, notifications, sharing, settings changes, imports, exports, video uploads, machine-photo images and older history need a connection.
+
 ## Limitations and sensible next steps
 
 - Uploads are not resumable and mobile browsers can suspend a backgrounded PWA.
+- Offline, one finished workout can wait to sync at a time; starting another workout waits until it reaches the server. Settings and custom exercises cannot be changed offline.
 - A processing job cannot be cancelled once ffmpeg work begins; cancellation is supported during upload.
 - Video processing handles one session at a time.
 - Real YouTube uploads need credentials and internet access; mock mode remains ideal for local verification.
@@ -342,3 +432,7 @@ New accounts see a guided feature tour before the release announcement. Use **Ne
 Open **Settings > Help & about > Feedback & feature requests** to send feedback, report problems or suggest improvements at any time. Messages are stored in the app database with your username and appear for administrators in **Settings > Help & about > Admin console > App feedback**. No email or GitHub issue is created.
 
 Open **Settings > Help & about > App guide > Replay guide** to see the tour again, or **Add to Home Screen > Show steps** for the illustrated installation instructions. Both remain available from the installed app. Settings and the closing screen link to [contribution instructions](../CONTRIBUTING.md). Upgrade existing databases with `alembic upgrade head` for `0031_app_feedback` before serving this frontend.
+
+## Exercise catalogue upgrades
+
+Default seeding matches each account's exercises by case-insensitive name or the explicit aliases in `exercise_aliases.py`. A matched custom exercise keeps its ID, name, custom flag, favourites, muscle credits and explicit equipment; only blank equipment is filled from a recognised default. This invalidates cached workout snapshots once. Manual creation and CSV imports recognise the same aliases, preventing a second entry when an older custom name is retained. Unknown or ambiguous names are left alone, and equipment variants retain separate histories. The Custom pill combines with search and equipment filters in the library and workout picker.

@@ -2,16 +2,37 @@
   "version": "1.1.0",
   "date": "2026-10-28",
   "title": "Find friends and improve your workouts",
-  "summary": "Save machine setups, plan training and rest days, build your exercise library with individual muscle credits, and discover friends and workout reactions.",
+  "summary": "Keep logging workouts offline with saves that survive interruptions, see when friends are training live, manage saved splits on one page, browse exercises with weekly partial-set controls, track body measurements and FFMI references, merge machine photos, personalise cardio goals, map and undo imports, and connect with friends through QR codes and workout reactions.",
   "changes": [
+    "Finish workout stores a completed snapshot on your device before syncing, including its fixed duration, sets and notes. Interrupted and offline saves retry automatically when you reopen or reconnect, without restarting the timer or creating duplicate workouts. Storage failures keep the workout open; server rejections offer Review workout.",
+    "Relay works offline once you have signed in on a device. It opens from an encrypted copy of your exercises, settings, recent history and stats saved on the device, shows Offline by the screen title, and lets you start, log and finish workouts. A finished workout syncs when the server is reachable again, including after an expired session once you sign back in. Exercise icons are about 14 times smaller and load offline. Signing in, Social and changing settings still need a connection.",
+    "Friends shows when each friend is working out, active now or was last active. A friend's workout in progress moves to the top with a Live label, its name and how long they have been training, and stays while their phone is locked between sets. Changes appear as they happen.",
+    "Home's Recent Friends Activity lists friends working out first, showing their live workout in place of their last session until they finish.",
+    "Settings > Account & privacy > Profile sharing has a Live activity section with separate Online status and Live workouts switches and a preview of what friends see. Both start on, only accepted friends can see them, and turning one off hides it from friends straight away.",
+    "Signing out ends live activity access from that window. Expired or disabled sign-ins can no longer send or receive live updates.",
+    "The notification bell updates immediately for friend requests, acceptances, workout reactions, comments and replies while connected. Reading notifications syncs across your open windows and devices. Reconnecting catches up automatically, and 30-second polling remains as a fallback.",
     "Mixed strength and cardio sessions follow their exercise order: Cardio + Upper body workout when cardio comes first, Upper body + Cardio workout when it comes last, and both labels when it bookends strength work. Custom workout types and names follow the same order. Existing history titles update when viewed; reordering exercises updates the live and saved title.",
+    "Training exercise trends load quietly after sign-in, so sparklines, estimated 1RM values and recent-first ordering are ready when you open Exercises. Loaded graphs stay visible while workout changes refresh in the background.",
+    "Workout exercise headers show only the last-performed date, without the previous weights and reps beside it. Equipment photo no longer shows Take or choose a photo when no photos are saved, and its pinned-count pill has a grey background.",
+    "Find strength exercises by equipment in Training > Exercises and the workout picker. Search bicep curl cable, dumbbells curl or DB curl in any word order; equipment, muscle, workout category, favourites and recent filters work together. The built-in strength library grows from 39 to 83 exercises across ten equipment types, with separate progress for each variant and existing history preserved. Use the Custom pill in either list to show only your custom exercises. Matching custom entries keep their IDs, names, muscle credits and history; only blank equipment on exact names or recognised aliases is filled from the library.",
+    "Your splits is one page with all saved plans and templates. The active split has a blue border and opens to its next seven days; centred calendar and week buttons switch the preview using the shared Home calendar. Saved template cycles are greyed out to prevent duplicates, and become available when their saved days change or the copy is deleted. Edit days, exercises and starting weights in a focused editor; sharing and deletion live in the split options. My splits sits beside Last 12 weeks on your profile instead of repeating the saved list. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change the date or pause the plan. Saving stays on the page with temporary popup feedback. Existing unlinked plans remain available and link to the library atomically on save. Sharing follows your profile audience and blocks, and copies remain independent.",
+    "Body measurements: log dated circumferences for your neck, shoulders, chest, waist, hips, upper arms, thighs, calves, wrist and ankle without a weigh-in. Filter history by body part to see dated values and changes from the previous measurement; edit a date or delete an entry. Measurements use cm or inches with your unit preference and stay private to your account.",
+    "FFMI now uses fat-free mass divided by height squared for both sexes. The saved sex icon selects matched population 5th, median and 95th percentile references, replacing the athlete and drug-use ranking. A question-mark beside each reference explains it in plain language using the selected male or female value. Reference data describe a young-adult Swiss sample, not worldwide or gym-goer norms. Score details offers a separate male height-adjusted figure and an illustrative body-fat sensitivity range. The optional Estimated natural muscular potential is separate from the chart and does not predict a personal genetic limit. Its four estimates use compact label/value rows with subtle dividers instead of large tiles. Existing check-ins and saved dimensions are retained; earlier adjusted scores may differ. Both question-marks explain the change and limitations inside the app without external links.",
+    "In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.",
+    "Set your own five heart-rate zone ranges with Edit on Training > Cardio > Weekly zone goals, below History. Keep the default 150-minute weekly Zone 2 target, change its minutes or zone, and add separate weekly goals for other zones. Once ranges are set, average heart rate estimates each session's zone and only matching sessions count towards that zone's goal; missing or out-of-range heart rate receives no zone credit. Until then, sessions keep counting as Zone 2 as before. A brief text notification shows the result. Editing ranges recalculates existing sessions and goals; cardio logged inside workouts follows the same rules.",
+    "Choose what the Home cardio goal card tracks and how it looks. While editing Home, tap Customise on the card to follow one zone goal or all of them, and pick a progress bar, ring or list design. The choice is saved with your Home layout across devices; a removed goal falls back to showing every goal.",
+    "Add friends in person with a QR code. Tap the QR button on your profile, or QR code in Social > Find, and the other person scans it with their phone camera or the Scan tab in the same sheet, which stays inside Relay. Scanning sends you a friend request straight away and opens your profile, with Undo in case it was a mistake. If you had already asked them, it accepts your request instead. Someone signed out or new to Relay signs in or creates an account first. Share or copy the same link instead. Your profile must be shared with friends or everyone to use your code.",
+    "Map incoming exercise names to your existing library during import review, then update the review to recalculate new exercises and duplicates before saving.",
+    "Import history lets you undo a tracked batch of sessions and check-ins. Other sessions, existing check-ins and edited imported check-ins are kept; unused, unchanged exercises created by that batch are removed. Imports saved before this update cannot be undone as a batch.",
+    "The bottom Start button is now circular, matching the Cardio, Up next and Empty workout choices. It keeps the same shape when closing the menu, resuming a workout or showing a rest timer.",
+    "Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.",
+    "Sign out ends your account's sessions on every device and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes sign out other devices; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts; connection failures alone keep them.",
     "Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.",
-    "Plan workout and rest days together in Settings > Training > Your split, or Edit split on Home. Add, change, reorder or remove rest days, including consecutive days off, and preview the repeating calendar cycle. Save it to your account; Home shows scheduled Rest days without creating workout records, and skipped or extra workouts do not shift the plan.",
     "Cardio sets open with their editable fields expanded, including values suggested from your previous session. Uncompleted cardio rows are blue; completed rows are green. Review duration, distance, calories, heart rate, speed and incline or upload a screenshot immediately; sets remain uncompleted until you tick them.",
     "Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save.",
     "Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.",
     "Removed the prompt beneath empty workout start and end times. Overnight workouts keep their start date: an 11:30 pm to 12:30 am session records 60 minutes on the day it started, including after reopening the app.",
-    "Use the + beside Search exercises to add an exercise to your library without starting a workout. Sessions has a compact + beside the Training heading. Both open the same form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
+    "Use the + beside Search exercises to add an exercise to your library without starting a workout. The Training heading no longer has an add button. The library shortcut opens the form for multiple target muscles and their individual credits; saving keeps you on the current tab.",
     "When adding a custom strength exercise, add multiple target muscles and choose Direct (1 set) or Partial (half a set) credit separately for each muscle. Each completed working set contributes those independent credits to weekly muscle totals and the exercise's muscle help. Add or remove targets before saving; existing exercise credits stay unchanged, and cardio does not add strength sets.",
     "Profile loads quietly after sign-in and keeps its loaded workouts visible during refreshes, so you see Loading profile less often when opening it.",
     "Tap a workout's reaction count to instantly open a bottom sheet showing the people who reacted and their emojis. Swipe down, tap Close or press Escape to dismiss it. Adding or changing your own reaction remains a separate control.",
@@ -24,7 +45,17 @@
     "Equipment photo opens directly to its photo controls, with the redundant introductory sentence removed.",
     "RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10, with colours between those values for half points. The selected RPE and folded set summary use the same colour; blank values stay neutral. Light mode uses darker text colours.",
     "The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.",
-    "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour."
+    "Strength workout rows now follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. The tint stays consistent while editing, after completion and on suggested sets. RPE changes do not change the row type or its colour.",
+    "Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.",
+    "The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.",
+    "Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.",
+    "Sets per muscle is on Home and at the bottom of Training. Weekly totals use each workout’s saved credit setting. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.",
+    "Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.",
+    "Volume records now say Volume PR for this weight on set badges, popups and record lists, making the same-weight comparison clear.",
+    "Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets.",
+    "Your profile and shared profiles show five cardio sessions per page, newest first. Use the previous and next arrows or the page picker to browse older sessions, including sessions beyond the former latest-20 limit.",
+    "The Cardio header shows the visible range and total. Your selected page stays in place during profile updates, and a failed page request can be retried without losing the current page.",
+    "Swipe through saved equipment photos while logging. Deleting a photo explains that it also removes the photo from saved workouts, and keeps the recorded sets."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
@@ -33,11 +64,75 @@
   },
   "highlights": [
     {
-      "title": "Rest days in your split",
-      "description": "Plan workouts and rest together. Add, move or change rest days, including consecutive days off, then save your repeating cycle. Home follows the schedule.",
+      "title": "Keep logging offline",
+      "description": "After signing in once, Relay opens from an encrypted copy saved on your device when the server can't be reached. Log and finish workouts while Offline shows; they sync when it reconnects.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/fa42998b90e3cbb752032a0dc1018f35ae98c47d/docs/screenshots/releases/1.1.0-split-rest-days.png",
-        "alt": "Saved training split with Pull and Lower body workouts, consecutive Rest days, an Add rest day button and a seven-day calendar preview. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b5508096d20c7142eb37d740749f94dcc76e5853/docs/screenshots/releases/1.1.0-offline-mode.png",
+        "alt": "Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats. Isolated sample data."
+      }
+    },
+    {
+      "title": "See friends training in real time",
+      "description": "Friends and Home update as workouts start or end. Separate Online status and Live workouts switches let you hide each part immediately.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/81a86d6e80534beeaf7c0b77cfbd24817ed0fdc2/docs/screenshots/releases/1.1.0-live-friend-updates.gif",
+        "alt": "Jordan Sample starts and discards a workout, then hides live workouts and online status; Friends updates immediately without reloading, using isolated synthetic data."
+      }
+    },
+    {
+      "title": "Notifications arrive while you browse",
+      "description": "The bell updates as requests, reactions, comments and replies arrive. Reading them syncs across your open windows, and reconnecting catches up automatically.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/725207c4cc88e9cf3d4e21e648aabb80a44b3768/docs/screenshots/releases/1.1.0-live-notification-badge.gif",
+        "alt": "The unread badge appears on the closed notification bell, then the inbox opens to a friend request from a synthetic sample account."
+      }
+    },
+    {
+      "title": "FFMI with clear references",
+      "description": "Standard FFMI for both sexes, with sex-specific population reference points and a question-mark beside each one to explain it. Open Score details for height adjustment and sensitivity, or Estimated natural muscular potential for the separate model. Your dimensions and sex preference stay saved.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/f360194e63a87b681dcf261540a09d08ee236999/docs/screenshots/releases/1.1.0-ffmi.png",
+        "alt": "Standard FFMI card with sex-specific population percentile references, one sex icon, Score details and a separate Estimated natural muscular potential. Synthetic sample data."
+      }
+    },
+    {
+      "title": "Merge duplicate machine photos",
+      "description": "Choose Select in Equipment photo, pick duplicates and review Merge. Keep every photo and saved workout link together; recorded workout settings stay unchanged.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b8fa2a3c26f582fcabaadaf981e149aae1ce6ca9/docs/screenshots/releases/1.1.0-machine-photo-merge.gif",
+        "alt": "Select duplicate machine photos, review the retained setup, then merge and open both photos in one saved machine."
+      }
+    },
+    {
+      "title": "Add friends with a QR code",
+      "description": "Show your QR code from Profile or Social > Find, or switch to Scan to read a friend's code inside Relay. Scanning sends a friend request, with Undo, even for someone who still needs to sign in or create an account.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/ee6d9993421df45e4ad1ac0ce347b53074f9775b/docs/screenshots/releases/1.1.0-friend-qr-code.png",
+        "alt": "My QR code sheet with a large QR code, the sample member Sam Rivera and a Copy link button. Isolated sample accounts."
+      }
+    },
+    {
+      "title": "Map your imported exercises",
+      "description": "Match incoming exercise names to existing entries, then update the review to recalculate duplicates and new exercises before saving.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/03e635cefc31aa0193961bc2ed5ab43a80471793/docs/screenshots/releases/1.1.0-import-exercise-mapping.png",
+        "alt": "Import review mapping Flat bench (old app) to Barbell Bench Press, with one session and set to add and no new exercises. Isolated sample data."
+      }
+    },
+    {
+      "title": "Undo one import",
+      "description": "Import history removes one tracked batch while keeping other sessions and edited check-ins. Earlier imports cannot be undone as a batch.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/cdf2beea2fba8e624465ff788b6ad540626b76c4/docs/screenshots/releases/1.1.0-undo-import-batch.png",
+        "alt": "Import history asking to undo one sample batch of one session and one check-in, with Undo import and Cancel buttons. Isolated sample data."
+      }
+    },
+    {
+      "title": "Your splits, one page",
+      "description": "Find saved splits and templates together. The blue-bordered active card contains the week and calendar preview. Saved template cycles are greyed out; sharing lives in split options. Open My splits beside Last 12 weeks on your profile.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/fb907e93c90d1247e8477252a4d715a5a62bf62d/docs/screenshots/releases/1.1.0-split-activation.png",
+        "alt": "Your splits immediately after activation, with the Active badge and blue border and no success popup. Isolated sample data."
       }
     },
     {
@@ -54,6 +149,38 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/8fe590caf8ad77fb26bd9c49b55d8c369536d74b/docs/screenshots/releases/1.1.0-profile-reactions.gif",
         "alt": "Opening a profile already loaded while Home was active, tapping a workout reaction count to view three sample people and their emojis, then swiping the bottom sheet down to close it."
+      }
+    },
+    {
+      "title": "Exercises, ten at a time",
+      "description": "Use the question mark beside a lift for muscle credits and the three-line button to change page size. Filters include direct and enabled partial credits.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/646b470175422c1d60f4276e889ce71f12e9bdb0/docs/screenshots/releases/1.0.1-exercise-list.png",
+        "alt": "Training exercise list with a question-mark help button beside each lift, list options and Page 1 of 4."
+      }
+    },
+    {
+      "title": "Keep each week’s partial-set choices",
+      "description": "Choose a week in an exercise’s question-mark popup. Count partial sets carries forward until changed again, while earlier weeks keep their setting.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/932f2a772dbd8da05ab300061c7b18ffd335ebc4/docs/screenshots/releases/1.0.1-weekly-partial-sets.png",
+        "alt": "Leg Press week-of selector on 5 October with partial adductors off and direct glute and quad credits retained."
+      }
+    },
+    {
+      "title": "See every weekly muscle total",
+      "description": "The weekly muscle card is on Home and at the bottom of Training. Show more reveals remaining trained and untrained muscles.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e5cab9ec4a52a9eec48795facf0c8f645683a38d/docs/screenshots/releases/1.0.1-weekly-muscle-totals.png",
+        "alt": "Weekly muscle totals with 4 direct glute and quad sets and 2 partial adductor set credits."
+      }
+    },
+    {
+      "title": "Keep Home’s header aligned",
+      "description": "The date sits above the title, with all five action buttons beside Home at phone widths. Very narrow screens use a left-aligned action row.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/52909b0a76986f647495d9c08fb84418c982fa0c/docs/screenshots/releases/1.0.1-home-header.png",
+        "alt": "Home header at 393px with the date above and all five action buttons aligned beside the title."
       }
     },
     {
@@ -102,6 +229,14 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/e90b4f322f66a6527da1875d81a88827cc5aea16/docs/screenshots/releases/1.0.1-all-settings.png",
         "alt": "All settings overview after reopening Settings from another screen, using a synthetic account."
+      }
+    },
+    {
+      "title": "Profile cardio pages",
+      "description": "Profiles show the five latest cardio sessions at a time, with page controls for browsing older sessions.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e87a77061c8bca44c7ab1ce2bb66b268c92c4d8b/docs/screenshots/releases/1.0.1-profile-cardio-pages.png",
+        "alt": "Profile Cardio card with the five latest sessions, visible range and page controls, using synthetic sample data."
       }
     }
   ]

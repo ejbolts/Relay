@@ -5,10 +5,14 @@ import { authErrorMessage } from './authForm';
 import { CollapsibleSection } from './CollapsibleSection';
 import { Icon } from './Icon';
 import { HelpPopup } from './HelpPopup';
+import { liveWorkoutReport, type PresenceStatus } from './presence';
+import { PresenceAvatar } from './PresenceAvatar';
 import { VISIBILITY_LABELS } from './sharedProfileDisplay';
+import { useUserSession } from './userContext';
 import type { ProfileVisibility, SharingChoices, SharingSettings } from './types';
 
 type OptionalChoice = Exclude<keyof SharingChoices, 'visibility'>;
+type LiveChoice = 'share_online_status' | 'share_live_workouts';
 
 const VISIBILITY_OPTIONS: Array<{ value: ProfileVisibility; description: string }> = [
   { value: 'private', description: 'Only you. You cannot see or add other members.' },
@@ -65,6 +69,11 @@ const VISIBILITY_CONFIRM: Record<ProfileVisibility, string> = {
   public: 'Make my profile public',
 };
 
+const LIVE_OPTIONS: Array<{ key: LiveChoice; label: string }> = [
+  { key: 'share_online_status', label: 'Online status' },
+  { key: 'share_live_workouts', label: 'Live workouts' },
+];
+
 const STATUS_TOAST_MS = 5000;
 
 const PRIVATE_DEFAULTS: SharingChoices = {
@@ -73,6 +82,8 @@ const PRIVATE_DEFAULTS: SharingChoices = {
   share_body_weight: false,
   share_goals: false,
   share_machine_photos: false,
+  share_online_status: true,
+  share_live_workouts: true,
 };
 
 function choicesFrom(settings: SharingSettings): SharingChoices {
@@ -82,7 +93,21 @@ function choicesFrom(settings: SharingSettings): SharingChoices {
     share_body_weight: settings.share_body_weight,
     share_goals: settings.share_goals,
     share_machine_photos: settings.share_machine_photos,
+    share_online_status: settings.share_online_status,
+    share_live_workouts: settings.share_live_workouts,
   };
+}
+
+/** What friends would see right now with these choices: this device's workout, or online. */
+function livePreview(choices: SharingChoices): { status: PresenceStatus; text: string } {
+  const workout = choices.visibility === 'private' ? null : liveWorkoutReport();
+  if (workout && choices.share_live_workouts) {
+    return { status: { kind: 'workout', workout }, text: `Working out · ${workout.name}` };
+  }
+  if (choices.visibility !== 'private' && choices.share_online_status) {
+    return { status: { kind: 'online' }, text: 'Active now' };
+  }
+  return { status: null, text: 'No live activity' };
 }
 
 function Spinner() {
@@ -91,6 +116,7 @@ function Spinner() {
 
 /** Settings' sharing section: who can see the profile, and what it shares. */
 export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
+  const { user } = useUserSession();
   const [saved, setSaved] = useState<SharingSettings | null>(null);
   const [draft, setDraft] = useState<SharingChoices>(PRIVATE_DEFAULTS);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -283,6 +309,33 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
               </div>
             ))}
           </CollapsibleSection>
+          <CollapsibleSection
+            className="sharing-options sharing-live"
+            title="Live activity"
+            headingLevel={3}
+            headingClassName="sharing-group-title"
+          >
+            {LIVE_OPTIONS.map((option) => (
+              <div className="notification-setting-row" key={option.key}>
+                <div>
+                  <strong>{option.label}</strong>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label={option.label}
+                  aria-checked={draft[option.key]}
+                  className={draft[option.key] ? 'is-on' : ''}
+                  disabled={saving}
+                  onClick={() => toggle({ ...draft, [option.key]: !draft[option.key] })}
+                >
+                  <span />
+                  {draft[option.key] ? 'On' : 'Off'}
+                </button>
+              </div>
+            ))}
+            <LivePreview choices={draft} user={user} />
+          </CollapsibleSection>
           <small className="sharing-never">
             Shared accounts can be found by username. Your videos and sample data are never shared.
           </small>
@@ -315,5 +368,27 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
         </>
       )}
     </CollapsibleSection>
+  );
+}
+
+function LivePreview({
+  choices,
+  user,
+}: {
+  choices: SharingChoices;
+  user: ReturnType<typeof useUserSession>['user'];
+}) {
+  const { status, text } = livePreview(choices);
+  return (
+    <div className="sharing-live-preview">
+      <span className="sharing-live-preview-label">Friends see you as</span>
+      <div className="sharing-live-preview-person">
+        {user && <PresenceAvatar user={user} status={status} />}
+        <span className="friend-card-name">
+          {user && <b>{user.display_name}</b>}
+          <small className={`friend-status ${status?.kind ?? 'hidden'}`}>{text}</small>
+        </span>
+      </div>
+    </div>
   );
 }

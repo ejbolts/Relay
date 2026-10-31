@@ -45,7 +45,9 @@ from .notifications import (
     send_push_notification,
     vapid_public_key,
 )
+from .presence import presence_router
 from .processing import ProcessingValidationError, SessionProcessor, validate_batch_ready
+from .routines import router as routines_router
 from .schemas import (
     ActiveWorkoutReminderCreate,
     ClipPatch,
@@ -60,6 +62,7 @@ from .schemas import (
     SessionCreate,
     SessionRead,
 )
+from .session_events import session_router
 from .sharing import sharing_router
 from .storage import (
     UploadValidationError,
@@ -629,14 +632,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return load_session(db, user.id, session.id)
 
     app.include_router(auth_router)
+    app.include_router(session_router)
     app.include_router(profile_router)
     app.include_router(admin_router)
     app.include_router(feedback_router)
     app.include_router(admin_feedback_router)
     app.include_router(sharing_router)
+    app.include_router(presence_router)
     app.include_router(protected)
     app.include_router(video)
     app.include_router(tracker_router)
+    app.include_router(routines_router)
     app.include_router(home_layout_router)
     app.include_router(machine_settings_router)
     app.include_router(youtube_router)

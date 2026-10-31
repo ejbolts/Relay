@@ -71,7 +71,8 @@ export function calculateDraftPrs(
       const labels: string[] = [];
       if (state.weight >= 0 && weight > state.weight) labels.push('Weight PR');
       const previousReps = state.reps.get(weight);
-      if (previousReps !== undefined && item.reps! > previousReps) labels.push('Volume PR');
+      if (previousReps !== undefined && item.reps! > previousReps)
+        labels.push('Volume PR for this weight');
       state.weight = Math.max(state.weight, weight);
       state.reps.set(weight, Math.max(previousReps ?? 0, item.reps!));
       if (labels.length) badges.set(item.key, labels);

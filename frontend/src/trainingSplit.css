@@ -1,6 +1,17 @@
 .split-editor {
   max-width: 550px;
 }
+.split-manager {
+  max-width: 550px;
+  margin-inline: auto;
+}
+.split-manager > .split-manager-views {
+  margin: 16px 14px 4px;
+}
+.split-manager > .routine-panel {
+  width: calc(100% - 28px);
+  margin: 12px 14px 40px;
+}
 .split-fields {
   display: grid;
   gap: 1.6rem;
@@ -262,6 +273,7 @@
 }
 .split-preview-controls {
   display: flex;
+  margin-inline-start: auto;
   gap: 0.15rem;
   align-items: center;
 }
@@ -269,9 +281,29 @@
   font-size: 0.65rem;
   color: var(--p-muted);
 }
-.split-preview-controls .split-icon-button {
-  width: 24px;
-  height: 25px;
+.routine-panel .split-preview-controls .split-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--p-ink-2);
+}
+.routine-panel .split-preview-controls .split-calendar-toggle {
+  margin-right: 0.2rem;
+}
+.routine-panel .split-calendar-toggle[aria-pressed='true'] {
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+.split-preview-heading {
+  flex-wrap: wrap;
 }
 .split-preview {
   display: grid;

@@ -9,8 +9,10 @@ import { MuscleSetsCard } from './MuscleSetsCard';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
-import type { HomeSectionId } from './homeLayout';
-import { Meter, SparkBars, Sparkline } from './PulseCharts';
+import { homeSectionSettings, updateHomeSectionSettings, type HomeSectionId } from './homeLayout';
+import { CardioGoalCard } from './CardioGoalCard';
+import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
+import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
   daysBetween,
@@ -48,6 +50,8 @@ import {
   weightUnitName,
 } from './weightUnits';
 import { formatElapsed, useElapsedSeconds } from './elapsed';
+import { useOffline } from './connectionStatus';
+import { OfflineBadge } from './OfflineBadge';
 
 export function PageHeader({
   eyebrow,
@@ -67,14 +71,16 @@ export function PageHeader({
   headingLevel?: 1 | 2;
 }) {
   const Heading = headingLevel === 1 ? 'h1' : 'h2';
+  const offline = useOffline();
   return (
     <header className="page-header">
       <div>
         {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
-        {titleAction ? (
+        {titleAction || offline ? (
           <div className="page-header-title-row">
             <Heading>{title}</Heading>
             {titleAction}
+            {offline && <OfflineBadge />}
           </div>
         ) : (
           <Heading>{title}</Heading>
@@ -104,7 +110,7 @@ function formatTotal(value: number | null | undefined): string {
 }
 
 const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
-  reps_at_weight: 'Volume PR',
+  reps_at_weight: 'Volume PR for this weight',
   weight: 'Weight PR',
 };
 
@@ -223,8 +229,7 @@ export function TodayScreen({
   const averageCardioSessions = averageOf(history.map((week) => week.cardioSessions));
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
   const zone2 = data?.zone2 ?? null;
-  const cardioMinutes = data?.cardio_minutes_this_week ?? zone2?.completed_minutes ?? null;
-  const zone2DaysLeft = zone2 ? Math.max(0, daysBetween(today, zone2.week_end) + 1) : null;
+  const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
   const latest = measurements[0] ?? null;
   const recentWeights = measurements
     .slice(0, 30)
@@ -339,7 +344,13 @@ export function TodayScreen({
             {recommendation?.scheduled_date && recommendation.scheduled_date > today ? (
               <small>{shortDate(recommendation.scheduled_date)}</small>
             ) : (
-              template && <small>Last: {shortDate(template.sourceWorkout.workout_date)}</small>
+              template && (
+                <small>
+                  {recommendation?.routine_day
+                    ? 'Routine'
+                    : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
+                </small>
+              )
             )}
           </div>
           {template ? (
@@ -380,6 +391,7 @@ export function TodayScreen({
                   onStartRecommended ? onStartRecommended() : onStartTemplate(template)
                 }
                 aria-label={`Start ${recommendationLabel?.toLowerCase()} workout`}
+                disabled={workoutSaving}
               >
                 <Icon name="play" filled />
                 Start workout
@@ -393,6 +405,7 @@ export function TodayScreen({
                     ? onStartEmpty
                     : (onStartRecommended ?? onStartEmpty)
                 }
+                disabled={workoutSaving}
               >
                 <Icon name="plus" />
                 Start workout
@@ -403,6 +416,7 @@ export function TodayScreen({
               type="button"
               onClick={onStartEmpty}
               aria-label="Start empty workout"
+              disabled={workoutSaving}
             >
               Empty
             </button>
@@ -470,27 +484,12 @@ export function TodayScreen({
       />
     ),
     zone2: (
-      <button type="button" className="pulse-card pulse-mini" onClick={onOpenCardio}>
-        <span>Zone 2 cardio</span>
-        <strong>
-          {cardioMinutes ?? '–'}
-          {zone2 && <small> / {zone2.goal_minutes} min</small>}
-        </strong>
-        {zone2 && (
-          <Meter
-            value={zone2.completed_minutes}
-            max={zone2.goal_minutes}
-            label="Zone 2 minutes this week"
-          />
-        )}
-        <p>
-          {zone2
-            ? zone2.complete
-              ? 'Weekly goal reached'
-              : `${zone2.remaining_minutes} min to go${zone2DaysLeft !== null ? ` · ${zone2DaysLeft} ${zone2DaysLeft === 1 ? 'day' : 'days'} left` : ''}`
-            : 'Minutes this week'}
-        </p>
-      </button>
+      <CardioGoalCard
+        goals={cardioGoals}
+        settings={homeSectionSettings(home.editing ? home.draft : home.layout, 'zone2')}
+        daysLeft={zone2 ? Math.max(0, daysBetween(today, zone2.week_end) + 1) : null}
+        onOpen={onOpenCardio}
+      />
     ),
     'bodyweight-trend': (
       <button type="button" className="pulse-card pulse-mini" onClick={onOpenBody}>
@@ -651,6 +650,17 @@ export function TodayScreen({
         layout={home.editing ? home.draft : home.layout}
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
+        customisers={{
+          zone2: (
+            <CardioGoalCardSettingsForm
+              goals={cardioGoals.map((goal) => ({ zone: goal.zone, minutes: goal.goal_minutes }))}
+              value={homeSectionSettings(home.draft, 'zone2')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'zone2', change))
+              }
+            />
+          ),
+        }}
         edit={
           home.editing
             ? {

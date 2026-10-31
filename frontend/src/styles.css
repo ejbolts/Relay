@@ -2329,7 +2329,7 @@ button.metric-card:focus-visible {
   flex: 0 0 auto;
   border-radius: 999px;
   padding: 0.28rem 0.45rem;
-  background: rgb(255 99 84 / 10%);
+  background: var(--p-surface-3);
   color: var(--accent-dark);
   font-size: 0.5rem;
   font-weight: 850;
@@ -7361,6 +7361,16 @@ body:has(.notification-dialog[open]) {
   color: #f09a92;
 }
 
+.photo-detail-caption > .inline-confirmation {
+  flex-wrap: wrap;
+}
+
+.photo-detail-caption .inline-confirmation-message {
+  flex-basis: 100%;
+  color: var(--muted-ink);
+  font-size: 0.7rem;
+}
+
 .photo-detail-caption > .photo-choose-other {
   border-color: var(--accent);
   color: var(--accent);
@@ -9126,7 +9136,7 @@ body,
 }
 
 @media (min-width: 700px) {
-  .calendar-panel .calendar-scroll {
+  .calendar-panel .calendar-scroll:not(.calendar-preview) {
     /* Two months exactly fill the card; minmax() would settle on the 310px minimum. */
     grid-auto-columns: max(310px, calc(50% - 0.3rem));
   }
@@ -10459,6 +10469,44 @@ body.chart-fullscreen-open {
 
 .workout-completion-toast h2 {
   font-size: 1.15rem;
+}
+
+.pending-workout-save {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.pending-workout-heading,
+.pending-workout-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pending-workout-heading > svg {
+  color: var(--accent);
+  width: 22px;
+  height: 22px;
+}
+
+.pending-workout-heading time {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.pending-workout-actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.pending-workout-actions button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--card);
 }
 
 .background-activity-bar {

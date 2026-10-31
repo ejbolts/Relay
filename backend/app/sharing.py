@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, selectinload
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
+from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
 from .models import (
@@ -55,6 +56,7 @@ from .models import (
     utc_now,
 )
 from .photo_storage import profile_photo_path
+from .presence import FriendPresence, hub, presence_by_member
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
     HeatmapDay,
@@ -80,7 +82,7 @@ PENDING, ACCEPTED = "pending", "accepted"
 MAX_WORKOUT_PAGE = 50
 FEED_SIZE = 5
 MAX_REACTION_NOTICES = 20
-RECENT_CARDIO_SESSIONS = 20
+PROFILE_CARDIO_PAGE_SIZE = 5
 RECENT_DAYS = 30
 # Friends list training days; one spare day covers members in time zones ahead of the server.
 ACTIVITY_DAYS = 8
@@ -99,6 +101,8 @@ class SharingChoices(BaseModel):
     share_body_weight: bool = False
     share_goals: bool = False
     share_machine_photos: bool = False
+    share_online_status: bool = True
+    share_live_workouts: bool = True
 
 
 class SharingRead(SharingChoices):
@@ -163,6 +167,7 @@ class SharedBodyWeightGoal(BaseModel):
 
 
 class SharedGoals(BaseModel):
+    cardio_goals: list[CardioGoalWeek]
     body_weight: SharedBodyWeightGoal | None
     zone2: Zone2WeekRead
 
@@ -186,6 +191,11 @@ class SharedCardioSession(BaseModel):
     notes: str | None
 
 
+class SharedCardioPage(BaseModel):
+    total: int
+    sessions: list[SharedCardioSession]
+
+
 class SharedConsistencyRead(BaseModel):
     heatmap: list[HeatmapDay]
     current_streak: int
@@ -198,6 +208,7 @@ class SharedProfileRead(SharedProfileSummary):
     body_weight: list[SharedBodyMeasurement] | None = None
     goals: SharedGoals | None = None
     cardio_sessions: list[SharedCardioSession] | None = None
+    cardio_total: int | None = None
     training_time: TrainingTimeRead | None = None
     training_time_past_year: TrainingTimeRead | None = None
     consistency: SharedConsistencyRead | None = None
@@ -254,6 +265,7 @@ class FeedFriend(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    presence: FriendPresence | None = None
 
 
 class FriendFeedItem(BaseModel):
@@ -282,6 +294,7 @@ class FriendActivity(ConnectionRead):
     recent_workout_count: int = 0
     # Days with a shared workout in the last week or so, for a compact activity strip.
     training_dates: list[date] = []
+    presence: FriendPresence | None = None
 
 
 class FriendsRead(BaseModel):
@@ -327,6 +340,8 @@ def sharing_choices(db: Session, user_id: str) -> ProfileSharing:
         share_body_weight=False,
         share_goals=False,
         share_machine_photos=False,
+        share_online_status=True,
+        share_live_workouts=True,
     )
 
 
@@ -542,6 +557,14 @@ def sample_workout_ids():
     return select(TrainingWorkout.id).where(TrainingWorkout.is_sample.is_(True))
 
 
+def shared_machine_photo(photo: MachinePhotoRead, user_id: str) -> MachinePhotoRead:
+    for image in [photo, *photo.images]:
+        base = f"/api/sharing/profiles/{user_id}/machine-photos/{image.id}"
+        image.thumbnail_url = f"{base}?variant=thumbnail"
+        image.full_url = f"{base}?variant=full"
+    return photo
+
+
 def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> TrainingWorkoutRead:
     """A workout with only what its owner shares: notes, body weight and photos on request."""
     shared = TrainingWorkoutRead.model_validate(workout)
@@ -551,9 +574,7 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
         movement.exercise.is_favorite = False
         if sharing.share_machine_photos:
             for photo in movement.machine_photos:
-                base = f"/api/sharing/profiles/{sharing.user_id}/machine-photos/{photo.id}"
-                photo.thumbnail_url = f"{base}?variant=thumbnail"
-                photo.full_url = f"{base}?variant=full"
+                shared_machine_photo(photo, sharing.user_id)
         else:
             movement.machine_photos = []
         if not sharing.share_notes:
@@ -586,29 +607,51 @@ def shared_goals(db: Session, user_id: str) -> SharedGoals:
         )
     )
     return SharedGoals(
+        cardio_goals=cardio_goal_weeks(
+            sessions, week, cardio_preferences(db, user_id), date.today()
+        ),
         body_weight=SharedBodyWeightGoal.model_validate(goal) if goal else None,
-        zone2=zone2_week(sessions, week, preferences.zone2_goal_minutes),
+        zone2=zone2_week(
+            sessions, week, preferences.zone2_goal_minutes, cardio_preferences(db, user_id)
+        ),
     )
 
 
-def shared_cardio(db: Session, user_id: str, sharing: ProfileSharing) -> list[SharedCardioSession]:
+def shared_cardio(
+    db: Session,
+    user_id: str,
+    sharing: ProfileSharing,
+    offset: int = 0,
+    limit: int = PROFILE_CARDIO_PAGE_SIZE,
+) -> SharedCardioPage:
+    owned = (
+        CardioSession.user_id == user_id,
+        or_(
+            CardioSession.source_workout_id.is_(None),
+            CardioSession.source_workout_id.not_in(sample_workout_ids()),
+        ),
+    )
+    total = db.scalar(select(func.count(CardioSession.id)).where(*owned)) or 0
     sessions = db.scalars(
         select(CardioSession)
-        .where(
-            CardioSession.user_id == user_id,
-            or_(
-                CardioSession.source_workout_id.is_(None),
-                CardioSession.source_workout_id.not_in(sample_workout_ids()),
-            ),
+        .where(*owned)
+        .order_by(
+            CardioSession.session_date.desc(),
+            CardioSession.created_at.desc(),
+            CardioSession.id.desc(),
         )
-        .order_by(CardioSession.session_date.desc(), CardioSession.created_at.desc())
-        .limit(RECENT_CARDIO_SESSIONS)
+        .offset(offset)
+        .limit(limit)
     )
-    shared = [SharedCardioSession.model_validate(session) for session in sessions]
+    personal = cardio_preferences(db, user_id)
+    shared = []
+    for session in sessions:
+        classify_session(session, personal)
+        shared.append(SharedCardioSession.model_validate(session))
     if not sharing.share_notes:
         for session in shared:
             session.notes = None
-    return shared
+    return SharedCardioPage(total=total, sessions=shared)
 
 
 def pending_request_count(db: Session, user_id: str) -> int:
@@ -653,6 +696,8 @@ def update_sharing(payload: SharingChoices, user: CurrentUser, db: Db) -> Sharin
     # Friend requests keep waiting: anyone can see a public profile, but friends are chosen.
     db.commit()
     db.refresh(sharing)
+    # Friends' open windows show or hide live activity straight away.
+    hub.notify(user.id)
     return sharing_read(db, sharing)
 
 
@@ -807,18 +852,32 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
         if sharing.share_body_weight
         else None
     )
+    cardio = shared_cardio(db, member.id, sharing)
     return SharedProfileRead(
         **summary.model_dump(),
         body_weight=body_weight,
         goals=shared_goals(db, member.id) if sharing.share_goals else None,
         # Cardio is shared with workouts; its notes still follow the notes choice.
-        cardio_sessions=shared_cardio(db, member.id, sharing),
+        cardio_sessions=cardio.sessions,
+        cardio_total=cardio.total,
         training_time=training_time_totals(db, member.id),
         training_time_past_year=training_time_totals(
             db, member.id, since=past_year_start(date.today())
         ),
         consistency=shared_consistency(db, member.id),
     )
+
+
+@sharing_router.get("/profiles/{user_id}/cardio", response_model=SharedCardioPage)
+def list_shared_cardio(
+    user_id: str,
+    user: CurrentUser,
+    db: Db,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=PROFILE_CARDIO_PAGE_SIZE)] = PROFILE_CARDIO_PAGE_SIZE,
+) -> SharedCardioPage:
+    member, sharing = viewable_member(db, user, user_id)
+    return shared_cardio(db, member.id, sharing, offset, limit)
 
 
 @sharing_router.get("/profiles/{user_id}/workouts", response_model=SharedWorkoutPage)
@@ -916,9 +975,7 @@ def shared_workout_filters(user_id: str, user: CurrentUser, db: Db) -> SharedWor
         )
         for photo in photos:
             item = MachinePhotoRead.model_validate(photo)
-            base = f"/api/sharing/profiles/{member.id}/machine-photos/{photo.id}"
-            item.thumbnail_url = f"{base}?variant=thumbnail"
-            item.full_url = f"{base}?variant=full"
+            shared_machine_photo(item, member.id)
             machines.append(item)
     used_type_ids = set(db.scalars(select(TrainingWorkout.workout_type_id).where(*owned)))
     return SharedWorkoutFiltersRead(
@@ -963,7 +1020,8 @@ def get_shared_machine_photo(
         .join(WorkoutMovement, WorkoutMovement.id == movement_machine_photos.c.movement_id)
         .join(TrainingWorkout, TrainingWorkout.id == WorkoutMovement.workout_id)
         .where(
-            movement_machine_photos.c.machine_photo_id == MachinePhoto.id,
+            movement_machine_photos.c.machine_photo_id
+            == func.coalesce(MachinePhoto.merged_into_id, MachinePhoto.id),
             TrainingWorkout.user_id == member.id,
             TrainingWorkout.is_sample.is_(False),
         )
@@ -1015,6 +1073,7 @@ def add_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
         )
         try:
             db.commit()
+            hub.notifications_changed(member.id)
         except IntegrityError:
             # A repeated tap, or their request, raced this one; that row stands.
             db.rollback()
@@ -1022,6 +1081,7 @@ def add_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
     elif friendship.status == PENDING and friendship.requested_by_id != user.id:
         accept_request(friendship)
         db.commit()
+        hub.notifications_changed(user.id, member.id)
     return FriendRequestRead(status=friend_status(friendship, user.id))
 
 
@@ -1037,6 +1097,7 @@ def accept_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
     if friendship.status == PENDING:
         accept_request(friendship)
         db.commit()
+        hub.notifications_changed(user.id, user_id)
     return FriendRequestRead(status="friends")
 
 
@@ -1045,6 +1106,7 @@ def remove_friend(user_id: str, user: CurrentUser, db: Db) -> None:
     """Remove a friend, cancel your request or decline theirs. Always allowed."""
     db.execute(delete(Friendship).where(*friendship_key(user.id, user_id)))
     db.commit()
+    hub.notifications_changed(user.id, user_id)
 
 
 def friendship_key(user_id: str, other_id: str):
@@ -1152,6 +1214,14 @@ def friend_feed(
     friend_ids = shared_friend_ids(db, user.id)
     friends = db.scalar(select(func.count()).select_from(friend_ids.subquery())) or 0
     sessions = latest_workouts(db, friend_ids)
+    presence = presence_by_member(db, [(member, sharing) for _, member, sharing in sessions])
+
+    def live_since(row: tuple[TrainingWorkout, User, ProfileSharing]) -> float:
+        current = presence[row[1].id]
+        return -current.workout.started_at.timestamp() if current and current.workout else 0
+
+    # Friends working out now come first, most recently started first; the rest stay newest first.
+    sessions.sort(key=live_since)
     rows = sessions[:limit]
     reactions = reaction_summaries(db, user.id, [workout.id for workout, _, _ in rows])
     return FriendFeedRead(
@@ -1163,6 +1233,7 @@ def friend_feed(
                     id=member.id,
                     display_name=member.display_name,
                     profile_photo_url=photo_url(member),
+                    presence=presence[member.id],
                 ),
                 workout=shared_workout(workout, sharing),
                 reactions=reactions[workout.id],
@@ -1181,7 +1252,12 @@ def reactable_workout(db: Session, user: User, workout_id: str) -> TrainingWorko
     return workout
 
 
-class ReactionPerson(FeedFriend):
+class ReactionPerson(BaseModel):
+    """Someone who reacted. Reactors can include non-friends, so no live presence."""
+
+    id: str
+    display_name: str
+    profile_photo_url: str | None
     reaction: Reaction
 
 
@@ -1250,6 +1326,7 @@ def react_to_workout(
         reaction.notification_seen = False
     try:
         db.commit()
+        hub.notifications_changed(workout.user_id)
     except IntegrityError:
         # Another tab reacted first; that reaction stands.
         db.rollback()
@@ -1265,6 +1342,7 @@ def remove_workout_reaction(workout_id: str, user: CurrentUser, db: Db) -> Worko
         )
     )
     db.commit()
+    hub.notifications_changed(workout.user_id)
     return reaction_summaries(db, user.id, [workout.id])[workout.id]
 
 
@@ -1346,6 +1424,11 @@ def list_friends(user: CurrentUser, db: Db) -> FriendsRead:
     reactions = reaction_summaries(db, user.id, [workout.id for workout, _ in latest.values()])
     stats = workout_stats(db, ids)
     dates = training_dates(db, ids)
+    sharings = {
+        sharing.user_id: sharing
+        for sharing in db.scalars(select(ProfileSharing).where(ProfileSharing.user_id.in_(ids)))
+    }
+    presence = presence_by_member(db, [(member, sharings[member.id]) for member in members])
     friends = []
     for member in members:
         newest = latest.get(member.id)
@@ -1362,6 +1445,7 @@ def list_friends(user: CurrentUser, db: Db) -> FriendsRead:
                 ),
                 recent_workout_count=stats[member.id].recent_workouts,
                 training_dates=dates[member.id],
+                presence=presence[member.id],
             )
         )
     # Most recent activity first; friends without a session come last, by name.
@@ -1512,7 +1596,10 @@ def mark_notifications_read(payload: NotificationsSeen, user: CurrentUser, db: D
             friendship = friendships.get(item.id)
             if notice_matches(friendship, user.id, item.kind, item.since):
                 friendship.notification_seen = True
+    changed = any(db.is_modified(row) for row in db.dirty)
     db.commit()
+    if changed:
+        hub.notifications_changed(user.id)
 
 
 class NotificationDismiss(BaseModel):
@@ -1534,6 +1621,7 @@ def dismiss_reaction_notification(
     ):
         reaction.notification_seen = True
         db.commit()
+        hub.notifications_changed(user.id)
 
 
 @sharing_router.post("/notifications/{user_id}/dismiss", status_code=204)
@@ -1545,6 +1633,7 @@ def dismiss_friend_notification(
     if notice_matches(friendship, user.id, "accepted", payload.since):
         friendship.notification_seen = True
         db.commit()
+        hub.notifications_changed(user.id)
 
 
 @sharing_router.post("/blocks/{user_id}", status_code=204)
@@ -1581,6 +1670,7 @@ def block_member(user_id: str, user: CurrentUser, db: Db) -> None:
         )
     )
     db.commit()
+    hub.notifications_changed(user.id, user_id)
 
 
 @sharing_router.delete("/blocks/{user_id}", status_code=204)
@@ -1591,3 +1681,4 @@ def unblock_member(user_id: str, user: CurrentUser, db: Db) -> None:
         )
     )
     db.commit()
+    hub.notifications_changed(user.id, user_id)

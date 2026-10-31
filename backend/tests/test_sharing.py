@@ -231,15 +231,18 @@ def add_training_history(test_client: TestClient) -> dict:
 
 
 def test_new_accounts_start_public_and_keep_choices(client):
+    live_activity = {"share_online_status": True, "share_live_workouts": True}
     assert client.get("/api/sharing").json() == {
         "visibility": "public",
         **NOTHING_EXTRA,
+        **live_activity,
         "pending_requests": 0,
     }
     saved = share(client, "followers", share_goals=True)
     assert saved == {
         "visibility": "followers",
         **NOTHING_EXTRA,
+        **live_activity,
         "share_goals": True,
         "pending_requests": 0,
     }
@@ -499,6 +502,7 @@ def test_shared_profile_includes_only_the_chosen_parts(client, other_client):
     ]
     assert view["goals"]["body_weight"]["target_weight_kg"] == 78
     assert view["goals"]["zone2"]["completed_minutes"] == 40
+    assert view["goals"]["cardio_goals"][0]["completed_minutes"] == 40
     assert [session["notes"] for session in view["cardio_sessions"]] == ["Easy spin"]
 
     [shared] = other_client.get(f"/api/sharing/profiles/{owner_id}/workouts").json()["workouts"]

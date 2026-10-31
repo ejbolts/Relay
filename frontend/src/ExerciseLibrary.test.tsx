@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
+import { useExerciseLibrary } from './useExerciseLibrary';
 import type { Exercise, ExerciseLibrarySummary, ExerciseProgress, TrackedWorkout } from './types';
 
 const pec: Exercise = {
@@ -17,7 +18,7 @@ const pec: Exercise = {
   is_favorite: false,
   muscle_contributions: [],
 };
-const row = { ...pec, id: 'row', name: 'Cable Row', muscle_group: 'Back' };
+const row = { ...pec, id: 'row', name: 'Cable Row', muscle_group: 'Back', equipment: 'Cable' };
 const empty = { ...pec, id: 'empty', name: 'Untrained Press' };
 const catalogue = [pec, row, empty];
 function progress(exercise: Exercise, value = 100): ExerciseProgress {
@@ -67,20 +68,29 @@ const onOpenWorkout = vi.fn();
 const named = (name: string) =>
   [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === name)!;
 const click = async (element: Element) => act(async () => (element as HTMLElement).click());
-async function render(revision: string | null = null) {
-  await act(async () =>
-    root.render(
-      <ProgressScreen
-        exercises={catalogue}
-        measurements={[]}
-        personalRecords={[]}
-        onOpenWorkout={onOpenWorkout}
-        embedded
-        browseFirst
-        dataRevision={revision}
-      />,
-    ),
+function LibraryScreen({
+  revision,
+  exercises,
+}: {
+  revision: string | null;
+  exercises: Exercise[];
+}) {
+  const exerciseLibrary = useExerciseLibrary(exercises, revision);
+  return (
+    <ProgressScreen
+      exerciseLibrary={exerciseLibrary}
+      exercises={exercises}
+      measurements={[]}
+      personalRecords={[]}
+      onOpenWorkout={onOpenWorkout}
+      embedded
+      browseFirst
+      dataRevision={revision}
+    />
   );
+}
+async function render(revision: string | null = null, exercises: Exercise[] = catalogue) {
+  await act(async () => root.render(<LibraryScreen revision={revision} exercises={exercises} />));
 }
 async function search(value: string) {
   const input = host.querySelector<HTMLInputElement>('[aria-label="Search exercises"]')!;
@@ -125,6 +135,52 @@ it('opens on a full list, with one summary request and no automatically selected
     true,
   );
   expect(host.querySelector('.exercise-list-rows button')?.textContent).toContain('Pec Deck');
+});
+it('combines equipment, muscle and reordered search, retaining equipment after detail', async () => {
+  await render();
+  const equipment = host.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
+  await act(async () => {
+    equipment.value = 'Cable';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await click(named('Back'));
+  await search('back cable row');
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
+  await click(host.querySelector('[data-exercise-id="row"]')!);
+  await click(host.querySelector('.training-back')!);
+  expect(equipment.value).toBe('Cable');
+  await search('machine');
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(0);
+  expect(host.querySelector('[role="status"]')?.textContent).toContain('No exercises match');
+});
+it('combines the Custom pill with equipment and muscle filters and preserves it after detail', async () => {
+  await render(
+    null,
+    catalogue.map((exercise) => ({ ...exercise, is_custom: exercise.id === 'row' })),
+  );
+  const custom = host.querySelector('[aria-label="Custom exercises"]')!;
+  expect(custom.getAttribute('aria-pressed')).toBe('false');
+  await click(custom);
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
+  await click(named('Back'));
+  const equipment = host.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
+  await act(async () => {
+    equipment.value = 'Cable';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await search('row');
+  await click(host.querySelector('[data-exercise-id="row"]')!);
+  await click(host.querySelector('.training-back')!);
+  expect(custom.getAttribute('aria-pressed')).toBe('true');
+  await click(host.querySelector('[aria-label="Clear search"]')!);
+  await act(async () => {
+    equipment.value = 'Machine';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(0);
+  await click(custom);
+  await click(named('All'));
+  expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(2);
 });
 it('searches, filters, clears and cycles through recent, alphabetical and improvement ordering', async () => {
   await render();
@@ -246,6 +302,41 @@ it('ignores stale detail responses after returning to the list and choosing anot
   expect(host.querySelector('.progress-hero-value')?.textContent).toContain('89');
 });
 
+it('keeps loaded graphs and ordering visible during a refresh and ignores an older response', async () => {
+  await render('initial');
+  const points = host.querySelector('.exercise-list-spark polyline')!.getAttribute('points');
+  let finishOld!: (value: ExerciseLibrarySummary[]) => void;
+  let finishNew!: (value: ExerciseLibrarySummary[]) => void;
+  vi.mocked(api.exerciseLibrary)
+    .mockImplementationOnce(() => new Promise((resolve) => (finishOld = resolve)))
+    .mockImplementationOnce(() => new Promise((resolve) => (finishNew = resolve)));
+  await search('Pec');
+  await render('older');
+  expect(host.querySelector('.exercise-list-spark polyline')?.getAttribute('points')).toBe(points);
+  expect(host.textContent).not.toContain('Loading trends');
+  await render('newer');
+  await act(async () => finishNew([{ ...summaries[0], latest_estimated_1rm: 130 }]));
+  await act(async () => finishOld(summaries));
+  expect(host.querySelector('.exercise-list-value b')?.textContent).toContain('130');
+  expect(host.querySelector<HTMLInputElement>('[aria-label="Search exercises"]')?.value).toBe(
+    'Pec',
+  );
+});
+
+it('refreshes trends after adding an exercise and keeps the previous graphs if the refresh fails', async () => {
+  await render();
+  vi.mocked(api.exerciseLibrary).mockRejectedValueOnce(new Error('Offline'));
+  await render(null, [...catalogue, { ...pec, id: 'new', name: 'New press' }]);
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('.exercise-list-spark polyline')).not.toBeNull();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load exercise trends',
+  );
+  await click(named('Retry'));
+  expect(api.exerciseLibrary).toHaveBeenCalledTimes(3);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
 it('retries a failed session read and keeps the workout action unavailable until it loads', async () => {
   const workout: TrackedWorkout = {
     id: 'session-9',
@@ -289,4 +380,36 @@ it('retries a failed session read and keeps the workout action unavailable until
   expect(document.querySelector('dialog')?.textContent).toContain('Updated upper body');
   await click(document.querySelector('dialog .popup-dialog-close')!);
   expect(document.querySelector('dialog')).toBeNull();
+});
+
+it('preserves the library page when returning from a lift and resets it for a new search', async () => {
+  const many = Array.from({ length: 23 }, (_, index) => ({
+    ...pec,
+    id: `lift-${index}`,
+    name: `Lift ${String(index).padStart(2, '0')}`,
+  }));
+  vi.mocked(api.exerciseProgress).mockResolvedValue(progress(many[10]));
+  await act(async () =>
+    root.render(
+      <ProgressScreen
+        exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
+        exercises={many}
+        measurements={[]}
+        personalRecords={[]}
+        onOpenWorkout={onOpenWorkout}
+        embedded
+        browseFirst
+      />,
+    ),
+  );
+  await click(host.querySelector('[aria-label="Next exercises page"]')!);
+  await click(host.querySelector('[data-exercise-id="lift-10"]')!);
+  await click(host.querySelector('.training-back')!);
+  expect(host.textContent).toContain('Page 2 of 3');
+  expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe(
+    'lift-10',
+  );
+  await search('Lift 02');
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(1);
+  expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe('lift-2');
 });
