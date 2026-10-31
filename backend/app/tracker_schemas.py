@@ -742,6 +742,16 @@ class TrainingPreferencesRead(TrainingPreferencesUpdate):
     weekly_muscle_set_goal: int = 10
 
 
+class FfmiProfile(BaseModel):
+    """Body frame inputs for FFMI and natural muscular potential estimates."""
+
+    sex: Literal["male", "female"] | None = None
+    height_cm: float | None = Field(default=None, ge=100, le=250)
+    wrist_cm: float | None = Field(default=None, ge=10, le=30)
+    ankle_cm: float | None = Field(default=None, ge=12, le=40)
+    target_body_fat_pct: float = Field(default=10, ge=3, le=40)
+
+
 class WorkoutTypeColors(BaseModel):
     upper: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
     lower: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")

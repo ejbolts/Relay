@@ -1,0 +1,420 @@
+import { useEffect, useState, type CSSProperties } from 'react';
+import { api } from './api';
+import { FfmiHelp } from './FfmiHelp';
+import { HelpPopup } from './HelpPopup';
+import { PopupDialog } from './PopupDialog';
+import {
+  DEFAULT_FFMI_PROFILE,
+  ffmiComparisons,
+  ffmiScaleRange,
+  ffmiSensitivity,
+  maleHeightAdjustedFfmi,
+  ffmiScalePercent,
+  ffmiScore,
+  latestBodyFatMeasurement,
+  lengthFromCm,
+  lengthToCm,
+  frameEstimate,
+} from './ffmi';
+import { useWeightUnit } from './trainingPreferencesContext';
+import type { BodyMeasurement, FfmiProfile } from './types';
+import { formatWeight } from './weightUnits';
+import './ffmi.css';
+
+const LENGTH_LIMITS_CM = {
+  height_cm: [100, 250],
+  wrist_cm: [10, 30],
+  ankle_cm: [12, 40],
+} as const;
+
+type LengthField = keyof typeof LENGTH_LIMITS_CM;
+
+function inputValue(cm: number | null, unit: 'kg' | 'lb'): string {
+  return cm === null ? '' : String(lengthFromCm(cm, unit));
+}
+
+export function FfmiScale({ ffmi, sex }: { ffmi: number; sex: 'male' | 'female' }) {
+  const comparisons = ffmiComparisons(sex);
+  const range = ffmiScaleRange(sex, ffmi);
+  const position = (value: number) =>
+    ({ left: `${ffmiScalePercent(value, range)}%` }) as CSSProperties;
+  const labels = (below: boolean) => (
+    <div className={`ffmi-scale-ticks${below ? ' below' : ''}`} aria-hidden="true">
+      {comparisons
+        .filter((_, index) => (index === 1) === below)
+        .map(({ value }) => (
+          <span key={value} className="ffmi-scale-tick" style={position(value)}>
+            <i>{value.toFixed(1)}</i>
+          </span>
+        ))}
+    </div>
+  );
+  return (
+    <div className="ffmi-scale">
+      {labels(false)}
+      <div
+        className="ffmi-scale-track"
+        role="img"
+        aria-label={`Your FFMI ${ffmi.toFixed(1)}. ${sex === 'male' ? 'Male' : 'Female'} population reference points: ${comparisons.map((p) => `${p.label} ${p.value.toFixed(1)}`).join(', ')}. Scale ${range.min} to ${range.max}.`}
+      >
+        <span className="ffmi-scale-fill" style={{ width: `${ffmiScalePercent(ffmi, range)}%` }} />
+        {comparisons.map(({ value }) => (
+          <span key={value} className="ffmi-scale-line" style={position(value)} />
+        ))}
+        <span className="ffmi-scale-marker you" style={position(ffmi)} />
+      </div>
+      {labels(true)}
+      <div className="ffmi-axis-ends" aria-hidden="true">
+        <span>{range.min}</span>
+        <span>{range.max}</span>
+      </div>
+      <div className="ffmi-scale-key">
+        <span className="you">You {ffmi.toFixed(1)}</span>
+      </div>
+    </div>
+  );
+}
+
+export function FfmiCard({
+  measurements,
+  dataRevision = null,
+  initialProfile = null,
+}: {
+  measurements: BodyMeasurement[];
+  dataRevision?: string | null;
+  initialProfile?: FfmiProfile | null;
+}) {
+  const weightUnit = useWeightUnit();
+  const lengthUnit = weightUnit === 'lb' ? 'in' : 'cm';
+  const [profile, setProfile] = useState<FfmiProfile | null>(initialProfile);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<FfmiProfile>(DEFAULT_FFMI_PROFILE);
+  const [lengths, setLengths] = useState<Record<LengthField, string>>({
+    height_cm: '',
+    wrist_cm: '',
+    ankle_cm: '',
+  });
+  const [targetBodyFat, setTargetBodyFat] = useState('10');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getFfmiProfile()
+      .then((next) => {
+        if (!cancelled) setProfile(next);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile((current) => current ?? DEFAULT_FFMI_PROFILE);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataRevision]);
+
+  if (!profile) return null;
+
+  const measurement = latestBodyFatMeasurement(measurements);
+  const ready = profile.sex !== null && profile.height_cm !== null;
+  const ffmi =
+    ready && measurement
+      ? ffmiScore(profile.height_cm!, measurement.weight_kg, measurement.body_fat_pct!)
+      : null;
+  const estimate = measurement ? frameEstimate(profile, measurement) : null;
+  const sensitivity =
+    ready && measurement
+      ? ffmiSensitivity(profile.height_cm!, measurement.weight_kg, measurement.body_fat_pct!)
+      : null;
+  const needsFrame = profile.sex === 'male' && (!profile.wrist_cm || !profile.ankle_cm);
+  const nextSex = profile.sex === 'male' ? 'female' : 'male';
+  const modelLabel = profile.sex
+    ? `${profile.sex === 'male' ? 'Male' : 'Female'} FFMI model. Switch to ${nextSex}.`
+    : 'Select male FFMI model';
+
+  function openEditor() {
+    const current = profile ?? DEFAULT_FFMI_PROFILE;
+    setDraft(current);
+    setLengths({
+      height_cm: inputValue(current.height_cm, weightUnit),
+      wrist_cm: inputValue(current.wrist_cm, weightUnit),
+      ankle_cm: inputValue(current.ankle_cm, weightUnit),
+    });
+    setTargetBodyFat(String(current.target_body_fat_pct));
+    setError(null);
+    setModelError(null);
+    setEditing(true);
+  }
+
+  async function switchModel(sex: 'male' | 'female') {
+    if (!profile || saving || profile.sex === sex) return;
+    setSaving(true);
+    setModelError(null);
+    try {
+      setProfile(await api.updateFfmiProfile({ ...profile, sex }));
+    } catch (saveError) {
+      setModelError(
+        saveError instanceof Error ? saveError.message : 'Could not save the FFMI model.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function parseLength(field: LengthField): number | null | undefined {
+    const text = lengths[field].trim();
+    if (!text) return null;
+    const cm = lengthToCm(Number(text), weightUnit);
+    const [low, high] = LENGTH_LIMITS_CM[field];
+    return Number.isFinite(cm) && cm >= low && cm <= high ? Math.round(cm * 10) / 10 : undefined;
+  }
+
+  async function save() {
+    const height = parseLength('height_cm');
+    const male = draft.sex === 'male';
+    const wrist = male ? parseLength('wrist_cm') : draft.wrist_cm;
+    const ankle = male ? parseLength('ankle_cm') : draft.ankle_cm;
+    const target = Number(targetBodyFat);
+    if (!draft.sex) return setError('Choose male or female.');
+    if (height === null || height === undefined)
+      return setError(
+        `Enter a height between ${lengthFromCm(100, weightUnit)} and ${lengthFromCm(250, weightUnit)} ${lengthUnit}.`,
+      );
+    if (wrist === undefined || ankle === undefined)
+      return setError('Check the wrist and ankle measurements.');
+    if (!targetBodyFat.trim() || !Number.isFinite(target) || target < 3 || target > 40)
+      return setError('Enter a target body fat between 3 and 40%.');
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await api.updateFfmiProfile({
+        sex: draft.sex,
+        height_cm: height,
+        wrist_cm: wrist,
+        ankle_cm: ankle,
+        target_body_fat_pct: target,
+      });
+      setProfile(saved);
+      setEditing(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save these details.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="pulse-card ffmi-card" aria-label="FFMI">
+      <header className="pulse-card-header">
+        <h2 className="profile-help-row">
+          FFMI <FfmiHelp />
+        </h2>
+        <div className="ffmi-header-actions">
+          <button
+            type="button"
+            className="ffmi-model-toggle"
+            aria-label={modelLabel}
+            title={modelLabel}
+            aria-busy={saving}
+            disabled={saving}
+            onClick={() => void switchModel(nextSex)}
+          >
+            <span aria-hidden="true">
+              {profile.sex === 'male' ? '♂' : profile.sex === 'female' ? '♀' : '⚥'}
+            </span>
+          </button>
+          {ready && (
+            <button type="button" className="ffmi-edit" disabled={saving} onClick={openEditor}>
+              Edit
+            </button>
+          )}
+        </div>
+      </header>
+
+      {modelError && (
+        <p className="inline-error" role="alert">
+          {modelError}
+        </p>
+      )}
+
+      {!ready && (
+        <button type="button" className="ffmi-setup" disabled={saving} onClick={openEditor}>
+          Add height and sex
+        </button>
+      )}
+
+      {ready && !measurement && (
+        <p className="ffmi-empty">Log a weigh-in with body fat % to see your FFMI.</p>
+      )}
+
+      {ffmi !== null && measurement && (
+        <>
+          <div className="ffmi-score">
+            <strong>{ffmi.toFixed(1)}</strong>
+          </div>
+          <FfmiScale ffmi={ffmi} sex={profile.sex!} />
+          <ol className="ffmi-legend">
+            {ffmiComparisons(profile.sex!).map(({ value, label, percentile }) => (
+              <li key={value}>
+                <strong>{value.toFixed(1)}</strong>
+                <span>{label}</span>
+                <HelpPopup title={label}>
+                  <p>
+                    {percentile === 50
+                      ? `The median is the middle value. About half of the ${profile.sex} reference sample had an FFMI at or below ${value.toFixed(1)}, and half had a higher value.`
+                      : `About ${percentile}% of the ${profile.sex} reference sample had an FFMI at or below ${value.toFixed(1)}, and about ${100 - percentile}% had a higher value.`}
+                  </p>
+                  <p>
+                    These figures describe a study sample of Swiss adults aged 18–34. They are
+                    reference points, not training targets, health grades or genetic limits. A
+                    percentile is a position within that sample, not a body-fat percentage.
+                  </p>
+                </HelpPopup>
+              </li>
+            ))}
+          </ol>
+          <details className="ffmi-details">
+            <summary>Score details</summary>
+            <dl className="ffmi-score-details">
+              {profile.sex === 'male' && (
+                <div>
+                  <dt>Height-adjusted FFMI</dt>
+                  <dd>
+                    {maleHeightAdjustedFfmi(
+                      profile.height_cm!,
+                      measurement.weight_kg,
+                      measurement.body_fat_pct!,
+                    ).toFixed(1)}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>Body fat ±3 points</dt>
+                <dd>
+                  {sensitivity!.min.toFixed(1)}–{sensitivity!.max.toFixed(1)}
+                </dd>
+              </div>
+            </dl>
+          </details>
+          <details className="ffmi-details ffmi-frame-estimate">
+            <summary>Estimated natural muscular potential</summary>
+            {profile.sex === 'male' && (
+              <p className="ffmi-model-assumption">Model assumes 4–12% body fat.</p>
+            )}
+            {estimate && (
+              <dl className="ffmi-potential">
+                <div>
+                  <dt>Estimated FFMI</dt>
+                  <dd>{estimate.ffmi.toFixed(1)}</dd>
+                </div>
+                <div>
+                  <dt>Estimated lean mass</dt>
+                  <dd>{formatWeight(estimate.leanMassKg, weightUnit, 1)}</dd>
+                </div>
+                <div>
+                  <dt>Estimated weight at {profile.target_body_fat_pct}% fat</dt>
+                  <dd>{formatWeight(estimate.bodyweightKg, weightUnit, 1)}</dd>
+                </div>
+                <div>
+                  <dt>Lean mass gap</dt>
+                  <dd>{formatWeight(Math.max(0, estimate.leanMassGapKg), weightUnit, 1)}</dd>
+                </div>
+              </dl>
+            )}
+            {needsFrame && (
+              <button type="button" className="ffmi-setup" disabled={saving} onClick={openEditor}>
+                Add wrist and ankle for a model reference
+              </button>
+            )}
+          </details>
+        </>
+      )}
+
+      {editing && (
+        <PopupDialog
+          title="FFMI details"
+          kicker="BODY"
+          className="body-entry-popup"
+          onClose={() => setEditing(false)}
+        >
+          <form
+            className="body-entry-form ffmi-profile-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+          >
+            <div className="segmented-control" role="radiogroup" aria-label="Sex">
+              {(
+                [
+                  ['male', 'Male'],
+                  ['female', 'Female'],
+                ] as const
+              ).map(([sex, label]) => (
+                <button
+                  key={sex}
+                  type="button"
+                  role="radio"
+                  aria-checked={draft.sex === sex}
+                  className={draft.sex === sex ? 'active' : ''}
+                  onClick={() => setDraft((current) => ({ ...current, sex }))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="body-entry-fields">
+              {(
+                [
+                  ['height_cm', 'Height'],
+                  ...(draft.sex === 'male'
+                    ? ([
+                        ['wrist_cm', 'Wrist'],
+                        ['ankle_cm', 'Ankle'],
+                      ] as const)
+                    : []),
+                ] as const
+              ).map(([field, label]) => (
+                <label key={field}>
+                  {label} ({lengthUnit})
+                  <input
+                    inputMode="decimal"
+                    type="number"
+                    step="0.1"
+                    value={lengths[field]}
+                    placeholder={field === 'height_cm' ? undefined : 'Optional'}
+                    onChange={(event) =>
+                      setLengths((current) => ({ ...current, [field]: event.target.value }))
+                    }
+                  />
+                </label>
+              ))}
+              <label>
+                Target body fat %
+                <input
+                  inputMode="decimal"
+                  type="number"
+                  min="3"
+                  max="40"
+                  step="0.5"
+                  value={targetBodyFat}
+                  onChange={(event) => setTargetBodyFat(event.target.value)}
+                />
+              </label>
+            </div>
+            {error && <p className="inline-error">{error}</p>}
+            <footer className="popup-dialog-actions">
+              <button type="button" disabled={saving} onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="popup-primary-action" disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </footer>
+          </form>
+        </PopupDialog>
+      )}
+    </section>
+  );
+}

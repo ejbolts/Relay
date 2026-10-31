@@ -56,6 +56,30 @@ _Show your QR code from your profile or Social > Find, or switch to **Scan** to 
 
 _Signing out on desktop also ends the mobile session and clears its unfinished workout. Two independent browser sessions with isolated sample data._
 
+![Waist history showing dated measurements and changes from the previous recorded value](screenshots/releases/1.1.0-body-part-history.png)
+
+_Select a body part to follow its own measurement history. Missing values are skipped and changes use your displayed units. Isolated synthetic measurements._
+
+![Short FFMI methodology summary explaining the model reference and measurement guidance](screenshots/releases/1.1.0-ffmi-methodology.png)
+
+_The existing question-marks explain standard scoring, the reference sample, illustrative sensitivity and the optional frame model. Learn more and Back stay inside the app without external links._
+
+![Population median help explains the middle value and distinguishes percentile from body-fat percentage](screenshots/releases/1.1.0-ffmi-reference-help.png)
+
+_Each reference row has a question-mark with a short explanation using the selected sex and value. Keyboard, close/Escape and focus return use the existing help popup. Synthetic sample data._
+
+![Compact muscular-potential rows with labels on the left and estimates on the right](screenshots/releases/1.1.0-ffmi-compact-potential.png)
+
+_The four estimates use compact rows with subtle dividers, replacing the large tiles. Synthetic sample data._
+
+![Standard FFMI with sex-specific population references and separate expandable score and frame details](screenshots/releases/1.1.0-ffmi.png)
+
+_The score uses conventional FFMI for either sex. The saved icon changes the reference population, with matched median and percentile points. Score details and the frame-based model stay separate. Synthetic sample data._
+
+![Female reference population on the same standard FFMI scale, with the Estimated natural muscular potential open](screenshots/releases/1.1.0-ffmi-female.png)
+
+_The same synthetic height, weight and body-fat inputs still score 21.0; female population references change to 13.8, 15.4 and 17.6. The optional female model assumes raw FFMI 20._
+
 ![Import review mapping Flat bench (old app) to Barbell Bench Press with no new exercises](screenshots/releases/1.1.0-import-exercise-mapping.png)
 
 _Map incoming names to your exercise library, then update the review before saving. Isolated sample data._
@@ -139,6 +163,8 @@ _The circular Start button matches its workout choices. Isolated sample data._
 - **Find the right equipment variant:** Filter by equipment in Training > Exercises and the workout picker. Search `bicep curl cable`, `dumbbells curl` or `DB curl` in any word order. Equipment, muscle, workout category, favourites and recent filters work together. Added 44 common strength exercises (83 total), covering barbell, dumbbell, cable, machine, Smith machine, EZ bar, trap bar, kettlebell, resistance band and bodyweight. Existing IDs, custom exercises, favourites and history are preserved; each variant has its own progress. The **Custom** pill works alongside the other filters in both lists. Exact-name and recognised-alias custom entries are reused; only missing equipment is filled, leaving explicit equipment and muscle credits intact. Ambiguous names stay separate.
 
 - **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
+- **Body measurements:** log dated circumferences for neck, shoulders, chest, waist, hips, left/right upper arms, thighs and calves, wrist and ankle. Filter history by body part for dated values and changes from the previous recorded measurement, edit or delete entries, and use cm or inches with your unit preference. No weigh-in is required; records stay private and are included in account backups.
+- FFMI now uses fat-free mass divided by height squared for both sexes. The saved sex icon selects matched population 5th, median and 95th percentile references, replacing the athlete and drug-use ranking. A question-mark beside each reference explains it in plain language using the selected male or female value. Reference data describe a young-adult Swiss sample, not worldwide or gym-goer norms. Score details offers a separate male height-adjusted figure and an illustrative body-fat sensitivity range. The optional Estimated natural muscular potential is separate from the chart and does not predict a personal genetic limit. Its four estimates use compact label/value rows with subtle dividers instead of large tiles. Existing check-ins and saved dimensions are retained; earlier adjusted scores may differ. Both question-marks explain the change and limitations inside the app without external links.
 
 - Workout exercise headers show only the last-performed date, without the previous weights and reps beside it. **Equipment photo** no longer shows **Take or choose a photo** when no photos are saved, and its pinned-count pill has a grey background.
 - In Equipment photo, choose Select to pick multiple saved machines, review their cover, name and future settings, then merge them. All photos and workout links are kept together, including older drafts; settings recorded in existing workouts stay unchanged.
