@@ -3,6 +3,7 @@ import type { WorkoutCategory } from './types';
 import {
   finalizeWorkoutIdentity,
   inferWorkoutCategory,
+  mixedWorkoutName,
   workoutNameForCategory,
 } from './workoutCategory';
 
@@ -15,7 +16,7 @@ describe('automatic workout category', () => {
     (name) => {
       expect(
         finalizeWorkoutIdentity(exercises('pull', 'lower', 'cardio'), 'other', '', true, { name }),
-      ).toEqual({ category: 'other', name: `${name} workout` });
+      ).toEqual({ category: 'other', name: `${name} + Cardio workout` });
       expect(
         finalizeWorkoutIdentity(exercises('pull'), 'other', 'My session', true, { name }),
       ).toEqual({ category: 'other', name: 'My session' });
@@ -63,5 +64,79 @@ describe('automatic workout category', () => {
     expect(
       finalizeWorkoutIdentity(exercises('pull', 'pull'), 'push', 'Tuesday training', true),
     ).toEqual({ category: 'pull', name: 'Tuesday training' });
+  });
+});
+
+describe('mixed-session names', () => {
+  it.each([
+    [['cardio', 'push', 'pull'], 'Cardio + Upper body workout'],
+    [['push', 'pull', 'cardio'], 'Upper body + Cardio workout'],
+    [['cardio', 'cardio', 'push', 'pull', 'cardio'], 'Cardio + Upper body + Cardio workout'],
+    [['push', 'cardio', 'pull'], 'Upper body + Cardio + Upper body workout'],
+  ] as [WorkoutCategory[], string][])(
+    'follows the contiguous segments in %j',
+    (categories, name) => {
+      expect(finalizeWorkoutIdentity(exercises(...categories), 'upper', '', true)).toEqual({
+        category: 'upper',
+        name,
+      });
+      expect(mixedWorkoutName(name, exercises(...categories))).toBe(name);
+    },
+  );
+
+  it('keeps custom names and workout types in the strength segment', () => {
+    expect(
+      finalizeWorkoutIdentity(exercises('cardio', 'lower'), 'lower', 'Legs + abs', false).name,
+    ).toBe('Cardio + Legs + abs');
+    expect(
+      finalizeWorkoutIdentity(exercises('lower', 'cardio'), 'other', '', false, { name: 'Legs A' })
+        .name,
+    ).toBe('Legs A + Cardio workout');
+  });
+
+  it('names the strength segment even when the session started as the Cardio type', () => {
+    expect(
+      finalizeWorkoutIdentity(exercises('cardio', 'push', 'pull'), 'cardio', '', false),
+    ).toEqual({ category: 'cardio', name: 'Cardio + Upper body workout' });
+  });
+
+  it('removes automatic cardio labels when the cardio exercise is removed', () => {
+    expect(
+      finalizeWorkoutIdentity(exercises('push'), 'upper', 'Cardio + Upper body workout', true),
+    ).toEqual({ category: 'push', name: 'Push workout' });
+  });
+
+  it('updates old mixed names when exercises move without duplicating labels', () => {
+    expect(
+      finalizeWorkoutIdentity(
+        exercises('cardio', 'push', 'pull'),
+        'upper',
+        'Upper body + Cardio workout',
+        false,
+      ).name,
+    ).toBe('Cardio + Upper body workout');
+    expect(mixedWorkoutName('Cardio + Legs + abs', exercises('lower', 'cardio'))).toBe(
+      'Legs + abs + Cardio',
+    );
+  });
+
+  it('recognises any cardio kind, even with an uncategorized exercise', () => {
+    expect(
+      mixedWorkoutName('Upper body workout', [
+        { category: 'other', kind: 'cardio' },
+        { category: 'upper', kind: 'strength' },
+      ]),
+    ).toBe('Cardio + Upper body workout');
+  });
+
+  it('leaves single-mode workouts unchanged and respects the saved name limit', () => {
+    expect(mixedWorkoutName('Upper body + Cardio workout', [])).toBe('Upper body + Cardio workout');
+    expect(mixedWorkoutName('Cardio workout', exercises('cardio', 'cardio'))).toBe(
+      'Cardio workout',
+    );
+    expect(mixedWorkoutName('Legs + abs', exercises('lower'))).toBe('Legs + abs');
+    const name = mixedWorkoutName('A'.repeat(200), exercises('cardio', 'push', 'cardio'));
+    expect(name.length).toBeLessThanOrEqual(200);
+    expect(name).toMatch(/^Cardio \+ A+… \+ Cardio$/);
   });
 });

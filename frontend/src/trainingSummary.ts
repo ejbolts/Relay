@@ -8,6 +8,7 @@ import type {
   WorkoutCategory,
 } from './types';
 import { isCompletedWorkingSet } from './workoutSets';
+import { mixedWorkoutName } from './workoutCategory';
 
 const DAY_MS = 86_400_000;
 
@@ -198,12 +199,15 @@ export function niceTicks(min: number, max: number, count = 4): number[] {
 
 /** Imported workouts are named “Imported workout · YYYY-MM-DD”; their type reads better. */
 export function workoutDisplayName(
-  workout: Pick<TrackedWorkout, 'name' | 'category' | 'workout_type'>,
+  workout: Pick<TrackedWorkout, 'name' | 'category' | 'workout_type'> &
+    Partial<Pick<TrackedWorkout, 'movements'>>,
 ): string {
   const name = workout.name.trim();
-  if (!name || /^Imported workout\b/i.test(name))
-    return workout.workout_type?.name ?? CATEGORY_LABELS[workout.category];
-  return name;
+  const base =
+    !name || /^Imported workout\b/i.test(name)
+      ? (workout.workout_type?.name ?? CATEGORY_LABELS[workout.category])
+      : name;
+  return mixedWorkoutName(base, workout.movements?.map((movement) => movement.exercise) ?? []);
 }
 
 export function formatVolume(kg: number, unit: WeightUnit = 'kg'): string {

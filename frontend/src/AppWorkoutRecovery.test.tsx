@@ -381,6 +381,64 @@ it('uses the top header to return from settings sections before leaving settings
   expect(window.location.hash).toBe('#dashboard');
 });
 
+describe('mixed-session timelines', () => {
+  const cardio: Exercise = {
+    ...bench,
+    id: 'bike',
+    name: 'Exercise bike',
+    category: 'cardio',
+    kind: 'cardio',
+  };
+
+  it('reorders the live title and saves the same strength/cardio sequence', async () => {
+    const draft = storedDraft({ name: 'Upper body workout', workoutTypeExplicit: true });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: cardio.id,
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'bike-set',
+            completed: true,
+            duration_seconds: 600,
+          },
+        ],
+      },
+      { ...draft.movements[1], exerciseId: bench.id, supersetKey: null },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([bench, row, cardio]);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const heading = () =>
+      container.querySelector('.logger-screen .overlay-header-copy strong')?.textContent;
+    expect(heading()).toBe('Cardio + Upper body workout');
+    const cards = () => [...container.querySelectorAll('.movement-card')];
+    expect(cards().map((card) => card.querySelector('h2')?.textContent)).toEqual([
+      'Exercise bike',
+      'Bench press',
+    ]);
+    const move = [...cards()[0].querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Move Later'),
+    )!;
+    await act(async () => move.click());
+    expect(heading()).toBe('Upper body + Cardio workout');
+    expect(cards().map((card) => card.querySelector('h2')?.textContent)).toEqual([
+      'Bench press',
+      'Exercise bike',
+    ]);
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await confirmFinish();
+    const payload = vi.mocked(api.createWorkout).mock.calls.at(-1)![0];
+    expect(payload.name).toBe('Upper body + Cardio workout');
+    expect(payload.movements.map((movement) => movement.exercise_id)).toEqual([
+      bench.id,
+      cardio.id,
+    ]);
+  });
+});
+
 describe('RPE and set type presentation', () => {
   async function click(label: string) {
     const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;

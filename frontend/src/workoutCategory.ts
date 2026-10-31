@@ -1,6 +1,51 @@
 import type { Exercise, WorkoutCategory, WorkoutType } from './types';
 
-type CategorizedExercise = Pick<Exercise, 'category'>;
+type CategorizedExercise = Pick<Exercise, 'category'> & Partial<Pick<Exercise, 'kind'>>;
+
+function strengthWorkoutName(name: string): string {
+  const suffix = / workout$/i.test(name) ? ' workout' : '';
+  const undecorated = name
+    .replace(/ workout$/i, '')
+    .replace(/^(Cardio \+ )+/, '')
+    .replace(/( \+ Cardio)+$/, '');
+  const names = undecorated.split(' + Cardio + ');
+  return (names.every((part) => part === names[0]) ? names[0] : undecorated) + suffix;
+}
+
+/** Keep each contiguous cardio/strength segment in the exercise order. */
+export function mixedWorkoutName(name: string, exercises: CategorizedExercise[]): string {
+  if (!exercises.length) return name;
+  const segments: boolean[] = [];
+  for (const exercise of exercises) {
+    const cardio = exercise.kind ? exercise.kind === 'cardio' : exercise.category === 'cardio';
+    if (segments.at(-1) !== cardio) segments.push(cardio);
+  }
+  if (!segments.includes(true) || !segments.includes(false)) return strengthWorkoutName(name);
+
+  // Recognise previously generated names so reopening or reordering does not stack labels.
+  const workoutSuffix = / workout$/i.test(name) ? ' workout' : '';
+  const strengthName = strengthWorkoutName(name).replace(/ workout$/i, '');
+  const base =
+    strengthName === 'Cardio'
+      ? workoutNameForCategory(inferWorkoutCategory(exercises) ?? 'other').replace(/ workout$/i, '')
+      : strengthName;
+  const strengthCount = segments.filter((cardio) => !cardio).length;
+  const available = Math.max(
+    1,
+    Math.floor(
+      (200 -
+        workoutSuffix.length -
+        segments.filter(Boolean).length * 6 -
+        (segments.length - 1) * 3) /
+        strengthCount,
+    ),
+  );
+  const label = base.length > available ? `${base.slice(0, available - 1).trimEnd()}…` : base;
+  return (segments.map((cardio) => (cardio ? 'Cardio' : label)).join(' + ') + workoutSuffix).slice(
+    0,
+    200,
+  );
+}
 
 const automaticWorkoutNames: Record<WorkoutCategory, string> = {
   upper: 'Upper body workout',
@@ -27,34 +72,28 @@ export function finalizeWorkoutIdentity(
     const trimmedName = currentName.trim();
     return {
       category: currentCategory,
-      name:
+      name: mixedWorkoutName(
         !trimmedName || trimmedName === workoutNameForCategory(currentCategory)
           ? `${workoutType.name} workout`
           : trimmedName,
+        exercises,
+      ),
     };
   }
   const category = inferFromExercises
     ? (inferWorkoutCategory(exercises) ?? currentCategory)
     : currentCategory;
   const trimmedName = currentName.trim();
-  const includesCardio = exercises.some((exercise) => exercise.category === 'cardio');
   const hasAutomaticName =
     trimmedName === '' ||
-    trimmedName === workoutNameForCategory(currentCategory) ||
-    trimmedName === workoutNameWithCardio(currentCategory);
+    strengthWorkoutName(trimmedName) === workoutNameForCategory(currentCategory);
   return {
     category,
-    name:
-      hasAutomaticName && includesCardio && category !== 'cardio'
-        ? workoutNameWithCardio(category)
-        : hasAutomaticName
-          ? workoutNameForCategory(category)
-          : trimmedName,
+    name: mixedWorkoutName(
+      hasAutomaticName ? workoutNameForCategory(category) : trimmedName,
+      exercises,
+    ),
   };
-}
-
-function workoutNameWithCardio(category: WorkoutCategory): string {
-  return workoutNameForCategory(category).replace(' workout', ' + Cardio workout');
 }
 
 function focusedUpperCategory(counts: Record<WorkoutCategory, number>): WorkoutCategory {

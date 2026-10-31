@@ -140,6 +140,10 @@ _Map incoming names to your exercise library, then update the review before savi
 
 _Undo a tracked import while preserving other sessions and edited check-ins. Isolated sample data._
 
+![Mixed sessions named Cardio + Upper body workout, Upper body + Cardio workout and Cardio + Upper body + Cardio workout, with the first session expanded in exercise order](screenshots/releases/1.1.0-mixed-session-timeline.png)
+
+_Mixed-session titles follow the exercise sequence. The expanded sample starts with cycling, then bench press and seated row; the other sessions finish with cardio or have cardio at both ends. Isolated synthetic data._
+
 ![Training shows one sample workout saved for 45 minutes and the Start action after recovering an interrupted save](screenshots/releases/1.1.0-workout-save-recovery.png)
 
 _A sample workout remains one 45-minute session after its save response is lost, recovery runs and a later three-hour retry reaches the server. No workout remains active. Isolated synthetic data._
@@ -231,6 +235,8 @@ _The circular Start button matches its workout choices. Isolated sample data._
 - Your profile and shared profiles show five cardio sessions per page, newest first. Use the previous and next arrows or the page picker to browse older sessions, including sessions beyond the former latest-20 limit.
 - The Cardio header shows the visible range and total. Your selected page stays in place during profile updates, and a failed page request can be retried without losing the current page.
 - Swipe through saved equipment photos while logging. Deleting a photo explains that it also removes the photo from saved workouts, and keeps the recorded sets.
+
+- Mixed strength and cardio sessions follow their exercise order: **Cardio + Upper body workout** when cardio comes first, **Upper body + Cardio workout** when it comes last, and both labels when it bookends strength work. Custom workout types and names follow the same order. Existing history titles update when viewed without rewriting records; reordering exercises updates the live and saved title. Consecutive exercises of the same kind share one segment label.
 
 - **Find the right equipment variant:** Filter by equipment in Training > Exercises and the workout picker. Search `bicep curl cable`, `dumbbells curl` or `DB curl` in any word order. Equipment, muscle, workout category, favourites and recent filters work together. Added 44 common strength exercises (83 total), covering barbell, dumbbell, cable, machine, Smith machine, EZ bar, trap bar, kettlebell, resistance band and bodyweight. Existing IDs, custom exercises, favourites and history are preserved; each variant has its own progress. The **Custom** pill works alongside the other filters in both lists. Exact-name and recognised-alias custom entries are reused; only missing equipment is filled, leaving explicit equipment and muscle credits intact. Ambiguous names stay separate.
 
