@@ -825,6 +825,7 @@ ACCOUNT_TABLES = {
     "workout_reactions",
     "workout_comments",
     "comment_reactions",
+    "live_workouts",
 }
 
 

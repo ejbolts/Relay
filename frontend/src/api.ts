@@ -49,6 +49,7 @@ import type {
   SharedProfileSummary,
   SuggestedProfilePage,
   SharedWorkoutPage,
+  SharedCardioPage,
   SharingChoices,
   FriendConnections,
   SharingNotifications,
@@ -273,6 +274,10 @@ export const api = {
       request<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`),
     profile: (userId: string) =>
       request<SharedProfile>(`/api/sharing/profiles/${encodeURIComponent(userId)}`),
+    cardio: (userId: string, offset: number, limit = 5) =>
+      request<SharedCardioPage>(
+        `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
+      ),
     workoutFilters: (userId: string) =>
       request<SharedWorkoutFilterOptions>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/workout-filters`,
@@ -427,6 +432,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercisePartialSets: (exerciseId: string, enabled: boolean, weekStart: string) =>
+    request<Exercise>(`/api/exercises/${exerciseId}/partial-sets`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partial_sets_enabled: enabled, week_start: weekStart }),
+    }),
   listMachinePhotos: (exerciseId: string) =>
     request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
   mergeMachinePhotos: (
@@ -479,8 +490,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ caption }),
     }),
-  deleteMachinePhoto: (photoId: string) =>
-    request<void>(`/api/machine-photos/${photoId}`, { method: 'DELETE' }),
+  deleteMachinePhoto: (photoId: string, detachFromWorkouts = false) =>
+    request<void>(
+      `/api/machine-photos/${photoId}${detachFromWorkouts ? '?detach_from_workouts=true' : ''}`,
+      { method: 'DELETE' },
+    ),
   dashboard: (calendarStart?: string) =>
     request<DashboardData>(
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,

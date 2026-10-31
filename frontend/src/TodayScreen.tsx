@@ -106,7 +106,7 @@ function formatTotal(value: number | null | undefined): string {
 }
 
 const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
-  reps_at_weight: 'Volume PR',
+  reps_at_weight: 'Volume PR for this weight',
   weight: 'Weight PR',
 };
 

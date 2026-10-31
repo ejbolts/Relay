@@ -156,6 +156,14 @@
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/e90b4f322f66a6527da1875d81a88827cc5aea16/docs/screenshots/releases/1.0.1-all-settings.png",
         "alt": "All settings overview after reopening Settings from another screen, using a synthetic account."
       }
+    },
+    {
+      "title": "Profile cardio pages",
+      "description": "Profiles show the five latest cardio sessions at a time, with page controls for browsing older sessions.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e87a77061c8bca44c7ab1ce2bb66b268c92c4d8b/docs/screenshots/releases/1.0.1-profile-cardio-pages.png",
+        "alt": "Profile Cardio card with the five latest sessions, visible range and page controls, using synthetic sample data."
+      }
     }
   ]
 }

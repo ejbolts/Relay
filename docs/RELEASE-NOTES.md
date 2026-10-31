@@ -6,7 +6,51 @@ _Relay was called Gym Logger before version 1.0._
 
 28 October 2026
 
-### Find friends and improve your workouts
+### Your training split and friends
+
+![The notification bell gains an unread badge before the inbox opens, then displays a sample friend request](screenshots/releases/1.1.0-live-notification-badge.gif)
+
+_A new request updates the closed bell immediately. Opening the inbox shows the request and syncs its read state to the account's other open windows. Captured directly as a looping GIF with isolated sample accounts._
+
+![Your split editor with templates, a named Full body A / B cycle, rest days, start date and a seven-day preview using synthetic training data](screenshots/releases/1.1.0-training-split.png)
+
+_Choose a template or build your own repeating cycle. Custom workout types and rest days stay in the order you choose._
+
+![Home showing the scheduled Full body A day and Edit split shortcut using a synthetic sample account](screenshots/releases/1.1.0-training-split-home.png)
+
+_Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
+
+![Live friend workout and privacy updates without reloading](screenshots/releases/1.1.0-live-friend-updates.gif)
+
+_A friend starts and discards a workout, then hides live workouts and online status. The Friends card updates immediately through each step without reloading. This looping GIF was captured directly from isolated synthetic accounts; Home uses the same live updates._
+
+![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
+
+_Browse ten lifts per page. Muscle filters include direct and currently enabled partial credits; the three-line button changes the page size._
+
+![Leg Press muscle-credit popup showing the selected week with partial sets off and direct quadriceps and glute credits retained](screenshots/releases/1.0.1-weekly-partial-sets.png)
+
+_Choose a week and switch partial sets off or on. That choice carries forward until the next change, while earlier weeks retain their settings. Direct credits stay counted._
+
+![Weekly muscle totals at the bottom of Training](screenshots/releases/1.0.1-weekly-muscle-totals.png)
+
+_The weekly muscle card is on Home and Training. Show more reveals the remaining muscles, and tapping a muscle opens its contributing workouts. All previews use isolated synthetic training data._
+
+![Home header with the date above the title and all five action buttons aligned beside Home](screenshots/releases/1.0.1-home-header.png)
+
+_The Home title and actions share one row at phone width, with the date above. Very narrow screens place the actions on a left-aligned row._
+
+![Workout set with a Volume PR for this weight badge](screenshots/releases/1.0.1-volume-pr-weight.png)
+
+_The badge makes it clear that the record compares reps at the same weight._
+
+![Swiping saved machine photos and deleting an old photo while logging](screenshots/releases/1.0.1-equipment-photos.gif)
+
+_Swipe both ways through saved equipment photos. Confirming deletion removes an old photo from the library and its saved workout attachments while keeping the sets._
+
+![Profile workout with subtle orange warm-up chips, green working sets, purple drop sets and red failed sets](screenshots/releases/1.0.1-history-set-colours.png)
+
+_Saved sets use the logger's set-type colours in Profile and Training history, with readable labels in both themes._
 
 ![Opening Training Exercises with preloaded sparklines and estimated 1RM values, then returning with the same graphs ready](screenshots/releases/1.1.0-training-preload.gif)
 

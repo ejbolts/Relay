@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
+import { onFriendPresence } from './presence';
 import type { FriendConnections, WorkoutReactions } from './types';
 
 export type FriendConnectionsState = 'loading' | 'ready' | 'locked' | 'error';
 
 /**
  * Friends, requests and blocks for Social, refreshed while `active`: on focus, when the app is
- * shown again or comes back online, and every 30 seconds.
+ * shown again or comes back online, and every 30 seconds. Friends' live activity updates as soon
+ * as the presence connection reports it.
  */
 export function useFriendConnections(active: boolean) {
   const [connections, setConnections] = useState<FriendConnections | null>(null);
@@ -55,6 +57,22 @@ export function useFriendConnections(active: boolean) {
       document.removeEventListener('visibilitychange', load);
     };
   }, [active, version]);
+
+  useEffect(
+    () =>
+      onFriendPresence((friendId, presence) =>
+        setConnections(
+          (current) =>
+            current && {
+              ...current,
+              friends: current.friends.map((friend) =>
+                friend.id === friendId ? { ...friend, presence } : friend,
+              ),
+            },
+        ),
+      ),
+    [],
+  );
 
   const refresh = useCallback(() => setVersion((current) => current + 1), []);
 

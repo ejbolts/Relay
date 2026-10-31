@@ -54,6 +54,7 @@ from .models import (
     ExerciseKind,
     ExerciseMuscleContribution,
     ImportBatch,
+    ExercisePartialSetWeek,
     MachinePhoto,
     MuscleRole,
     PersonalRecord,
@@ -105,6 +106,7 @@ from .tracker_schemas import (
     ExerciseHistoryBaselineRead,
     ExerciseLatestSessionRead,
     ExerciseLibrarySummaryRead,
+    ExercisePartialSetsUpdate,
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
@@ -331,16 +333,18 @@ SESSION_NAMES = {
 }
 
 
-def exercise_muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
+def exercise_muscle_credits(
+    exercise: Exercise, on_date: date | None = None
+) -> list[tuple[str, float]]:
     if exercise.category == WorkoutCategory.CARDIO or exercise.kind == ExerciseKind.CARDIO:
         return []
-    return muscle_credits(exercise)
+    return muscle_credits(exercise, on_date=on_date)
 
 
-def exercise_coverage_groups(exercise: Exercise) -> set[str]:
+def exercise_coverage_groups(exercise: Exercise, on_date: date | None = None) -> set[str]:
     if exercise.category == WorkoutCategory.CARDIO or exercise.kind == ExerciseKind.CARDIO:
         return {"Cardio"}
-    return {group for group, _ in exercise_muscle_credits(exercise)}
+    return {group for group, _ in exercise_muscle_credits(exercise, on_date)}
 
 
 def weekly_sets(
@@ -364,7 +368,7 @@ def weekly_sets(
             continue
         in_current_week = week_start <= workout.workout_date <= today
         for movement in workout.movements:
-            credits = exercise_muscle_credits(movement.exercise)
+            credits = exercise_muscle_credits(movement.exercise, workout.workout_date)
             if not credits:
                 continue
             work_sets = [item for item in movement.sets if is_working_set(item)]
@@ -445,7 +449,7 @@ def workout_recommendation(
         for movement in workout.movements:
             if not any(is_working_set(item) for item in movement.sets):
                 continue
-            for group in exercise_coverage_groups(movement.exercise):
+            for group in exercise_coverage_groups(movement.exercise, workout.workout_date):
                 group_dates[group].add(workout.workout_date)
 
     last_rotation = next(
@@ -980,6 +984,33 @@ def update_exercise_favorite(
     return exercise
 
 
+@router.patch("/exercises/{exercise_id}/partial-sets", response_model=ExerciseRead)
+def update_exercise_partial_sets(
+    exercise_id: str, payload: ExercisePartialSetsUpdate, db: DbSession, user: CurrentUser
+) -> Exercise:
+    exercise = get_owned(db, Exercise, exercise_id, user.id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise was not found.")
+    week_day = training_preferences(db, user.id).week_start
+    week_start = start_of_week(payload.week_start or date.today(), week_day)
+    if week_start > start_of_week(date.today(), week_day):
+        raise HTTPException(status_code=422, detail="Choose this week or an earlier week.")
+    entry = db.get(ExercisePartialSetWeek, (exercise.id, week_start))
+    if entry:
+        entry.enabled = payload.partial_sets_enabled
+    else:
+        db.add(
+            ExercisePartialSetWeek(
+                exercise_id=exercise.id, week_start=week_start, enabled=payload.partial_sets_enabled
+            )
+        )
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    db.refresh(exercise)
+    db.expire(exercise, ["partial_set_weeks"])
+    return exercise
+
+
 def machine_photo_usage(
     db: Session, user_id: str, photos: list[MachinePhoto]
 ) -> list[MachinePhotoUsageRead]:
@@ -1245,7 +1276,11 @@ def get_machine_photo_image(
 
 @router.delete("/machine-photos/{photo_id}", status_code=204)
 def delete_machine_photo(
-    photo_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+    photo_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    detach_from_workouts: bool = False,
 ) -> None:
     photo = get_owned(db, MachinePhoto, photo_id, user.id)
     if not photo:
@@ -1255,18 +1290,26 @@ def delete_machine_photo(
             409, "This photo belongs to a merged machine. Delete the machine instead."
         )
     images = photo.images
+    image_ids = [image.id for image in images]
     reference = db.scalar(
         select(movement_machine_photos.c.movement_id)
-        .where(movement_machine_photos.c.machine_photo_id.in_([image.id for image in images]))
+        .where(movement_machine_photos.c.machine_photo_id.in_(image_ids))
         .limit(1)
     )
-    if reference:
+    if reference and not detach_from_workouts:
         raise HTTPException(
             status_code=409,
             detail="Remove this photo from its workouts before deleting it.",
         )
+    if reference:
+        db.execute(
+            delete(movement_machine_photos).where(
+                movement_machine_photos.c.machine_photo_id.in_(image_ids)
+            )
+        )
     files = [(image.full_filename, image.thumbnail_filename) for image in images]
     db.delete(photo)
+    bump_workout_cache_revision(db, user.id)
     db.commit()
     for full_filename, thumbnail_filename in files:
         delete_machine_photo_files(settings, full_filename, thumbnail_filename)

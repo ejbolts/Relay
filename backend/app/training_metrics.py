@@ -311,7 +311,23 @@ def is_pr_eligible(item: WorkoutSet) -> bool:
     return True
 
 
-def muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
+def partial_sets_enabled_on(exercise: Exercise, on_date: date) -> bool:
+    baseline = (
+        exercise.partial_sets_default
+        if hasattr(exercise, "partial_sets_default")
+        else getattr(exercise, "partial_sets_enabled", True)
+    )
+    changes = [
+        item for item in getattr(exercise, "partial_set_weeks", []) if item.week_start <= on_date
+    ]
+    return (
+        max(changes, key=lambda item: item.week_start).enabled if changes else baseline is not False
+    )
+
+
+def muscle_credits(
+    exercise: Exercise, *, include_partial: bool | None = None, on_date: date | None = None
+) -> list[tuple[str, float]]:
     if exercise.kind == ExerciseKind.CARDIO or exercise.category == WorkoutCategory.CARDIO:
         return []
     if exercise.muscle_contributions:
@@ -321,7 +337,9 @@ def muscle_credits(exercise: Exercise) -> list[tuple[str, float]]:
                 continue
             muscle_name = MUSCLE_GROUP_ALIASES.get(item.muscle_name, item.muscle_name)
             credits[muscle_name] = max(credits.get(muscle_name, 0), item.contribution_factor)
-        return list(credits.items())
+        if include_partial is None:
+            include_partial = partial_sets_enabled_on(exercise, on_date or date.today())
+        return [(name, sets) for name, sets in credits.items() if sets >= 1 or include_partial]
     # Custom exercises retain the user's explicit muscle field until they edit detailed credits.
     muscle_name = exercise.muscle_group.strip()
     if not muscle_name or muscle_name in HIDDEN_MUSCLE_GROUPS:
@@ -335,7 +353,7 @@ def muscle_volume(workouts: list[TrainingWorkout], start: date, end: date) -> di
         if not start <= workout.workout_date <= end:
             continue
         for movement in workout.movements:
-            credits = muscle_credits(movement.exercise)
+            credits = muscle_credits(movement.exercise, on_date=workout.workout_date)
             for item in movement.sets:
                 if is_working_set(item):
                     for muscle, contribution in credits:

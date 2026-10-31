@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileSharingPanel } from './ProfileSharing';
 import type { SharingChoices, SharingSettings } from './types';
+import { clearActiveWorkoutDraft, writeActiveWorkoutDraft } from './workoutDraft';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -15,6 +16,8 @@ const friendsOnly: SharingSettings = {
   share_body_weight: false,
   share_goals: false,
   share_machine_photos: false,
+  share_online_status: true,
+  share_live_workouts: true,
   pending_requests: 0,
 };
 
@@ -125,3 +128,52 @@ describe('profile sharing visibility', () => {
     expect(document.querySelector('.top-toast')).toBeNull();
   });
 });
+
+it('saves online status and live workouts separately and previews what friends see', async () => {
+  await render();
+  const section = container.querySelector('.sharing-live')!;
+  const toggle = (label: string) =>
+    section.querySelector<HTMLButtonElement>(`[role="switch"][aria-label="${label}"]`)!;
+  const preview = () => section.querySelector('.sharing-live-preview .friend-status')?.textContent;
+  expect(section.querySelector('h3')?.textContent).toBe('Live activity');
+  expect(toggle('Online status').getAttribute('aria-checked')).toBe('true');
+  expect(toggle('Live workouts').getAttribute('aria-checked')).toBe('true');
+  expect(preview()).toBe('Active now');
+
+  await act(async () => toggle('Online status').click());
+  expect(api.sharing.updateChoices).toHaveBeenLastCalledWith({
+    ...choicesOf(friendsOnly),
+    share_online_status: false,
+  });
+  expect(toggle('Online status').getAttribute('aria-checked')).toBe('false');
+  expect(preview()).toBe('No live activity');
+
+  const now = Date.now();
+  writeActiveWorkoutDraft({
+    version: 1,
+    startedAt: now - 60_000,
+    updatedAt: now,
+    inactiveFinishAt: now + 3_600_000,
+    name: 'Leg day',
+    workoutDate: '2026-10-25',
+    category: 'lower',
+    notes: '',
+    movements: [],
+  });
+  await act(async () => toggle('Live workouts').click());
+  expect(api.sharing.updateChoices).toHaveBeenLastCalledWith({
+    ...choicesOf(friendsOnly),
+    share_online_status: false,
+    share_live_workouts: false,
+  });
+  expect(preview()).toBe('No live activity');
+  await act(async () => toggle('Live workouts').click());
+  expect(preview()).toBe('Working out · Leg day');
+  clearActiveWorkoutDraft();
+});
+
+function choicesOf(settings: SharingSettings): SharingChoices {
+  const choices: Partial<SharingSettings> = { ...settings };
+  delete choices.pending_requests;
+  return choices as SharingChoices;
+}
