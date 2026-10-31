@@ -454,6 +454,152 @@ describe('RPE and set type presentation', () => {
   });
 });
 
+describe('training split schedule on Home', () => {
+  const custom = {
+    id: 'custom-a',
+    name: 'Full body A',
+    color: '#123456',
+    is_custom: true,
+    archived: false,
+  };
+  const recommendation = {
+    category: 'other',
+    session_name: 'Full body A workout',
+    rotation_next: 'other',
+    reason: 'Day 1',
+    muscle_frequency: [],
+    workout_type: custom,
+    split_name: 'My split',
+    scheduled_date: '2026-10-26',
+  };
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#dashboard');
+    vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom]);
+    vi.mocked(api.dashboard).mockResolvedValue({ recommendation } as unknown as DashboardData);
+  });
+
+  it('starts the scheduled custom type even without a previous workout of that type', async () => {
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    expect(window.location.hash).toBe('#log');
+    expect(readActiveWorkoutDraft()).toMatchObject({
+      category: 'other',
+      workoutTypeId: 'custom-a',
+      workoutTypeExplicit: true,
+    });
+  });
+
+  it('shows a rest day without offering it as a workout in the Start menu', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: { ...recommendation, workout_type: null, is_rest_day: true },
+    } as unknown as DashboardData);
+    await mount();
+    expect(container.querySelector('#next-session-title')?.textContent).toBe('Rest day');
+    expect(container.querySelector('.next-session-exercises')).toBeNull();
+    const start = container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!;
+    await act(async () => start.click());
+    expect(container.querySelector('.start-menu')?.textContent).not.toContain('Rest day');
+  });
+
+  it('refreshes the scheduled day after local midnight even when training has not changed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T23:59:59'));
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    await mount();
+    const before = vi.mocked(api.dashboard).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(vi.mocked(api.dashboard).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('rechecks the day when a dashboard response crosses local midnight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T23:59:59'));
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    let finish!: (value: DashboardData) => void;
+    vi.mocked(api.dashboard).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await mount();
+    expect(api.dashboard).toHaveBeenCalledOnce();
+    vi.setSystemTime(new Date('2026-10-27T00:00:01'));
+    await act(async () => finish({ recommendation } as unknown as DashboardData));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(vi.mocked(api.dashboard).mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+it.each(['Home', 'Training', 'Body'])(
+  'opens All settings from the %s header after visiting a section',
+  async (page) => {
+    window.history.replaceState(null, '', '#settings');
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    await mount();
+    const appearance = [
+      ...container.querySelectorAll<HTMLButtonElement>('.settings-category-card'),
+    ].find((button) => button.textContent?.includes('Appearance'))!;
+    await act(async () => appearance.click());
+    expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(true);
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('nav[aria-label="Main navigation"] button')]
+        .find((button) => button.textContent?.trim() === page)!
+        .click(),
+    );
+    const settings = [
+      ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Settings"]'),
+    ].find((button) => !button.closest('[hidden]'))!;
+    expect(settings).toBeDefined();
+    await act(async () => settings.click());
+    expect(window.location.hash).toBe('#settings');
+    expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);
+    expect(container.querySelector('.overlay-header-back')?.getAttribute('aria-label')).toBe(
+      'Go back',
+    );
+  },
+);
+
+it('keeps settings search navigation working after the header resets a previous search jump', async () => {
+  window.history.replaceState(null, '', '#settings');
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  await mount();
+  const searchRest = async () => {
+    const input = container.querySelector<HTMLInputElement>('.settings-search input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Rest timer',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const result = [
+      ...container.querySelectorAll<HTMLButtonElement>('.settings-search button'),
+    ].find((button) => button.querySelector('strong')?.textContent === 'Rest timer')!;
+    await act(async () => result.click());
+    expect(container.querySelector('.settings-hub')?.classList.contains('has-selection')).toBe(
+      true,
+    );
+    expect(
+      container.querySelector('[data-settings-group="training"]')?.hasAttribute('hidden'),
+    ).toBe(false);
+  };
+  await searchRest();
+  await navigateTo('Body');
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Settings"]')]
+      .find((button) => !button.closest('[hidden]'))!
+      .click(),
+  );
+  expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);
+  await searchRest();
+});
+
 describe('saved training splits on Home', () => {
   const custom = {
     id: 'custom-a',
