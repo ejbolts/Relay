@@ -2849,7 +2849,7 @@ def dashboard(
 
 @router.get("/progress", response_model=list[ExerciseLibrarySummaryRead])
 def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[ExerciseLibrarySummaryRead]:
-    """Account-owned strength summaries, with a bounded eight-week sparkline payload."""
+    """Account-owned strength summaries, with an eight-week sparkline up to each lift's latest."""
     today = date.today()
     rows = db.execute(
         select(
@@ -2884,10 +2884,14 @@ def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[Exercise
         points = sorted(values.items())
         last_date, _ = points[-1][0]
         latest = round(points[-1][1], 1) or None
-        # Best per calendar day keeps repeated sessions from crowding the sparkline.
+        # The sparkline covers the eight weeks up to the lift's latest estimate, so lifts that
+        # have not been trained recently keep their trend. Best per calendar day keeps repeated
+        # sessions from crowding it.
+        estimated = [(workout_date, value) for (workout_date, _), value in points if value > 0]
+        start = estimated[-1][0] - timedelta(days=56) if estimated else last_date
         daily: dict[date, float] = {}
-        for (workout_date, _), value in points:
-            if workout_date >= today - timedelta(days=56) and value > 0:
+        for workout_date, value in estimated:
+            if workout_date >= start:
                 daily[workout_date] = max(daily.get(workout_date, 0), round(value, 1))
         trend = [
             ExerciseTrendPointRead(date=day, estimated_1rm=value)
