@@ -73,7 +73,16 @@ import type {
   WorkoutType,
   YouTubeConnection,
 } from './types';
-import { cachedWorkoutsForRevision, readWorkoutCache, writeWorkoutCache } from './workoutCache';
+import {
+  cachedWorkoutsForRevision,
+  cachedWorkoutsSince,
+  DASHBOARD_CACHE_KEY,
+  readWorkoutCache,
+  writeWorkoutCache,
+} from './workoutCache';
+import { isUsingSavedData, reportSavedDataUsed, reportServerReached } from './connectionStatus';
+import { readLastUser } from './deviceAccount';
+import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
 import type { HomeLayout } from './homeLayout';
@@ -94,12 +103,25 @@ interface RequestOptions {
   signalExpiredSession?: boolean;
 }
 
+/** Proxy answers meaning the Relay server itself could not be reached. */
+const GATEWAY_FAILURES = new Set([502, 503, 504]);
+
+/** No usable answer from the server: offline, unreachable, timed out, or behind a failed proxy. */
+export function isConnectionFailure(reason: unknown): boolean {
+  if (reason instanceof ApiError) return reason.status === 0 || GATEWAY_FAILURES.has(reason.status);
+  if (reason instanceof DOMException)
+    return reason.name === 'AbortError' || reason.name === 'TimeoutError';
+  // A captive portal can answer with an HTML page instead of JSON.
+  return reason instanceof TypeError || reason instanceof SyntaxError;
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
   { signalExpiredSession = true }: RequestOptions = {},
 ): Promise<T> {
   const response = await fetch(path, { ...init, credentials: 'same-origin' });
+  if (!GATEWAY_FAILURES.has(response.status)) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string };
@@ -120,6 +142,70 @@ async function request<T>(
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
+/** How long a read waits for the server before showing this device's saved copy instead. */
+export const SAVED_COPY_AFTER_MS = 4000;
+const serverTooSlow = Symbol('server too slow');
+
+/**
+ * Prefers the server, but answers from this device's saved copy when there is no connection, the
+ * server cannot be reached, or it has not answered within a few seconds. A late answer still
+ * refreshes the saved copy for next time. Without a saved copy the server's outcome is returned.
+ */
+async function preferServer<T>(
+  load: () => Promise<T>,
+  saved: () => Promise<{ value: T } | null>,
+): Promise<T> {
+  const answerFromSaved = async (): Promise<T | typeof serverTooSlow> => {
+    const copy = await saved();
+    if (!copy) return serverTooSlow;
+    reportSavedDataUsed();
+    return copy.value;
+  };
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  // Already known to be offline: answer at once and let the server refresh the copy in background.
+  if (offline || isUsingSavedData()) {
+    const copy = await answerFromSaved();
+    if (copy !== serverTooSlow) {
+      if (!offline) load().catch(() => undefined);
+      return copy;
+    }
+  }
+  const live = load();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const slow = new Promise<typeof serverTooSlow>((resolve) => {
+    timer = setTimeout(() => resolve(serverTooSlow), SAVED_COPY_AFTER_MS);
+  });
+  try {
+    const first = await Promise.race([live, slow]);
+    if (first !== serverTooSlow) return first;
+    const copy = await answerFromSaved();
+    if (copy === serverTooSlow) return await live;
+    live.catch(() => undefined);
+    return copy;
+  } catch (reason) {
+    if (!isConnectionFailure(reason)) throw reason;
+    const copy = await answerFromSaved();
+    if (copy === serverTooSlow) throw reason;
+    return copy;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** An account read that keeps working offline from an encrypted copy saved on this device. */
+function accountRead<T>(path: string, savedKey = `response:${path}`): Promise<T> {
+  const owner = readLastUser()?.id;
+  if (!owner) return request<T>(path);
+  return preferServer(
+    () =>
+      request<T>(path).then((value) => {
+        void writeOffline(savedKey, value, owner);
+        return value;
+      }),
+    () => readOffline<T>(savedKey, owner),
+  );
+}
+
 async function requestBlob(path: string): Promise<Blob> {
   const response = await fetch(path, { credentials: 'same-origin' });
   if (!response.ok) {
@@ -129,20 +215,29 @@ async function requestBlob(path: string): Promise<Blob> {
   return response.blob();
 }
 
-/** Workouts dated `since` or later, from the device cache while the server revision matches. */
+/**
+ * Workouts dated `since` or later, from the device cache while the server revision matches. Offline,
+ * the saved snapshot answers whatever its revision, provided it reaches back that far.
+ */
 async function listCachedWorkouts(since: string): Promise<TrackedWorkout[]> {
-  const [cached, current] = await Promise.all([
-    readWorkoutCache(),
-    request<WorkoutCacheRevision>('/api/workouts/revision'),
-  ]);
-  const reusable = cachedWorkoutsForRevision(cached, current.revision, since);
-  if (reusable) return reusable;
+  const cached = readWorkoutCache();
+  return preferServer(
+    async () => {
+      const current = await request<WorkoutCacheRevision>('/api/workouts/revision');
+      const reusable = cachedWorkoutsForRevision(await cached, current.revision, since);
+      if (reusable) return reusable;
 
-  const snapshot = await request<WorkoutSnapshot>(
-    `/api/workouts/snapshot?${new URLSearchParams({ start: since })}`,
+      const snapshot = await request<WorkoutSnapshot>(
+        `/api/workouts/snapshot?${new URLSearchParams({ start: since })}`,
+      );
+      await writeWorkoutCache({ ...snapshot, since });
+      return snapshot.workouts;
+    },
+    async () => {
+      const workouts = cachedWorkoutsSince(await cached, since);
+      return workouts ? { value: workouts } : null;
+    },
   );
-  await writeWorkoutCache({ ...snapshot, since });
-  return snapshot.workouts;
 }
 
 /** Workouts and calendar days for an older window than the one loaded at startup. */
@@ -419,7 +514,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   listSessions: () => request<WorkoutSession[]>('/api/sessions'),
-  listExercises: () => request<Exercise[]>('/api/exercises'),
+  listExercises: () => accountRead<Exercise[]>('/api/exercises'),
   createExercise: (payload: ExerciseCreateInput) =>
     request<Exercise>('/api/exercises', {
       method: 'POST',
@@ -439,7 +534,7 @@ export const api = {
       body: JSON.stringify({ partial_sets_enabled: enabled, week_start: weekStart }),
     }),
   listMachinePhotos: (exerciseId: string) =>
-    request<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
+    accountRead<MachinePhotoUsage[]>(`/api/exercises/${exerciseId}/machine-photos`),
   mergeMachinePhotos: (
     exerciseId: string,
     photoIds: string[],
@@ -452,7 +547,7 @@ export const api = {
       body: JSON.stringify({ photo_ids: photoIds, keep_photo_id: keepPhotoId, caption }),
     }),
   getMachineSettings: (exerciseId: string, machinePhotoId?: string) =>
-    request<{ settings: MachineSetting[] }>(
+    accountRead<{ settings: MachineSetting[] }>(
       `/api/exercises/${exerciseId}/machine-settings${machinePhotoId ? `?${new URLSearchParams({ machine_photo_id: machinePhotoId })}` : ''}`,
     ),
   saveMachineSettings: (exerciseId: string, settings: MachineSetting[], machinePhotoId?: string) =>
@@ -464,11 +559,11 @@ export const api = {
         body: JSON.stringify({ settings }),
       },
     ),
-  listAllMachinePhotos: () => request<MachinePhotoUsage[]>('/api/machine-photos'),
+  listAllMachinePhotos: () => accountRead<MachinePhotoUsage[]>('/api/machine-photos'),
   machinePhotoWorkouts: (photoId: string) =>
     request<TrackedWorkout[]>(`/api/machine-photos/${photoId}/workouts`),
   lastUsedMachinePhotos: (exerciseId: string) =>
-    request<MachinePhoto[]>(`/api/exercises/${exerciseId}/machine-photos/last-used`),
+    accountRead<MachinePhoto[]>(`/api/exercises/${exerciseId}/machine-photos/last-used`),
   uploadMachinePhoto: (
     exerciseId: string,
     file: File,
@@ -495,11 +590,13 @@ export const api = {
       `/api/machine-photos/${photoId}${detachFromWorkouts ? '?detach_from_workouts=true' : ''}`,
       { method: 'DELETE' },
     ),
+  // Offline, the last dashboard answers whichever day and calendar window it was saved for.
   dashboard: (calendarStart?: string) =>
-    request<DashboardData>(
+    accountRead<DashboardData>(
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
+      DASHBOARD_CACHE_KEY,
     ),
-  getTrainingSplit: () => request<TrainingSplit | null>('/api/training-split'),
+  getTrainingSplit: () => accountRead<TrainingSplit | null>('/api/training-split'),
   routines: {
     create: (
       routine: Omit<Routine, 'id'>,
@@ -510,7 +607,7 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
       }),
-    list: () => request<Routine[]>('/api/routines'),
+    list: () => accountRead<Routine[]>('/api/routines'),
     profile: (id: string) => request<Routine[]>(`/api/routines/profile/${encodeURIComponent(id)}`),
     fromSplit: () => request<Routine>('/api/routines/from-split', { method: 'POST' }),
     save: (routine: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) =>
@@ -535,7 +632,7 @@ export const api = {
       headers: jsonHeaders,
       body: JSON.stringify(payload),
     }),
-  trainingTime: () => request<TrainingTime>('/api/training-time'),
+  trainingTime: () => accountRead<TrainingTime>('/api/training-time'),
   workoutRevision: () =>
     request<WorkoutCacheRevision>('/api/workouts/revision', {
       cache: 'no-store',
@@ -544,10 +641,10 @@ export const api = {
   listWorkouts: listCachedWorkouts,
   listOlderHistory,
   exerciseHistoryBaselines: (before: string) =>
-    request<ExerciseHistoryBaseline[]>(
+    accountRead<ExerciseHistoryBaseline[]>(
       `/api/exercise-history-baselines?${new URLSearchParams({ before })}`,
     ),
-  listBodySizes: () => request<BodySizeLog[]>('/api/body-sizes'),
+  listBodySizes: () => accountRead<BodySizeLog[]>('/api/body-sizes'),
   saveBodySizes: (payload: BodySizeLog) =>
     request<BodySizeLog>('/api/body-sizes', {
       method: 'PUT',
@@ -555,7 +652,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   deleteBodySizes: (date: string) => request<void>(`/api/body-sizes/${date}`, { method: 'DELETE' }),
-  listBodyMeasurements: () => request<BodyMeasurement[]>('/api/body-measurements'),
+  listBodyMeasurements: () => accountRead<BodyMeasurement[]>('/api/body-measurements'),
   saveBodyMeasurement: (payload: {
     measurement_date: string;
     weight_kg: number;
@@ -579,14 +676,14 @@ export const api = {
       body: form,
     });
   },
-  getFfmiProfile: () => request<FfmiProfile>('/api/ffmi-profile'),
+  getFfmiProfile: () => accountRead<FfmiProfile>('/api/ffmi-profile'),
   updateFfmiProfile: (payload: FfmiProfile) =>
     request<FfmiProfile>('/api/ffmi-profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
-  listBodyWeightGoals: () => request<BodyWeightGoal[]>('/api/body-weight-goals'),
+  listBodyWeightGoals: () => accountRead<BodyWeightGoal[]>('/api/body-weight-goals'),
   createBodyWeightGoal: (payload: BodyWeightGoalInput) =>
     request<BodyWeightGoal>('/api/body-weight-goals', {
       method: 'POST',
@@ -605,7 +702,11 @@ export const api = {
     const query = new URLSearchParams();
     if (params?.exerciseId) query.set('exercise_id', params.exerciseId);
     if (params?.workoutId) query.set('workout_id', params.workoutId);
-    return request<PersonalRecord[]>(`/api/personal-records${query.size ? `?${query}` : ''}`);
+    const path = `/api/personal-records${query.size ? `?${query}` : ''}`;
+    // A just-saved workout's records only matter online; saving a copy per workout would pile up.
+    return params?.workoutId
+      ? request<PersonalRecord[]>(path)
+      : accountRead<PersonalRecord[]>(path);
   },
   muscleVolume: (start?: string, end?: string) => {
     const query = new URLSearchParams();
@@ -613,8 +714,8 @@ export const api = {
     if (end) query.set('end', end);
     return request<MuscleVolume[]>(`/api/muscle-volume${query.size ? `?${query}` : ''}`);
   },
-  cardioOverview: () => request<CardioOverview>('/api/cardio'),
-  getCardioPreferences: () => request<CardioPreferences>('/api/cardio-preferences'),
+  cardioOverview: () => accountRead<CardioOverview>('/api/cardio'),
+  getCardioPreferences: () => accountRead<CardioPreferences>('/api/cardio-preferences'),
   updateCardioPreferences: (payload: CardioPreferences) =>
     request<CardioPreferences>('/api/cardio-preferences', {
       method: 'PUT',
@@ -654,16 +755,16 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
-  getTrainingPreferences: () => request<TrainingPreferences>('/api/training-preferences'),
-  getHomeLayout: () => request<HomeLayout>('/api/home-layout'),
+  getTrainingPreferences: () => accountRead<TrainingPreferences>('/api/training-preferences'),
+  getHomeLayout: () => accountRead<HomeLayout>('/api/home-layout'),
   saveHomeLayout: (layout: HomeLayout) =>
     request<HomeLayout>('/api/home-layout', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(layout),
     }),
-  getWorkoutTypeColors: () => request<WorkoutTypeColors>('/api/workout-type-colors'),
-  getWorkoutTypes: () => request<WorkoutType[]>('/api/workout-types'),
+  getWorkoutTypeColors: () => accountRead<WorkoutTypeColors>('/api/workout-type-colors'),
+  getWorkoutTypes: () => accountRead<WorkoutType[]>('/api/workout-types'),
   createWorkoutType: (payload: { name: string; color: string }) =>
     request<WorkoutType>('/api/workout-types', {
       method: 'POST',
@@ -726,22 +827,24 @@ export const api = {
   importBatches: () => request<ImportBatch[]>('/api/workouts/import/batches'),
   undoImportBatch: (id: string) =>
     request<ImportUndoResult>(`/api/workouts/import/batches/${id}`, { method: 'DELETE' }),
-  createWorkout: (payload: WorkoutInput) =>
+  createWorkout: (payload: WorkoutInput, signal?: AbortSignal) =>
     request<TrackedWorkout>('/api/workouts', {
+      signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
-  updateWorkout: (id: string, payload: WorkoutInput) =>
+  updateWorkout: (id: string, payload: WorkoutInput, signal?: AbortSignal) =>
     request<TrackedWorkout>(`/api/workouts/${id}`, {
+      signal,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
-  exerciseProgress: (id: string) => request<ExerciseProgress>(`/api/progress/${id}`),
-  exerciseLibrary: () => request<ExerciseLibrarySummary[]>('/api/progress'),
+  exerciseProgress: (id: string) => accountRead<ExerciseProgress>(`/api/progress/${id}`),
+  exerciseLibrary: () => accountRead<ExerciseLibrarySummary[]>('/api/progress'),
   getWorkout: (id: string) => request<TrackedWorkout>(`/api/workouts/${id}`),
   getSession: (id: string) => request<WorkoutSession>(`/api/sessions/${id}`),
   deleteSession: (id: string) =>

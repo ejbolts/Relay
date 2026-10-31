@@ -285,6 +285,8 @@ import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
+import { usePendingWorkoutSave } from './usePendingWorkoutSave';
+import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { RestTimerToast, WorkoutHeaderMeta } from './WorkoutRestTimer';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
@@ -319,6 +321,7 @@ import {
   workoutSetForAutoSave,
 } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
+import { isUsingSavedData } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import {
@@ -684,11 +687,13 @@ function AppContent() {
   );
   const [workoutStartDate, setWorkoutStartDate] = useState(localDate());
   const [editingWorkout, setEditingWorkout] = useState<TrackedWorkout | null>(null);
-  const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(
-    () => readActiveWorkoutDraft()?.resumingWorkoutId ?? null,
-  );
+  const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(() => {
+    const draft = readActiveWorkoutDraft();
+    return draft?.pendingSave ? null : (draft?.resumingWorkoutId ?? null);
+  });
   const [activeWorkoutStartedAt, setActiveWorkoutStartedAt] = useState<number | null>(() => {
-    return readActiveWorkoutDraft()?.startedAt ?? null;
+    const draft = readActiveWorkoutDraft();
+    return draft?.pendingSave ? null : (draft?.startedAt ?? null);
   });
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
   // The opened shared profile; each opening refetches it, while Back reveals the cached screen.
@@ -732,7 +737,12 @@ function AppContent() {
     [],
   );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
-  const [workoutSaving, setWorkoutSaving] = useState(false);
+  const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
+  const pendingWorkout = usePendingWorkoutSave(user?.id ?? null, (saved, resumedId) =>
+    completeWorkoutSave(saved, false, resumedId),
+  );
+  const workoutSaving = editingWorkoutSaving || pendingWorkout.saving;
+  const workoutSaveBlocked = workoutSaving || pendingWorkout.pending !== null;
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
   useEffect(() => {
     // A URL (including an old phone notification) is navigation, never a Start action.
@@ -897,8 +907,9 @@ function AppContent() {
     const generation = ++refreshGenerationRef.current;
     const current = () => generation === refreshGenerationRef.current;
     const refresh = async () => {
-      // Read before the data: a change during this refresh must trigger another pass.
-      const revision = await api.workoutRevision().catch(() => null);
+      // Read before the data: a change during this refresh must trigger another pass. Offline,
+      // there is no revision to confirm and saved copies answer the reads straight away.
+      const revision = isUsingSavedData() ? null : await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
@@ -1159,9 +1170,16 @@ function AppContent() {
   async function saveWorkout(payload: WorkoutInput) {
     const wasEditing = editingWorkout !== null;
     const resumedId = resumingWorkoutId;
+    if (!wasEditing) {
+      pendingWorkout.queue(payload);
+      setActiveWorkoutStartedAt(null);
+      setResumingWorkoutId(null);
+      setTab('dashboard', { replace: true });
+      return;
+    }
     setWorkoutSaving(true);
     ++refreshGenerationRef.current;
-    // Keep the logger and its recovery draft mounted until the server confirms the save.
+    // Existing-workout edits stay mounted until confirmed; active completions use the durable snapshot.
     setTab(wasEditing ? 'history' : 'dashboard', { replace: true });
     let saved: TrackedWorkout;
     try {
@@ -1186,13 +1204,15 @@ function AppContent() {
       setWorkoutSaving(false);
     }
 
+    completeWorkoutSave(saved, wasEditing, resumedId);
+  }
+
+  function completeWorkoutSave(
+    saved: TrackedWorkout,
+    wasEditing: boolean,
+    resumedId: string | null,
+  ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
-    if (!wasEditing) {
-      const draft = readActiveWorkoutDraft();
-      if (draft?.startedAt === activeWorkoutStartedAt) clearActiveWorkoutDraft();
-      setActiveWorkoutStartedAt(null);
-      setResumingWorkoutId(null);
-    }
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     setEditingWorkout(null);
 
@@ -1225,7 +1245,7 @@ function AppContent() {
   }
 
   async function deleteWorkout(workout: TrackedWorkout) {
-    if (workoutSaving) return;
+    if (workoutSaveBlocked) return;
     try {
       await withBackgroundActivity('Deleting workout…', async () => {
         await api.deleteWorkout(workout.id);
@@ -1297,7 +1317,7 @@ function AppContent() {
     category: WorkoutCategory | null = null,
     startType: WorkoutType | null = null,
   ) {
-    if (workoutSaving) return;
+    if (workoutSaveBlocked) return;
     if (replaceActiveWorkout) clearActiveWorkoutDraft();
     const storedDraft = replaceActiveWorkout ? null : readActiveWorkoutDraft();
     const freshStart = !storedDraft && activeWorkoutStartedAt === null;
@@ -1314,14 +1334,14 @@ function AppContent() {
   }
 
   function editWorkout(workout: TrackedWorkout) {
-    if (workoutSaving) return;
+    if (workoutSaveBlocked) return;
     setEditingWorkout(workout);
     setWorkoutStartDate(workout.workout_date);
     setTab('log');
   }
 
   function resumeWorkout(workout: TrackedWorkout) {
-    if (workoutSaving || activeWorkoutStartedAt !== null) return;
+    if (workoutSaveBlocked || activeWorkoutStartedAt !== null) return;
     clearActiveWorkoutDraft();
     setEditingWorkout(null);
     setResumingWorkoutId(workout.id);
@@ -1641,6 +1661,26 @@ function AppContent() {
           className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || tab === 'log' ? 'with-overlay-header' : ''}`}
           data-nav-direction={navDirection}
         >
+          {pendingWorkout.pending && (
+            <PendingWorkoutSaveCard
+              completion={pendingWorkout.pending}
+              saving={pendingWorkout.saving}
+              error={pendingWorkout.error}
+              onRetry={pendingWorkout.retry}
+              onReview={
+                pendingWorkout.needsReview
+                  ? () => {
+                      const draft = pendingWorkout.review();
+                      if (!draft) return;
+                      setActiveWorkoutStartedAt(draft.startedAt);
+                      setResumingWorkoutId(draft.resumingWorkoutId ?? null);
+                      setWorkoutStartDate(draft.workoutDate);
+                      setTab('log');
+                    }
+                  : undefined
+              }
+            />
+          )}
           {loading &&
             tab !== 'dashboard' &&
             tab !== 'videos' &&
@@ -1660,7 +1700,7 @@ function AppContent() {
                   personalRecords={personalRecords}
                   categoryColors={workoutTypeColors}
                   workoutStartedAt={activeWorkoutStartedAt}
-                  workoutSaving={workoutSaving}
+                  workoutSaving={workoutSaveBlocked}
                   todayBodyweight={todayMeasurement?.weight_kg ?? null}
                   todayBodyFat={todayMeasurement?.body_fat_pct ?? null}
                   onSaveBodyFat={(bodyFat) =>
@@ -1805,7 +1845,7 @@ function AppContent() {
                       onRestTimerComplete={notifyRestComplete}
                       onClose={navigateBack}
                       onDelete={() => {
-                        if (workoutSaving) return;
+                        if (workoutSaveBlocked) return;
                         if (editingWorkout) {
                           void deleteWorkout(editingWorkout);
                           setTab('history');
@@ -2037,7 +2077,7 @@ function AppContent() {
             active={activeMainTab}
             workoutStartedAt={activeWorkoutStartedAt}
             restEndsAt={restEndsAt}
-            workoutSaving={workoutSaving}
+            workoutSaving={workoutSaveBlocked}
             onSelect={(nextTab) => {
               if (nextTab === 'training')
                 setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);

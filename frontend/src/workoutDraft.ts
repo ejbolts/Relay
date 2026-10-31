@@ -1,4 +1,10 @@
-import type { MachineSetting, TrackedWorkout, WorkoutCategory, WorkoutSetInput } from './types';
+import type {
+  MachineSetting,
+  TrackedWorkout,
+  WorkoutCategory,
+  WorkoutInput,
+  WorkoutSetInput,
+} from './types';
 
 export const ACTIVE_WORKOUT_DRAFT_KEY = 'gym-video-logger.active-workout.v1';
 /** Dispatched on `window` when this window saves or clears the active workout draft. */
@@ -43,6 +49,55 @@ export interface ActiveWorkoutDraft {
   workoutTypeExplicit?: boolean;
   notes: string;
   movements: StoredDraftMovement[];
+  pendingSave?: PendingWorkoutSave;
+}
+
+/** Stored in the same atomic write as the draft, before any network request. */
+export interface PendingWorkoutSave {
+  userId: string | null;
+  finishedAt: number;
+  workoutId: string | null;
+  payload: WorkoutInput;
+}
+
+function isPendingSave(value: unknown, draft: Record<string, unknown>): boolean {
+  if (!isRecord(value) || !isRecord(value.payload)) return false;
+  const payload = value.payload;
+  return (
+    (value.userId === null || typeof value.userId === 'string') &&
+    typeof value.finishedAt === 'number' &&
+    Number.isFinite(value.finishedAt) &&
+    value.finishedAt >= Number(draft.startedAt) &&
+    (value.workoutId === null ||
+      (typeof value.workoutId === 'string' && value.workoutId === draft.resumingWorkoutId)) &&
+    (value.workoutId !== null ||
+      (typeof draft.clientSessionId === 'string' &&
+        payload.client_session_id === draft.clientSessionId)) &&
+    typeof payload.name === 'string' &&
+    payload.workout_date === draft.workoutDate &&
+    typeof payload.category === 'string' &&
+    workoutCategories.has(payload.category as WorkoutCategory) &&
+    (payload.workout_type_id == null || typeof payload.workout_type_id === 'string') &&
+    (payload.notes === null || typeof payload.notes === 'string') &&
+    typeof payload.duration_minutes === 'number' &&
+    Number.isInteger(payload.duration_minutes) &&
+    payload.duration_minutes >= 1 &&
+    payload.duration_minutes <= 1440 &&
+    payload.start_time === null &&
+    payload.end_time === null &&
+    Array.isArray(payload.movements) &&
+    payload.movements.length > 0 &&
+    payload.movements.every(
+      (movement) =>
+        isRecord(movement) &&
+        typeof movement.exercise_id === 'string' &&
+        (movement.notes === null || typeof movement.notes === 'string') &&
+        Array.isArray(movement.machine_photo_ids) &&
+        movement.machine_photo_ids.every((id) => typeof id === 'string') &&
+        Array.isArray(movement.sets) &&
+        movement.sets.every((set) => isRecord(set) && typeof set.completed === 'boolean'),
+    )
+  );
 }
 
 const workoutCategories = new Set<WorkoutCategory>([
@@ -147,7 +202,8 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
     (value.workoutTypeExplicit === undefined || typeof value.workoutTypeExplicit === 'boolean') &&
     typeof value.notes === 'string' &&
     Array.isArray(value.movements) &&
-    value.movements.every(isStoredMovement)
+    value.movements.every(isStoredMovement) &&
+    (value.pendingSave === undefined || isPendingSave(value.pendingSave, value))
   );
 }
 

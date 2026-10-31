@@ -6,7 +6,11 @@ import { api } from './api';
 import { emitAuthExpired } from './authEvents';
 import { AuthGate } from './AuthGate';
 import { LAST_USER_KEY } from './sessionCleanup';
-import { ACTIVE_WORKOUT_DRAFT_KEY } from './workoutDraft';
+import {
+  ACTIVE_WORKOUT_DRAFT_KEY,
+  readActiveWorkoutDraft,
+  writeActiveWorkoutDraft,
+} from './workoutDraft';
 import type { User } from './types';
 
 const { clearCache } = vi.hoisted(() => ({ clearCache: vi.fn().mockResolvedValue(undefined) }));
@@ -64,6 +68,60 @@ it('unmounts account content and clears offline data when a live session ends', 
   expect(container.textContent).not.toContain('Account workout');
   expect(localStorage.getItem(LAST_USER_KEY)).toBeNull();
   expect(localStorage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
+  expect(clearCache).toHaveBeenCalledOnce();
+});
+
+it('keeps only a finished workout that still has to sync when a live session ends', async () => {
+  await act(async () =>
+    root.render(
+      <AuthGate>
+        <p>Account workout</p>
+      </AuthGate>,
+    ),
+  );
+  const clientSessionId = '1b4e28ba-2fa1-41d2-883f-0016d3cca427';
+  const startedAt = Date.now() - 45 * 60_000;
+  writeActiveWorkoutDraft({
+    version: 1,
+    clientSessionId,
+    startedAt,
+    updatedAt: startedAt,
+    name: 'Sample push session',
+    workoutDate: '2026-10-30',
+    category: 'push',
+    notes: '',
+    movements: [],
+    pendingSave: {
+      userId: user.id,
+      finishedAt: Date.now(),
+      workoutId: null,
+      payload: {
+        client_session_id: clientSessionId,
+        name: 'Sample push session',
+        workout_date: '2026-10-30',
+        category: 'push',
+        notes: null,
+        duration_minutes: 45,
+        start_time: null,
+        end_time: null,
+        movements: [
+          {
+            exercise_id: 'bench',
+            notes: null,
+            machine_photo_ids: [],
+            sets: [{ reps: 8, weight_kg: 60, completed: true } as never],
+          },
+        ],
+      },
+    },
+  });
+  clearCache.mockClear();
+
+  await act(async () => emitAuthExpired());
+
+  expect(container.textContent).toContain('Sign in');
+  expect(readActiveWorkoutDraft()?.pendingSave?.userId).toBe(user.id);
+  expect(localStorage.getItem(LAST_USER_KEY)).toBeNull();
   expect(clearCache).toHaveBeenCalledOnce();
 });
 

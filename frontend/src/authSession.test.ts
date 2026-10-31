@@ -3,7 +3,12 @@ import { ApiError } from './api';
 import { resolveSession } from './authSession';
 import { LAST_USER_KEY, type CleanupStorage } from './sessionCleanup';
 import type { User } from './types';
-import { ACTIVE_WORKOUT_DRAFT_KEY } from './workoutDraft';
+import {
+  ACTIVE_WORKOUT_DRAFT_KEY,
+  readActiveWorkoutDraft,
+  writeActiveWorkoutDraft,
+  type ActiveWorkoutDraft,
+} from './workoutDraft';
 
 class MemoryStorage implements CleanupStorage {
   values = new Map<string, string>();
@@ -29,6 +34,46 @@ const user: User = {
 
 function deps(me: () => Promise<User>, storage = new MemoryStorage()) {
   return { me, storage, clearCache: vi.fn().mockResolvedValue(undefined) };
+}
+
+/** A finished sample workout stored on the device but not yet accepted by the server. */
+function finishedOffline(): ActiveWorkoutDraft {
+  const startedAt = Date.now() - 45 * 60_000;
+  const clientSessionId = '1b4e28ba-2fa1-41d2-883f-0016d3cca427';
+  return {
+    version: 1,
+    clientSessionId,
+    startedAt,
+    updatedAt: startedAt,
+    name: 'Sample push session',
+    workoutDate: '2026-10-30',
+    category: 'push',
+    notes: '',
+    movements: [],
+    pendingSave: {
+      userId: user.id,
+      finishedAt: Date.now(),
+      workoutId: null,
+      payload: {
+        client_session_id: clientSessionId,
+        name: 'Sample push session',
+        workout_date: '2026-10-30',
+        category: 'push',
+        notes: null,
+        duration_minutes: 45,
+        start_time: null,
+        end_time: null,
+        movements: [
+          {
+            exercise_id: 'bench',
+            notes: null,
+            machine_photo_ids: [],
+            sets: [{ reps: 8, weight_kg: 60, completed: true } as never],
+          },
+        ],
+      },
+    },
+  };
 }
 
 describe('resolveSession', () => {
@@ -68,6 +113,41 @@ describe('resolveSession', () => {
     expect(storage.getItem(LAST_USER_KEY)).toBeNull();
     expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
     expect(session.clearCache).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a finished workout that has not synced when the session expires', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user));
+    expect(writeActiveWorkoutDraft(finishedOffline(), storage)).toBe(true);
+    const session = deps(
+      () => Promise.reject(new ApiError('Sign in', 'not_authenticated', 401)),
+      storage,
+    );
+
+    expect(await resolveSession(session)).toEqual({ status: 'signed-out' });
+    expect(readActiveWorkoutDraft(storage)?.pendingSave?.payload.duration_minutes).toBe(45);
+    expect(storage.getItem(LAST_USER_KEY)).toBeNull();
+    expect(session.clearCache).toHaveBeenCalledOnce();
+  });
+
+  it('opens a remembered account offline when the server does not answer in time', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user));
+
+    const state = await resolveSession({
+      ...deps(() => new Promise<User>(() => {}), storage),
+      offlineStartAfterMs: 10,
+    });
+
+    expect(state).toEqual({ status: 'authenticated', user, offline: true });
+  });
+
+  it('waits for a slow server on a first visit, with no account to open offline', async () => {
+    const slowly = () => new Promise<User>((resolve) => setTimeout(() => resolve(user), 30));
+
+    const state = await resolveSession({ ...deps(slowly), offlineStartAfterMs: 10 });
+
+    expect(state).toEqual({ status: 'authenticated', user, offline: false });
   });
 
   it('keeps a remembered user in the offline app instead of signing them out', async () => {

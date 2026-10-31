@@ -62,6 +62,54 @@ const draft: ActiveWorkoutDraft = {
 };
 
 describe('active workout draft persistence', () => {
+  it('round-trips an immutable completion and rejects a missing target or mismatched session', () => {
+    const storage = new MemoryStorage();
+    const sessionId = 'c911075b-8eb3-48b0-8790-f535d579fa52';
+    const completed: ActiveWorkoutDraft = {
+      ...draft,
+      clientSessionId: sessionId,
+      pendingSave: {
+        userId: 'sample-owner',
+        finishedAt: draft.updatedAt,
+        workoutId: null,
+        payload: {
+          client_session_id: sessionId,
+          name: draft.name,
+          workout_date: draft.workoutDate,
+          category: draft.category,
+          notes: draft.notes,
+          duration_minutes: 30,
+          start_time: null,
+          end_time: null,
+          movements: draft.movements.map((movement) => ({
+            exercise_id: movement.exerciseId,
+            notes: movement.notes,
+            machine_photo_ids: movement.machinePhotoIds,
+            sets: movement.sets,
+          })),
+        },
+      },
+    };
+    expect(writeActiveWorkoutDraft(completed, storage)).toBe(true);
+    expect(readActiveWorkoutDraft(storage)).toEqual(completed);
+    for (const invalid of [
+      { ...completed.pendingSave, workoutId: undefined },
+      {
+        ...completed.pendingSave,
+        payload: { ...completed.pendingSave!.payload, client_session_id: 'different' },
+      },
+      {
+        ...completed.pendingSave,
+        payload: { ...completed.pendingSave!.payload, duration_minutes: null },
+      },
+    ]) {
+      const raw = JSON.stringify({ ...completed, pendingSave: invalid });
+      storage.setItem(ACTIVE_WORKOUT_DRAFT_KEY, raw);
+      expect(readActiveWorkoutDraft(storage)).toBeNull();
+      expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBe(raw);
+    }
+  });
+
   it('preserves custom machine settings and rejects malformed settings', () => {
     const storage = new MemoryStorage();
     const withSettings = structuredClone(draft);
