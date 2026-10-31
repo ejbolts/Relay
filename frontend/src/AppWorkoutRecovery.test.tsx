@@ -814,7 +814,7 @@ describe('rest time controls', () => {
     'alerts above other tabs after a dismissed countdown (server push scheduled: %s)',
     async (scheduled) => {
       const systemNotification = await startRest(scheduled);
-      await click('Dismiss rest timer popup and show it beside the live time');
+      await click('Hide rest timer');
       await act(async () =>
         container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click(),
       );
@@ -840,11 +840,81 @@ describe('rest time controls', () => {
     },
   );
 
-  it('does not announce a cancelled rest', async () => {
+  it('does not announce a rest ended by taking all of it off', async () => {
     await startRest();
-    await click('Cancel rest timer');
+    await click('Take 30 seconds off the rest');
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(container.querySelector('.rest-notch.is-idle')).not.toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
     expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  const headerMeta = () => container.querySelector('.logger-screen .workout-header-meta');
+
+  it('pauses the live time and the rest together, keeps the rest alert waiting, then resumes both', async () => {
+    const systemNotification = await startRest(true);
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    vi.spyOn(api, 'cancelRestTimerNotification').mockResolvedValue(undefined);
+    vi.mocked(api.scheduleRestTimerNotification).mockClear();
+    await click('Pause workout and rest timer');
+    expect(headerMeta()?.textContent).toMatch(/^10:0\d•Paused$/);
+    const frozenHeader = headerMeta()?.textContent;
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(api.cancelRestTimerNotification).toHaveBeenCalled();
+    expect(readActiveWorkoutDraft()?.pausedAt).toEqual(expect.any(Number));
+    // A minute later nothing has moved and no rest alert has fired.
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(headerMeta()?.textContent).toBe(frozenHeader);
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    // Adjusting a paused rest changes what is left without starting it.
+    await click('Add 30 seconds to the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
+    expect(api.scheduleRestTimerNotification).not.toHaveBeenCalled();
+    await click('Resume workout and rest timer');
+    expect(headerMeta()?.textContent).toMatch(/^Live 10:0\d$/);
+    expect(readActiveWorkoutDraft()).toMatchObject({ pausedAt: null, pausedMs: 60_000 });
+    expect(api.scheduleRestTimerNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ delay_seconds: 55 }),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(55_000));
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Rest complete',
+    );
+    expect(systemNotification).not.toHaveBeenCalled();
+  });
+
+  it('pauses from the notch with no rest, and completing a set resumes the workout', async () => {
+    vi.useFakeTimers();
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].rest_seconds = 30;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    await click('Pause workout');
+    expect(headerMeta()?.textContent).toContain('Paused');
+    expect(container.querySelector('.rest-notch.is-idle.is-paused')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(120_000));
+    await click('Complete set 1');
+    expect(headerMeta()?.textContent).toMatch(/^Live 10:0\d$/);
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:30');
+    expect(readActiveWorkoutDraft()).toMatchObject({ pausedAt: null, pausedMs: 120_000 });
+  });
+
+  it('keeps a pause through a reload and leaves paused time out of the saved duration', async () => {
+    const now = Date.now();
+    // Started 10 minutes ago: 3 minutes paused earlier, and paused again 1 minute ago.
+    writeActiveWorkoutDraft(
+      storedDraft({ pausedMs: 180_000, pausedAt: now - 60_000, startedAt: now - 600_000 }),
+    );
+    await mount();
+    expect(headerMeta()?.textContent).toBe('6:00•Paused');
+    expect(container.querySelector('.rest-notch[aria-label="Resume workout"]')).not.toBeNull();
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await confirmFinish();
+    const payload = vi.mocked(api.createWorkout).mock.calls.at(-1)![0];
+    expect(payload.duration_minutes).toBe(6);
   });
 
   it.each([false, true])(

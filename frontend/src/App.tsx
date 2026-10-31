@@ -287,7 +287,15 @@ import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
 import { usePendingWorkoutSave } from './usePendingWorkoutSave';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
-import { RestTimerToast, WorkoutHeaderMeta } from './WorkoutRestTimer';
+import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import {
+  activeElapsedSeconds,
+  draftPause,
+  pauseWorkout,
+  pausedMsAt,
+  resumeWorkout,
+  type WorkoutPause,
+} from './workoutPause';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
@@ -2736,6 +2744,9 @@ function WorkoutLogger({
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
+  // Paused time is left out of the live time and the saved duration; the real start is kept.
+  const [pause, setPause] = useState<WorkoutPause>(() => draftPause(restoredDraft));
+  const workoutPaused = !initialWorkout && pause.pausedAt !== null;
   const clientSessionId = useState(() => restoredDraft?.clientSessionId ?? crypto.randomUUID())[0];
   const draftPersistedRef = useRef(Boolean(restoredDraft));
   const isCurrentDraft = useCallback(() => {
@@ -2774,28 +2785,30 @@ function WorkoutLogger({
   const [elapsed, setElapsed] = useState(
     initialWorkout
       ? (initialWorkout.duration_minutes ?? 0) * 60
-      : Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
+      : activeElapsedSeconds(startedAt, draftPause(restoredDraft)),
   );
   const [restLeft, setRestLeft] = useState(0);
-  // The rest popup shows each new timer; dismissing it moves the countdown beside the live time.
+  // Each new rest opens the pill; hiding it tucks the countdown into the bottom-edge notch.
   const [restTotal, setRestTotal] = useState(0);
-  const [restPopupOpen, setRestPopupOpen] = useState(false);
+  const [restHidden, setRestHidden] = useState(false);
   const restNotificationEndpointRef = useRef<string | null>(null);
   const activeRestTimerRef = useRef<{
     id: string;
     endsAt: number;
+    /** Seconds left when the workout was paused; null while the rest is counting down. */
+    pausedLeft: number | null;
     serverScheduled: boolean;
     pendingSchedules: Set<Promise<void>>;
   } | null>(null);
 
   useEffect(() => {
     if (initialWorkout) return;
-    const timer = window.setInterval(
-      () => setElapsed(Math.floor((Date.now() - startedAt) / 1000)),
-      1000,
-    );
+    const update = () => setElapsed(activeElapsedSeconds(startedAt, pause));
+    update();
+    if (pause.pausedAt !== null) return;
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [initialWorkout, startedAt]);
+  }, [initialWorkout, startedAt, pause]);
 
   useEffect(() => {
     if (initialWorkout) {
@@ -2821,6 +2834,8 @@ function WorkoutLogger({
         lastActiveAt: lastActiveAtRef.current,
         inactiveFinishAt: inactiveFinishAtRef.current,
         durationOverrideMinutes,
+        pausedMs: pause.pausedMs,
+        pausedAt: pause.pausedAt,
         name,
         workoutDate,
         category,
@@ -2892,6 +2907,7 @@ function WorkoutLogger({
     startedAt,
     workoutDate,
     durationOverrideMinutes,
+    pause,
     clientSessionId,
     isCurrentDraft,
   ]);
@@ -2925,12 +2941,12 @@ function WorkoutLogger({
     if (restLeft <= 0) return;
     const tick = () => {
       const active = activeRestTimerRef.current;
-      if (!active) return;
+      if (!active || active.pausedLeft !== null) return;
       const next = restSecondsLeft(active.endsAt);
       setRestLeft(next);
       if (next > 0) return;
       activeRestTimerRef.current = null;
-      setRestPopupOpen(false);
+      setRestHidden(false);
       onRestTimerChange?.(null);
       if (document.visibilityState === 'visible') onRestTimerComplete();
       else if (!active.serverScheduled) void showRestTimerNotification().catch(() => undefined);
@@ -3216,25 +3232,33 @@ function WorkoutLogger({
     const timer = {
       id: crypto.randomUUID(),
       endsAt: Date.now() + seconds * 1000,
+      pausedLeft: null,
       serverScheduled: false,
       pendingSchedules: new Set<Promise<void>>(),
     };
     activeRestTimerRef.current = timer;
     setRestLeft(seconds);
     setRestTotal(seconds);
-    setRestPopupOpen(true);
+    setRestHidden(false);
     onRestTimerChange?.(timer.endsAt);
     const endpoint = restNotificationEndpointRef.current;
     if (endpoint) scheduleRestTimerPush(timer, endpoint);
   }
 
-  /** Adds or takes off rest; taking off all of it ends the rest like Cancel. */
+  /** Adds or takes off rest; taking off all of it ends the rest. */
   function adjustRestTimer(deltaSeconds: number) {
     const timer = activeRestTimerRef.current;
     if (!timer) return;
-    const left = restSecondsLeft(timer.endsAt) + deltaSeconds;
+    const left = (timer.pausedLeft ?? restSecondsLeft(timer.endsAt)) + deltaSeconds;
     if (left <= 0) {
       cancelRestTimer();
+      return;
+    }
+    if (timer.pausedLeft !== null) {
+      // A paused rest keeps waiting; the change applies when the workout resumes.
+      timer.pausedLeft = left;
+      setRestLeft(left);
+      setRestTotal((total) => Math.max(left, total + deltaSeconds));
       return;
     }
     timer.endsAt = Date.now() + left * 1000;
@@ -3246,23 +3270,57 @@ function WorkoutLogger({
     if (endpoint) scheduleRestTimerPush(timer, endpoint);
   }
 
+  /** Stops this device's scheduled "Rest complete" alert for `timer`. */
+  const cancelRestTimerPush = useCallback(
+    (timer: NonNullable<typeof activeRestTimerRef.current>) => {
+      timer.serverScheduled = false;
+      const endpoint = restNotificationEndpointRef.current;
+      if (!endpoint) return;
+      const cancelServerTimer = () =>
+        api.cancelRestTimerNotification({ endpoint, timer_id: timer.id });
+      void cancelRestTimerPushSchedule(cancelServerTimer, timer.pendingSchedules);
+    },
+    [],
+  );
+
   const cancelRestTimer = useCallback(() => {
     const timer = activeRestTimerRef.current;
     activeRestTimerRef.current = null;
     setRestLeft(0);
-    setRestPopupOpen(false);
+    setRestHidden(false);
     onRestTimerChange?.(null);
     void dismissRestTimerNotifications().catch(() => undefined);
-    const endpoint = restNotificationEndpointRef.current;
-    if (timer && endpoint) {
-      const cancelServerTimer = () =>
-        api.cancelRestTimerNotification({ endpoint, timer_id: timer.id });
-      void cancelRestTimerPushSchedule(cancelServerTimer, timer.pendingSchedules);
-    }
-  }, [onRestTimerChange]);
+    if (timer) cancelRestTimerPush(timer);
+  }, [onRestTimerChange, cancelRestTimerPush]);
 
-  function skipRestTimer() {
-    cancelRestTimer();
+  /** Pausing freezes the workout time and any rest together; the rest alert waits too. */
+  function pauseWorkoutTimers() {
+    setPause((current) => pauseWorkout(current));
+    const timer = activeRestTimerRef.current;
+    if (!timer || timer.pausedLeft !== null) return;
+    const left = restSecondsLeft(timer.endsAt);
+    if (left <= 0) return;
+    timer.pausedLeft = left;
+    setRestLeft(left);
+    onRestTimerChange?.(null);
+    cancelRestTimerPush(timer);
+  }
+
+  function resumeWorkoutTimers() {
+    setPause((current) => resumeWorkout(current));
+    const timer = activeRestTimerRef.current;
+    if (!timer || timer.pausedLeft === null) return;
+    timer.endsAt = Date.now() + timer.pausedLeft * 1000;
+    timer.pausedLeft = null;
+    setRestLeft(restSecondsLeft(timer.endsAt));
+    onRestTimerChange?.(timer.endsAt);
+    const endpoint = restNotificationEndpointRef.current;
+    if (endpoint) scheduleRestTimerPush(timer, endpoint);
+  }
+
+  function toggleWorkoutPause() {
+    if (pause.pausedAt === null) pauseWorkoutTimers();
+    else resumeWorkoutTimers();
   }
 
   useEffect(() => {
@@ -3289,6 +3347,7 @@ function WorkoutLogger({
         ? restTimerSecondsAfterSetUpdate(movement.exercise.kind, currentSet, update)
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
+    if (loggingSet && workoutPaused) resumeWorkoutTimers();
     // Correcting the weight or reps of a logged set also moves the untouched suggestion after it.
     const correctingLoggedSet =
       currentSet?.completed === true &&
@@ -3366,6 +3425,7 @@ function WorkoutLogger({
           startedAt,
           finishedAt,
           durationOverrideMinutes,
+          pausedMsAt(pause, finishedAt),
         );
     const movementsToSave =
       automaticEndAt === undefined
@@ -3546,12 +3606,13 @@ function WorkoutLogger({
   }
 
   const restActive = restTimerEnabled && restLeft > 0;
+  // Live workouts always have the timer dock: the rest pill, or the bottom-edge notch.
+  const showTimerDock = !initialWorkout;
+  const restPillOpen = showTimerDock && restActive && !restHidden;
+  const dockSpacing = restPillOpen ? 'has-rest-pill' : showTimerDock ? 'has-rest-notch' : '';
 
   return (
-    <section
-      className={`logger-screen content-page ${restActive && restPopupOpen ? 'has-rest-popup' : ''}`}
-      inert={saving}
-    >
+    <section className={`logger-screen content-page ${dockSpacing}`} inert={saving}>
       {prToastEntries.length > 0 && (
         <PrToast key={`pr-toast-${prToastId}`} entries={prToastEntries} onClose={closePrToast} />
       )}
@@ -3566,11 +3627,11 @@ function WorkoutLogger({
             durationLabel={
               initialWorkout
                 ? `${readOnly ? 'View only \u00b7 ' : ''}${formatDuration(displayedDurationSeconds)}`
-                : `Live ${formatDuration(elapsed)}`
+                : workoutPaused
+                  ? formatDuration(elapsed)
+                  : `Live ${formatDuration(elapsed)}`
             }
-            restSeconds={restActive && !restPopupOpen ? restLeft : null}
-            onSkipRest={skipRestTimer}
-            onShowRest={() => setRestPopupOpen(true)}
+            paused={workoutPaused}
           />
         }
         onBack={onClose}
@@ -3924,10 +3985,10 @@ function WorkoutLogger({
         </div>
       )}
 
-      {(undoDeletion || (restActive && restPopupOpen)) && (
-        // Popups that stay up while you train sit at the bottom, clear of the workout header.
-        <div className="logger-bottom-toasts">
-          {undoDeletion && (
+      {undoDeletion && (
+        // Popups that stay up while you train sit at the bottom, above the timer dock.
+        <div className={`logger-bottom-toasts ${dockSpacing}`}>
+          {
             <div
               className="undo-toast"
               role="status"
@@ -3946,17 +4007,20 @@ function WorkoutLogger({
                 <Icon name="close" />
               </button>
             </div>
-          )}
-          {restActive && restPopupOpen && (
-            <RestTimerToast
-              seconds={restLeft}
-              totalSeconds={restTotal}
-              onDismiss={() => setRestPopupOpen(false)}
-              onCancel={skipRestTimer}
-              onAdjust={adjustRestTimer}
-            />
-          )}
+          }
         </div>
+      )}
+      {showTimerDock && (
+        <WorkoutTimerDock
+          restSeconds={restActive ? restLeft : 0}
+          restTotal={restTotal}
+          restHidden={restHidden}
+          paused={workoutPaused}
+          onTogglePause={toggleWorkoutPause}
+          onAdjust={adjustRestTimer}
+          onHide={() => setRestHidden(true)}
+          onShow={() => setRestHidden(false)}
+        />
       )}
       {!readOnly && (
         <>

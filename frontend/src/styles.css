@@ -4424,7 +4424,7 @@ body:has(.popup-dialog[open]) {
   }
 }
 
-/* Active rest state stays in the workout subtitle instead of covering the workout. */
+/* The live workout time under the title. */
 .overlay-header-copy .workout-header-meta {
   max-width: 100%;
   display: flex;
@@ -4451,77 +4451,22 @@ body:has(.popup-dialog[open]) {
 }
 
 .overlay-header-copy .workout-header-separator,
-.overlay-header-copy .workout-rest-timer {
+.overlay-header-copy .workout-header-paused {
   flex: 0 0 auto;
 }
 
-.overlay-header-copy .workout-rest-timer {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.24rem;
-  overflow: visible;
-  color: #d7d4d0;
+/* The live time freezes and turns gold while the workout is paused. */
+.overlay-header-copy .workout-header-meta.is-paused {
+  color: var(--p-gold);
 }
 
-.overlay-header-copy .workout-rest-timer strong {
-  overflow: visible;
-  color: #e7e4e0;
-  font-size: 0.76rem;
-  font-weight: 850;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-  line-height: 1;
-}
-
-.workout-rest-timer > button {
-  width: 1.22rem;
-  height: 1.22rem;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border: 1px solid rgb(255 91 105 / 64%);
-  border-radius: 50%;
-  padding: 0;
-  background: rgb(102 30 39 / 58%);
-  color: #ff6b78;
-  font-size: 0.82rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
-/* Tapping the time reopens the rest popup; the red × still skips the rest. */
-.workout-rest-timer > .workout-rest-timer-show {
-  width: auto;
-  height: auto;
-  min-height: 1.5rem;
-  border: 0;
-  border-radius: 6px;
-  padding: 0 0.15rem;
-  background: transparent;
-  color: inherit;
-}
-
-.workout-rest-timer > .workout-rest-timer-show:hover,
-.workout-rest-timer > .workout-rest-timer-show:focus-visible {
-  outline: 2px solid var(--p-accent);
-  outline-offset: 1px;
-  background: transparent;
-}
-
-.workout-rest-timer > button:not(.workout-rest-timer-show):hover,
-.workout-rest-timer > button:not(.workout-rest-timer-show):focus-visible {
-  outline: 2px solid rgb(255 107 120 / 35%);
-  outline-offset: 1px;
-  background: rgb(126 33 43 / 72%);
+.overlay-header-copy .workout-header-paused {
+  font-weight: 800;
 }
 
 @media (max-width: 390px) {
   .overlay-header-copy .workout-header-meta {
     gap: 0.22rem;
-  }
-
-  .overlay-header-copy .workout-rest-timer {
-    gap: 0.18rem;
   }
 }
 

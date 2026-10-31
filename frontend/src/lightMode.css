@@ -17,6 +17,7 @@
   --p-good: #1d8534;
   --p-gold: #a36800;
   --p-gold-soft: rgb(201 133 0 / 14%);
+  --p-on-gold: #ffffff;
   --p-danger: #c53b3b;
   --p-grid: #e4e8eb;
   --p-axis: #c3cad0;
@@ -218,21 +219,6 @@
   color: var(--p-ink);
 }
 
-:root[data-colour-mode='light'] .overlay-header-copy .workout-rest-timer,
-:root[data-colour-mode='light'] .overlay-header-copy .workout-rest-timer strong {
-  color: var(--p-ink);
-}
-:root[data-colour-mode='light'] .workout-rest-timer > button:not(.workout-rest-timer-show) {
-  border-color: rgb(197 59 59 / 55%);
-  background: rgb(197 59 59 / 10%);
-  color: var(--p-danger);
-}
-:root[data-colour-mode='light'] .workout-rest-timer > button:not(.workout-rest-timer-show):hover,
-:root[data-colour-mode='light']
-  .workout-rest-timer
-  > button:not(.workout-rest-timer-show):focus-visible {
-  background: rgb(197 59 59 / 18%);
-}
 :root[data-colour-mode='light']
   .logger-screen
   .set-details.completed:not(.is-open)

@@ -1,3 +1,4 @@
+import { validStoredPause } from './workoutPause';
 import type {
   MachineSetting,
   TrackedWorkout,
@@ -42,6 +43,10 @@ export interface ActiveWorkoutDraft {
   lastActiveAt?: number;
   inactiveFinishAt?: number;
   durationOverrideMinutes?: number | null;
+  /** Paused time already resumed; see workoutPause.ts. */
+  pausedMs?: number;
+  /** When the current pause began, or null while the live workout is running. */
+  pausedAt?: number | null;
   name: string;
   workoutDate: string;
   category: WorkoutCategory;
@@ -189,6 +194,7 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
         Number.isInteger(value.durationOverrideMinutes) &&
         value.durationOverrideMinutes >= 1 &&
         value.durationOverrideMinutes <= 1440)) &&
+    validStoredPause(value.pausedMs, value.pausedAt) &&
     typeof value.updatedAt === 'number' &&
     typeof value.name === 'string' &&
     typeof value.workoutDate === 'string' &&
