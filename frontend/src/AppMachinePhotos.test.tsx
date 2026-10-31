@@ -356,9 +356,8 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(api.deleteMachinePhoto).toHaveBeenCalledTimes(2);
     expect(container.querySelector('.machine-photo-rail')).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([]);
-    expect(container.querySelector('.machine-photo-summary small')?.textContent).toBe(
-      'Take or choose a photo',
-    );
+    // No helper text once the last photo is gone (faa993e).
+    expect(container.querySelector('.machine-photo-summary small')).toBeNull();
   });
 
   function pinHomeMachine() {

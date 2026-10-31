@@ -5778,7 +5778,13 @@ function MachinePhotoChooser({
                     </button>
                   </div>
                 )}
-                <div className="machine-photo-rail" ref={photoRailRef}>
+                <div
+                  className="machine-photo-rail"
+                  ref={photoRailRef}
+                  role="region"
+                  aria-label={`Saved equipment photos for ${exercise.name}`}
+                  tabIndex={0}
+                >
                   {photos.map((photo) => {
                     const selected = selectedIds.includes(photo.id);
                     return (
@@ -5975,6 +5981,11 @@ function MachinePhotoDetail({
               className="photo-delete"
               label={images.length > 1 ? 'Delete machine' : 'Delete'}
               confirmLabel={images.length > 1 ? 'Delete machine and all photos' : 'Delete photo'}
+              confirmationMessage={
+                images.length > 1
+                  ? 'Also removes these photos from saved workouts.'
+                  : 'Also removes this photo from saved workouts.'
+              }
               onConfirm={removePhoto}
               disabled={saving}
             />

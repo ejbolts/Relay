@@ -1252,7 +1252,12 @@ def reactable_workout(db: Session, user: User, workout_id: str) -> TrainingWorko
     return workout
 
 
-class ReactionPerson(FeedFriend):
+class ReactionPerson(BaseModel):
+    """Someone who reacted. Reactors can include non-friends, so no live presence."""
+
+    id: str
+    display_name: str
+    profile_photo_url: str | None
     reaction: Reaction
 
 
