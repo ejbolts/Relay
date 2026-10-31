@@ -209,6 +209,16 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     reveal: ['Profile sharing', 'What you share'],
   },
   {
+    id: 'live-activity',
+    group: 'account',
+    title: 'Live activity',
+    page: 'settings',
+    requiresAccount: true,
+    keywords: 'online status last active live workouts working out presence friends',
+    selector: '.sharing-live',
+    reveal: ['Profile sharing', 'Live activity'],
+  },
+  {
     id: 'password',
     group: 'account',
     title: 'Change password',

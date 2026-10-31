@@ -123,7 +123,14 @@ it('shows feature media before change bullets for current and expanded earlier r
   expect(current.querySelector('ul')?.previousElementSibling).toBe(current.querySelector('figure'));
   await act(async () => versionToggle(history[0].version).click());
   const earlier = document.querySelector('.release-history-details')!;
-  expect(earlier.querySelector('ul')?.previousElementSibling).toBe(earlier.querySelector('figure'));
+  const earlierMedia = [...earlier.querySelectorAll('figure')];
+  expect(earlier.querySelector('ul')?.previousElementSibling).toBe(earlierMedia.at(-1));
+  for (const figure of earlierMedia) {
+    expect(
+      figure.compareDocumentPosition(earlier.querySelector('ul')!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  }
 });
 
 it('shows the ordered showcase once before changes and keeps captions when a preview fails', async () => {

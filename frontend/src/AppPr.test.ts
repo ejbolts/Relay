@@ -97,9 +97,9 @@ const labels = (
 describe('exercise weight and volume PRs', () => {
   it.each([
     ['heavier with fewer reps', 105, 1, ['Weight PR']],
-    ['more reps at the heaviest weight', 100, 9, ['Volume PR']],
-    ['more reps at a lighter known weight', 90, 13, ['Volume PR']],
-    ['more reps at another known weight', 80, 11, ['Volume PR']],
+    ['more reps at the heaviest weight', 100, 9, ['Volume PR for this weight']],
+    ['more reps at a lighter known weight', 90, 13, ['Volume PR for this weight']],
+    ['more reps at another known weight', 80, 11, ['Volume PR for this weight']],
     ['tied reps and weight', 100, 8, []],
     ['fewer reps', 100, 7, []],
     ['new lighter weight with a higher estimated 1RM', 95, 30, []],
@@ -121,13 +121,15 @@ describe('exercise weight and volume PRs', () => {
     expect(labels([set(110, 9, extra)])).toEqual([]);
   });
   it('allows a failed set that met its target and drop sets', () => {
-    expect(labels([set(100, 9, { failed: true, target_reps: 9 })])).toEqual([['Volume PR']]);
-    expect(labels([set(80, 11, { set_type: 'drop' })])).toEqual([['Volume PR']]);
+    expect(labels([set(100, 9, { failed: true, target_reps: 9 })])).toEqual([
+      ['Volume PR for this weight'],
+    ]);
+    expect(labels([set(80, 11, { set_type: 'drop' })])).toEqual([['Volume PR for this weight']]);
   });
   it('establishes a first-exercise baseline without celebrating it', () => {
     expect(labels([set(100, 8)], [])).toEqual([]);
     expect(labels([set(100, 8), set(100, 9), set(105, 1)], [])).toEqual([
-      ['Volume PR'],
+      ['Volume PR for this weight'],
       ['Weight PR'],
     ]);
   });
@@ -136,8 +138,8 @@ describe('exercise weight and volume PRs', () => {
   });
   it('does not repeat a PR for a tied later set', () => {
     expect(labels([set(100, 9), set(100, 9), set(100, 10)])).toEqual([
-      ['Volume PR'],
-      ['Volume PR'],
+      ['Volume PR for this weight'],
+      ['Volume PR for this weight'],
     ]);
   });
   it('counts completed sets only as the baseline', () => {
@@ -176,7 +178,7 @@ describe('exercise weight and volume PRs', () => {
   });
   it('excludes the edited or resumed workout itself', () => {
     const own = history([set(100, 9)], 'own', '2026-01-15');
-    expect(labels([set(100, 9)], [baseline, own], 'own')).toEqual([['Volume PR']]);
+    expect(labels([set(100, 9)], [baseline, own], 'own')).toEqual([['Volume PR for this weight']]);
   });
   it('excludes later workouts when logging or editing an earlier date', () => {
     const future = history([set(150, 15)], 'future', '2026-02-01');
@@ -192,11 +194,11 @@ describe('exercise weight and volume PRs', () => {
   });
   it('recognizes bodyweight reps at zero added weight without awarding a zero weight PR', () => {
     expect(labels([set(0, 8)], [])).toEqual([]);
-    expect(labels([set(0, 9)], [history([set(0, 8)])])).toEqual([['Volume PR']]);
+    expect(labels([set(0, 9)], [history([set(0, 8)])])).toEqual([['Volume PR for this weight']]);
   });
   it('keeps close but distinct weights separate and absorbs conversion noise', () => {
     expect(labels([set(100.04, 9)])).toEqual([['Weight PR']]);
-    expect(labels([set(100.000001, 9)])).toEqual([['Volume PR']]);
+    expect(labels([set(100.000001, 9)])).toEqual([['Volume PR for this weight']]);
     expect(labels([set(100.04, 9)], [history([set(100.05, 10)])])).toEqual([]);
   });
 
@@ -224,9 +226,9 @@ describe('exercise weight and volume PRs', () => {
     expect(withOlder([set(105, 1)])).toEqual([]);
     expect(withOlder([set(100, 9)])).toEqual([]);
     expect(withOlder([set(100, 11), set(125, 1), set(120, 4)])).toEqual([
-      ['Volume PR'],
+      ['Volume PR for this weight'],
       ['Weight PR'],
-      ['Volume PR'],
+      ['Volume PR for this weight'],
     ]);
     // Loaded workouts still count alongside it.
     expect(withOlder([set(90, 12)])).toEqual([]);

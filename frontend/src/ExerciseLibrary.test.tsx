@@ -381,3 +381,35 @@ it('retries a failed session read and keeps the workout action unavailable until
   await click(document.querySelector('dialog .popup-dialog-close')!);
   expect(document.querySelector('dialog')).toBeNull();
 });
+
+it('preserves the library page when returning from a lift and resets it for a new search', async () => {
+  const many = Array.from({ length: 23 }, (_, index) => ({
+    ...pec,
+    id: `lift-${index}`,
+    name: `Lift ${String(index).padStart(2, '0')}`,
+  }));
+  vi.mocked(api.exerciseProgress).mockResolvedValue(progress(many[10]));
+  await act(async () =>
+    root.render(
+      <ProgressScreen
+        exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
+        exercises={many}
+        measurements={[]}
+        personalRecords={[]}
+        onOpenWorkout={onOpenWorkout}
+        embedded
+        browseFirst
+      />,
+    ),
+  );
+  await click(host.querySelector('[aria-label="Next exercises page"]')!);
+  await click(host.querySelector('[data-exercise-id="lift-10"]')!);
+  await click(host.querySelector('.training-back')!);
+  expect(host.textContent).toContain('Page 2 of 3');
+  expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe(
+    'lift-10',
+  );
+  await search('Lift 02');
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(1);
+  expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe('lift-2');
+});

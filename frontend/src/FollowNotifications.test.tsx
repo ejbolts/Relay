@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
+import { notifyNotificationsChanged } from './notificationEvents';
 import metadata from '../release.json';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
@@ -52,6 +53,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -65,6 +67,98 @@ async function click(label: string) {
 async function render() {
   await act(async () => root.render(<FollowNotifications active />));
 }
+
+it('updates the closed bell on a socket invalidation before the next fallback poll', async () => {
+  vi.useFakeTimers();
+  await render();
+  snapshot = { requests: [person], accepted: [] };
+  await act(async () => notifyNotificationsChanged());
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
+  expect(api.sharing.markNotificationsRead).not.toHaveBeenCalled();
+  expect(api.sharing.notifications).toHaveBeenCalledTimes(2);
+  snapshot = { requests: [person], accepted: [], reactions: [reaction] };
+  await act(async () => vi.advanceTimersByTimeAsync(30_000));
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 2 unread');
+});
+
+it('fetches again when events arrive during a request rather than losing the newer notice', async () => {
+  let resolve!: (value: SharingNotifications) => void;
+  vi.mocked(api.sharing.notifications).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  await render();
+  snapshot = { requests: [person], accepted: [] };
+  await act(async () => {
+    notifyNotificationsChanged();
+    notifyNotificationsChanged();
+    resolve({ requests: [], accepted: [] });
+  });
+  expect(api.sharing.notifications).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
+});
+
+it('refreshes and reads incoming events while the inbox is open, without a read-event loop', async () => {
+  await render();
+  await click('Notifications');
+  snapshot = { requests: [], accepted: [], reactions: [reaction] };
+  vi.mocked(api.sharing.markNotificationsRead).mockImplementation(async (refs) => {
+    snapshot = markNotificationSnapshotRead(snapshot, refs);
+    notifyNotificationsChanged();
+  });
+  await act(async () => notifyNotificationsChanged());
+  expect(document.querySelector('dialog')?.textContent).toContain('Leg day');
+  expect(api.sharing.markNotificationsRead).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+});
+
+it('catches up when visible or online and ignores events for an inactive header', async () => {
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await render();
+  snapshot = { requests: [person], accepted: [] };
+  visibility.mockReturnValue('hidden');
+  await act(async () => notifyNotificationsChanged());
+  expect(api.sharing.notifications).toHaveBeenCalledTimes(1);
+  visibility.mockReturnValue('visible');
+  await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
+  snapshot = { requests: [], accepted: [] };
+  await act(async () => window.dispatchEvent(new Event('online')));
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+  await act(async () => root.render(<FollowNotifications active={false} />));
+  vi.mocked(api.sharing.notifications).mockClear();
+  await act(async () => notifyNotificationsChanged());
+  expect(api.sharing.notifications).not.toHaveBeenCalled();
+});
+
+it('recovers from a failed fetch on the next notification event', async () => {
+  await render();
+  vi.mocked(api.sharing.notifications).mockRejectedValueOnce(new Error('Offline'));
+  await act(async () => notifyNotificationsChanged());
+  snapshot = { requests: [person], accepted: [] };
+  await act(async () => notifyNotificationsChanged());
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
+});
+
+it('retries an invalidation queued behind a failed request', async () => {
+  let reject!: (reason: Error) => void;
+  vi.mocked(api.sharing.notifications).mockImplementationOnce(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  await render();
+  snapshot = { requests: [person], accepted: [] };
+  await act(async () => {
+    notifyNotificationsChanged();
+    reject(new Error('Connection interrupted'));
+  });
+  expect(api.sharing.notifications).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
+});
 
 function ReleaseInbox({
   userId,

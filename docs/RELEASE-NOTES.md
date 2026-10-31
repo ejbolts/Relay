@@ -6,7 +6,51 @@ _Relay was called Gym Logger before version 1.0._
 
 28 October 2026
 
-### Find friends and improve your workouts
+### Your training split and friends
+
+![The notification bell gains an unread badge before the inbox opens, then displays a sample friend request](screenshots/releases/1.1.0-live-notification-badge.gif)
+
+_A new request updates the closed bell immediately. Opening the inbox shows the request and syncs its read state to the account's other open windows. Captured directly as a looping GIF with isolated sample accounts._
+
+![Your split editor with templates, a named Full body A / B cycle, rest days, start date and a seven-day preview using synthetic training data](screenshots/releases/1.1.0-training-split.png)
+
+_Choose a template or build your own repeating cycle. Custom workout types and rest days stay in the order you choose._
+
+![Home showing the scheduled Full body A day and Edit split shortcut using a synthetic sample account](screenshots/releases/1.1.0-training-split-home.png)
+
+_Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
+
+![Live friend workout and privacy updates without reloading](screenshots/releases/1.1.0-live-friend-updates.gif)
+
+_A friend starts and discards a workout, then hides live workouts and online status. The Friends card updates immediately through each step without reloading. This looping GIF was captured directly from isolated synthetic accounts; Home uses the same live updates._
+
+![Exercise list with question-mark help beside every lift, the three-line list options button and ten-row pagination](screenshots/releases/1.0.1-exercise-list.png)
+
+_Browse ten lifts per page. Muscle filters include direct and currently enabled partial credits; the three-line button changes the page size._
+
+![Leg Press muscle-credit popup showing the selected week with partial sets off and direct quadriceps and glute credits retained](screenshots/releases/1.0.1-weekly-partial-sets.png)
+
+_Choose a week and switch partial sets off or on. That choice carries forward until the next change, while earlier weeks retain their settings. Direct credits stay counted._
+
+![Weekly muscle totals at the bottom of Training](screenshots/releases/1.0.1-weekly-muscle-totals.png)
+
+_The weekly muscle card is on Home and Training. Show more reveals the remaining muscles, and tapping a muscle opens its contributing workouts. All previews use isolated synthetic training data._
+
+![Home header with the date above the title and all five action buttons aligned beside Home](screenshots/releases/1.0.1-home-header.png)
+
+_The Home title and actions share one row at phone width, with the date above. Very narrow screens place the actions on a left-aligned row._
+
+![Workout set with a Volume PR for this weight badge](screenshots/releases/1.0.1-volume-pr-weight.png)
+
+_The badge makes it clear that the record compares reps at the same weight._
+
+![Swiping saved machine photos and deleting an old photo while logging](screenshots/releases/1.0.1-equipment-photos.gif)
+
+_Swipe both ways through saved equipment photos. Confirming deletion removes an old photo from the library and its saved workout attachments while keeping the sets._
+
+![Profile workout with subtle orange warm-up chips, green working sets, purple drop sets and red failed sets](screenshots/releases/1.0.1-history-set-colours.png)
+
+_Saved sets use the logger's set-type colours in Profile and Training history, with readable labels in both themes._
 
 ![Opening Training Exercises with preloaded sparklines and estimated 1RM values, then returning with the same graphs ready](screenshots/releases/1.1.0-training-preload.gif)
 
@@ -35,6 +79,14 @@ _Sharing lives in the saved split's options instead of the editor. Isolated samp
 ![Profile with My splits beside Last 12 weeks in the Consistency header and no repeated split list](screenshots/releases/1.1.0-profile-split-link.png)
 
 _Open My splits directly from the consistency header. The profile no longer repeats saved plans or offers Save current split. Isolated sample data._
+
+![Finished sample workout with a fixed ten-minute duration, Saved on this device status and Retry sync](screenshots/releases/1.1.0-finished-workout-pending-sync.png)
+
+_After closing mid-save and reopening an hour later, the completed workout still shows **10 min** and waits safely for sync. Retrying stores one workout with the same sets, notes and duration. Isolated synthetic data._
+
+![Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats](screenshots/releases/1.1.0-offline-mode.png)
+
+_With the server stopped, Relay opens Home from the encrypted copy saved on the device and marks it **Offline**. The badge clears when the server answers again. Isolated sample data._
 
 ![Selecting two sample machine photos, choosing their cover and settings, then merging and viewing both retained images](screenshots/releases/1.1.0-machine-photo-merge.gif)
 
@@ -160,6 +212,26 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _The circular Start button matches its workout choices. Isolated sample data._
 
+- **Safe workout completion:** Finish stores the completed workout and its fixed duration on this device before syncing. If the app closes or goes offline mid-save, reopening or reconnecting retries the exact snapshot. Sets and notes are retained, timers stay stopped and new-workout retries keep the same session ID to prevent duplicates. Device-storage failures keep the workout open; a server rejection offers **Review workout**. One pending completion is retained until it syncs, before another workout can start. Confirmed sign-out or changing accounts clears it with the account's other local data.
+
+- **Offline mode:** Relay works offline once you have signed in on a device. It opens from an encrypted copy of your exercises, settings, recent history and stats saved on the device, shows Offline by the screen title, and lets you start, log and finish workouts. A finished workout syncs when the server is reachable again, including after an expired session once you sign back in. Exercise icons are about 14 times smaller and load offline. Signing in, Social and changing settings still need a connection.
+
+- **See friends training live:** Friends shows when each friend is working out, active now or was last active. A friend's workout in progress moves to the top with a Live label, its name and how long they have been training, and stays while their phone is locked between sets. Changes appear as they happen.
+- Home's Recent Friends Activity lists friends working out first, showing their live workout in place of their last session until they finish.
+- **Settings > Account & privacy > Profile sharing** has a Live activity section with separate Online status and Live workouts switches and a preview of what friends see. Both start on, only accepted friends can see them, and turning one off hides it from friends straight away.
+- Signing out ends live activity access from that window. Expired or disabled sign-ins can no longer send or receive live updates.
+- The notification bell updates immediately for friend requests, acceptances, workout reactions, comments and replies while connected. Reading notifications syncs across your open windows and devices. Reconnecting catches up automatically, and 30-second polling remains as a fallback.
+- Exercises has a question-mark button beside every lift for its direct and partial muscle credits. Muscle filters include all exercises currently contributing to that muscle, including 0.5-set assistance, instead of matching only the exercise label.
+- The exercise list shows 10 lifts per page by default. Use the three-line options button to choose 10, 20, 50 or 100, and the previous, next or page-picker controls to browse. Search, muscle and sort changes return to page one; returning from exercise details keeps the page.
+- Count partial sets is saved from the selected week for each exercise and carries forward until the next change. Earlier weeks keep their choices, and totals use the setting on each workout date. Direct credits always count; muscle mappings are unchanged.
+- Sets per muscle is on Home and at the bottom of Training. Weekly totals use each workout’s saved credit setting. Show more reveals remaining trained and untrained muscles, and each muscle opens its contributing exercises and workouts.
+- Home keeps the date above its header, with the title and action buttons aligned on one row at phone widths. Very narrow screens use a left-aligned action row.
+- Volume records now say Volume PR for this weight on set badges, popups and record lists, making the same-weight comparison clear.
+- Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets.
+- Your profile and shared profiles show five cardio sessions per page, newest first. Use the previous and next arrows or the page picker to browse older sessions, including sessions beyond the former latest-20 limit.
+- The Cardio header shows the visible range and total. Your selected page stays in place during profile updates, and a failed page request can be retried without losing the current page.
+- Swipe through saved equipment photos while logging. Deleting a photo explains that it also removes the photo from saved workouts, and keeps the recorded sets.
+
 - **Find the right equipment variant:** Filter by equipment in Training > Exercises and the workout picker. Search `bicep curl cable`, `dumbbells curl` or `DB curl` in any word order. Equipment, muscle, workout category, favourites and recent filters work together. Added 44 common strength exercises (83 total), covering barbell, dumbbell, cable, machine, Smith machine, EZ bar, trap bar, kettlebell, resistance band and bodyweight. Existing IDs, custom exercises, favourites and history are preserved; each variant has its own progress. The **Custom** pill works alongside the other filters in both lists. Exact-name and recognised-alias custom entries are reused; only missing equipment is filled, leaving explicit equipment and muscle credits intact. Ambiguous names stay separate.
 
 - **Your splits, one page:** all saved splits and templates live together. The active split has a blue border and opens to its next seven days; centred week/calendar buttons switch the preview. Its calendar uses the shared Home component, one month at a time, limited to the current and next month. Saved template cycles are greyed out to prevent duplicates, including after a reload or rename. Changing their saved workout/rest days or deleting the copy makes the template available again. Sharing and deletion live in each saved split's options instead of the editor. Your profile has a **My splits** button beside **Last 12 weeks**, without repeating the saved list or a Save current split button. Other members' profiles retain their shared splits and private copying. Use split confirms a start date and updates the Active badge without a success popup; Edit split can change that date or pause the plan. Saving stays on the page with temporary popup feedback. Unlinked plans remain visible without automatic writes and link atomically on save. Private plans can be activated before adding exercises; publishing still requires exercises on every workout day. Audience checks and blocks protect sharing; copies survive unsharing or deletion. Up next prefills planned sets unchecked.
@@ -178,6 +250,7 @@ _The circular Start button matches its workout choices. Isolated sample data._
 - Removed workout types cannot be used for new workouts, including when a save reserves its session ID first. Existing workout history stays editable, and retrying an already saved session still returns its original workout.
 - Sign out ends every session for your account and stops its phone alerts. Connected apps return to sign-in immediately; sleeping or offline devices check when they reconnect. Password changes end other devices' sessions; disabled or deleted accounts and expired sessions return to sign-in too. Confirmed sign-out clears cached account data and unfinished workouts, while connection failures alone preserve them.
 - Training exercise trends load quietly after sign-in, so sparklines, estimated 1RM values and recent-first ordering are ready when you open Exercises. Loaded graphs stay visible while workout changes refresh in the background. Trends stay in memory for the signed-in account and are cleared when accounts change.
+- Exercises now shows the eight-week estimated 1RM sparkline and change for lifts you have not trained in the last eight weeks. Each lift's eight weeks end at its latest session instead of today, so a lift with two or more sessions in that period always has a trend line.
 - Cardio screenshot scans discard the uploaded photo and release the decoded image after OCR, including when a scan fails. Only extracted workout values are returned; photos are not saved to your account.
 - Fixed unintended workout timers after opening an old workout link or returning through browser history. Finished or discarded workouts stop in other tabs on the same device. Retrying a save after a connection interruption returns the original saved workout instead of creating a duplicate or replacing its duration with a three-hour auto-save. Unfinished workouts remain local to their device; cross-device history sync does not transfer an active session.
 - Add any machine setting name and numeric value while naming a new machine, then Save and pin everything together. Choosing a saved machine records its own settings with the workout. Equipment photo shows only machine photos, without a settings editor, and the exercise menu no longer has a Settings action. The muscle set credits popup shows only muscle credits. Workouts keep their original settings snapshot.

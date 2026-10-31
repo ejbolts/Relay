@@ -98,8 +98,15 @@ export default defineConfig({
         // auth state must always come from the server.
         navigateFallbackDenylist: [/^\/api\//],
         importScripts: ['push-notifications.js'],
-        // The bundled Inter font must be precached so the installed PWA renders offline.
-        globPatterns: ['**/*.{js,css,html,woff2}'],
+        // Everything the app shows must be precached so the installed PWA works offline: the
+        // bundled Inter font, exercise icons and in-app images (manifest icons are added
+        // automatically). Release videos stay online-only.
+        globPatterns: [
+          '**/*.{js,css,html,woff2,webp}',
+          'relay-logo.png',
+          'favicon.png',
+          'import-apps/*.png',
+        ],
       },
       manifest: {
         name: 'Relay',

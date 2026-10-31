@@ -55,6 +55,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "body_weight_goals": _OWNED,
     "exercises": _OWNED,
     "exercise_muscle_contributions": f"exercise_id IN ({_EXERCISES})",
+    "exercise_partial_set_weeks": f"exercise_id IN ({_EXERCISES})",
     "machine_photos": _OWNED,
     "training_workouts": _OWNED,
     "workout_types": _OWNED,
@@ -66,6 +67,8 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "cardio_sessions": _OWNED,
     "push_subscriptions": None,
     "active_workout_reminders": None,
+    # A workout in progress is shown to friends live; it is not part of the training archive.
+    "live_workouts": None,
     "user_sessions": None,
     "server_settings": None,
     "app_settings": None,

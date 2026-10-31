@@ -20,6 +20,7 @@ import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
+import { ProfileCardioCard } from './ProfileCardioCard';
 import { SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
@@ -44,7 +45,6 @@ import type {
   MachinePhoto,
   PersonalRecord,
   SharedBodyMeasurement,
-  SharedCardioSession,
   SharedGoals,
   SharedProfile,
   SharedProfileSummary,
@@ -57,7 +57,6 @@ import type {
   WorkoutReactions,
   User,
 } from './types';
-import { formatMinutesDuration } from './utils';
 
 const BODY_WEIGHT_CHART_DAYS = 90;
 const INVITE_NOTICE_MS = 6000;
@@ -1098,51 +1097,6 @@ function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: 
   );
 }
 
-function cardioMetrics(session: SharedCardioSession): string {
-  return [
-    formatMinutesDuration(session.duration_minutes),
-    session.distance_km !== null && session.distance_km !== undefined
-      ? `${Number(session.distance_km.toFixed(2))} km`
-      : null,
-    session.calories_kcal !== null && session.calories_kcal !== undefined
-      ? `${session.calories_kcal} kcal`
-      : null,
-    session.average_heart_rate_bpm ? `${session.average_heart_rate_bpm} bpm avg` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function CardioCard({ sessions }: { sessions: SharedCardioSession[] }) {
-  return (
-    <section className="pulse-card shared-card" aria-labelledby="shared-cardio-title">
-      <header className="pulse-card-header">
-        <h2 id="shared-cardio-title">Cardio</h2>
-        {sessions.length > 0 && <span>Latest {sessions.length}</span>}
-      </header>
-      {sessions.length === 0 ? (
-        <p className="shared-card-empty">No cardio sessions yet.</p>
-      ) : (
-        <ul className="shared-cardio-list">
-          {sessions.map((session) => (
-            <li key={session.id}>
-              <span className="shared-cardio-date num">{dayMonth(session.session_date)}</span>
-              <span>
-                <strong>
-                  {session.activity_type}
-                  {session.qualifies_zone2 && <em>Zone 2</em>}
-                </strong>
-                <small className="num">{cardioMetrics(session)}</small>
-                {session.notes && <small className="shared-cardio-notes">{session.notes}</small>}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
 export interface SharedWorkoutListProps {
   workouts: TrackedWorkout[];
   personalRecords: PersonalRecord[];
@@ -1626,7 +1580,14 @@ export function SharedProfileScreen({
             <BodyWeightCard measurements={profile.body_weight} goals={profile.goals} />
           )}
           {profile.goals && <GoalsCard goals={profile.goals} latestWeight={latestWeight} />}
-          {profile.cardio_sessions && <CardioCard sessions={profile.cardio_sessions} />}
+          {profile.cardio_sessions && (
+            <ProfileCardioCard
+              profileId={profile.id}
+              sessions={profile.cardio_sessions}
+              total={profile.cardio_total ?? profile.cardio_sessions.length}
+              active={active}
+            />
+          )}
           <section
             className="history-screen shared-workouts"
             aria-labelledby="shared-workouts-title"

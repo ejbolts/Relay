@@ -117,6 +117,10 @@ export interface Exercise {
   is_favorite: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
+  default_muscle_set_credits?: { muscle_name: string; sets: number }[];
+  partial_sets_enabled?: boolean;
+  partial_sets_default?: boolean;
+  partial_set_weeks?: { week_start: string; enabled: boolean }[];
 }
 
 export interface MuscleSetCreditInput {
@@ -807,6 +811,10 @@ export interface SharingChoices {
   share_body_weight: boolean;
   share_goals: boolean;
   share_machine_photos: boolean;
+  /** Friends see whether you are online and when you were last active. */
+  share_online_status: boolean;
+  /** Friends see the name of a workout while you are doing it. */
+  share_live_workouts: boolean;
 }
 
 export interface SharingSettings extends SharingChoices {
@@ -866,12 +874,28 @@ export interface SharingConnection {
 }
 
 /** A friend, `since` the friendship began, with their latest session and recent training. */
+/** A friend's workout in progress. */
+export interface LiveWorkout {
+  name: string;
+  kind: 'strength' | 'cardio';
+  started_at: string;
+}
+
+/** What a friend shares live. Online fields are null when they hide their online status. */
+export interface FriendPresence {
+  online: boolean | null;
+  last_active_at: string | null;
+  workout: LiveWorkout | null;
+}
+
 export interface FriendActivity extends SharingConnection {
   latest: { workout: TrackedWorkout; reactions: WorkoutReactions } | null;
   /** Workouts in the last 30 days. */
   recent_workout_count: number;
   /** Dates with a workout in roughly the last week, oldest first. */
   training_dates: string[];
+  /** Absent when the friend shares no live activity. */
+  presence?: FriendPresence | null;
 }
 
 export interface FriendConnections {
@@ -939,7 +963,9 @@ export interface CommentNotice extends SharingConnection {
 
 /** A friend's latest workout or cardio session. */
 export interface FriendFeedItem {
-  friend: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'>;
+  friend: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+    presence?: FriendPresence | null;
+  };
   workout: TrackedWorkout;
   reactions: WorkoutReactions;
 }
@@ -1018,9 +1044,15 @@ export interface SharedProfile extends SharedProfileSummary {
   body_weight: SharedBodyMeasurement[] | null;
   goals: SharedGoals | null;
   cardio_sessions: SharedCardioSession[] | null;
+  cardio_total?: number | null;
   training_time?: TrainingTime | null;
   /** The same totals from this day last year onwards. */
   training_time_past_year?: TrainingTime | null;
+}
+
+export interface SharedCardioPage {
+  total: number;
+  sessions: SharedCardioSession[];
 }
 
 export interface SharedWorkoutPage {

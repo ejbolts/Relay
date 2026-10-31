@@ -36,6 +36,7 @@ vi.mock('./api', async (importOriginal) => {
       saveMachineSettings: vi.fn(),
       lastUsedMachinePhotos: vi.fn(),
       uploadMachinePhoto: vi.fn(),
+      deleteMachinePhoto: vi.fn(),
       listAllMachinePhotos: vi.fn(),
       machinePhotoWorkouts: vi.fn(),
       exerciseLibrary: vi.fn().mockResolvedValue([]),
@@ -290,6 +291,73 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(card.querySelector('.machine-last-used')?.getAttribute('title')).toBe(
       'Last used 12 Oct 2025',
     );
+    const rail = container.querySelector('.machine-photo-rail')!;
+    expect(rail.getAttribute('aria-label')).toBe('Saved equipment photos for Leg Press');
+    expect(rail.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('explains deletion from saved workouts and lets the user cancel', async () => {
+    await act(async () => root.render(<App />));
+    await click(button(`Expand ${homeGym.caption}`));
+    await click(button('Delete'));
+    const confirmation = container.querySelector('.photo-detail .inline-confirmation')!;
+    expect(confirmation.textContent).toContain('Also removes this photo from saved workouts.');
+    expect(
+      document.getElementById(confirmation.getAttribute('aria-describedby')!)?.textContent,
+    ).toBe('Also removes this photo from saved workouts.');
+    expect(api.deleteMachinePhoto).not.toHaveBeenCalled();
+    await click(button('Cancel', confirmation));
+    expect(container.querySelector('.photo-detail')).not.toBeNull();
+    expect(container.querySelector('.inline-confirmation')).toBeNull();
+    expect(api.deleteMachinePhoto).not.toHaveBeenCalled();
+  });
+
+  it('deletes an older pinned photo and preserves the workout sets and other pins', async () => {
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, '2025-10-12'),
+      usage(travelGym, 1, '2026-10-14'),
+    ]);
+    vi.mocked(api.deleteMachinePhoto).mockResolvedValue(undefined);
+    await act(async () => root.render(<App />));
+    for (const card of container.querySelectorAll('.machine-photo-rail article')) {
+      await click(button('Pin to sets', card));
+    }
+    const before = readActiveWorkoutDraft()!;
+    await click(button(`Expand ${homeGym.caption}`));
+    await click(button('Delete'));
+    await click(button('Delete photo'));
+    expect(api.deleteMachinePhoto).toHaveBeenCalledWith(homeGym.id, true);
+    expect(container.querySelector('.photo-detail')).toBeNull();
+    expect(container.querySelector('.machine-photo-rail')?.textContent).not.toContain(
+      homeGym.caption,
+    );
+    expect(container.querySelector('.machine-photo-rail .selected')?.textContent).toContain(
+      travelGym.caption,
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([travelGym.id]);
+    expect(readActiveWorkoutDraft()?.movements[0].sets).toEqual(before.movements[0].sets);
+  });
+
+  it('keeps the photo and draft on failure and can retry deleting the last photo', async () => {
+    vi.mocked(api.deleteMachinePhoto)
+      .mockRejectedValueOnce(new Error('Could not delete the photo. Try again.'))
+      .mockResolvedValueOnce(undefined);
+    await act(async () => root.render(<App />));
+    await click(button('Pin to sets'));
+    await click(button(`Expand ${homeGym.caption}`));
+    await click(button('Delete'));
+    await click(button('Delete photo'));
+    expect(container.querySelector('.photo-detail [role="alert"]')?.textContent).toContain(
+      'Could not delete the photo. Try again.',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([homeGym.id]);
+    await click(button('Delete'));
+    await click(button('Delete photo'));
+    expect(api.deleteMachinePhoto).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.machine-photo-rail')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([]);
+    // No helper text once the last photo is gone (faa993e).
+    expect(container.querySelector('.machine-photo-summary small')).toBeNull();
   });
 
   function pinHomeMachine() {
@@ -542,6 +610,40 @@ describe('saving and pinning a machine photo while logging', () => {
 
 describe('filtering History by machine', () => {
   beforeEach(() => window.history.replaceState(null, '', '#history'));
+
+  it('keeps saved set types distinct, including legacy warm-ups, with their results and labels', async () => {
+    const source = recentTravel.movements[0].sets[0];
+    const sets = [
+      { ...source, id: 'warmup', order_index: 0, set_type: 'warmup' as const, warmup: false },
+      { ...source, id: 'legacy-warmup', order_index: 1, set_type: 'normal' as const, warmup: true },
+      { ...source, id: 'working', order_index: 2 },
+      { ...source, id: 'drop', order_index: 3, set_type: 'drop' as const },
+      { ...source, id: 'failed', order_index: 4, failed: true },
+    ];
+    vi.mocked(api.listWorkouts).mockResolvedValue([
+      { ...recentTravel, movements: [{ ...recentTravel.movements[0], sets }] },
+    ]);
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
+    const pills = [...container.querySelectorAll('.history-set-pill')];
+    expect(pills.map((item) => item.getAttribute('data-set-type'))).toEqual([
+      'warmup',
+      'warmup',
+      'normal',
+      'drop',
+      'failure',
+    ]);
+    expect(pills.map((item) => item.querySelector('em')?.textContent)).toEqual([
+      'Warm-up',
+      'Warm-up',
+      '',
+      'Drop',
+      'Failed',
+    ]);
+    expect(pills.every((item) => item.querySelector('span')?.textContent === '140 kg × 10')).toBe(
+      true,
+    );
+  });
 
   it('replaces the Training header with an exercise back header and restores the searched list', async () => {
     await act(async () => root.render(<App />));

@@ -43,6 +43,19 @@ def test_library_matches_progress_and_uses_eight_calendar_weeks(client):
     assert [p["estimated_1rm"] for p in summary["trend"]] == [80, 100]
 
 
+def test_library_trend_ends_at_the_latest_session_for_lifts_not_trained_recently(client):
+    lift = exercise(client)
+    workout(client, lift, 200)
+    workout(client, lift, 120)
+    workout(client, lift, 90, [{"weight_kg": 75, "reps": 10, "completed": True}])
+    [summary] = client.get("/api/progress").json()
+    assert [p["date"] for p in summary["trend"]] == [
+        str(date.today() - timedelta(days=days)) for days in (120, 90)
+    ]
+    assert [p["estimated_1rm"] for p in summary["trend"]] == [80, 100]
+    assert summary["change_kg"] == 20
+
+
 def test_library_excludes_future_warmups_unfinished_cardio_and_other_accounts(client, other_client):
     lift = exercise(client)
     workout(client, lift, -1)
