@@ -4,7 +4,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.1.0
 
-28 October 2026
+1 November 2026
 
 ### Offline workouts, live friends and saved splits
 
