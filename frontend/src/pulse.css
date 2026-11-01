@@ -942,14 +942,15 @@ button.pulse-card:hover {
 
 .muscle-set-goal-key {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.25rem 0.875rem;
   margin: 0 0 0.75rem;
   color: var(--p-ink-2);
   font-size: 0.75rem;
 }
 
-.muscle-set-goal-key > span {
+.muscle-key-goal {
   width: 1rem;
   height: 2px;
   background: radial-gradient(circle, var(--p-ink) 1px, transparent 1.25px) left center / 0.5rem 2px
