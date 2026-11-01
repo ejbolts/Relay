@@ -11,6 +11,21 @@ describe('workout header time', () => {
     expect(markup).toContain('<span class="workout-header-duration">Live 3:55:32</span>');
     expect(markup).not.toContain('Paused');
     expect(markup).not.toContain('role="timer"');
+    expect(markup).not.toContain('<button');
+  });
+
+  it('puts a pause button beside the live time, which turns to resume while paused', () => {
+    const running = renderToStaticMarkup(
+      <WorkoutHeaderMeta durationLabel="Live 3:55" onTogglePause={() => {}} />,
+    );
+    expect(running).toMatch(
+      /<span class="workout-header-duration">Live 3:55<\/span><button type="button" class="workout-header-pause" aria-label="Pause workout"/,
+    );
+    const paused = renderToStaticMarkup(
+      <WorkoutHeaderMeta durationLabel="3:55" paused onTogglePause={() => {}} />,
+    );
+    expect(paused).toContain('<span class="workout-header-paused">Paused</span><button');
+    expect(paused).toContain('aria-label="Resume workout"');
   });
 
   it('marks a paused workout beside its frozen time', () => {
@@ -53,6 +68,7 @@ describe('workout timer dock', () => {
       onAdjust: vi.fn(),
       onHide: vi.fn(),
       onShow: vi.fn(),
+      onEnd: vi.fn(),
     };
     await act(async () =>
       root.render(
@@ -69,7 +85,7 @@ describe('workout timer dock', () => {
     return handlers;
   }
 
-  it('shows a running rest as one pill: pause, countdown, -30, +30, hide and its progress', async () => {
+  it('shows a running rest as one pill: pause, countdown, end, -30, +30, hide and its progress', async () => {
     const handlers = await render();
     const pill = container.querySelector('.rest-pill')!;
     expect(pill.getAttribute('role')).toBe('group');
@@ -81,6 +97,7 @@ describe('workout timer dock', () => {
       [...pill.querySelectorAll('button')].map((item) => item.getAttribute('aria-label')),
     ).toEqual([
       'Pause workout and rest timer',
+      'End rest timer',
       'Take 30 seconds off the rest',
       'Add 30 seconds to the rest',
       'Hide rest timer',
@@ -96,6 +113,8 @@ describe('workout timer dock', () => {
     expect(handlers.onAdjust.mock.calls).toEqual([[-30], [30]]);
     await act(async () => button('Pause workout')!.click());
     expect(handlers.onTogglePause).toHaveBeenCalledTimes(1);
+    await act(async () => button('End rest timer')!.click());
+    expect(handlers.onEnd).toHaveBeenCalledTimes(1);
   });
 
   it('swaps pause for a gold play button while paused', async () => {
@@ -120,6 +139,7 @@ describe('workout timer dock', () => {
           onAdjust={vi.fn()}
           onHide={() => setHidden(true)}
           onShow={() => setHidden(false)}
+          onEnd={vi.fn()}
         />
       );
     }
@@ -140,15 +160,10 @@ describe('workout timer dock', () => {
     expect(button('Show paused rest timer, 0:45 left')).not.toBeNull();
   });
 
-  it('keeps a notch that pauses or resumes the workout when no rest is running', async () => {
-    const handlers = await render({ restSeconds: 0 });
-    const notch = container.querySelector<HTMLButtonElement>('.rest-notch.is-idle')!;
-    expect(notch.getAttribute('aria-label')).toBe('Pause workout');
-    expect(container.querySelector('[role="timer"]')).toBeNull();
-    await act(async () => notch.click());
-    expect(handlers.onTogglePause).toHaveBeenCalledTimes(1);
-    expect(handlers.onShow).not.toHaveBeenCalled();
-    await render({ restSeconds: 0, paused: true });
-    expect(button('Resume workout')?.classList.contains('is-paused')).toBe(true);
+  it('shows nothing when no rest is running, paused or not', async () => {
+    await render({ restSeconds: 0 });
+    expect(container.innerHTML).toBe('');
+    await render({ restSeconds: 0, paused: true, restHidden: true });
+    expect(container.innerHTML).toBe('');
   });
 });

@@ -4,7 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Keep logging workouts offline with saves that survive interruptions, see when friends are training live, manage saved splits on one page, browse exercises with weekly partial-set controls, track body measurements and FFMI references, merge machine photos, personalise cardio goals, map and undo imports, and connect with friends through QR codes and workout reactions.",
   "changes": [
-    "The rest timer is one slim bar at the bottom of a workout: pause or play, the countdown, back or forward 30 seconds and hide. Pausing freezes the rest and the live workout time together, and paused time is left out of the saved duration. Hide tucks the timer into a small tab on the bottom edge that keeps the countdown; with no rest running, the same tab pauses or resumes the workout. Completing a set resumes a paused workout, and Home and the Start button show when it is paused.",
+    "The rest timer is one slim bar that rises from the bottom of a workout: pause or play, the countdown, end, back or forward 30 seconds and hide. Pausing freezes the rest and the live workout time together, and paused time is left out of the saved duration. Pause or resume at any time with the button beside the live time. Hide tucks the timer into a small tab on the bottom edge that keeps the countdown. Completing a set resumes a paused workout, and Home and the Start button show when it is paused.",
     "Finish workout stores a completed snapshot on your device before syncing, including its fixed duration, sets and notes. Interrupted and offline saves retry automatically when you reopen or reconnect, without restarting the timer or creating duplicate workouts. Storage failures keep the workout open; server rejections offer Review workout.",
     "Relay works offline once you have signed in on a device. It opens from an encrypted copy of your exercises, settings, recent history and stats saved on the device, shows Offline by the screen title, and lets you start, log and finish workouts. A finished workout syncs when the server is reachable again, including after an expired session once you sign back in. Exercise icons are about 14 times smaller and load offline. Signing in, Social and changing settings still need a connection.",
     "Friends shows when each friend is working out, active now or was last active. A friend's workout in progress moves to the top with a Live label, its name and how long they have been training, and stays while their phone is locked between sets. Changes appear as they happen.",
@@ -67,10 +67,10 @@
   "highlights": [
     {
       "title": "Pause your workout from the rest timer",
-      "description": "One slim bar holds pause, the countdown, -30, +30 and hide. Pausing freezes the rest and your workout time, and hiding tucks it into a tab on the bottom edge.",
+      "description": "One slim bar holds pause, the countdown, end, -30, +30 and hide. Pausing freezes the rest and your workout time, and the button beside the live time pauses the workout between rests.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/f2b5ff25e2e83457ac225b98cd43596f34c61d79/docs/screenshots/releases/1.1.0-rest-timer-pill.png",
-        "alt": "Three phone screens of a sample workout: the rest bar counting down in blue, the same bar paused in gold with the header showing Paused, and the hidden rest as a small gold tab on the bottom edge."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/0a20084e02f3f7c0dd9b1601d19df1e28358e166/docs/screenshots/releases/1.1.0-rest-timer-pill.gif",
+        "alt": "A sample workout: completing a set raises the rest bar from the bottom edge, pausing turns it gold and marks the header Paused, the X ends the rest, and the button beside the live time pauses and resumes the workout."
       }
     },
     {

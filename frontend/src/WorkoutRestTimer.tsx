@@ -3,14 +3,20 @@ import { Icon } from './Icon';
 import { restTimerProgress } from './restTimer';
 import { formatSeconds } from './utils';
 
-/** The live time under the workout title, marked while the workout is paused. */
+/**
+ * The live time under the workout title, marked while the workout is paused. A live workout gets a
+ * pause or resume button beside its time.
+ */
 export function WorkoutHeaderMeta({
   durationLabel,
   paused = false,
+  onTogglePause,
 }: {
   durationLabel: string;
   paused?: boolean;
+  onTogglePause?: () => void;
 }) {
+  const label = `${paused ? 'Resume' : 'Pause'} workout`;
   return (
     <span className={`workout-header-meta${paused ? ' is-paused' : ''}`}>
       <span className="workout-header-duration">{durationLabel}</span>
@@ -21,6 +27,17 @@ export function WorkoutHeaderMeta({
           </span>
           <span className="workout-header-paused">Paused</span>
         </>
+      )}
+      {onTogglePause && (
+        <button
+          type="button"
+          className="workout-header-pause"
+          aria-label={label}
+          title={label}
+          onClick={onTogglePause}
+        >
+          <Icon name={paused ? 'play' : 'pause'} />
+        </button>
       )}
     </span>
   );
@@ -43,10 +60,9 @@ function SkipIcon({ direction }: { direction: 'back' | 'forward' }) {
 }
 
 /**
- * The workout's timing controls at the bottom of the logger. A running rest shows a slim pill:
- * pause or play, the countdown, -30/+30 and hide. A hidden rest, or no rest at all, tucks into a
- * notch on the bottom edge; with no rest it pauses or resumes the workout. Pausing freezes the
- * rest and the live workout time together. Taking off all the rest left ends it.
+ * The rest timer at the bottom of the logger: a slim pill with pause or play, the countdown, end,
+ * -30/+30 and hide. A hidden rest tucks into a notch on the bottom edge. Pausing freezes the rest
+ * and the live workout time together. Taking off all the rest left ends it.
  */
 export function WorkoutTimerDock({
   restSeconds,
@@ -57,6 +73,7 @@ export function WorkoutTimerDock({
   onAdjust,
   onHide,
   onShow,
+  onEnd,
 }: {
   restSeconds: number;
   restTotal: number;
@@ -67,6 +84,7 @@ export function WorkoutTimerDock({
   onAdjust: (seconds: number) => void;
   onHide: () => void;
   onShow: () => void;
+  onEnd: () => void;
 }) {
   const notchRef = useRef<HTMLButtonElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -76,13 +94,13 @@ export function WorkoutTimerDock({
     focusNext.current?.current?.focus({ preventScroll: true });
     focusNext.current = null;
   });
-  const resting = restSeconds > 0;
   const time = formatSeconds(restSeconds);
   const verb = paused ? 'Resume' : 'Pause';
   const progress = `scaleX(${restTimerProgress(restSeconds, restTotal)})`;
   const state = paused ? ' is-paused' : '';
 
-  if (resting && !restHidden) {
+  if (restSeconds <= 0) return null;
+  if (!restHidden) {
     return (
       <div className={`workout-timer-dock rest-pill${state}`} role="group" aria-label="Rest timer">
         <span className="rest-pill-fill" aria-hidden="true" style={{ transform: progress }} />
@@ -105,6 +123,16 @@ export function WorkoutTimerDock({
         </strong>
         <button
           type="button"
+          className="rest-pill-end"
+          aria-label="End rest timer"
+          title="End rest timer"
+          onClick={onEnd}
+        >
+          <Icon name="close" />
+        </button>
+        <button
+          type="button"
+          className="rest-pill-adjust"
           aria-label={`Take ${REST_ADJUST_SECONDS} seconds off the rest`}
           title={`Take ${REST_ADJUST_SECONDS} seconds off the rest`}
           onClick={() => onAdjust(-REST_ADJUST_SECONDS)}
@@ -135,38 +163,26 @@ export function WorkoutTimerDock({
     );
   }
 
-  const label = resting
-    ? `Show ${paused ? 'paused ' : ''}rest timer, ${time} left`
-    : `${verb} workout`;
+  const label = `Show ${paused ? 'paused ' : ''}rest timer, ${time} left`;
   return (
     <button
       ref={notchRef}
       type="button"
-      className={`workout-timer-dock rest-notch${state}${resting ? '' : ' is-idle'}`}
+      className={`workout-timer-dock rest-notch${state}`}
       aria-label={label}
       title={label}
       onClick={() => {
-        if (!resting) {
-          onTogglePause();
-          return;
-        }
         focusNext.current = toggleRef;
         onShow();
       }}
     >
-      {resting ? (
-        <>
-          <span className="rest-notch-bar" aria-hidden="true">
-            <span style={{ transform: progress }} />
-          </span>
-          <Icon name={paused ? 'pause' : 'timer'} />
-          <strong role="timer" aria-label={`Rest timer ${time}`}>
-            {time}
-          </strong>
-        </>
-      ) : (
-        <Icon name={paused ? 'play' : 'pause'} />
-      )}
+      <span className="rest-notch-bar" aria-hidden="true">
+        <span style={{ transform: progress }} />
+      </span>
+      <Icon name={paused ? 'pause' : 'timer'} />
+      <strong role="timer" aria-label={`Rest timer ${time}`}>
+        {time}
+      </strong>
     </button>
   );
 }

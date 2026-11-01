@@ -4183,16 +4183,18 @@ html.edge-swipe-ready .edge-swipe-indicator {
   bottom: calc(3rem + env(safe-area-inset-bottom));
 }
 
-/* ───────── Workout timer dock: the rest pill, or a notch on the bottom edge ───────── */
+/* ───────── Rest timer dock: the rest pill, or a notch on the bottom edge ───────── */
 
+/* Both rise from the bottom edge. `translate` keeps the centring separate from the animation. */
 .workout-timer-dock {
   position: fixed;
   z-index: 90;
   left: 50%;
-  transform: translateX(-50%);
+  translate: -50% 0;
+  animation: rest-dock-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* One 56px row: pause/play, the countdown, -30, +30 and hide. The fill shrinks as rest runs. */
+/* One 56px row: pause/play, the countdown, end, -30, +30 and hide. The fill shrinks as rest runs. */
 .rest-pill {
   bottom: calc(0.75rem + env(safe-area-inset-bottom));
   width: min(calc(100% - 1.5rem), 26rem);
@@ -4208,7 +4210,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
   box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  animation: rest-timer-toast-in 180ms ease-out;
 }
 
 .rest-pill > :not(.rest-pill-fill) {
@@ -4247,8 +4248,18 @@ html.edge-swipe-ready .edge-swipe-indicator {
   transition: background-color 0.2s;
 }
 
-.rest-pill .rest-pill-hide {
+.rest-pill .rest-pill-hide,
+.rest-pill .rest-pill-end {
   color: var(--p-muted);
+}
+
+.rest-pill .rest-pill-end .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.rest-pill .rest-pill-adjust {
+  margin-left: auto;
 }
 
 .rest-pill button:focus-visible,
@@ -4259,8 +4270,8 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .rest-pill-time {
   min-width: 0;
-  flex: 1;
-  padding-left: 0.625rem;
+  flex: 0 1 auto;
+  padding: 0 0.125rem 0 0.625rem;
   color: var(--p-ink);
   font-size: 1.375rem;
   font-weight: 850;
@@ -4355,7 +4366,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .rest-pill.is-paused .rest-pill-time,
 .rest-notch.is-paused strong,
-.rest-notch.is-paused:not(.is-idle) .pulse-icon {
+.rest-notch.is-paused .pulse-icon {
   color: var(--p-gold);
 }
 
@@ -4368,13 +4379,8 @@ html.edge-swipe-ready .edge-swipe-indicator {
   transition: none;
 }
 
-.rest-notch.is-paused.is-idle {
-  background: var(--p-gold);
-  color: var(--p-on-gold);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .rest-pill {
+  .workout-timer-dock {
     animation: none;
   }
 
@@ -4382,6 +4388,13 @@ html.edge-swipe-ready .edge-swipe-indicator {
   .rest-notch-bar > span,
   .rest-pill .rest-pill-toggle {
     transition: none;
+  }
+}
+
+@keyframes rest-dock-rise {
+  from {
+    opacity: 0;
+    transform: translateY(calc(100% + 0.75rem + env(safe-area-inset-bottom)));
   }
 }
 

@@ -4430,7 +4430,6 @@ body:has(.popup-dialog[open]) {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  overflow: hidden;
   color: #93989b;
   font-size: clamp(0.68rem, 3vw, 0.82rem);
   font-weight: 650;
@@ -4447,7 +4446,46 @@ body:has(.popup-dialog[open]) {
 .overlay-header-copy .workout-header-duration {
   min-width: 0;
   flex: 0 1 auto;
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A small pause or play button beside the live time, with a 44px touch area. */
+.overlay-header-copy .workout-header-pause {
+  position: relative;
+  width: 1.375rem;
+  height: 1.375rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  margin-left: 0.15rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--p-surface-2, var(--p-surface));
+  color: var(--p-accent-text);
+}
+
+.overlay-header-copy .workout-header-pause::before {
+  position: absolute;
+  inset: -0.6875rem;
+  content: '';
+}
+
+.overlay-header-copy .workout-header-pause .pulse-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.overlay-header-copy .workout-header-pause:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.overlay-header-copy .workout-header-meta.is-paused .workout-header-pause {
+  border-color: var(--p-gold);
+  background: var(--p-gold);
+  color: var(--p-on-gold);
 }
 
 .overlay-header-copy .workout-header-separator,

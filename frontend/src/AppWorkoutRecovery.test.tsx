@@ -772,6 +772,8 @@ describe('rest time controls', () => {
     );
   }
 
+  const headerMeta = () => container.querySelector('.logger-screen .workout-header-meta');
+
   async function click(label: string) {
     const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
     expect(button).not.toBeNull();
@@ -844,12 +846,24 @@ describe('rest time controls', () => {
     await startRest();
     await click('Take 30 seconds off the rest');
     expect(container.querySelector('[role="timer"]')).toBeNull();
-    expect(container.querySelector('.rest-notch.is-idle')).not.toBeNull();
+    expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
     expect(document.querySelector('.app-notification-toast')).toBeNull();
   });
 
-  const headerMeta = () => container.querySelector('.logger-screen .workout-header-meta');
+  it('ends the rest from its X without announcing it or pausing the workout', async () => {
+    await startRest(true);
+    vi.spyOn(api, 'cancelRestTimerNotification').mockResolvedValue(undefined);
+    await click('End rest timer');
+    expect(container.querySelector('.workout-timer-dock')).toBeNull();
+    expect(container.querySelector('.logger-screen')?.classList.contains('has-rest-pill')).toBe(
+      false,
+    );
+    expect(api.cancelRestTimerNotification).toHaveBeenCalled();
+    expect(headerMeta()?.textContent).toMatch(/^Live /);
+    await act(async () => vi.advanceTimersByTimeAsync(31_000));
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
 
   it('pauses the live time and the rest together, keeps the rest alert waiting, then resumes both', async () => {
     const systemNotification = await startRest(true);
@@ -884,7 +898,7 @@ describe('rest time controls', () => {
     expect(systemNotification).not.toHaveBeenCalled();
   });
 
-  it('pauses from the notch with no rest, and completing a set resumes the workout', async () => {
+  it('pauses beside the live time with no rest, and completing a set resumes the workout', async () => {
     vi.useFakeTimers();
     const draft = storedDraft();
     draft.movements[0].sets[0].completed = false;
@@ -892,9 +906,12 @@ describe('rest time controls', () => {
     writeActiveWorkoutDraft(draft);
     await mount();
     expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await click('Pause workout');
     expect(headerMeta()?.textContent).toContain('Paused');
-    expect(container.querySelector('.rest-notch.is-idle.is-paused')).not.toBeNull();
+    expect(headerMeta()?.querySelector('.workout-header-pause')?.getAttribute('aria-label')).toBe(
+      'Resume workout',
+    );
     await act(async () => vi.advanceTimersByTimeAsync(120_000));
     await click('Complete set 1');
     expect(headerMeta()?.textContent).toMatch(/^Live 10:0\d$/);
@@ -910,7 +927,7 @@ describe('rest time controls', () => {
     );
     await mount();
     expect(headerMeta()?.textContent).toBe('6:00•Paused');
-    expect(container.querySelector('.rest-notch[aria-label="Resume workout"]')).not.toBeNull();
+    expect(headerMeta()?.querySelector('[aria-label="Resume workout"]')).not.toBeNull();
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     await confirmFinish();
     const payload = vi.mocked(api.createWorkout).mock.calls.at(-1)![0];

@@ -8,9 +8,9 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Your training split and friends
 
-![Three phone screens of a sample workout: the rest bar counting down in blue, the same bar paused in gold with the header showing Paused, and the hidden rest as a small gold tab on the bottom edge](screenshots/releases/1.1.0-rest-timer-pill.png)
+![A sample workout: completing a set raises the rest bar from the bottom edge, pausing turns it gold and marks the header Paused, the X ends the rest, and the button beside the live time pauses and resumes the workout](screenshots/releases/1.1.0-rest-timer-pill.gif)
 
-_The rest bar running, paused, and hidden in its bottom-edge tab. Pausing freezes the rest and the workout time. Isolated sample data._
+_Completing a set raises the rest bar, which pauses in gold and ends with its X. With no rest running, the button beside the live time pauses the workout. Captured directly as a looping GIF with isolated sample data._
 
 ![The notification bell gains an unread badge before the inbox opens, then displays a sample friend request](screenshots/releases/1.1.0-live-notification-badge.gif)
 
@@ -220,7 +220,7 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 
 _The circular Start button matches its workout choices. Isolated sample data._
 
-- **Pause from the rest timer:** The rest timer is one slim bar at the bottom of a workout: pause or play, the countdown, back or forward 30 seconds and hide. Pausing freezes the rest and the live workout time together, and paused time is left out of the saved duration. Hide tucks the timer into a small tab on the bottom edge that keeps the countdown; with no rest running, the same tab pauses or resumes the workout. Completing a set resumes a paused workout, and Home and the Start button show when it is paused.
+- **Pause from the rest timer:** The rest timer is one slim bar that rises from the bottom of a workout: pause or play, the countdown, end, back or forward 30 seconds and hide. Pausing freezes the rest and the live workout time together, and paused time is left out of the saved duration. Pause or resume at any time with the button beside the live time. Hide tucks the timer into a small tab on the bottom edge that keeps the countdown. Completing a set resumes a paused workout, and Home and the Start button show when it is paused.
 
 - **Safe workout completion:** Finish stores the completed workout and its fixed duration on this device before syncing. If the app closes or goes offline mid-save, reopening or reconnecting retries the exact snapshot. Sets and notes are retained, timers stay stopped and new-workout retries keep the same session ID to prevent duplicates. Device-storage failures keep the workout open; a server rejection offers **Review workout**. One pending completion is retained until it syncs, before another workout can start. Confirmed sign-out or changing accounts clears it with the account's other local data.
 

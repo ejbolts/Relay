@@ -3606,10 +3606,9 @@ function WorkoutLogger({
   }
 
   const restActive = restTimerEnabled && restLeft > 0;
-  // Live workouts always have the timer dock: the rest pill, or the bottom-edge notch.
-  const showTimerDock = !initialWorkout;
-  const restPillOpen = showTimerDock && restActive && !restHidden;
-  const dockSpacing = restPillOpen ? 'has-rest-pill' : showTimerDock ? 'has-rest-notch' : '';
+  // A live rest shows the rest pill, or the bottom-edge notch while hidden.
+  const showTimerDock = !initialWorkout && restActive;
+  const dockSpacing = !showTimerDock ? '' : restHidden ? 'has-rest-notch' : 'has-rest-pill';
 
   return (
     <section className={`logger-screen content-page ${dockSpacing}`} inert={saving}>
@@ -3632,6 +3631,7 @@ function WorkoutLogger({
                   : `Live ${formatDuration(elapsed)}`
             }
             paused={workoutPaused}
+            onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
           />
         }
         onBack={onClose}
@@ -4012,7 +4012,7 @@ function WorkoutLogger({
       )}
       {showTimerDock && (
         <WorkoutTimerDock
-          restSeconds={restActive ? restLeft : 0}
+          restSeconds={restLeft}
           restTotal={restTotal}
           restHidden={restHidden}
           paused={workoutPaused}
@@ -4020,6 +4020,7 @@ function WorkoutLogger({
           onAdjust={adjustRestTimer}
           onHide={() => setRestHidden(true)}
           onShow={() => setRestHidden(false)}
+          onEnd={cancelRestTimer}
         />
       )}
       {!readOnly && (
