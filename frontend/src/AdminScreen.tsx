@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
+import { useAdminUsers } from './adminActivity';
+import { useNow, workoutElapsed } from './presence';
 import {
   LIMIT_GROUPS,
   VIDEO_UPLOAD_OPTIONS,
@@ -281,6 +283,9 @@ function UserRow({
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
 }) {
   const disabled = user.disabled_at !== null;
+  const online = !disabled && user.presence?.online;
+  const live = disabled ? null : user.presence?.workout;
+  const now = useNow(Boolean(live || online), 60_000);
   return (
     <li className={`admin-user ${disabled ? 'is-disabled' : ''}`}>
       <div className="admin-user-heading">
@@ -299,8 +304,18 @@ function UserRow({
         </div>
         <div>
           <dt>Last active</dt>
-          <dd>{formatLastActive(user.last_active_at)}</dd>
+          <dd className={online ? 'admin-user-online' : undefined}>
+            {online ? 'Active now' : formatLastActive(user.last_active_at)}
+          </dd>
         </div>
+        {live && (
+          <div className="admin-user-workout">
+            <dt>Live workout</dt>
+            <dd>
+              {live.name} · {workoutElapsed(live.started_at, now)}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Signed in on</dt>
           <dd>{plural(user.signed_in_devices, 'device')}</dd>
@@ -497,7 +512,7 @@ export function AdminScreenView({
 
 export function AdminScreen({ active }: { active: boolean }) {
   const { user, updateUser } = useUserSession();
-  const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const { users, setUsers, loadUsers } = useAdminUsers(active && Boolean(user?.is_admin));
   const [feedback, setFeedback] = useState<AppFeedback[] | null>(null);
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [status, setStatus] = useState<ServerStatus | null>(null);
@@ -514,14 +529,13 @@ export function AdminScreen({ active }: { active: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextUsers, nextSettings, nextStatus, nextLimits, nextFeedback] = await Promise.all([
-        api.admin.users(),
+      const [, nextSettings, nextStatus, nextLimits, nextFeedback] = await Promise.all([
+        loadUsers(),
         api.admin.settings(),
         api.admin.status(),
         api.admin.limits(),
         api.admin.feedback(),
       ]);
-      setUsers(nextUsers);
       setSettings(nextSettings);
       setStatus(nextStatus);
       setLimits(nextLimits);
@@ -531,7 +545,7 @@ export function AdminScreen({ active }: { active: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadUsers]);
 
   useEffect(() => {
     // The screen stays mounted while hidden, so reload whenever it is opened again.

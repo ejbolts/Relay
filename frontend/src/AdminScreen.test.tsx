@@ -89,6 +89,44 @@ function view(overrides: Partial<AdminScreenViewProps> = {}) {
 }
 
 describe('AdminScreenView', () => {
+  it('shows online activity and a live workout while preserving last-active information', () => {
+    const markup = view({
+      users: [
+        {
+          ...tester,
+          presence: {
+            online: true,
+            last_active_at: tester.last_active_at,
+            workout: { name: 'Push day', kind: 'strength', started_at: new Date().toISOString() },
+          },
+        },
+      ],
+    });
+    expect(markup).toContain('Active now');
+    expect(markup).toContain('Live workout');
+    expect(markup).toContain('Push day');
+    expect(markup).toContain('Last active');
+    const disabled = view({
+      users: [
+        {
+          ...tester,
+          disabled_at: new Date().toISOString(),
+          presence: {
+            online: true,
+            last_active_at: tester.last_active_at,
+            workout: {
+              name: 'Must stay hidden',
+              kind: 'strength',
+              started_at: new Date().toISOString(),
+            },
+          },
+        },
+      ],
+    });
+    expect(disabled).not.toContain('Active now');
+    expect(disabled).not.toContain('Must stay hidden');
+  });
+
   it('shows the current video mode and the sign-up switch', () => {
     const markup = view();
 

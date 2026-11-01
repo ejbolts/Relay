@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {
+  ADMIN_ACTIVITY_SUBSCRIPTION_EVENT,
+  hasAdminActivitySubscribers,
+  publishAdminActivity,
+} from './adminActivity';
 import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import { notifyNotificationsChanged } from './notificationEvents';
 import type { FriendPresence, LiveWorkout } from './types';
@@ -80,6 +85,7 @@ export function usePresenceConnection(userId: string | null): void {
     let attempts = 0;
     let retryTimer: number | undefined;
     let stopped = false;
+    let adminSubscribed = false;
 
     function send(force = false) {
       if (socket?.readyState !== WebSocket.OPEN) return;
@@ -94,6 +100,13 @@ export function usePresenceConnection(userId: string | null): void {
       lastSent = state;
     }
 
+    function sendAdminSubscription() {
+      const enabled = hasAdminActivitySubscribers();
+      if (socket?.readyState !== WebSocket.OPEN || enabled === adminSubscribed) return;
+      socket.send(JSON.stringify({ type: 'admin_activity', enabled }));
+      adminSubscribed = enabled;
+    }
+
     function connect() {
       window.clearTimeout(retryTimer);
       if (stopped || socket) return;
@@ -104,12 +117,34 @@ export function usePresenceConnection(userId: string | null): void {
         if (stopped || socket !== current) return;
         attempts = 0;
         send(true);
+        adminSubscribed = false;
+        sendAdminSubscription();
         notifyNotificationsChanged();
       };
       current.onmessage = (event: MessageEvent) => {
         if (stopped || socket !== current) return;
         try {
           const message: unknown = JSON.parse(String(event.data));
+          if (message && typeof message === 'object' && 'type' in message) {
+            if (message.type === 'admin_activity_sync') {
+              publishAdminActivity(null);
+              return;
+            }
+            if (
+              message.type === 'admin_activity' &&
+              'user_id' in message &&
+              typeof message.user_id === 'string' &&
+              'presence' in message &&
+              message.presence &&
+              typeof message.presence === 'object'
+            ) {
+              publishAdminActivity({
+                userId: message.user_id,
+                presence: message.presence as FriendPresence,
+              });
+              return;
+            }
+          }
           if (
             message &&
             typeof message === 'object' &&
@@ -160,6 +195,7 @@ export function usePresenceConnection(userId: string | null): void {
     window.addEventListener('online', connect);
     window.addEventListener(ACTIVE_WORKOUT_CHANGE_EVENT, onWorkoutChange);
     window.addEventListener('storage', onStorage);
+    window.addEventListener(ADMIN_ACTIVITY_SUBSCRIPTION_EVENT, sendAdminSubscription);
     return () => {
       stopped = true;
       window.clearTimeout(retryTimer);
@@ -168,6 +204,7 @@ export function usePresenceConnection(userId: string | null): void {
       window.removeEventListener('online', connect);
       window.removeEventListener(ACTIVE_WORKOUT_CHANGE_EVENT, onWorkoutChange);
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener(ADMIN_ACTIVITY_SUBSCRIPTION_EVENT, sendAdminSubscription);
       socket?.close(1000);
       socket = null;
     };

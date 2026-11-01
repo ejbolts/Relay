@@ -24,6 +24,10 @@ _Choose a template or build your own repeating cycle. Custom workout types and r
 
 _Home follows the account's saved cycle. Edit split opens the full editor; Start workout selects the scheduled type even when it has no previous session._
 
+![Admin user cards showing live workout activity and last-active information with fictional accounts](screenshots/releases/1.1.0-admin-live-activity.png)
+
+_An active member's current workout updates live, while last-active information remains available for offline members. Isolated sample accounts._
+
 ![Live friend workout and privacy updates without reloading](screenshots/releases/1.1.0-live-friend-updates.gif)
 
 _A friend starts and discards a workout, then hides live workouts and online status. The Friends card updates immediately through each step without reloading. This looping GIF was captured directly from isolated synthetic accounts; Home uses the same live updates._
@@ -282,6 +286,8 @@ _The circular Start button matches its workout choices. Isolated sample data._
 - RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
 - The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.
 - Strength workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
+
+- **Live admin activity:** The admin console updates user activity live: Active now, last-active times and workouts in progress. Reconnecting refreshes the user list without reloading editable server settings. This administrator-only feed is independent of friend-sharing choices.
 
 ## 1.0.0
 

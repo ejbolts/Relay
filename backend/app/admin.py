@@ -34,6 +34,7 @@ from .models import (
     WorkoutSession,
 )
 from .photo_storage import machine_photo_paths
+from .presence import FriendPresence, admin_presence_by_member
 from .server_settings import (
     ALLOW_REGISTRATION_KEY,
     VIDEO_UPLOADS_KEY,
@@ -63,6 +64,7 @@ class AdminUserRead(BaseModel):
     disabled_at: datetime | None
     created_at: datetime
     last_active_at: datetime | None
+    presence: FriendPresence
     signed_in_devices: int
     workouts: int
     photos: int
@@ -154,6 +156,8 @@ def _photo_bytes_by_user(db: Session, settings: Settings) -> dict[str, int]:
 def _admin_user_reads(
     db: Session, settings: Settings, users: Iterable[User]
 ) -> list[AdminUserRead]:
+    users = list(users)
+    activity = admin_presence_by_member(db, users)
     devices = _counts_by_user(db, UserSession, UserSession.expires_at > utc_now())
     workouts = _counts_by_user(db, TrainingWorkout)
     photos = _counts_by_user(db, MachinePhoto)
@@ -168,6 +172,7 @@ def _admin_user_reads(
             disabled_at=as_utc(user.disabled_at) if user.disabled_at else None,
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
+            presence=activity[user.id],
             signed_in_devices=devices.get(user.id, 0),
             workouts=workouts.get(user.id, 0),
             photos=photos.get(user.id, 0),

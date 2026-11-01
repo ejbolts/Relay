@@ -721,6 +721,8 @@ export interface AdminUser {
   disabled_at: string | null;
   created_at: string;
   last_active_at: string | null;
+  /** Admin-only live activity, including accounts that do not share with friends. */
+  presence?: FriendPresence;
   signed_in_devices: number;
   workouts: number;
   photos: number;

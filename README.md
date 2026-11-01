@@ -90,7 +90,7 @@ Shared profiles include workouts and your profile photo. You choose separately w
 
 The **Social** tab has two parts. **Friends** lists each friend once with their latest session, a seven-day activity strip and a reaction button. **Find** holds friend requests, people search, requests you sent and blocked members. To add someone in person, tap the QR button on your Profile or **QR code** beside people search; scanning it with a phone camera, or with **Scan** in the same sheet, sends you a friend request (with **Undo**), after signing in or creating an account if needed. Profiles offer **Add friend**, **Accept** or **Decline**, and a menu to cancel a request, remove a friend or block. Your profile-sharing choices still apply, and Home keeps a compact friends preview; **+N more** shows a spinner and adds three friends inline, keeping the expanded list during refreshes.
 
-Administrators can manage accounts, registration, video access and private app feedback from the admin console.
+Administrators can manage accounts, registration, video access and private app feedback from the admin console. User cards show live online status and workouts in progress, alongside last-active times.
 
 Settings opens with **Training**, **Appearance**, **Notifications**, **Account & privacy**,
 **Data & connections** and **Help & about**. Open a focused section without losing unfinished edits.
