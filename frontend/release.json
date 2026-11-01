@@ -8,5 +8,9 @@
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
     "**Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120"
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
+  "image": {
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/10b4b0f2a523923ee4ab3c74272b999f40b96190/docs/screenshots/releases/1.2.0-attempted-set.png",
+    "alt": "Workout set marked A with Attempted selected in the set-type menu. Isolated sample data."
+  }
 }
