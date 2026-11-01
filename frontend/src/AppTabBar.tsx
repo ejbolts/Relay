@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MainTab } from './appNavigation';
 import { Icon, type IconName } from './Icon';
-import { formatElapsed, useElapsedSeconds } from './elapsed';
+import { formatElapsed, useElapsedSeconds, useLiveWorkoutClock } from './elapsed';
 import { useRestCountdown } from './restTimer';
 import { formatSeconds } from './utils';
 import type { useHomeLayout } from './useHomeLayout';
@@ -175,7 +175,7 @@ export function AppTabBar({
               {resting ? (
                 <Icon name="timer" />
               ) : live ? (
-                <i className="live-dot" aria-hidden="true" />
+                <LiveDot startedAt={workoutStartedAt} />
               ) : (
                 <Icon name={workoutSaving ? 'check' : 'plus'} />
               )}
@@ -239,6 +239,12 @@ export function AppTabBar({
       </nav>
     </>
   );
+}
+
+/** The live workout's dot stops pulsing and turns gold while the workout is paused. */
+function LiveDot({ startedAt }: { startedAt: number }) {
+  const { paused } = useLiveWorkoutClock(startedAt);
+  return <i className={`live-dot${paused ? ' paused' : ''}`} aria-hidden="true" />;
 }
 
 function LiveElapsed({ startedAt }: { startedAt: number }) {

@@ -35,6 +35,7 @@
   --p-good: #2fb84a;
   --p-gold: #e9b44a;
   --p-gold-soft: rgb(201 133 0 / 15%);
+  --p-on-gold: #1c1404;
   --p-danger: #e66767;
   --p-grid: #22272b;
   --p-axis: #3a4046;
@@ -727,6 +728,18 @@ button.pulse-card:hover {
   background: var(--p-accent);
   box-shadow: 0 0 0 0 rgb(57 135 229 / 55%);
   animation: pulse-live 1.6s ease-out infinite;
+}
+
+/* A paused workout keeps a still gold dot and a gold, frozen time. */
+.app-tab-start.live .live-dot.paused,
+.live-workout-card.is-paused .live-workout-label i {
+  background: var(--p-gold);
+  box-shadow: none;
+  animation: none;
+}
+
+.live-workout-card.is-paused .live-workout-duration {
+  color: var(--p-gold);
 }
 
 .live-workout-duration {
@@ -4153,93 +4166,186 @@ html.edge-swipe-ready .edge-swipe-indicator {
   pointer-events: auto;
 }
 
-/* Keep Finish workout reachable above the rest popup. */
-.logger-screen.has-rest-popup {
-  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+/* Keep Finish workout reachable above the timer dock. */
+.logger-screen.has-rest-pill {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }
 
-/* The time sits centred between -30s and +30s, with Cancel and × at the edges. */
-.rest-timer-toast {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 0.5rem 0.625rem;
-  animation-name: rest-timer-toast-in;
+.logger-screen.has-rest-notch {
+  padding-bottom: calc(3rem + env(safe-area-inset-bottom));
 }
 
-.undo-toast .rest-timer-toast-cancel {
-  justify-self: start;
-  padding: 0 0.375rem;
-  font-size: 0.875rem;
+.logger-bottom-toasts.has-rest-pill {
+  bottom: calc(5rem + env(safe-area-inset-bottom));
 }
 
-.rest-timer-toast .undo-toast-close {
-  justify-self: end;
+.logger-bottom-toasts.has-rest-notch {
+  bottom: calc(3rem + env(safe-area-inset-bottom));
 }
 
-.rest-timer-toast .rest-timer-toast-adjust {
-  min-width: 3rem;
-  min-height: 2.25rem;
-  padding: 0 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--p-accent) 35%, transparent);
-  border-radius: 999px;
-  background: var(--p-accent-soft);
-  color: var(--p-accent-text);
-  font-size: 0.875rem;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
+/* ───────── Rest timer dock: the rest pill, or a notch on the bottom edge ───────── */
+
+/* Both rise from the bottom edge. `translate` keeps the centring separate from the animation. */
+.workout-timer-dock {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  translate: -50% 0;
+  animation: rest-dock-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* The rest popup draws its own bar from the time left, so it also works with reduced motion. */
-.rest-timer-toast::after {
-  display: none;
-}
-
-.undo-toast > .rest-timer-toast-copy {
-  min-width: 4.25rem;
+/* One 56px row: pause/play, the countdown, end, -30, +30 and hide. The fill shrinks as rest runs. */
+.rest-pill {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  width: min(calc(100% - 1.5rem), 26rem);
+  height: 3.5rem;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
-  text-align: center;
+  gap: 0.125rem;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 1.75rem;
+  padding: 0 0.375rem;
+  background: color-mix(in srgb, var(--p-surface) 90%, transparent);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
-.rest-timer-toast-copy small {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-  font-weight: 750;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.rest-pill > :not(.rest-pill-fill) {
+  position: relative;
 }
 
-.rest-timer-toast-copy small .pulse-icon {
-  width: 0.8125rem;
-  height: 0.8125rem;
+.rest-pill-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--p-accent-soft);
+  transform-origin: left;
+  transition: transform 1s linear;
+}
+
+.rest-pill button {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: none;
   color: var(--p-accent-text);
 }
 
-.rest-timer-toast-copy strong {
+.rest-pill .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.rest-pill .rest-pill-toggle {
+  background: var(--p-accent);
+  color: #fff;
+  transition: background-color 0.2s;
+}
+
+.rest-pill .rest-pill-hide,
+.rest-pill .rest-pill-end {
+  color: var(--p-muted);
+}
+
+.rest-pill .rest-pill-end .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.rest-pill .rest-pill-adjust {
+  margin-left: auto;
+}
+
+.rest-pill button:focus-visible,
+.rest-notch:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.rest-pill-time {
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 0 0.125rem 0 0.625rem;
+  color: var(--p-ink);
   font-size: 1.375rem;
   font-weight: 850;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
-.rest-timer-toast-bar {
-  position: absolute;
-  right: 0;
+.rest-skip-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rest-skip-icon text {
+  fill: currentColor;
+  stroke: none;
+  font-family: inherit;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+/* Hidden rest, or no rest: a 36px tab on the bottom edge with a 44px touch area. */
+.rest-notch {
   bottom: 0;
-  left: 0;
-  height: 3px;
-  background: rgb(59 130 246 / 18%);
+  min-width: 3.25rem;
+  height: calc(2.25rem + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  isolation: isolate;
+  border: 1px solid var(--p-line-strong);
+  border-bottom: 0;
+  border-radius: 0.875rem 0.875rem 0 0;
+  padding: 0 0.75rem env(safe-area-inset-bottom);
+  background: var(--p-surface);
+  color: var(--p-accent-text);
 }
 
-/* Shrinks from right to left as the rest runs down, easing between the once-a-second updates. */
-.rest-timer-toast-bar > span {
+.rest-notch::before {
+  position: absolute;
+  z-index: -1;
+  inset: -0.5rem -1px 0;
+  content: '';
+}
+
+.rest-notch .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.rest-notch strong {
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-notch-bar {
+  position: absolute;
+  top: 0;
+  right: 0.875rem;
+  left: 0.875rem;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 0 0 3px 3px;
+}
+
+.rest-notch-bar > span {
   display: block;
   height: 100%;
   background: var(--p-accent);
@@ -4247,24 +4353,48 @@ html.edge-swipe-ready .edge-swipe-indicator {
   transition: transform 1s linear;
 }
 
-/* Narrow phones keep Cancel clear of -30s. */
-@media (max-width: 359px) {
-  .rest-timer-toast {
-    padding-inline: 0.375rem;
+/* Paused: the same controls in gold, with the play icon. */
+.rest-pill.is-paused .rest-pill-fill {
+  background: var(--p-gold-soft);
+  transition: none;
+}
+
+.rest-pill.is-paused .rest-pill-toggle {
+  background: var(--p-gold);
+  color: var(--p-on-gold);
+}
+
+.rest-pill.is-paused .rest-pill-time,
+.rest-notch.is-paused strong,
+.rest-notch.is-paused .pulse-icon {
+  color: var(--p-gold);
+}
+
+.rest-notch.is-paused {
+  border-color: var(--p-gold);
+}
+
+.rest-notch.is-paused .rest-notch-bar > span {
+  background: var(--p-gold);
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workout-timer-dock {
+    animation: none;
   }
 
-  .undo-toast .rest-timer-toast-cancel {
-    padding: 0 0.25rem;
+  .rest-pill-fill,
+  .rest-notch-bar > span,
+  .rest-pill .rest-pill-toggle {
+    transition: none;
   }
+}
 
-  .rest-timer-toast .rest-timer-toast-adjust {
-    min-width: 2.625rem;
-    padding: 0 0.25rem;
-    font-size: 0.8125rem;
-  }
-
-  .undo-toast > .rest-timer-toast-copy {
-    min-width: 3.75rem;
+@keyframes rest-dock-rise {
+  from {
+    opacity: 0;
+    transform: translateY(calc(100% + 0.75rem + env(safe-area-inset-bottom)));
   }
 }
 

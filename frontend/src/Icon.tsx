@@ -65,6 +65,7 @@ const PATHS = {
 
 const FILLED = {
   play: 'M8 5.5v13l10.5-6.5z',
+  pause: 'M6.5 5h3.5v14H6.5zM14 5h3.5v14H14z',
 } as const;
 
 export type IconName = keyof typeof PATHS | keyof typeof FILLED;

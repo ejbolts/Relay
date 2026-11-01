@@ -1,112 +1,169 @@
 // @vitest-environment jsdom
-import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { act, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
-import { RestTimerToast, WorkoutHeaderMeta, WorkoutRestTimer } from './WorkoutRestTimer';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 
-describe('workout header rest timer', () => {
-  it('shows the countdown with an accessible red-X skip control', () => {
-    const markup = renderToStaticMarkup(<WorkoutRestTimer seconds={168} onSkip={vi.fn()} />);
-
-    expect(markup).toContain('role="timer"');
-    expect(markup).toContain('aria-label="Rest timer 2:48"');
-    expect(markup).toContain('<strong>2:48</strong>');
-    expect(markup).toContain('aria-label="Skip rest timer"');
-    expect(markup).toContain('>×</button>');
+describe('workout header time', () => {
+  it('shows only the live time while running', () => {
+    const markup = renderToStaticMarkup(<WorkoutHeaderMeta durationLabel="Live 3:55:32" />);
+    expect(markup).toContain('<span class="workout-header-duration">Live 3:55:32</span>');
+    expect(markup).not.toContain('Paused');
+    expect(markup).not.toContain('role="timer"');
+    expect(markup).not.toContain('<button');
   });
 
-  it('keeps a dot separator between the duration and active timer', () => {
-    const markup = renderToStaticMarkup(
-      <WorkoutHeaderMeta durationLabel="Live 3:55:32" restSeconds={168} onSkipRest={vi.fn()} />,
+  it('puts a pause button beside the live time, which turns to resume while paused', () => {
+    const running = renderToStaticMarkup(
+      <WorkoutHeaderMeta durationLabel="Live 3:55" onTogglePause={() => {}} />,
     );
+    expect(running).toMatch(
+      /<span class="workout-header-duration">Live 3:55<\/span><button type="button" class="workout-header-pause" aria-label="Pause workout"/,
+    );
+    const paused = renderToStaticMarkup(
+      <WorkoutHeaderMeta durationLabel="3:55" paused onTogglePause={() => {}} />,
+    );
+    expect(paused).toContain('<span class="workout-header-paused">Paused</span><button');
+    expect(paused).toContain('aria-label="Resume workout"');
+  });
 
-    expect(markup).toContain('Live 3:55:32');
+  it('marks a paused workout beside its frozen time', () => {
+    const markup = renderToStaticMarkup(<WorkoutHeaderMeta durationLabel="28:14" paused />);
+    expect(markup).toContain('class="workout-header-meta is-paused"');
     expect(markup).toContain(
-      '<span class="workout-header-duration">Live 3:55:32</span><span class="workout-header-separator" aria-hidden="true">•</span><span class="workout-rest-timer"',
+      '<span class="workout-header-duration">28:14</span><span class="workout-header-separator" aria-hidden="true">•</span><span class="workout-header-paused">Paused</span>',
     );
-  });
-
-  it('shows only the duration when the timer is inactive', () => {
-    const markup = renderToStaticMarkup(
-      <WorkoutHeaderMeta durationLabel="Live 4:11:40" restSeconds={null} onSkipRest={vi.fn()} />,
-    );
-
-    expect(markup).toContain('<span class="workout-header-duration">Live 4:11:40</span>');
-    expect(markup).not.toContain('workout-header-separator');
-    expect(markup).not.toContain('workout-rest-timer');
-  });
-
-  it('reopens the popup from the time while the red × still skips the rest', () => {
-    const markup = renderToStaticMarkup(
-      <WorkoutRestTimer seconds={75} onSkip={vi.fn()} onShow={vi.fn()} />,
-    );
-
-    expect(markup).toContain(
-      '<button type="button" class="workout-rest-timer-show" aria-label="Show rest timer, 1:15 left"><strong>1:15</strong></button>',
-    );
-    expect(markup).toContain('aria-label="Skip rest timer"');
   });
 });
 
-describe('rest timer popup', () => {
-  it('centres the time left between -30s and +30s, with Cancel, Dismiss and a progress bar', () => {
-    const markup = renderToStaticMarkup(
-      <RestTimerToast
-        seconds={45}
-        totalSeconds={180}
-        onDismiss={vi.fn()}
-        onCancel={vi.fn()}
-        onAdjust={vi.fn()}
-      />,
-    );
+describe('workout timer dock', () => {
+  let container: HTMLDivElement;
+  let root: Root;
 
-    expect(markup).toContain('role="timer"');
-    expect(markup).toContain('aria-label="Rest timer 0:45"');
-    expect(markup).toMatch(
-      /aria-label="Take 30 seconds off the rest">−30s<\/button><span class="rest-timer-toast-copy"><small><svg[^>]*>.*?<\/svg>Rest<\/small><strong>0:45<\/strong><\/span><button class="rest-timer-toast-adjust" type="button" aria-label="Add 30 seconds to the rest">\+30s</,
-    );
-    expect(markup).toContain('aria-label="Cancel rest timer"');
-    expect(markup).toContain(
-      'aria-label="Dismiss rest timer popup and show it beside the live time"',
-    );
-    expect(markup).toContain('transform:scaleX(0.25)');
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
   });
 
-  it('calls back separately when cancelled, dismissed or adjusted', async () => {
-    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-    const onCancel = vi.fn();
-    const onDismiss = vi.fn();
-    const onAdjust = vi.fn();
-    const container = document.createElement('div');
-    document.body.append(container);
-    const root = createRoot(container);
-    try {
-      await act(async () =>
-        root.render(
-          <RestTimerToast
-            seconds={90}
-            totalSeconds={90}
-            onDismiss={onDismiss}
-            onCancel={onCancel}
-            onAdjust={onAdjust}
-          />,
-        ),
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  const button = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`);
+
+  type DockState = Pick<
+    Parameters<typeof WorkoutTimerDock>[0],
+    'restSeconds' | 'restTotal' | 'restHidden' | 'paused'
+  >;
+
+  async function render(props: Partial<DockState> = {}) {
+    const handlers = {
+      onTogglePause: vi.fn(),
+      onAdjust: vi.fn(),
+      onHide: vi.fn(),
+      onShow: vi.fn(),
+      onEnd: vi.fn(),
+    };
+    await act(async () =>
+      root.render(
+        <WorkoutTimerDock
+          restSeconds={45}
+          restTotal={180}
+          restHidden={false}
+          paused={false}
+          {...handlers}
+          {...props}
+        />,
+      ),
+    );
+    return handlers;
+  }
+
+  it('shows a running rest as one pill: pause, countdown, end, -30, +30, hide and its progress', async () => {
+    const handlers = await render();
+    const pill = container.querySelector('.rest-pill')!;
+    expect(pill.getAttribute('role')).toBe('group');
+    expect(pill.querySelector('[role="timer"]')?.textContent).toBe('0:45');
+    expect(pill.querySelector('[role="timer"]')?.getAttribute('aria-label')).toBe(
+      'Rest timer 0:45',
+    );
+    expect(
+      [...pill.querySelectorAll('button')].map((item) => item.getAttribute('aria-label')),
+    ).toEqual([
+      'Pause workout and rest timer',
+      'End rest timer',
+      'Take 30 seconds off the rest',
+      'Add 30 seconds to the rest',
+      'Hide rest timer',
+    ]);
+    // The only text is the countdown; the skip buttons are icons drawn around "30".
+    expect(pill.textContent).toBe('0:453030');
+    expect(pill.querySelector<HTMLElement>('.rest-pill-fill')?.style.transform).toBe(
+      'scaleX(0.25)',
+    );
+    expect(container.querySelector('.rest-notch')).toBeNull();
+    await act(async () => button('Take 30 seconds')!.click());
+    await act(async () => button('Add 30 seconds')!.click());
+    expect(handlers.onAdjust.mock.calls).toEqual([[-30], [30]]);
+    await act(async () => button('Pause workout')!.click());
+    expect(handlers.onTogglePause).toHaveBeenCalledTimes(1);
+    await act(async () => button('End rest timer')!.click());
+    expect(handlers.onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('swaps pause for a gold play button while paused', async () => {
+    await render({ paused: true });
+    expect(container.querySelector('.rest-pill')?.classList.contains('is-paused')).toBe(true);
+    expect(button('Resume workout and rest timer')).not.toBeNull();
+    expect(container.querySelector('[role="timer"]')?.getAttribute('aria-label')).toBe(
+      'Rest timer 0:45, paused',
+    );
+  });
+
+  it('hides into the bottom-edge notch, which shows the time and reopens the pill', async () => {
+    function Harness() {
+      const [hidden, setHidden] = useState(false);
+      return (
+        <WorkoutTimerDock
+          restSeconds={48}
+          restTotal={90}
+          restHidden={hidden}
+          paused={false}
+          onTogglePause={vi.fn()}
+          onAdjust={vi.fn()}
+          onHide={() => setHidden(true)}
+          onShow={() => setHidden(false)}
+          onEnd={vi.fn()}
+        />
       );
-      const button = (label: string) =>
-        container.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`)!;
-      await act(async () => button('Dismiss').click());
-      expect(onDismiss).toHaveBeenCalledTimes(1);
-      expect(onCancel).not.toHaveBeenCalled();
-      await act(async () => button('Take 30 seconds').click());
-      await act(async () => button('Add 30 seconds').click());
-      expect(onAdjust.mock.calls).toEqual([[-30], [30]]);
-      expect(onCancel).not.toHaveBeenCalled();
-      await act(async () => button('Cancel').click());
-      expect(onCancel).toHaveBeenCalledTimes(1);
-    } finally {
-      await act(async () => root.unmount());
-      container.remove();
     }
+    await act(async () => root.render(<Harness />));
+    await act(async () => button('Hide rest timer')!.click());
+    const notch = container.querySelector<HTMLButtonElement>('.rest-notch')!;
+    expect(container.querySelector('.rest-pill')).toBeNull();
+    expect(notch.getAttribute('aria-label')).toBe('Show rest timer, 0:48 left');
+    expect(notch.querySelector('[role="timer"]')?.textContent).toBe('0:48');
+    expect(document.activeElement).toBe(notch);
+    await act(async () => notch.click());
+    expect(container.querySelector('.rest-pill')).not.toBeNull();
+    expect(document.activeElement).toBe(button('Pause workout and rest timer'));
+  });
+
+  it('says a hidden paused rest is paused', async () => {
+    await render({ restHidden: true, paused: true });
+    expect(button('Show paused rest timer, 0:45 left')).not.toBeNull();
+  });
+
+  it('shows nothing when no rest is running, paused or not', async () => {
+    await render({ restSeconds: 0 });
+    expect(container.innerHTML).toBe('');
+    await render({ restSeconds: 0, paused: true, restHidden: true });
+    expect(container.innerHTML).toBe('');
   });
 });

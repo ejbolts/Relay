@@ -49,7 +49,7 @@ import {
   weightInputValue,
   weightUnitName,
 } from './weightUnits';
-import { formatElapsed, useElapsedSeconds } from './elapsed';
+import { formatElapsed, useLiveWorkoutClock } from './elapsed';
 import { useOffline } from './connectionStatus';
 import { OfflineBadge } from './OfflineBadge';
 
@@ -684,17 +684,17 @@ function LiveWorkoutCard({
   saving: boolean;
   onResume: () => void;
 }) {
-  const elapsed = useElapsedSeconds(startedAt);
+  const { elapsed, paused } = useLiveWorkoutClock(startedAt);
   return (
     <button
-      className="pulse-card live-workout-card"
+      className={`pulse-card live-workout-card${paused && !saving ? ' is-paused' : ''}`}
       type="button"
       onClick={onResume}
       disabled={saving}
     >
       <span className="live-workout-label">
         <i aria-hidden="true" />
-        {saving ? 'Workout finished' : 'Workout live'}
+        {saving ? 'Workout finished' : paused ? 'Workout paused' : 'Workout live'}
       </span>
       {!saving && (
         <time className="live-workout-duration num" dateTime={`PT${elapsed}S`}>
