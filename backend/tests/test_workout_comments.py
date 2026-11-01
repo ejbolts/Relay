@@ -135,3 +135,19 @@ def test_root_pagination_keeps_replies_with_thread(client, other_client, discuss
     assert page["total"] == 22 and page["next_offset"] == 20
     assert len(page["items"]) == 21
     assert client.get(discussion + "?offset=20").json()["items"][0]["id"] == roots[-1]["id"]
+
+
+def test_run_reaction_on_comments_and_attached_workout_reaction(client, other_client, discussion):
+    comment = post(client, discussion, "Great run!", reaction="run")
+    assert comment["reaction"] == "run"
+    url = f"/api/sharing/comments/{comment['id']}/reaction"
+    response = other_client.put(url, json={"reaction": "run"})
+    assert response.status_code == 200, response.text
+    assert response.json()["reactions"] == {
+        "counts": [{"reaction": "run", "count": 1}],
+        "yours": "run",
+        "comment_count": 0,
+    }
+    notices = client.get("/api/sharing/notifications").json()["comments"]
+    assert any(n["kind"] == "comment_reaction" and n["reaction"] == "run" for n in notices)
+    assert other_client.delete(url).json()["reactions"]["counts"] == []

@@ -281,7 +281,7 @@ it('reacts from the picker, shows your reaction, and removes it when chosen agai
     .mockResolvedValue({ items: [alex], friends: 1, with_sessions: 1 });
   const react = vi
     .spyOn(api.sharing, 'react')
-    .mockResolvedValue({ counts: [{ reaction: 'love', count: 1 }], yours: 'love' });
+    .mockResolvedValue({ counts: [{ reaction: 'run', count: 1 }], yours: 'run' });
   const remove = vi
     .spyOn(api.sharing, 'removeReaction')
     .mockResolvedValue({ counts: [], yours: null });
@@ -290,30 +290,30 @@ it('reacts from the picker, shows your reaction, and removes it when chosen agai
   const trigger = button('React to Alex Preview’s Incline walk');
   await act(async () => trigger.click());
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
-  expect(host.querySelectorAll('.friend-react-picker button')).toHaveLength(6);
+  expect(host.querySelectorAll('.friend-react-picker button')).toHaveLength(7);
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Like');
 
   feed.mockResolvedValue({
-    items: [{ ...alex, reactions: { counts: [{ reaction: 'love', count: 1 }], yours: 'love' } }],
+    items: [{ ...alex, reactions: { counts: [{ reaction: 'run', count: 1 }], yours: 'run' } }],
     friends: 1,
     with_sessions: 1,
   });
-  await act(async () => button('Love').click());
-  expect(react).toHaveBeenCalledWith('w2', 'love');
+  await act(async () => button('Run').click());
+  expect(react).toHaveBeenCalledWith('w2', 'run');
   // Choosing a reaction closes the picker without opening the comments.
   expect(host.querySelector('.friend-react-picker')).toBeNull();
   expect(host.querySelector('.workout-comments')).toBeNull();
-  const mine = button('Your reaction to Alex Preview’s Incline walk: Love. Change reaction');
-  expect(mine.textContent).toBe('❤️');
-  expect(host.querySelector('.discussion-reaction-summary')?.textContent).toBe('❤️ 1');
+  const mine = button('Your reaction to Alex Preview’s Incline walk: Run. Change reaction');
+  expect(mine.textContent).toBe('🏃');
+  expect(host.querySelector('.discussion-reaction-summary')?.textContent).toBe('🏃 1');
   expect(document.activeElement).toBe(mine);
 
   await act(async () => mine.click());
-  expect(button('Love').getAttribute('aria-pressed')).toBe('true');
+  expect(button('Run').getAttribute('aria-pressed')).toBe('true');
   feed.mockResolvedValue({ items: [alex], friends: 1, with_sessions: 1 });
-  await act(async () => button('Love').click());
+  await act(async () => button('Run').click());
   expect(remove).toHaveBeenCalledWith('w2');
-  expect(button('React to Alex Preview’s Incline walk').textContent).not.toContain('❤️');
+  expect(button('React to Alex Preview’s Incline walk').textContent).not.toContain('🏃');
 });
 
 it('refreshes an already reacted session to the newest workout and keeps the server recency order', async () => {

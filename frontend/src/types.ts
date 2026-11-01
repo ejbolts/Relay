@@ -911,7 +911,7 @@ export interface FriendConnections {
   blocked: SharingConnection[];
 }
 
-export type WorkoutReactionKind = 'like' | 'love' | 'strong' | 'fire' | 'clap' | 'trophy';
+export type WorkoutReactionKind = 'like' | 'love' | 'strong' | 'fire' | 'clap' | 'trophy' | 'run';
 
 export interface WorkoutReactions {
   counts: Array<{ reaction: WorkoutReactionKind; count: number }>;

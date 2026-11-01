@@ -4,6 +4,7 @@
   "title": "Find friends and improve your workouts",
   "summary": "Keep logging workouts offline with saves that survive interruptions, see when friends are training live, manage saved splits on one page, browse exercises with weekly partial-set controls, track body measurements and FFMI references, merge machine photos, personalise cardio goals, map and undo imports, and connect with friends through QR codes and workout reactions.",
   "changes": [
+    "React to friends’ workouts and comments with the new 🏃 Run reaction. Home’s +N more button loads three additional friends inline and keeps the expanded list during refreshes.",
     "The rest timer is one slim bar that rises from the bottom of a workout: pause or play, the countdown, end, back or forward 30 seconds and hide. Pausing freezes the rest and the live workout time together, and paused time is left out of the saved duration. Pause or resume at any time with the button beside the live time. Hide tucks the timer into a small tab on the bottom edge that keeps the countdown. Completing a set resumes a paused workout, and Home and the Start button show when it is paused.",
     "Finish workout stores a completed snapshot on your device before syncing, including its fixed duration, sets and notes. Interrupted and offline saves retry automatically when you reopen or reconnect, without restarting the timer or creating duplicate workouts. Storage failures keep the workout open; server rejections offer Review workout.",
     "Relay works offline once you have signed in on a device. It opens from an encrypted copy of your exercises, settings, recent history and stats saved on the device, shows Offline by the screen title, and lets you start, log and finish workouts. A finished workout syncs when the server is reachable again, including after an expired session once you sign back in. Exercise icons are about 14 times smaller and load offline. Signing in, Social and changing settings still need a connection.",
@@ -66,6 +67,14 @@
     "alt": "New machine photo form with a machine name, custom numeric Seat and Backrest settings, Add, Cancel and Save and pin. Isolated sample data and an exercise illustration."
   },
   "highlights": [
+    {
+      "title": "A Run reaction for friends",
+      "description": "Choose 🏃 Run when reacting to a friend's workout or comment.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/48b3e06365733230cef77145b73c4f83222154f5/docs/screenshots/releases/1.1.0-run-reaction.png",
+        "alt": "Home's reaction picker with Run selected on a sample friend's workout."
+      }
+    },
     {
       "title": "Pause your workout from the rest timer",
       "description": "One slim bar holds pause, the countdown, end, -30, +30 and hide. Pausing freezes the rest and your workout time, and the button beside the live time pauses the workout between rests.",
