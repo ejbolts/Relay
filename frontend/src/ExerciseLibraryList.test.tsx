@@ -120,6 +120,54 @@ it('clamps the last page when a catalogue shrinks', async () => {
   expect(host.textContent).toContain('Page 2 of 2');
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(2);
 });
+it('toggles a selected muscle back to All and resets pagination', async () => {
+  await render();
+  const filters = [
+    ...host.querySelectorAll<HTMLButtonElement>('[aria-label="Muscle group"] button'),
+  ];
+  const all = filters.find((item) => item.textContent === 'All')!;
+  const pectorals = filters.find((item) => item.textContent === 'Pectorals')!;
+  await click(pectorals);
+  expect(pectorals.getAttribute('aria-pressed')).toBe('true');
+  expect(all.getAttribute('aria-pressed')).toBe('false');
+  await click(button('Next exercises page'));
+  expect(host.textContent).toContain('Page 2 of 3');
+  await click(pectorals);
+  expect(pectorals.getAttribute('aria-pressed')).toBe('false');
+  expect(all.getAttribute('aria-pressed')).toBe('true');
+  expect(host.textContent).toContain('Page 1 of 3');
+  await click(all);
+  expect(all.getAttribute('aria-pressed')).toBe('true');
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(10);
+});
+it('restores all muscles without clearing Custom, and toggles Custom off independently', async () => {
+  const curl = {
+    ...bench,
+    id: 'curl',
+    name: 'Custom Curl',
+    is_custom: true,
+    muscle_set_credits: [{ muscle_name: 'Biceps', sets: 1 }],
+  };
+  const customPress = { ...bench, id: 'custom-press', name: 'Custom Press', is_custom: true };
+  await render([bench, curl, customPress]);
+  const biceps = [
+    ...host.querySelectorAll<HTMLButtonElement>('[aria-label="Muscle group"] button'),
+  ].find((item) => item.textContent === 'Biceps')!;
+  const custom = button('Custom exercises');
+  await click(custom);
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(2);
+  await click(biceps);
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(1);
+  await click(biceps);
+  expect(custom.getAttribute('aria-pressed')).toBe('true');
+  expect(
+    host.querySelector('[aria-label="Muscle group"] button[aria-pressed="true"]')?.textContent,
+  ).toBe('All');
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(2);
+  await click(custom);
+  expect(custom.getAttribute('aria-pressed')).toBe('false');
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(3);
+});
 it('saves partial credits, shows failure without changing the switch, and retries with direct credits intact', async () => {
   const save = vi
     .fn()

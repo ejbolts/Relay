@@ -20,9 +20,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Attempted sets** — A replaces F in the set-type menu and workout rows. Isolated sample data.
 
+![Exercise filters with green borders around the selected Custom and Biceps pills.](screenshots/releases/1.2.0-exercise-filter-pills.png)
+
+**Clearer filters** — Selected pills stand out in green; tap a selected muscle again to return to All. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
+- **Exercise filters:** Selected pills have a green border. Tap the selected muscle again to return to All; Custom toggles independently.
 
 ## 1.1.0
 
