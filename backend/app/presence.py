@@ -13,6 +13,10 @@ and feed responses include the same presence, so a dropped socket only delays up
 The same authenticated connection invalidates the account's own notification inbox after
 committed changes. These messages carry no notification contents and do not depend on friend
 status or live-activity sharing choices.
+
+Admin windows can subscribe to an additional activity feed on the same socket. Its snapshot and
+events include all accounts independently of friend-sharing settings. Each delivery rechecks the
+receiver's administrator role and session. Closing the admin screen unsubscribes that window.
 """
 
 from __future__ import annotations
@@ -74,6 +78,11 @@ class LiveWorkoutReport(BaseModel):
         return value
 
 
+class AdminActivitySubscription(BaseModel):
+    type: Literal["admin_activity"]
+    enabled: bool
+
+
 class PresenceReport(BaseModel):
     """A window's state: whether it is visible, and its device's workout in progress."""
 
@@ -86,12 +95,13 @@ class PresenceReport(BaseModel):
 class Window:
     """An open presence socket, the event loop serving it, and whether its window is visible."""
 
-    __slots__ = ("loop", "socket", "visible", "user_id", "token")
+    __slots__ = ("loop", "socket", "visible", "user_id", "token", "admin_activity")
 
     def __init__(self, socket: WebSocket, user_id: str, token: str) -> None:
         self.socket = socket
         self.loop = asyncio.get_running_loop()
         self.visible = False
+        self.admin_activity = False
         self.user_id = user_id
         self.token = token
 
@@ -145,6 +155,21 @@ class PresenceHub:
         with self._lock:
             return [
                 window for user_id in user_ids for window in self._windows.get(user_id, {}).values()
+            ]
+
+    def subscribe_admin(self, user_id: str, socket_id: str, enabled: bool) -> None:
+        with self._lock:
+            window = self._windows.get(user_id, {}).get(socket_id)
+            if window is not None:
+                window.admin_activity = enabled
+
+    def admin_windows(self) -> list[Window]:
+        with self._lock:
+            return [
+                window
+                for windows in self._windows.values()
+                for window in windows.values()
+                if window.admin_activity
             ]
 
     def notify(self, user_id: str) -> None:
@@ -218,18 +243,61 @@ def presence_by_member(
     }
 
 
-def signed_in_user_id(token: str) -> str | None:
+def admin_presence(member: User, live: LiveWorkout | None, online: bool) -> FriendPresence:
+    """Admin-only activity, independent of the member's friend-sharing choices."""
+    now = utc_now()
+    enabled = member.disabled_at is None
+    workout = (
+        LiveWorkoutRead(name=live.name, kind=live.kind, started_at=as_utc(live.started_at))
+        if enabled and live is not None and as_utc(live.expires_at) > now
+        else None
+    )
+    return FriendPresence(
+        online=enabled and online,
+        workout=workout,
+        last_active_at=as_utc(member.last_active_at) if member.last_active_at else None,
+    )
+
+
+def admin_presence_by_member(db: Session, members: list[User]) -> dict[str, FriendPresence]:
+    ids = [member.id for member in members]
+    live = {
+        workout.user_id: workout
+        for workout in db.scalars(select(LiveWorkout).where(LiveWorkout.user_id.in_(ids)))
+    }
+    online = hub.online_ids(ids)
+    return {
+        member.id: admin_presence(member, live.get(member.id), member.id in online)
+        for member in members
+    }
+
+
+def admin_presence_update(user_id: str) -> FriendPresence | None:
+    with SessionLocal() as db:
+        member = db.get(User, user_id)
+        return (
+            admin_presence(member, db.get(LiveWorkout, user_id), hub.is_online(user_id))
+            if member
+            else None
+        )
+
+
+def signed_in_user_id(token: str, *, admin_only: bool = False) -> str | None:
     """The account behind a live session cookie, without extending the session."""
     with SessionLocal() as db:
         row = db.execute(
-            select(UserSession.expires_at, User.id, User.disabled_at)
+            select(UserSession.expires_at, User.id, User.disabled_at, User.is_admin)
             .join(User, User.id == UserSession.user_id)
             .where(UserSession.token_hash == hash_token(token))
         ).first()
     if row is None:
         return None
-    expires_at, user_id, disabled_at = row
-    return user_id if as_utc(expires_at) > utc_now() and disabled_at is None else None
+    expires_at, user_id, disabled_at, is_admin = row
+    return (
+        user_id
+        if as_utc(expires_at) > utc_now() and disabled_at is None and (not admin_only or is_admin)
+        else None
+    )
 
 
 def save_live_workout(user_id: str, device: str, report: LiveWorkoutReport | None) -> bool:
@@ -306,12 +374,36 @@ async def broadcast(user_id: str) -> None:
             with contextlib.suppress(RuntimeError):
                 asyncio.run_coroutine_threadsafe(deliver(window, message), window.loop)
 
+    admins = hub.admin_windows()
+    if admins:
+        activity = await run_in_threadpool(admin_presence_update, user_id)
+        if activity is not None:
+            message = {
+                "type": "admin_activity",
+                "user_id": user_id,
+                "presence": activity.model_dump(mode="json"),
+            }
+            for window in admins:
+                if window.loop is current:
+                    await deliver(window, message, admin_only=True)
+                elif not window.loop.is_closed():
+                    with contextlib.suppress(RuntimeError):
+                        asyncio.run_coroutine_threadsafe(
+                            deliver(window, message, admin_only=True), window.loop
+                        )
 
-async def deliver(window: Window, message: dict) -> None:
+
+async def deliver(window: Window, message: dict, *, admin_only: bool = False) -> None:
     # A socket closing mid-send is cleaned up by its own handler.
     with contextlib.suppress(Exception):
         if await run_in_threadpool(signed_in_user_id, window.token) != window.user_id:
             await window.socket.close(code=SIGNED_OUT)
+            return
+        if (
+            admin_only
+            and await run_in_threadpool(signed_in_user_id, window.token, admin_only=True)
+            != window.user_id
+        ):
             return
         await window.socket.send_json(message)
 
@@ -359,6 +451,20 @@ async def presence_socket(websocket: WebSocket) -> None:
             if len(message) > MAX_MESSAGE_CHARACTERS:
                 continue
             try:
+                subscription = AdminActivitySubscription.model_validate_json(message)
+            except ValidationError:
+                subscription = None
+            if subscription is not None:
+                enabled = (
+                    subscription.enabled
+                    and await run_in_threadpool(signed_in_user_id, token, admin_only=True)
+                    == user_id
+                )
+                hub.subscribe_admin(user_id, socket_id, enabled)
+                if enabled:
+                    await websocket.send_json({"type": "admin_activity_sync"})
+                continue
+            try:
                 report = PresenceReport.model_validate_json(message)
             except ValidationError:
                 continue
@@ -366,7 +472,7 @@ async def presence_socket(websocket: WebSocket) -> None:
                 save_live_workout, user_id, report.device, report.workout
             )
             online_changed = hub.set_visible(user_id, socket_id, report.visible)
-            if online_changed and not report.visible:
+            if online_changed:
                 await run_in_threadpool(record_last_active, user_id)
             if online_changed or workout_changed:
                 await broadcast(user_id)

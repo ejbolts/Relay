@@ -57,7 +57,8 @@
     "Saved workout sets use subtle type colours in Profile and Training history: orange warm-ups, green working sets, purple drop sets and red failed sets.",
     "Your profile and shared profiles show five cardio sessions per page, newest first. Use the previous and next arrows or the page picker to browse older sessions, including sessions beyond the former latest-20 limit.",
     "The Cardio header shows the visible range and total. Your selected page stays in place during profile updates, and a failed page request can be retried without losing the current page.",
-    "Swipe through saved equipment photos while logging. Deleting a photo explains that it also removes the photo from saved workouts, and keeps the recorded sets."
+    "Swipe through saved equipment photos while logging. Deleting a photo explains that it also removes the photo from saved workouts, and keeps the recorded sets.",
+    "The admin console updates user activity live: Active now, last-active times and workouts in progress. Reconnecting refreshes the user list without reloading editable server settings. This administrator-only feed is independent of friend-sharing choices."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
@@ -247,6 +248,14 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/e87a77061c8bca44c7ab1ce2bb66b268c92c4d8b/docs/screenshots/releases/1.0.1-profile-cardio-pages.png",
         "alt": "Profile Cardio card with the five latest sessions, visible range and page controls, using synthetic sample data."
+      }
+    },
+    {
+      "title": "Live activity in the admin console",
+      "description": "User cards update as members open Relay, start or finish a workout, or go offline. Last-active times remain available to administrators.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e6f280a558d90c64611f45c9dc5869ae7823a139/docs/screenshots/releases/1.1.0-admin-live-activity.png",
+        "alt": "Admin console with a fictional member active in an Upper body workout and another member last active two hours ago."
       }
     }
   ]

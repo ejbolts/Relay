@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { onNotificationsChanged } from './notificationEvents';
+import { onAdminActivity, type AdminActivity } from './adminActivity';
 import {
   activeAgo,
   byLiveActivity,
@@ -242,6 +243,34 @@ it('invalidates notifications on connect, recipient events and reconnect, ignori
     expect(changed).toHaveBeenCalledTimes(3);
     await act(async () => FakeSocket.instances[2].open());
     expect(changed).toHaveBeenCalledTimes(4);
+  } finally {
+    stop();
+  }
+});
+
+it('subscribes admin activity on the shared socket, relays updates and re-subscribes after reconnect', async () => {
+  const received: Array<AdminActivity | null> = [];
+  const stop = onAdminActivity((activity) => received.push(activity));
+  try {
+    await act(async () => root.render(<Connection userId="admin" />));
+    const first = FakeSocket.instances[0];
+    await act(async () => first.open());
+    expect(first.sent[1]).toEqual({ type: 'admin_activity', enabled: true });
+    const presence = { online: true, last_active_at: null, workout: null };
+    first.onmessage?.({ data: JSON.stringify({ type: 'admin_activity_sync' }) });
+    first.onmessage?.({
+      data: JSON.stringify({ type: 'admin_activity', user_id: 'sample', presence }),
+    });
+    expect(received).toEqual([null, { userId: 'sample', presence }]);
+    await act(async () => first.drop());
+    await act(async () => vi.advanceTimersByTime(1000));
+    const second = FakeSocket.instances[1];
+    await act(async () => second.open());
+    expect(second.sent[1]).toEqual({ type: 'admin_activity', enabled: true });
+    first.onmessage?.({ data: JSON.stringify({ type: 'admin_activity_sync' }) });
+    expect(received).toHaveLength(2);
+    stop();
+    expect(second.sent.at(-1)).toEqual({ type: 'admin_activity', enabled: false });
   } finally {
     stop();
   }

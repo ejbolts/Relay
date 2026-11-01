@@ -1068,3 +1068,11 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 .sample-profile-dialog .popup-dialog-actions .popup-primary-action {
   flex: 1;
 }
+
+.admin-user .admin-user-stats dd.admin-user-online {
+  color: var(--p-good);
+}
+
+.admin-user-workout dd {
+  color: var(--p-accent-text);
+}
