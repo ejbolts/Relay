@@ -21,6 +21,7 @@ _Relay was called Gym Logger before version 1.0._
 **Your saved splits** — Saved plans and your upcoming week.
 
 - **Reliable saves:** Interrupted saves recover without duplicate workouts or runaway timers.
+- **Split sharing:** Clear guidance when workout days need exercises before sharing on your profile.
 - **Workout controls:** Pause live time, manage the slimmer rest timer and receive in-app rest alerts.
 - **Set colours:** Clearer RPE, warm-up, working, drop and failure sets, plus same-weight volume PR labels.
 - **Workout dates:** Overnight sessions keep their correct start date and duration.
