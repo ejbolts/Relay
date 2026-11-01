@@ -2,6 +2,18 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.1.1
+
+1 November 2026
+
+### Swipe away body-weight goals
+
+![Swiping a goal line left in the monthly check-in history to reveal Delete, then the goal removed with an Undo popup.](screenshots/releases/1.1.1-swipe-remove-goal.png)
+
+**Swipe to remove** — Goals come off the history like rest times in a workout.
+
+- **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
+
 ## 1.1.0
 
 1 November 2026
