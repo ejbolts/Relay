@@ -152,13 +152,27 @@ function ReleaseDetails({ release, linkLabel }: { release: Release; linkLabel: s
       )}
       <ul>
         {release.changes.map((change, index) => (
-          <li key={index}>{change}</li>
+          <li key={index}>
+            <ReleaseChange text={change} />
+          </li>
         ))}
       </ul>
       <a href={release.url} target="_blank" rel="noopener noreferrer">
         {linkLabel} <span aria-hidden="true">↗</span>
       </a>
     </>
+  );
+}
+
+/** Only a leading bold title is supported; all content remains escaped React text. */
+function ReleaseChange({ text }: { text: string }) {
+  const titled = text.match(/^\*\*([^*\n]+)\*\*\s+(.+)$/);
+  return titled ? (
+    <>
+      <strong>{titled[1]}</strong> {titled[2]}
+    </>
+  ) : (
+    <>{text}</>
   );
 }
 

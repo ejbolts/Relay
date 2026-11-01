@@ -71,4 +71,23 @@ describe('release popup', () => {
     expect(markup).toContain('&lt;script&gt;');
     expect(markup).not.toContain('<script>');
   });
+
+  it('renders a leading bold title while leaving HTML and other markdown as text', () => {
+    const markup = renderToStaticMarkup(
+      <ReleaseAnnouncement
+        release={{
+          ...metadata,
+          changes: [
+            '**Security:** Safer <img src=x> and [links](javascript:bad)',
+            'Older plain-text note',
+          ],
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(markup).toContain('<strong>Security:</strong> Safer &lt;img src=x&gt;');
+    expect(markup).toContain('[links](javascript:bad)');
+    expect(markup).toContain('<li>Older plain-text note</li>');
+    expect(markup).not.toContain('src="x"');
+  });
 });
