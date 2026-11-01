@@ -252,22 +252,48 @@ it('retries failed profile loading and does not open an editor after failed copy
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
-it('keeps failed publishing in split options and preserves the saved privacy state', async () => {
+it('explains how to complete an empty workout day before sharing and allows retry after editing', async () => {
+  const routine = structuredClone(original);
+  routine.shared = false;
+  routine.days.splice(1, 0, {
+    workout_type_id: 'pull',
+    workout_type: DEFAULT_WORKOUT_TYPES.find((type) => type.id === 'pull')!,
+    movements: [],
+  });
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
   await mount(true);
-  await click('New split');
-  await save();
-  await click('Close notification');
-  await click('Options for My split');
-  vi.mocked(api.routines.save).mockRejectedValueOnce(
-    new Error('Add exercises to every workout day before sharing.'),
-  );
+  await click('Options for Upper / Rest');
   await click('Show on my profile');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
-    'Add exercises to every workout day before sharing.',
+    'Add an exercise to each workout day in Edit split, then try again.',
   );
   expect(document.querySelector('dialog[open]')?.textContent).toContain('Split options');
   expect(host.querySelector('.routine-card-meta')?.textContent).toContain('Only you');
-  expect(api.routines.create).toHaveBeenCalledOnce();
+  expect(api.routines.save).not.toHaveBeenCalled();
+  await click('Close Split options');
+  await click('Edit split');
+  await input('[aria-label="Add exercise to day 2"]', 'row');
+  await save();
+  await click('Close notification');
+  await click('Options for Upper / Rest');
+  await click('Show on my profile');
+  expect(api.routines.save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ id: routine.id, shared: true }),
+  );
+  expect(host.querySelector('.routine-card-meta')?.textContent).toContain('On profile');
+  expect(document.querySelector('[role="alert"]')).toBeNull();
+});
+
+it('keeps failed publishing in split options and preserves the saved privacy state', async () => {
+  vi.mocked(api.routines.list).mockResolvedValue([{ ...structuredClone(original), shared: false }]);
+  await mount(true);
+  await click('Options for Upper / Rest');
+  vi.mocked(api.routines.save).mockRejectedValueOnce(new Error('Could not save the split.'));
+  await click('Show on my profile');
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('Could not save the split.');
+  expect(document.querySelector('dialog[open]')?.textContent).toContain('Split options');
+  expect(host.querySelector('.routine-card-meta')?.textContent).toContain('Only you');
+  expect(api.routines.save).toHaveBeenCalledOnce();
 });
 
 it('preserves an existing shared split when editing without a publishing control', async () => {
