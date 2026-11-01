@@ -112,7 +112,7 @@ export function ExerciseSessionSheet({
                   <tr key={set.id}>
                     <td>
                       {set.warmup || set.set_type === 'warmup' ? 'W' : ++workingSetNumber}
-                      {set.failed ? ' · Failed' : ''}
+                      {set.failed ? ' · Attempted' : ''}
                     </td>
                     <td>{set.weight_kg == null ? '—' : formatWeight(set.weight_kg, weightUnit)}</td>
                     <td>{set.reps ?? '—'}</td>

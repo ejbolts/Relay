@@ -938,7 +938,7 @@ function RoutineEditor({
                           <option value="normal">{si + 1}</option>
                           <option value="warmup">W</option>
                           <option value="drop">D</option>
-                          <option value="failure">F</option>
+                          <option value="failure">A</option>
                         </select>
                         {movement.exercise.kind === 'cardio' ? (
                           <>

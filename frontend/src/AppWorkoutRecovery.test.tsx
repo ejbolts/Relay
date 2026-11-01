@@ -488,7 +488,7 @@ describe('RPE and set type presentation', () => {
     for (const [label, kind] of [
       ['Warm-up', 'warmup'],
       ['Drop set', 'drop'],
-      ['Failure', 'failure'],
+      ['Attempted', 'failure'],
       ['Working set', 'normal'],
     ]) {
       await act(async () => row().querySelector<HTMLButtonElement>('.set-number-cell')!.click());
