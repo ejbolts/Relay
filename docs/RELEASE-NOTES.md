@@ -2,6 +2,18 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.1.1
+
+1 November 2026
+
+### Clear notifications in one go
+
+![The bell with 3 unread, its popup with a new release and two friend requests, and the bell with no badge after closing.](screenshots/releases/1.1.1-notifications-clear-on-close.png)
+
+**One close clears it** — The bell's badge clears when you close its popup.
+
+- **Notifications:** Closing the bell's popup clears its badge, including a new release and notices on later pages, without opening each one.
+
 ## 1.1.0
 
 1 November 2026

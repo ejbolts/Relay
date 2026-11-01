@@ -185,8 +185,8 @@ async function releaseInbox(userId: string, secondHeader = false) {
   await act(async () => root.render(<ReleaseInbox userId={userId} secondHeader={secondHeader} />));
 }
 
-it('keeps the release unread on opening, opens its notes with View, closes back to the page, and retains the read row across headers and remounts', async () => {
-  await releaseInbox('inbox-view-sample', true);
+it('shows the release as New while open and clears its badge on closing, across headers and remounts', async () => {
+  await releaseInbox('inbox-close-sample', true);
   expect(host.querySelectorAll('[aria-label="Notifications, 1 unread"]')).toHaveLength(2);
   await click('Notifications, 1 unread');
   const row = document.querySelector('.release-notification-row')!;
@@ -196,10 +196,26 @@ it('keeps the release unread on opening, opens its notes with View, closes back 
   expect(row.querySelector('.release-notification-new')?.textContent).toBe('New');
   expect(document.querySelector('.shared-card-empty')).toBeNull();
   expect(api.sharing.markNotificationsRead).not.toHaveBeenCalled();
-  await click('Close Notifications');
-  await click('Notifications, 1 unread');
-  expect(document.querySelector('.release-notification-new')).not.toBeNull();
 
+  await click('Close Notifications');
+  expect(document.querySelector('.follow-notifications')).toBeNull();
+  expect(host.querySelectorAll('[aria-label="Notifications"]')).toHaveLength(2);
+  expect(host.querySelector('.profile-request-badge')).toBeNull();
+  // A release has no server event to acknowledge.
+  expect(api.sharing.markNotificationsRead).not.toHaveBeenCalled();
+  await click('Notifications');
+  expect(document.querySelector('.release-notification-row')).not.toBeNull();
+  expect(document.querySelector('.release-notification-new')).toBeNull();
+
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await releaseInbox('inbox-close-sample');
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+});
+
+it('opens the release notes with View, clears the badge and returns focus to the bell', async () => {
+  await releaseInbox('inbox-view-sample', true);
+  await click('Notifications, 1 unread');
   await click(`View Relay ${metadata.version} release notes`);
   expect(document.querySelector('.follow-notifications')).toBeNull();
   expect(document.querySelectorAll('dialog')).toHaveLength(1);
@@ -210,14 +226,35 @@ it('keeps the release unread on opening, opens its notes with View, closes back 
   expect(document.querySelector('.follow-notifications')).toBeNull();
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Notifications');
   await click('Notifications');
-  expect(document.querySelector('.release-notification-row')).not.toBeNull();
   expect(document.querySelector('.release-notification-new')).toBeNull();
-  await act(async () => root.unmount());
-  root = createRoot(host);
-  await releaseInbox('inbox-view-sample');
+});
+
+it('reads unread events on pages that were never opened when the inbox closes', async () => {
+  snapshot = {
+    requests: Array.from({ length: 15 }, (_, index) => ({ ...person, id: `request-${index}` })),
+    accepted: [],
+  };
+  await releaseInbox('inbox-close-pages-sample');
+  await click('Notifications, 16 unread');
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 2 unread');
+  await click('Close Notifications');
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toEqual([
+    { kind: 'request', id: 'request-14', since: person.since },
+  ]);
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+  // Requests stay actionable after being read.
   await click('Notifications');
-  expect(document.querySelector('.release-notification-row')).not.toBeNull();
-  expect(document.querySelector('.release-notification-new')).toBeNull();
+  expect(document.querySelectorAll('.follow-notification-list > li')).toHaveLength(15);
+});
+
+it('keeps the badge when reading on close fails, so the next open tries again', async () => {
+  snapshot = { requests: [person], accepted: [] };
+  vi.mocked(api.sharing.markNotificationsRead).mockRejectedValue(new Error('Offline'));
+  await render();
+  await click('Notifications, 1 unread');
+  await click('Close Notifications');
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
 });
 
 it('counts the release in the 15-row page but only acknowledges displayed social events', async () => {

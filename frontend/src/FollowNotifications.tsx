@@ -10,7 +10,7 @@ import {
   unreadNotificationReferences,
 } from './notificationReadState';
 import { ProfileAvatar } from './ProfileAvatar';
-import { onNotificationsChanged } from './notificationEvents';
+import { notifyNotificationsChanged, onNotificationsChanged } from './notificationEvents';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { formatReleaseDate, type Release } from './releaseMetadata';
@@ -179,6 +179,24 @@ export function FollowNotifications({ active }: { active: boolean }) {
     }
   }
 
+  /** Leaving the inbox clears its badge: the release notice and every remaining unread event. */
+  function closeInbox() {
+    setOpen(false);
+    if (announcement?.noticeUnread) announcement.readNotice();
+    const remaining = items ? unreadNotificationReferences(items) : [];
+    if (!remaining.length) return;
+    api.sharing
+      .markNotificationsRead(remaining)
+      .then(() => {
+        setItems((current) => current && markNotificationSnapshotRead(current, remaining));
+        // Other headers in this tab refresh their badges too.
+        notifyNotificationsChanged();
+      })
+      .catch(() => {
+        // The badge stays, and the next open reads these events again.
+      });
+  }
+
   const count =
     (items ? unreadNotificationReferences(items).length : 0) +
     Number(announcement?.noticeUnread ?? false);
@@ -209,11 +227,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
         )}
       </button>
       {open && (
-        <PopupDialog
-          title="Notifications"
-          className="follow-notifications"
-          onClose={() => setOpen(false)}
-        >
+        <PopupDialog title="Notifications" className="follow-notifications" onClose={closeInbox}>
           {error && (
             <p className="inline-error" role="alert">
               {error}{' '}
@@ -263,8 +277,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                     className="profile-secondary release-notification-view"
                     aria-label={`View Relay ${row.item.version} release notes`}
                     onClick={() => {
-                      setOpen(false);
-                      announcement?.readNotice();
+                      closeInbox();
                       setReleaseOpen(true);
                     }}
                   >
