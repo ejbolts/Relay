@@ -16,7 +16,7 @@ _Relay was called Gym Logger before version 1.0._
 
 **Friends, live** — Live activity, workouts and timers.
 
-![The Your splits page focused on the active plan, with the page title and weekly preview visible.](screenshots/releases/1.1.0-splits-page-focus.png)
+![Your splits showing the active Push / Pull / Legs plan, its upcoming week and another saved split.](screenshots/releases/1.1.0-splits-supplied-active.png)
 
 **Your saved splits** — Saved plans and your upcoming week.
 

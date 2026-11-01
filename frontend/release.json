@@ -54,8 +54,8 @@
       "title": "Your saved splits",
       "description": "Saved plans and your upcoming week.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3ccbe732cc5f8e75237782c439be72b97ed608a1/docs/screenshots/releases/1.1.0-splits-page-focus.png",
-        "alt": "The Your splits page focused on the active plan, with the page title and weekly preview visible."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/057c7bbfb9eabbbf7a25e2b38cad0e9a60db55f7/docs/screenshots/releases/1.1.0-splits-supplied-active.png",
+        "alt": "Your splits showing the active Push / Pull / Legs plan, its upcoming week and another saved split."
       }
     }
   ]
