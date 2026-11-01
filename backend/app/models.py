@@ -209,7 +209,7 @@ class Friendship(Base):
         return self.member_b_id if user_id == self.member_a_id else self.member_a_id
 
 
-WORKOUT_REACTIONS = ("like", "love", "strong", "fire", "clap", "trophy")
+WORKOUT_REACTIONS = ("like", "love", "strong", "fire", "clap", "trophy", "run")
 
 
 class ProfileBlock(Base):
@@ -235,7 +235,7 @@ class WorkoutReaction(Base):
     __tablename__ = "workout_reactions"
     __table_args__ = (
         CheckConstraint(
-            "reaction IN ('like', 'love', 'strong', 'fire', 'clap', 'trophy')",
+            "reaction IN ('like', 'love', 'strong', 'fire', 'clap', 'trophy', 'run')",
             name="workout_reaction_known",
         ),
     )
@@ -281,7 +281,7 @@ class CommentReaction(Base):
     __tablename__ = "comment_reactions"
     __table_args__ = (
         CheckConstraint(
-            "reaction IN ('like', 'love', 'strong', 'fire', 'clap', 'trophy')",
+            "reaction IN ('like', 'love', 'strong', 'fire', 'clap', 'trophy', 'run')",
             name="comment_reaction_known",
         ),
     )

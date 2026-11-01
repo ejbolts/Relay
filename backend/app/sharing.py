@@ -243,7 +243,7 @@ class ConnectionRead(BaseModel):
     since: datetime
 
 
-Reaction = Literal["like", "love", "strong", "fire", "clap", "trophy"]
+Reaction = Literal["like", "love", "strong", "fire", "clap", "trophy", "run"]
 
 
 class ReactionChoice(BaseModel):

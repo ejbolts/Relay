@@ -8,6 +8,10 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Your training split and friends
 
+![Home's reaction picker with Run selected on a sample friend's workout](screenshots/releases/1.1.0-run-reaction.png)
+
+_The Run reaction is available beside the existing choices and appears in the saved reaction count. Isolated sample data._
+
 ![A sample workout: completing a set raises the rest bar from the bottom edge, pausing turns it gold and marks the header Paused, the X ends the rest, and the button beside the live time pauses and resumes the workout](screenshots/releases/1.1.0-rest-timer-pill.gif)
 
 _Completing a set raises the rest bar, which pauses in gold and ends with its X. With no rest running, the button beside the live time pauses the workout. Captured directly as a looping GIF with isolated sample data._
@@ -219,6 +223,8 @@ _The exercise card ends at Add set. Set notes and workout notes remain available
 ![Circular Start button below the Cardio, Up next and Empty workout choices](screenshots/releases/1.1.0-circular-start.png)
 
 _The circular Start button matches its workout choices. Isolated sample data._
+
+- React to friends’ workouts and comments with the new 🏃 Run reaction. Home’s **+N more** loads three additional friends inline and keeps the expanded list during refreshes.
 
 - **Pause from the rest timer:** The rest timer is one slim bar that rises from the bottom of a workout: pause or play, the countdown, end, back or forward 30 seconds and hide. Pausing freezes the rest and the live workout time together, and paused time is left out of the saved duration. Pause or resume at any time with the button beside the live time. Hide tucks the timer into a small tab on the bottom edge that keeps the countdown. Completing a set resumes a paused workout, and Home and the Start button show when it is paused.
 

@@ -91,7 +91,7 @@ it('shows inline replies, opens mention profiles, posts replies, and toggles rea
   const add = vi.spyOn(api.sharing, 'addComment').mockResolvedValue(replyComment);
   const react = vi.spyOn(api.sharing, 'reactToComment').mockResolvedValue({
     ...rootComment,
-    reactions: { counts: [{ reaction: 'fire', count: 1 }], yours: 'fire' },
+    reactions: { counts: [{ reaction: 'run', count: 1 }], yours: 'run' },
   });
   const open = vi.fn();
   const count = vi.fn();
@@ -107,10 +107,10 @@ it('shows inline replies, opens mention profiles, posts replies, and toggles rea
   await click('Send');
   expect(add).toHaveBeenCalledWith('w1', 'What was your warm-up?', 'c1', null);
   await click('React');
-  await click('Fire');
-  expect(react).toHaveBeenCalledWith('c1', 'fire');
-  expect(host.querySelector('[aria-label="fire, 1"]')?.getAttribute('aria-pressed')).toBe('true');
-  await click('fire, 1');
+  await click('Run');
+  expect(react).toHaveBeenCalledWith('c1', 'run');
+  expect(host.querySelector('[aria-label="run, 1"]')?.getAttribute('aria-pressed')).toBe('true');
+  await click('run, 1');
   expect(react).toHaveBeenLastCalledWith('c1', null);
 });
 

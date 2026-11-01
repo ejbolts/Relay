@@ -9,6 +9,7 @@ export const REACTIONS: ReadonlyArray<{ kind: WorkoutReactionKind; emoji: string
     { kind: 'strong', emoji: '💪', label: 'Strong' },
     { kind: 'fire', emoji: '🔥', label: 'Fire' },
     { kind: 'clap', emoji: '👏', label: 'Applause' },
+    { kind: 'run', emoji: '🏃', label: 'Run' },
     { kind: 'trophy', emoji: '🏆', label: 'Trophy' },
   ];
 

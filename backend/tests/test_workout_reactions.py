@@ -370,3 +370,22 @@ def test_opening_notifications_reads_exact_events_and_keeps_requests_actionable(
         json={"items": [{"kind": "accepted", "id": accepted["id"], "since": accepted["since"]}]},
     )
     assert client.get("/api/sharing/notifications").json()["accepted"][0]["is_read"] is True
+
+
+def test_running_reaction_reaches_feed_people_and_notifications(client, other_client):
+    share(client, "public")
+    share(other_client, "public")
+    befriend(client, other_client)
+    workout = log_workout(client, "Tempo run", 0)
+    url = f"/api/sharing/workouts/{workout['id']}/reaction"
+    response = other_client.put(url, json={"reaction": "run"})
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "counts": [{"reaction": "run", "count": 1}],
+        "yours": "run",
+        "comment_count": 0,
+    }
+    assert other_client.get("/api/sharing/feed").json()["items"][0]["reactions"]["yours"] == "run"
+    assert client.get(url + "s").json()["items"][0]["reaction"] == "run"
+    assert client.get("/api/sharing/notifications").json()["reactions"][0]["reaction"] == "run"
+    assert other_client.delete(url).json()["counts"] == []
