@@ -155,8 +155,8 @@ html[data-reduce-motion] .release-confetti {
 
 .release-showcase {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
 
@@ -167,6 +167,10 @@ html[data-reduce-motion] .release-confetti {
   border: 1px solid var(--p-line);
   border-radius: 1rem;
   background: var(--p-surface-2);
+}
+
+.release-feature:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .release-announcement-body .release-feature > a {

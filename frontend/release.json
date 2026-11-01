@@ -30,32 +30,32 @@
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-offline-badge-crop.png",
-    "alt": "The Offline badge shown when Relay uses saved data."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/3ccbe732cc5f8e75237782c439be72b97ed608a1/docs/screenshots/releases/1.1.0-offline-home-focus.png",
+    "alt": "Home focused on the Offline badge, with the sample profile and avatar still visible."
   },
   "highlights": [
     {
       "title": "Offline workouts",
       "description": "Set up online; one workout awaits sync.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-offline-badge-crop.png",
-        "alt": "The Offline badge shown when Relay uses saved data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3ccbe732cc5f8e75237782c439be72b97ed608a1/docs/screenshots/releases/1.1.0-offline-home-focus.png",
+        "alt": "Home focused on the Offline badge, with the sample profile and avatar still visible."
       }
     },
     {
       "title": "Friends, live",
       "description": "Live activity, workouts and timers.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-riley-live-card.png",
-        "alt": "Riley Sample training live, with workout name and elapsed time."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3ccbe732cc5f8e75237782c439be72b97ed608a1/docs/screenshots/releases/1.1.0-riley-social-focus.png",
+        "alt": "The Social page focused on Riley Sample training live, with the page heading and Friends tabs visible."
       }
     },
     {
       "title": "Your saved splits",
       "description": "Saved plans and your upcoming week.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-active-split-crop.png",
-        "alt": "The active saved split and its next seven days."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3ccbe732cc5f8e75237782c439be72b97ed608a1/docs/screenshots/releases/1.1.0-splits-page-focus.png",
+        "alt": "The Your splits page focused on the active plan, with the page title and weekly preview visible."
       }
     }
   ]

@@ -8,15 +8,15 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Offline workouts, live friends and saved splits
 
-![The Offline badge shown when Relay uses saved data.](screenshots/releases/1.1.0-offline-badge-crop.png)
+![Home focused on the Offline badge, with the sample profile and avatar still visible.](screenshots/releases/1.1.0-offline-home-focus.png)
 
 **Offline workouts** — Set up online; one workout awaits sync.
 
-![Riley Sample training live, with workout name and elapsed time.](screenshots/releases/1.1.0-riley-live-card.png)
+![The Social page focused on Riley Sample training live, with the page heading and Friends tabs visible.](screenshots/releases/1.1.0-riley-social-focus.png)
 
 **Friends, live** — Live activity, workouts and timers.
 
-![The active saved split and its next seven days.](screenshots/releases/1.1.0-active-split-crop.png)
+![The Your splits page focused on the active plan, with the page title and weekly preview visible.](screenshots/releases/1.1.0-splits-page-focus.png)
 
 **Your saved splits** — Saved plans and your upcoming week.
 
