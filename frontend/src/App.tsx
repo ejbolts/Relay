@@ -10331,7 +10331,7 @@ function HistorySetFlow({
                 : item.set_type === 'drop'
                   ? 'Drop'
                   : item.failed
-                    ? 'Failed'
+                    ? 'Attempted'
                     : ''}
             </em>
             {personalRecords.some((record) => record.set_id === item.id) && (

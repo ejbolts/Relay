@@ -11,7 +11,7 @@ export const SET_KINDS: Array<{ kind: SetKind; label: string; letter: string | n
   { kind: 'normal', label: 'Working set', letter: null },
   { kind: 'warmup', label: 'Warm-up', letter: 'W' },
   { kind: 'drop', label: 'Drop set', letter: 'D' },
-  { kind: 'failure', label: 'Failure', letter: 'F' },
+  { kind: 'failure', label: 'Attempted', letter: 'A' },
 ];
 
 export function setKindOf(item: SetKindFields): SetKind {
@@ -21,7 +21,7 @@ export function setKindOf(item: SetKindFields): SetKind {
   return 'normal';
 }
 
-/** The fields to store when the lifter picks a set type. Failure uses the existing failed flag. */
+/** The fields to store when the lifter picks a set type. Attempted uses the existing failed flag. */
 export function setKindUpdate(kind: SetKind): Required<SetKindFields> {
   return {
     set_type: kind === 'warmup' || kind === 'drop' ? kind : 'normal',
@@ -30,7 +30,7 @@ export function setKindUpdate(kind: SetKind): Required<SetKindFields> {
   };
 }
 
-/** Working sets are numbered 1…n; warm-ups show W, drop sets D and sets to failure F. */
+/** Working sets are numbered 1…n; warm-ups show W, drop sets D and attempted sets A. */
 export function setNumberLabels(sets: SetKindFields[]): string[] {
   let working = 0;
   return sets.map((item) => {

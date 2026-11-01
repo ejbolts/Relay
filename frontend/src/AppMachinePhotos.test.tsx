@@ -638,7 +638,7 @@ describe('filtering History by machine', () => {
       'Warm-up',
       '',
       'Drop',
-      'Failed',
+      'Attempted',
     ]);
     expect(pills.every((item) => item.querySelector('span')?.textContent === '140 kg × 10')).toBe(
       true,
