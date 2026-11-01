@@ -74,5 +74,3 @@
 - RPE numbers use an effort scale: green at 5 and 6, lime at 7, gold at 8, orange at 9 and red at 10. Half points use colours between those values. The selected value and folded summary use the same colour; blank RPE stays neutral. Light mode uses darker text colours.
 - The plate calculator button beside each barbell exercise is now grey, matching the finish button next to it.
 - Strength workout rows follow their set type: orange warm-ups, green working sets, purple drop sets and red failure sets. Editing, completing and suggesting a set keep its type tint; RPE changes only affect the effort number.
-
-- **Live admin activity:** The admin console updates user activity live: Active now, last-active times and workouts in progress. Reconnecting refreshes the user list without reloading editable server settings. This administrator-only feed is independent of friend-sharing choices.

@@ -8,15 +8,15 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Offline workouts, live friends and saved splits
 
-![Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats. Isolated sample data.](screenshots/releases/1.1.0-offline-mode.png)
+![The Offline badge shown when Relay uses saved data.](screenshots/releases/1.1.0-offline-badge-crop.png)
 
 **Offline workouts** — Set up online; one workout awaits sync.
 
-![Sample friends showing live workouts and online activity.](screenshots/releases/1.1.0-friends-live-activity.png)
+![Riley Sample training live, with workout name and elapsed time.](screenshots/releases/1.1.0-riley-live-card.png)
 
 **Friends, live** — Live activity, workouts and timers.
 
-![Saved training splits, the active weekly preview and available templates.](screenshots/releases/1.1.0-your-splits.png)
+![The active saved split and its next seven days.](screenshots/releases/1.1.0-active-split-crop.png)
 
 **Your saved splits** — Saved plans and your upcoming week.
 
@@ -42,7 +42,6 @@ _Relay was called Gym Logger before version 1.0._
 - **Account security:** Sign out across devices; revoked sessions lose access to live updates.
 - **Workout polish:** Clearer mixed-session labels, safer type validation and simpler notes/photo controls.
 - **Navigation:** Cleaner Home header, circular Start button and Settings opening at the overview.
-- **Admin:** User activity and workouts update live in the admin console.
 - **Security:** Safer push alerts, image processing, offline caches and CSV exports.
 
 [Full change details on GitHub](https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-DETAILS-1.1.md#110).

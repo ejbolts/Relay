@@ -26,37 +26,36 @@
     "**Account security:** Sign out across devices; revoked sessions lose access to live updates.",
     "**Workout polish:** Clearer mixed-session labels, safer type validation and simpler notes/photo controls.",
     "**Navigation:** Cleaner Home header, circular Start button and Settings opening at the overview.",
-    "**Admin:** User activity and workouts update live in the admin console.",
     "**Security:** Safer push alerts, image processing, offline caches and CSV exports."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/b5508096d20c7142eb37d740749f94dcc76e5853/docs/screenshots/releases/1.1.0-offline-mode.png",
-    "alt": "Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats. Isolated sample data."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-offline-badge-crop.png",
+    "alt": "The Offline badge shown when Relay uses saved data."
   },
   "highlights": [
     {
       "title": "Offline workouts",
       "description": "Set up online; one workout awaits sync.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b5508096d20c7142eb37d740749f94dcc76e5853/docs/screenshots/releases/1.1.0-offline-mode.png",
-        "alt": "Home on a phone with the server unreachable, showing an Offline badge under the title, the sample profile, Up next workout and stats. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-offline-badge-crop.png",
+        "alt": "The Offline badge shown when Relay uses saved data."
       }
     },
     {
       "title": "Friends, live",
       "description": "Live activity, workouts and timers.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b0d204a26a601f47d3cd0e76bd9ec8bac359df82/docs/screenshots/releases/1.1.0-friends-live-activity.png",
-        "alt": "Sample friends showing live workouts and online activity."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-riley-live-card.png",
+        "alt": "Riley Sample training live, with workout name and elapsed time."
       }
     },
     {
       "title": "Your saved splits",
       "description": "Saved plans and your upcoming week.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/0f25587caae30c94acaae9e659abf5b694cd6ffd/docs/screenshots/releases/1.1.0-your-splits.png",
-        "alt": "Saved training splits, the active weekly preview and available templates."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/7056d68365ded484658c124119987217766db4f5/docs/screenshots/releases/1.1.0-active-split-crop.png",
+        "alt": "The active saved split and its next seven days."
       }
     }
   ]
