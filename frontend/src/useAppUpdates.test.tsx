@@ -27,8 +27,8 @@ let updates: ReturnType<typeof useAppUpdates>;
 let receiveRelease: (release: Release) => void;
 let workerAvailable: boolean;
 let notifyWorker: (() => void) | undefined;
-let stopWatching: ReturnType<typeof vi.fn>;
-let stopWorker: ReturnType<typeof vi.fn>;
+let stopWatching = vi.fn<() => void>();
+let stopWorker = vi.fn<() => void>();
 const nextRelease: Release = { ...metadata, version: '99.0.0', title: 'Next sample release' };
 
 function Harness() {
@@ -45,8 +45,8 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   workerAvailable = false;
   notifyWorker = undefined;
-  stopWatching = vi.fn();
-  stopWorker = vi.fn();
+  stopWatching = vi.fn<() => void>();
+  stopWorker = vi.fn<() => void>();
   vi.mocked(isAppUpdateAvailable).mockImplementation(() => workerAvailable);
   vi.mocked(subscribeAppUpdates).mockImplementation((listener) => {
     notifyWorker = listener;

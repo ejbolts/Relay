@@ -22,7 +22,7 @@ class Socket {
 
 let root: Root;
 let container: HTMLDivElement;
-let expired: ReturnType<typeof vi.fn>;
+let expired = vi.fn<() => void>();
 let visible = 'visible';
 
 function Harness({ userId = 'user-1' }: { userId?: string | null }) {
@@ -42,7 +42,7 @@ beforeEach(async () => {
   vi.spyOn(api.auth, 'me').mockResolvedValue({ id: 'user-1' } as Awaited<
     ReturnType<typeof api.auth.me>
   >);
-  expired = vi.fn();
+  expired = vi.fn<() => void>();
   window.addEventListener(AUTH_EXPIRED_EVENT, expired);
   container = document.createElement('div');
   document.body.append(container);

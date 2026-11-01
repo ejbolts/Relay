@@ -2,8 +2,8 @@
  * Account data kept on this device so Relay opens and keeps working without a connection.
  *
  * Each value is gzip-compressed and then AES-GCM encrypted with a non-extractable key held in the
- * same IndexedDB database. The key cannot be read out of the browser, so a copy of the storage
- * files alone does not reveal workouts; the device lock still protects the unlocked browser.
+ * same IndexedDB database. This does not protect an unlocked browser or against same-origin
+ * script. Unsynced workout drafts use separate localStorage recovery records.
  * Every record is bound to the account that saved it, and clearing the store (sign-out or an
  * account change) also discards the key.
  */
@@ -19,6 +19,7 @@ export interface OfflineBackend {
   put(key: string, value: unknown): Promise<void>;
   delete(keys: string[]): Promise<void>;
   clear(): Promise<void>;
+  keepDeviceKey?(created: CryptoKey): Promise<unknown>;
 }
 
 interface StoredRecord {
@@ -26,7 +27,7 @@ interface StoredRecord {
   owner: string;
   savedAt: number;
   compressed: boolean;
-  /** Present when the bytes are encrypted; absent only where Web Crypto is unavailable. */
+  /** Legacy records without encryption metadata are refused on read. */
   iv?: Uint8Array;
   bytes: ArrayBuffer;
 }
@@ -74,6 +75,28 @@ async function transact<T>(
 }
 
 export const indexedDbBackend: OfflineBackend = {
+  keepDeviceKey: async (created) => {
+    const database = await openDatabase();
+    if (!database) return null;
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(DEVICE_KEY);
+      let kept: unknown;
+      request.onsuccess = () => {
+        kept = isCryptoKey(request.result) ? request.result : created;
+        if (kept === created) store.put(created, DEVICE_KEY);
+      };
+      transaction.oncomplete = () => {
+        database.close();
+        resolve(kept);
+      };
+      transaction.onerror = transaction.onabort = () => {
+        database.close();
+        reject(transaction.error);
+      };
+    });
+  },
   get: (key) => transact('readonly', (store) => store.get(key)),
   put: async (key, value) => {
     await transact('readwrite', (store) => store.put(value, key));
@@ -90,10 +113,34 @@ export const indexedDbBackend: OfflineBackend = {
 
 let backend: OfflineBackend = indexedDbBackend;
 let deviceKey: Promise<CryptoKey | null> | null = null;
+let generation = 0;
+let clearing: Promise<void> = Promise.resolve();
+export const offlineGeneration = () => generation;
+
+// Another tab can sign out and sign back into the same account while a request is pending.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    const ownerOf = (value: string | null) => {
+      try {
+        return value ? (JSON.parse(value) as { id?: string }).id : null;
+      } catch {
+        return null;
+      }
+    };
+    if (
+      event.key === null ||
+      (event.key === 'gym-logger-last-user' && ownerOf(event.oldValue) !== ownerOf(event.newValue))
+    ) {
+      ++generation;
+      deviceKey = null;
+    }
+  });
+}
 
 /** Tests swap in an in-memory backend; the app always uses IndexedDB. */
 export function replaceOfflineBackend(next: OfflineBackend): void {
   backend = next;
+  ++generation;
   deviceKey = null;
 }
 
@@ -106,6 +153,7 @@ function isCryptoKey(value: unknown): value is CryptoKey {
 }
 
 async function loadDeviceKey(): Promise<CryptoKey | null> {
+  const started = generation;
   const subtle = subtleCrypto();
   if (!subtle) return null;
   const stored = await backend.get(DEVICE_KEY);
@@ -114,6 +162,11 @@ async function loadDeviceKey(): Promise<CryptoKey | null> {
     'encrypt',
     'decrypt',
   ]);
+  if (started !== generation) return null;
+  if (backend.keepDeviceKey) {
+    const kept = await backend.keepDeviceKey(created);
+    return isCryptoKey(kept) ? kept : null;
+  }
   await backend.put(DEVICE_KEY, created);
   // Another tab may have stored its key first; always use the one that was kept.
   const kept = await backend.get(DEVICE_KEY);
@@ -148,14 +201,24 @@ function associatedData(owner: string, key: string): Uint8Array {
   return new TextEncoder().encode(`${owner}\n${key}`);
 }
 
-export async function writeOffline(key: string, value: unknown, owner: string): Promise<void> {
+export async function writeOffline(
+  key: string,
+  value: unknown,
+  owner: string,
+  isCurrent = () => true,
+): Promise<void> {
+  const started = generation;
   try {
+    await clearing;
+    if (started !== generation || !isCurrent()) return;
     const json = new TextEncoder().encode(JSON.stringify(value));
     const compressed = canCompress();
     const plain = compressed
       ? await pipeBytes(json, new CompressionStream('gzip'))
       : new Uint8Array(json).buffer;
     const cryptoKey = await currentDeviceKey();
+    // Saved server copies are refetchable. Never silently persist plaintext if encryption fails.
+    if (!cryptoKey || started !== generation || !isCurrent()) return;
     const record: StoredRecord = {
       format: RECORD_FORMAT,
       owner,
@@ -171,7 +234,7 @@ export async function writeOffline(key: string, value: unknown, owner: string): 
         new Uint8Array(plain),
       );
     }
-    await backend.put(key, record);
+    if (started === generation && isCurrent()) await backend.put(key, record);
   } catch {
     // IndexedDB can be unavailable or full. The server remains the source of truth.
   }
@@ -195,9 +258,11 @@ function isStoredRecord(value: unknown): value is StoredRecord {
 
 /** The saved copy for `owner`, or null when missing, from another account, or unreadable. */
 export async function readOffline<T>(key: string, owner: string): Promise<SavedCopy<T> | null> {
+  const started = generation;
   try {
+    await clearing;
     const record = await backend.get(key);
-    if (!isStoredRecord(record) || record.owner !== owner) return null;
+    if (!isStoredRecord(record) || !record.iv || record.owner !== owner) return null;
     let plain = record.bytes;
     if (record.iv) {
       const cryptoKey = await currentDeviceKey();
@@ -212,6 +277,7 @@ export async function readOffline<T>(key: string, owner: string): Promise<SavedC
       if (!canCompress()) return null;
       plain = await pipeBytes(new Uint8Array(plain), new DecompressionStream('gzip'));
     }
+    if (started !== generation) return null;
     return { value: JSON.parse(new TextDecoder().decode(plain)) as T, savedAt: record.savedAt };
   } catch {
     return null;
@@ -228,10 +294,8 @@ export async function deleteOffline(keys: string[]): Promise<void> {
 
 /** Removes every saved record and the device key, so earlier ciphertext can never be read. */
 export async function clearOffline(): Promise<void> {
+  ++generation;
   deviceKey = null;
-  try {
-    await backend.clear();
-  } catch {
-    // Nothing to clear when IndexedDB is unavailable.
-  }
+  clearing = clearing.then(() => backend.clear()).catch(() => undefined);
+  await clearing;
 }

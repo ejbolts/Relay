@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, SAVED_COPY_AFTER_MS } from './api';
 import { isUsingSavedData, reportServerReached } from './connectionStatus';
 import { LAST_USER_KEY } from './deviceAccount';
-import { replaceOfflineBackend, type OfflineBackend } from './offlineStore';
+import { clearOffline, replaceOfflineBackend, type OfflineBackend } from './offlineStore';
 import { readWorkoutCache, writeWorkoutCache } from './workoutCache';
 import type { Exercise, TrackedWorkout } from './types';
 
@@ -137,6 +137,79 @@ describe('account reads without a connection', () => {
 
 describe('workout history without a connection', () => {
   const recent = { id: 'recent', workout_date: '2026-10-20' } as TrackedWorkout;
+
+  it('cancels a delayed export when the account changes', async () => {
+    let resolve!: (value: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((r) => {
+          resolve = r;
+        }),
+    );
+    const pending = api.exportWorkouts();
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'account_changed' });
+    signIn('different-account');
+    resolve(new Response('Sample account A CSV'));
+    await rejected;
+  });
+
+  it('does not expire the new sign-in when an old request returns 401', async () => {
+    const expired = vi.fn();
+    window.addEventListener('gym-logger-auth-expired', expired);
+    let resolve!: (value: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((r) => {
+          resolve = r;
+        }),
+    );
+    const pending = api.listExercises();
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'account_changed' });
+    await clearOffline();
+    signIn('different-account');
+    resolve(json({ error: { code: 'not_authenticated' } }, 401));
+    await rejected;
+    expect(expired).not.toHaveBeenCalled();
+    window.removeEventListener('gym-logger-auth-expired', expired);
+  });
+
+  it.each(['different-account', 'sample-account'])(
+    'rejects late history after cleanup and sign-in: %s',
+    async (nextAccount) => {
+      let resolveSnapshot!: (value: Response) => void;
+      fetchMock.mockResolvedValueOnce(json({ revision: 'old-account' })).mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveSnapshot = resolve;
+          }),
+      );
+      const pending = api.listWorkouts('2026-08-01');
+      const rejected = expect(pending).rejects.toMatchObject({ code: 'account_changed' });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      await clearOffline();
+      signIn(nextAccount);
+      resolveSnapshot(json({ revision: 'old-account', workouts: [recent] }));
+      await rejected;
+      expect(await readWorkoutCache()).toBeNull();
+    },
+  );
+
+  it('rejects a late account-specific read after an account switch', async () => {
+    let resolve!: (value: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((r) => {
+          resolve = r;
+        }),
+    );
+    const pending = api.listExercises();
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'account_changed' });
+    signIn('different-account');
+    resolve(json([bench]));
+    await rejected;
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(api.listExercises()).rejects.toThrow('Failed to fetch');
+  });
 
   it('uses the saved snapshot when the revision check fails, if it reaches back far enough', async () => {
     await writeWorkoutCache({ revision: 'one', since: '2026-08-01', workouts: [recent] });

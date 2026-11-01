@@ -1,4 +1,4 @@
-import { readLastUser } from './deviceAccount';
+import { captureAccountCacheScope, type AccountCacheScope } from './accountCacheScope';
 import { clearOffline, deleteOffline, readOffline, writeOffline } from './offlineStore';
 import type { DashboardData, TrackedWorkout } from './types';
 
@@ -17,19 +17,25 @@ export interface CachedWorkoutSnapshot {
 let legacyRemoved = false;
 
 async function readAccountValue<T>(key: string): Promise<T | null> {
-  const owner = readLastUser()?.id;
+  const scope = captureAccountCacheScope();
+  const owner = scope.owner;
   if (!owner) return null;
-  return (await readOffline<T>(key, owner))?.value ?? null;
+  const saved = await readOffline<T>(key, owner);
+  return scope.isCurrent() ? (saved?.value ?? null) : null;
 }
 
-async function writeAccountValue(key: string, value: unknown): Promise<void> {
-  const owner = readLastUser()?.id;
-  if (!owner) return;
+async function writeAccountValue(
+  key: string,
+  value: unknown,
+  scope: AccountCacheScope,
+): Promise<void> {
+  const owner = scope.owner;
+  if (!owner || !scope.isCurrent()) return;
   if (!legacyRemoved) {
     legacyRemoved = true;
     await deleteOffline(LEGACY_CACHE_KEYS);
   }
-  await writeOffline(key, value, owner);
+  await writeOffline(key, value, owner, scope.isCurrent);
 }
 
 function isWorkoutSnapshot(value: unknown): value is CachedWorkoutSnapshot {
@@ -47,16 +53,22 @@ export async function readWorkoutCache(): Promise<CachedWorkoutSnapshot | null> 
   return isWorkoutSnapshot(cached) ? cached : null;
 }
 
-export async function writeWorkoutCache(snapshot: CachedWorkoutSnapshot): Promise<void> {
-  return writeAccountValue(WORKOUT_CACHE_KEY, snapshot);
+export async function writeWorkoutCache(
+  snapshot: CachedWorkoutSnapshot,
+  scope = captureAccountCacheScope(),
+): Promise<void> {
+  return writeAccountValue(WORKOUT_CACHE_KEY, snapshot, scope);
 }
 
 export async function readDashboardCache(): Promise<DashboardData | null> {
   return readAccountValue<DashboardData>(DASHBOARD_CACHE_KEY);
 }
 
-export async function writeDashboardCache(dashboard: DashboardData): Promise<void> {
-  return writeAccountValue(DASHBOARD_CACHE_KEY, dashboard);
+export async function writeDashboardCache(
+  dashboard: DashboardData,
+  scope = captureAccountCacheScope(),
+): Promise<void> {
+  return writeAccountValue(DASHBOARD_CACHE_KEY, dashboard, scope);
 }
 
 /** Removes every saved record and its key. Used on sign-out and when the account changes. */

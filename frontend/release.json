@@ -59,7 +59,8 @@
     "Your profile and shared profiles show five cardio sessions per page, newest first. Use the previous and next arrows or the page picker to browse older sessions, including sessions beyond the former latest-20 limit.",
     "The Cardio header shows the visible range and total. Your selected page stays in place during profile updates, and a failed page request can be retried without losing the current page.",
     "Swipe through saved equipment photos while logging. Deleting a photo explains that it also removes the photo from saved workouts, and keeps the recorded sets.",
-    "The admin console updates user activity live: Active now, last-active times and workouts in progress. Reconnecting refreshes the user list without reloading editable server settings. This administrator-only feed is independent of friend-sharing choices."
+    "The admin console updates user activity live: Active now, last-active times and workouts in progress. Reconnecting refreshes the user list without reloading editable server settings. This administrator-only feed is independent of friend-sharing choices.",
+    "Security improvements restrict browser alert destinations, update image and encryption libraries, keep delayed offline-cache responses tied to their original account, and make CSV exports safer to open in spreadsheets."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
   "image": {

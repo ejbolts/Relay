@@ -9,6 +9,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .csv_text import TEXT_ENCODING, TEXT_ENCODING_HEADER, decode_text, encode_text
 from .models import BodyMeasurement
 from .tracker_csv import DELIMITERS, CsvImportError, format_number
 
@@ -104,7 +105,7 @@ def _parse_body_measurement_rows(raw: bytes) -> list[ParsedBodyMeasurement]:
         body_fat_pct = parse_optional_number(row.get("Body Fat (%)"), "Body Fat (%)", row_number)
         if body_fat_pct is not None and not 1 <= body_fat_pct <= 70:
             raise CsvImportError(f"Row {row_number}: Body Fat (%) must be between 1 and 70.")
-        notes = (row.get("Notes") or "").strip() or None
+        notes = decode_text(row, "Notes").strip() or None
         if notes is not None and len(notes) > 2_000:
             raise CsvImportError(f"Row {row_number}: Notes must be 2,000 characters or fewer.")
 
@@ -165,14 +166,16 @@ def import_body_measurements(db: Session, user_id: str, raw: bytes) -> BodyMeasu
 def export_body_measurements(measurements: list[BodyMeasurement]) -> str:
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\r\n")
-    writer.writerow(CSV_HEADERS)
+    encoded = any(encode_text(item.notes or "") != (item.notes or "") for item in measurements)
+    writer.writerow((*CSV_HEADERS, *((TEXT_ENCODING_HEADER,) if encoded else ())))
     for measurement in measurements:
         writer.writerow(
             (
                 measurement.measurement_date.isoformat(),
                 format_number(measurement.weight_kg),
                 format_number(measurement.body_fat_pct),
-                measurement.notes or "",
+                encode_text(measurement.notes or ""),
+                *((TEXT_ENCODING,) if encoded else ()),
             )
         )
     return output.getvalue()

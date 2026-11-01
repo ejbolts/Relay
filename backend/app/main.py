@@ -47,6 +47,7 @@ from .notifications import (
 )
 from .presence import presence_router
 from .processing import ProcessingValidationError, SessionProcessor, validate_batch_ready
+from .push_security import MAX_PUSH_SUBSCRIPTIONS
 from .routines import router as routines_router
 from .schemas import (
     ActiveWorkoutReminderCreate,
@@ -173,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.login_throttle = LoginThrottle()
     app.state.save_rate_limiter = SaveRateLimiter()
+    app.state.push_rate_limiter = SaveRateLimiter()
     app.add_middleware(CsrfOriginMiddleware)
 
     @app.exception_handler(HTTPException)
@@ -222,7 +224,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             enabled=enabled, public_key=vapid_public_key(settings) if enabled else None
         )
 
-    @protected.post("/api/notifications/push/subscriptions", status_code=204)
+    def limit_push_changes(request: Request, user: CurrentUser) -> None:
+        test = request.url.path.endswith("/test")
+        key = f"{user.id}:{'test' if test else 'change'}"
+        if not request.app.state.push_rate_limiter.allow(key, 3 if test else 60):
+            raise api_error(429, "push_rate_limited", "Wait a moment before trying alerts again.")
+
+    @protected.post(
+        "/api/notifications/push/subscriptions",
+        status_code=204,
+        dependencies=[Depends(limit_push_changes)],
+    )
     async def save_push_subscription(
         payload: PushSubscriptionCreate,
         request: Request,
@@ -233,6 +245,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             select(PushSubscription).where(PushSubscription.endpoint == payload.endpoint)
         )
         reassigned = False
+        if subscription is None or subscription.user_id != user.id:
+            count = db.scalar(
+                select(func.count())
+                .select_from(PushSubscription)
+                .where(PushSubscription.user_id == user.id)
+            )
+            if count >= MAX_PUSH_SUBSCRIPTIONS:
+                raise api_error(
+                    409, "push_device_limit", "The alert device limit has been reached."
+                )
         if subscription:
             # A browser endpoint belongs to whoever registered it last (shared device, new login).
             reassigned = subscription.user_id != user.id
@@ -265,7 +287,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request.app.state.rest_timer_notifications.cancel_endpoint(payload.endpoint)
             request.app.state.workout_reminders.cancel(endpoint=payload.endpoint, user_id=user.id)
 
-    @protected.post("/api/notifications/push/test", status_code=204)
+    @protected.post(
+        "/api/notifications/push/test", status_code=204, dependencies=[Depends(limit_push_changes)]
+    )
     def send_test_push_notification(user: CurrentUser) -> None:
         send_push_notification(
             SessionLocal,
@@ -275,7 +299,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user_id=user.id,
         )
 
-    @protected.put("/api/notifications/push/rest-timer", status_code=204)
+    @protected.put(
+        "/api/notifications/push/rest-timer",
+        status_code=204,
+        dependencies=[Depends(limit_push_changes)],
+    )
     async def schedule_rest_timer_notification(
         payload: RestTimerNotificationCreate,
         request: Request,
@@ -296,7 +324,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if owns_subscription(db, user.id, payload.endpoint):
             request.app.state.rest_timer_notifications.cancel(**payload.model_dump())
 
-    @protected.put("/api/notifications/push/active-workout", status_code=204)
+    @protected.put(
+        "/api/notifications/push/active-workout",
+        status_code=204,
+        dependencies=[Depends(limit_push_changes)],
+    )
     def schedule_workout_reminder(
         payload: ActiveWorkoutReminderCreate,
         request: Request,
