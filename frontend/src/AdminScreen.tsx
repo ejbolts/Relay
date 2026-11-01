@@ -273,11 +273,13 @@ function StatusPanel({ status }: { status: ServerStatus }) {
 
 function UserRow({
   user,
+  now,
   isSelf,
   busy,
   onDisabledChange,
 }: {
   user: AdminUser;
+  now: number;
   isSelf: boolean;
   busy: boolean;
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
@@ -285,7 +287,6 @@ function UserRow({
   const disabled = user.disabled_at !== null;
   const online = !disabled && user.presence?.online;
   const live = disabled ? null : user.presence?.workout;
-  const now = useNow(Boolean(live || online), 60_000);
   return (
     <li className={`admin-user ${disabled ? 'is-disabled' : ''}`}>
       <div className="admin-user-heading">
@@ -305,7 +306,7 @@ function UserRow({
         <div>
           <dt>Last active</dt>
           <dd className={online ? 'admin-user-online' : undefined}>
-            {online ? 'Active now' : formatLastActive(user.last_active_at)}
+            {online ? 'Active now' : formatLastActive(user.last_active_at, new Date(now))}
           </dd>
         </div>
         {live && (
@@ -415,6 +416,7 @@ export function AdminScreenView({
   onUserDisabledChange,
   onRefresh,
 }: AdminScreenViewProps) {
+  const now = useNow(users !== null, 60_000);
   const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
   const openFeedback = feedback?.filter((item) => item.resolved_at === null).length ?? 0;
   return (
@@ -495,6 +497,7 @@ export function AdminScreenView({
               <UserRow
                 key={user.id}
                 user={user}
+                now={now}
                 isSelf={user.id === currentUserId}
                 busy={busyUserId === user.id}
                 onDisabledChange={onUserDisabledChange}
