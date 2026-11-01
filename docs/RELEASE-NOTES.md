@@ -8,11 +8,11 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Offline workouts, live friends and saved splits
 
-![Home focused on the Offline badge, with the sample profile and avatar still visible.](screenshots/releases/1.1.0-offline-home-focus.png)
+![Home showing the Offline badge and sample profile in the supplied closer view.](screenshots/releases/1.1.0-offline-user-focus.png)
 
 **Offline workouts** — Set up online; one workout awaits sync.
 
-![The Social page focused on Riley Sample training live, with the page heading and Friends tabs visible.](screenshots/releases/1.1.0-riley-social-focus.png)
+![Jordan Sample's online and live-workout status updating in Social.](screenshots/releases/1.1.0-jordan-live-activity.gif)
 
 **Friends, live** — Live activity, workouts and timers.
 

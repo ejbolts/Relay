@@ -174,15 +174,16 @@ html[data-reduce-motion] .release-confetti {
 }
 
 .release-announcement-body .release-feature > a {
-  display: grid;
-  place-items: center;
-  padding: 0.75rem;
+  display: block;
+  padding: 0;
   background: var(--p-page);
 }
 
 .release-feature img {
-  max-height: 16rem;
-  border-radius: 0.5rem;
+  height: auto;
+  max-height: none;
+  object-fit: cover;
+  border-radius: 0;
 }
 
 .release-feature:first-child {
