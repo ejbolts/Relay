@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from requests import RequestException
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .config import Settings
 from .models import ActiveWorkoutReminder, PushSubscription
+from .push_security import MAX_PUSH_SUBSCRIPTIONS, PushSession, validate_push_endpoint
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -79,29 +81,36 @@ def send_push_notification(
         query = select(PushSubscription).where(PushSubscription.user_id == user_id)
         if endpoint is not None:
             query = query.where(PushSubscription.endpoint == endpoint)
-        subscriptions = list(db.scalars(query))
+        subscriptions = list(db.scalars(query.limit(MAX_PUSH_SUBSCRIPTIONS)))
 
     delivered = False
     stale_ids: list[str] = []
     for subscription in subscriptions:
         try:
-            webpush(
-                subscription_info={
-                    "endpoint": subscription.endpoint,
-                    "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
-                },
-                data=json.dumps({"title": title, "body": body, "url": url, "tag": tag}),
-                vapid_private_key=str(key_path),
-                vapid_claims={"sub": settings.web_push_contact_email},
-                timeout=10,
-            )
-            delivered = True
-        except WebPushException as error:
+            validate_push_endpoint(subscription.endpoint)
+        except ValueError:
+            stale_ids.append(subscription.id)
+            continue
+        try:
+            with PushSession() as transport:
+                response = webpush(
+                    subscription_info={
+                        "endpoint": subscription.endpoint,
+                        "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
+                    },
+                    data=json.dumps({"title": title, "body": body, "url": url, "tag": tag}),
+                    vapid_private_key=str(key_path),
+                    vapid_claims={"sub": settings.web_push_contact_email},
+                    timeout=10,
+                    requests_session=transport,
+                )
+            delivered = delivered or (response is None or 200 <= response.status_code < 300)
+        except (WebPushException, RequestException, ValueError) as error:
             response = getattr(error, "response", None)
             if response is not None and response.status_code in {404, 410}:
                 stale_ids.append(subscription.id)
             else:
-                logger.warning("Could not deliver push notification: %s", error)
+                logger.warning("Could not deliver push notification (%s)", type(error).__name__)
 
     if stale_ids:
         with session_factory() as db:

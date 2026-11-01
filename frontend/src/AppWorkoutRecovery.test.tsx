@@ -1464,7 +1464,9 @@ describe('finishing workouts in the background', () => {
 });
 
 describe('durable workout completion', () => {
-  beforeEach(() => vi.mocked(api.createWorkout).mockReset());
+  beforeEach(() => {
+    vi.mocked(api.createWorkout).mockReset();
+  });
 
   it('stores the exact completion before sending, closes mid-request, and replays it hours later without the catalogue', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });

@@ -13,7 +13,7 @@ def test_phone_push_subscription_can_be_saved(client):
     response = client.post(
         "/api/notifications/push/subscriptions",
         json={
-            "endpoint": "https://push.example.test/subscription",
+            "endpoint": "https://web.push.apple.com/subscription",
             "p256dh": "public-key",
             "auth": "auth-key",
         },
@@ -23,7 +23,7 @@ def test_phone_push_subscription_can_be_saved(client):
 
 
 def test_phone_push_subscription_can_be_removed_and_cancels_its_timer(client):
-    endpoint = "https://push.example.test/removable-phone"
+    endpoint = "https://web.push.apple.com/removable-phone"
     client.post(
         "/api/notifications/push/subscriptions",
         json={"endpoint": endpoint, "p256dh": "public-key", "auth": "auth-key"},
@@ -47,7 +47,7 @@ def test_phone_push_subscription_can_be_removed_and_cancels_its_timer(client):
 
 
 def test_rest_timer_notification_is_scheduled_for_the_subscribed_phone(client):
-    endpoint = "https://push.example.test/rest-timer-phone"
+    endpoint = "https://web.push.apple.com/rest-timer-phone"
     client.post(
         "/api/notifications/push/subscriptions",
         json={"endpoint": endpoint, "p256dh": "public-key", "auth": "auth-key"},
@@ -75,7 +75,7 @@ def test_rest_timer_notification_requires_a_saved_subscription(client):
     response = client.put(
         "/api/notifications/push/rest-timer",
         json={
-            "endpoint": "https://push.example.test/not-subscribed",
+            "endpoint": "https://web.push.apple.com/not-subscribed",
             "timer_id": "timer-1",
             "delay_seconds": 180,
         },
@@ -89,7 +89,7 @@ def test_rest_timer_notification_can_be_cancelled(client):
     client.post(
         "/api/notifications/push/subscriptions",
         json={
-            "endpoint": "https://push.example.test/rest-timer-phone",
+            "endpoint": "https://web.push.apple.com/rest-timer-phone",
             "p256dh": "public-key",
             "auth": "auth-key",
         },
@@ -100,14 +100,14 @@ def test_rest_timer_notification_can_be_cancelled(client):
     response = client.post(
         "/api/notifications/push/rest-timer/cancel",
         json={
-            "endpoint": "https://push.example.test/rest-timer-phone",
+            "endpoint": "https://web.push.apple.com/rest-timer-phone",
             "timer_id": "timer-1",
         },
     )
 
     assert response.status_code == 204
     assert cancelled == [
-        {"endpoint": "https://push.example.test/rest-timer-phone", "timer_id": "timer-1"}
+        {"endpoint": "https://web.push.apple.com/rest-timer-phone", "timer_id": "timer-1"}
     ]
 
 

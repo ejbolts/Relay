@@ -10,9 +10,10 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
 
 from .config import Settings
+from .image_workers import run_image_task
 
 CHUNK_SIZE = 1024 * 1024
-ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF", "HEIC"}
+ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF"}
 FULL_MAX_SIZE = (1800, 1800)
 THUMBNAIL_MAX_SIZE = (360, 360)
 PROFILE_PHOTO_SIZE = (512, 512)
@@ -76,7 +77,7 @@ async def _receive_upload(upload: UploadFile, target_path: Path, max_bytes: int)
 def _decode_photo(path: Path) -> Image.Image:
     """Open a received photo, refusing unsupported or oversized images, upright and in RGB(A)."""
     try:
-        with Image.open(path) as source:
+        with Image.open(path, formats=sorted(ALLOWED_IMAGE_FORMATS)) as source:
             if source.format not in ALLOWED_IMAGE_FORMATS:
                 raise PhotoValidationError(
                     "unsupported_photo_type",
@@ -120,16 +121,9 @@ async def store_machine_photo(
     stored = False
     try:
         total = await _receive_upload(upload, upload_partial, max_bytes)
-        oriented = _decode_photo(upload_partial)
-
-        full = oriented.copy()
-        full.thumbnail(FULL_MAX_SIZE, Image.Resampling.LANCZOS)
-        width, height = full.size
-        full.save(full_partial, format="WEBP", quality=90, method=6)
-
-        thumbnail = full.copy()
-        thumbnail.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
-        thumbnail.save(thumbnail_partial, format="WEBP", quality=82, method=6)
+        width, height = await run_image_task(
+            _write_machine_variants, upload_partial, full_partial, thumbnail_partial
+        )
 
         full_partial.replace(full_path)
         thumbnail_partial.replace(thumbnail_path)
@@ -171,6 +165,23 @@ def profile_photo_path(settings: Settings, filename: str) -> Path | None:
     return settings.profile_photos_dir / filename
 
 
+def _write_machine_variants(source: Path, full_path: Path, thumbnail_path: Path) -> tuple[int, int]:
+    with _decode_photo(source) as full:
+        full.thumbnail(FULL_MAX_SIZE, Image.Resampling.LANCZOS)
+        full.save(full_path, format="WEBP", quality=90, method=6)
+        with full.copy() as thumbnail:
+            thumbnail.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
+            thumbnail.save(thumbnail_path, format="WEBP", quality=82, method=6)
+        return full.size
+
+
+def _write_profile_variant(source: Path, target: Path) -> None:
+    with _decode_photo(source) as oriented:
+        side = min(PROFILE_PHOTO_SIZE[0], oriented.width, oriented.height)
+        with ImageOps.fit(oriented, (side, side), Image.Resampling.LANCZOS) as square:
+            square.save(target, format="WEBP", quality=88, method=6)
+
+
 async def store_profile_photo(*, upload: UploadFile, settings: Settings, max_bytes: int) -> str:
     """Store an uploaded image as an upright, centre-cropped square WebP; return its filename."""
     token = uuid.uuid4().hex
@@ -179,10 +190,7 @@ async def store_profile_photo(*, upload: UploadFile, settings: Settings, max_byt
     photo_partial = settings.profile_photos_dir / f"{filename}.partial"
     try:
         await _receive_upload(upload, upload_partial, max_bytes)
-        oriented = _decode_photo(upload_partial)
-        side = min(PROFILE_PHOTO_SIZE[0], oriented.width, oriented.height)
-        square = ImageOps.fit(oriented, (side, side), Image.Resampling.LANCZOS)
-        square.save(photo_partial, format="WEBP", quality=88, method=6)
+        await run_image_task(_write_profile_variant, upload_partial, photo_partial)
         photo_partial.replace(settings.profile_photos_dir / filename)
         return filename
     except PhotoValidationError:

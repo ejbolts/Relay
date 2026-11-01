@@ -91,12 +91,46 @@ describe('offline store', () => {
     expect(await readOffline('workouts', 'sample-account')).toBeNull();
   });
 
-  it('still works offline where Web Crypto is unavailable', async () => {
+  it('never saves plaintext when Web Crypto is unavailable', async () => {
     vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
 
     await writeOffline('workouts', workouts, 'sample-account');
 
-    expect(storedRecord('workouts').iv).toBeUndefined();
-    expect((await readOffline('workouts', 'sample-account'))?.value).toEqual(workouts);
+    expect(backend.values.has('workouts')).toBe(false);
+    expect(await readOffline('workouts', 'sample-account')).toBeNull();
+  });
+
+  it('does not save plaintext when key storage fails', async () => {
+    const get = backend.get.bind(backend);
+    backend.get = async (key) => {
+      if (key === 'device-key-v1') throw new Error('Key unavailable');
+      return get(key);
+    };
+    await writeOffline('workouts', workouts, 'sample-account');
+    expect(backend.values.has('workouts')).toBe(false);
+  });
+
+  it('discards a write if cleanup happens during asynchronous encryption', async () => {
+    let resume!: () => void;
+    let started!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const get = backend.get.bind(backend);
+    backend.get = async (key) => {
+      if (key === 'device-key-v1' && !resume) {
+        started();
+        await new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+      }
+      return get(key);
+    };
+    const writing = writeOffline('workouts', workouts, 'sample-account');
+    await paused;
+    await clearOffline();
+    resume();
+    await writing;
+    expect(backend.values.has('workouts')).toBe(false);
   });
 });

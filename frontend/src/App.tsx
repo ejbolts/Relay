@@ -1,4 +1,5 @@
 import { BodySizesCard } from './BodySizesCard';
+import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
 import {
   extendInactiveWorkoutFinishAt,
@@ -913,7 +914,8 @@ function AppContent() {
     activityLabel = trainingDataActivityLabel('startup'),
   }: { silent?: boolean; activityLabel?: string | null } = {}) {
     const generation = ++refreshGenerationRef.current;
-    const current = () => generation === refreshGenerationRef.current;
+    const cacheScope = captureAccountCacheScope();
+    const current = () => generation === refreshGenerationRef.current && cacheScope.isCurrent();
     const refresh = async () => {
       // Read before the data: a change during this refresh must trigger another pass. Offline,
       // there is no revision to confirm and saved copies answer the reads straight away.
@@ -937,7 +939,7 @@ function AppContent() {
                 : nextDashboard;
             }),
           );
-          void writeDashboardCache(nextDashboard);
+          void writeDashboardCache(nextDashboard, cacheScope);
           if (hasOlderHistory(windowStart, nextDashboard.history)) {
             // Logging compares sets with older history; its summary loads off the startup path.
             void api

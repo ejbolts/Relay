@@ -15,7 +15,7 @@ from app.notifications import ActiveWorkoutReminderScheduler
 
 
 def test_reminder_survives_restart_and_delivers_only_once(monkeypatch):
-    endpoint = "https://push.example.test/phone"
+    endpoint = "https://web.push.apple.com/phone"
     user_id = make_user()
     with SessionLocal() as db:
         db.add(PushSubscription(user_id=user_id, endpoint=endpoint, p256dh="key", auth="auth"))
@@ -47,7 +47,7 @@ def test_reminder_survives_restart_and_delivers_only_once(monkeypatch):
 
 
 def test_cancel_and_old_cancel_do_not_interfere_with_new_workout(monkeypatch):
-    endpoint = "https://push.example.test/phone"
+    endpoint = "https://web.push.apple.com/phone"
     user_id = make_user()
     with SessionLocal() as db:
         db.add(PushSubscription(user_id=user_id, endpoint=endpoint, p256dh="key", auth="auth"))
@@ -78,7 +78,7 @@ def test_cancel_and_old_cancel_do_not_interfere_with_new_workout(monkeypatch):
 
 def test_reminder_api_requires_subscription_and_cancels(client):
     payload = {
-        "endpoint": "https://push.example.test/phone",
+        "endpoint": "https://web.push.apple.com/phone",
         "timer_id": "one",
         "started_at": datetime.now(UTC).timestamp(),
     }

@@ -9,12 +9,13 @@ from datetime import date, timedelta
 from fastapi import UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
-from starlette.concurrency import run_in_threadpool
+
+from .image_workers import run_image_task
 
 MAX_SCREENSHOT_BYTES = 15 * 1024 * 1024
 MAX_SCREENSHOT_PIXELS = 50_000_000
 MAX_OCR_SIZE = (3000, 3000)
-ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF", "HEIC"}
+ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF"}
 
 register_heif_opener()
 
@@ -81,7 +82,7 @@ async def read_cardio_screenshot(upload: UploadFile) -> bytes:
 
 def _prepare_image(contents: bytes) -> Image.Image:
     try:
-        with Image.open(io.BytesIO(contents)) as source:
+        with Image.open(io.BytesIO(contents), formats=sorted(ALLOWED_IMAGE_FORMATS)) as source:
             if source.format not in ALLOWED_IMAGE_FORMATS:
                 raise CardioScreenshotError(
                     "unsupported_screenshot_type",
@@ -349,7 +350,7 @@ def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[st
 async def scan_cardio_screenshot(upload: UploadFile) -> dict[str, object]:
     contents = await read_cardio_screenshot(upload)
     try:
-        lines = await run_in_threadpool(_recognize, contents)
+        lines = await run_image_task(_recognize, contents)
     except CardioScreenshotError:
         raise
     except Exception as error:

@@ -8,7 +8,7 @@ import { parseRelease } from './releaseMetadata';
 
 let root: Root;
 let container: HTMLDivElement;
-let play: ReturnType<typeof vi.fn>;
+let play = vi.fn<() => Promise<void>>();
 // Keep testing the shipped trailer when a later announcement has no video.
 const metadata = parseRelease(history.find((release) => release.version === '1.0.0'))!;
 const video = metadata.video!;
@@ -21,7 +21,7 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
     this.open = false;
   };
-  play = vi.fn().mockResolvedValue(undefined);
+  play = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(play);
   container = document.createElement('div');
   document.body.append(container);

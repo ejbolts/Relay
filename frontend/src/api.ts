@@ -73,6 +73,7 @@ import type {
   WorkoutType,
   YouTubeConnection,
 } from './types';
+import { captureAccountCacheScope } from './accountCacheScope';
 import {
   cachedWorkoutsForRevision,
   cachedWorkoutsSince,
@@ -81,7 +82,6 @@ import {
   writeWorkoutCache,
 } from './workoutCache';
 import { isUsingSavedData, reportSavedDataUsed, reportServerReached } from './connectionStatus';
-import { readLastUser } from './deviceAccount';
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
@@ -120,12 +120,18 @@ async function request<T>(
   init?: RequestInit,
   { signalExpiredSession = true }: RequestOptions = {},
 ): Promise<T> {
+  const scope = captureAccountCacheScope();
+  const checkAccount = () => {
+    if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
+  };
   const response = await fetch(path, { ...init, credentials: 'same-origin' });
+  checkAccount();
   if (!GATEWAY_FAILURES.has(response.status)) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string };
     } | null;
+    checkAccount();
     if (
       signalExpiredSession &&
       response.status === 401 &&
@@ -139,7 +145,9 @@ async function request<T>(
       response.status,
     );
   }
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  const value = response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  checkAccount();
+  return value;
 }
 
 /** How long a read waits for the server before showing this device's saved copy instead. */
@@ -194,25 +202,38 @@ async function preferServer<T>(
 
 /** An account read that keeps working offline from an encrypted copy saved on this device. */
 function accountRead<T>(path: string, savedKey = `response:${path}`): Promise<T> {
-  const owner = readLastUser()?.id;
+  const scope = captureAccountCacheScope();
+  const owner = scope.owner;
   if (!owner) return request<T>(path);
   return preferServer(
     () =>
       request<T>(path).then((value) => {
-        void writeOffline(savedKey, value, owner);
+        if (!scope.isCurrent())
+          throw new ApiError('The signed-in account changed.', 'account_changed');
+        void writeOffline(savedKey, value, owner, scope.isCurrent);
         return value;
       }),
-    () => readOffline<T>(savedKey, owner),
+    async () => {
+      const saved = await readOffline<T>(savedKey, owner);
+      return scope.isCurrent() ? saved : null;
+    },
   );
 }
 
 async function requestBlob(path: string): Promise<Blob> {
+  const scope = captureAccountCacheScope();
+  const checkAccount = () => {
+    if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
+  };
   const response = await fetch(path, { credentials: 'same-origin' });
+  checkAccount();
   if (!response.ok) {
     if (response.status === 401) emitAuthExpired();
     throw new ApiError(`Export failed (${response.status})`, 'export_failed', response.status);
   }
-  return response.blob();
+  const blob = await response.blob();
+  checkAccount();
+  return blob;
 }
 
 /**
@@ -220,21 +241,29 @@ async function requestBlob(path: string): Promise<Blob> {
  * the saved snapshot answers whatever its revision, provided it reaches back that far.
  */
 async function listCachedWorkouts(since: string): Promise<TrackedWorkout[]> {
+  const scope = captureAccountCacheScope();
+  const checkAccount = () => {
+    if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
+  };
   const cached = readWorkoutCache();
   return preferServer(
     async () => {
       const current = await request<WorkoutCacheRevision>('/api/workouts/revision');
       const reusable = cachedWorkoutsForRevision(await cached, current.revision, since);
+      checkAccount();
       if (reusable) return reusable;
 
       const snapshot = await request<WorkoutSnapshot>(
         `/api/workouts/snapshot?${new URLSearchParams({ start: since })}`,
       );
-      await writeWorkoutCache({ ...snapshot, since });
+      checkAccount();
+      await writeWorkoutCache({ ...snapshot, since }, scope);
+      checkAccount();
       return snapshot.workouts;
     },
     async () => {
       const workouts = cachedWorkoutsSince(await cached, since);
+      checkAccount();
       return workouts ? { value: workouts } : null;
     },
   );

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import ClipUploadStatus, SessionStatus
+from .push_security import validate_push_endpoint
 
 
 class SessionCreate(BaseModel):
@@ -95,6 +96,8 @@ class PushSubscriptionCreate(BaseModel):
     endpoint: str = Field(min_length=1, max_length=2_000)
     p256dh: str = Field(min_length=1, max_length=200)
     auth: str = Field(min_length=1, max_length=200)
+
+    _endpoint = field_validator("endpoint")(validate_push_endpoint)
 
 
 class PushSubscriptionDelete(BaseModel):

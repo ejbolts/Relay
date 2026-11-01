@@ -19,10 +19,10 @@ from app.database import SessionLocal
 from app.models import ActiveWorkoutReminder, PushSubscription
 from app.notifications import ActiveWorkoutReminderScheduler, RestTimerNotificationScheduler
 
-ALICE_PHONE = "https://push.example.test/alice-phone"
-ALICE_TABLET = "https://push.example.test/alice-tablet"
-BOB_PHONE = "https://push.example.test/bob-phone"
-SHARED_PHONE = "https://push.example.test/shared-phone"
+ALICE_PHONE = "https://web.push.apple.com/alice-phone"
+ALICE_TABLET = "https://web.push.apple.com/alice-tablet"
+BOB_PHONE = "https://web.push.apple.com/bob-phone"
+SHARED_PHONE = "https://web.push.apple.com/shared-phone"
 
 
 @pytest.fixture

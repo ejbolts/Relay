@@ -110,7 +110,7 @@ def test_socket_requires_valid_cookie_and_same_origin(anonymous_client):
 
 def test_logout_stops_account_alerts_and_keeps_other_subscriptions(client, other_client):
     for browser in (client, other_client):
-        endpoint = f"https://push.example/{browser.user['id']}"
+        endpoint = f"https://web.push.apple.com/{browser.user['id']}"
         with SessionLocal() as db:
             db.add(
                 PushSubscription(

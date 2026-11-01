@@ -13,6 +13,7 @@ from statistics import median
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from .csv_text import TEXT_ENCODING, TEXT_ENCODING_HEADER, decode_text, encode_text
 from .exercise_aliases import canonical_exercise_name
 from .models import (
     BodyMeasurement,
@@ -61,7 +62,8 @@ def header_key(name: str) -> str:
 
 
 KNOWN_HEADERS = {
-    header_key(header): header for header in (*CSV_HEADERS, *SESSION_HEADERS, *WORKOUT_TYPE_HEADERS)
+    header_key(header): header
+    for header in (*CSV_HEADERS, *SESSION_HEADERS, *WORKOUT_TYPE_HEADERS, TEXT_ENCODING_HEADER)
 }
 
 
@@ -209,6 +211,8 @@ def parse_rows(raw: bytes) -> tuple[list[ParsedRow], list[str]]:
             raise CsvImportError(f"Row {row_number}: there are more values than columns.")
         if not any((value or "").strip() for value in row.values()):
             continue
+        for text_field in ("Exercise", "Workout name", "Workout type"):
+            row[text_field] = decode_text(row, text_field)
         exercise_name = (row.get("Exercise") or "").strip()
         if not exercise_name:
             raise CsvImportError(f"Row {row_number}: Exercise is required.")
@@ -804,7 +808,23 @@ def format_number(value: float | int | None) -> str:
 def export_workouts(workouts: list[TrainingWorkout]) -> str:
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\r\n")
-    writer.writerow((*CSV_HEADERS, *SESSION_HEADERS, *WORKOUT_TYPE_HEADERS))
+    encoded = any(
+        encode_text(text) != text
+        for workout in workouts
+        for text in (
+            workout.name,
+            workout.workout_type.name if workout.workout_type else "",
+            *(movement.exercise.name for movement in workout.movements),
+        )
+    )
+    writer.writerow(
+        (
+            *CSV_HEADERS,
+            *SESSION_HEADERS,
+            *WORKOUT_TYPE_HEADERS,
+            *((TEXT_ENCODING_HEADER,) if encoded else ()),
+        )
+    )
     for workout in workouts:
         for movement in sorted(workout.movements, key=lambda item: item.order_index):
             for item in sorted(movement.sets, key=lambda entry: entry.order_index):
@@ -813,7 +833,7 @@ def export_workouts(workouts: list[TrainingWorkout]) -> str:
                 writer.writerow(
                     (
                         workout.workout_date.isoformat(),
-                        movement.exercise.name,
+                        encode_text(movement.exercise.name),
                         format_number(item.weight_kg),
                         format_number(
                             round(item.weight_kg * KG_TO_LB, 1)
@@ -830,9 +850,10 @@ def export_workouts(workouts: list[TrainingWorkout]) -> str:
                         format_number(item.percentile),
                         "1" if item.warmup else "0",
                         workout.id,
-                        workout.name,
-                        workout.workout_type.name if workout.workout_type else "",
+                        encode_text(workout.name),
+                        encode_text(workout.workout_type.name) if workout.workout_type else "",
                         workout.workout_type.color if workout.workout_type else "",
+                        *((TEXT_ENCODING,) if encoded else ()),
                     )
                 )
     return output.getvalue()

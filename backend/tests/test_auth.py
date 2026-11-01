@@ -509,7 +509,9 @@ def test_first_user_claims_legacy_rows_without_duplicating_the_catalog(anonymous
                 CardioSession(
                     session_date=date(2026, 1, 6), activity_type="Walking", duration_minutes=30
                 ),
-                PushSubscription(endpoint="https://push.example.test/legacy", p256dh="k", auth="a"),
+                PushSubscription(
+                    endpoint="https://web.push.apple.com/legacy", p256dh="k", auth="a"
+                ),
                 WorkoutSession(
                     name="Old video", workout_date=date(2026, 1, 5), expected_clip_count=1
                 ),
@@ -746,7 +748,7 @@ def populate_account(test_client: TestClient) -> dict:
     subscription = test_client.post(
         "/api/notifications/push/subscriptions",
         json={
-            "endpoint": f"https://push.example.test/{test_client.user['id']}",
+            "endpoint": f"https://web.push.apple.com/{test_client.user['id']}",
             "p256dh": "k",
             "auth": "a",
         },
@@ -765,7 +767,7 @@ def test_account_deletion_removes_everything_the_user_owns(client, other_client,
     with SessionLocal() as db:
         db.add(
             ActiveWorkoutReminder(
-                endpoint="https://push.example.test/reminder",
+                endpoint="https://web.push.apple.com/reminder",
                 user_id=client.user["id"],
                 timer_id="t",
                 due_at=datetime.now(UTC) + timedelta(hours=1),
@@ -1220,7 +1222,7 @@ def test_video_sessions_are_scoped_to_their_owner(client, other_client, fake_upl
 
 
 def test_push_subscription_belongs_to_the_user_who_registered_it(client, other_client):
-    endpoint = "https://push.example.test/shared-device"
+    endpoint = "https://web.push.apple.com/shared-device"
     subscription = {"endpoint": endpoint, "p256dh": "k", "auth": "a"}
     reminder = {
         "endpoint": endpoint,
@@ -1268,10 +1270,14 @@ def test_notifications_only_reach_the_owning_users_subscriptions(monkeypatch, tm
         db.add_all(
             [
                 PushSubscription(
-                    user_id=alice, endpoint="https://p.test/alice", p256dh="k", auth="a"
+                    user_id=alice, endpoint="https://web.push.apple.com/alice", p256dh="k", auth="a"
                 ),
-                PushSubscription(user_id=bob, endpoint="https://p.test/bob", p256dh="k", auth="a"),
-                PushSubscription(endpoint="https://p.test/legacy", p256dh="k", auth="a"),
+                PushSubscription(
+                    user_id=bob, endpoint="https://web.push.apple.com/bob", p256dh="k", auth="a"
+                ),
+                PushSubscription(
+                    endpoint="https://web.push.apple.com/legacy", p256dh="k", auth="a"
+                ),
             ]
         )
         db.commit()
@@ -1286,7 +1292,7 @@ def test_notifications_only_reach_the_owning_users_subscriptions(monkeypatch, tm
     )
 
     assert send_push_notification(SessionLocal, settings, title="t", body="b", user_id=alice)
-    assert sent == ["https://p.test/alice"]
+    assert sent == ["https://web.push.apple.com/alice"]
     sent.clear()
     assert (
         send_push_notification(
@@ -1295,7 +1301,7 @@ def test_notifications_only_reach_the_owning_users_subscriptions(monkeypatch, tm
             title="t",
             body="b",
             user_id=bob,
-            endpoint="https://p.test/alice",
+            endpoint="https://web.push.apple.com/alice",
         )
         is False
     )
