@@ -1737,6 +1737,67 @@ describe('cardio set editing defaults', () => {
     },
   );
 
+  it('pastes a screenshot into the active cardio set and completes it without saving the workout', async () => {
+    const draft = storedDraft({ category: 'cardio' });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: treadmill.id,
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'cardio-set',
+            completed: false,
+            incline_percent: 15,
+            notes: 'Keep this note',
+          },
+        ],
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([
+          {
+            types: ['image/png'],
+            getType: async () => new Blob(['screenshot'], { type: 'image/png' }),
+          },
+        ]),
+      },
+    });
+    vi.spyOn(api, 'scanCardioScreenshot').mockResolvedValue({
+      session_date: null,
+      activity_type: 'Treadmill',
+      duration_minutes: 40,
+      calories_kcal: 448,
+      average_heart_rate_bpm: 143,
+      distance_km: 2.98,
+      average_speed_kph: 4.5,
+      fields_found: ['duration', 'distance'],
+      warning: null,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const paste = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Paste screenshot',
+    )!;
+    await act(async () => paste.click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0]).toMatchObject({
+      duration_seconds: 2400,
+      distance_km: 2.98,
+      calories_kcal: 448,
+      average_heart_rate_bpm: 143,
+      speed_kph: 4.5,
+      completed: true,
+      incline_percent: 15,
+      notes: 'Keep this note',
+    });
+    expect(container.querySelector('.set-details')?.getAttribute('data-expanded')).toBe('false');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
   it('folds a completed cardio set and reopens it when unticked, including after recovery', async () => {
     const draft = storedDraft({ category: 'cardio' });
     draft.movements = [

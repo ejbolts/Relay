@@ -20,9 +20,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Attempted sets** — A replaces F in the set-type menu and workout rows. Isolated sample data.
 
+![Paste screenshot beside Upload screenshot in an expanded cardio set with scanned sample workout metrics.](screenshots/releases/1.2.0-paste-screenshot.png)
+
+**Paste a screenshot** - Copy it, tap Paste screenshot and review the scanned values. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
+- **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
 
 ## 1.1.0
 

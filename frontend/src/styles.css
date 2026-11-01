@@ -4831,7 +4831,20 @@ html.edge-swipe-active .edge-swipe-indicator {
   gap: 0.4rem;
 }
 
-.add-set-dialog .cardio-set-screenshot-upload > label {
+.cardio-set-screenshot-actions {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.cardio-set-screenshot-actions > :is(label, button) {
+  min-width: 0;
+  text-align: center;
+}
+
+.add-set-dialog .cardio-set-screenshot-actions > label,
+.add-set-dialog .cardio-set-screenshot-actions > button {
   position: relative;
   min-height: 2.8rem;
   display: grid;
@@ -4849,11 +4862,13 @@ html.edge-swipe-active .edge-swipe-indicator {
   cursor: pointer;
 }
 
-.set-dialog-secondary-fields .cardio-set-screenshot-upload > label {
+.set-dialog-secondary-fields .cardio-set-screenshot-actions > label,
+.set-dialog-secondary-fields .cardio-set-screenshot-actions > button {
   min-height: 3.6rem;
 }
 
-.add-set-dialog .cardio-set-screenshot-upload > label.disabled {
+.add-set-dialog .cardio-set-screenshot-actions > label.disabled,
+.add-set-dialog .cardio-set-screenshot-actions > button:disabled {
   cursor: wait;
   opacity: 0.7;
 }

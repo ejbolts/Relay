@@ -52,7 +52,6 @@ import type {
   BodyMeasurement,
   BodyWeightGoal,
   CardioOverview,
-  CardioScreenshotScan,
   CardioSession,
   CardioSessionInput,
   DashboardData,
@@ -158,6 +157,7 @@ import { CardioZoneSettings } from './CardioZoneSettings';
 import { cardioZoneNotice, DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
+import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
 import { useBackdropDismiss } from './backdropDismiss';
 import { CachedTabPanel } from './CachedTabPanel';
 import { optimisePhoto } from './photoOptimise';
@@ -5546,56 +5546,6 @@ function ScanningLabel() {
       <span className="scanning-spinner" aria-hidden="true" />
       Scanning
     </span>
-  );
-}
-
-function CardioSetScreenshotUpload({ onScan }: { onScan: (scan: CardioScreenshotScan) => void }) {
-  const [scanning, setScanning] = useState(false);
-  const [status, setStatus] = useState<{ message: string; warning: boolean } | null>(null);
-
-  async function importScreenshot(file: File) {
-    if (scanning) return;
-    setScanning(true);
-    setStatus(null);
-    try {
-      const scan = await api.scanCardioScreenshot(file);
-      onScan(scan);
-      setStatus({
-        message: `Scanned ${scan.fields_found.join(', ')}.${scan.warning ? ` ${scan.warning}` : ''} Review the set before saving.`,
-        warning: Boolean(scan.warning),
-      });
-    } catch (reason) {
-      setStatus({
-        message: reason instanceof Error ? reason.message : 'Could not scan that screenshot.',
-        warning: true,
-      });
-    } finally {
-      setScanning(false);
-    }
-  }
-
-  return (
-    <div className="cardio-set-screenshot-upload">
-      <label className={scanning ? 'disabled' : ''}>
-        {scanning ? <ScanningLabel /> : 'Upload screenshot'}
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-          disabled={scanning}
-          aria-label="Upload cardio set screenshot"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void importScreenshot(file);
-          }}
-        />
-      </label>
-      {status && (
-        <small className={status.warning ? 'warning' : ''} role="status">
-          {status.message}
-        </small>
-      )}
-    </div>
   );
 }
 
