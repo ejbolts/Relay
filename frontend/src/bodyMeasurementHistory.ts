@@ -1,5 +1,5 @@
 import type { BodyTrendStatistic } from './bodyTrend';
-import { weightFromKg, type WeightUnit } from './weightUnits';
+import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
 
 export type BodyHistoryPeriod = 'week' | 'month';
 
@@ -195,4 +195,13 @@ export function summarizeBodyHistory(
         count: entries.length,
       };
     });
+}
+
+/** "Lose to 82 kg", "Gain to 85 kg" or "Maintain 84 kg". */
+export function bodyGoalName(goal: BodyHistoryGoal, unit: WeightUnit): string {
+  const kind = bodyGoalKind(goal);
+  const target = formatWeight(goal.target_weight_kg, unit, 1);
+  return kind === 'maintain'
+    ? `Maintain ${target}`
+    : `${kind === 'loss' ? 'Lose' : 'Gain'} to ${target}`;
 }

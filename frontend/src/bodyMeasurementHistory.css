@@ -44,8 +44,14 @@
   letter-spacing: 0.02em;
 }
 
-.body-history-panel > article:has(+ .body-history-goal-divider) {
+.body-history-panel > article:has(+ .body-history-goal-divider),
+.body-history-panel > article:has(+ .body-goal-swipe) {
   border-bottom: 0;
+}
+
+/* Swipe a goal divider left to remove the goal; it covers the delete layer until dragged. */
+.body-goal-swipe .set-swipe-content {
+  background: var(--p-surface, #15181b);
 }
 
 .body-history-goal-name {

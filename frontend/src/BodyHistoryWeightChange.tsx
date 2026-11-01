@@ -1,11 +1,12 @@
 import { Icon } from './Icon';
 import {
   bodyGoalKind,
+  bodyGoalName,
   weightChangeAmount,
   type BodyHistoryGoal,
   type BodyHistoryWeightChange as WeightChange,
 } from './bodyMeasurementHistory';
-import { formatWeight, type WeightUnit } from './weightUnits';
+import type { WeightUnit } from './weightUnits';
 import './bodyMeasurementHistory.css';
 
 function goalComparison(change: WeightChange): string {
@@ -58,11 +59,7 @@ export function BodyHistoryGoalDivider({
   unit: WeightUnit;
 }) {
   const kind = bodyGoalKind(goal);
-  const target = formatWeight(goal.target_weight_kg, unit, 1);
-  const name =
-    kind === 'maintain'
-      ? `Maintain ${target}`
-      : `${kind === 'loss' ? 'Lose' : 'Gain'} to ${target}`;
+  const name = bodyGoalName(goal, unit);
   const start = new Date(`${goal.start_date}T12:00:00`);
   const date = new Intl.DateTimeFormat(undefined, {
     day: 'numeric',

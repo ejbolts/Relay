@@ -1,10 +1,12 @@
 {
-  "version": "1.1.1",
+  "version": "1.2.0",
   "date": "2026-11-01",
-  "title": "Clear notifications in one go",
-  "summary": "Closing the notification bell clears its badge, including new releases.",
+  "title": "Weekly comparisons, body goals and notifications",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals and clear notification badges.",
   "changes": [
+    "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
+    "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
     "**Notifications:** Closing the bell's popup clears its badge, including a new release and notices on later pages, without opening each one."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#111"
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120"
 }

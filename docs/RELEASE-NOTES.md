@@ -2,16 +2,26 @@
 
 _Relay was called Gym Logger before version 1.0._
 
-## 1.1.1
+## 1.2.0
 
 1 November 2026
 
-### Clear notifications in one go
+### Weekly comparisons, body goals and notifications
+
+![Sets per muscle on Home with week arrows, this week's bars, outlines for the week before and the change for each muscle.](screenshots/releases/1.1.1-sets-per-muscle-compare.png)
+
+**Week by week** — Step back and see the change on the week before.
+
+![Swiping a goal line left in the monthly check-in history to reveal Delete, then the goal removed with an Undo popup.](screenshots/releases/1.1.1-swipe-remove-goal.png)
+
+**Swipe to remove** — Goals come off the history like rest times in a workout.
 
 ![The bell with 3 unread, its popup with a new release and two friend requests, and the bell with no badge after closing.](screenshots/releases/1.1.1-notifications-clear-on-close.png)
 
 **One close clears it** — The bell's badge clears when you close its popup.
 
+- **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
+- **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Notifications:** Closing the bell's popup clears its badge, including a new release and notices on later pages, without opening each one.
 
 ## 1.1.0
