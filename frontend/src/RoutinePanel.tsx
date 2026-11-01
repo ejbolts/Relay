@@ -452,6 +452,16 @@ export function RoutinePanel({
               disabled={busy}
               onClick={() =>
                 void run(async () => {
+                  if (
+                    !options.shared &&
+                    options.days.some(
+                      (day) => day.workout_type_id !== null && !day.movements.length,
+                    )
+                  ) {
+                    throw new Error(
+                      'Add an exercise to each workout day in Edit split, then try again.',
+                    );
+                  }
                   const saved = await api.routines.save({ ...options, shared: !options.shared });
                   setRoutines((items) =>
                     items!.map((item) => (item.id === saved.id ? saved : item)),
