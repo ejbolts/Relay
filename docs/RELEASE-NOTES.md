@@ -20,9 +20,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Attempted sets** — A replaces F in the set-type menu and workout rows. Isolated sample data.
 
+![Holding a set's drag handle until a blue outline appears, then dragging the first set below the next two sets.](screenshots/releases/1.2.0-hold-to-reorder-sets.gif)
+
+**Hold to reorder** — Hold for half a second, then drag the outlined set. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
+- **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
 
 ## 1.1.0
 

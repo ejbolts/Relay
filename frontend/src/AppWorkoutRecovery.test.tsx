@@ -1086,6 +1086,79 @@ describe('rest time controls', () => {
   });
 });
 
+describe('hold to reorder workout sets', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  });
+  it.each(['strength', 'cardio'] as const)(
+    'requires half a second before highlighting and moving a %s set',
+    async (kind) => {
+      const draft = storedDraft();
+      const movement = draft.movements[0];
+      movement.machinePhotoIds = [];
+      movement.sets = [1, 2, 3].map((number) => ({
+        ...movement.sets[0],
+        key: `hold-set-${number}`,
+        reps: number * 5,
+      }));
+      if (kind === 'cardio') {
+        vi.mocked(api.listExercises).mockResolvedValue([{ ...bench, kind, category: 'cardio' }]);
+      }
+      draft.movements = [movement];
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      vi.useFakeTimers();
+      const rows = () => [...container.querySelectorAll<HTMLElement>('.set-details')];
+      const handle = container.querySelector<HTMLButtonElement>('.set-drag-handle')!;
+      handle.setPointerCapture = vi.fn();
+      handle.hasPointerCapture = vi.fn().mockReturnValue(false);
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: vi.fn(() => rows()[2]),
+      });
+      const pointer = async (type: string) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.assign(event, {
+          pointerId: 1,
+          isPrimary: true,
+          pointerType: 'touch',
+          button: 0,
+          clientX: 100,
+          clientY: 200,
+        });
+        await act(async () => {
+          handle.dispatchEvent(event);
+        });
+      };
+      await pointer('pointerdown');
+      await act(async () => {
+        vi.advanceTimersByTime(499);
+      });
+      expect(container.querySelector('.set-dragging')).toBeNull();
+      expect(handle.setPointerCapture).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(rows()[0].classList.contains('set-dragging')).toBe(true);
+      expect(handle.setPointerCapture).toHaveBeenCalledWith(1);
+      await pointer('pointermove');
+      expect(rows()[2].classList.contains('set-drop-target')).toBe(true);
+      await pointer('pointerup');
+      expect(rows().map((row) => row.dataset.setKey)).toEqual([
+        'hold-set-2',
+        'hold-set-3',
+        'hold-set-1',
+      ]);
+      expect(container.querySelector('.set-dragging, .set-drop-target')).toBeNull();
+      expect(readActiveWorkoutDraft()?.movements[0].sets.map((set) => set.key)).toEqual([
+        'hold-set-2',
+        'hold-set-3',
+        'hold-set-1',
+      ]);
+    },
+  );
+});
+
 describe('active workout recovery at startup', () => {
   it('flushes the live draft before an update and blocks refresh if device storage fails', async () => {
     const draft = storedDraft();

@@ -2,11 +2,12 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo, mark attempted sets more clearly and hold briefly before reordering sets.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
-    "**Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording."
+    "**Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.",
+    "**Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
