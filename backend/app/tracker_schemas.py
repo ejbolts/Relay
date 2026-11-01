@@ -821,6 +821,8 @@ class DashboardRead(BaseModel):
     weekly_days: list[WeeklyDayBreakdown]
     recommendation: WorkoutRecommendationRead
     weekly_sets: WeeklySetsRead
+    # The weeks before ``weekly_sets``, newest first.
+    weekly_sets_history: list[WeeklySetsRead] = Field(default_factory=list)
     muscle_volume: list[MuscleVolumeRead]
     zone2: Zone2WeekRead
     recent_workouts: list[TrainingWorkoutRead]

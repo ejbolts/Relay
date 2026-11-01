@@ -1945,6 +1945,7 @@ function AppContent() {
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
                 weeklySets={dashboard?.weekly_sets}
+                weeklySetsHistory={dashboard?.weekly_sets_history}
                 onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
@@ -9543,6 +9544,7 @@ function HistoryScreen({
   weekStartDay,
   heatmap,
   weeklySets,
+  weeklySetsHistory,
   onOpenMuscleWorkout,
   historySummary,
   olderHistory,
@@ -9576,6 +9578,7 @@ function HistoryScreen({
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
   weeklySets: DashboardData['weekly_sets'] | undefined;
+  weeklySetsHistory: DashboardData['weekly_sets_history'];
   onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
@@ -9996,6 +9999,7 @@ function HistoryScreen({
       {!exerciseHeader && (
         <MuscleSetsCard
           weeklySets={weeklySets}
+          history={weeklySetsHistory}
           goal={muscleSetGoal}
           onOpenWorkout={onOpenMuscleWorkout}
         />

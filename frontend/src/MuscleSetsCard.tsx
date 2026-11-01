@@ -1,81 +1,187 @@
 import { useId, useState, type CSSProperties } from 'react';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
-import { shortDate } from './trainingSummary';
+import { dayMonth, shortDate } from './trainingSummary';
 import type { WeeklyMuscleContribution, WeeklyMuscleSets, WeeklySets } from './types';
 import './muscleSets.css';
 
 const credits = (value: number) => Number(value.toFixed(3)).toLocaleString();
 
+const weekName = (weeksAgo: number) =>
+  weeksAgo === 0 ? 'This week' : weeksAgo === 1 ? 'Last week' : `${weeksAgo} weeks ago`;
+
+/** "+2", "−1.5" or "±0" for the change on the week before. */
+function signedChange(change: number) {
+  if (change > 0) return `+${credits(change)}`;
+  if (change < 0) return `−${credits(-change)}`;
+  return '±0';
+}
+
 export function MuscleSetsCard({
   weeklySets,
+  history = [],
   goal,
   onOpenWorkout,
 }: {
   weeklySets: WeeklySets | null | undefined;
+  /** The weeks before `weeklySets`, newest first. Older cached dashboards have none. */
+  history?: WeeklySets[];
   goal: number;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [requestedWeeksAgo, setWeeksAgo] = useState(0);
   const titleId = useId();
   const listId = useId();
-  const allMuscles = [...(weeklySets?.muscle_groups ?? [])].sort(
-    (left, right) =>
-      right.raw_sets - left.raw_sets || left.muscle_group.localeCompare(right.muscle_group),
+  const weeks = weeklySets ? [weeklySets, ...history] : [];
+  const weeksAgo = Math.min(requestedWeeksAgo, Math.max(0, weeks.length - 1));
+  const week = weeks[weeksAgo];
+  const previous = weeks[weeksAgo + 1];
+  const previousSets = new Map(
+    (previous?.muscle_groups ?? []).map((item) => [item.muscle_group, item.raw_sets]),
   );
-  const muscles = allMuscles.filter((muscle) => muscle.raw_sets > 0);
+  const before = (name: string) => (previous ? (previousSets.get(name) ?? 0) : null);
+  const groups = new Map((week?.muscle_groups ?? []).map((item) => [item.muscle_group, item]));
+  // A muscle trained only the week before still gets a row, so the drop is visible.
+  for (const item of previous?.muscle_groups ?? []) {
+    if (item.raw_sets > 0 && !groups.has(item.muscle_group)) {
+      groups.set(item.muscle_group, {
+        muscle_group: item.muscle_group,
+        raw_sets: 0,
+        effective_sets: 0,
+        average_rpe: null,
+        contributions: [],
+      });
+    }
+  }
+  const allMuscles = [...groups.values()].sort(
+    (left, right) =>
+      right.raw_sets - left.raw_sets ||
+      (before(right.muscle_group) ?? 0) - (before(left.muscle_group) ?? 0) ||
+      left.muscle_group.localeCompare(right.muscle_group),
+  );
+  const muscles = allMuscles.filter(
+    (item) => item.raw_sets > 0 || (before(item.muscle_group) ?? 0) > 0,
+  );
   const visibleMuscles = expanded ? allMuscles : muscles.slice(0, 8);
-  const untrained = (weeklySets?.muscle_groups ?? []).filter(
-    (muscle) => muscle.raw_sets <= 0,
-  ).length;
-  const maximum = Math.max(...muscles.map((muscle) => muscle.raw_sets), goal * 1.15);
+  const untrained = allMuscles.filter((item) => item.raw_sets <= 0).length;
+  // One scale for every week, so bar lengths stay comparable while stepping through them.
+  const maximum = Math.max(
+    goal * 1.15,
+    ...weeks.flatMap((item) => item.muscle_groups.map((group) => group.raw_sets)),
+  );
   const muscle = allMuscles.find((item) => item.muscle_group === selected);
+  const name = weekName(weeksAgo);
+  const current = weeksAgo === 0;
 
   return (
     <section className="pulse-card muscle-sets-card" aria-labelledby={titleId}>
-      <header className="pulse-card-header">
+      <header className="pulse-card-header muscle-sets-header">
         <h2 id={titleId}>Sets per muscle</h2>
-        <span>This week · working sets</span>
+        <div className="muscle-week-nav" role="group" aria-label="Week">
+          <button
+            type="button"
+            aria-label="Previous week"
+            disabled={weeksAgo >= weeks.length - 1}
+            onClick={() => setWeeksAgo(weeksAgo + 1)}
+          >
+            <Icon name="chevron-left" />
+          </button>
+          <span aria-live="polite">{name}</span>
+          <button
+            type="button"
+            aria-label="Next week"
+            disabled={current}
+            onClick={() => setWeeksAgo(weeksAgo - 1)}
+          >
+            <Icon name="chevron-right" />
+          </button>
+        </div>
       </header>
       <p className="muscle-set-goal-key">
-        <span aria-hidden="true" /> Weekly goal: {goal} sets per muscle
+        {week && (
+          <span className="muscle-key-item">
+            <i className="muscle-key-swatch" aria-hidden="true" />
+            Week of {dayMonth(week.week_start)}
+          </span>
+        )}
+        {previous && (
+          <span className="muscle-key-item">
+            <i className="muscle-key-swatch is-previous" aria-hidden="true" />
+            Week of {dayMonth(previous.week_start)}
+          </span>
+        )}
+        <span className="muscle-key-item">
+          <i className="muscle-key-goal" aria-hidden="true" />
+          Goal {goal}
+        </span>
       </p>
       <ul
         id={listId}
         hidden={visibleMuscles.length === 0}
         className="muscle-bars"
-        aria-label={`Working sets per muscle; weekly goal: ${goal} sets`}
+        aria-label={`Working sets per muscle, ${name.toLowerCase()}; weekly goal: ${goal} sets`}
         style={{ '--muscle-goal-ratio': goal / maximum } as CSSProperties}
       >
-        {visibleMuscles.map((item, index) => (
-          <li key={item.muscle_group}>
-            <button
-              type="button"
-              className="muscle-name-button"
-              aria-label={`Exercises contributing to ${item.muscle_group}`}
-              aria-haspopup="dialog"
-              onClick={() => setSelected(item.muscle_group)}
-            >
-              {item.muscle_group}
-            </button>
-            <span className="muscle-bar-track">
-              <i
-                style={
-                  {
-                    width: `${(item.raw_sets / maximum) * 100}%`,
-                    '--d': `${index * 45}ms`,
-                  } as CSSProperties
-                }
-              />
-            </span>
-            <b className="num">{credits(item.raw_sets)}</b>
-          </li>
-        ))}
+        {visibleMuscles.map((item, index) => {
+          const last = before(item.muscle_group);
+          const change = last === null ? null : item.raw_sets - last;
+          return (
+            <li key={item.muscle_group}>
+              <button
+                type="button"
+                className="muscle-name-button"
+                aria-label={`Exercises contributing to ${item.muscle_group}`}
+                aria-haspopup="dialog"
+                onClick={() => setSelected(item.muscle_group)}
+              >
+                {item.muscle_group}
+              </button>
+              <span className="muscle-bar-track">
+                {last !== null && last > 0 && (
+                  <i
+                    className="muscle-bar-previous"
+                    style={{ width: `${(last / maximum) * 100}%` }}
+                  />
+                )}
+                <i
+                  style={
+                    {
+                      width: `${(item.raw_sets / maximum) * 100}%`,
+                      '--d': `${index * 45}ms`,
+                    } as CSSProperties
+                  }
+                />
+              </span>
+              <b className="num">
+                {credits(item.raw_sets)}
+                {change !== null && (
+                  <small
+                    className={`muscle-set-change ${change > 0 ? 'is-up' : change < 0 ? 'is-down' : 'is-same'}`}
+                    aria-label={
+                      change === 0
+                        ? 'same as the week before'
+                        : `${change > 0 ? 'up' : 'down'} ${credits(Math.abs(change))} on the week before`
+                    }
+                  >
+                    {signedChange(change)}
+                  </small>
+                )}
+              </b>
+            </li>
+          );
+        })}
       </ul>
-      {!muscles.length && <p className="pulse-empty-line">No working sets logged yet this week.</p>}
+      {!muscles.length && (
+        <p className="pulse-empty-line">
+          {current ? 'No working sets logged yet this week.' : 'No working sets logged that week.'}
+        </p>
+      )}
       {muscles.length > 0 && untrained > 0 && (
-        <p className="pulse-footnote">{untrained} muscles not trained yet</p>
+        <p className="pulse-footnote">
+          {untrained} muscles not trained{current ? ' yet' : ''}
+        </p>
       )}
       {(expanded || allMuscles.length > visibleMuscles.length) && (
         <button
@@ -93,6 +199,8 @@ export function MuscleSetsCard({
         <MuscleContributionSheet
           key={muscle.muscle_group}
           muscle={muscle}
+          current={current}
+          weekLabel={name}
           goal={goal}
           onClose={() => setSelected(null)}
           onOpenWorkout={onOpenWorkout}
@@ -104,11 +212,15 @@ export function MuscleSetsCard({
 
 function MuscleContributionSheet({
   muscle,
+  current,
+  weekLabel,
   goal,
   onClose,
   onOpenWorkout,
 }: {
   muscle: WeeklyMuscleSets;
+  current: boolean;
+  weekLabel: string;
   goal: number;
   onClose: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
@@ -137,7 +249,7 @@ function MuscleContributionSheet({
   return (
     <PopupDialog
       title={muscle.muscle_group}
-      kicker="THIS WEEK"
+      kicker={weekLabel.toUpperCase()}
       className="muscle-contribution-sheet"
       closeLabel="Done"
       swipeToDismiss
@@ -146,7 +258,7 @@ function MuscleContributionSheet({
       <div className="muscle-sheet-body">
         <p className="muscle-sheet-total">
           <strong>{credits(muscle.raw_sets)}</strong>
-          <span>set credits this week</span>
+          <span>set credits {current ? 'this week' : 'that week'}</span>
         </p>
         <div
           className="muscle-sheet-goal"
@@ -202,7 +314,7 @@ function MuscleContributionSheet({
           <p className="muscle-sheet-note">
             {muscle.raw_sets > 0
               ? 'Refresh Home to load the contributing exercises.'
-              : 'No working sets for this muscle this week.'}
+              : `No working sets for this muscle ${current ? 'this week' : 'that week'}.`}
           </p>
         )}
         {busy && (

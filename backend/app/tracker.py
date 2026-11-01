@@ -347,12 +347,24 @@ def exercise_coverage_groups(exercise: Exercise, on_date: date | None = None) ->
     return {group for group, _ in exercise_muscle_credits(exercise, on_date)}
 
 
+# Earlier weeks of sets per muscle sent with the dashboard, so Home can step back and compare.
+WEEKLY_SETS_HISTORY_WEEKS = 8
+
+
 def weekly_sets(
-    workouts: list[TrainingWorkout], today: date, week_start_day: str = "monday"
+    workouts: list[TrainingWorkout],
+    today: date,
+    week_start_day: str = "monday",
+    weeks_ago: int = 0,
 ) -> WeeklySetsRead:
-    week_start = start_of_week(today, week_start_day)
+    """Working sets per muscle for this week, or a whole week ``weeks_ago`` weeks back.
+
+    Muscles trained in the four weeks up to the week's last counted day are listed, including
+    those with no sets that week."""
+    week_start = start_of_week(today, week_start_day) - timedelta(weeks=weeks_ago)
     week_end = week_start + timedelta(days=6)
-    active_start = today - timedelta(days=27)
+    last_day = today if weeks_ago == 0 else week_end
+    active_start = last_day - timedelta(days=27)
     active_groups: set[str] = set()
     raw_by_group: dict[str, float] = defaultdict(float)
     effective_by_group: dict[str, float] = defaultdict(float)
@@ -364,9 +376,9 @@ def weekly_sets(
     low_rpe_sets = 0
 
     for workout in workouts:
-        if not active_start <= workout.workout_date <= today:
+        if not active_start <= workout.workout_date <= last_day:
             continue
-        in_current_week = week_start <= workout.workout_date <= today
+        in_current_week = week_start <= workout.workout_date <= last_day
         for movement in workout.movements:
             credits = exercise_muscle_credits(movement.exercise, workout.workout_date)
             if not credits:
@@ -2689,9 +2701,11 @@ def dashboard(
     today = on_date or date.today()
     preferences = training_preferences(db, user.id)
     week_start = start_of_week(today, preferences.week_start)
-    # Weekly figures look back at most four weeks, so a calendar window never truncates them.
+    # Weekly figures look back four weeks before the oldest week of sets history, so a calendar
+    # window never truncates them.
+    weekly_lookback = week_start - timedelta(weeks=WEEKLY_SETS_HISTORY_WEEKS, days=21)
     window_start = (
-        min(calendar_start, week_start, today - timedelta(days=27)) if calendar_start else None
+        min(calendar_start, weekly_lookback, today - timedelta(days=27)) if calendar_start else None
     )
     workouts = workouts_between(db, user.id, window_start)
     this_week = [workout for workout in workouts if week_start <= workout.workout_date <= today]
@@ -2832,6 +2846,10 @@ def dashboard(
             or workout_recommendation(workouts, today, earlier_rotation)
         ),
         weekly_sets=weekly_sets(workouts, today, preferences.week_start),
+        weekly_sets_history=[
+            weekly_sets(workouts, today, preferences.week_start, weeks_ago)
+            for weeks_ago in range(1, WEEKLY_SETS_HISTORY_WEEKS + 1)
+        ],
         muscle_volume=[
             MuscleVolumeRead(muscle_name=name, set_total=value)
             for name, value in sorted(muscle_totals.items())

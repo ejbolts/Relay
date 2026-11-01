@@ -1,10 +1,11 @@
 {
-  "version": "1.1.1",
+  "version": "1.2.0",
   "date": "2026-11-01",
-  "title": "Swipe away body-weight goals",
-  "summary": "Remove a body-weight goal by swiping its line in the check-in history, with Undo.",
+  "title": "Weekly comparisons and body goals",
+  "summary": "Compare muscle sets across weeks and swipe away body-weight goals with Undo.",
   "changes": [
+    "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#111"
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120"
 }
