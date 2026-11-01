@@ -181,3 +181,105 @@ it('can reveal untrained muscles before the first workout of the week', async ()
   expect(host.querySelectorAll('.muscle-bars > li')).toHaveLength(1);
   expect(host.querySelector('.num')?.textContent).toBe('0');
 });
+
+function week(start: string, sets: Record<string, number>): WeeklySets {
+  return {
+    ...weeklySets,
+    week_start: start,
+    muscle_groups: Object.entries(sets).map(([muscle_group, raw_sets]) => ({
+      muscle_group,
+      raw_sets,
+      effective_sets: raw_sets,
+      average_rpe: null,
+      contributions: [],
+    })),
+  };
+}
+
+const rows = () =>
+  [...host.querySelectorAll('.muscle-bars > li')].map((row) => [
+    row.querySelector('.muscle-name-button')?.textContent,
+    row.querySelector('.num')?.childNodes[0]?.textContent,
+    row.querySelector('.muscle-set-change')?.textContent ?? null,
+    row.querySelector('.muscle-bar-previous') !== null,
+  ]);
+const arrow = (label: string) => host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+const weekLabel = () => host.querySelector('.muscle-week-nav > span')?.textContent;
+
+it('compares each muscle with the week before and steps back through earlier weeks', async () => {
+  const thisWeek = week('2026-10-26', { Chest: 9, Quads: 8 });
+  const history = [
+    week('2026-10-19', { Chest: 12, Quads: 8, Calves: 4 }),
+    week('2026-10-12', { Chest: 10, Quads: 9.5 }),
+  ];
+  await act(async () =>
+    root.render(<MuscleSetsCard weeklySets={thisWeek} history={history} goal={10} />),
+  );
+
+  expect(weekLabel()).toBe('This week');
+  expect(arrow('Next week').disabled).toBe(true);
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe(
+    'Week of 26 OctWeek of 19 OctGoal 10',
+  );
+  // Calves were trained only the week before, so their drop still shows.
+  expect(rows()).toEqual([
+    ['Chest', '9', '−3', true],
+    ['Quads', '8', '±0', true],
+    ['Calves', '0', '−4', true],
+  ]);
+
+  await act(async () => arrow('Previous week').click());
+  expect(weekLabel()).toBe('Last week');
+  expect(rows()).toEqual([
+    ['Chest', '12', '+2', true],
+    ['Quads', '8', '−1.5', true],
+    ['Calves', '4', '+4', false],
+  ]);
+
+  // The oldest week has nothing before it to compare with.
+  await act(async () => arrow('Previous week').click());
+  expect(weekLabel()).toBe('2 weeks ago');
+  expect(arrow('Previous week').disabled).toBe(true);
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe('Week of 12 OctGoal 10');
+  expect(rows()).toEqual([
+    ['Chest', '10', null, false],
+    ['Quads', '9.5', null, false],
+  ]);
+  expect(host.querySelector('.muscle-bars')?.getAttribute('aria-label')).toContain('2 weeks ago');
+
+  await act(async () =>
+    host
+      .querySelector<HTMLButtonElement>('[aria-label="Exercises contributing to Chest"]')!
+      .click(),
+  );
+  const dialog = document.querySelector('dialog')!;
+  expect(dialog.textContent).toContain('2 WEEKS AGO');
+  expect(dialog.textContent).toContain('set credits that week');
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Close Chest"]')!.click(),
+  );
+
+  await act(async () => arrow('Next week').click());
+  await act(async () => arrow('Next week').click());
+  expect(weekLabel()).toBe('This week');
+});
+
+it('keeps one bar scale across weeks so lengths stay comparable', async () => {
+  const thisWeek = week('2026-10-26', { Chest: 5 });
+  const history = [week('2026-10-19', { Chest: 20 })];
+  await act(async () =>
+    root.render(<MuscleSetsCard weeklySets={thisWeek} history={history} goal={10} />),
+  );
+  const width = (selector: string) =>
+    host.querySelector<HTMLElement>(`.muscle-bars li ${selector}`)?.style.width;
+  expect(width('.muscle-bar-previous')).toBe('100%');
+  expect(width('i:not(.muscle-bar-previous)')).toBe('25%');
+});
+
+it('works without earlier weeks from an older cached dashboard', async () => {
+  await act(async () => root.render(<MuscleSetsCard weeklySets={weeklySets} goal={10} />));
+  expect(arrow('Previous week').disabled).toBe(true);
+  expect(arrow('Next week').disabled).toBe(true);
+  expect(host.querySelector('.muscle-set-change')).toBeNull();
+  expect(host.querySelector('.muscle-bar-previous')).toBeNull();
+});

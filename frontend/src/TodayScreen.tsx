@@ -479,6 +479,7 @@ export function TodayScreen({
     'muscle-sets': (
       <MuscleSetsCard
         weeklySets={data?.weekly_sets}
+        history={data?.weekly_sets_history}
         goal={muscleSetGoal}
         onOpenWorkout={onOpenWorkout}
       />

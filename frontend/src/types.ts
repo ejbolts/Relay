@@ -422,6 +422,8 @@ export interface DashboardData {
   weekly_days: WeeklyDayBreakdown[];
   recommendation: WorkoutRecommendation;
   weekly_sets: WeeklySets;
+  /** The weeks before `weekly_sets`, newest first; absent from dashboards cached by earlier releases. */
+  weekly_sets_history?: WeeklySets[];
   muscle_volume: MuscleVolume[];
   zone2: Zone2Week;
   recent_workouts: TrackedWorkout[];

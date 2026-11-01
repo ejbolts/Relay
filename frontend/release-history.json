@@ -1,5 +1,68 @@
 [
   {
+    "version": "1.1.0",
+    "date": "2026-11-01",
+    "title": "Offline workouts, live friends and saved splits",
+    "summary": "Log offline, see friends training live and keep your workout plans together.",
+    "changes": [
+      "**Reliable saves:** Interrupted saves recover without duplicate workouts or runaway timers.",
+      "**Split sharing:** Clear guidance when workout days need exercises before sharing on your profile.",
+      "**Workout controls:** Pause live time, manage the slimmer rest timer and receive in-app rest alerts.",
+      "**Set colours:** Clearer RPE, warm-up, working, drop and failure sets, plus same-weight volume PR labels.",
+      "**Workout dates:** Overnight sessions keep their correct start date and duration.",
+      "**Exercise library:** Search by equipment, page results and add exercises without starting a workout.",
+      "**Muscle tracking:** Choose direct/partial credits by week and inspect each muscle's contributing workouts.",
+      "**Training trends:** Faster charts and useful eight-week trends for less-recent lifts.",
+      "**Body measurements:** Record circumferences and browse history by body part.",
+      "**FFMI:** Clearer calculations and sex-matched population references.",
+      "**Cardio goals:** Custom heart-rate zones, weekly targets and Home card designs.",
+      "**Cardio logging:** Edit suggested values immediately; screenshot scans discard images after reading them.",
+      "**Equipment:** Merge machines, swipe photos and save named settings with each workout.",
+      "**Imports:** Match exercise names and undo individual import batches.",
+      "**Find friends:** Add friends with QR codes and browse suggested public accounts.",
+      "**Reactions:** Use the Run reaction and see who reacted to a workout.",
+      "**Friend feed:** Load more friends inline and see local session timestamps.",
+      "**Live notifications:** Receive updates while browsing, with read states synced across devices.",
+      "**Profiles:** Faster loading and paged cardio history.",
+      "**Privacy:** Choose whether friends see your online status and live workouts.",
+      "**Account security:** Sign out across devices; revoked sessions lose access to live updates.",
+      "**Workout polish:** Clearer mixed-session labels, safer type validation and simpler notes/photo controls.",
+      "**Navigation:** Cleaner Home header, circular Start button and Settings opening at the overview.",
+      "**Security:** Safer push alerts, image processing, offline caches and CSV exports."
+    ],
+    "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#110",
+    "image": {
+      "url": "https://raw.githubusercontent.com/ejbolts/Relay/55b653fa405cec03f07b871feb5a7d2522f90161/docs/screenshots/releases/1.1.0-offline-test-user.png",
+      "alt": "Home showing the Offline badge and Test User profile in the supplied closer view."
+    },
+    "highlights": [
+      {
+        "title": "Offline workouts",
+        "description": "Set up online; one workout awaits sync.",
+        "image": {
+          "url": "https://raw.githubusercontent.com/ejbolts/Relay/55b653fa405cec03f07b871feb5a7d2522f90161/docs/screenshots/releases/1.1.0-offline-test-user.png",
+          "alt": "Home showing the Offline badge and Test User profile in the supplied closer view."
+        }
+      },
+      {
+        "title": "Friends, live",
+        "description": "Live activity, workouts and timers.",
+        "image": {
+          "url": "https://raw.githubusercontent.com/ejbolts/Relay/ecd57b47d80529559678d24175b2dea8784b8b64/docs/screenshots/releases/1.1.0-jordan-live-activity.gif",
+          "alt": "Jordan Sample's online and live-workout status updating in Social."
+        }
+      },
+      {
+        "title": "Your saved splits",
+        "description": "Saved plans and your upcoming week.",
+        "image": {
+          "url": "https://raw.githubusercontent.com/ejbolts/Relay/057c7bbfb9eabbbf7a25e2b38cad0e9a60db55f7/docs/screenshots/releases/1.1.0-splits-supplied-active.png",
+          "alt": "Your splits showing the active Push / Pull / Legs plan, its upcoming week and another saved split."
+        }
+      }
+    ]
+  },
+  {
     "version": "1.0.0",
     "date": "2026-10-25",
     "title": "Gym Logger is now Relay",
