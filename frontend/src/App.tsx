@@ -88,11 +88,13 @@ import {
 import type { BodyTrendDuration, BodyTrendRange, BodyTrendStatistic } from './bodyTrend';
 import {
   bodyGoalKind,
+  bodyGoalName,
   bodyHistoryWithWeightChanges,
   summarizeBodyHistory,
 } from './bodyMeasurementHistory';
 import type { BodyGoalKind, BodyHistoryPeriod } from './bodyMeasurementHistory';
 import { BodyHistoryGoalDivider, BodyHistoryWeightChange } from './BodyHistoryWeightChange';
+import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
 import {
   DEFAULT_BODY_TREND_PREFERENCE,
   loadBodyTrendPreference,
@@ -7915,6 +7917,7 @@ export function BodyCompositionScreen({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [goals, setGoals] = useState<BodyWeightGoal[]>([]);
+  const [goalRemovalError, setGoalRemovalError] = useState<string | null>(null);
   const [goalTarget, setGoalTarget] = useState<number | null>(null);
   const [goalKind, setGoalKind] = useState<BodyGoalKind>('loss');
   const [goalDate, setGoalDate] = useState('');
@@ -7931,6 +7934,18 @@ export function BodyCompositionScreen({
   const [trendStatistic, setTrendStatistic] = useState<BodyTrendStatistic>(
     trendPreference.statistic,
   );
+  const goalRemoval = useGoalRemoval<BodyWeightGoal>({
+    remove: (id) => api.deleteBodyWeightGoal(id),
+    onRemoved: () => void onDataChange(),
+    onRestore: ({ goal, index }) =>
+      setGoals((current) =>
+        current.some((item) => item.id === goal.id)
+          ? current
+          : [...current.slice(0, index), goal, ...current.slice(index)],
+      ),
+    onFailed: setGoalRemovalError,
+  });
+  const pendingGoalId = goalRemoval.pendingId;
   const activeGoal = goals.find((goal) => goal.active) ?? null;
   const dailyHistory = bodyHistoryWithWeightChanges(
     measurements
@@ -7984,7 +7999,8 @@ export function BodyCompositionScreen({
     void api
       .listBodyWeightGoals()
       .then((next) => {
-        if (!cancelled) setGoals(next);
+        // A goal waiting out its Undo window stays hidden when the list reloads.
+        if (!cancelled) setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
       })
       .catch((reason) => {
         if (!cancelled)
@@ -7993,7 +8009,26 @@ export function BodyCompositionScreen({
     return () => {
       cancelled = true;
     };
-  }, [dataRevision]);
+  }, [dataRevision, pendingGoalId]);
+
+  /** A goal divider in body history; swipe it left to remove the goal, with Undo. */
+  function renderGoalDivider(goal: BodyWeightGoal) {
+    return (
+      <SwipeToDeleteSetRow
+        className="body-goal-swipe"
+        label={`goal: ${bodyGoalName(goal, weightUnit)}`}
+        onDelete={() => {
+          const index = goals.findIndex((item) => item.id === goal.id);
+          if (index < 0) return;
+          setGoalRemovalError(null);
+          setGoals((current) => current.filter((item) => item.id !== goal.id));
+          goalRemoval.start(goal, index);
+        }}
+      >
+        <BodyHistoryGoalDivider goal={goal} unit={weightUnit} />
+      </SwipeToDeleteSetRow>
+    );
+  }
 
   function chooseGoalKind(kind: BodyGoalKind) {
     setGoalKind(kind);
@@ -8430,6 +8465,11 @@ export function BodyCompositionScreen({
             {historyView === 'daily' && <span />}
           </div>
         )}
+        {goalRemovalError && (
+          <p className="inline-error" role="alert">
+            {goalRemovalError}
+          </p>
+        )}
         {historyView === 'daily' &&
           pagedMeasurements.map((measurement) => (
             <Fragment key={measurement.id}>
@@ -8528,9 +8568,7 @@ export function BodyCompositionScreen({
                   </div>
                 </form>
               )}
-              {measurement.goal_change && (
-                <BodyHistoryGoalDivider goal={measurement.goal_change} unit={weightUnit} />
-              )}
+              {measurement.goal_change && renderGoalDivider(measurement.goal_change)}
             </Fragment>
           ))}
         {historyView !== 'daily' &&
@@ -8573,9 +8611,7 @@ export function BodyCompositionScreen({
                   </strong>
                 </div>
               </article>
-              {summary.goal_change && (
-                <BodyHistoryGoalDivider goal={summary.goal_change} unit={weightUnit} />
-              )}
+              {summary.goal_change && renderGoalDivider(summary.goal_change)}
             </Fragment>
           ))}
         <PaginationControls
@@ -8585,6 +8621,30 @@ export function BodyCompositionScreen({
           label={`${historyView} bodyweight history`}
         />
       </section>
+      {goalRemoval.pending &&
+        createPortal(
+          <div
+            key={goalRemoval.pending.goal.id}
+            className="undo-toast top-toast"
+            role="status"
+            aria-atomic="true"
+            style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
+          >
+            <span>Goal removed</span>
+            <button className="undo-toast-action" type="button" onClick={goalRemoval.undo}>
+              Undo
+            </button>
+            <button
+              className="undo-toast-close"
+              type="button"
+              aria-label="Dismiss goal notification"
+              onClick={goalRemoval.dismiss}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }

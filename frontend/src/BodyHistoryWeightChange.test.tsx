@@ -199,6 +199,8 @@ describe('Body history goal-aware arrows', () => {
       const dividers = () => [
         ...container.querySelectorAll<HTMLElement>('.body-history-goal-divider'),
       ];
+      // Each divider sits in a swipe row so the goal can be swiped away.
+      const rule = (divider: HTMLElement) => divider.closest<HTMLElement>('.body-goal-swipe')!;
       expect(dividers()).toHaveLength(2);
       const goalStart = new Date(2026, 9, 17);
       const goalDate = new DateTimeFormat(locale, {
@@ -207,18 +209,18 @@ describe('Body history goal-aware arrows', () => {
         ...(goalStart.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
       }).format(goalStart);
       // Each rule sits directly below the oldest row under its goal.
-      expect(dividers()[0].previousElementSibling).toBe(rows()[1]);
+      expect(rule(dividers()[0]).previousElementSibling).toBe(rows()[1]);
       expect(dividers()[0].getAttribute('aria-label')).toBe(
         `New goal from ${goalDate}: Gain to 86 kg`,
       );
       expect(dividers()[0].textContent).toContain(`from ${goalDate}`);
-      expect(dividers()[1].previousElementSibling).toBe(rows()[3]);
+      expect(rule(dividers()[1]).previousElementSibling).toBe(rows()[3]);
       expect(dividers()[1].textContent).toContain('Lose to 82 kg');
 
       await selectTab('Avg Monthly');
       expect(rows()).toHaveLength(3);
       expect(arrow(rows()[0])?.classList.contains('favorable')).toBe(true);
-      expect(dividers().map((divider) => divider.previousElementSibling)).toEqual([
+      expect(dividers().map((divider) => rule(divider).previousElementSibling)).toEqual([
         rows()[0],
         rows()[1],
       ]);

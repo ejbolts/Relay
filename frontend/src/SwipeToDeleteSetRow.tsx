@@ -15,6 +15,7 @@ interface ActivePointer {
 export function SwipeToDeleteSetRow({
   children,
   label,
+  className = '',
   flipKey,
   disabled = false,
   overlayOpen = false,
@@ -22,6 +23,8 @@ export function SwipeToDeleteSetRow({
 }: {
   children: ReactNode;
   label: string;
+  /** Extra classes for the row, such as a goal divider in body history. */
+  className?: string;
   /** Lets list reorder animations track this row. */
   flipKey?: string;
   disabled?: boolean;
@@ -137,7 +140,7 @@ export function SwipeToDeleteSetRow({
 
   return (
     <div
-      className={`set-swipe-shell ${dragging ? 'is-dragging' : ''} ${deleting ? 'is-deleting' : ''} ${disabled ? 'is-disabled' : ''} ${overlayOpen ? 'has-open-overlay' : ''}`}
+      className={`set-swipe-shell ${className} ${dragging ? 'is-dragging' : ''} ${deleting ? 'is-deleting' : ''} ${disabled ? 'is-disabled' : ''} ${overlayOpen ? 'has-open-overlay' : ''}`}
       data-flip-key={flipKey}
       style={style}
       onClickCapture={(event) => {

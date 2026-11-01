@@ -2,17 +2,22 @@
 
 _Relay was called Gym Logger before version 1.0._
 
-## 1.1.1
+## 1.2.0
 
 1 November 2026
 
-### Compare sets per muscle by week
+### Weekly comparisons and body goals
 
 ![Sets per muscle on Home with week arrows, this week's bars, outlines for the week before and the change for each muscle.](screenshots/releases/1.1.1-sets-per-muscle-compare.png)
 
 **Week by week** — Step back and see the change on the week before.
 
+![Swiping a goal line left in the monthly check-in history to reveal Delete, then the goal removed with an Undo popup.](screenshots/releases/1.1.1-swipe-remove-goal.png)
+
+**Swipe to remove** — Goals come off the history like rest times in a workout.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
+- **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 
 ## 1.1.0
 
