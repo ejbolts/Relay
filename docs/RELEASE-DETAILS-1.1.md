@@ -4,7 +4,7 @@
 
 ## 1.1.0
 
-28 October 2026
+1 November 2026
 
 ### Your training split and friends
 
