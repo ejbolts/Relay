@@ -3729,8 +3729,25 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: #8c9692;
 }
 
-.logger-screen .set-details.is-open .completed-set-menu {
-  color: #5598e7;
+.logger-screen .set-grid .completed-set-menu {
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  min-height: 2rem;
+  box-sizing: border-box;
+  border-color: var(--p-line);
+  color: var(--p-muted);
+}
+
+.logger-screen .set-grid .set-drag-handle {
+  width: 1.5rem;
+}
+
+.logger-screen .set-grid .completed-set-menu:hover,
+.logger-screen .set-grid .completed-set-menu:focus-visible,
+.logger-screen .set-grid .completed-set-menu[aria-expanded='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  color: var(--p-accent);
 }
 
 .logger-screen .set-grid .set-editor {

@@ -18,7 +18,8 @@
     "**Split editor:** Editing a split opens a compact full screen led by a Weekly volume chart of the sets each muscle gets per week and your planned cardio, against your weekly goals. Days fold into one-line rows, each exercise has a sets stepper with a ? for its direct and partial set credits, and tapping a muscle shows which days train it.",
     "**Split days:** Split cards list each exercise with a coloured block per planned set instead of every set's reps and weight, with a Muscles button to show what each exercise trains.",
     "**Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.",
-    "**Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it."
+    "**Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.",
+    "**Set options:** An outlined pencil replaces the three-dot button on each set row. Open it to edit, move or delete a set; the separate reorder grip stays beside it."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {

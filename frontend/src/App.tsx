@@ -4790,7 +4790,7 @@ function MovementCard({
             setOpenSetActionsKey((current) => (current === item.key ? null : item.key));
           }}
         >
-          ⋮
+          <Icon name="edit" />
         </button>
         {openSetActionsKey === item.key && (
           <span className="set-actions-menu-popover">
