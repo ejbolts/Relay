@@ -3139,7 +3139,11 @@ function WorkoutLogger({
         }
         const sets = [...movement.sets];
         sets.splice(undoDeletion.index, 0, undoDeletion.set);
-        return { ...movement, sets };
+        return {
+          ...movement,
+          isComplete: movement.isComplete && sets.every((set) => set.completed),
+          sets,
+        };
       }),
     );
     setUndoDeletion(null);
@@ -3323,6 +3327,7 @@ function WorkoutLogger({
         );
         return {
           ...movement,
+          isComplete: movement.isComplete && sets.every((set) => set.completed),
           sets:
             loggingSet || correctingLoggedSet
               ? suggestNextSetFromLoggedSet(
@@ -3345,7 +3350,11 @@ function WorkoutLogger({
     setMovements((current) =>
       current.map((item) =>
         item.key === movement.key
-          ? { ...item, sets: [...item.sets, emptySet(item.exercise.kind, item.sets.at(-1))] }
+          ? {
+              ...item,
+              isComplete: false,
+              sets: [...item.sets, emptySet(item.exercise.kind, item.sets.at(-1))],
+            }
           : item,
       ),
     );
@@ -3890,17 +3899,17 @@ function WorkoutLogger({
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
               onExerciseComplete={(isComplete) =>
                 setMovements((current) =>
-                  current.map((item) =>
-                    item.key === movement.key
-                      ? {
-                          ...item,
-                          isComplete,
-                          sets: isComplete
-                            ? completeRemainingSets(item.exercise.kind, item.sets)
-                            : item.sets,
-                        }
-                      : item,
-                  ),
+                  current.map((item) => {
+                    if (item.key !== movement.key) return item;
+                    const sets = isComplete
+                      ? completeRemainingSets(item.exercise.kind, item.sets)
+                      : item.sets;
+                    return {
+                      ...item,
+                      isComplete: isComplete && sets.every((set) => set.completed),
+                      sets,
+                    };
+                  }),
                 )
               }
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
@@ -4511,7 +4520,7 @@ function MovementCard({
   const setNumbers = setNumberLabels(movement.sets);
 
   useEffect(() => {
-    if (!movement.isComplete) setExpanded(true);
+    setExpanded(!movement.isComplete);
   }, [movement.isComplete]);
 
   useEffect(() => {
@@ -5207,7 +5216,6 @@ function MovementCard({
             onClick={() => {
               const next = !movement.isComplete;
               onExerciseComplete(next);
-              setExpanded(!next);
               closeMovementMenu();
             }}
           >

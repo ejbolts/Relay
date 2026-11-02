@@ -33,7 +33,7 @@ export function restoreWorkoutDraftMovements(
     machinePhotosInitialized: true,
     machineSettings: movement.machineSettings,
     supersetKey: movement.supersetKey,
-    isComplete: movement.isComplete ?? false,
+    isComplete: Boolean(movement.isComplete) && movement.sets.every((set) => set.completed),
     sets: movement.sets,
   }));
 }

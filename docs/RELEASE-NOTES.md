@@ -44,6 +44,10 @@ _Relay was called Gym Logger before version 1.0._
 
 **Wrapping set notes** - Notes stay inside the card while typing and after saving, including long words and manual line breaks. Isolated sample data.
 
+![Leg Extension with its exercise tick cleared after unticking the first working set, while the warm-up and second working set remain completed.](screenshots/releases/1.2.0-exercise-completion-sync.png)
+
+**Consistent exercise ticks** - Unticking a set clears the exercise tick. Tick the exercise again to complete its remaining entered sets. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -53,6 +57,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.
 - **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
 - **Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.
+- **Exercise completion:** Unticking a set also unticks its exercise. Adding a set or restoring an unfinished set with Undo clears the exercise tick too. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished. Recovery repairs inconsistent ticks from earlier versions.
 
 ## 1.1.0
 
