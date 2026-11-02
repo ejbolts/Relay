@@ -62,7 +62,7 @@ describe('plannedWeeklyVolume', () => {
     expect(volume.cardioMinutes).toBe(0);
   });
 
-  it('averages a cycle that does not line up with a week', () => {
+  it('averages a cycle that does not line up with a week, in head-to-toe order', () => {
     const volume = plannedWeeklyVolume([
       day([{ exercise_id: bench.id, exercise: bench, sets: [set(), set(), set(), set()] }]),
       {
@@ -75,8 +75,8 @@ describe('plannedWeeklyVolume', () => {
     ]);
     expect(volume.muscles).toEqual([
       { muscle: 'Chest', sets: 7 },
-      { muscle: 'Quads', sets: 3.5 },
       { muscle: 'Triceps', sets: 3.5 },
+      { muscle: 'Quads', sets: 3.5 },
     ]);
     expect(volume.cardioMinutes).toBeCloseTo(78.75);
   });

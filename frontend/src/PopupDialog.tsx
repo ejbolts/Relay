@@ -8,6 +8,7 @@ export function PopupDialog({
   kicker,
   className = '',
   closeLabel,
+  headerActions,
   style,
   swipeToDismiss = false,
   onClose,
@@ -19,6 +20,8 @@ export function PopupDialog({
   kicker?: string;
   className?: string;
   closeLabel?: ReactNode;
+  /** Controls beside the close button, such as a screen's Save action. */
+  headerActions?: ReactNode;
   style?: CSSProperties;
   swipeToDismiss?: boolean;
   onClose: () => void;
@@ -64,6 +67,7 @@ export function PopupDialog({
             <h2 id={titleId}>{title}</h2>
           )}
         </div>
+        {headerActions}
         <button
           type="button"
           className="popup-dialog-close"

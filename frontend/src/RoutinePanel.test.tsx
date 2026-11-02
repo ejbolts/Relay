@@ -72,6 +72,11 @@ async function input(selector: string, value: string) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
+async function openDay(day: number) {
+  await act(async () =>
+    document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[day - 1].click(),
+  );
+}
 async function save() {
   await act(async () =>
     document
@@ -274,6 +279,7 @@ it('explains how to complete an empty workout day before sharing and allows retr
   expect(api.routines.save).not.toHaveBeenCalled();
   await click('Close Split options');
   await click('Edit split');
+  await openDay(2);
   await input('[aria-label="Add exercise to day 2"]', 'row');
   await save();
   await click('Close notification');
@@ -306,7 +312,7 @@ it('preserves an existing shared split when editing without a publishing control
   expect(api.routines.save).toHaveBeenCalledWith(expect.objectContaining({ shared: true }));
 });
 
-it('edits cardio minutes as a planned target', async () => {
+it('steps cardio minutes as a planned target', async () => {
   const cardio: Exercise = {
     ...bench,
     id: 'run',
@@ -334,58 +340,48 @@ it('edits cardio minutes as a planned target', async () => {
   vi.mocked(api.listExercises).mockResolvedValue([bench, row, cardio]);
   await mount(true);
   await click('Edit split');
-  expect(
-    document.querySelector<HTMLInputElement>('[aria-label="Day 1 exercise 1 minutes"]')!.value,
-  ).toBe('10');
-  await input('[aria-label="Day 1 exercise 1 minutes"]', '15.5');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('10 min');
+  await click('5 more minutes of Running on day 1');
   await save();
   expect(vi.mocked(api.routines.save).mock.calls[0][0].days[0].movements[0].sets[0]).toMatchObject({
-    duration_seconds: 930,
+    duration_seconds: 900,
     distance_km: 2,
     weight_kg: null,
   });
 });
 
-const tray = () => document.querySelector<HTMLElement>('.split-targets')!;
-const chip = (muscle: string) =>
-  [...tray().querySelectorAll('.split-target-chips li')].find((item) =>
-    item.textContent?.includes(muscle),
+const chartRows = () =>
+  [...document.querySelectorAll('.split-volume-row')].map(
+    (row) => row.querySelector('.sr-only')?.textContent,
   );
+const count = () => document.querySelector('.split-volume-count')?.textContent;
 
-it('shows planned weekly sets per muscle against the goal and updates them live', async () => {
+it('charts planned weekly sets per muscle and updates them as sets change', async () => {
   await mount(true);
   await click('Edit split');
   // A two-day cycle repeats 3.5 times a week, so one bench set is 3.5 sets of chest.
-  expect(chip('Chest')?.textContent).toContain('Chest: 3.5 of 10 sets a week, under target');
-  expect(tray().querySelector('.split-targets-count')?.textContent).toBe('0 of 2 on target');
-  await click('One more set of Bench press on day 1');
-  await click('One more set of Bench press on day 1');
-  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('3');
-  expect(chip('Chest')?.textContent).toContain('Chest: 10.5 of 10 sets a week, on target');
-  expect(chip('Chest')?.className).toContain('is-changed');
-  expect(tray().querySelector('.split-targets-count')?.textContent).toBe('1 of 2 on target');
-  await click('One fewer set of Bench press on day 1');
-  expect(chip('Chest')?.textContent).toContain('Chest: 7 of 10 sets a week, nearly there');
-});
-
-it('expands to bars that include the combined cardio goal', async () => {
-  await mount(true);
-  await click('Edit split');
-  const toggle = tray().querySelector<HTMLButtonElement>('.split-targets-toggle')!;
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  await act(async () => toggle.click());
-  expect(toggle.getAttribute('aria-expanded')).toBe('true');
-  const rows = [...tray().querySelectorAll('.split-target-bars li')].map(
-    (item) => item.querySelector('.sr-only')?.textContent,
-  );
-  expect(rows).toEqual([
+  expect(chartRows()).toEqual([
     'Chest: 3.5 of 10 sets a week, under target',
     'Cardio: 0 of 150 minutes a week, under target',
   ]);
-  expect(tray().querySelector('.split-target-value')?.textContent).toBe('3.5 / 10');
+  expect(count()).toBe('0 of 2 on target');
+  await click('One more set of Bench press on day 1');
+  await click('One more set of Bench press on day 1');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('3');
+  expect(chartRows()[0]).toBe('Chest: 10.5 of 10 sets a week, on target');
+  expect(count()).toBe('1 of 2 on target');
+  expect(document.querySelector('.routine-day-toggle small')?.textContent).toBe(
+    '1 exercise · 3 sets',
+  );
+  await click('One fewer set of Bench press on day 1');
+  await click('One fewer set of Bench press on day 1');
+  expect(chartRows()[0]).toBe('Chest: 3.5 of 10 sets a week, under target');
+  await click('Remove Bench press from day 1');
+  expect(chartRows()).toEqual(['Cardio: 0 of 150 minutes a week, under target']);
+  expect(document.querySelector('.routine-day-toggle small')?.textContent).toBe('No exercises');
 });
 
-it('leads the collapsed summary with the muscles of the day being edited', async () => {
+it('marks the days that train a selected muscle', async () => {
   const routine = structuredClone(original);
   routine.days[1] = {
     workout_type_id: 'lower',
@@ -407,22 +403,18 @@ it('leads the collapsed summary with the muscles of the day being edited', async
   vi.mocked(api.routines.list).mockResolvedValue([routine]);
   await mount(true);
   await click('Edit split');
-  const names = () =>
-    [...tray().querySelectorAll('.split-target-chips li')].map((item) => ({
-      name: item.querySelector('span[aria-hidden]')?.textContent,
-      faded: item.classList.contains('is-faded'),
-    }));
-  expect(names().slice(0, 2)).toEqual([
-    { name: 'Chest', faded: false },
-    { name: 'Quads', faded: false },
-  ]);
-  await act(async () =>
-    document
-      .querySelector('[aria-label="Day 2"]')!
-      .dispatchEvent(new Event('pointerdown', { bubbles: true })),
+  const quads = [...document.querySelectorAll<HTMLButtonElement>('.split-volume-row')].find((row) =>
+    row.textContent?.startsWith('Quads:'),
+  )!;
+  expect(quads.querySelector('.sr-only')?.textContent).toBe(
+    'Quads: 7 of 10 sets a week, nearly there',
   );
-  expect(names().slice(0, 2)).toEqual([
-    { name: 'Quads', faded: false },
-    { name: 'Chest', faded: true },
-  ]);
+  await act(async () => quads.click());
+  expect(quads.getAttribute('aria-pressed')).toBe('true');
+  const days = [...document.querySelectorAll('.routine-day')];
+  expect(days[0].className).toContain('is-dim');
+  expect(days[1].className).not.toContain('is-dim');
+  expect(days[1].querySelector('.routine-day-hit')?.textContent).toBe('+2 sets');
+  await act(async () => quads.click());
+  expect(document.querySelector('.routine-day.is-dim')).toBeNull();
 });

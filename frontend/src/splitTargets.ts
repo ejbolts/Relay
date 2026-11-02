@@ -15,6 +15,40 @@ export interface PlannedWeeklyVolume {
 
 export type TargetStatus = 'met' | 'close' | 'under';
 
+/** Head-to-toe order, so rows stay put while sets change. Unlisted muscles follow A–Z. */
+const MUSCLE_ORDER = [
+  'Chest',
+  'Pectorals',
+  'Shoulders',
+  'Front delts',
+  'Side delts',
+  'Rear Delts',
+  'Rear deltoids',
+  'Upper traps',
+  'Back',
+  'Lats',
+  'Mid / Upper Back',
+  'Lower Back',
+  'Spinal erectors',
+  'Biceps',
+  'Triceps',
+  'Forearms',
+  'Abs',
+  'Core',
+  'Hip flexors',
+  'Glutes',
+  'Posterior chain',
+  'Quads',
+  'Quadriceps',
+  'Hamstrings',
+  'Adductors',
+  'Calves',
+];
+const muscleRank = (muscle: string) => {
+  const index = MUSCLE_ORDER.indexOf(muscle);
+  return index < 0 ? MUSCLE_ORDER.length : index;
+};
+
 /** The muscles an exercise credits per working set, matching the weekly sets on Home. */
 export function exerciseSetCredits(exercise: Exercise): { muscle: string; sets: number }[] {
   if (exercise.kind === 'cardio' || exercise.category === 'cardio') return [];
@@ -38,7 +72,8 @@ export function daySetCredits(day: RoutineDay): Map<string, number> {
   return totals;
 }
 
-function dayCardioMinutes(day: RoutineDay): number {
+/** Planned cardio minutes for one session of a split day. */
+export function dayCardioMinutes(day: RoutineDay): number {
   return day.movements
     .filter(({ exercise }) => exercise.kind === 'cardio' || exercise.category === 'cardio')
     .flatMap(({ sets }) => sets)
@@ -64,7 +99,11 @@ export function plannedWeeklyVolume(days: RoutineDay[]): PlannedWeeklyVolume {
     cycleDays,
     muscles: [...totals]
       .map(([muscle, sets]) => ({ muscle, sets: sets * perWeek }))
-      .sort((left, right) => right.sets - left.sets || left.muscle.localeCompare(right.muscle)),
+      .sort(
+        (left, right) =>
+          muscleRank(left.muscle) - muscleRank(right.muscle) ||
+          left.muscle.localeCompare(right.muscle),
+      ),
     cardioMinutes: cardio * perWeek,
   };
 }

@@ -1,9 +1,18 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
-import { SplitTargetsTray } from './SplitTargetsTray';
+import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
+import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } from './splitTargets';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { formatWeight } from './weightUnits';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -22,11 +31,6 @@ const emptySet = (): RoutineSet => ({
 });
 const failure = (reason: unknown) =>
   reason instanceof Error ? reason.message : 'Could not save the split. Try again.';
-/** Planned cardio minutes for an exercise, to one decimal place. */
-const cardioMinutes = (sets: RoutineSet[]) =>
-  sets.every((set) => set.duration_seconds == null)
-    ? ''
-    : Number((sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) / 60).toFixed(1));
 const dayCount = (days: RoutineDay[]) => `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
 
 function RoutinePattern({ days }: { days: RoutineDay[] }) {
@@ -652,6 +656,39 @@ export function RoutinePanel({
   );
 }
 
+function daySummary(day: RoutineDay) {
+  if (!day.workout_type_id) return 'Rest';
+  if (!day.movements.length) return 'No exercises';
+  const sets = day.movements
+    .filter(({ exercise }) => exercise.kind !== 'cardio')
+    .reduce((total, movement) => total + movement.sets.length, 0);
+  const minutes = Math.round(dayCardioMinutes(day));
+  const parts = [
+    `${day.movements.length} ${day.movements.length === 1 ? 'exercise' : 'exercises'}`,
+  ];
+  if (sets) parts.push(`${sets} ${sets === 1 ? 'set' : 'sets'}`);
+  if (minutes) parts.push(`${minutes} min`);
+  return parts.join(' · ');
+}
+
+/** What one session of a day adds to the selected chart row, such as "+3 sets". */
+function dayContribution(day: RoutineDay, selected: string | null) {
+  if (!selected || !day.workout_type_id) return null;
+  if (selected === CARDIO_ROW) {
+    const minutes = Math.round(dayCardioMinutes(day));
+    return minutes ? `${minutes} min` : null;
+  }
+  const sets = daySetCredits(day).get(selected);
+  return sets ? `+${formatVolume(sets)} ${sets === 1 ? 'set' : 'sets'}` : null;
+}
+
+function exerciseMuscles(exercise: Exercise) {
+  if (exercise.kind === 'cardio') return 'Cardio';
+  return exerciseSetCredits(exercise)
+    .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
+    .join(' · ');
+}
+
 function RoutineEditor({
   routine,
   schedule,
@@ -667,6 +704,7 @@ function RoutineEditor({
   onSave: (value: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) => void;
   onClose: () => void;
 }) {
+  const formId = useId();
   const [startDate, setStartDate] = useState(schedule?.start_date ?? localDate());
   const [enabled, setEnabled] = useState(schedule?.enabled ?? false);
   const [typeName, setTypeName] = useState('');
@@ -676,13 +714,19 @@ function RoutineEditor({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [focusedDay, setFocusedDay] = useState<number | null>(null);
+  const [openDay, setOpenDay] = useState<number | null>(() => {
+    const first = routine.days.findIndex((item) => item.workout_type_id);
+    return first < 0 ? 0 : first;
+  });
+  const [selected, setSelected] = useState<string | null>(null);
   const [cardioGoal, setCardioGoal] = useState<number | null>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
   const types = useWorkoutTypes();
   const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const message = validation || error;
   useEffect(() => {
     let live = true;
-    // Without cardio goals the tray still shows planned minutes.
+    // Without cardio goals the chart still shows planned minutes.
     api.getCardioPreferences().then(
       (preferences) => {
         if (live)
@@ -711,11 +755,29 @@ function RoutineEditor({
       live = false;
     };
   }, [attempt]);
+  useEffect(() => {
+    if (message) alertRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [message]);
   function day(index: number, next: RoutineDay) {
     setValue((current) => ({
       ...current,
       days: current.days.map((item, i) => (i === index ? next : item)),
     }));
+  }
+  function movement(
+    dayIndex: number,
+    movementIndex: number,
+    change: (item: RoutineDay['movements'][number]) => RoutineDay['movements'][number] | null,
+  ) {
+    const item = value.days[dayIndex];
+    day(dayIndex, {
+      ...item,
+      movements: item.movements.flatMap((m, i) => {
+        if (i !== movementIndex) return [m];
+        const next = change(m);
+        return next ? [next] : [];
+      }),
+    });
   }
   function move(index: number, direction: number) {
     setValue((current) => {
@@ -723,6 +785,11 @@ function RoutineEditor({
       [days[index], days[index + direction]] = [days[index + direction], days[index]];
       return { ...current, days };
     });
+    setOpenDay(index + direction);
+  }
+  function addDay(next: RoutineDay) {
+    setValue((current) => ({ ...current, days: [...current.days, next] }));
+    setOpenDay(value.days.length);
   }
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -742,9 +809,7 @@ function RoutineEditor({
     }
     if (
       value.days.some((item) =>
-        item.movements.some((movement) =>
-          movement.sets.some((set) => (set.weight_kg ?? 0) > 10000),
-        ),
+        item.movements.some((m) => m.sets.some((set) => (set.weight_kg ?? 0) > 10000)),
       )
     ) {
       setValidation('Starting weights must be no more than 10,000 kg.');
@@ -753,8 +818,8 @@ function RoutineEditor({
     setValidation(null);
     if (
       value.days.some(
-        (day) =>
-          day.workout_type_id && types.types.find((t) => t.id === day.workout_type_id)?.archived,
+        (item) =>
+          item.workout_type_id && types.types.find((t) => t.id === item.workout_type_id)?.archived,
       )
     ) {
       setValidation('Choose an active workout type for every workout day.');
@@ -762,6 +827,7 @@ function RoutineEditor({
     }
     onSave(value, schedule ? { start_date: startDate, enabled } : undefined);
   }
+  const canSave = !busy && !addingType && !types.loading && !types.error && !loadError;
   return (
     <PopupDialog
       title={routine.id ? 'Edit split' : 'New split'}
@@ -771,19 +837,23 @@ function RoutineEditor({
           <path d="M14.5 5.5 8 12l6.5 6.5" />
         </svg>
       }
+      headerActions={
+        <button type="submit" form={formId} className="routine-editor-save" disabled={!canSave}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      }
       onClose={onClose}
     >
-      <form onSubmit={submit} className="routine-editor">
+      <form id={formId} onSubmit={submit} className="routine-editor">
         <fieldset disabled={busy}>
-          <label>
-            Split name
-            <input
-              required
-              maxLength={40}
-              value={value.name}
-              onChange={(event) => setValue({ ...value, name: event.target.value })}
-            />
-          </label>
+          <input
+            className="routine-name-input"
+            aria-label="Split name"
+            required
+            maxLength={40}
+            value={value.name}
+            onChange={(event) => setValue({ ...value, name: event.target.value })}
+          />
           {schedule && (
             <div className="split-editor-schedule">
               <label>
@@ -796,7 +866,7 @@ function RoutineEditor({
                 />
               </label>
               <label className="routine-share">
-                <span>Active split</span>
+                <span>Active</span>
                 <input
                   type="checkbox"
                   role="switch"
@@ -822,225 +892,268 @@ function RoutineEditor({
               </button>
             </p>
           )}
-          {value.days.map((item, di) => (
-            <section
-              className={`routine-edit-day${item.workout_type ? '' : ' is-rest'}`}
-              key={di}
-              aria-label={`Day ${di + 1}`}
-              style={item.workout_type ? { borderLeftColor: item.workout_type.color } : undefined}
-              onFocusCapture={() => setFocusedDay(di)}
-              onPointerDownCapture={() => setFocusedDay(di)}
-            >
-              <header>
-                <strong>Day {di + 1}</strong>
-                <div>
-                  <button
-                    type="button"
-                    className="routine-icon-button"
-                    aria-label={`Move day ${di + 1} earlier`}
-                    disabled={di === 0}
-                    onClick={() => move(di, -1)}
-                  >
-                    <Icon name="up" />
-                  </button>
-                  <button
-                    type="button"
-                    className="routine-icon-button"
-                    aria-label={`Move day ${di + 1} later`}
-                    disabled={di === value.days.length - 1}
-                    onClick={() => move(di, 1)}
-                  >
-                    <Icon name="down" />
-                  </button>
-                  <button
-                    type="button"
-                    className="routine-icon-button"
-                    aria-label={`Remove day ${di + 1}`}
-                    disabled={value.days.length === 1}
-                    onClick={() =>
-                      setValue({ ...value, days: value.days.filter((_, i) => i !== di) })
-                    }
-                  >
-                    <Icon name="close" />
-                  </button>
-                </div>
-              </header>
-              <label>
-                Workout type
-                <select
-                  aria-label={`Day ${di + 1} workout type`}
-                  value={item.workout_type_id ?? ''}
-                  onChange={(event) => {
-                    const type = types.types.find((t) => t.id === event.target.value) ?? null;
-                    day(di, {
-                      ...item,
-                      workout_type_id: type?.id ?? null,
-                      workout_type: type,
-                      movements: type ? item.movements : [],
-                    });
-                  }}
+          {message && (
+            <p role="alert" className="inline-error" ref={alertRef}>
+              {message}
+            </p>
+          )}
+          <SplitVolumeChart
+            days={value.days}
+            muscleGoal={muscleGoal}
+            cardioGoal={cardioGoal}
+            selected={selected}
+            onSelect={setSelected}
+          />
+          <h3 className="routine-cycle-heading">Cycle · {dayCount(value.days)}</h3>
+          <ol className="routine-day-list">
+            {value.days.map((item, di) => {
+              const open = openDay === di;
+              const contribution = dayContribution(item, selected);
+              const bodyId = `${formId}-day-${di}`;
+              return (
+                <li
+                  key={di}
+                  className={[
+                    'routine-day',
+                    open ? 'is-open' : '',
+                    selected && !contribution ? 'is-dim' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  style={
+                    {
+                      '--day-colour': item.workout_type?.color ?? 'var(--p-deemph)',
+                    } as CSSProperties
+                  }
                 >
-                  <option value="">Rest</option>
-                  {types.types
-                    .filter((t) => !t.archived || t.id === item.workout_type_id)
-                    .map((t) => (
-                      <option value={t.id} key={t.id}>
-                        {t.name}
-                        {t.archived ? ' (removed)' : ''}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              {item.movements.map((movement, mi) => (
-                <div className="routine-edit-exercise" key={`${di}-${mi}-${movement.exercise_id}`}>
-                  <div className="routine-exercise-select">
-                    <select
-                      aria-label={`Day ${di + 1} exercise ${mi + 1}`}
-                      value={movement.exercise_id}
-                      onChange={(event) => {
-                        const exercise = exercises.find((e) => e.id === event.target.value)!;
-                        day(di, {
-                          ...item,
-                          movements: item.movements.map((m, i) =>
-                            i === mi
-                              ? {
-                                  ...m,
-                                  exercise_id: exercise.id,
-                                  exercise,
-                                  sets: exercise.kind === m.exercise.kind ? m.sets : [emptySet()],
-                                }
-                              : m,
-                          ),
-                        });
-                      }}
-                    >
-                      {[
-                        movement.exercise,
-                        ...exercises.filter((e) => e.id !== movement.exercise_id),
-                      ].map((e) => (
-                        <option value={e.id} key={e.id}>
-                          {e.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="routine-icon-button"
-                      aria-label={`Remove exercise ${mi + 1} from day ${di + 1}`}
-                      onClick={() =>
-                        day(di, { ...item, movements: item.movements.filter((_, i) => i !== mi) })
-                      }
-                    >
-                      <Icon name="close" />
-                    </button>
-                  </div>
-                  {movement.exercise.kind === 'cardio' ? (
-                    <label className="routine-cardio-minutes">
-                      Minutes
-                      <input
-                        aria-label={`Day ${di + 1} exercise ${mi + 1} minutes`}
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        max="2880"
-                        step="1"
-                        value={cardioMinutes(movement.sets)}
-                        onChange={(event) =>
-                          day(di, {
-                            ...item,
-                            movements: item.movements.map((m, i) =>
-                              i === mi
-                                ? {
-                                    ...m,
-                                    // One planned duration; earlier interval sets fold into it.
-                                    sets: [
-                                      {
-                                        ...m.sets[0],
-                                        duration_seconds:
-                                          event.target.value === ''
-                                            ? null
-                                            : Math.round(Number(event.target.value) * 60),
-                                      },
-                                    ],
-                                  }
-                                : m,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                  ) : (
-                    <div className="routine-set-count">
-                      <span>Sets</span>
-                      <div className="routine-stepper">
-                        <button
-                          type="button"
-                          aria-label={`One fewer set of ${movement.exercise.name} on day ${di + 1}`}
-                          disabled={movement.sets.length <= 1}
-                          onClick={() =>
+                  <button
+                    type="button"
+                    className="routine-day-toggle"
+                    aria-expanded={open}
+                    aria-controls={bodyId}
+                    onClick={() => setOpenDay(open ? null : di)}
+                  >
+                    <span className="routine-day-bar" aria-hidden="true" />
+                    <span className="routine-day-title">
+                      <strong>
+                        Day {di + 1} ·{' '}
+                        {item.workout_type?.name ??
+                          (item.workout_type_id ? 'Removed type' : 'Rest')}
+                      </strong>
+                      <small>{daySummary(item)}</small>
+                    </span>
+                    {contribution && <span className="routine-day-hit">{contribution}</span>}
+                    <Icon name="chevron-down" />
+                  </button>
+                  {open && (
+                    <section className="routine-day-body" id={bodyId} aria-label={`Day ${di + 1}`}>
+                      <div className="routine-day-tools">
+                        <select
+                          className="routine-day-type"
+                          aria-label={`Day ${di + 1} workout type`}
+                          value={item.workout_type_id ?? ''}
+                          onChange={(event) => {
+                            const type =
+                              types.types.find((t) => t.id === event.target.value) ?? null;
                             day(di, {
                               ...item,
-                              movements: item.movements.map((m, i) =>
-                                i === mi ? { ...m, sets: m.sets.slice(0, -1) } : m,
-                              ),
-                            })
-                          }
+                              workout_type_id: type?.id ?? null,
+                              workout_type: type,
+                              movements: type ? item.movements : [],
+                            });
+                          }}
                         >
-                          <Icon name="minus" />
+                          <option value="">Rest</option>
+                          {types.types
+                            .filter((t) => !t.archived || t.id === item.workout_type_id)
+                            .map((t) => (
+                              <option value={t.id} key={t.id}>
+                                {t.name}
+                                {t.archived ? ' (removed)' : ''}
+                              </option>
+                            ))}
+                        </select>
+                        <span className="routine-day-spacer" />
+                        <button
+                          type="button"
+                          className="routine-icon-button"
+                          aria-label={`Move day ${di + 1} earlier`}
+                          disabled={di === 0}
+                          onClick={() => move(di, -1)}
+                        >
+                          <Icon name="up" />
                         </button>
-                        <output>{movement.sets.length}</output>
                         <button
                           type="button"
-                          aria-label={`One more set of ${movement.exercise.name} on day ${di + 1}`}
-                          disabled={movement.sets.length >= 50}
-                          onClick={() =>
-                            day(di, {
-                              ...item,
-                              movements: item.movements.map((m, i) =>
-                                i === mi
-                                  ? {
-                                      ...m,
-                                      sets: [...m.sets, { ...m.sets.at(-1)!, set_type: 'normal' }],
-                                    }
-                                  : m,
-                              ),
-                            })
-                          }
+                          className="routine-icon-button"
+                          aria-label={`Move day ${di + 1} later`}
+                          disabled={di === value.days.length - 1}
+                          onClick={() => move(di, 1)}
                         >
-                          <Icon name="plus" />
+                          <Icon name="down" />
+                        </button>
+                        <button
+                          type="button"
+                          className="routine-icon-button"
+                          aria-label={`Remove day ${di + 1}`}
+                          disabled={value.days.length === 1}
+                          onClick={() => {
+                            setValue({ ...value, days: value.days.filter((_, i) => i !== di) });
+                            setOpenDay(null);
+                          }}
+                        >
+                          <Icon name="close" />
                         </button>
                       </div>
-                    </div>
+                      {item.movements.map((m, mi) => {
+                        const cardio = m.exercise.kind === 'cardio';
+                        const minutes = Math.round(
+                          m.sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) /
+                            60,
+                        );
+                        const atMinimum = cardio ? minutes <= 5 : m.sets.length <= 1;
+                        const name = m.exercise.name;
+                        return (
+                          <div
+                            className="routine-exercise-row"
+                            key={`${di}-${mi}-${m.exercise_id}`}
+                          >
+                            <div className="routine-exercise-main">
+                              <select
+                                className="routine-exercise-name"
+                                aria-label={`Day ${di + 1} exercise ${mi + 1}`}
+                                value={m.exercise_id}
+                                onChange={(event) => {
+                                  const exercise = exercises.find(
+                                    (e) => e.id === event.target.value,
+                                  )!;
+                                  movement(di, mi, (current) => ({
+                                    ...current,
+                                    exercise_id: exercise.id,
+                                    exercise,
+                                    sets:
+                                      exercise.kind === current.exercise.kind
+                                        ? current.sets
+                                        : [emptySet()],
+                                  }));
+                                }}
+                              >
+                                {[
+                                  m.exercise,
+                                  ...exercises.filter((e) => e.id !== m.exercise_id),
+                                ].map((e) => (
+                                  <option value={e.id} key={e.id}>
+                                    {e.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <small>{exerciseMuscles(m.exercise)}</small>
+                            </div>
+                            <div className="routine-stepper">
+                              <button
+                                type="button"
+                                aria-label={
+                                  atMinimum
+                                    ? `Remove ${name} from day ${di + 1}`
+                                    : cardio
+                                      ? `5 fewer minutes of ${name} on day ${di + 1}`
+                                      : `One fewer set of ${name} on day ${di + 1}`
+                                }
+                                onClick={() =>
+                                  movement(di, mi, (current) => {
+                                    if (atMinimum) return null;
+                                    if (!cardio)
+                                      return { ...current, sets: current.sets.slice(0, -1) };
+                                    return {
+                                      ...current,
+                                      // One planned duration; earlier interval sets fold into it.
+                                      sets: [
+                                        {
+                                          ...current.sets[0],
+                                          duration_seconds: (minutes - 5) * 60,
+                                        },
+                                      ],
+                                    };
+                                  })
+                                }
+                              >
+                                <Icon name={atMinimum ? 'close' : 'minus'} />
+                              </button>
+                              <output>{cardio ? `${minutes} min` : m.sets.length}</output>
+                              <button
+                                type="button"
+                                aria-label={
+                                  cardio
+                                    ? `5 more minutes of ${name} on day ${di + 1}`
+                                    : `One more set of ${name} on day ${di + 1}`
+                                }
+                                disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
+                                onClick={() =>
+                                  movement(di, mi, (current) =>
+                                    cardio
+                                      ? {
+                                          ...current,
+                                          sets: [
+                                            {
+                                              ...current.sets[0],
+                                              duration_seconds: (minutes + 5) * 60,
+                                            },
+                                          ],
+                                        }
+                                      : {
+                                          ...current,
+                                          sets: [
+                                            ...current.sets,
+                                            { ...current.sets.at(-1)!, set_type: 'normal' },
+                                          ],
+                                        },
+                                  )
+                                }
+                              >
+                                <Icon name="plus" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {item.workout_type_id && (
+                        <select
+                          className="routine-add-exercise"
+                          aria-label={`Add exercise to day ${di + 1}`}
+                          value=""
+                          disabled={item.movements.length >= 20 || exercises.length === 0}
+                          onChange={(event) => {
+                            const exercise = exercises.find((e) => e.id === event.target.value)!;
+                            day(di, {
+                              ...item,
+                              movements: [
+                                ...item.movements,
+                                {
+                                  exercise_id: exercise.id,
+                                  exercise,
+                                  sets:
+                                    exercise.kind === 'cardio'
+                                      ? [{ ...emptySet(), duration_seconds: 1800 }]
+                                      : [emptySet(), emptySet(), emptySet()],
+                                },
+                              ],
+                            });
+                          }}
+                        >
+                          <option value="">+ Exercise</option>
+                          {exercises.map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </section>
                   )}
-                </div>
-              ))}
-              {item.workout_type_id && (
-                <select
-                  className="routine-add-exercise"
-                  aria-label={`Add exercise to day ${di + 1}`}
-                  value=""
-                  disabled={item.movements.length >= 20 || exercises.length === 0}
-                  onChange={(event) => {
-                    const exercise = exercises.find((e) => e.id === event.target.value)!;
-                    day(di, {
-                      ...item,
-                      movements: [
-                        ...item.movements,
-                        { exercise_id: exercise.id, exercise, sets: [emptySet()] },
-                      ],
-                    });
-                  }}
-                >
-                  <option value="">Add exercise…</option>
-                  {exercises.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </section>
-          ))}
+                </li>
+              );
+            })}
+          </ol>
           <div className="routine-add-days">
             <button
               type="button"
@@ -1048,14 +1161,7 @@ function RoutineEditor({
               disabled={value.days.length >= 28 || types.loading}
               onClick={() => {
                 const type = types.types.find((t) => !t.archived);
-                if (type)
-                  setValue({
-                    ...value,
-                    days: [
-                      ...value.days,
-                      { workout_type_id: type.id, workout_type: type, movements: [] },
-                    ],
-                  });
+                if (type) addDay({ workout_type_id: type.id, workout_type: type, movements: [] });
               }}
             >
               <Icon name="plus" />
@@ -1065,15 +1171,7 @@ function RoutineEditor({
               type="button"
               className="routine-add"
               disabled={value.days.length >= 28}
-              onClick={() =>
-                setValue({
-                  ...value,
-                  days: [
-                    ...value.days,
-                    { workout_type_id: null, workout_type: null, movements: [] },
-                  ],
-                })
-              }
+              onClick={() => addDay({ workout_type_id: null, workout_type: null, movements: [] })}
             >
               <Icon name="plus" />
               Add rest day
@@ -1116,20 +1214,12 @@ function RoutineEditor({
                         color: '#a855f7',
                       });
                       types.applySaved([...types.types, created]);
-                      setValue((current) => ({
-                        ...current,
-                        days:
-                          current.days.length < 28
-                            ? [
-                                ...current.days,
-                                {
-                                  workout_type_id: created.id,
-                                  workout_type: created,
-                                  movements: [],
-                                },
-                              ]
-                            : current.days,
-                      }));
+                      if (value.days.length < 28)
+                        addDay({
+                          workout_type_id: created.id,
+                          workout_type: created,
+                          movements: [],
+                        });
                       setTypeName('');
                     } catch (reason) {
                       setValidation(failure(reason));
@@ -1143,25 +1233,6 @@ function RoutineEditor({
               </button>
             </div>
           </details>
-          <div className="routine-editor-footer">
-            <SplitTargetsTray
-              days={value.days}
-              muscleGoal={muscleGoal}
-              cardioGoal={cardioGoal}
-              focusedDay={focusedDay}
-            />
-            {(validation || error) && (
-              <p role="alert" className="inline-error">
-                {validation || error}
-              </p>
-            )}
-            <button
-              className="popup-primary-action"
-              disabled={busy || addingType || types.loading || !!types.error || !!loadError}
-            >
-              {busy ? 'Saving…' : 'Save split'}
-            </button>
-          </div>
         </fieldset>
       </form>
     </PopupDialog>

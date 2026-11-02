@@ -188,6 +188,9 @@ it('makes templates available only after a saved day change and blocks them agai
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Close notification');
   await editCopy();
+  await act(async () =>
+    document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[2].click(),
+  );
   await click('Remove day 3');
   await submit();
   expect(button('Full body / Rest').disabled).toBe(true);
