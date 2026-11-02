@@ -2498,4 +2498,19 @@ describe('navigation while saving an old workout', () => {
     await navigateTo('Training');
     expect(window.location.hash).toBe('#training');
   });
+
+  it('dismisses a save error from the X inside the error box', async () => {
+    vi.mocked(api.updateWorkout).mockRejectedValueOnce(new Error('Save failed; retry.'));
+    await editSavedWorkout();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
+    );
+    const errorBox = container.querySelector('.logger-screen .inline-error-dismissible');
+    expect(errorBox?.textContent).toContain('Save failed; retry.');
+    await act(async () =>
+      errorBox!.querySelector<HTMLButtonElement>('button[aria-label="Dismiss error"]')!.click(),
+    );
+    expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+    expect(container.querySelector('.logger-screen')).not.toBeNull();
+  });
 });
