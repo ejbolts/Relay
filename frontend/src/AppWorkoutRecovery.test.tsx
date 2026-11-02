@@ -1650,6 +1650,77 @@ describe('durable workout completion', () => {
   });
 });
 
+describe('high-rep warning preference', () => {
+  function highRepDraft() {
+    const draft = storedDraft();
+    draft.movements = draft.movements.map((movement) => ({
+      ...movement,
+      machinePhotoIds: [],
+      supersetKey: null,
+      sets: movement.sets.map((set) => ({ ...set, completed: false, reps: 25, weight_kg: 80 })),
+    }));
+    return draft;
+  }
+  const tick = (index: number) =>
+    container.querySelectorAll<HTMLButtonElement>('.row-complete-button')[index];
+  const preference = () =>
+    document.querySelector<HTMLInputElement>('.set-entry-warning-preference input')!;
+  const confirm = () => document.querySelector<HTMLButtonElement>('.confirm-unusual-set')!;
+  const popup = () => document.querySelector('.set-entry-confirmation');
+
+  it('keeps warning by default and does not apply a checked preference when cancelled', async () => {
+    writeActiveWorkoutDraft(highRepDraft());
+    await mount();
+    await act(async () => tick(0).click());
+    expect(preference().checked).toBe(false);
+    await act(async () => preference().click());
+    await act(async () =>
+      [...popup()!.querySelectorAll<HTMLButtonElement>('button')]
+        .find((b) => b.textContent === 'Go back')!
+        .click(),
+    );
+    expect(readActiveWorkoutDraft()!.skipHighRepWarning).toBe(false);
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].completed).toBe(false);
+    await act(async () => tick(0).click());
+    expect(preference().checked).toBe(false);
+    await act(async () => confirm().click());
+    await act(async () => tick(1).click());
+    expect(popup()?.textContent).toContain('Add high rep set?');
+  });
+
+  it('suppresses across exercises and recovery, keeps weight warnings, and resets for a new workout', async () => {
+    const draft = highRepDraft();
+    draft.movements[1].sets.push({
+      ...draft.movements[1].sets[0],
+      key: 'heavy-set',
+      weight_kg: 300,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () => tick(0).click());
+    await act(async () => preference().click());
+    await act(async () => confirm().click());
+    expect(readActiveWorkoutDraft()!.skipHighRepWarning).toBe(true);
+    await act(async () => tick(1).click());
+    expect(popup()).toBeNull();
+    expect(readActiveWorkoutDraft()!.movements[1].sets[0].completed).toBe(true);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    await act(async () => tick(2).click());
+    expect(popup()?.textContent).toContain('Is 300 kg intended?');
+    expect(preference()).toBeNull();
+    expect(readActiveWorkoutDraft()!.movements[1].sets[1].completed).toBe(false);
+    await act(async () => root.unmount());
+    writeActiveWorkoutDraft(highRepDraft());
+    root = createRoot(container);
+    await mount();
+    await act(async () => tick(0).click());
+    expect(popup()?.textContent).toContain('Add high rep set?');
+    expect(preference().checked).toBe(false);
+  });
+});
+
 describe('cardio set editing defaults', () => {
   it('shows a personal-zone text result after saving cardio inside a workout', async () => {
     const saved = remoteWorkout();
@@ -1736,6 +1807,67 @@ describe('cardio set editing defaults', () => {
       expect(api.createWorkout).not.toHaveBeenCalled();
     },
   );
+
+  it('pastes a screenshot into the active cardio set and completes it without saving the workout', async () => {
+    const draft = storedDraft({ category: 'cardio' });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: treadmill.id,
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'cardio-set',
+            completed: false,
+            incline_percent: 15,
+            notes: 'Keep this note',
+          },
+        ],
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([
+          {
+            types: ['image/png'],
+            getType: async () => new Blob(['screenshot'], { type: 'image/png' }),
+          },
+        ]),
+      },
+    });
+    vi.spyOn(api, 'scanCardioScreenshot').mockResolvedValue({
+      session_date: null,
+      activity_type: 'Treadmill',
+      duration_minutes: 40,
+      calories_kcal: 448,
+      average_heart_rate_bpm: 143,
+      distance_km: 2.98,
+      average_speed_kph: 4.5,
+      fields_found: ['duration', 'distance'],
+      warning: null,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const paste = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Paste screenshot',
+    )!;
+    await act(async () => paste.click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0]).toMatchObject({
+      duration_seconds: 2400,
+      distance_km: 2.98,
+      calories_kcal: 448,
+      average_heart_rate_bpm: 143,
+      speed_kph: 4.5,
+      completed: true,
+      incline_percent: 15,
+      notes: 'Keep this note',
+    });
+    expect(container.querySelector('.set-details')?.getAttribute('data-expanded')).toBe('false');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
 
   it('folds a completed cardio set and reopens it when unticked, including after recovery', async () => {
     const draft = storedDraft({ category: 'cardio' });
