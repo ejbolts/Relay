@@ -163,8 +163,8 @@
 .exercise-muscle-filters button[aria-pressed='true'],
 .exercise-custom-filter[aria-pressed='true'] {
   background: var(--p-surface-3);
-  border-color: var(--p-good);
-  box-shadow: inset 0 0 0 1px var(--p-good);
+  border-color: var(--p-accent);
+  box-shadow: inset 0 0 0 1px var(--p-accent);
   color: var(--p-ink);
 }
 .exercise-list-meta {

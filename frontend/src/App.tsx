@@ -52,7 +52,6 @@ import type {
   BodyMeasurement,
   BodyWeightGoal,
   CardioOverview,
-  CardioScreenshotScan,
   CardioSession,
   CardioSessionInput,
   DashboardData,
@@ -158,6 +157,7 @@ import { CardioZoneSettings } from './CardioZoneSettings';
 import { cardioZoneNotice, DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
+import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
 import { useBackdropDismiss } from './backdropDismiss';
 import { CachedTabPanel } from './CachedTabPanel';
 import { optimisePhoto } from './photoOptimise';
@@ -2655,6 +2655,9 @@ function WorkoutLogger({
     workoutTypes.error,
     workoutTypes.types,
   ]);
+  const [skipHighRepWarning, setSkipHighRepWarning] = useState(
+    restoredDraft?.skipHighRepWarning ?? false,
+  );
   const [notes, setNotes] = useState(
     initialWorkout?.notes ?? restoredDraft?.notes ?? resumingWorkout?.notes ?? '',
   );
@@ -2846,6 +2849,7 @@ function WorkoutLogger({
         category,
         workoutTypeId: customTypeId,
         workoutTypeExplicit,
+        skipHighRepWarning,
         notes,
         movements: movements.map((movement) => ({
           key: movement.key,
@@ -2902,6 +2906,7 @@ function WorkoutLogger({
     category,
     customTypeId,
     workoutTypeExplicit,
+    skipHighRepWarning,
     initialWorkout,
     readOnly,
     movements,
@@ -3908,6 +3913,8 @@ function WorkoutLogger({
         <div className="movement-stack" ref={movementStackRef}>
           {movements.map((movement, movementIndex) => (
             <MovementCard
+              skipHighRepWarning={skipHighRepWarning}
+              onSkipHighRepWarning={() => setSkipHighRepWarning(true)}
               key={movement.key}
               movement={movement}
               showRestTimes={showRestTimes}
@@ -4448,6 +4455,8 @@ function ExerciseIcon({ exercise, number }: { exercise: Exercise; number?: numbe
 }
 
 function MovementCard({
+  skipHighRepWarning,
+  onSkipHighRepWarning,
   movement,
   showRestTimes,
   number,
@@ -4472,6 +4481,8 @@ function MovementCard({
   onRemoveRestTime,
   onSuperset,
 }: {
+  skipHighRepWarning: boolean;
+  onSkipHighRepWarning: () => void;
   movement: DraftMovement;
   showRestTimes: boolean;
   number: number;
@@ -4677,7 +4688,7 @@ function MovementCard({
       otherSets.find((candidate) => candidate.weight_kg !== null)?.weight_kg ??
       null;
     const warning = unusualSetEntryWarning(
-      { reps: item.reps, weightKg: item.weight_kg, referenceWeightKg },
+      { reps: item.reps, weightKg: item.weight_kg, referenceWeightKg, skipHighRepWarning },
       weightUnit,
     );
     if (warning) {
@@ -5457,7 +5468,8 @@ function MovementCard({
           warning={pendingSetCompletion.warning}
           confirmLabel="Add set"
           onCancel={() => setPendingSetCompletion(null)}
-          onConfirm={() => {
+          onConfirm={(skipWarning) => {
+            if (skipWarning) onSkipHighRepWarning();
             completeSet(pendingSetCompletion.item);
             setPendingSetCompletion(null);
           }}
@@ -5493,9 +5505,10 @@ function SetEntryConfirmationDialog({
 }: {
   warning: SetEntryWarning;
   confirmLabel: string;
-  onConfirm: () => void;
+  onConfirm: (skipHighRepWarning: boolean) => void;
   onCancel: () => void;
 }) {
+  const [skipHighRepWarning, setSkipHighRepWarning] = useState(false);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const onCancelRef = useRef(onCancel);
   const backdropDismiss = useBackdropDismiss(onCancel);
@@ -5521,6 +5534,16 @@ function SetEntryConfirmationDialog({
       >
         <h3 id="set-entry-confirmation-title">{warning.title}</h3>
         <p id="set-entry-confirmation-message">{warning.message}</p>
+        {warning.highReps && (
+          <label className="set-entry-warning-preference">
+            <input
+              type="checkbox"
+              checked={skipHighRepWarning}
+              onChange={(event) => setSkipHighRepWarning(event.target.checked)}
+            />
+            <span>Don't show high-rep warnings again for this workout</span>
+          </label>
+        )}
         <footer>
           <button type="button" onClick={onCancel}>
             Go back
@@ -5529,7 +5552,7 @@ function SetEntryConfirmationDialog({
             ref={confirmButtonRef}
             type="button"
             className="confirm-unusual-set"
-            onClick={onConfirm}
+            onClick={() => onConfirm(skipHighRepWarning)}
           >
             {confirmLabel}
           </button>
@@ -5546,56 +5569,6 @@ function ScanningLabel() {
       <span className="scanning-spinner" aria-hidden="true" />
       Scanning
     </span>
-  );
-}
-
-function CardioSetScreenshotUpload({ onScan }: { onScan: (scan: CardioScreenshotScan) => void }) {
-  const [scanning, setScanning] = useState(false);
-  const [status, setStatus] = useState<{ message: string; warning: boolean } | null>(null);
-
-  async function importScreenshot(file: File) {
-    if (scanning) return;
-    setScanning(true);
-    setStatus(null);
-    try {
-      const scan = await api.scanCardioScreenshot(file);
-      onScan(scan);
-      setStatus({
-        message: `Scanned ${scan.fields_found.join(', ')}.${scan.warning ? ` ${scan.warning}` : ''} Review the set before saving.`,
-        warning: Boolean(scan.warning),
-      });
-    } catch (reason) {
-      setStatus({
-        message: reason instanceof Error ? reason.message : 'Could not scan that screenshot.',
-        warning: true,
-      });
-    } finally {
-      setScanning(false);
-    }
-  }
-
-  return (
-    <div className="cardio-set-screenshot-upload">
-      <label className={scanning ? 'disabled' : ''}>
-        {scanning ? <ScanningLabel /> : 'Upload screenshot'}
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-          disabled={scanning}
-          aria-label="Upload cardio set screenshot"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void importScreenshot(file);
-          }}
-        />
-      </label>
-      {status && (
-        <small className={status.warning ? 'warning' : ''} role="status">
-          {status.message}
-        </small>
-      )}
-    </div>
   );
 }
 

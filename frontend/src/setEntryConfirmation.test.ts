@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { isUnusuallyHighWeight, unusualSetEntryWarning } from './setEntryConfirmation';
 
 describe('set entry confirmation', () => {
+  it('suppresses rep warnings only, retaining an independent high-weight warning', () => {
+    expect(
+      unusualSetEntryWarning({
+        reps: 30,
+        weightKg: 80,
+        referenceWeightKg: 80,
+        skipHighRepWarning: true,
+      }),
+    ).toBeNull();
+    const warning = unusualSetEntryWarning({
+      reps: 30,
+      weightKg: 300,
+      referenceWeightKg: 80,
+      skipHighRepWarning: true,
+    });
+    expect(warning?.title).toBe('Is 300 kg intended?');
+    expect(warning?.highReps).toBe(false);
+    expect(warning?.message).not.toContain('reps');
+  });
+
+  it('offers the rep preference on rep-only and combined warnings, but not weight-only warnings', () => {
+    expect(
+      unusualSetEntryWarning({ reps: 25, weightKg: 80, referenceWeightKg: 80 })?.highReps,
+    ).toBe(true);
+    expect(
+      unusualSetEntryWarning({ reps: 25, weightKg: 300, referenceWeightKg: 80 })?.highReps,
+    ).toBe(true);
+    expect(
+      unusualSetEntryWarning({ reps: 5, weightKg: 300, referenceWeightKg: 80 })?.highReps,
+    ).toBe(false);
+  });
+
   it('warns when a newly logged set is over 20 reps', () => {
     expect(unusualSetEntryWarning({ reps: 21, weightKg: 80, referenceWeightKg: 80 })?.title).toBe(
       'Add high rep set?',
