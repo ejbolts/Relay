@@ -52,6 +52,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Steady exercise search** - Filters and results stay together while searching and selecting exercises. Isolated sample data.
 
+![Split editor with the name, start date and Active chip on one row, a two-column Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers.](screenshots/releases/1.2.0-split-editor.png)
+
+**Weekly volume while you build** - See planned sets per muscle and cardio against your goals as you step sets. Isolated sample data.
+
+![Split card listing each day's exercises with a coloured block for every planned set, day totals, cardio minutes and a Muscles button.](screenshots/releases/1.2.0-split-days.png)
+
+**Split days at a glance** - Each planned set is a coloured block. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -63,6 +71,8 @@ _Relay was called Gym Logger before version 1.0._
 - **Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.
 - **Exercise completion:** Unticking a set also unticks its exercise. Adding a set or restoring an unfinished set with Undo clears the exercise tick too. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished. Recovery repairs inconsistent ticks from earlier versions.
 - **Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard.
+- **Split editor:** Editing a split now opens a compact full screen with Save at the top. A **Weekly volume** chart leads, showing the working sets each muscle gets per week and your planned cardio minutes against your weekly set and cardio goals, and it updates as you build. Days fold into one-line rows with their exercise and set counts, and one opens at a time. Each exercise has a sets stepper (cardio steps in 5-minute amounts), and stepping below one set removes it. The **?** beside each exercise shows its direct and partial set credits, and turning partial sets on or off there updates the chart. Tap a muscle in the chart to see which days train it and how many sets each adds. Cycles that aren't seven days long use weekly averages.
+- **Split days:** Split cards, including friends' shared splits and **Exercises & sets** on your active split, list each exercise with a coloured block for every planned set and a total for each day, instead of each set's reps and weight. Cardio shows its minutes, and the **Muscles** button shows what each exercise trains.
 
 ## 1.1.0
 

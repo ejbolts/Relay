@@ -1,0 +1,179 @@
+.split-volume {
+  min-width: 0;
+  border: 1px solid var(--p-line);
+  border-radius: 16px;
+  padding: 10px 8px 8px;
+  background: var(--p-surface);
+}
+.split-volume > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 6px;
+}
+.split-volume h3 {
+  flex: 1;
+  margin: 0;
+  color: var(--p-ink);
+  font-size: 14px;
+}
+.split-volume-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.routine-editor .split-volume .auth-help-button {
+  width: 1.25rem;
+  height: 1.25rem;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+.split-volume ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.split-volume li {
+  /* Keeps each visually hidden label inside its own row, so it can't widen the screen. */
+  position: relative;
+}
+.split-volume li.is-cardio {
+  grid-column: 1 / -1;
+}
+.split-volume li.is-cardio:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--p-line);
+  padding-top: 4px;
+}
+.routine-editor .split-volume-row {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'mark name value'
+    'track track track';
+  align-items: center;
+  gap: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 4px 6px;
+  background: none;
+  font-weight: 400;
+  text-align: left;
+}
+.split-volume-row > .split-volume-mark {
+  grid-area: mark;
+}
+.split-volume-row > .split-volume-name {
+  grid-area: name;
+}
+.split-volume-row > .split-volume-track {
+  grid-area: track;
+}
+.split-volume-row > .split-volume-value {
+  grid-area: value;
+}
+.routine-editor .split-volume-row[aria-pressed='true'] {
+  background: var(--p-surface-3);
+}
+.split-volume-name {
+  overflow: hidden;
+  color: var(--p-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.split-volume-track {
+  position: relative;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--p-surface-3);
+}
+.split-volume-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--fill);
+  border-radius: 4px;
+  background: var(--p-ink-2);
+  transition: width 0.3s ease;
+}
+.split-volume-fill.is-met {
+  background: var(--p-good);
+}
+.split-volume-fill.is-close {
+  background: var(--p-gold);
+}
+.split-volume-fill.is-under {
+  background: var(--p-danger);
+}
+.split-volume-goal {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: var(--goal);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--p-ink);
+  opacity: 0.8;
+}
+.split-volume-value {
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.split-volume-value b {
+  color: var(--p-ink);
+  font-weight: 650;
+}
+.split-volume-mark {
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+.split-volume-mark.is-met {
+  background: color-mix(in srgb, var(--p-good) 18%, transparent);
+  color: var(--p-good);
+}
+.split-volume-mark.is-close {
+  background: var(--p-gold-soft);
+  color: var(--p-gold);
+}
+.split-volume-mark.is-under {
+  background: color-mix(in srgb, var(--p-danger) 18%, transparent);
+  color: var(--p-danger);
+}
+.split-volume-mark.is-none {
+  background: var(--p-surface-3);
+  color: var(--p-ink-2);
+}
+.split-volume-empty {
+  margin: 0;
+  padding: 6px 4px 4px;
+  color: var(--p-muted);
+  font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .split-volume-fill {
+    transition: none;
+  }
+}

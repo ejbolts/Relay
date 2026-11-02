@@ -5,9 +5,7 @@
   padding: 0;
 }
 .routine-heading,
-.routine-actions,
-.routine-edit-day header,
-.routine-exercise-select {
+.routine-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -201,14 +199,75 @@
   font-size: 12px;
   cursor: pointer;
 }
-.split-plan-exercises .routine-cycle {
+.split-plan-exercises .routine-cycle-view {
   border-top: 0;
+  padding-top: 0;
+}
+.routine-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .split-editor-schedule {
-  display: grid;
-  gap: 12px;
-  border-block: 1px solid var(--p-line);
-  padding-block: 12px;
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+}
+.routine-editor .split-editor-schedule input[type='date'] {
+  width: 7.25rem;
+  min-height: 34px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.routine-editor .routine-active-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0 11px 0 9px;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.routine-editor .routine-active-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.routine-active-toggle span::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--p-deemph);
+  content: '';
+}
+.routine-active-toggle:has(input:checked) {
+  border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+.routine-active-toggle:has(input:checked) span::before {
+  background: var(--p-accent-text);
+}
+.routine-active-toggle:has(input:focus-visible) {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
 }
 .routine-panel .routine-secondary {
   background: transparent;
@@ -299,38 +358,136 @@
   border: 1px solid var(--p-line-strong);
   background: var(--p-surface-3);
 }
-.routine-cycle {
-  list-style: none;
-  margin: 0;
+.routine-cycle-view {
   border-top: 1px solid var(--p-line);
-  padding: 14px;
+  padding: 8px 14px 12px;
+}
+.routine-cycle-tools {
+  display: flex;
+  justify-content: flex-end;
+}
+.routine-panel .routine-muscle-toggle {
+  min-height: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.routine-panel .routine-muscle-toggle[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  color: var(--p-ink);
+}
+.routine-cycle {
   display: grid;
-  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .routine-cycle > li {
-  border-left: 3px solid var(--p-muted);
-  padding: 0 0 0 12px;
+  padding: 8px 0;
+}
+.routine-cycle > li + li {
+  border-top: 1px solid var(--p-line);
+}
+.routine-cycle-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.routine-cycle-number {
+  width: 20px;
+  height: 20px;
   display: grid;
-  gap: 4px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--day-colour);
+  color: #0b0d0f;
+  font-size: 11px;
+  font-weight: 800;
 }
-.routine-cycle > li.is-rest {
-  border-left-color: var(--p-line-strong);
+.routine-cycle > li.is-rest .routine-cycle-number {
+  color: var(--p-ink-2);
 }
-.routine-cycle > li > span {
+.routine-cycle-day strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-cycle > li.is-rest .routine-cycle-day strong {
+  color: var(--p-ink-2);
+}
+.routine-cycle-total {
+  flex: none;
+  margin-left: auto;
   color: var(--p-muted);
   font-size: 12px;
 }
-.routine-cycle > li.is-rest > strong {
-  color: var(--p-ink-2);
+.routine-cycle ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .routine-exercise {
   display: grid;
-  gap: 2px;
-  padding-top: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0 3px 28px;
   font-size: 13px;
 }
-.routine-exercise > span {
+.routine-exercise-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-exercise-label small {
+  display: block;
+  overflow: hidden;
   color: var(--p-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+.routine-pips {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.routine-pips i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--day-colour);
+}
+.routine-pips span,
+.routine-cardio-length {
+  color: var(--p-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.routine-cardio-length {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.routine-cardio-bar {
+  height: 9px;
+  border-radius: 3px;
+  background: var(--day-colour);
+}
+.routine-cycle-empty {
+  margin: 0;
+  padding-left: 28px;
+  color: var(--p-muted);
+  font-size: 12px;
 }
 .routine-card > .routine-actions {
   border-top: 1px solid var(--p-line);
@@ -466,25 +623,6 @@
   background: white;
   transform: translateX(16px);
 }
-.routine-edit-day {
-  border: 1px solid var(--p-line);
-  border-left: 3px solid var(--p-muted);
-  border-radius: 12px;
-  padding: 12px;
-  display: grid;
-  gap: 12px;
-  background: var(--p-surface);
-}
-.routine-edit-day.is-rest {
-  border-left-color: var(--p-line-strong);
-}
-.routine-edit-day header > strong {
-  font-size: 14px;
-}
-.routine-edit-day header > div {
-  display: flex;
-  gap: 2px;
-}
 .routine-editor .routine-icon-button {
   display: inline-grid;
   place-items: center;
@@ -515,38 +653,31 @@
   max-width: 100%;
   width: 100%;
 }
-.routine-edit-exercise {
-  display: grid;
-  gap: 6px;
-  border-top: 1px solid var(--p-line);
-  padding-top: 12px;
-}
-.routine-exercise-select {
-  gap: 4px;
-}
-.routine-exercise-select select {
-  flex: 1;
-  font-weight: 600;
-}
-.routine-set,
-.routine-set-labels {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 32px;
-  gap: 6px;
+.routine-stepper {
+  display: inline-flex;
   align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
 }
-.routine-set-labels {
-  padding-top: 2px;
-  font-size: 11px;
-  color: var(--p-muted);
+.routine-editor .routine-stepper button {
+  width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
 }
-.routine-set-labels > span:first-child {
-  padding-left: 2px;
-}
-.routine-editor .routine-set select,
-.routine-editor .routine-set input {
-  min-height: 36px;
-  padding: 6px 8px;
+.routine-stepper output {
+  min-width: 2.25rem;
+  padding-inline: 2px;
+  color: var(--p-ink);
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 .routine-editor .routine-add {
@@ -565,20 +696,297 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
-.routine-editor-footer {
-  position: sticky;
-  z-index: 1;
-  bottom: 0;
+/* The editor is a full screen rather than a popup, leaving room for every day's controls. */
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--p-page);
+  box-shadow: none;
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen[open] {
+  animation: routine-screen-in 240ms var(--ease-out, ease) backwards;
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen::backdrop {
+  background: var(--p-page);
+  backdrop-filter: none;
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header {
+  justify-content: flex-start;
+  gap: 0.65rem;
+  border-bottom: 1px solid var(--p-line);
+  padding: calc(0.55rem + env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) 0.75rem
+    max(0.75rem, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--p-page) 96%, transparent);
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
+  color: var(--p-ink);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.routine-editor-screen > header > div {
+  flex: 1;
+  min-width: 0;
+}
+.routine-editor-screen .popup-dialog-close {
+  order: -1;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 0;
+  background: var(--p-surface);
+  color: var(--p-ink-2);
+}
+.routine-editor-screen .popup-dialog-close svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.15;
+}
+.routine-editor-screen .routine-editor {
+  max-width: 600px;
+  margin-inline: auto;
+}
+.routine-editor-screen .routine-editor fieldset {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+.routine-editor-save {
+  flex: none;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: var(--p-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.routine-editor-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.routine-editor .routine-name-input {
+  /* Below this width the date and Active wrap under the name instead of squeezing it. */
+  flex: 1 1 8.5rem;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--p-line-strong);
+  border-radius: 0;
+  padding: 4px 0 6px;
+  background: none;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.routine-editor .routine-name-input:focus-visible {
+  outline: none;
+  border-bottom: 1px solid var(--p-accent-text);
+}
+.routine-cycle-heading {
+  margin: 6px 0 -4px;
+  color: var(--p-ink);
+  font-size: 14px;
+}
+.routine-day-list {
   display: grid;
   gap: 8px;
-  margin: 0 -1rem;
-  border-top: 1px solid var(--p-line);
-  padding: 12px 1rem 1rem;
-  background: var(--p-surface);
-}
-.routine-editor-footer .inline-error {
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.routine-editor-footer .popup-primary-action {
+.routine-day {
+  overflow: hidden;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+  transition: opacity 0.2s ease;
+}
+.routine-day.is-dim {
+  opacity: 0.45;
+}
+.routine-editor .routine-day-toggle {
   width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  padding: 10px 12px;
+  background: none;
+  text-align: left;
+}
+.routine-day-bar {
+  width: 4px;
+  align-self: stretch;
+  flex: none;
+  border-radius: 2px;
+  background: var(--day-colour);
+}
+.routine-day-title {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.routine-day-title strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-day-title small {
+  color: var(--p-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.routine-day-hit {
+  flex: none;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.routine-editor .routine-day-toggle .pulse-icon {
+  flex: none;
+  color: var(--p-muted);
+  transition: transform 0.2s ease;
+}
+.routine-day.is-open .routine-day-toggle .pulse-icon {
+  transform: rotate(180deg);
+}
+.routine-day-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms var(--ease-out, ease);
+}
+.routine-day.is-open .routine-day-panel {
+  grid-template-rows: 1fr;
+}
+.routine-day-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.routine-day-body {
+  display: grid;
+  padding: 2px 12px 12px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 180ms ease,
+    transform 280ms var(--ease-out, ease);
+}
+.routine-day.is-open .routine-day-body {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 240ms ease 60ms,
+    transform 280ms var(--ease-out, ease);
+}
+.routine-day-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: 4px;
+}
+.routine-day-spacer {
+  flex: 1;
+}
+.routine-editor .routine-day-type {
+  width: auto;
+  max-width: 60%;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.routine-exercise-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--p-line);
+  padding: 7px 0;
+}
+.routine-exercise-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.routine-editor .routine-exercise-name {
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+}
+.routine-editor .routine-exercise-row .exercise-muscle-help-button {
+  width: 2rem;
+  height: 2rem;
+  min-height: 0;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--p-muted);
+}
+.routine-editor .routine-exercise-row .exercise-muscle-help-button svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.routine-exercise-main small {
+  overflow: hidden;
+  color: var(--p-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-editor .routine-day-body .routine-add-exercise {
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 6px 10px;
+}
+@keyframes routine-screen-in {
+  from {
+    opacity: 0;
+    transform: translate3d(1.5rem, 0, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.popup-dialog.routine-editor-dialog.routine-editor-screen[open] {
+    animation: none;
+  }
+  .routine-day,
+  .routine-day-panel,
+  .routine-day-body,
+  .routine-day.is-open .routine-day-body,
+  .routine-editor .routine-day-toggle .pulse-icon {
+    transition: none;
+  }
 }

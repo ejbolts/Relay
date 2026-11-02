@@ -93,6 +93,7 @@ beforeEach(() => {
   vi.spyOn(api.routines, 'create').mockImplementation(async (r) => ({ ...r, id: 'new' }));
   vi.spyOn(api.routines, 'use').mockResolvedValue(current);
   vi.spyOn(api, 'listExercises').mockResolvedValue([]);
+  vi.spyOn(api, 'getCardioPreferences').mockResolvedValue({ heart_rate_zones: [], goals: [] });
   vi.spyOn(api, 'saveTrainingSplit').mockImplementation(async (s) => s);
   vi.spyOn(api, 'createWorkoutType').mockImplementation(async (t) => ({
     ...t,
@@ -187,6 +188,9 @@ it('makes templates available only after a saved day change and blocks them agai
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Close notification');
   await editCopy();
+  await act(async () =>
+    document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[2].click(),
+  );
   await click('Remove day 3');
   await submit();
   expect(button('Full body / Rest').disabled).toBe(true);

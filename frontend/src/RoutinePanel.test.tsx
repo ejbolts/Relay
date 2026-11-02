@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { RoutinePanel } from './RoutinePanel';
 import type { Exercise, Routine } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
@@ -72,6 +73,11 @@ async function input(selector: string, value: string) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
+async function openDay(day: number) {
+  await act(async () =>
+    document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[day - 1].click(),
+  );
+}
 async function save() {
   await act(async () =>
     document
@@ -106,6 +112,10 @@ beforeEach(() => {
     steps: [],
   });
   vi.spyOn(api, 'listExercises').mockResolvedValue([bench, row]);
+  vi.spyOn(api, 'getCardioPreferences').mockResolvedValue({
+    heart_rate_zones: [],
+    goals: [{ zone: 2, minutes: 150 }],
+  });
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -126,7 +136,7 @@ it('copies into an editable private routine and adapts exercise and weight indep
     'Show on my profile',
   );
   await input('[aria-label="Day 1 exercise 1"]', 'row');
-  await input('[aria-label="Day 1 exercise 1 set 1 weight kg"]', '35');
+  await click('One more set of Cable row on day 1');
   await save();
   expect(api.routines.save).toHaveBeenCalledWith(
     expect.objectContaining({ id: 'copy', shared: false }),
@@ -134,9 +144,9 @@ it('copies into an editable private routine and adapts exercise and weight indep
   const saved = vi.mocked(api.routines.save).mock.calls[0][0];
   expect(saved.days[0].movements[0]).toMatchObject({
     exercise_id: 'row',
-    sets: [{ weight_kg: 35 }],
+    sets: [{ weight_kg: 50 }, { weight_kg: 50, set_type: 'normal' }],
   });
-  expect(original.days[0].movements[0].sets[0].weight_kg).toBe(50);
+  expect(original.days[0].movements[0].sets).toHaveLength(1);
   expect(api.routines.use).not.toHaveBeenCalled();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
@@ -155,13 +165,11 @@ it('opens My splits at the imported copy after dismissing the editor', async () 
 it('keeps edits after a failed save and allows retry', async () => {
   await mount(true);
   await click('Edit split');
-  await input('[aria-label="Day 1 exercise 1 set 1 reps"]', '10');
+  await click('One more set of Bench press on day 1');
   vi.mocked(api.routines.save).mockRejectedValueOnce(new Error('Connection lost'));
   await save();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('Connection lost');
-  expect(
-    document.querySelector<HTMLInputElement>('[aria-label="Day 1 exercise 1 set 1 reps"]')!.value,
-  ).toBe('10');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('2');
   await save();
   expect(api.routines.save).toHaveBeenCalledTimes(2);
 });
@@ -272,6 +280,7 @@ it('explains how to complete an empty workout day before sharing and allows retr
   expect(api.routines.save).not.toHaveBeenCalled();
   await click('Close Split options');
   await click('Edit split');
+  await openDay(2);
   await input('[aria-label="Add exercise to day 2"]', 'row');
   await save();
   await click('Close notification');
@@ -304,7 +313,7 @@ it('preserves an existing shared split when editing without a publishing control
   expect(api.routines.save).toHaveBeenCalledWith(expect.objectContaining({ shared: true }));
 });
 
-it('edits cardio minutes and distance as planned targets', async () => {
+it('steps cardio minutes as a planned target', async () => {
   const cardio: Exercise = {
     ...bench,
     id: 'run',
@@ -332,12 +341,169 @@ it('edits cardio minutes and distance as planned targets', async () => {
   vi.mocked(api.listExercises).mockResolvedValue([bench, row, cardio]);
   await mount(true);
   await click('Edit split');
-  await input('[aria-label="Day 1 exercise 1 set 1 minutes"]', '15.5');
-  await input('[aria-label="Day 1 exercise 1 set 1 distance km"]', '3.4');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('10 min');
+  await click('5 more minutes of Running on day 1');
   await save();
   expect(vi.mocked(api.routines.save).mock.calls[0][0].days[0].movements[0].sets[0]).toMatchObject({
-    duration_seconds: 930,
-    distance_km: 3.4,
+    duration_seconds: 900,
+    distance_km: 2,
     weight_kg: null,
   });
+});
+
+const chartRows = () =>
+  [...document.querySelectorAll('.split-volume-row')].map(
+    (row) => row.querySelector('.sr-only')?.textContent,
+  );
+const count = () => document.querySelector('.split-volume-count')?.textContent;
+
+it('charts planned weekly sets per muscle and updates them as sets change', async () => {
+  await mount(true);
+  await click('Edit split');
+  // A two-day cycle repeats 3.5 times a week, so one bench set is 3.5 sets of chest.
+  expect(chartRows()).toEqual([
+    'Chest: 3.5 of 10 sets a week, under target',
+    'Cardio: 0 of 150 minutes a week, under target',
+  ]);
+  expect(count()).toBe('0 of 2 on target');
+  await click('One more set of Bench press on day 1');
+  await click('One more set of Bench press on day 1');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('3');
+  expect(chartRows()[0]).toBe('Chest: 10.5 of 10 sets a week, on target');
+  expect(count()).toBe('1 of 2 on target');
+  expect(document.querySelector('.routine-day-toggle small')?.textContent).toBe(
+    '1 exercise · 3 sets',
+  );
+  await click('One fewer set of Bench press on day 1');
+  await click('One fewer set of Bench press on day 1');
+  expect(chartRows()[0]).toBe('Chest: 3.5 of 10 sets a week, under target');
+  await click('Remove Bench press from day 1');
+  expect(chartRows()).toEqual(['Cardio: 0 of 150 minutes a week, under target']);
+  expect(document.querySelector('.routine-day-toggle small')?.textContent).toBe('No exercises');
+});
+
+it('marks the days that train a selected muscle', async () => {
+  const routine = structuredClone(original);
+  routine.days[1] = {
+    workout_type_id: 'lower',
+    workout_type: DEFAULT_WORKOUT_TYPES[1],
+    movements: [
+      {
+        exercise_id: 'squat',
+        exercise: {
+          ...bench,
+          id: 'squat',
+          name: 'Squat',
+          category: 'lower',
+          muscle_group: 'Quads',
+        },
+        sets: [routine.days[0].movements[0].sets[0], routine.days[0].movements[0].sets[0]],
+      },
+    ],
+  };
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
+  await mount(true);
+  await click('Edit split');
+  const quads = [...document.querySelectorAll<HTMLButtonElement>('.split-volume-row')].find((row) =>
+    row.textContent?.startsWith('Quads:'),
+  )!;
+  expect(quads.querySelector('.sr-only')?.textContent).toBe(
+    'Quads: 7 of 10 sets a week, nearly there',
+  );
+  await act(async () => quads.click());
+  expect(quads.getAttribute('aria-pressed')).toBe('true');
+  const days = [...document.querySelectorAll('.routine-day')];
+  expect(days[0].className).toContain('is-dim');
+  expect(days[1].className).not.toContain('is-dim');
+  expect(days[1].querySelector('.routine-day-hit')?.textContent).toBe('+2 sets');
+  await act(async () => quads.click());
+  expect(document.querySelector('.routine-day.is-dim')).toBeNull();
+});
+
+it("explains each exercise's set credits and charts partial-set changes made there", async () => {
+  const credited: Exercise = {
+    ...bench,
+    muscle_set_credits: [
+      { muscle_name: 'Chest', sets: 1 },
+      { muscle_name: 'Triceps', sets: 0.5 },
+    ],
+  };
+  const routine = structuredClone(original);
+  routine.days[0].movements[0].exercise = credited;
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
+  const withLibrary = (exercise: Exercise) => (
+    <ExerciseCreditsContext.Provider
+      value={{ exercises: [exercise], updatePartialSets: async () => exercise }}
+    >
+      <RoutinePanel ownerId="friend" own />
+    </ExerciseCreditsContext.Provider>
+  );
+  await act(async () => root.render(withLibrary(credited)));
+  await click('Edit split');
+  expect(document.querySelector('.routine-exercise-main small')?.textContent).toBe(
+    'Chest · Triceps ½',
+  );
+  await click('Muscle set credits for Bench press');
+  const credits = document.querySelector('.exercise-muscle-dialog')!;
+  expect(credits.textContent).toContain('Direct work');
+  expect(credits.textContent).toContain('Partial credit · assistance');
+  await click('Close Bench press');
+  expect(chartRows()).toContain('Triceps: 1.8 of 10 sets a week, under target');
+  // Turning partial sets off in the popup updates the library copy of the exercise.
+  await act(async () =>
+    root.render(
+      withLibrary({ ...credited, muscle_set_credits: [{ muscle_name: 'Chest', sets: 1 }] }),
+    ),
+  );
+  expect(chartRows().some((row) => row?.startsWith('Triceps'))).toBe(false);
+  expect(document.querySelector('.routine-exercise-main small')?.textContent).toBe('Chest');
+});
+
+it('keeps closed days mounted for their closing animation but out of reach', async () => {
+  await mount(true);
+  await click('Edit split');
+  const inert = () =>
+    [...document.querySelectorAll('.routine-day-panel')].map((panel) =>
+      panel.hasAttribute('inert'),
+    );
+  expect(inert()).toEqual([false, true]);
+  await openDay(2);
+  expect(inert()).toEqual([true, false]);
+  expect(document.querySelectorAll('.routine-day.is-open')).toHaveLength(1);
+  await openDay(2);
+  expect(inert()).toEqual([true, true]);
+});
+
+it('shows each planned set as a block, with muscles on request', async () => {
+  const routine = structuredClone(original);
+  const set = routine.days[0].movements[0].sets[0];
+  routine.days[0].movements[0].sets = [set, set, set];
+  routine.days.push({
+    workout_type_id: 'cardio',
+    workout_type: DEFAULT_WORKOUT_TYPES.find((type) => type.id === 'cardio')!,
+    movements: [
+      {
+        exercise_id: 'run',
+        exercise: { ...bench, id: 'run', name: 'Running', category: 'cardio', kind: 'cardio' },
+        sets: [{ ...set, reps: null, duration_seconds: 2700 }],
+      },
+    ],
+  });
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
+  await mount(true);
+  const days = [...host.querySelectorAll('.routine-cycle > li')];
+  expect(days.map((day) => day.querySelector('.routine-cycle-day')?.textContent)).toEqual([
+    '1Upper body3 sets',
+    '2Rest',
+    '3Cardio45 min',
+  ]);
+  const pips = days[0].querySelector('.routine-pips')!;
+  expect(pips.getAttribute('aria-label')).toBe('3 sets');
+  expect(pips.querySelectorAll('i')).toHaveLength(3);
+  expect(host.querySelector('.routine-cycle')?.textContent).not.toContain('×');
+  expect(days[1].querySelector('.routine-cycle-empty')?.textContent).toBe('Rest day');
+  expect(days[2].querySelector('.routine-cardio-length')?.textContent).toBe('45 min');
+  expect(host.querySelector('.routine-exercise-label small')).toBeNull();
+  await click('Muscles');
+  expect(host.querySelector('.routine-exercise-label small')?.textContent).toBe('Chest');
 });
