@@ -2,7 +2,7 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
@@ -13,7 +13,8 @@
     "**Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.",
     "**Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.",
     "**Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.",
-    "**Exercise completion:** Unticking a set also unticks its exercise. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished."
+    "**Exercise completion:** Unticking a set also unticks its exercise. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished.",
+    "**Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
