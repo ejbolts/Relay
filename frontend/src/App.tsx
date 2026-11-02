@@ -26,6 +26,7 @@ import type {
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { SetDragHandle } from './SetDragHandle';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
@@ -440,55 +441,6 @@ function completedSetPerformance(
 
 function moveItem<T>(items: T[], from: number, to: number): T[] {
   return reorder(items, from, to);
-}
-
-function SetDragHandle({
-  setNumber,
-  disabled,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-  onPointerCancel,
-  onMoveEarlier,
-  onMoveLater,
-}: {
-  setNumber: number;
-  disabled: boolean;
-  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onMoveEarlier: () => void;
-  onMoveLater: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="set-drag-handle"
-      aria-label={`Drag set ${setNumber} to reorder`}
-      title="Drag to reorder"
-      disabled={disabled}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          onMoveEarlier();
-        } else if (event.key === 'ArrowDown') {
-          event.preventDefault();
-          onMoveLater();
-        }
-      }}
-    >
-      <span className="set-drag-grip" aria-hidden="true">
-        {[0, 1, 2, 3, 4, 5].map((dot) => (
-          <i key={dot} />
-        ))}
-      </span>
-    </button>
-  );
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -4699,11 +4651,8 @@ function MovementCard({
     completeSet(item);
   }
 
-  function beginSetDrag(event: ReactPointerEvent<HTMLButtonElement>, setKey: string) {
-    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+  function beginSetDrag(handle: HTMLButtonElement, pointerId: number, setKey: string) {
+    handle.setPointerCapture(pointerId);
     draggingSetKeyRef.current = setKey;
     dragTargetSetKeyRef.current = setKey;
     setDraggingSetKey(setKey);
@@ -4746,20 +4695,15 @@ function MovementCard({
     clearSetDrag();
   }
 
-  function cancelSetDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    clearSetDrag();
-  }
-
   function renderSetDragHandle(item: DraftSet, index: number) {
     return (
       <SetDragHandle
         setNumber={index + 1}
         disabled={movement.sets.length < 2}
-        onPointerDown={(event) => beginSetDrag(event, item.key)}
+        onStart={(handle, pointerId) => beginSetDrag(handle, pointerId, item.key)}
         onPointerMove={moveSetDrag}
         onPointerUp={finishSetDrag}
-        onPointerCancel={cancelSetDrag}
+        onCancel={clearSetDrag}
         onMoveEarlier={() => {
           if (index > 0) onMoveSet(index, index - 1);
         }}
