@@ -80,8 +80,7 @@ function VolumeRow({
         </span>
         <span className="split-volume-value" aria-hidden="true">
           <b>{shown(row)}</b>
-          {row.goal != null ? ` / ${row.goal}` : ''}
-          {row.unit === 'min' ? ' min' : ''}
+          {row.unit === 'min' && `${row.goal != null ? ` / ${row.goal}` : ''} min`}
         </span>
       </button>
     </li>

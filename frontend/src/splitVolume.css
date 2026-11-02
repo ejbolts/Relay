@@ -37,7 +37,8 @@
 }
 .split-volume ul {
   display: grid;
-  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -45,6 +46,9 @@
 .split-volume li {
   /* Keeps each visually hidden label inside its own row, so it can't widen the screen. */
   position: relative;
+}
+.split-volume li.is-cardio {
+  grid-column: 1 / -1;
 }
 .split-volume li.is-cardio:not(:first-child) {
   margin-top: 4px;
@@ -55,15 +59,30 @@
   width: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 16px minmax(0, 6.75rem) minmax(40px, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'mark name value'
+    'track track track';
   align-items: center;
-  gap: 7px;
+  gap: 4px 6px;
   border: 0;
   border-radius: 8px;
-  padding: 4px;
+  padding: 5px 4px 6px;
   background: none;
   font-weight: 400;
   text-align: left;
+}
+.split-volume-row > .split-volume-mark {
+  grid-area: mark;
+}
+.split-volume-row > .split-volume-name {
+  grid-area: name;
+}
+.split-volume-row > .split-volume-track {
+  grid-area: track;
+}
+.split-volume-row > .split-volume-value {
+  grid-area: value;
 }
 .routine-editor .split-volume-row[aria-pressed='true'] {
   background: var(--p-surface-3);
@@ -109,7 +128,6 @@
   opacity: 0.8;
 }
 .split-volume-value {
-  min-width: 3.25rem;
   color: var(--p-ink-2);
   font-size: 12px;
   font-variant-numeric: tabular-nums;

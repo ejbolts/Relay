@@ -846,36 +846,36 @@ function RoutineEditor({
     >
       <form id={formId} onSubmit={submit} className="routine-editor">
         <fieldset disabled={busy}>
-          <input
-            className="routine-name-input"
-            aria-label="Split name"
-            required
-            maxLength={40}
-            value={value.name}
-            onChange={(event) => setValue({ ...value, name: event.target.value })}
-          />
-          {schedule && (
-            <div className="split-editor-schedule">
-              <label>
-                Starts
+          <div className="routine-title-row">
+            <input
+              className="routine-name-input"
+              aria-label="Split name"
+              required
+              maxLength={40}
+              value={value.name}
+              onChange={(event) => setValue({ ...value, name: event.target.value })}
+            />
+            {schedule && (
+              <div className="split-editor-schedule">
                 <input
                   type="date"
+                  aria-label="Starts"
                   required
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
                 />
-              </label>
-              <label className="routine-share">
-                <span>Active</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={enabled}
-                  onChange={(event) => setEnabled(event.target.checked)}
-                />
-              </label>
-            </div>
-          )}
+                <label className="routine-active-toggle">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={enabled}
+                    onChange={(event) => setEnabled(event.target.checked)}
+                  />
+                  <span>Active</span>
+                </label>
+              </div>
+            )}
+          </div>
           {types.error && (
             <p className="inline-error" role="alert">
               {types.error}{' '}
