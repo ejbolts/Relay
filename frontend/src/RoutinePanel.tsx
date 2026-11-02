@@ -1,4 +1,5 @@
 import {
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -8,6 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from './api';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
+import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
@@ -723,6 +726,14 @@ function RoutineEditor({
   const alertRef = useRef<HTMLParagraphElement>(null);
   const types = useWorkoutTypes();
   const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  // The library's copies reflect partial-set changes made from the credits popup.
+  const libraryExercises = useContext(ExerciseCreditsContext)?.exercises;
+  const latest = (exercise: Exercise) =>
+    libraryExercises?.find((item) => item.id === exercise.id) ?? exercise;
+  const creditDays = value.days.map((item) => ({
+    ...item,
+    movements: item.movements.map((m) => ({ ...m, exercise: latest(m.exercise) })),
+  }));
   const message = validation || error;
   useEffect(() => {
     let live = true;
@@ -898,7 +909,7 @@ function RoutineEditor({
             </p>
           )}
           <SplitVolumeChart
-            days={value.days}
+            days={creditDays}
             muscleGoal={muscleGoal}
             cardioGoal={cardioGoal}
             selected={selected}
@@ -908,7 +919,7 @@ function RoutineEditor({
           <ol className="routine-day-list">
             {value.days.map((item, di) => {
               const open = openDay === di;
-              const contribution = dayContribution(item, selected);
+              const contribution = dayContribution(creditDays[di], selected);
               const bodyId = `${formId}-day-${di}`;
               return (
                 <li
@@ -1047,8 +1058,9 @@ function RoutineEditor({
                                   </option>
                                 ))}
                               </select>
-                              <small>{exerciseMuscles(m.exercise)}</small>
+                              <small>{exerciseMuscles(latest(m.exercise))}</small>
                             </div>
+                            <ExerciseMuscleHelp exercise={m.exercise} />
                             <div className="routine-stepper">
                               <button
                                 type="button"

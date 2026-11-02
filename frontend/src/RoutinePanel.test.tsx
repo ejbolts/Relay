@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
+import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { RoutinePanel } from './RoutinePanel';
 import type { Exercise, Routine } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
@@ -417,4 +418,43 @@ it('marks the days that train a selected muscle', async () => {
   expect(days[1].querySelector('.routine-day-hit')?.textContent).toBe('+2 sets');
   await act(async () => quads.click());
   expect(document.querySelector('.routine-day.is-dim')).toBeNull();
+});
+
+it("explains each exercise's set credits and charts partial-set changes made there", async () => {
+  const credited: Exercise = {
+    ...bench,
+    muscle_set_credits: [
+      { muscle_name: 'Chest', sets: 1 },
+      { muscle_name: 'Triceps', sets: 0.5 },
+    ],
+  };
+  const routine = structuredClone(original);
+  routine.days[0].movements[0].exercise = credited;
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
+  const withLibrary = (exercise: Exercise) => (
+    <ExerciseCreditsContext.Provider
+      value={{ exercises: [exercise], updatePartialSets: async () => exercise }}
+    >
+      <RoutinePanel ownerId="friend" own />
+    </ExerciseCreditsContext.Provider>
+  );
+  await act(async () => root.render(withLibrary(credited)));
+  await click('Edit split');
+  expect(document.querySelector('.routine-exercise-main small')?.textContent).toBe(
+    'Chest · Triceps ½',
+  );
+  await click('Muscle set credits for Bench press');
+  const credits = document.querySelector('.exercise-muscle-dialog')!;
+  expect(credits.textContent).toContain('Direct work');
+  expect(credits.textContent).toContain('Partial credit · assistance');
+  await click('Close Bench press');
+  expect(chartRows()).toContain('Triceps: 1.8 of 10 sets a week, under target');
+  // Turning partial sets off in the popup updates the library copy of the exercise.
+  await act(async () =>
+    root.render(
+      withLibrary({ ...credited, muscle_set_credits: [{ muscle_name: 'Chest', sets: 1 }] }),
+    ),
+  );
+  expect(chartRows().some((row) => row?.startsWith('Triceps'))).toBe(false);
+  expect(document.querySelector('.routine-exercise-main small')?.textContent).toBe('Chest');
 });

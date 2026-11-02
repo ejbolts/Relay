@@ -800,7 +800,7 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
 .routine-exercise-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   border-top: 1px solid var(--p-line);
   padding: 7px 0;
 }
@@ -822,6 +822,20 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   white-space: nowrap;
   appearance: none;
   cursor: pointer;
+}
+.routine-editor .routine-exercise-row .exercise-muscle-help-button {
+  width: 2rem;
+  height: 2rem;
+  min-height: 0;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--p-muted);
+}
+.routine-editor .routine-exercise-row .exercise-muscle-help-button svg {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 .routine-exercise-main small {
   overflow: hidden;
