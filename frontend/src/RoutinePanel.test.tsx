@@ -106,6 +106,10 @@ beforeEach(() => {
     steps: [],
   });
   vi.spyOn(api, 'listExercises').mockResolvedValue([bench, row]);
+  vi.spyOn(api, 'getCardioPreferences').mockResolvedValue({
+    heart_rate_zones: [],
+    goals: [{ zone: 2, minutes: 150 }],
+  });
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -340,4 +344,89 @@ it('edits cardio minutes and distance as planned targets', async () => {
     distance_km: 3.4,
     weight_kg: null,
   });
+});
+
+const tray = () => document.querySelector<HTMLElement>('.split-targets')!;
+const chip = (muscle: string) =>
+  [...tray().querySelectorAll('.split-target-chips li')].find((item) =>
+    item.textContent?.includes(muscle),
+  );
+
+it('shows planned weekly sets per muscle against the goal and updates them live', async () => {
+  await mount(true);
+  await click('Edit split');
+  // A two-day cycle repeats 3.5 times a week, so one bench set is 3.5 sets of chest.
+  expect(chip('Chest')?.textContent).toContain('Chest: 3.5 of 10 sets a week, under target');
+  expect(tray().querySelector('.split-targets-count')?.textContent).toBe('0 of 2 on target');
+  await click('Add set');
+  await click('Add set');
+  expect(chip('Chest')?.textContent).toContain('Chest: 10.5 of 10 sets a week, on target');
+  expect(chip('Chest')?.className).toContain('is-changed');
+  expect(tray().querySelector('.split-targets-count')?.textContent).toBe('1 of 2 on target');
+  await act(async () =>
+    document
+      .querySelector('[aria-label="Day 1 exercise 1 set 3 type"]')!
+      .dispatchEvent(new Event('focus', { bubbles: true })),
+  );
+  await input('[aria-label="Day 1 exercise 1 set 3 type"]', 'warmup');
+  expect(chip('Chest')?.textContent).toContain('Chest: 7 of 10 sets a week, nearly there');
+});
+
+it('expands to bars that include the combined cardio goal', async () => {
+  await mount(true);
+  await click('Edit split');
+  const toggle = tray().querySelector<HTMLButtonElement>('.split-targets-toggle')!;
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => toggle.click());
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  const rows = [...tray().querySelectorAll('.split-target-bars li')].map(
+    (item) => item.querySelector('.sr-only')?.textContent,
+  );
+  expect(rows).toEqual([
+    'Chest: 3.5 of 10 sets a week, under target',
+    'Cardio: 0 of 150 minutes a week, under target',
+  ]);
+  expect(tray().querySelector('.split-target-value')?.textContent).toBe('3.5 / 10');
+});
+
+it('leads the collapsed summary with the muscles of the day being edited', async () => {
+  const routine = structuredClone(original);
+  routine.days[1] = {
+    workout_type_id: 'lower',
+    workout_type: DEFAULT_WORKOUT_TYPES[1],
+    movements: [
+      {
+        exercise_id: 'squat',
+        exercise: {
+          ...bench,
+          id: 'squat',
+          name: 'Squat',
+          category: 'lower',
+          muscle_group: 'Quads',
+        },
+        sets: [routine.days[0].movements[0].sets[0], routine.days[0].movements[0].sets[0]],
+      },
+    ],
+  };
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
+  await mount(true);
+  await click('Edit split');
+  const names = () =>
+    [...tray().querySelectorAll('.split-target-chips li')].map((item) => ({
+      name: item.querySelector('span[aria-hidden]')?.textContent,
+      faded: item.classList.contains('is-faded'),
+    }));
+  expect(names().slice(0, 2)).toEqual([
+    { name: 'Chest', faded: false },
+    { name: 'Quads', faded: false },
+  ]);
+  await act(async () =>
+    document
+      .querySelector('[aria-label="Day 2"]')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true })),
+  );
+  expect(names().slice(0, 2)).toEqual([
+    { name: 'Quads', faded: false },
+    { name: 'Chest', faded: true },
+  ]);
 });

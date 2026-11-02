@@ -93,6 +93,7 @@ beforeEach(() => {
   vi.spyOn(api.routines, 'create').mockImplementation(async (r) => ({ ...r, id: 'new' }));
   vi.spyOn(api.routines, 'use').mockResolvedValue(current);
   vi.spyOn(api, 'listExercises').mockResolvedValue([]);
+  vi.spyOn(api, 'getCardioPreferences').mockResolvedValue({ heart_rate_zones: [], goals: [] });
   vi.spyOn(api, 'saveTrainingSplit').mockImplementation(async (s) => s);
   vi.spyOn(api, 'createWorkoutType').mockImplementation(async (t) => ({
     ...t,

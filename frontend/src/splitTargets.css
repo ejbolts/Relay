@@ -1,0 +1,207 @@
+.split-targets {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+.split-targets-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.routine-editor .split-targets-toggle {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 2px 0;
+  background: none;
+  text-align: left;
+}
+.split-targets-toggle strong {
+  margin-right: auto;
+  font-size: 14px;
+}
+.routine-editor .split-targets-toggle .pulse-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--p-ink-2);
+  transform: rotate(180deg);
+  transition: transform 0.2s ease;
+}
+.split-targets.is-open .split-targets-toggle .pulse-icon {
+  transform: none;
+}
+.split-targets-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.split-targets-count .split-target-mark {
+  margin-left: -5px;
+}
+.routine-editor .split-targets .auth-help-button {
+  min-height: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.split-target-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+.split-target-mark.is-met {
+  background: color-mix(in srgb, var(--p-good) 18%, transparent);
+  color: var(--p-good);
+}
+.split-target-mark.is-close {
+  background: var(--p-gold-soft);
+  color: var(--p-gold);
+}
+.split-target-mark.is-under {
+  background: color-mix(in srgb, var(--p-danger) 18%, transparent);
+  color: var(--p-danger);
+}
+.split-target-mark.is-none {
+  background: var(--p-surface-3);
+  color: var(--p-ink-2);
+}
+
+.split-target-chips,
+.split-target-bars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.split-target-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-inline: -1rem;
+  padding: 0 1rem 2px;
+  scrollbar-width: none;
+}
+.split-target-chips::-webkit-scrollbar {
+  display: none;
+}
+.split-target-chips li {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 9px 4px 4px;
+  background: var(--p-surface-2);
+  font-size: 12px;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+.split-target-chips b {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.split-target-chips li.is-faded {
+  opacity: 0.45;
+}
+.split-target-chips li.is-changed {
+  animation: split-target-changed 0.9s ease;
+}
+@keyframes split-target-changed {
+  from {
+    border-color: var(--p-accent);
+    background: var(--p-accent-soft);
+  }
+}
+
+.split-target-bars {
+  display: grid;
+  gap: 2px;
+  max-height: min(46vh, 360px);
+  overflow-y: auto;
+}
+.split-target-bars li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 7.5rem) minmax(48px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.split-target-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.split-target-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--p-surface-3);
+}
+.split-target-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--fill);
+  border-radius: 4px;
+  background: var(--p-ink-2);
+  transition: width 0.3s ease;
+}
+.split-target-fill.is-met {
+  background: var(--p-good);
+}
+.split-target-fill.is-close {
+  background: var(--p-gold);
+}
+.split-target-fill.is-under {
+  background: var(--p-danger);
+}
+.split-target-goal {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: var(--goal);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--p-ink);
+  opacity: 0.85;
+}
+.split-target-value {
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-target-chips li,
+  .split-target-fill,
+  .routine-editor .split-targets-toggle .pulse-icon {
+    transition: none;
+  }
+  .split-target-chips li.is-changed {
+    animation: none;
+  }
+}

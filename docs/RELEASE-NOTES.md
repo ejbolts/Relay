@@ -33,6 +33,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
 - **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
 - **High-rep warnings:** The confirmation popup offers a checkbox to skip further high-rep warnings for this workout, including after recovery. New workouts warn again; unusually high-weight warnings stay active.
+- **Split weekly targets:** While you edit a split, the **Weekly targets** tray shows the working sets each muscle gets per week and your planned cardio minutes against your weekly set and cardio goals. It updates as you add or remove sets, puts the muscles of the day you're editing first, and opens into bars with a goal marker. Cycles that aren't seven days long use weekly averages.
 
 ## 1.1.0
 

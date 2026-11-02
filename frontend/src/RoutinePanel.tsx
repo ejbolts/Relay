@@ -4,7 +4,8 @@ import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
 import { WeightInput } from './WeightInput';
-import { useWeightUnit } from './trainingPreferencesContext';
+import { SplitTargetsTray } from './SplitTargetsTray';
+import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { formatWeight } from './weightUnits';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
@@ -671,8 +672,25 @@ function RoutineEditor({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [focusedDay, setFocusedDay] = useState<number | null>(null);
+  const [cardioGoal, setCardioGoal] = useState<number | null>(null);
   const types = useWorkoutTypes();
   const unit = useWeightUnit();
+  const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  useEffect(() => {
+    let live = true;
+    // Without cardio goals the tray still shows planned minutes.
+    api.getCardioPreferences().then(
+      (preferences) => {
+        if (live)
+          setCardioGoal(preferences.goals.reduce((total, goal) => total + goal.minutes, 0) || null);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
   useEffect(() => {
     let live = true;
     api.listExercises().then(
@@ -802,6 +820,8 @@ function RoutineEditor({
               key={di}
               aria-label={`Day ${di + 1}`}
               style={item.workout_type ? { borderLeftColor: item.workout_type.color } : undefined}
+              onFocusCapture={() => setFocusedDay(di)}
+              onPointerDownCapture={() => setFocusedDay(di)}
             >
               <header>
                 <strong>Day {di + 1}</strong>
@@ -1162,6 +1182,12 @@ function RoutineEditor({
             </div>
           </details>
           <div className="routine-editor-footer">
+            <SplitTargetsTray
+              days={value.days}
+              muscleGoal={muscleGoal}
+              cardioGoal={cardioGoal}
+              focusedDay={focusedDay}
+            />
             {(validation || error) && (
               <p role="alert" className="inline-error">
                 {validation || error}
