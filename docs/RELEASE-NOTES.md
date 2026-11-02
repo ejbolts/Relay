@@ -52,6 +52,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Steady exercise search** - Filters and results stay together while searching and selecting exercises. Isolated sample data.
 
+![Split editor with the name, start date and Active chip on one row, a two-column Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers.](screenshots/releases/1.2.0-split-editor.png)
+
+**Weekly volume while you build** - See planned sets per muscle and cardio against your goals as you step sets. Isolated sample data.
+
+![Split card listing each day's exercises with a coloured block for every planned set, day totals, cardio minutes and a Muscles button.](screenshots/releases/1.2.0-split-days.png)
+
+**Split days at a glance** - Each planned set is a coloured block. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
