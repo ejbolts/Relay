@@ -2682,6 +2682,12 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   stroke-width: 1.5;
 }
 
+.pulse-chart-goal-path line {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 5;
+}
+
 .pulse-chart-goal text {
   fill: var(--p-ink-2);
   font-size: 10.5px;
@@ -3188,7 +3194,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .chart-legend .legend-goal {
   width: 0.875rem;
   height: 0;
-  border-top: 1.5px solid var(--p-ink-2);
+  border-top: 2px dotted var(--p-ink-2);
 }
 
 .body-screen .body-reference-stats {
@@ -3734,7 +3740,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
   width: 1.5rem;
   min-height: 2rem;
   box-sizing: border-box;
-  border-color: var(--p-line);
   color: var(--p-muted);
 }
 
@@ -3745,8 +3750,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .set-grid .completed-set-menu:hover,
 .logger-screen .set-grid .completed-set-menu:focus-visible,
 .logger-screen .set-grid .completed-set-menu[aria-expanded='true'] {
-  border-color: var(--p-accent);
-  background: var(--p-accent-soft);
   color: var(--p-accent);
 }
 

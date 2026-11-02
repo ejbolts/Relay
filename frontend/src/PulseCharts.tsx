@@ -337,7 +337,7 @@ export function TrendChart({
           </g>
         )}
         {goalLine && (
-          <g className="pulse-chart-goal">
+          <g className="pulse-chart-goal pulse-chart-goal-path">
             <line x1={goalLine.x1} y1={goalLine.y1} x2={goalLine.x2} y2={goalLine.y2} />
             <text
               x={Math.min(goalLine.x2, width - pad.right) - 4}

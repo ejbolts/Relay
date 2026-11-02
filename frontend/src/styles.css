@@ -4697,8 +4697,7 @@ html.edge-swipe-active .edge-swipe-indicator {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid currentColor;
-  border-radius: 0.4rem;
+  border: 0;
   padding: 0;
   background: transparent;
   color: #5598e7;

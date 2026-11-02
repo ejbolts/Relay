@@ -68,9 +68,13 @@ _Relay was called Gym Logger before version 1.0._
 
 **Dismissible workout errors** - Close a workout error with the X inside it. Isolated sample data.
 
-![Workout set rows with outlined pencil buttons beside their reorder grips, including completed sets and an open set editor.](screenshots/releases/1.2.0-set-pencil.png)
+![Workout set rows with pencil icons beside their reorder grips, including completed sets and an open set editor.](screenshots/releases/1.2.0-set-pencil.png)
 
 **Set options** - The pencil opens the existing edit, move and delete actions. Isolated sample data.
+
+![Body trend chart extended to December, with a dotted goal line rising from the goal's start weight in October to 85 kg at the end of December.](screenshots/releases/1.2.0-goal-future-line.png)
+
+**Goal line to your target date** - The trend chart runs on to a future goal date with a dotted line from where you started. Isolated sample data.
 
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
@@ -87,7 +91,8 @@ _Relay was called Gym Logger before version 1.0._
 - **Split days:** Split cards, including friends' shared splits and **Exercises & sets** on your active split, list each exercise with a coloured block for every planned set and a total for each day, instead of each set's reps and weight. Cardio shows its minutes, and the **Muscles** button shows what each exercise trains.
 - **Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.
 - **Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.
-- **Set options:** An outlined pencil replaces the three-dot button on each set row. Open it to edit, move or delete a set; the separate reorder grip stays beside it.
+- **Set options:** A pencil replaces the three-dot button on each set row. Open it to edit, move or delete a set; the separate reorder grip stays beside it.
+- **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
 
 ## 1.1.0
 
