@@ -284,7 +284,6 @@ export function ExerciseLibraryList({
                   >
                     <strong>{exercise.name}</strong>
                   </button>
-                  <ExerciseMuscleHelp exercise={exercise} />
                 </div>
                 <small>
                   {[
@@ -303,6 +302,7 @@ export function ExerciseLibraryList({
                     .join(' · ')}
                 </small>
               </div>
+              <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
                 <b>

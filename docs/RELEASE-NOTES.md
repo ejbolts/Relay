@@ -32,12 +32,17 @@ _Relay was called Gym Logger before version 1.0._
 
 **Clearer filters** - Selected pills follow your theme; tap a selected muscle again to return to All. Isolated sample data.
 
+![Exercise library with muscle-credit help icons aligned in one column immediately beside the trend sparklines, with short and wrapped exercise names.](screenshots/releases/1.2.0-exercise-help-alignment.png)
+
+**Aligned exercise help** — Question marks stay beside the trends. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
 - **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
 - **High-rep warnings:** The confirmation popup offers a checkbox to skip further high-rep warnings for this workout, including after recovery. New workouts warn again; unusually high-weight warnings stay active.
 - **Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.
+- **Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.
 
 ## 1.1.0
 
