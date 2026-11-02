@@ -218,6 +218,9 @@
   height: 0.875rem;
 }
 .exercise-list-rows {
+  display: grid;
+  grid-template-columns: 2.3rem minmax(0, 1fr) 2.75rem 3rem max-content;
+  column-gap: 0.65rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -226,9 +229,10 @@
   border-top: 1px solid var(--p-line);
 }
 .exercise-list-rows > li {
-  display: flex;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
-  gap: 0.65rem;
   width: 100%;
   min-width: 0;
   margin: 0;
@@ -262,16 +266,16 @@
   inset: 0;
   border-radius: 8px;
 }
-.exercise-list-name > .exercise-muscle-help {
+.exercise-list-rows > li > .exercise-muscle-help {
   position: relative;
   z-index: 1;
 }
-.exercise-list-name .exercise-muscle-help-button {
+.exercise-list-rows .exercise-muscle-help-button {
   width: 2.75rem;
   height: 2.75rem;
   margin: -0.5rem 0;
 }
-.exercise-list-name .exercise-muscle-help-button svg {
+.exercise-list-rows .exercise-muscle-help-button svg {
   width: 1rem;
   height: 1rem;
 }
@@ -432,7 +436,8 @@
     flex-basis: 2rem;
     width: 2rem;
   }
-  .exercise-list-rows > li {
-    gap: 0.45rem;
+  .exercise-list-rows {
+    grid-template-columns: 2.3rem minmax(0, 1fr) 2.75rem 2rem max-content;
+    column-gap: 0.45rem;
   }
 }
