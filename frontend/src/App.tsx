@@ -8615,8 +8615,9 @@ function BodyTrendChart({
     displayRange,
   );
   const activeGoal = goals.find((goal) => goal.active) ?? null;
+  // Clip only the start: a future target date extends the chart so the goal line reaches it.
   const clippedGoal = activeGoal
-    ? clipBodyWeightGoalPath(activeGoal, selectedDateRange.start_date, selectedDateRange.end_date)
+    ? clipBodyWeightGoalPath(activeGoal, selectedDateRange.start_date)
     : null;
   const weekMs = 7 * 86_400_000;
   const averagePoints = useMemo<TrendPoint[]>(
