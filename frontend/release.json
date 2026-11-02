@@ -67,6 +67,14 @@
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-days.png",
         "alt": "Split card listing each day's exercises with a coloured block for every planned set and day totals. Isolated sample data."
       }
+    },
+    {
+      "title": "Machine weights",
+      "description": "Filter progress by machine, or map machines to a reference for one comparable trend.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/22bd7cff3acb33f4cb6e947d7feabff767e712ca/docs/screenshots/releases/1.2.0-machine-weights.png",
+        "alt": "Machine Chest Press progress with All machines ≈ selected, showing a steady est. 1RM line in the reference machine's weights. Isolated sample data."
+      }
     }
   ]
 }
