@@ -633,9 +633,15 @@ export interface ProgressPoint {
   best_rpe: number | null;
 }
 
+/** One workout's sets on one saved machine; null when none or several were pinned. */
+export interface MachineProgressPoint extends ProgressPoint {
+  machine_photo_id: string | null;
+}
+
 export interface ExerciseProgress {
   exercise: Exercise;
   points: ProgressPoint[];
+  machine_points?: MachineProgressPoint[];
   personal_best_weight_kg: number;
   personal_best_estimated_1rm: number;
 }
@@ -1079,4 +1085,21 @@ export interface SharedWorkoutFilterOptions {
   workout_types?: WorkoutType[];
   exercises: { id: string; name: string }[];
   machines: MachinePhoto[];
+}
+
+/** `machine_kg` on this machine feels like `reference_kg` on the reference machine. */
+export interface MachineWeight {
+  id: string;
+  caption: string;
+  thumbnail_url: string;
+  workout_count: number;
+  last_used_date: string | null;
+  machine_kg: number | null;
+  reference_kg: number | null;
+}
+
+export interface WeightMapping {
+  enabled: boolean;
+  reference_machine_id: string | null;
+  machines: MachineWeight[];
 }

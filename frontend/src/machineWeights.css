@@ -1,0 +1,200 @@
+.machine-weights-save {
+  flex: none;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: var(--p-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.machine-weights-save:disabled {
+  opacity: 0.5;
+}
+
+.machine-weights-form {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.machine-weights-toggle-label {
+  display: flex !important;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.machine-weights-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.machine-weights-list > li {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  padding: 0.65rem;
+  background: var(--p-surface-2);
+}
+
+.machine-weights-list > li.is-reference {
+  border-color: var(--p-accent);
+}
+
+.machine-weights-machine {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.machine-weights-machine img {
+  width: 2.6rem;
+  height: 2.6rem;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--p-surface-3);
+}
+
+.machine-weights-machine > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.machine-weights-machine strong {
+  overflow-wrap: anywhere;
+  color: var(--p-ink);
+  font-size: 0.9rem;
+}
+
+.machine-weights-machine small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.machine-weights-machine .text-link {
+  flex: none;
+  font-size: 0.78rem;
+}
+
+.machine-weights-reference {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.machine-weights-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  color: var(--p-ink-2);
+  font-size: 0.8rem;
+}
+
+.machine-weights-pair label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.machine-weights-pair input {
+  width: 4.25rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 9px;
+  padding: 0 0.5rem;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 16px;
+  text-align: right;
+}
+
+.machine-weights-pair input[aria-invalid='true'] {
+  border-color: var(--p-danger);
+}
+
+.machine-weights-pair b {
+  margin-left: auto;
+  color: var(--p-muted);
+  font-size: 0.78rem;
+}
+
+.machine-weights-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--p-danger);
+  font-size: 0.75rem;
+}
+
+.progress-machine-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+}
+
+.progress-machine-chips {
+  display: flex;
+  flex: 1;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.progress-machine-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.progress-machine-chips > button {
+  flex-shrink: 0;
+  max-width: 12rem;
+  min-height: 2.2rem;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: var(--p-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-machine-chips > button[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  box-shadow: inset 0 0 0 1px var(--p-accent);
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}
+
+.progress-machine-settings {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  margin-left: auto;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--p-muted);
+}
