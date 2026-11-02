@@ -47,6 +47,22 @@
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/2ee686f3a4c7954308c859c2a434d27ad5a9cb6c/docs/screenshots/releases/1.2.0-high-rep-warning.png",
         "alt": "High-rep confirmation with the checkbox selected to stop repeat rep warnings for this workout. Isolated sample data."
       }
+    },
+    {
+      "title": "Weekly volume while you build",
+      "description": "See planned sets per muscle and cardio against your goals as you step sets.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
+        "alt": "Split editor with a two-column Weekly volume chart of planned sets per muscle and Day 1 open with set steppers. Isolated sample data."
+      }
+    },
+    {
+      "title": "Split days at a glance",
+      "description": "Each planned set is a coloured block, with totals for each day.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-days.png",
+        "alt": "Split card listing each day's exercises with a coloured block for every planned set and day totals. Isolated sample data."
+      }
     }
   ]
 }
