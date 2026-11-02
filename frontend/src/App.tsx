@@ -3863,7 +3863,7 @@ function WorkoutLogger({
         <WorkoutNavigationArrows navigation={navigation} />
       </section>
 
-      {error && <p className="inline-error">{error}</p>}
+      {error && <DismissibleInlineError message={error} onDismiss={() => setError(null)} />}
 
       {readOnly && initialWorkout ? (
         <BrowsedWorkoutDetails
@@ -4324,6 +4324,28 @@ function SupersetPicker({
       </section>
     </div>,
     document.body,
+  );
+}
+
+function DismissibleInlineError({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="inline-error inline-error-dismissible" role="alert">
+      <span>{message}</span>
+      <button
+        className="undo-toast-close"
+        type="button"
+        aria-label="Dismiss error"
+        onClick={onDismiss}
+      >
+        <Icon name="close" />
+      </button>
+    </div>
   );
 }
 

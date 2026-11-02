@@ -4116,7 +4116,8 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-weight: 750;
 }
 
-.undo-toast .undo-toast-close {
+.undo-toast .undo-toast-close,
+.inline-error-dismissible .undo-toast-close {
   width: 2.5rem;
   display: grid;
   place-items: center;
@@ -4124,9 +4125,33 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-muted);
 }
 
-.undo-toast .undo-toast-close .pulse-icon {
+.undo-toast .undo-toast-close .pulse-icon,
+.inline-error-dismissible .undo-toast-close .pulse-icon {
   width: 1.125rem;
   height: 1.125rem;
+}
+
+/* An inline error with the toast's dismiss X on the right; the button's
+   negative margins keep the box the same height as a plain inline error. */
+.inline-error-dismissible {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inline-error-dismissible > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.inline-error-dismissible .undo-toast-close {
+  flex: none;
+  min-height: 2.5rem;
+  margin: -0.65rem -0.45rem -0.65rem 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
 }
 
 /* Shrinks over the toast's lifetime to show when it will close. */
