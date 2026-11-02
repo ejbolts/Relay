@@ -1188,6 +1188,41 @@ describe('active workout recovery at startup', () => {
     expectPreserved(draft);
   });
 
+  it('keeps multiline set notes when editing, closing and recovering a workout', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Edit note for set 1"]')!.click(),
+    );
+    const editor = container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Note for set 1"]',
+    )!;
+    expect(editor).not.toBeNull();
+    expect(document.activeElement).toBe(editor);
+    const note = `Keep the elbows tucked and lower slowly.\n${'LongNote'.repeat(20)}`;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        editor,
+        note,
+      );
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Done editing set 1"]')!.click(),
+    );
+    expect(container.querySelector('[aria-label="Edit note for set 1"]')?.textContent).toBe(note);
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].notes).toBe(note);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Edit note for set 1"]')!.click(),
+    );
+    expect(
+      container.querySelector<HTMLTextAreaElement>('[aria-label="Note for set 1"]')?.value,
+    ).toBe(note);
+  });
+
   it('keeps the original draft while the catalogue request is delayed, then restores it', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);

@@ -3815,6 +3815,21 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-muted);
 }
 
+.logger-screen .set-editor-note {
+  height: auto;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.625rem;
+  line-height: 1.45;
+  field-sizing: content;
+  overflow-wrap: anywhere;
+}
+
+.logger-screen .completed-set-note {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .logger-screen .set-editor-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(4.25rem, 1fr));
