@@ -52,6 +52,8 @@ export interface ActiveWorkoutDraft {
   category: WorkoutCategory;
   workoutTypeId?: string | null;
   workoutTypeExplicit?: boolean;
+  /** Applies only to this unfinished workout, including after recovery. */
+  skipHighRepWarning?: boolean;
   notes: string;
   movements: StoredDraftMovement[];
   pendingSave?: PendingWorkoutSave;
@@ -206,6 +208,7 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
         value.workoutTypeId.length > 0 &&
         value.workoutTypeId.length <= 64)) &&
     (value.workoutTypeExplicit === undefined || typeof value.workoutTypeExplicit === 'boolean') &&
+    (value.skipHighRepWarning === undefined || typeof value.skipHighRepWarning === 'boolean') &&
     typeof value.notes === 'string' &&
     Array.isArray(value.movements) &&
     value.movements.every(isStoredMovement) &&

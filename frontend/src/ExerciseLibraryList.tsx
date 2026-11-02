@@ -177,7 +177,7 @@ export function ExerciseLibraryList({
               key={name}
               aria-pressed={muscle === name}
               onClick={() => {
-                setMuscle(name);
+                setMuscle((current) => (current === name ? 'All' : name));
                 setPage(1);
               }}
             >

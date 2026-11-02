@@ -2,16 +2,45 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo, mark attempted sets more clearly and hold briefly before reordering sets.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Hold briefly before reordering sets.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
     "**Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.",
+    "**Screenshot paste:** Copy a screenshot and tap Paste screenshot beside Upload screenshot in a cardio set to scan it without saving it to Photos.",
+    "**High-rep warnings:** Choose not to show rep warnings again for the current workout. The choice survives workout recovery; high-weight warnings stay on.",
+    "**Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.",
     "**Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
     "url": "https://raw.githubusercontent.com/ejbolts/Relay/10b4b0f2a523923ee4ab3c74272b999f40b96190/docs/screenshots/releases/1.2.0-attempted-set.png",
     "alt": "Workout set marked A with Attempted selected in the set-type menu. Isolated sample data."
-  }
+  },
+  "highlights": [
+    {
+      "title": "Attempted sets",
+      "description": "A replaces F in the set-type menu and workout rows.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/10b4b0f2a523923ee4ab3c74272b999f40b96190/docs/screenshots/releases/1.2.0-attempted-set.png",
+        "alt": "Workout set marked A with Attempted selected in the set-type menu. Isolated sample data."
+      }
+    },
+    {
+      "title": "Paste a screenshot",
+      "description": "Copy it, tap Paste screenshot and review the scanned values.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/63c88969081b8ee05f36e2f1aa190dee78c8c558/docs/screenshots/releases/1.2.0-paste-screenshot.png",
+        "alt": "Paste screenshot beside Upload screenshot in a cardio set with scanned sample workout metrics."
+      }
+    },
+    {
+      "title": "High-rep warnings",
+      "description": "Skip repeat rep warnings for one workout. High-weight warnings stay active.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2ee686f3a4c7954308c859c2a434d27ad5a9cb6c/docs/screenshots/releases/1.2.0-high-rep-warning.png",
+        "alt": "High-rep confirmation with the checkbox selected to stop repeat rep warnings for this workout. Isolated sample data."
+      }
+    }
+  ]
 }

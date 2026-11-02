@@ -1,6 +1,7 @@
 export interface SetEntryWarning {
   title: string;
   message: string;
+  highReps: boolean;
 }
 
 export interface SetEntryValues {
@@ -8,6 +9,7 @@ export interface SetEntryValues {
   weightKg: number | null;
   referenceWeightKg: number | null;
   originalReps?: number | null;
+  skipHighRepWarning?: boolean;
 }
 
 export function isUnusuallyHighWeight(
@@ -23,28 +25,34 @@ export function isUnusuallyHighWeight(
 }
 
 export function unusualSetEntryWarning(
-  { reps, weightKg, referenceWeightKg, originalReps }: SetEntryValues,
+  { reps, weightKg, referenceWeightKg, originalReps, skipHighRepWarning }: SetEntryValues,
   weightUnit: WeightUnit = 'kg',
 ): SetEntryWarning | null {
   const highReps =
-    reps !== null && reps > 20 && (originalReps === undefined || reps !== originalReps);
+    !skipHighRepWarning &&
+    reps !== null &&
+    reps > 20 &&
+    (originalReps === undefined || reps !== originalReps);
   const highWeight = isUnusuallyHighWeight(weightKg, referenceWeightKg);
 
   if (highReps && highWeight) {
     return {
       title: 'Add high rep and weight set?',
+      highReps: true,
       message: `You entered ${reps} reps at ${formatWeight(weightKg!, weightUnit)}. Confirm that both values are intended.`,
     };
   }
   if (highReps) {
     return {
       title: 'Add high rep set?',
+      highReps: true,
       message: `You entered ${reps} reps. Confirm that this high-rep set is intended.`,
     };
   }
   if (highWeight) {
     return {
       title: `Is ${formatWeight(weightKg!, weightUnit)} intended?`,
+      highReps: false,
       message:
         referenceWeightKg !== null && referenceWeightKg > 0
           ? `This is unusually high compared with the reference set at ${formatWeight(referenceWeightKg, weightUnit)}.`

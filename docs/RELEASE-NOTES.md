@@ -20,6 +20,18 @@ _Relay was called Gym Logger before version 1.0._
 
 **Attempted sets** — A replaces F in the set-type menu and workout rows. Isolated sample data.
 
+![Paste screenshot beside Upload screenshot in an expanded cardio set with scanned sample workout metrics.](screenshots/releases/1.2.0-paste-screenshot.png)
+
+**Paste a screenshot** - Copy it, tap Paste screenshot and review the scanned values. Isolated sample data.
+
+![High-rep confirmation popup with the checkbox selected to stop further high-rep warnings for this workout.](screenshots/releases/1.2.0-high-rep-warning.png)
+
+**High-rep warnings** - Skip repeat rep warnings for one workout. High-weight warnings stay active. Isolated sample data.
+
+![Exercise filters with blue theme-coloured borders around the selected Custom and Biceps pills.](screenshots/releases/1.2.0-exercise-filter-pills.png)
+
+**Clearer filters** - Selected pills follow your theme; tap a selected muscle again to return to All. Isolated sample data.
+
 ![Holding a set's drag handle until a blue outline appears, then dragging the first set below the next two sets.](screenshots/releases/1.2.0-hold-to-reorder-sets.gif)
 
 **Hold to reorder** — Hold for half a second, then drag the outlined set. Isolated sample data.
@@ -27,6 +39,9 @@ _Relay was called Gym Logger before version 1.0._
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
+- **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
+- **High-rep warnings:** The confirmation popup offers a checkbox to skip further high-rep warnings for this workout, including after recovery. New workouts warn again; unusually high-weight warnings stay active.
+- **Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.
 - **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
 
 ## 1.1.0
