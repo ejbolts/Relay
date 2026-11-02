@@ -40,6 +40,10 @@ _Relay was called Gym Logger before version 1.0._
 
 **Hold to reorder** — Hold for half a second, then drag the outlined set. Isolated sample data.
 
+![Saved set notes and the multiline note editor wrapping long text within the workout card.](screenshots/releases/1.2.0-set-notes-wrap.png)
+
+**Wrapping set notes** - Notes stay inside the card while typing and after saving, including long words and manual line breaks. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -48,6 +52,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.
 - **Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.
 - **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
+- **Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.
 
 ## 1.1.0
 

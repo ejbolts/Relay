@@ -5087,9 +5087,10 @@ function MovementCard({
               )}
             </div>
           )}
-          <input
+          <textarea
             data-set-field="notes"
             className="set-editor-note"
+            rows={2}
             value={item.notes ?? ''}
             onChange={(event) => onUpdateSet(item.key, { notes: event.target.value || null })}
             placeholder="Add a note"
