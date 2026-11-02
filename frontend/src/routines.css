@@ -775,9 +775,33 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
 .routine-day.is-open .routine-day-toggle .pulse-icon {
   transform: rotate(180deg);
 }
+.routine-day-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms var(--ease-out, ease);
+}
+.routine-day.is-open .routine-day-panel {
+  grid-template-rows: 1fr;
+}
+.routine-day-clip {
+  min-height: 0;
+  overflow: hidden;
+}
 .routine-day-body {
   display: grid;
-  padding: 0 12px 12px;
+  padding: 2px 12px 12px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 180ms ease,
+    transform 280ms var(--ease-out, ease);
+}
+.routine-day.is-open .routine-day-body {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 240ms ease 60ms,
+    transform 280ms var(--ease-out, ease);
 }
 .routine-day-tools {
   display: flex;
@@ -860,6 +884,9 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
     animation: none;
   }
   .routine-day,
+  .routine-day-panel,
+  .routine-day-body,
+  .routine-day.is-open .routine-day-body,
   .routine-editor .routine-day-toggle .pulse-icon {
     transition: none;
   }

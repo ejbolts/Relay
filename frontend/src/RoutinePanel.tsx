@@ -956,212 +956,219 @@ function RoutineEditor({
                     {contribution && <span className="routine-day-hit">{contribution}</span>}
                     <Icon name="chevron-down" />
                   </button>
-                  {open && (
-                    <section className="routine-day-body" id={bodyId} aria-label={`Day ${di + 1}`}>
-                      <div className="routine-day-tools">
-                        <select
-                          className="routine-day-type"
-                          aria-label={`Day ${di + 1} workout type`}
-                          value={item.workout_type_id ?? ''}
-                          onChange={(event) => {
-                            const type =
-                              types.types.find((t) => t.id === event.target.value) ?? null;
-                            day(di, {
-                              ...item,
-                              workout_type_id: type?.id ?? null,
-                              workout_type: type,
-                              movements: type ? item.movements : [],
-                            });
-                          }}
-                        >
-                          <option value="">Rest</option>
-                          {types.types
-                            .filter((t) => !t.archived || t.id === item.workout_type_id)
-                            .map((t) => (
-                              <option value={t.id} key={t.id}>
-                                {t.name}
-                                {t.archived ? ' (removed)' : ''}
-                              </option>
-                            ))}
-                        </select>
-                        <span className="routine-day-spacer" />
-                        <button
-                          type="button"
-                          className="routine-icon-button"
-                          aria-label={`Move day ${di + 1} earlier`}
-                          disabled={di === 0}
-                          onClick={() => move(di, -1)}
-                        >
-                          <Icon name="up" />
-                        </button>
-                        <button
-                          type="button"
-                          className="routine-icon-button"
-                          aria-label={`Move day ${di + 1} later`}
-                          disabled={di === value.days.length - 1}
-                          onClick={() => move(di, 1)}
-                        >
-                          <Icon name="down" />
-                        </button>
-                        <button
-                          type="button"
-                          className="routine-icon-button"
-                          aria-label={`Remove day ${di + 1}`}
-                          disabled={value.days.length === 1}
-                          onClick={() => {
-                            setValue({ ...value, days: value.days.filter((_, i) => i !== di) });
-                            setOpenDay(null);
-                          }}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </div>
-                      {item.movements.map((m, mi) => {
-                        const cardio = m.exercise.kind === 'cardio';
-                        const minutes = Math.round(
-                          m.sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) /
-                            60,
-                        );
-                        const atMinimum = cardio ? minutes <= 5 : m.sets.length <= 1;
-                        const name = m.exercise.name;
-                        return (
-                          <div
-                            className="routine-exercise-row"
-                            key={`${di}-${mi}-${m.exercise_id}`}
+                  {/* Kept mounted so it can slide shut; inert keeps a closed day out of reach. */}
+                  <div className="routine-day-panel" inert={!open}>
+                    <div className="routine-day-clip">
+                      <section
+                        className="routine-day-body"
+                        id={bodyId}
+                        aria-label={`Day ${di + 1}`}
+                      >
+                        <div className="routine-day-tools">
+                          <select
+                            className="routine-day-type"
+                            aria-label={`Day ${di + 1} workout type`}
+                            value={item.workout_type_id ?? ''}
+                            onChange={(event) => {
+                              const type =
+                                types.types.find((t) => t.id === event.target.value) ?? null;
+                              day(di, {
+                                ...item,
+                                workout_type_id: type?.id ?? null,
+                                workout_type: type,
+                                movements: type ? item.movements : [],
+                              });
+                            }}
                           >
-                            <div className="routine-exercise-main">
-                              <select
-                                className="routine-exercise-name"
-                                aria-label={`Day ${di + 1} exercise ${mi + 1}`}
-                                value={m.exercise_id}
-                                onChange={(event) => {
-                                  const exercise = exercises.find(
-                                    (e) => e.id === event.target.value,
-                                  )!;
-                                  movement(di, mi, (current) => ({
-                                    ...current,
+                            <option value="">Rest</option>
+                            {types.types
+                              .filter((t) => !t.archived || t.id === item.workout_type_id)
+                              .map((t) => (
+                                <option value={t.id} key={t.id}>
+                                  {t.name}
+                                  {t.archived ? ' (removed)' : ''}
+                                </option>
+                              ))}
+                          </select>
+                          <span className="routine-day-spacer" />
+                          <button
+                            type="button"
+                            className="routine-icon-button"
+                            aria-label={`Move day ${di + 1} earlier`}
+                            disabled={di === 0}
+                            onClick={() => move(di, -1)}
+                          >
+                            <Icon name="up" />
+                          </button>
+                          <button
+                            type="button"
+                            className="routine-icon-button"
+                            aria-label={`Move day ${di + 1} later`}
+                            disabled={di === value.days.length - 1}
+                            onClick={() => move(di, 1)}
+                          >
+                            <Icon name="down" />
+                          </button>
+                          <button
+                            type="button"
+                            className="routine-icon-button"
+                            aria-label={`Remove day ${di + 1}`}
+                            disabled={value.days.length === 1}
+                            onClick={() => {
+                              setValue({ ...value, days: value.days.filter((_, i) => i !== di) });
+                              setOpenDay(null);
+                            }}
+                          >
+                            <Icon name="close" />
+                          </button>
+                        </div>
+                        {item.movements.map((m, mi) => {
+                          const cardio = m.exercise.kind === 'cardio';
+                          const minutes = Math.round(
+                            m.sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) /
+                              60,
+                          );
+                          const atMinimum = cardio ? minutes <= 5 : m.sets.length <= 1;
+                          const name = m.exercise.name;
+                          return (
+                            <div
+                              className="routine-exercise-row"
+                              key={`${di}-${mi}-${m.exercise_id}`}
+                            >
+                              <div className="routine-exercise-main">
+                                <select
+                                  className="routine-exercise-name"
+                                  aria-label={`Day ${di + 1} exercise ${mi + 1}`}
+                                  value={m.exercise_id}
+                                  onChange={(event) => {
+                                    const exercise = exercises.find(
+                                      (e) => e.id === event.target.value,
+                                    )!;
+                                    movement(di, mi, (current) => ({
+                                      ...current,
+                                      exercise_id: exercise.id,
+                                      exercise,
+                                      sets:
+                                        exercise.kind === current.exercise.kind
+                                          ? current.sets
+                                          : [emptySet()],
+                                    }));
+                                  }}
+                                >
+                                  {[
+                                    m.exercise,
+                                    ...exercises.filter((e) => e.id !== m.exercise_id),
+                                  ].map((e) => (
+                                    <option value={e.id} key={e.id}>
+                                      {e.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <small>{exerciseMuscles(latest(m.exercise))}</small>
+                              </div>
+                              <ExerciseMuscleHelp exercise={m.exercise} />
+                              <div className="routine-stepper">
+                                <button
+                                  type="button"
+                                  aria-label={
+                                    atMinimum
+                                      ? `Remove ${name} from day ${di + 1}`
+                                      : cardio
+                                        ? `5 fewer minutes of ${name} on day ${di + 1}`
+                                        : `One fewer set of ${name} on day ${di + 1}`
+                                  }
+                                  onClick={() =>
+                                    movement(di, mi, (current) => {
+                                      if (atMinimum) return null;
+                                      if (!cardio)
+                                        return { ...current, sets: current.sets.slice(0, -1) };
+                                      return {
+                                        ...current,
+                                        // One planned duration; earlier interval sets fold into it.
+                                        sets: [
+                                          {
+                                            ...current.sets[0],
+                                            duration_seconds: (minutes - 5) * 60,
+                                          },
+                                        ],
+                                      };
+                                    })
+                                  }
+                                >
+                                  <Icon name={atMinimum ? 'close' : 'minus'} />
+                                </button>
+                                <output>{cardio ? `${minutes} min` : m.sets.length}</output>
+                                <button
+                                  type="button"
+                                  aria-label={
+                                    cardio
+                                      ? `5 more minutes of ${name} on day ${di + 1}`
+                                      : `One more set of ${name} on day ${di + 1}`
+                                  }
+                                  disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
+                                  onClick={() =>
+                                    movement(di, mi, (current) =>
+                                      cardio
+                                        ? {
+                                            ...current,
+                                            sets: [
+                                              {
+                                                ...current.sets[0],
+                                                duration_seconds: (minutes + 5) * 60,
+                                              },
+                                            ],
+                                          }
+                                        : {
+                                            ...current,
+                                            sets: [
+                                              ...current.sets,
+                                              { ...current.sets.at(-1)!, set_type: 'normal' },
+                                            ],
+                                          },
+                                    )
+                                  }
+                                >
+                                  <Icon name="plus" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {item.workout_type_id && (
+                          <select
+                            className="routine-add-exercise"
+                            aria-label={`Add exercise to day ${di + 1}`}
+                            value=""
+                            disabled={item.movements.length >= 20 || exercises.length === 0}
+                            onChange={(event) => {
+                              const exercise = exercises.find((e) => e.id === event.target.value)!;
+                              day(di, {
+                                ...item,
+                                movements: [
+                                  ...item.movements,
+                                  {
                                     exercise_id: exercise.id,
                                     exercise,
                                     sets:
-                                      exercise.kind === current.exercise.kind
-                                        ? current.sets
-                                        : [emptySet()],
-                                  }));
-                                }}
-                              >
-                                {[
-                                  m.exercise,
-                                  ...exercises.filter((e) => e.id !== m.exercise_id),
-                                ].map((e) => (
-                                  <option value={e.id} key={e.id}>
-                                    {e.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <small>{exerciseMuscles(latest(m.exercise))}</small>
-                            </div>
-                            <ExerciseMuscleHelp exercise={m.exercise} />
-                            <div className="routine-stepper">
-                              <button
-                                type="button"
-                                aria-label={
-                                  atMinimum
-                                    ? `Remove ${name} from day ${di + 1}`
-                                    : cardio
-                                      ? `5 fewer minutes of ${name} on day ${di + 1}`
-                                      : `One fewer set of ${name} on day ${di + 1}`
-                                }
-                                onClick={() =>
-                                  movement(di, mi, (current) => {
-                                    if (atMinimum) return null;
-                                    if (!cardio)
-                                      return { ...current, sets: current.sets.slice(0, -1) };
-                                    return {
-                                      ...current,
-                                      // One planned duration; earlier interval sets fold into it.
-                                      sets: [
-                                        {
-                                          ...current.sets[0],
-                                          duration_seconds: (minutes - 5) * 60,
-                                        },
-                                      ],
-                                    };
-                                  })
-                                }
-                              >
-                                <Icon name={atMinimum ? 'close' : 'minus'} />
-                              </button>
-                              <output>{cardio ? `${minutes} min` : m.sets.length}</output>
-                              <button
-                                type="button"
-                                aria-label={
-                                  cardio
-                                    ? `5 more minutes of ${name} on day ${di + 1}`
-                                    : `One more set of ${name} on day ${di + 1}`
-                                }
-                                disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
-                                onClick={() =>
-                                  movement(di, mi, (current) =>
-                                    cardio
-                                      ? {
-                                          ...current,
-                                          sets: [
-                                            {
-                                              ...current.sets[0],
-                                              duration_seconds: (minutes + 5) * 60,
-                                            },
-                                          ],
-                                        }
-                                      : {
-                                          ...current,
-                                          sets: [
-                                            ...current.sets,
-                                            { ...current.sets.at(-1)!, set_type: 'normal' },
-                                          ],
-                                        },
-                                  )
-                                }
-                              >
-                                <Icon name="plus" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {item.workout_type_id && (
-                        <select
-                          className="routine-add-exercise"
-                          aria-label={`Add exercise to day ${di + 1}`}
-                          value=""
-                          disabled={item.movements.length >= 20 || exercises.length === 0}
-                          onChange={(event) => {
-                            const exercise = exercises.find((e) => e.id === event.target.value)!;
-                            day(di, {
-                              ...item,
-                              movements: [
-                                ...item.movements,
-                                {
-                                  exercise_id: exercise.id,
-                                  exercise,
-                                  sets:
-                                    exercise.kind === 'cardio'
-                                      ? [{ ...emptySet(), duration_seconds: 1800 }]
-                                      : [emptySet(), emptySet(), emptySet()],
-                                },
-                              ],
-                            });
-                          }}
-                        >
-                          <option value="">+ Exercise</option>
-                          {exercises.map((e) => (
-                            <option key={e.id} value={e.id}>
-                              {e.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </section>
-                  )}
+                                      exercise.kind === 'cardio'
+                                        ? [{ ...emptySet(), duration_seconds: 1800 }]
+                                        : [emptySet(), emptySet(), emptySet()],
+                                  },
+                                ],
+                              });
+                            }}
+                          >
+                            <option value="">+ Exercise</option>
+                            {exercises.map((e) => (
+                              <option key={e.id} value={e.id}>
+                                {e.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </section>
+                    </div>
+                  </div>
                 </li>
               );
             })}

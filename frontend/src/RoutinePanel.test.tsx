@@ -458,3 +458,18 @@ it("explains each exercise's set credits and charts partial-set changes made the
   expect(chartRows().some((row) => row?.startsWith('Triceps'))).toBe(false);
   expect(document.querySelector('.routine-exercise-main small')?.textContent).toBe('Chest');
 });
+
+it('keeps closed days mounted for their closing animation but out of reach', async () => {
+  await mount(true);
+  await click('Edit split');
+  const inert = () =>
+    [...document.querySelectorAll('.routine-day-panel')].map((panel) =>
+      panel.hasAttribute('inert'),
+    );
+  expect(inert()).toEqual([false, true]);
+  await openDay(2);
+  expect(inert()).toEqual([true, false]);
+  expect(document.querySelectorAll('.routine-day.is-open')).toHaveLength(1);
+  await openDay(2);
+  expect(inert()).toEqual([true, true]);
+});
