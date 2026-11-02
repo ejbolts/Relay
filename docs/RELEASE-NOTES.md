@@ -44,6 +44,10 @@ _Relay was called Gym Logger before version 1.0._
 
 **Wrapping set notes** - Notes stay inside the card while typing and after saving, including long words and manual line breaks. Isolated sample data.
 
+![Leg Extension with its exercise tick cleared after unticking the first working set, while the warm-up and second working set remain completed.](screenshots/releases/1.2.0-exercise-completion-sync.png)
+
+**Consistent exercise ticks** - Unticking a set clears the exercise tick. Tick the exercise again to complete its remaining entered sets. Isolated sample data.
+
 ![Exercise picker showing two Lying search results immediately below the filters, with Lying Leg Curl selected and the add action at the bottom.](screenshots/releases/1.2.0-exercise-picker-layout.png)
 
 **Steady exercise search** - Filters and results stay together while searching and selecting exercises. Isolated sample data.
@@ -57,6 +61,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.
 - **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
 - **Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.
+- **Exercise completion:** Unticking a set also unticks its exercise. Adding a set or restoring an unfinished set with Undo clears the exercise tick too. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished. Recovery repairs inconsistent ticks from earlier versions.
 - **Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard.
 
 ## 1.1.0
