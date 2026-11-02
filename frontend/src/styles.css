@@ -6090,7 +6090,7 @@ body,
 }
 
 .exercise-picker {
-  grid-template-rows: auto auto auto 1fr auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
 }
 .exercise-picker header small {
   color: var(--accent-dark);
@@ -6140,7 +6140,7 @@ body,
 }
 
 .exercise-picker.keyboard-visible {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   padding-top: 0.7rem;
   padding-bottom: 0.7rem;
   border-radius: 18px;
@@ -10164,9 +10164,10 @@ body.chart-fullscreen-open {
   background: transparent;
   color: #8c9692;
   cursor: grab;
-  touch-action: none;
+  touch-action: auto;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .set-drag-grip {
@@ -10210,7 +10211,9 @@ body.chart-fullscreen-open {
 }
 
 .set-details.set-dragging {
-  opacity: 0.48;
+  outline: 2px solid var(--p-accent, #3987e5);
+  outline-offset: -2px;
+  opacity: 0.85;
   transform: scale(0.992);
 }
 

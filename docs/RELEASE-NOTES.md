@@ -28,11 +28,41 @@ _Relay was called Gym Logger before version 1.0._
 
 **High-rep warnings** - Skip repeat rep warnings for one workout. High-weight warnings stay active. Isolated sample data.
 
+![Exercise filters with blue theme-coloured borders around the selected Custom and Biceps pills.](screenshots/releases/1.2.0-exercise-filter-pills.png)
+
+**Clearer filters** - Selected pills follow your theme; tap a selected muscle again to return to All. Isolated sample data.
+
+![Exercise library with muscle-credit help icons aligned in one column immediately beside the trend sparklines, with short and wrapped exercise names.](screenshots/releases/1.2.0-exercise-help-alignment.png)
+
+**Aligned exercise help** — Question marks stay beside the trends. Isolated sample data.
+
+![Holding a set's drag handle until a blue outline appears, then dragging the first set below the next two sets.](screenshots/releases/1.2.0-hold-to-reorder-sets.gif)
+
+**Hold to reorder** — Hold for half a second, then drag the outlined set. Isolated sample data.
+
+![Saved set notes and the multiline note editor wrapping long text within the workout card.](screenshots/releases/1.2.0-set-notes-wrap.png)
+
+**Wrapping set notes** - Notes stay inside the card while typing and after saving, including long words and manual line breaks. Isolated sample data.
+
+![Leg Extension with its exercise tick cleared after unticking the first working set, while the warm-up and second working set remain completed.](screenshots/releases/1.2.0-exercise-completion-sync.png)
+
+**Consistent exercise ticks** - Unticking a set clears the exercise tick. Tick the exercise again to complete its remaining entered sets. Isolated sample data.
+
+![Exercise picker showing two Lying search results immediately below the filters, with Lying Leg Curl selected and the add action at the bottom.](screenshots/releases/1.2.0-exercise-picker-layout.png)
+
+**Steady exercise search** - Filters and results stay together while searching and selecting exercises. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
 - **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
 - **High-rep warnings:** The confirmation popup offers a checkbox to skip further high-rep warnings for this workout, including after recovery. New workouts warn again; unusually high-weight warnings stay active.
+- **Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.
+- **Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.
+- **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
+- **Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.
+- **Exercise completion:** Unticking a set also unticks its exercise. Adding a set or restoring an unfinished set with Undo clears the exercise tick too. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished. Recovery repairs inconsistent ticks from earlier versions.
+- **Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard.
 - **Split editor:** Editing a split now opens a compact full screen with Save at the top. A **Weekly volume** chart leads, showing the working sets each muscle gets per week and your planned cardio minutes against your weekly set and cardio goals, and it updates as you build. Days fold into one-line rows with their exercise and set counts, and one opens at a time. Each exercise has a sets stepper (cardio steps in 5-minute amounts), and stepping below one set removes it. The **?** beside each exercise shows its direct and partial set credits, and turning partial sets on or off there updates the chart. Tap a muscle in the chart to see which days train it and how many sets each adds. Cycles that aren't seven days long use weekly averages.
 - **Split days:** Split cards, including friends' shared splits and **Exercises & sets** on your active split, list each exercise with a coloured block for every planned set and a total for each day, instead of each set's reps and weight. Cardio shows its minutes, and the **Muscles** button shows what each exercise trains.
 

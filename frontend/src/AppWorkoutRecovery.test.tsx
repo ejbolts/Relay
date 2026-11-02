@@ -1086,6 +1086,79 @@ describe('rest time controls', () => {
   });
 });
 
+describe('hold to reorder workout sets', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  });
+  it.each(['strength', 'cardio'] as const)(
+    'requires half a second before highlighting and moving a %s set',
+    async (kind) => {
+      const draft = storedDraft();
+      const movement = draft.movements[0];
+      movement.machinePhotoIds = [];
+      movement.sets = [1, 2, 3].map((number) => ({
+        ...movement.sets[0],
+        key: `hold-set-${number}`,
+        reps: number * 5,
+      }));
+      if (kind === 'cardio') {
+        vi.mocked(api.listExercises).mockResolvedValue([{ ...bench, kind, category: 'cardio' }]);
+      }
+      draft.movements = [movement];
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      vi.useFakeTimers();
+      const rows = () => [...container.querySelectorAll<HTMLElement>('.set-details')];
+      const handle = container.querySelector<HTMLButtonElement>('.set-drag-handle')!;
+      handle.setPointerCapture = vi.fn();
+      handle.hasPointerCapture = vi.fn().mockReturnValue(false);
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: vi.fn(() => rows()[2]),
+      });
+      const pointer = async (type: string) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.assign(event, {
+          pointerId: 1,
+          isPrimary: true,
+          pointerType: 'touch',
+          button: 0,
+          clientX: 100,
+          clientY: 200,
+        });
+        await act(async () => {
+          handle.dispatchEvent(event);
+        });
+      };
+      await pointer('pointerdown');
+      await act(async () => {
+        vi.advanceTimersByTime(499);
+      });
+      expect(container.querySelector('.set-dragging')).toBeNull();
+      expect(handle.setPointerCapture).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(rows()[0].classList.contains('set-dragging')).toBe(true);
+      expect(handle.setPointerCapture).toHaveBeenCalledWith(1);
+      await pointer('pointermove');
+      expect(rows()[2].classList.contains('set-drop-target')).toBe(true);
+      await pointer('pointerup');
+      expect(rows().map((row) => row.dataset.setKey)).toEqual([
+        'hold-set-2',
+        'hold-set-3',
+        'hold-set-1',
+      ]);
+      expect(container.querySelector('.set-dragging, .set-drop-target')).toBeNull();
+      expect(readActiveWorkoutDraft()?.movements[0].sets.map((set) => set.key)).toEqual([
+        'hold-set-2',
+        'hold-set-3',
+        'hold-set-1',
+      ]);
+    },
+  );
+});
+
 describe('active workout recovery at startup', () => {
   it('flushes the live draft before an update and blocks refresh if device storage fails', async () => {
     const draft = storedDraft();
@@ -1113,6 +1186,41 @@ describe('active workout recovery at startup', () => {
     expect(container.textContent).toContain('Bench press');
     expect(container.textContent).toContain('Cable row');
     expectPreserved(draft);
+  });
+
+  it('keeps multiline set notes when editing, closing and recovering a workout', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Edit note for set 1"]')!.click(),
+    );
+    const editor = container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Note for set 1"]',
+    )!;
+    expect(editor).not.toBeNull();
+    expect(document.activeElement).toBe(editor);
+    const note = `Keep the elbows tucked and lower slowly.\n${'LongNote'.repeat(20)}`;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        editor,
+        note,
+      );
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Done editing set 1"]')!.click(),
+    );
+    expect(container.querySelector('[aria-label="Edit note for set 1"]')?.textContent).toBe(note);
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].notes).toBe(note);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Edit note for set 1"]')!.click(),
+    );
+    expect(
+      container.querySelector<HTMLTextAreaElement>('[aria-label="Note for set 1"]')?.value,
+    ).toBe(note);
   });
 
   it('keeps the original draft while the catalogue request is delayed, then restores it', async () => {
@@ -1647,6 +1755,140 @@ describe('durable workout completion', () => {
     await act(async () => resolve(remoteWorkout()));
     expect(readActiveWorkoutDraft()).toEqual(replacement);
     root = createRoot(container);
+  });
+});
+
+describe('exercise completion stays consistent with its sets', () => {
+  function completionDraft(kind: 'strength' | 'cardio' = 'strength', warmup = false) {
+    const draft = storedDraft();
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [0, 1, 2].map((index) => ({
+          ...createWorkoutSet(kind, undefined, false),
+          key: `completion-${index}`,
+          reps: kind === 'strength' ? 8 : null,
+          weight_kg: kind === 'strength' ? 40 : null,
+          duration_seconds: kind === 'cardio' ? 600 : null,
+          warmup: warmup && index === 0,
+          set_type: warmup && index === 0 ? 'warmup' : 'normal',
+          completed: index === 1,
+          notes: `Keep set ${index}`,
+        })),
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([{ ...bench, kind }]);
+    return draft;
+  }
+  const exerciseTick = () =>
+    container.querySelector<HTMLButtonElement>('.exercise-complete-button')!;
+  const setTicks = () => [...container.querySelectorAll<HTMLButtonElement>('.row-complete-button')];
+  const savedMovement = () => readActiveWorkoutDraft()!.movements[0];
+  const click = async (button: HTMLButtonElement) => act(async () => button.click());
+  const expand = () =>
+    click(container.querySelector<HTMLButtonElement>('.movement-expand-toggle')!);
+
+  it.each([
+    ['strength', false],
+    ['strength', true],
+    ['cardio', false],
+  ] as const)(
+    'clears the exercise after unticking a %s set (warmup: %s), then completes remaining sets',
+    async (kind, warmup) => {
+      writeActiveWorkoutDraft(completionDraft(kind, warmup));
+      await mount();
+      await click(exerciseTick());
+      expect(exerciseTick().getAttribute('aria-pressed')).toBe('true');
+      expect(savedMovement().sets.map((set) => set.completed)).toEqual([true, true, true]);
+      await expand();
+      await click(setTicks()[0]);
+      expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+      expect(savedMovement().isComplete).toBe(false);
+      expect(savedMovement().sets.map((set) => set.completed)).toEqual([false, true, true]);
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await mount();
+      expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+      await click(exerciseTick());
+      expect(savedMovement().isComplete).toBe(true);
+      expect(savedMovement().sets.map((set) => set.completed)).toEqual([true, true, true]);
+      expect(savedMovement().sets.map((set) => set.notes)).toEqual([
+        'Keep set 0',
+        'Keep set 1',
+        'Keep set 2',
+      ]);
+      await expand();
+      await click(setTicks()[2]);
+      expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+    },
+  );
+
+  it('clears completion when adding a set', async () => {
+    writeActiveWorkoutDraft(completionDraft());
+    await mount();
+    await click(exerciseTick());
+    await expand();
+    await click(container.querySelector<HTMLButtonElement>('.add-set-button')!);
+    expect(savedMovement().isComplete).toBe(false);
+    expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+    expect(savedMovement().sets.map((set) => set.completed)).toEqual([true, true, true, false]);
+    await click(exerciseTick());
+    expect(savedMovement().sets.every((set) => set.completed)).toBe(true);
+    expect(exerciseTick().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does not mark an exercise finished while a blank set remains', async () => {
+    const draft = completionDraft();
+    draft.movements[0].sets.push({ ...createWorkoutSet('strength'), key: 'blank' });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await click(exerciseTick());
+    expect(savedMovement().sets.map((set) => set.completed)).toEqual([true, true, true, false]);
+    expect(savedMovement().isComplete).toBe(false);
+    expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelector('.movement-card')?.classList.contains('exercise-finished')).toBe(
+      false,
+    );
+  });
+
+  it('clears completion when Undo brings back an unfinished set', async () => {
+    writeActiveWorkoutDraft(completionDraft());
+    await mount();
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Options for set 1"]')!);
+    await click(
+      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')].find(
+        (button) => button.textContent?.includes('Delete set'),
+      )!,
+    );
+    expect(savedMovement().sets).toHaveLength(2);
+    await click(exerciseTick());
+    expect(savedMovement().isComplete).toBe(true);
+    await click(container.querySelector<HTMLButtonElement>('.undo-toast-action')!);
+    expect(savedMovement().sets.map((set) => set.completed)).toEqual([false, true, true]);
+    expect(savedMovement().isComplete).toBe(false);
+    expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('leaves logged sets intact when manually unticking the exercise', async () => {
+    writeActiveWorkoutDraft(completionDraft());
+    await mount();
+    await click(exerciseTick());
+    const sets = savedMovement().sets;
+    await click(exerciseTick());
+    expect(savedMovement().isComplete).toBe(false);
+    expect(savedMovement().sets).toEqual(sets);
+  });
+
+  it('repairs a recovered exercise marked complete with unfinished sets', async () => {
+    const draft = completionDraft();
+    draft.movements[0].isComplete = true;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
+    expect(savedMovement().isComplete).toBe(false);
+    expect(savedMovement().sets.map((set) => set.completed)).toEqual([false, true, false]);
   });
 });
 

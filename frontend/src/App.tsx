@@ -26,6 +26,7 @@ import type {
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
+import { SetDragHandle } from './SetDragHandle';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
@@ -440,55 +441,6 @@ function completedSetPerformance(
 
 function moveItem<T>(items: T[], from: number, to: number): T[] {
   return reorder(items, from, to);
-}
-
-function SetDragHandle({
-  setNumber,
-  disabled,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-  onPointerCancel,
-  onMoveEarlier,
-  onMoveLater,
-}: {
-  setNumber: number;
-  disabled: boolean;
-  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onMoveEarlier: () => void;
-  onMoveLater: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="set-drag-handle"
-      aria-label={`Drag set ${setNumber} to reorder`}
-      title="Drag to reorder"
-      disabled={disabled}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          onMoveEarlier();
-        } else if (event.key === 'ArrowDown') {
-          event.preventDefault();
-          onMoveLater();
-        }
-      }}
-    >
-      <span className="set-drag-grip" aria-hidden="true">
-        {[0, 1, 2, 3, 4, 5].map((dot) => (
-          <i key={dot} />
-        ))}
-      </span>
-    </button>
-  );
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -3187,7 +3139,11 @@ function WorkoutLogger({
         }
         const sets = [...movement.sets];
         sets.splice(undoDeletion.index, 0, undoDeletion.set);
-        return { ...movement, sets };
+        return {
+          ...movement,
+          isComplete: movement.isComplete && sets.every((set) => set.completed),
+          sets,
+        };
       }),
     );
     setUndoDeletion(null);
@@ -3371,6 +3327,7 @@ function WorkoutLogger({
         );
         return {
           ...movement,
+          isComplete: movement.isComplete && sets.every((set) => set.completed),
           sets:
             loggingSet || correctingLoggedSet
               ? suggestNextSetFromLoggedSet(
@@ -3393,7 +3350,11 @@ function WorkoutLogger({
     setMovements((current) =>
       current.map((item) =>
         item.key === movement.key
-          ? { ...item, sets: [...item.sets, emptySet(item.exercise.kind, item.sets.at(-1))] }
+          ? {
+              ...item,
+              isComplete: false,
+              sets: [...item.sets, emptySet(item.exercise.kind, item.sets.at(-1))],
+            }
           : item,
       ),
     );
@@ -3938,17 +3899,17 @@ function WorkoutLogger({
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
               onExerciseComplete={(isComplete) =>
                 setMovements((current) =>
-                  current.map((item) =>
-                    item.key === movement.key
-                      ? {
-                          ...item,
-                          isComplete,
-                          sets: isComplete
-                            ? completeRemainingSets(item.exercise.kind, item.sets)
-                            : item.sets,
-                        }
-                      : item,
-                  ),
+                  current.map((item) => {
+                    if (item.key !== movement.key) return item;
+                    const sets = isComplete
+                      ? completeRemainingSets(item.exercise.kind, item.sets)
+                      : item.sets;
+                    return {
+                      ...item,
+                      isComplete: isComplete && sets.every((set) => set.completed),
+                      sets,
+                    };
+                  }),
                 )
               }
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
@@ -4559,7 +4520,7 @@ function MovementCard({
   const setNumbers = setNumberLabels(movement.sets);
 
   useEffect(() => {
-    if (!movement.isComplete) setExpanded(true);
+    setExpanded(!movement.isComplete);
   }, [movement.isComplete]);
 
   useEffect(() => {
@@ -4699,11 +4660,8 @@ function MovementCard({
     completeSet(item);
   }
 
-  function beginSetDrag(event: ReactPointerEvent<HTMLButtonElement>, setKey: string) {
-    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+  function beginSetDrag(handle: HTMLButtonElement, pointerId: number, setKey: string) {
+    handle.setPointerCapture(pointerId);
     draggingSetKeyRef.current = setKey;
     dragTargetSetKeyRef.current = setKey;
     setDraggingSetKey(setKey);
@@ -4746,20 +4704,15 @@ function MovementCard({
     clearSetDrag();
   }
 
-  function cancelSetDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    clearSetDrag();
-  }
-
   function renderSetDragHandle(item: DraftSet, index: number) {
     return (
       <SetDragHandle
         setNumber={index + 1}
         disabled={movement.sets.length < 2}
-        onPointerDown={(event) => beginSetDrag(event, item.key)}
+        onStart={(handle, pointerId) => beginSetDrag(handle, pointerId, item.key)}
         onPointerMove={moveSetDrag}
         onPointerUp={finishSetDrag}
-        onPointerCancel={cancelSetDrag}
+        onCancel={clearSetDrag}
         onMoveEarlier={() => {
           if (index > 0) onMoveSet(index, index - 1);
         }}
@@ -5143,9 +5096,10 @@ function MovementCard({
               )}
             </div>
           )}
-          <input
+          <textarea
             data-set-field="notes"
             className="set-editor-note"
+            rows={2}
             value={item.notes ?? ''}
             onChange={(event) => onUpdateSet(item.key, { notes: event.target.value || null })}
             placeholder="Add a note"
@@ -5262,7 +5216,6 @@ function MovementCard({
             onClick={() => {
               const next = !movement.isComplete;
               onExerciseComplete(next);
-              setExpanded(!next);
               closeMovementMenu();
             }}
           >
