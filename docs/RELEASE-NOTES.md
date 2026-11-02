@@ -34,6 +34,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
 - **High-rep warnings:** The confirmation popup offers a checkbox to skip further high-rep warnings for this workout, including after recovery. New workouts warn again; unusually high-weight warnings stay active.
 - **Split editor:** Editing a split now opens a compact full screen with Save at the top. A **Weekly volume** chart leads, showing the working sets each muscle gets per week and your planned cardio minutes against your weekly set and cardio goals, and it updates as you build. Days fold into one-line rows with their exercise and set counts, and one opens at a time. Each exercise has a sets stepper (cardio steps in 5-minute amounts), and stepping below one set removes it. The **?** beside each exercise shows its direct and partial set credits, and turning partial sets on or off there updates the chart. Tap a muscle in the chart to see which days train it and how many sets each adds. Cycles that aren't seven days long use weekly averages.
+- **Split days:** Split cards, including friends' shared splits and **Exercises & sets** on your active split, list each exercise with a coloured block for every planned set and a total for each day, instead of each set's reps and weight. Cardio shows its minutes, and the **Muscles** button shows what each exercise trains.
 
 ## 1.1.0
 

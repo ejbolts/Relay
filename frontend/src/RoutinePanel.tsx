@@ -16,8 +16,7 @@ import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
 import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
 import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } from './splitTargets';
-import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
-import { formatWeight } from './weightUnits';
+import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
 import { SPLIT_TEMPLATES } from './trainingSplit';
@@ -50,42 +49,99 @@ function RoutinePattern({ days }: { days: RoutineDay[] }) {
   );
 }
 
-function RoutineCycle({
-  routine,
-  unit,
-}: {
-  routine: Routine;
-  unit: ReturnType<typeof useWeightUnit>;
-}) {
+const MAX_PIPS = 10;
+
+/** A day's cycle as one row per exercise, with a block for each planned set. */
+function RoutineCycle({ routine }: { routine: Routine }) {
+  const [showMuscles, setShowMuscles] = useState(false);
   return (
-    <ol className="routine-cycle">
-      {routine.days.map((day, index) => (
-        <li
-          key={index}
-          className={day.workout_type ? undefined : 'is-rest'}
-          style={day.workout_type ? { borderColor: day.workout_type.color } : undefined}
+    <div className="routine-cycle-view">
+      <div className="routine-cycle-tools">
+        <button
+          type="button"
+          className="routine-muscle-toggle"
+          aria-pressed={showMuscles}
+          onClick={() => setShowMuscles((value) => !value)}
         >
-          <span>Day {index + 1}</span>
-          <strong>
-            {day.workout_type?.name ?? (day.workout_type_id ? 'Removed type' : 'Rest')}
-          </strong>
-          {day.movements.map((movement, mi) => (
-            <div className="routine-exercise" key={mi}>
-              <strong>{movement.exercise.name}</strong>
-              <span>
-                {movement.sets
-                  .map((set) =>
-                    movement.exercise.kind === 'cardio'
-                      ? `${set.duration_seconds == null ? '–' : Number((set.duration_seconds / 60).toFixed(1))} min${set.distance_km == null ? '' : ` · ${set.distance_km} km`}`
-                      : `${set.reps ?? '–'} × ${set.weight_kg == null ? '–' : formatWeight(set.weight_kg, unit)}`,
-                  )
-                  .join(' / ')}
-              </span>
-            </div>
-          ))}
-        </li>
-      ))}
-    </ol>
+          Muscles
+        </button>
+      </div>
+      <ol className="routine-cycle">
+        {routine.days.map((day, index) => {
+          const sets = day.movements
+            .filter(({ exercise }) => exercise.kind !== 'cardio')
+            .reduce((total, movement) => total + movement.sets.length, 0);
+          const minutes = Math.round(dayCardioMinutes(day));
+          const total = [
+            sets && `${sets} ${sets === 1 ? 'set' : 'sets'}`,
+            minutes && `${minutes} min`,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          return (
+            <li
+              key={index}
+              className={day.workout_type ? undefined : 'is-rest'}
+              style={
+                { '--day-colour': day.workout_type?.color ?? 'var(--p-deemph)' } as CSSProperties
+              }
+            >
+              <div className="routine-cycle-day">
+                <span className="routine-cycle-number">{index + 1}</span>
+                <strong>
+                  {day.workout_type?.name ?? (day.workout_type_id ? 'Removed type' : 'Rest')}
+                </strong>
+                {total && <span className="routine-cycle-total">{total}</span>}
+              </div>
+              {day.movements.length ? (
+                <ul>
+                  {day.movements.map((movement, mi) => {
+                    const cardio = movement.exercise.kind === 'cardio';
+                    const length = Math.round(
+                      movement.sets.reduce((sum, set) => sum + (set.duration_seconds ?? 0), 0) / 60,
+                    );
+                    const count = movement.sets.length;
+                    return (
+                      <li className="routine-exercise" key={mi}>
+                        <span className="routine-exercise-label">
+                          {movement.exercise.name}
+                          {showMuscles && <small>{exerciseMuscles(movement.exercise)}</small>}
+                        </span>
+                        {cardio ? (
+                          <span className="routine-cardio-length">
+                            <span
+                              className="routine-cardio-bar"
+                              aria-hidden="true"
+                              style={{ width: `${Math.max(6, Math.min(length, 120) * 0.6)}px` }}
+                            />
+                            {length} min
+                          </span>
+                        ) : (
+                          <span
+                            className="routine-pips"
+                            role="img"
+                            aria-label={`${count} ${count === 1 ? 'set' : 'sets'}`}
+                          >
+                            {Array.from({ length: Math.min(count, MAX_PIPS) }, (_, pip) => (
+                              <i key={pip} />
+                            ))}
+                            {count > MAX_PIPS && <span>+{count - MAX_PIPS}</span>}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="routine-cycle-empty">
+                  {day.workout_type_id ? 'No exercises' : 'Rest day'}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -154,7 +210,6 @@ export function RoutinePanel({
     focusCard.current = null;
   }, [embedded, expandedId, routines, activeId]);
   const types = useWorkoutTypes();
-  const unit = useWeightUnit();
   useEffect(() => {
     if (!active) return;
     let live = true;
@@ -341,12 +396,11 @@ export function RoutinePanel({
             {embedded && routine.id === activeId ? (
               routine.days.some((day) => day.movements.length > 0) && (
                 <details className="split-plan-exercises">
-                  <summary>Exercises &amp; sets</summary>{' '}
-                  <RoutineCycle routine={routine} unit={unit} />
+                  <summary>Exercises &amp; sets</summary> <RoutineCycle routine={routine} />
                 </details>
               )
             ) : (
-              <RoutineCycle routine={routine} unit={unit} />
+              <RoutineCycle routine={routine} />
             )}
             <div className="routine-actions">
               {own ? (

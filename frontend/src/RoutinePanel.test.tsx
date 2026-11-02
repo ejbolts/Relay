@@ -473,3 +473,37 @@ it('keeps closed days mounted for their closing animation but out of reach', asy
   await openDay(2);
   expect(inert()).toEqual([true, true]);
 });
+
+it('shows each planned set as a block, with muscles on request', async () => {
+  const routine = structuredClone(original);
+  const set = routine.days[0].movements[0].sets[0];
+  routine.days[0].movements[0].sets = [set, set, set];
+  routine.days.push({
+    workout_type_id: 'cardio',
+    workout_type: DEFAULT_WORKOUT_TYPES.find((type) => type.id === 'cardio')!,
+    movements: [
+      {
+        exercise_id: 'run',
+        exercise: { ...bench, id: 'run', name: 'Running', category: 'cardio', kind: 'cardio' },
+        sets: [{ ...set, reps: null, duration_seconds: 2700 }],
+      },
+    ],
+  });
+  vi.mocked(api.routines.list).mockResolvedValue([routine]);
+  await mount(true);
+  const days = [...host.querySelectorAll('.routine-cycle > li')];
+  expect(days.map((day) => day.querySelector('.routine-cycle-day')?.textContent)).toEqual([
+    '1Upper body3 sets',
+    '2Rest',
+    '3Cardio45 min',
+  ]);
+  const pips = days[0].querySelector('.routine-pips')!;
+  expect(pips.getAttribute('aria-label')).toBe('3 sets');
+  expect(pips.querySelectorAll('i')).toHaveLength(3);
+  expect(host.querySelector('.routine-cycle')?.textContent).not.toContain('×');
+  expect(days[1].querySelector('.routine-cycle-empty')?.textContent).toBe('Rest day');
+  expect(days[2].querySelector('.routine-cardio-length')?.textContent).toBe('45 min');
+  expect(host.querySelector('.routine-exercise-label small')).toBeNull();
+  await click('Muscles');
+  expect(host.querySelector('.routine-exercise-label small')?.textContent).toBe('Chest');
+});
