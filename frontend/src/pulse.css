@@ -2682,6 +2682,12 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   stroke-width: 1.5;
 }
 
+.pulse-chart-goal-path line {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 5;
+}
+
 .pulse-chart-goal text {
   fill: var(--p-ink-2);
   font-size: 10.5px;
@@ -3188,7 +3194,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .chart-legend .legend-goal {
   width: 0.875rem;
   height: 0;
-  border-top: 1.5px solid var(--p-ink-2);
+  border-top: 2px dotted var(--p-ink-2);
 }
 
 .body-screen .body-reference-stats {
