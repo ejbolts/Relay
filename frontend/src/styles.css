@@ -11537,3 +11537,23 @@ html {
   opacity: 1;
   cursor: default;
 }
+
+.set-entry-warning-preference {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  margin: 1rem 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.set-entry-warning-preference input {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--accent);
+}

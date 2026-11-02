@@ -1650,6 +1650,77 @@ describe('durable workout completion', () => {
   });
 });
 
+describe('high-rep warning preference', () => {
+  function highRepDraft() {
+    const draft = storedDraft();
+    draft.movements = draft.movements.map((movement) => ({
+      ...movement,
+      machinePhotoIds: [],
+      supersetKey: null,
+      sets: movement.sets.map((set) => ({ ...set, completed: false, reps: 25, weight_kg: 80 })),
+    }));
+    return draft;
+  }
+  const tick = (index: number) =>
+    container.querySelectorAll<HTMLButtonElement>('.row-complete-button')[index];
+  const preference = () =>
+    document.querySelector<HTMLInputElement>('.set-entry-warning-preference input')!;
+  const confirm = () => document.querySelector<HTMLButtonElement>('.confirm-unusual-set')!;
+  const popup = () => document.querySelector('.set-entry-confirmation');
+
+  it('keeps warning by default and does not apply a checked preference when cancelled', async () => {
+    writeActiveWorkoutDraft(highRepDraft());
+    await mount();
+    await act(async () => tick(0).click());
+    expect(preference().checked).toBe(false);
+    await act(async () => preference().click());
+    await act(async () =>
+      [...popup()!.querySelectorAll<HTMLButtonElement>('button')]
+        .find((b) => b.textContent === 'Go back')!
+        .click(),
+    );
+    expect(readActiveWorkoutDraft()!.skipHighRepWarning).toBe(false);
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].completed).toBe(false);
+    await act(async () => tick(0).click());
+    expect(preference().checked).toBe(false);
+    await act(async () => confirm().click());
+    await act(async () => tick(1).click());
+    expect(popup()?.textContent).toContain('Add high rep set?');
+  });
+
+  it('suppresses across exercises and recovery, keeps weight warnings, and resets for a new workout', async () => {
+    const draft = highRepDraft();
+    draft.movements[1].sets.push({
+      ...draft.movements[1].sets[0],
+      key: 'heavy-set',
+      weight_kg: 300,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () => tick(0).click());
+    await act(async () => preference().click());
+    await act(async () => confirm().click());
+    expect(readActiveWorkoutDraft()!.skipHighRepWarning).toBe(true);
+    await act(async () => tick(1).click());
+    expect(popup()).toBeNull();
+    expect(readActiveWorkoutDraft()!.movements[1].sets[0].completed).toBe(true);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    await act(async () => tick(2).click());
+    expect(popup()?.textContent).toContain('Is 300 kg intended?');
+    expect(preference()).toBeNull();
+    expect(readActiveWorkoutDraft()!.movements[1].sets[1].completed).toBe(false);
+    await act(async () => root.unmount());
+    writeActiveWorkoutDraft(highRepDraft());
+    root = createRoot(container);
+    await mount();
+    await act(async () => tick(0).click());
+    expect(popup()?.textContent).toContain('Add high rep set?');
+    expect(preference().checked).toBe(false);
+  });
+});
+
 describe('cardio set editing defaults', () => {
   it('shows a personal-zone text result after saving cardio inside a workout', async () => {
     const saved = remoteWorkout();
