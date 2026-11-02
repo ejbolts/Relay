@@ -130,7 +130,7 @@ it('copies into an editable private routine and adapts exercise and weight indep
     'Show on my profile',
   );
   await input('[aria-label="Day 1 exercise 1"]', 'row');
-  await input('[aria-label="Day 1 exercise 1 set 1 weight kg"]', '35');
+  await click('One more set of Cable row on day 1');
   await save();
   expect(api.routines.save).toHaveBeenCalledWith(
     expect.objectContaining({ id: 'copy', shared: false }),
@@ -138,9 +138,9 @@ it('copies into an editable private routine and adapts exercise and weight indep
   const saved = vi.mocked(api.routines.save).mock.calls[0][0];
   expect(saved.days[0].movements[0]).toMatchObject({
     exercise_id: 'row',
-    sets: [{ weight_kg: 35 }],
+    sets: [{ weight_kg: 50 }, { weight_kg: 50, set_type: 'normal' }],
   });
-  expect(original.days[0].movements[0].sets[0].weight_kg).toBe(50);
+  expect(original.days[0].movements[0].sets).toHaveLength(1);
   expect(api.routines.use).not.toHaveBeenCalled();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
@@ -159,13 +159,11 @@ it('opens My splits at the imported copy after dismissing the editor', async () 
 it('keeps edits after a failed save and allows retry', async () => {
   await mount(true);
   await click('Edit split');
-  await input('[aria-label="Day 1 exercise 1 set 1 reps"]', '10');
+  await click('One more set of Bench press on day 1');
   vi.mocked(api.routines.save).mockRejectedValueOnce(new Error('Connection lost'));
   await save();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('Connection lost');
-  expect(
-    document.querySelector<HTMLInputElement>('[aria-label="Day 1 exercise 1 set 1 reps"]')!.value,
-  ).toBe('10');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('2');
   await save();
   expect(api.routines.save).toHaveBeenCalledTimes(2);
 });
@@ -308,7 +306,7 @@ it('preserves an existing shared split when editing without a publishing control
   expect(api.routines.save).toHaveBeenCalledWith(expect.objectContaining({ shared: true }));
 });
 
-it('edits cardio minutes and distance as planned targets', async () => {
+it('edits cardio minutes as a planned target', async () => {
   const cardio: Exercise = {
     ...bench,
     id: 'run',
@@ -336,12 +334,14 @@ it('edits cardio minutes and distance as planned targets', async () => {
   vi.mocked(api.listExercises).mockResolvedValue([bench, row, cardio]);
   await mount(true);
   await click('Edit split');
-  await input('[aria-label="Day 1 exercise 1 set 1 minutes"]', '15.5');
-  await input('[aria-label="Day 1 exercise 1 set 1 distance km"]', '3.4');
+  expect(
+    document.querySelector<HTMLInputElement>('[aria-label="Day 1 exercise 1 minutes"]')!.value,
+  ).toBe('10');
+  await input('[aria-label="Day 1 exercise 1 minutes"]', '15.5');
   await save();
   expect(vi.mocked(api.routines.save).mock.calls[0][0].days[0].movements[0].sets[0]).toMatchObject({
     duration_seconds: 930,
-    distance_km: 3.4,
+    distance_km: 2,
     weight_kg: null,
   });
 });
@@ -358,17 +358,13 @@ it('shows planned weekly sets per muscle against the goal and updates them live'
   // A two-day cycle repeats 3.5 times a week, so one bench set is 3.5 sets of chest.
   expect(chip('Chest')?.textContent).toContain('Chest: 3.5 of 10 sets a week, under target');
   expect(tray().querySelector('.split-targets-count')?.textContent).toBe('0 of 2 on target');
-  await click('Add set');
-  await click('Add set');
+  await click('One more set of Bench press on day 1');
+  await click('One more set of Bench press on day 1');
+  expect(document.querySelector('.routine-stepper output')?.textContent).toBe('3');
   expect(chip('Chest')?.textContent).toContain('Chest: 10.5 of 10 sets a week, on target');
   expect(chip('Chest')?.className).toContain('is-changed');
   expect(tray().querySelector('.split-targets-count')?.textContent).toBe('1 of 2 on target');
-  await act(async () =>
-    document
-      .querySelector('[aria-label="Day 1 exercise 1 set 3 type"]')!
-      .dispatchEvent(new Event('focus', { bubbles: true })),
-  );
-  await input('[aria-label="Day 1 exercise 1 set 3 type"]', 'warmup');
+  await click('One fewer set of Bench press on day 1');
   expect(chip('Chest')?.textContent).toContain('Chest: 7 of 10 sets a week, nearly there');
 });
 

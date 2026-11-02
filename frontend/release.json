@@ -9,7 +9,7 @@
     "**Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.",
     "**Screenshot paste:** Copy a screenshot and tap Paste screenshot beside Upload screenshot in a cardio set to scan it without saving it to Photos.",
     "**High-rep warnings:** Choose not to show rep warnings again for the current workout. The choice survives workout recovery; high-weight warnings stay on.",
-    "**Split weekly targets:** While you edit a split, a Weekly targets tray shows the sets each muscle gets per week and your planned cardio minutes against your weekly goals, updating as you add sets."
+    "**Split editor:** Editing a split opens a full screen. Each exercise has a sets stepper, and a Weekly targets tray shows the sets each muscle gets per week and your planned cardio minutes against your weekly goals as you build."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {

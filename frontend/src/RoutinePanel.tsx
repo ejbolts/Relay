@@ -3,7 +3,6 @@ import { api } from './api';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
-import { WeightInput } from './WeightInput';
 import { SplitTargetsTray } from './SplitTargetsTray';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { formatWeight } from './weightUnits';
@@ -23,6 +22,11 @@ const emptySet = (): RoutineSet => ({
 });
 const failure = (reason: unknown) =>
   reason instanceof Error ? reason.message : 'Could not save the split. Try again.';
+/** Planned cardio minutes for an exercise, to one decimal place. */
+const cardioMinutes = (sets: RoutineSet[]) =>
+  sets.every((set) => set.duration_seconds == null)
+    ? ''
+    : Number((sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) / 60).toFixed(1));
 const dayCount = (days: RoutineDay[]) => `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
 
 function RoutinePattern({ days }: { days: RoutineDay[] }) {
@@ -675,7 +679,6 @@ function RoutineEditor({
   const [focusedDay, setFocusedDay] = useState<number | null>(null);
   const [cardioGoal, setCardioGoal] = useState<number | null>(null);
   const types = useWorkoutTypes();
-  const unit = useWeightUnit();
   const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   useEffect(() => {
     let live = true;
@@ -762,7 +765,12 @@ function RoutineEditor({
   return (
     <PopupDialog
       title={routine.id ? 'Edit split' : 'New split'}
-      className="routine-editor-dialog"
+      className="routine-editor-dialog routine-editor-screen"
+      closeLabel={
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M14.5 5.5 8 12l6.5 6.5" />
+        </svg>
+      }
       onClose={onClose}
     >
       <form onSubmit={submit} className="routine-editor">
@@ -926,130 +934,84 @@ function RoutineEditor({
                       <Icon name="close" />
                     </button>
                   </div>
-                  <div className="routine-set-labels">
-                    <span>Set</span>
-                    <span>{movement.exercise.kind === 'cardio' ? 'Min' : 'Reps'}</span>
-                    <span>{movement.exercise.kind === 'cardio' ? 'km' : unit}</span>
-                    <span />
-                  </div>
-                  {movement.sets.map((set, si) => {
-                    const change = (patch: Partial<RoutineSet>) =>
-                      day(di, {
-                        ...item,
-                        movements: item.movements.map((m, i) =>
-                          i === mi
-                            ? {
-                                ...m,
-                                sets: m.sets.map((s, j) => (j === si ? { ...s, ...patch } : s)),
-                              }
-                            : m,
-                        ),
-                      });
-                    const label = `Day ${di + 1} exercise ${mi + 1} set ${si + 1}`;
-                    return (
-                      <div className="routine-set" key={si}>
-                        <select
-                          aria-label={`${label} type`}
-                          value={set.set_type}
-                          onChange={(event) =>
-                            change({ set_type: event.target.value as RoutineSet['set_type'] })
-                          }
-                        >
-                          <option value="normal">{si + 1}</option>
-                          <option value="warmup">W</option>
-                          <option value="drop">D</option>
-                          <option value="failure">A</option>
-                        </select>
-                        {movement.exercise.kind === 'cardio' ? (
-                          <>
-                            <input
-                              aria-label={`${label} minutes`}
-                              type="number"
-                              min="0"
-                              max="2880"
-                              step="0.1"
-                              value={set.duration_seconds == null ? '' : set.duration_seconds / 60}
-                              onChange={(event) =>
-                                change({
-                                  duration_seconds:
-                                    event.target.value === ''
-                                      ? null
-                                      : Math.round(Number(event.target.value) * 60),
-                                })
-                              }
-                            />
-                            <input
-                              aria-label={`${label} distance km`}
-                              type="number"
-                              min="0"
-                              max="10000"
-                              step="0.01"
-                              value={set.distance_km ?? ''}
-                              onChange={(event) =>
-                                change({
-                                  distance_km:
-                                    event.target.value === '' ? null : Number(event.target.value),
-                                })
-                              }
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <input
-                              aria-label={`${label} reps`}
-                              type="number"
-                              min="0"
-                              max="10000"
-                              value={set.reps ?? ''}
-                              onChange={(event) =>
-                                change({
-                                  reps:
-                                    event.target.value === '' ? null : Number(event.target.value),
-                                })
-                              }
-                            />
-                            <WeightInput
-                              aria-label={`${label} weight ${unit}`}
-                              weightKg={set.weight_kg}
-                              onWeightChange={(weight_kg) => change({ weight_kg })}
-                            />
-                          </>
-                        )}
+                  {movement.exercise.kind === 'cardio' ? (
+                    <label className="routine-cardio-minutes">
+                      Minutes
+                      <input
+                        aria-label={`Day ${di + 1} exercise ${mi + 1} minutes`}
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        max="2880"
+                        step="1"
+                        value={cardioMinutes(movement.sets)}
+                        onChange={(event) =>
+                          day(di, {
+                            ...item,
+                            movements: item.movements.map((m, i) =>
+                              i === mi
+                                ? {
+                                    ...m,
+                                    // One planned duration; earlier interval sets fold into it.
+                                    sets: [
+                                      {
+                                        ...m.sets[0],
+                                        duration_seconds:
+                                          event.target.value === ''
+                                            ? null
+                                            : Math.round(Number(event.target.value) * 60),
+                                      },
+                                    ],
+                                  }
+                                : m,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <div className="routine-set-count">
+                      <span>Sets</span>
+                      <div className="routine-stepper">
                         <button
                           type="button"
-                          className="routine-icon-button"
-                          aria-label={`Remove ${label.toLowerCase()}`}
-                          disabled={movement.sets.length === 1}
+                          aria-label={`One fewer set of ${movement.exercise.name} on day ${di + 1}`}
+                          disabled={movement.sets.length <= 1}
                           onClick={() =>
                             day(di, {
                               ...item,
                               movements: item.movements.map((m, i) =>
-                                i === mi ? { ...m, sets: m.sets.filter((_, j) => j !== si) } : m,
+                                i === mi ? { ...m, sets: m.sets.slice(0, -1) } : m,
                               ),
                             })
                           }
                         >
-                          <Icon name="close" />
+                          <Icon name="minus" />
+                        </button>
+                        <output>{movement.sets.length}</output>
+                        <button
+                          type="button"
+                          aria-label={`One more set of ${movement.exercise.name} on day ${di + 1}`}
+                          disabled={movement.sets.length >= 50}
+                          onClick={() =>
+                            day(di, {
+                              ...item,
+                              movements: item.movements.map((m, i) =>
+                                i === mi
+                                  ? {
+                                      ...m,
+                                      sets: [...m.sets, { ...m.sets.at(-1)!, set_type: 'normal' }],
+                                    }
+                                  : m,
+                              ),
+                            })
+                          }
+                        >
+                          <Icon name="plus" />
                         </button>
                       </div>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    className="routine-add"
-                    disabled={movement.sets.length >= 50}
-                    onClick={() =>
-                      day(di, {
-                        ...item,
-                        movements: item.movements.map((m, i) =>
-                          i === mi ? { ...m, sets: [...m.sets, { ...m.sets.at(-1)! }] } : m,
-                        ),
-                      })
-                    }
-                  >
-                    <Icon name="plus" />
-                    Add set
-                  </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {item.workout_type_id && (

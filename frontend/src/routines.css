@@ -528,23 +528,49 @@
   flex: 1;
   font-weight: 600;
 }
-.routine-set,
-.routine-set-labels {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 32px;
-  gap: 6px;
+.routine-set-count {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 600;
 }
-.routine-set-labels {
-  padding-top: 2px;
-  font-size: 11px;
-  color: var(--p-muted);
+.routine-stepper {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
 }
-.routine-set-labels > span:first-child {
-  padding-left: 2px;
+.routine-editor .routine-stepper button {
+  width: 40px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
 }
-.routine-editor .routine-set select,
-.routine-editor .routine-set input {
+.routine-stepper output {
+  min-width: 2.5rem;
+  color: var(--p-ink);
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.routine-editor .routine-cardio-minutes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.routine-editor .routine-cardio-minutes input {
+  width: 6.5rem;
   min-height: 36px;
   padding: 6px 8px;
   text-align: center;
@@ -566,6 +592,7 @@
   gap: 8px;
 }
 .routine-editor-footer {
+  grid-template-columns: minmax(0, 1fr);
   position: sticky;
   z-index: 1;
   bottom: 0;
@@ -581,4 +608,77 @@
 }
 .routine-editor-footer .popup-primary-action {
   width: 100%;
+}
+
+/* The editor is a full screen rather than a popup, leaving room for every day's controls. */
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--p-page);
+  box-shadow: none;
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen[open] {
+  animation: routine-screen-in 240ms var(--ease-out, ease) backwards;
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen::backdrop {
+  background: var(--p-page);
+  backdrop-filter: none;
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  border-bottom: 1px solid var(--p-line);
+  padding: calc(0.55rem + env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) 0.75rem
+    max(0.75rem, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--p-page) 96%, transparent);
+}
+dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
+  color: var(--p-ink);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.routine-editor-screen .popup-dialog-close {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 0;
+  background: var(--p-surface);
+  color: var(--p-ink-2);
+}
+.routine-editor-screen .popup-dialog-close svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.15;
+}
+.routine-editor-screen .routine-editor {
+  max-width: 600px;
+  margin-inline: auto;
+}
+.routine-editor-screen .routine-editor-footer {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+@keyframes routine-screen-in {
+  from {
+    opacity: 0;
+    transform: translate3d(1.5rem, 0, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.popup-dialog.routine-editor-dialog.routine-editor-screen[open] {
+    animation: none;
+  }
 }

@@ -18,7 +18,7 @@ export function PopupDialog({
   titleBadge?: ReactNode;
   kicker?: string;
   className?: string;
-  closeLabel?: string;
+  closeLabel?: ReactNode;
   style?: CSSProperties;
   swipeToDismiss?: boolean;
   onClose: () => void;

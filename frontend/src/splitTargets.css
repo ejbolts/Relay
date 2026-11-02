@@ -1,5 +1,7 @@
 .split-targets {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 8px;
   margin: 0 0 4px;
 }
@@ -104,6 +106,11 @@
 }
 .split-target-chips::-webkit-scrollbar {
   display: none;
+}
+/* Keeps each visually hidden label inside its own row, so it can't widen the screen. */
+.split-target-chips li,
+.split-target-bars li {
+  position: relative;
 }
 .split-target-chips li {
   display: inline-flex;
