@@ -62,6 +62,20 @@ const draft: ActiveWorkoutDraft = {
 };
 
 describe('active workout draft persistence', () => {
+  it('keeps the high-rep preference with its draft and rejects malformed preferences', () => {
+    const storage = new MemoryStorage();
+    for (const skipHighRepWarning of [undefined, false, true]) {
+      const value = { ...draft, skipHighRepWarning };
+      writeActiveWorkoutDraft(value, storage);
+      expect(readActiveWorkoutDraft(storage)?.skipHighRepWarning).toBe(skipHighRepWarning);
+    }
+    storage.setItem(
+      ACTIVE_WORKOUT_DRAFT_KEY,
+      JSON.stringify({ ...draft, skipHighRepWarning: 'false' }),
+    );
+    expect(readActiveWorkoutDraft(storage)).toBeNull();
+  });
+
   it('round-trips an immutable completion and rejects a missing target or mismatched session', () => {
     const storage = new MemoryStorage();
     const sessionId = 'c911075b-8eb3-48b0-8790-f535d579fa52';
