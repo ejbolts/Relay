@@ -2,7 +2,7 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
@@ -16,7 +16,8 @@
     "**Exercise completion:** Unticking a set also unticks its exercise. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished.",
     "**Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard.",
     "**Split editor:** Editing a split opens a compact full screen led by a Weekly volume chart of the sets each muscle gets per week and your planned cardio, against your weekly goals. Days fold into one-line rows, each exercise has a sets stepper with a ? for its direct and partial set credits, and tapping a muscle shows which days train it.",
-    "**Split days:** Split cards list each exercise with a coloured block per planned set instead of every set's reps and weight, with a Muscles button to show what each exercise trains."
+    "**Split days:** Split cards list each exercise with a coloured block per planned set instead of every set's reps and weight, with a Muscles button to show what each exercise trains.",
+    "**Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
-import { nextReaction, reactionEmoji, reactionSummary, REACTIONS } from './friendFeedData';
+import { nextReaction, reactionSummary, REACTIONS } from './friendFeedData';
 import { Icon } from './Icon';
 import type { WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
@@ -40,12 +40,13 @@ export function WorkoutReactionControl({
   const reactTrigger = useRef<HTMLButtonElement>(null);
   const commentTrigger = useRef<HTMLButtonElement>(null);
   const peopleTrigger = useRef<HTMLButtonElement>(null);
+  const restoreReactFocus = useRef(false);
   const closeRef = useRef(onOpenChange);
   closeRef.current = onOpenChange;
   const shown = open ? panel : null;
   const yours = reactions.yours;
   const summary = reactionSummary(reactions.counts);
-  const selected = REACTIONS.find((entry) => entry.kind === yours);
+  const selected = !ownWorkout && REACTIONS.find((entry) => entry.kind === yours);
   const comments = reactions.comment_count ?? 0;
   const commentLabel = `${comments} ${comments === 1 ? 'comment' : 'comments'}`;
   const reactionCount = `${summary.total} ${summary.total === 1 ? 'reaction' : 'reactions'}`;
@@ -56,6 +57,13 @@ export function WorkoutReactionControl({
     if (next === 'comments') setVisited(true);
     onOpenChange(next !== null);
   }
+
+  useEffect(() => {
+    if (!shown && restoreReactFocus.current) {
+      restoreReactFocus.current = false;
+      reactTrigger.current?.focus();
+    }
+  }, [shown, yours]);
 
   useEffect(() => {
     if (!shown || shown === 'people') return;
@@ -90,13 +98,12 @@ export function WorkoutReactionControl({
     setError(null);
     try {
       const next = nextReaction(yours, chosen);
-      onChange(
-        next
-          ? await api.sharing.react(workoutId, next)
-          : await api.sharing.removeReaction(workoutId),
-      );
+      const updated = next
+        ? await api.sharing.react(workoutId, next)
+        : await api.sharing.removeReaction(workoutId);
+      restoreReactFocus.current = true;
+      onChange(updated);
       show(null);
-      reactTrigger.current?.focus();
     } catch (reason) {
       setError(authErrorMessage(reason));
     } finally {
@@ -104,51 +111,60 @@ export function WorkoutReactionControl({
     }
   }
 
-  const reactionContent =
-    summary.total > 0 ? (
-      <>
-        <span aria-hidden="true">{summary.emojis.join('')}</span> {summary.total}
-      </>
-    ) : yours ? (
-      <span aria-hidden="true">{reactionEmoji(yours)}</span>
-    ) : (
-      <Icon name="react" />
-    );
+  const reactButton = (
+    <button
+      ref={reactTrigger}
+      type="button"
+      className="discussion-button friend-react-button"
+      aria-label={
+        selected
+          ? `Your reaction to ${subject}: ${selected.label}. Change reaction`
+          : `React to ${subject}`
+      }
+      aria-description={reactionCount}
+      aria-expanded={shown === 'reactions'}
+      aria-controls={`reactions-${workoutId}`}
+      onClick={() => show(shown === 'reactions' ? null : 'reactions')}
+    >
+      {selected ? <span aria-hidden="true">{selected.emoji}</span> : <Icon name="react" />}
+    </button>
+  );
 
   return (
     <div ref={container} className="workout-discussion">
       <div className="workout-discussion-actions">
-        {summary.total > 0 && (
-          <button
-            ref={peopleTrigger}
-            type="button"
-            className="discussion-button discussion-reaction-summary"
-            aria-label={`View ${reactionCount} on ${subject}`}
-            aria-haspopup="dialog"
-            aria-expanded={shown === 'people'}
-            onClick={() => show(shown === 'people' ? null : 'people')}
-          >
-            {reactionContent}
-          </button>
-        )}
-        {!ownWorkout && (
-          <button
-            ref={reactTrigger}
-            type="button"
-            className={`discussion-button friend-react-button${yours ? ' is-yours' : ''}`}
-            aria-label={
-              yours
-                ? `Your reaction to ${subject}: ${selected?.label}. Change reaction`
-                : `React to ${subject}`
-            }
-            aria-description={reactionCount}
-            aria-expanded={shown === 'reactions'}
-            aria-controls={`reactions-${workoutId}`}
-            onClick={() => show(shown === 'reactions' ? null : 'reactions')}
-          >
-            {yours ? <span aria-hidden="true">{reactionEmoji(yours)}</span> : <Icon name="react" />}
-          </button>
-        )}
+        {REACTIONS.map(({ kind, emoji, label }) => {
+          const count = reactions.counts.find((entry) => entry.reaction === kind)?.count ?? 0;
+          const mine = selected && yours === kind;
+          if (count <= 0 && !mine) return null;
+          const peopleButton = (
+            <button
+              key={kind}
+              type="button"
+              className={
+                mine ? 'discussion-reaction-count' : 'discussion-button discussion-reaction-summary'
+              }
+              aria-label={`View ${count} ${label} ${count === 1 ? 'reaction' : 'reactions'} on ${subject}`}
+              aria-haspopup="dialog"
+              aria-expanded={shown === 'people'}
+              onClick={(event) => {
+                peopleTrigger.current = event.currentTarget;
+                show(shown === 'people' ? null : 'people');
+              }}
+            >
+              {!mine && <span aria-hidden="true">{emoji}</span>} {count}
+            </button>
+          );
+          return mine ? (
+            <div key={kind} className="discussion-button discussion-reaction-summary is-yours">
+              {reactButton}
+              {peopleButton}
+            </div>
+          ) : (
+            peopleButton
+          );
+        })}
+        {!ownWorkout && !selected && reactButton}
         <button
           ref={commentTrigger}
           type="button"

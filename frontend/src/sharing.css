@@ -919,8 +919,7 @@
   height: 1.375rem;
 }
 
-.friend-react-button.is-yours,
-.friend-react-button[aria-expanded='true'] {
+.friend-react-button.is-yours {
   border-color: var(--p-accent);
   background: var(--p-accent-soft);
 }
@@ -1347,13 +1346,33 @@
   width: 1.25rem;
   height: 1.25rem;
 }
-.workout-discussion .discussion-button.is-yours,
-.workout-discussion .discussion-button[aria-expanded='true'] {
+.workout-discussion .discussion-button.is-yours {
   border-color: var(--p-accent);
   background: var(--p-accent-soft);
 }
 .workout-discussion .discussion-reaction-summary {
-  cursor: default;
+  cursor: pointer;
+}
+.workout-discussion .discussion-reaction-summary.is-yours {
+  gap: 0;
+  padding: 0;
+}
+.workout-discussion .discussion-reaction-summary > .friend-react-button,
+.workout-discussion .discussion-reaction-count {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.workout-discussion .discussion-reaction-summary > .friend-react-button {
+  padding: 0.4rem 0.25rem 0.4rem 0.75rem;
+  border-radius: 24px 0 0 24px;
+}
+.workout-discussion .discussion-reaction-count {
+  padding: 0.4rem 0.75rem 0.4rem 0.1rem;
+  border-radius: 0 24px 24px 0;
 }
 .friend-card-latest {
   flex-wrap: wrap;
