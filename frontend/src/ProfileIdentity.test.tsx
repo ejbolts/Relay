@@ -197,9 +197,7 @@ describe('profile viewing and editing', () => {
     expect(api.uploadProfilePhoto).toHaveBeenCalledTimes(1);
     expect(container.querySelector('input')).toBeNull();
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/saved-photo.png');
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Profile saved.',
-    );
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
   });
   it('keeps a failed photo draft available to retry and explains partially saved details', async () => {
     vi.mocked(api.uploadProfilePhoto).mockRejectedValueOnce(new Error('Offline'));
@@ -255,8 +253,16 @@ describe('profile viewing and editing', () => {
       expect.objectContaining({ name: 'profile-photo.jpg', type: 'image/jpeg' }),
     );
     expect(api.updateProfile).not.toHaveBeenCalled();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it('keeps the existing confirmation for a name-only save', async () => {
+    await act(async () => button('Edit profile').click());
+    await changeName();
+    await save();
     expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
       'Profile saved.',
     );
+    expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
   });
 });

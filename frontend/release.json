@@ -22,7 +22,7 @@
     "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
     "**Social workout links:** Tap a saved workout name to open that friend's workout, expanded and focused. Tap their name to open the profile normally.",
     "**Cardio saves:** Removed zone confirmation popups after saving workouts or adding and editing cardio. Zone classification and goal totals still update.",
-    "**Profile photos:** Pinch to zoom and drag to reposition new or existing photos. The area outside the circle is dimmed while adjusting and fades away after one idle second. Use crop stages the change until Save profile."
+    "**Profile photos:** Pinch to zoom and drag to reposition new or existing photos. The area outside the circle is dimmed while adjusting and fades away after one idle second. Use crop stages the change until Save profile. Photo changes save without a success popup."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {

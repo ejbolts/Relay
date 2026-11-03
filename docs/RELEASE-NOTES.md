@@ -102,7 +102,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
 - **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
-- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Pinch with two fingers to zoom and drag to reposition. The image outside the circle is dimmed while adjusting, fades away after one idle second and returns when movement resumes. Sliders have been removed; keyboard users can focus the photo, move with arrow keys and zoom with +/-. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop.
+- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Pinch with two fingers to zoom and drag to reposition. The image outside the circle is dimmed while adjusting, fades away after one idle second and returns when movement resumes. Sliders have been removed; keyboard users can focus the photo, move with arrow keys and zoom with +/-. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop. Photo changes save without a success popup.
 
 ## 1.1.0
 

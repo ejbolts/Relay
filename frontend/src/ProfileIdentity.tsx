@@ -196,7 +196,7 @@ export function ProfileIdentity({
       if (upload) onSaved(await api.uploadProfilePhoto(upload));
       else if (removePhoto) onSaved(await api.removeProfilePhoto());
       close();
-      setStatus('Profile saved.');
+      if (!photo && !removePhoto) setStatus('Profile saved.');
     } catch (reason) {
       const message =
         reason instanceof ApiError && PHOTO_ERRORS.has(reason.code)
