@@ -30,6 +30,7 @@ function FriendCard({
   picking,
   onPickingChange,
   onOpen,
+  onOpenWorkout,
   onOpenMember,
   onReactionsChange,
 }: {
@@ -39,6 +40,7 @@ function FriendCard({
   picking: boolean;
   onPickingChange: (open: boolean) => void;
   onOpen: () => void;
+  onOpenWorkout: () => void;
   onOpenMember: (person: { id: string; display_name: string }) => void;
   onReactionsChange: (workoutId: string, reactions: WorkoutReactions) => void;
 }) {
@@ -116,7 +118,14 @@ function FriendCard({
             {session.cardio ? 'Cardio' : 'Strength'}
           </span>
           <span className="friend-card-session">
-            <span className="friend-card-title">{session.title}</span>
+            <button
+              type="button"
+              className="friend-card-title friend-workout-link"
+              aria-label={`Open ${friend.display_name}’s ${latest.workout.name} workout`}
+              onClick={onOpenWorkout}
+            >
+              {session.title}
+            </button>
             <span className="friend-activity-meta">
               {[relativeDay(latest.workout.workout_date, today), session.detail]
                 .filter(Boolean)
@@ -160,7 +169,10 @@ export function FriendsList({
   error: string | null;
   today?: string;
   onRetry: () => void;
-  onOpenFriend: (friend: Pick<FriendActivity, 'id' | 'display_name'>) => void;
+  onOpenFriend: (
+    friend: Pick<FriendActivity, 'id' | 'display_name'>,
+    workout?: Pick<NonNullable<FriendActivity['latest']>['workout'], 'id' | 'workout_date'>,
+  ) => void;
   onOpenFind: () => void;
   onChooseSharing: () => void;
   onReactionsChange: (workoutId: string, reactions: WorkoutReactions) => void;
@@ -212,6 +224,7 @@ export function FriendsList({
                 }
                 onOpenMember={onOpenFriend}
                 onOpen={() => onOpenFriend(friend)}
+                onOpenWorkout={() => onOpenFriend(friend, friend.latest?.workout)}
                 onReactionsChange={onReactionsChange}
               />
             );

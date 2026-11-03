@@ -77,12 +77,14 @@ function renderProfile(
   active = true,
   dataRevision: string | null = null,
   onOpenSplits?: () => void,
+  targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>,
 ) {
   return act(async () =>
     root.render(
       <SharedProfileScreen
         dataRevision={dataRevision}
         profileId={profileId}
+        targetWorkout={targetWorkout}
         ownProfile={ownProfile}
         active={active}
         onOpenSplits={onOpenSplits}
@@ -281,6 +283,42 @@ describe('own profile', () => {
 });
 
 describe('shared history filtering', () => {
+  it('reports a removed linked workout, but not after selecting a different filter', async () => {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    const missing = { id: 'removed', workout_date: workout.workout_date };
+    vi.mocked(api.sharing.workouts).mockResolvedValue({
+      workouts: [],
+      personal_records: [],
+      total: 0,
+    });
+    await renderProfile('friend', undefined, true, null, undefined, missing);
+    expect(container.querySelector('.shared-workouts [role="alert"]')?.textContent).toContain(
+      'This workout is no longer available.',
+    );
+    await act(async () =>
+      container.querySelector<HTMLElement>('.shared-workout-filters summary')!.click(),
+    );
+    await chooseType('push');
+    expect(container.textContent).not.toContain('This workout is no longer available.');
+    expect(container.textContent).toContain('No workouts match these filters.');
+  });
+
+  it('preserves friends-only access for a linked workout', async () => {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      can_view: false,
+      friend_status: 'none',
+    });
+    vi.mocked(api.sharing.workouts).mockClear();
+    await renderProfile('friend', undefined, true, null, undefined, workout);
+    expect(api.sharing.workouts).not.toHaveBeenCalled();
+    expect(container.querySelector('.history-card')).toBeNull();
+    expect(container.textContent).toContain('as a friend to see their training');
+  });
+
   it('links My splits beside the own consistency range instead of listing saved plans on the profile', async () => {
     const user: User = {
       id: 'owner',

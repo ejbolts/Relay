@@ -6,7 +6,7 @@ import { FriendsList } from './FriendsList';
 import { FindPanel } from './SharedProfiles';
 import { PageHeader } from './TodayScreen';
 import { useSlidingIndicator } from './motionHooks';
-import type { SharedProfileSummary, User } from './types';
+import type { SharedProfileSummary, TrackedWorkout, User } from './types';
 
 export function SocialScreen({
   active,
@@ -18,7 +18,10 @@ export function SocialScreen({
   openFeedback,
 }: {
   active: boolean;
-  onOpenProfile: (profile: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
+  onOpenProfile: (
+    profile: Pick<SharedProfileSummary, 'id' | 'display_name'>,
+    workout?: Pick<TrackedWorkout, 'id' | 'workout_date'>,
+  ) => void;
   onOpenOwnProfile: () => void;
   onChooseSharing: () => void;
   onOpenSettings: () => void;

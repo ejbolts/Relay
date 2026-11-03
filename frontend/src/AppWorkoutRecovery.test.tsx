@@ -1964,7 +1964,7 @@ describe('high-rep warning preference', () => {
 });
 
 describe('cardio set editing defaults', () => {
-  it('shows a personal-zone text result after saving cardio inside a workout', async () => {
+  it('saves cardio inside a workout without showing a zone popup', async () => {
     const saved = remoteWorkout();
     saved.movements[0].exercise = { ...bench, kind: 'cardio' };
     vi.spyOn(api, 'cardioOverview').mockResolvedValue({
@@ -1985,10 +1985,8 @@ describe('cardio set editing defaults', () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     await confirmFinish();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Zone 2 · 120 bpm average (110–139 bpm). 30 min added to your Zone 2 goal.',
-    );
-    expect(document.querySelector('.app-notification-toast svg')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(api.cardioOverview).not.toHaveBeenCalled();
   });
 
   const treadmill: Exercise = {
