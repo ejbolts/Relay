@@ -33,7 +33,10 @@ export function FriendsActivityCard({
   today = localDate(),
 }: {
   active: boolean;
-  onOpenFriend: (friend: FriendFeedItem['friend']) => void;
+  onOpenFriend: (
+    friend: FriendFeedItem['friend'],
+    workout?: Pick<FriendFeedItem['workout'], 'id' | 'workout_date'>,
+  ) => void;
   onOpenFriends: () => void;
   onChooseSharing?: () => void;
   title?: string;
@@ -198,40 +201,52 @@ export function FriendsActivityCard({
                   ) : (
                     <span className="friend-activity-copy">
                       <b>{item.friend.display_name}</b>
-                      <span className="friend-activity-session">
+                    </span>
+                  )}
+                </button>
+                {!live && (
+                  <div className="friend-activity-session-row">
+                    <div className="friend-card-session">
+                      <button
+                        type="button"
+                        className="friend-card-title friend-activity-title friend-workout-link"
+                        aria-label={`Open ${subject} workout`}
+                        title={session.title}
+                        onClick={() => onOpenFriend(item.friend, item.workout)}
+                      >
+                        {session.title}
+                      </button>
+                      <div className="friend-card-meta">
                         <span
                           className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}
                         >
                           {session.cardio ? 'Cardio' : 'Strength'}
                         </span>
-                        <span className="friend-activity-title">{session.title}</span>
-                      </span>
-                      <span className="friend-activity-meta">
-                        {[
-                          relativeDay(item.workout.workout_date, today),
-                          loggedTime(item.workout.created_at),
-                          session.detail,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </span>
-                  )}
-                </button>
-                {!live && (
-                  <WorkoutReactionControl
-                    onOpenMember={onOpenFriend}
-                    workoutId={item.workout.id}
-                    subject={subject}
-                    reactions={item.reactions}
-                    open={open}
-                    onOpenChange={(value) =>
-                      setPicking((current) =>
-                        value ? item.workout.id : current === item.workout.id ? null : current,
-                      )
-                    }
-                    onChange={(value) => updateReactions(item.workout.id, value)}
-                  />
+                        <span>
+                          {[
+                            relativeDay(item.workout.workout_date, today),
+                            loggedTime(item.workout.created_at),
+                            session.detail,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </div>
+                    </div>
+                    <WorkoutReactionControl
+                      onOpenMember={onOpenFriend}
+                      workoutId={item.workout.id}
+                      subject={subject}
+                      reactions={item.reactions}
+                      open={open}
+                      onOpenChange={(value) =>
+                        setPicking((current) =>
+                          value ? item.workout.id : current === item.workout.id ? null : current,
+                        )
+                      }
+                      onChange={(value) => updateReactions(item.workout.id, value)}
+                    />
+                  </div>
                 )}
               </li>
             );

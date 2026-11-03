@@ -114,22 +114,25 @@ function FriendCard({
         </div>
       ) : latest && session && summary ? (
         <div className="friend-card-latest">
-          <span className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}>
-            {session.cardio ? 'Cardio' : 'Strength'}
-          </span>
           <span className="friend-card-session">
             <button
               type="button"
               className="friend-card-title friend-workout-link"
               aria-label={`Open ${friend.display_name}’s ${latest.workout.name} workout`}
+              title={session.title}
               onClick={onOpenWorkout}
             >
               {session.title}
             </button>
-            <span className="friend-activity-meta">
-              {[relativeDay(latest.workout.workout_date, today), session.detail]
-                .filter(Boolean)
-                .join(' · ')}
+            <span className="friend-card-meta">
+              <span className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}>
+                {session.cardio ? 'Cardio' : 'Strength'}
+              </span>
+              <span>
+                {[relativeDay(latest.workout.workout_date, today), session.detail]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
             </span>
           </span>
           <WorkoutReactionControl
