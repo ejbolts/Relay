@@ -1,0 +1,67 @@
+.profile-crop-dialog {
+  width: min(100% - 2rem, 420px);
+}
+
+.profile-crop-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.profile-crop-preview {
+  position: relative;
+  width: min(100%, 260px, 36dvh);
+  aspect-ratio: 1;
+  margin: 0 auto 0.25rem;
+  overflow: hidden;
+  border-radius: 50%;
+  outline: 2px solid var(--p-accent);
+  outline-offset: 3px;
+  background: var(--p-surface);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.profile-crop-preview:active {
+  cursor: grabbing;
+}
+
+.profile-crop-preview img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+
+.profile-crop-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--p-ink);
+}
+
+.profile-crop-control output {
+  color: var(--p-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-crop-control input {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  accent-color: var(--p-accent);
+}
+
+.profile-crop-dialog > .popup-dialog-actions {
+  margin: 0;
+  padding: 0 1.25rem 1.25rem;
+}
+
+.profile-photo-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}

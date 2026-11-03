@@ -14,6 +14,9 @@ import { FriendInviteButton } from './FriendQrCode';
 import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ProfilePhotoCrop } from './ProfilePhotoCrop';
+import { DEFAULT_PHOTO_CROP, type PhotoCrop } from './profilePhotoGeometry';
+import { NotificationDialog } from './NotificationDialog';
 import { motionReduced } from './motion';
 import { formatMemberSince } from './profileDisplay';
 import type { User } from './types';
@@ -50,6 +53,10 @@ export function ProfileIdentity({
   const [username, setUsername] = useState(user.username);
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [cropSource, setCropSource] = useState<File | string | null>(null);
+  const [photoSource, setPhotoSource] = useState<File | string | null>(null);
+  const [photoCrop, setPhotoCrop] = useState<PhotoCrop>(DEFAULT_PHOTO_CROP);
+  const cropButton = useRef<HTMLButtonElement>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -138,6 +145,8 @@ export function ProfileIdentity({
     setDisplayName(user.display_name);
     setUsername(user.username);
     setPhoto(null);
+    setPhotoSource(null);
+    setPhotoCrop(DEFAULT_PHOTO_CROP);
     setRemovePhoto(false);
     setStatus(null);
     setError(null);
@@ -147,6 +156,8 @@ export function ProfileIdentity({
   function close() {
     setEditing(false);
     setPhoto(null);
+    setPhotoSource(null);
+    setCropSource(null);
     setRemovePhoto(false);
     setError(null);
     requestAnimationFrame(() => editButton.current?.focus());
@@ -261,25 +272,36 @@ export function ProfileIdentity({
               const file = event.target.files?.[0];
               event.target.value = '';
               if (file) {
-                setPhoto(file);
-                setRemovePhoto(false);
+                setCropSource(file);
                 setError(null);
               }
             }}
           />
           {photoUrl && (
-            <button
-              type="button"
-              className="text-link profile-photo-remove"
-              disabled={saving}
-              onClick={() => {
-                setPhoto(null);
-                setRemovePhoto(Boolean(user.profile_photo_url));
-                setError(null);
-              }}
-            >
-              Remove photo
-            </button>
+            <div className="profile-photo-actions">
+              <button
+                ref={cropButton}
+                type="button"
+                className="text-link"
+                disabled={saving}
+                onClick={() => setCropSource(photoSource ?? photoUrl)}
+              >
+                Adjust crop
+              </button>
+              <button
+                type="button"
+                className="text-link profile-photo-remove"
+                disabled={saving}
+                onClick={() => {
+                  setPhoto(null);
+                  setPhotoSource(null);
+                  setRemovePhoto(Boolean(user.profile_photo_url));
+                  setError(null);
+                }}
+              >
+                Remove photo
+              </button>
+            </div>
           )}
           <form className="profile-form" noValidate onSubmit={(event) => void save(event)}>
             <label className="auth-field" htmlFor={`${id}-name`}>
@@ -333,10 +355,30 @@ export function ProfileIdentity({
           </form>
         </>
       )}
-      {status && (
-        <p className="notification-setting-status" role="status">
-          {status}
-        </p>
+      {status && <NotificationDialog message={status} onClose={() => setStatus(null)} />}
+      {cropSource && (
+        <ProfilePhotoCrop
+          source={cropSource}
+          initialCrop={cropSource === photoSource ? photoCrop : DEFAULT_PHOTO_CROP}
+          onUse={(file, crop) => {
+            setPhoto(file);
+            setPhotoSource(cropSource);
+            setPhotoCrop(crop);
+            setRemovePhoto(false);
+            setCropSource(null);
+            setError(null);
+            requestAnimationFrame(() => cropButton.current?.focus());
+          }}
+          onClose={() => {
+            setCropSource(null);
+            requestAnimationFrame(() =>
+              (
+                cropButton.current ??
+                section.current?.querySelector<HTMLButtonElement>('.profile-photo-edit')
+              )?.focus(),
+            );
+          }}
+        />
       )}
       {children}
     </section>
