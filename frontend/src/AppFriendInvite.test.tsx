@@ -12,7 +12,7 @@ import {
   writeWorkoutCache,
 } from './workoutCache';
 import { openFriendInvite, pendingFriendInvite } from './friendInvite';
-import type { DashboardData, FriendStatus, SharedProfile, User } from './types';
+import type { DashboardData, FriendStatus, SharedProfile, TrackedWorkout, User } from './types';
 import { UserContext, type UserSession } from './userContext';
 
 vi.mock('./workoutCache', () => ({
@@ -146,6 +146,66 @@ async function openLink(hash: string, strict = false) {
 const toast = () => document.querySelector('.friend-invite-toast');
 const buttonNamed = (name: string) =>
   [...document.querySelectorAll('button')].find((button) => button.textContent === name);
+
+it('opens a Social workout expanded and focuses its summary, including older same-day pages', async () => {
+  friendStatus = 'friends';
+  Element.prototype.scrollIntoView = vi.fn();
+  const workout: TrackedWorkout = {
+    id: 'linked-workout',
+    name: 'Upper body',
+    workout_date: '2026-08-01',
+    category: 'upper',
+    notes: 'Sample session',
+    duration_minutes: 48,
+    start_time: null,
+    end_time: null,
+    is_sample: false,
+    created_at: '2026-08-01T12:00:00Z',
+    updated_at: '2026-08-01T12:00:00Z',
+    movements: [],
+  };
+  vi.spyOn(api.sharing, 'friends').mockResolvedValue({
+    friends: [
+      {
+        id: inviterId,
+        display_name: inviter.display_name,
+        profile_photo_url: null,
+        since: '2026-01-01',
+        latest: { workout, reactions: { counts: [], yours: null } },
+        recent_workout_count: 4,
+        training_dates: [],
+      },
+    ],
+    requests: [],
+    sent: [],
+    blocked: [],
+  });
+  vi.spyOn(api.sharing, 'workoutFilters').mockResolvedValue({ exercises: [], machines: [] });
+  vi.mocked(api.sharing.workouts).mockImplementation(async (_id, offset) => ({
+    workouts: offset === 0 ? [{ ...workout, id: 'newer', name: 'Other session' }] : [workout],
+    personal_records: [],
+    total: 2,
+  }));
+  await openLink('/#social');
+  await act(async () => host.querySelector<HTMLButtonElement>('.friend-workout-link')!.click());
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 80)));
+  expect(api.sharing.workouts).toHaveBeenCalledWith(
+    inviterId,
+    0,
+    10,
+    expect.objectContaining({ start_date: workout.workout_date, end_date: workout.workout_date }),
+  );
+  expect(api.sharing.workouts).toHaveBeenCalledWith(inviterId, 1, 10, expect.anything());
+  const summary = document.activeElement as HTMLButtonElement;
+  expect(summary.className).toContain('history-card-summary');
+  expect(summary.textContent).toContain('Upper body');
+  expect(summary.getAttribute('aria-expanded')).toBe('true');
+  expect(summary.closest('article')?.querySelector('.history-detail')).not.toBeNull();
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+    behavior: 'instant',
+    block: 'start',
+  });
+});
 
 it('sends the inviter a friend request once signed in, with Undo', async () => {
   // Captured before sign-in, as main.tsx does when the QR code's link opens.

@@ -173,6 +173,15 @@ it('shows friend requests on Find with a count, and keeps the search between tab
   expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('Jamie');
 });
 
+it('opens the selected saved workout separately from the friend profile', async () => {
+  await render();
+  const link = labelled('Open Alex Sample’s Upper body workout');
+  expect(link.tagName).toBe('BUTTON');
+  await click(link);
+  expect(openProfile).toHaveBeenCalledExactlyOnceWith(alex, workout);
+  expect(host.querySelectorAll('.friend-workout-link')).toHaveLength(1);
+});
+
 it('cancels sent requests and unblocks members from Find', async () => {
   connections = {
     friends: [],

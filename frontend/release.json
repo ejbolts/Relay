@@ -2,7 +2,7 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X. The body trend chart extends to a future goal date with a dotted goal line.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X. The body trend chart extends to a future goal date with a dotted goal line. Tap saved workout names in Social to open the exact workout, expanded and focused. Cardio saves no longer show zone confirmation popups.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
@@ -19,7 +19,9 @@
     "**Split days:** Split cards list each exercise with a coloured block per planned set instead of every set's reps and weight, with a Muscles button to show what each exercise trains.",
     "**Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.",
     "**Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.",
-    "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target."
+    "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
+    "**Social workout links:** Tap a saved workout name to open that friend's workout, expanded and focused. Tap their name to open the profile normally.",
+    "**Cardio saves:** Removed zone confirmation popups after saving workouts or adding and editing cardio. Zone classification and goal totals still update."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
@@ -65,6 +67,22 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-days.png",
         "alt": "Split card listing each day's exercises with a coloured block for every planned set and day totals. Isolated sample data."
+      }
+    },
+    {
+      "title": "Open the workout",
+      "description": "Tap a saved workout name in Social to open it, expanded and focused.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a2dbb3279be967cff16a9d58fa3ab99a6c682674/docs/screenshots/releases/1.2.0-social-workout-link.png",
+        "alt": "Alex Rivera's shared Upper body workout opened with completed sample sets after tapping its name in Social."
+      }
+    },
+    {
+      "title": "Quieter cardio saves",
+      "description": "Zone and goal totals update without the zone confirmation popup.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a2dbb3279be967cff16a9d58fa3ab99a6c682674/docs/screenshots/releases/1.2.0-cardio-without-zone-popup.png",
+        "alt": "Cardio screen after saving a sample session, with updated totals and no zone confirmation popup."
       }
     }
   ]

@@ -72,6 +72,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Goal line to your target date** - The trend chart runs on to a future goal date with a dotted line from where you started. Isolated sample data.
 
+![Alex Rivera's shared Upper body workout opened with its completed sets after tapping the workout name in Social.](screenshots/releases/1.2.0-social-workout-link.png)
+
+**Open the workout** - Tap a saved workout name in Social to open that exact workout, expanded and focused. Isolated sample data.
+
+![Cardio screen after saving a sample session, with updated minutes and no zone notification popup.](screenshots/releases/1.2.0-cardio-without-zone-popup.png)
+
+**Quieter cardio saves** - Zone and goal totals still update, without the zone confirmation popup. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -88,6 +96,8 @@ _Relay was called Gym Logger before version 1.0._
 - **Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.
 - **Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
+- **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
+- **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
 
 ## 1.1.0
 

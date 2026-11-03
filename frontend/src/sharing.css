@@ -1288,6 +1288,27 @@
   font-weight: 600;
 }
 
+.friend-workout-link {
+  justify-self: start;
+  max-width: 100%;
+  min-height: 2.25rem;
+  border: 0;
+  padding: 0.25rem 0;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.friend-workout-link:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
 .friend-card-latest .friend-react-button {
   width: 2.25rem;
   height: 2.25rem;
