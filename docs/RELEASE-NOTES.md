@@ -80,9 +80,9 @@ _Relay was called Gym Logger before version 1.0._
 
 **Quieter cardio saves** - Zone and goal totals still update, without the zone confirmation popup. Isolated sample data.
 
-![Social with reaction and comment controls beside the workout details, without an inner workout box.](screenshots/releases/1.2.0-compact-friend-rows-social.png)
+![Social showing one flat friends list with thin dividers, weekly activity and compact workout controls.](screenshots/releases/1.2.0-social-flat-friend-list.png)
 
-**Compact friend rows** - Controls sit beside the workout details, directly on the friend card. Speech bubbles show only the count; long secondary text ends after two lines with an ellipsis. Isolated sample data.
+**Compact friend rows** - Social matches Home?s Recent Friends Activity with flat rows and thin dividers, leaving more room for names and workouts. Speech bubbles show only the count; long secondary text ends after two lines with an ellipsis. Isolated sample data.
 
 ![Home Recent Friends Activity with workout links and compact reaction and comment controls on the same row.](screenshots/releases/1.2.0-compact-friend-rows-home.png)
 
@@ -106,7 +106,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
 - **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
-- **Compact friend rows:** Home and Social put reaction and comment controls beside the workout details, without an inner workout box. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.
+- **Compact friend rows:** Social matches Home?s Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.
 
 ## 1.1.0
 

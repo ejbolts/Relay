@@ -1164,7 +1164,6 @@
 
 .friend-cards {
   display: grid;
-  gap: 0.75rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1173,12 +1172,13 @@
 .friend-cards > li {
   position: relative;
   display: grid;
-  gap: 0.7rem;
-  border: 1px solid var(--p-line);
-  border-radius: 14px;
-  padding: 0.85rem 0.85rem 0.75rem;
-  background: var(--p-surface-2);
+  gap: 0.4rem;
+  padding: 0.625rem 0;
   transition: opacity 160ms ease;
+}
+
+.friend-cards > li + li {
+  border-top: 1px solid var(--p-line);
 }
 
 /* While choosing a reaction, the other friends fade back. */
@@ -1353,9 +1353,6 @@
 
 .friend-card-empty {
   margin: 0;
-  border: 1px dashed var(--p-line-strong);
-  border-radius: 12px;
-  padding: 0.6rem 0.7rem;
   color: var(--p-muted);
   font-size: 0.8125rem;
 }
@@ -1952,10 +1949,6 @@
   border-radius: 50%;
   background: currentColor;
   animation: presence-blink 1.4s ease-in-out infinite;
-}
-
-.friend-cards > li.is-live {
-  border-color: color-mix(in srgb, var(--p-accent) 40%, var(--p-line));
 }
 
 .friend-card-latest.is-live {
