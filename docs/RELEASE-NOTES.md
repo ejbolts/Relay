@@ -80,9 +80,9 @@ _Relay was called Gym Logger before version 1.0._
 
 **Quieter cardio saves** - Zone and goal totals still update, without the zone confirmation popup. Isolated sample data.
 
-![Circular profile photo editor with an adjusted sample portrait, zoom and horizontal and vertical position controls.](screenshots/releases/1.2.0-profile-photo-crop.png)
+![Pinch zoom and dragging in the profile photo editor, with dimmed outer edges fading after one idle second, then the saved circular avatar.](screenshots/releases/1.2.0-profile-photo-crop.gif)
 
-**Your photo, your crop** - Drag and zoom to frame your photo, or use the position sliders. Isolated synthetic profile.
+**Your photo, your crop** - Pinch to zoom and drag to frame your photo. Dimmed edges fade after one idle second and return when you move again. Automated touch-pointer interaction with an isolated synthetic profile.
 
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
@@ -102,7 +102,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
 - **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
-- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Drag to reposition, change the zoom or use the horizontal and vertical sliders. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop.
+- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Pinch with two fingers to zoom and drag to reposition. The image outside the circle is dimmed while adjusting, fades away after one idle second and returns when movement resumes. Sliders have been removed; keyboard users can focus the photo, move with arrow keys and zoom with +/-. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop.
 
 ## 1.1.0
 

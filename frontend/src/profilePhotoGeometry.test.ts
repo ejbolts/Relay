@@ -1,10 +1,45 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cropProfilePhoto, DEFAULT_PHOTO_CROP, photoCropRect } from './profilePhotoGeometry';
+import {
+  cropProfilePhoto,
+  DEFAULT_PHOTO_CROP,
+  photoCropRect,
+  gesturePhotoCrop,
+  reframePhotoCrop,
+} from './profilePhotoGeometry';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('profile crop geometry and export', () => {
+  it('anchors zoom at an off-centre pinch midpoint and allows that midpoint to move', () => {
+    const start = { zoom: 1, x: 0.5, y: 0.5 };
+    const crop = gesturePhotoCrop(
+      1200,
+      800,
+      start,
+      [
+        { x: 0.1, y: 0.25 },
+        { x: 0.4, y: 0.25 },
+      ],
+      [
+        { x: 0.1, y: 0.5 },
+        { x: 0.7, y: 0.5 },
+      ],
+    );
+    expect(crop.zoom).toBeCloseTo(2);
+    const rect = photoCropRect(1200, 800, crop);
+    expect(rect.x + 0.4 * rect.side).toBeCloseTo(400);
+    expect(rect.y + 0.5 * rect.side).toBeCloseTo(200);
+  });
+
+  it('limits extreme pinches, keeps portrait crops inside the source and preserves the crop centre', () => {
+    const crop = reframePhotoCrop(800, 1200, DEFAULT_PHOTO_CROP, 100);
+    expect(crop).toEqual({ zoom: 4, x: 0.5, y: 0.5 });
+    expect(reframePhotoCrop(800, 1200, crop, 0)).toEqual(DEFAULT_PHOTO_CROP);
+    const edge = reframePhotoCrop(800, 1200, crop, 4, { x: 0.5, y: 0.5 }, { x: 100, y: -100 });
+    expect(edge.x).toBe(0);
+    expect(edge.y).toBe(1);
+  });
   it('centres landscape and portrait photos and keeps edge crops within the image', () => {
     expect(photoCropRect(1200, 800, DEFAULT_PHOTO_CROP)).toEqual({ x: 200, y: 0, side: 800 });
     expect(photoCropRect(800, 1200, DEFAULT_PHOTO_CROP)).toEqual({ x: 0, y: 200, side: 800 });

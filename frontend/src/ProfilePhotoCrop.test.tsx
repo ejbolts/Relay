@@ -34,12 +34,19 @@ afterEach(async () => {
   host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 async function mount(loaded = true) {
   await act(async () =>
     root.render(<ProfilePhotoCrop source="/sample.png" onUse={onUse} onClose={onClose} />),
   );
   const image = document.querySelector<HTMLImageElement>('.profile-crop-preview img')!;
+  const stage = document.querySelector<HTMLElement>('.profile-crop-stage')!;
+  stage.setPointerCapture = vi.fn();
+  vi.spyOn(
+    document.querySelector<HTMLElement>('.profile-crop-preview')!,
+    'getBoundingClientRect',
+  ).mockReturnValue({ left: 0, top: 0, width: 200, height: 200 } as DOMRect);
   if (loaded) {
     Object.defineProperties(image, {
       naturalWidth: { value: 1200 },
@@ -51,29 +58,74 @@ async function mount(loaded = true) {
 }
 const button = (text: string) =>
   [...document.querySelectorAll('button')].find((b) => b.textContent === text)!;
-const sliders = () => [...document.querySelectorAll<HTMLInputElement>('input[type=range]')];
-async function range(index: number, value: string) {
+async function pointer(type: string, id: number, x: number, y = 100) {
   await act(async () => {
-    const input = sliders()[index];
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, { pointerId: id, clientX: x, clientY: y, button: 0, isPrimary: id === 1 });
+    document.querySelector('.profile-crop-stage')!.dispatchEvent(event);
   });
 }
+async function key(value: string) {
+  await act(async () =>
+    document
+      .querySelector('.profile-crop-stage')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true })),
+  );
+}
+async function pinch() {
+  await pointer('pointerdown', 1, 50);
+  await pointer('pointerdown', 2, 150);
+  await pointer('pointermove', 1, 0);
+  await pointer('pointermove', 2, 200);
+}
 
-it('matches zoom and position controls to the exported crop and resets to centre', async () => {
+it('pinches around the midpoint without sliders and exports the same crop', async () => {
   const image = await mount();
-  expect(sliders()[2].disabled).toBe(true);
-  await range(0, '2');
-  await range(1, '0.25');
-  await range(2, '1');
+  expect(document.querySelector('input[type=range]')).toBeNull();
+  await pinch();
   expect(image.style.width).toBe('300%');
-  expect(image.style.left).toBe('-50%');
-  expect(image.style.top).toBe('-100%');
+  expect(image.style.left).toBe('-100%');
+  expect(image.style.top).toBe('-50%');
   await act(async () => button('Use crop').click());
-  expect(cropProfilePhoto).toHaveBeenLastCalledWith(image, { zoom: 2, x: 0.25, y: 1 });
-  expect(onUse).toHaveBeenCalledWith(expect.any(File), { zoom: 2, x: 0.25, y: 1 });
+  expect(cropProfilePhoto).toHaveBeenLastCalledWith(image, { zoom: 2, x: 0.5, y: 0.5 });
+  expect(onUse).toHaveBeenCalledWith(expect.any(File), { zoom: 2, x: 0.5, y: 0.5 });
+  await pointer('pointerup', 1, 0);
+  await pointer('pointerup', 2, 200);
   await act(async () => button('Reset').click());
-  expect(sliders().map((input) => input.value)).toEqual(['1', '0.5', '0.5']);
+  expect(image.style.width).toBe('150%');
+  expect(image.style.left).toBe('-25%');
+});
+
+it('keeps the dimmed image visible during movement, fades after one idle second and reveals it again', async () => {
+  vi.useFakeTimers();
+  await mount();
+  const stage = document.querySelector('.profile-crop-stage')!;
+  await act(async () => vi.advanceTimersByTime(1000));
+  expect(stage.classList.contains('is-adjusting')).toBe(false);
+  await pointer('pointerdown', 1, 100);
+  await pointer('pointermove', 1, 90);
+  expect(stage.classList.contains('is-adjusting')).toBe(true);
+  await act(async () => vi.advanceTimersByTime(999));
+  expect(stage.classList.contains('is-adjusting')).toBe(true);
+  await pointer('pointermove', 1, 80);
+  await act(async () => vi.advanceTimersByTime(999));
+  expect(stage.classList.contains('is-adjusting')).toBe(true);
+  await act(async () => vi.advanceTimersByTime(1));
+  expect(stage.classList.contains('is-adjusting')).toBe(false);
+  await pointer('pointermove', 1, 70);
+  expect(stage.classList.contains('is-adjusting')).toBe(true);
+});
+
+it('supports keyboard zoom and movement without visible slider controls', async () => {
+  const image = await mount();
+  await key('+');
+  const width = image.style.width;
+  expect(parseFloat(width)).toBeGreaterThan(150);
+  const left = image.style.left;
+  await key('ArrowLeft');
+  expect(parseFloat(image.style.left)).toBeLessThan(parseFloat(left));
+  await key('-');
+  expect(image.style.width).toBe('150%');
 });
 
 it('keeps Use crop disabled until loaded and explains an unreadable file', async () => {
@@ -89,36 +141,39 @@ it('keeps Use crop disabled until loaded and explains an unreadable file', async
 
 it('keeps adjustments available after an export failure so the user can retry', async () => {
   await mount();
-  await range(0, '2');
+  await key('+');
   vi.mocked(cropProfilePhoto).mockRejectedValueOnce(
     new Error('Could not crop this photo. Please try again.'),
   );
   await act(async () => button('Use crop').click());
   expect(document.querySelector('[role=alert]')?.textContent).toContain('Please try again');
   expect(button('Use crop').disabled).toBe(false);
-  expect(sliders()[0].value).toBe('2');
+  expect(
+    document.querySelector<HTMLImageElement>('.profile-crop-preview img')!.style.width,
+  ).toContain('165');
   await act(async () => button('Use crop').click());
   expect(onUse).toHaveBeenCalledOnce();
 });
 
-it('moves the crop with pointer dragging, clamps at the edge and stops on cancellation', async () => {
-  await mount();
-  const preview = document.querySelector<HTMLElement>('.profile-crop-preview')!;
-  preview.setPointerCapture = vi.fn();
-  vi.spyOn(preview, 'getBoundingClientRect').mockReturnValue({ width: 200 } as DOMRect);
-  async function pointer(type: string, x: number) {
-    await act(async () => {
-      const event = new Event(type, { bubbles: true });
-      Object.assign(event, { pointerId: 1, clientX: x, clientY: 100, button: 0, isPrimary: true });
-      preview.dispatchEvent(event);
-    });
-  }
-  await pointer('pointerdown', 100);
-  await pointer('pointermove', 50);
-  expect(sliders()[1].value).toBe('1');
-  await pointer('pointercancel', 50);
-  await pointer('pointermove', 100);
-  expect(sliders()[1].value).toBe('1');
+it('clamps dragging at the image edge and stops on cancellation', async () => {
+  const image = await mount();
+  await pointer('pointerdown', 1, 100);
+  await pointer('pointermove', 1, -100);
+  expect(image.style.left).toBe('-50%');
+  await pointer('pointercancel', 1, -100);
+  await pointer('pointermove', 1, 100);
+  expect(image.style.left).toBe('-50%');
+});
+
+it('continues with one finger after a pinch without jumping', async () => {
+  const image = await mount();
+  await pinch();
+  const left = image.style.left;
+  await pointer('pointerup', 2, 200);
+  await pointer('pointermove', 1, 0);
+  expect(image.style.left).toBe(left);
+  await pointer('pointermove', 1, -20);
+  expect(parseFloat(image.style.left)).toBeLessThan(parseFloat(left));
 });
 
 it('preserves HEIC uploads with an explicit centre-crop fallback when the browser cannot decode them', async () => {

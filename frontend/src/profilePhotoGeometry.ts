@@ -1,5 +1,44 @@
 export type PhotoCrop = { zoom: number; x: number; y: number };
 export const DEFAULT_PHOTO_CROP: PhotoCrop = { zoom: 1, x: 0.5, y: 0.5 };
+export type CropPoint = { x: number; y: number };
+const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, value));
+
+/** Keep the image under the gesture's midpoint while panning and changing magnification. */
+export function reframePhotoCrop(
+  width: number,
+  height: number,
+  crop: PhotoCrop,
+  zoom: number,
+  from: CropPoint = { x: 0.5, y: 0.5 },
+  to: CropPoint = from,
+): PhotoCrop {
+  const rect = photoCropRect(width, height, crop);
+  const nextZoom = clamp(zoom, 1, 4);
+  const side = Math.min(width, height) / nextZoom;
+  return {
+    zoom: nextZoom,
+    x: width > side ? clamp((rect.x + from.x * rect.side - to.x * side) / (width - side)) : 0.5,
+    y: height > side ? clamp((rect.y + from.y * rect.side - to.y * side) / (height - side)) : 0.5,
+  };
+}
+
+export function gesturePhotoCrop(
+  width: number,
+  height: number,
+  crop: PhotoCrop,
+  from: CropPoint[],
+  to: CropPoint[],
+): PhotoCrop {
+  const midpoint = (points: CropPoint[]) => ({
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  });
+  const distance = (points: CropPoint[]) =>
+    Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+  const factor =
+    from.length === 2 && to.length === 2 ? distance(to) / Math.max(0.001, distance(from)) : 1;
+  return reframePhotoCrop(width, height, crop, crop.zoom * factor, midpoint(from), midpoint(to));
+}
 
 export function photoCropRect(width: number, height: number, crop: PhotoCrop) {
   const side = Math.min(width, height) / Math.max(1, Math.min(4, crop.zoom));
