@@ -90,7 +90,7 @@
       "title": "Your photo, your crop",
       "description": "Pinch to zoom and drag to frame your photo. Dimmed edges fade after one idle second.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/e8d4e036cf76347e3ecf0d09808ac51b37f8fd99/docs/screenshots/releases/1.2.0-profile-photo-crop.gif",
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/54239d3369bd4955ab65156b3eec66bd26b7d077/docs/screenshots/releases/1.2.0-profile-photo-crop.gif",
         "alt": "Adjusting an isolated synthetic profile photo with pinch zoom and dragging, dimmed margins fading after one idle second, then the saved circular avatar."
       }
     }
