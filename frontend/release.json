@@ -22,7 +22,7 @@
     "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
     "**Social workout links:** Tap a saved workout name to open that friend's workout, expanded and focused. Tap their name to open the profile normally.",
     "**Cardio saves:** Removed zone confirmation popups after saving workouts or adding and editing cardio. Zone classification and goal totals still update.",
-    "**Compact friend rows:** Social matches Home?s Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Tap a workout name to open it. Comment buttons show only the speech-bubble icon and count; Social friend subtext truncates after two lines. Expanded comments and reaction pickers use the full row width."
+    "**Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Tap a workout name to open it. Comment buttons show only the speech-bubble icon and count; Social friend subtext truncates after two lines. Expanded comments and reaction pickers use the full row width."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
