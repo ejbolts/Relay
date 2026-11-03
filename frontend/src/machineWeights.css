@@ -15,10 +15,90 @@
   opacity: 0.5;
 }
 
+.machine-weights-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .machine-weights-form {
-  display: grid;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 0.75rem;
-  padding: 1rem;
+  min-height: 0;
+  padding: 1rem 1rem 0;
+}
+
+.machine-weights-form > :last-child {
+  padding-bottom: 1rem;
+}
+
+.machine-weights-preview {
+  flex: none;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  padding: 0.35rem 0.5rem 0.5rem;
+  background: var(--p-surface);
+}
+
+.machine-weights-preview-key {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0 0.4rem;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+}
+
+.machine-weights-preview-key .is-line {
+  width: 0.9rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--p-accent);
+}
+
+.machine-weights-preview-key .is-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.6rem;
+  border-radius: 50%;
+  background: var(--p-deemph);
+}
+
+.machine-weights-slider {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.machine-weights-slider input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--p-accent);
+}
+
+.machine-weights-slider b {
+  min-width: 3.2rem;
+  color: var(--p-ink);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.machine-weights-suggestion {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.machine-weights-suggestion .text-link {
+  font-size: 0.78rem;
 }
 
 .machine-weights-toggle-label {
@@ -29,8 +109,13 @@
 
 .machine-weights-list {
   display: grid;
+  flex: 1;
+  align-content: start;
   gap: 0.5rem;
+  min-height: 0;
   margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0;
   list-style: none;
 }
@@ -127,12 +212,6 @@
 
 .machine-weights-pair input[aria-invalid='true'] {
   border-color: var(--p-danger);
-}
-
-.machine-weights-pair b {
-  margin-left: auto;
-  color: var(--p-muted);
-  font-size: 0.78rem;
 }
 
 .machine-weights-error {

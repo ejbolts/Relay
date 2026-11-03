@@ -128,7 +128,35 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(document.querySelector('.machine-weights-list .is-reference')?.textContent).toContain(
     'Hammer',
   );
+  // Two switches between Hammer and Life Fitness suggest ×1.24 and pre-fill its pair.
+  const field = (label: string) =>
+    document.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!;
+  const factor = () => document.querySelector('.machine-weights-slider b')?.textContent;
+  const previewLine = () =>
+    document.querySelector('.machine-weights-preview .pulse-chart-line')?.getAttribute('d');
+  expect(document.querySelector('.machine-weights-suggestion')?.textContent).toContain(
+    'Suggested ×1.24 · 2 switches',
+  );
+  expect(field('Weight on Life Fitness').value).toBe('50');
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('62');
+  expect(factor()).toBe('×1.24');
+  const suggestedLine = previewLine();
+  expect(suggestedLine).toBeTruthy();
+
+  // Dragging the slider rewrites the pair and redraws the preview straight away.
+  const slider = field('Conversion for Life Fitness');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '1.5');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('75');
+  expect(factor()).toBe('×1.50');
+  expect(previewLine()).not.toBe(suggestedLine);
+  await click(button('Use suggested ×1.24 for Life Fitness'));
+  expect(factor()).toBe('×1.24');
+
   await type('Weight on Life Fitness', '40');
+  await type('Matching weight on Hammer for Life Fitness', '');
   await click(button('Save'));
   expect(document.querySelector('.machine-weights-error')?.textContent).toBe(
     'Enter both weights, or leave both blank.',
@@ -136,7 +164,7 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(api.saveWeightMapping).not.toHaveBeenCalled();
 
   await type('Matching weight on Hammer for Life Fitness', '50');
-  expect(document.querySelector('.machine-weights-pair b')?.textContent).toBe('×1.25');
+  expect(factor()).toBe('×1.25');
   await click(button('Save'));
   expect(api.saveWeightMapping).toHaveBeenCalledWith('press', {
     enabled: true,

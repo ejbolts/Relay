@@ -6,6 +6,7 @@ import {
   machinesWithSessions,
   progressViewPoints,
   runningBestIds,
+  suggestFactors,
   withReference,
 } from './machineWeights';
 import type { ExerciseProgress, MachineProgressPoint, MachineWeight, WeightMapping } from './types';
@@ -157,5 +158,27 @@ describe('machine weight normalisation', () => {
         point('c', '2026-10-15', null, 85),
       ]),
     ).toEqual(new Set(['a', 'c']));
+  });
+
+  it('suggests a conversion from switches to and from the reference', () => {
+    const data = progress([
+      point('w1', '2026-09-01', 'hammer', 80),
+      point('w2', '2026-09-08', 'life', 64),
+      point('w3', '2026-09-15', 'life', 66),
+      // Unpinned counts as the reference.
+      point('w4', '2026-09-22', null, 84),
+      point('w5', '2026-09-29', 'techno', 90),
+      // Too long after the previous session to compare.
+      point('w6', '2026-11-20', 'hammer', 86),
+      point('w7', '2026-11-27', 'life', 70),
+    ]);
+    const suggestions = suggestFactors(data, 'hammer');
+    // Ratios 80/64 = 1.25, 84/66 ≈ 1.27 and 86/70 ≈ 1.23: the median.
+    expect(suggestions.get('life')).toEqual({ factor: 1.25, switches: 3 });
+    // One switch is not enough.
+    expect(suggestions.has('techno')).toBe(false);
+    expect(suggestFactors(data, null).size).toBe(0);
+    // Against Life Fitness, the unpinned session counts as Life Fitness: 64/80 and 70/86.
+    expect(suggestFactors(data, 'life').get('hammer')).toEqual({ factor: 0.81, switches: 2 });
   });
 });

@@ -153,3 +153,67 @@ export function defaultReferenceId(mapping: WeightMapping): string | null {
     )?.id ?? null
   );
 }
+
+export interface FactorSuggestion {
+  factor: number;
+  /** Times you switched between this machine and the reference within two weeks. */
+  switches: number;
+}
+
+const SWITCH_WINDOW_DAYS = 14;
+const MIN_SWITCHES = 2;
+const DAY_MS = 86_400_000;
+
+/**
+ * Suggest each machine's conversion from sessions either side of a switch to or from the
+ * reference machine: the median ratio of the reference's est. 1RM to this machine's.
+ * Sessions without a single machine count as the reference.
+ */
+export function suggestFactors(
+  progress: ExerciseProgress,
+  referenceId: string | null,
+): Map<string, FactorSuggestion> {
+  const suggestions = new Map<string, FactorSuggestion>();
+  if (!referenceId) return suggestions;
+  const sessions = (progress.machine_points ?? [])
+    .filter((point) => point.estimated_1rm > 0)
+    .map((point) => ({
+      machine: point.machine_photo_id ?? referenceId,
+      time: Date.parse(`${point.workout_date}T00:00:00Z`),
+      value: point.estimated_1rm,
+    }))
+    .sort((first, second) => first.time - second.time);
+  const ratios = new Map<string, number[]>();
+  sessions.forEach((current, index) => {
+    const previous = sessions[index - 1];
+    if (!previous || previous.machine === current.machine) return;
+    if (current.time - previous.time > SWITCH_WINDOW_DAYS * DAY_MS) return;
+    const [reference, other] =
+      previous.machine === referenceId
+        ? [previous, current]
+        : current.machine === referenceId
+          ? [current, previous]
+          : [null, null];
+    if (!reference || !other) return;
+    ratios.set(other.machine, [
+      ...(ratios.get(other.machine) ?? []),
+      reference.value / other.value,
+    ]);
+  });
+  for (const [machine, values] of ratios) {
+    if (values.length < MIN_SWITCHES) continue;
+    const sorted = values.slice().sort((first, second) => first - second);
+    const middle = sorted.length / 2;
+    const median =
+      sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
+    suggestions.set(machine, { factor: Math.round(median * 100) / 100, switches: values.length });
+  }
+  return suggestions;
+}
+
+/** The slider's range of conversions, from half to double the reference's weights. */
+export const FACTOR_RANGE = { min: 0.5, max: 2, step: 0.01 } as const;
+
+export function clampFactor(factor: number): number {
+  return Math.min(FACTOR_RANGE.max, Math.max(FACTOR_RANGE.min, Math.round(factor * 100) / 100));
+}

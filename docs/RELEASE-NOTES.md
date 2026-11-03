@@ -74,9 +74,11 @@ _Relay was called Gym Logger before version 1.0._
 
 ![Machine Chest Press progress with All machines ≈ selected, showing a steady est. 1RM line in Hammer Strength Iso-Lateral weights and ≈ personal bests.](screenshots/releases/1.2.0-machine-weights.png)
 
-![Machine weights dialog with Normalise weights on, Hammer Strength Iso-Lateral as the reference and weight pairs for Life Fitness Signature and Technogym Selection.](screenshots/releases/1.2.0-machine-weights-dialog.png)
+![Machine weights dialog: dragging the Life Fitness Signature slider redraws the All machines preview chart, then Use restores the suggested ×1.24 from 5 switches.](screenshots/releases/1.2.0-machine-weights-slider.gif)
 
-**Machine weights** - Filter an exercise's progress by machine, or map each machine to a reference so All machines shows one comparable trend. Isolated sample data.
+_Drag a machine's slider and the preview redraws as you go. Isolated sample data._
+
+**Machine weights** - Filter an exercise's progress by machine, or map each machine to a reference so All machines shows one comparable trend. Relay suggests each conversion from your switches between machines. Isolated sample data.
 
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
@@ -94,7 +96,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.
 - **Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
-- **Machine weights:** An exercise's progress has a chip for each saved machine, so you can see one machine's sessions on their own. Tap the settings button beside the chips and turn on **Normalise weights** to pick a reference machine and enter one pair of weights that feel the same on each other machine, such as 40 kg here = 50 kg on the reference. **All machines ≈** then shows every session in the reference machine's weights, with **≈** beside converted values and personal bests. Sessions without a pinned machine count as the reference. Logged sets, History and personal records keep the weights you entered.
+- **Machine weights:** An exercise's progress has a chip for each saved machine, so you can see one machine's sessions on their own. Tap the settings button beside the chips and turn on **Normalise weights** to pick a reference machine and enter one pair of weights that feel the same on each other machine, such as 40 kg here = 50 kg on the reference, or drag its slider while a preview chart redraws. Relay suggests a conversion from your est. 1RM either side of at least two switches to or from the reference within two weeks, fills it in for machines without one, and **Use** restores it after you change it. **All machines ≈** then shows every session in the reference machine's weights, with **≈** beside converted values and personal bests. Sessions without a pinned machine count as the reference. Logged sets, History and personal records keep the weights you entered.
 
 ## 1.1.0
 

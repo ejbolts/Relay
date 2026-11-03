@@ -7033,6 +7033,7 @@ export function ProgressScreen({
                 exerciseId={progress.exercise.id}
                 exerciseName={progress.exercise.name}
                 mapping={mapping}
+                progress={progress}
                 weightUnit={weightUnit}
                 onClose={() => setMappingOpen(false)}
                 onSaved={(next) => {
