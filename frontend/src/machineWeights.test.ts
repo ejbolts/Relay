@@ -9,7 +9,6 @@ import {
   runningBestIds,
   suggestFactors,
   withReference,
-  zoneStatus,
 } from './machineWeights';
 import type { ExerciseProgress, MachineProgressPoint, MachineWeight, WeightMapping } from './types';
 
@@ -201,17 +200,5 @@ describe('machine weight normalisation', () => {
     expect(suggestions.has('techno')).toBe(false);
     expect(suggestFactors(data, null).size).toBe(0);
     expect(suggestFactors(data, 'life').get('hammer')?.sessions).toBe(2);
-  });
-
-  it('treats a conversion within 3% of the suggestion as lined up', () => {
-    const suggestion = { factor: 1.25, sessions: 4 };
-    expect(zoneStatus(1.25, suggestion).within).toBe(true);
-    expect(zoneStatus(1.22, suggestion).within).toBe(true);
-    expect(zoneStatus(1.28, suggestion).within).toBe(true);
-    expect(zoneStatus(1.29, suggestion).within).toBe(false);
-    const high = zoneStatus(1.35, suggestion);
-    expect(high.within).toBe(false);
-    expect(high.offset).toBeCloseTo(0.08);
-    expect(zoneStatus(1.2, suggestion).offset).toBeCloseTo(-0.04);
   });
 });

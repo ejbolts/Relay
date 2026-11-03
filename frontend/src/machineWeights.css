@@ -73,50 +73,11 @@
   gap: 0.6rem;
 }
 
-.machine-weights-track {
-  position: relative;
-  display: flex;
-  flex: 1;
-  align-items: center;
-  min-width: 0;
-}
-
-.machine-weights-track input {
-  position: relative;
+.machine-weights-slider input {
   flex: 1;
   min-width: 0;
   margin: 0.35rem 0;
   accent-color: var(--p-accent);
-}
-
-/* The ±3% band around the suggestion, behind the slider's track. */
-.machine-weights-zone {
-  position: absolute;
-  top: 50%;
-  left: calc(0.5rem + (100% - 1rem) * var(--zone-start));
-  width: max(0.5rem, calc((100% - 1rem) * (var(--zone-end) - var(--zone-start))));
-  height: 1.35rem;
-  border: 1px solid color-mix(in srgb, var(--p-good) 70%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--p-good) 22%, transparent);
-  transform: translateY(-50%);
-}
-
-.machine-weights-zone-badge {
-  flex: none;
-  margin-left: auto;
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-  background: var(--p-surface-3);
-  color: var(--p-ink-2);
-  font-size: 0.72rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.machine-weights-zone-badge.is-within {
-  background: color-mix(in srgb, var(--p-good) 18%, transparent);
-  color: var(--p-good);
 }
 
 .machine-weights-slider b {
@@ -131,6 +92,7 @@
   flex-basis: 100%;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   margin: 0;
   color: var(--p-muted);

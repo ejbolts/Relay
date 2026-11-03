@@ -142,9 +142,6 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(field('Weight on Life Fitness').value).toBe('50');
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('62');
   expect(factor()).toBe('×1.24');
-  const zone = () => document.querySelector('.machine-weights-zone-badge')?.textContent;
-  expect(zone()).toBe('Within 3%');
-  expect(document.querySelector('.machine-weights-zone')).not.toBeNull();
   const suggestedLine = previewLine();
   expect(suggestedLine).toBeTruthy();
 
@@ -156,11 +153,9 @@ it('filters progress by machine and normalises All machines once mapped', async 
   });
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('75');
   expect(factor()).toBe('×1.50');
-  expect(zone()).toBe('21% high');
   expect(previewLine()).not.toBe(suggestedLine);
   await click(button('Use suggested ×1.24 for Life Fitness'));
   expect(factor()).toBe('×1.24');
-  expect(zone()).toBe('Within 3%');
 
   await type('Weight on Life Fitness', '40');
   await type('Matching weight on Hammer for Life Fitness', '');

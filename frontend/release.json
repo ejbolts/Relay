@@ -20,7 +20,7 @@
     "**Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.",
     "**Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.",
     "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
-    "**Machine weights:** Progress has a chip for each saved machine. Turn on Normalise weights from the settings button; the machine you used most in the last three months is recommended as the reference. Relay suggests each other machine's conversion from your logged weights and reps, and a Within 3% badge shows when it lines up with the reference trend. Adjust it with a slider or a pair of equal weights while a preview chart redraws; All machines ≈ then shows one trend in the reference machine's weights. Logged sets, History and records keep the weights you entered."
+    "**Machine weights:** Progress has a chip for each saved machine. Turn on Normalise weights from the settings button; the machine you used most in the last three months is recommended as the reference. Relay suggests each other machine's conversion from your logged weights and reps so its sessions line up with the reference trend. Adjust it with a slider or a pair of equal weights while a preview chart redraws; All machines ≈ then shows one trend in the reference machine's weights. Logged sets, History and records keep the weights you entered."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {

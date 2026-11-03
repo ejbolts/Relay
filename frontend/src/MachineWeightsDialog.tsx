@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { HelpPopup } from './HelpPopup';
 import {
@@ -10,8 +10,6 @@ import {
   progressViewPoints,
   suggestFactors,
   withReference,
-  zoneStatus,
-  ZONE_TOLERANCE,
   type FactorSuggestion,
 } from './machineWeights';
 import { PopupDialog } from './PopupDialog';
@@ -63,25 +61,6 @@ function withSuggestions(
     }
   }
   return next;
-}
-
-/** Where a conversion sits along the slider, from 0 to 1. */
-function zonePosition(factor: number): number {
-  const position = (factor - FACTOR_RANGE.min) / (FACTOR_RANGE.max - FACTOR_RANGE.min);
-  return Math.min(1, Math.max(0, position));
-}
-
-/** Whether a conversion lines its sessions up with the reference trend, within 3%. */
-function ZoneBadge({ factor, suggestion }: { factor: number; suggestion: FactorSuggestion }) {
-  const { offset, within } = zoneStatus(factor, suggestion);
-  const percent = Math.round(Math.abs(offset) * 100);
-  return within ? (
-    <em className="machine-weights-zone-badge is-within">Within 3%</em>
-  ) : (
-    <em className="machine-weights-zone-badge">
-      {percent}% {offset > 0 ? 'high' : 'low'}
-    </em>
-  );
 }
 
 /** Choose a reference machine and how each other machine's weights compare with it. */
@@ -265,8 +244,7 @@ export function MachineWeightsDialog({
               </p>
               <p>
                 Suggestions compare the est. 1RM from each session’s weight and reps with the
-                reference machine’s trend around that date. Within 3% means that machine’s sessions
-                line up with the reference trend.
+                reference machine’s trend around that date.
               </p>
               <p>
                 Sessions without a machine count as the reference. Logged sets and History keep the
@@ -372,38 +350,21 @@ export function MachineWeightsDialog({
                       {weightUnit} on {reference.caption}
                     </label>
                     <div className="machine-weights-slider">
-                      <div
-                        className="machine-weights-track"
-                        style={
-                          suggestion
-                            ? ({
-                                '--zone-start': zonePosition(
-                                  suggestion.factor * (1 - ZONE_TOLERANCE),
-                                ),
-                                '--zone-end': zonePosition(
-                                  suggestion.factor * (1 + ZONE_TOLERANCE),
-                                ),
-                              } as CSSProperties)
-                            : undefined
+                      <input
+                        type="range"
+                        min={FACTOR_RANGE.min}
+                        max={FACTOR_RANGE.max}
+                        step={FACTOR_RANGE.step}
+                        value={clampFactor(factor)}
+                        aria-label={`Conversion for ${machine.caption}`}
+                        aria-valuetext={`times ${factor.toFixed(2)}`}
+                        onChange={(event) =>
+                          setPair(
+                            machine.id,
+                            pairForFactor(text, Number(event.target.value), weightUnit),
+                          )
                         }
-                      >
-                        {suggestion && <span className="machine-weights-zone" aria-hidden="true" />}
-                        <input
-                          type="range"
-                          min={FACTOR_RANGE.min}
-                          max={FACTOR_RANGE.max}
-                          step={FACTOR_RANGE.step}
-                          value={clampFactor(factor)}
-                          aria-label={`Conversion for ${machine.caption}`}
-                          aria-valuetext={`times ${factor.toFixed(2)}`}
-                          onChange={(event) =>
-                            setPair(
-                              machine.id,
-                              pairForFactor(text, Number(event.target.value), weightUnit),
-                            )
-                          }
-                        />
-                      </div>
+                      />
                       <b className="num">×{factor.toFixed(2)}</b>
                     </div>
                     {suggestion && (
@@ -411,7 +372,6 @@ export function MachineWeightsDialog({
                         <span>
                           Suggested ×{suggestion.factor.toFixed(2)} · {suggestion.sessions} sessions
                         </span>
-                        <ZoneBadge factor={factor} suggestion={suggestion} />
                         {Math.abs(factor - suggestion.factor) >= 0.005 && (
                           <button
                             type="button"

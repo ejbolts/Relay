@@ -197,8 +197,6 @@ const BRIDGE_DAYS = 56;
 const NEAREST_DAYS = 14;
 const MIN_SESSIONS = 2;
 const DAY_MS = 86_400_000;
-/** A conversion within this fraction of the suggestion lines up with the reference trend. */
-export const ZONE_TOLERANCE = 0.03;
 
 function median(values: number[]): number {
   const sorted = values.slice().sort((first, second) => first - second);
@@ -264,12 +262,6 @@ export function suggestFactors(
     });
   }
   return suggestions;
-}
-
-/** How far a conversion is from the suggestion, as a fraction, and whether it's within 3%. */
-export function zoneStatus(factor: number, suggestion: FactorSuggestion) {
-  const offset = factor / suggestion.factor - 1;
-  return { offset, within: Math.abs(offset) <= ZONE_TOLERANCE + 1e-9 };
 }
 
 /** The slider's range of conversions, from half to double the reference's weights. */
