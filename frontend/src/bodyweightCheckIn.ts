@@ -45,7 +45,9 @@ export async function saveBodyFatCheckIn(
     notes: previous.notes,
   });
   return async () => {
-    const current = (await api.listBodyMeasurements()).find((item) => item.id === saved.id);
+    const current = (await api.listBodyMeasurements()).find(
+      (item) => item.measurement_date === saved.measurement_date,
+    );
     if (!current) throw new Error('This check-in no longer exists. Refresh before trying again.');
     await api.saveBodyMeasurement({
       measurement_date: date,
