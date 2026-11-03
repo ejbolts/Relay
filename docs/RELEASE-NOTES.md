@@ -80,6 +80,14 @@ _Relay was called Gym Logger before version 1.0._
 
 **Quieter cardio saves** - Zone and goal totals still update, without the zone confirmation popup. Isolated sample data.
 
+![Social with speech-bubble comment counts and secondary friend text truncated after two lines.](screenshots/releases/1.2.0-compact-comments-social.png)
+
+**Compact Social controls** - Speech bubbles show only the count; long secondary text ends after two lines with an ellipsis. Isolated sample data.
+
+![Home Recent Friends Activity with speech-bubble icons and comment counts without the word comments.](screenshots/releases/1.2.0-compact-comments-home.png)
+
+**Comments at a glance** - The same icon and count appear on Home. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -98,6 +106,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
 - **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
+- **Compact social controls:** Comment buttons show just the speech-bubble icon and count on Home, Social and shared workouts, while keeping descriptive screen-reader labels. Secondary text beneath Social friend names ends with an ellipsis after two lines when space is limited.
 
 ## 1.1.0
 
