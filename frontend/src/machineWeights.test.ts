@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  defaultReferenceId,
   isNormalised,
   machineFactor,
   machinesWithSessions,
   progressViewPoints,
+  recentSessionCounts,
+  recommendedReferenceId,
   runningBestIds,
   suggestFactors,
   withReference,
+  zoneStatus,
 } from './machineWeights';
 import type { ExerciseProgress, MachineProgressPoint, MachineWeight, WeightMapping } from './types';
 
@@ -149,8 +151,26 @@ describe('machine weight normalisation', () => {
     expect(machineFactor(next, 'techno') / machineFactor(next, 'hammer')).toBeCloseTo(0.9 / 1);
   });
 
-  it('defaults the reference to the most used machine and marks running bests', () => {
-    expect(defaultReferenceId(hammerToLife)).toBe('hammer');
+  it('recommends the machine used most in the last three months as the reference', () => {
+    const data = progress([
+      point('old1', '2026-06-01', 'hammer', 70),
+      point('old2', '2026-06-08', 'hammer', 71),
+      point('r1', '2026-09-01', 'life', 60),
+      point('r2', '2026-10-01', 'life', 61),
+      point('r3', '2026-10-20', 'hammer', 80),
+      point('r4', '2026-10-27', 'life', 62),
+      point('r5', '2026-10-30', null, 82),
+    ]);
+    const recent = recentSessionCounts(data, '2026-11-03');
+    expect(Object.fromEntries(recent)).toEqual({ life: 3, hammer: 1 });
+    expect(recommendedReferenceId(hammerToLife, recent)).toBe('life');
+    // Without recent sessions, the most used machine overall.
+    expect(recommendedReferenceId(hammerToLife, recentSessionCounts(data, '2027-06-01'))).toBe(
+      'hammer',
+    );
+  });
+
+  it('marks running bests', () => {
     expect(
       runningBestIds([
         point('a', '2026-10-01', null, 80),
@@ -160,25 +180,38 @@ describe('machine weight normalisation', () => {
     ).toEqual(new Set(['a', 'c']));
   });
 
-  it('suggests a conversion from switches to and from the reference', () => {
+  it("suggests a conversion that puts every session on the reference machine's trend", () => {
     const data = progress([
-      point('w1', '2026-09-01', 'hammer', 80),
-      point('w2', '2026-09-08', 'life', 64),
-      point('w3', '2026-09-15', 'life', 66),
-      // Unpinned counts as the reference.
-      point('w4', '2026-09-22', null, 84),
-      point('w5', '2026-09-29', 'techno', 90),
-      // Too long after the previous session to compare.
-      point('w6', '2026-11-20', 'hammer', 86),
-      point('w7', '2026-11-27', 'life', 70),
+      point('h1', '2026-09-01', 'hammer', 80),
+      // The reference trend rises from 80 to 88 kg; each Life Fitness session sits on it at ×1.25.
+      point('l1', '2026-09-08', 'life', 65.6),
+      point('l2', '2026-09-15', 'life', 67.2),
+      // One off day does not move the median.
+      point('l3', '2026-09-22', 'life', 70),
+      point('h2', '2026-09-29', 'hammer', 88),
+      // Unpinned counts as the reference; Technogym is compared with the nearest one a week before.
+      point('u1', '2026-10-06', null, 90),
+      point('t1', '2026-10-13', 'techno', 100),
+      // Too far from any reference session to compare.
+      point('t2', '2027-01-20', 'techno', 104),
     ]);
     const suggestions = suggestFactors(data, 'hammer');
-    // Ratios 80/64 = 1.25, 84/66 ≈ 1.27 and 86/70 ≈ 1.23: the median.
-    expect(suggestions.get('life')).toEqual({ factor: 1.25, switches: 3 });
-    // One switch is not enough.
+    expect(suggestions.get('life')).toEqual({ factor: 1.25, sessions: 3 });
+    // One comparable session is not enough.
     expect(suggestions.has('techno')).toBe(false);
     expect(suggestFactors(data, null).size).toBe(0);
-    // Against Life Fitness, the unpinned session counts as Life Fitness: 64/80 and 70/86.
-    expect(suggestFactors(data, 'life').get('hammer')).toEqual({ factor: 0.81, switches: 2 });
+    expect(suggestFactors(data, 'life').get('hammer')?.sessions).toBe(2);
+  });
+
+  it('treats a conversion within 3% of the suggestion as lined up', () => {
+    const suggestion = { factor: 1.25, sessions: 4 };
+    expect(zoneStatus(1.25, suggestion).within).toBe(true);
+    expect(zoneStatus(1.22, suggestion).within).toBe(true);
+    expect(zoneStatus(1.28, suggestion).within).toBe(true);
+    expect(zoneStatus(1.29, suggestion).within).toBe(false);
+    const high = zoneStatus(1.35, suggestion);
+    expect(high.within).toBe(false);
+    expect(high.offset).toBeCloseTo(0.08);
+    expect(zoneStatus(1.2, suggestion).offset).toBeCloseTo(-0.04);
   });
 });

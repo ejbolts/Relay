@@ -36,13 +36,15 @@ const machinePoints = [
   session('w1', 1, 'hammer', 80),
   session('w2', 8, 'life', 66),
   session('w3', 15, 'hammer', 84),
+  session('w4', 22, 'life', 69),
+  session('w5', 29, 'hammer', 88),
 ];
 const progress: ExerciseProgress = {
   exercise: press,
   points: machinePoints.map((item) => ({ ...item, machine_photo_id: undefined })),
   machine_points: machinePoints,
-  personal_best_weight_kg: 84,
-  personal_best_estimated_1rm: 84,
+  personal_best_weight_kg: 88,
+  personal_best_estimated_1rm: 88,
 };
 const machine = (id: string, caption: string, workouts: number) => ({
   id,
@@ -56,7 +58,7 @@ const machine = (id: string, caption: string, workouts: number) => ({
 const unmapped: WeightMapping = {
   enabled: false,
   reference_machine_id: null,
-  machines: [machine('hammer', 'Hammer', 2), machine('life', 'Life Fitness', 1)],
+  machines: [machine('hammer', 'Hammer', 3), machine('life', 'Life Fitness', 2)],
 };
 
 let root: Root, host: HTMLDivElement;
@@ -115,12 +117,12 @@ afterEach(async () => {
 });
 
 it('filters progress by machine and normalises All machines once mapped', async () => {
-  expect(hero()).toBe('84kg');
+  expect(hero()).toBe('88kg');
   expect(button('All machines').getAttribute('aria-pressed')).toBe('true');
 
   await click(button('Life Fitness'));
-  expect(hero()).toBe('66kg');
-  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(1);
+  expect(hero()).toBe('69kg');
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(2);
 
   await click(button('Machine weights'));
   await click(document.querySelector('[role="switch"][aria-label="Normalise weights"]')!);
@@ -135,11 +137,14 @@ it('filters progress by machine and normalises All machines once mapped', async 
   const previewLine = () =>
     document.querySelector('.machine-weights-preview .pulse-chart-line')?.getAttribute('d');
   expect(document.querySelector('.machine-weights-suggestion')?.textContent).toContain(
-    'Suggested ×1.24 · 2 switches',
+    'Suggested ×1.24 · 2 sessions',
   );
   expect(field('Weight on Life Fitness').value).toBe('50');
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('62');
   expect(factor()).toBe('×1.24');
+  const zone = () => document.querySelector('.machine-weights-zone-badge')?.textContent;
+  expect(zone()).toBe('Within 3%');
+  expect(document.querySelector('.machine-weights-zone')).not.toBeNull();
   const suggestedLine = previewLine();
   expect(suggestedLine).toBeTruthy();
 
@@ -151,9 +156,11 @@ it('filters progress by machine and normalises All machines once mapped', async 
   });
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('75');
   expect(factor()).toBe('×1.50');
+  expect(zone()).toBe('21% high');
   expect(previewLine()).not.toBe(suggestedLine);
   await click(button('Use suggested ×1.24 for Life Fitness'));
   expect(factor()).toBe('×1.24');
+  expect(zone()).toBe('Within 3%');
 
   await type('Weight on Life Fitness', '40');
   await type('Matching weight on Hammer for Life Fitness', '');
@@ -175,13 +182,13 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(document.querySelector('.undo-toast')?.textContent).toContain('Machine weights saved');
 
   // The single-machine view still shows Life Fitness as logged.
-  expect(hero()).toBe('66kg');
+  expect(hero()).toBe('69kg');
   await click(button('All machines ≈'));
-  expect(hero()).toBe('≈ 84kg');
+  expect(hero()).toBe('≈ 88kg');
   const rows = [...host.querySelectorAll('.progress-sessions li')].map((row) => row.textContent);
   // The Life Fitness session keeps its logged set beside the converted value.
-  expect(rows[1]).toContain('66 kg × 8');
-  expect(rows[1]).toContain('≈ 82.5');
+  expect(rows[3]).toContain('66 kg × 8');
+  expect(rows[3]).toContain('≈ 82.5');
   expect(host.querySelector('.progress-hero-caption')?.textContent).toContain(
     'Est. 1RM in Hammer weights',
   );

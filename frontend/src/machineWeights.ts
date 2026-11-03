@@ -144,30 +144,74 @@ export function withReference(mapping: WeightMapping, referenceId: string): Weig
   };
 }
 
-/** The most used machine, as the default reference when normalising is first turned on. */
-export function defaultReferenceId(mapping: WeightMapping): string | null {
+/** How far back "recent" machine use reaches when recommending a reference. */
+export const RECENT_DAYS = 90;
+
+/** Sessions on each machine in the last three months, up to `today` (YYYY-MM-DD). */
+export function recentSessionCounts(
+  progress: ExerciseProgress,
+  today: string,
+): Map<string, number> {
+  const since = new Date(`${today}T00:00:00Z`);
+  since.setUTCDate(since.getUTCDate() - RECENT_DAYS);
+  const cutoff = since.toISOString().slice(0, 10);
+  const counts = new Map<string, number>();
+  for (const point of progress.machine_points ?? []) {
+    if (!point.machine_photo_id || point.workout_date < cutoff || point.workout_date > today) {
+      continue;
+    }
+    counts.set(point.machine_photo_id, (counts.get(point.machine_photo_id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * The machine to recommend as the reference: the one used most in the last three months, so
+ * converted numbers read in the weights you lift now. Ties, and exercises with no recent
+ * sessions, fall back to the most used machine overall.
+ */
+export function recommendedReferenceId(
+  mapping: WeightMapping,
+  recent: Map<string, number>,
+): string | null {
   return (
-    mapping.machines.reduce<MachineWeight | null>(
-      (best, machine) => (!best || machine.workout_count > best.workout_count ? machine : best),
-      null,
-    )?.id ?? null
+    mapping.machines.reduce<MachineWeight | null>((best, machine) => {
+      if (!best) return machine;
+      const difference = (recent.get(machine.id) ?? 0) - (recent.get(best.id) ?? 0);
+      return difference > 0 || (difference === 0 && machine.workout_count > best.workout_count)
+        ? machine
+        : best;
+    }, null)?.id ?? null
   );
 }
 
 export interface FactorSuggestion {
   factor: number;
-  /** Times you switched between this machine and the reference within two weeks. */
-  switches: number;
+  /** Sessions on this machine compared with the reference machine's trend. */
+  sessions: number;
 }
 
-const SWITCH_WINDOW_DAYS = 14;
-const MIN_SWITCHES = 2;
+/** Interpolate the reference trend between sessions up to this far apart. */
+const BRIDGE_DAYS = 56;
+/** Otherwise compare with the nearest reference session this close. */
+const NEAREST_DAYS = 14;
+const MIN_SESSIONS = 2;
 const DAY_MS = 86_400_000;
+/** A conversion within this fraction of the suggestion lines up with the reference trend. */
+export const ZONE_TOLERANCE = 0.03;
+
+function median(values: number[]): number {
+  const sorted = values.slice().sort((first, second) => first - second);
+  const middle = sorted.length / 2;
+  return sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
 
 /**
- * Suggest each machine's conversion from sessions either side of a switch to or from the
- * reference machine: the median ratio of the reference's est. 1RM to this machine's.
- * Sessions without a single machine count as the reference.
+ * Suggest each machine's conversion from its logged weights and reps: compare every session's
+ * est. 1RM with the reference machine's trend on that date, interpolated between the reference
+ * sessions either side, or the nearest one within two weeks. The median ratio puts the machine's
+ * sessions on the reference trend without letting one odd session pull it away. Sessions
+ * without a single machine count as the reference.
  */
 export function suggestFactors(
   progress: ExerciseProgress,
@@ -183,32 +227,49 @@ export function suggestFactors(
       value: point.estimated_1rm,
     }))
     .sort((first, second) => first.time - second.time);
+  const references = sessions.filter((session) => session.machine === referenceId);
   const ratios = new Map<string, number[]>();
-  sessions.forEach((current, index) => {
-    const previous = sessions[index - 1];
-    if (!previous || previous.machine === current.machine) return;
-    if (current.time - previous.time > SWITCH_WINDOW_DAYS * DAY_MS) return;
-    const [reference, other] =
-      previous.machine === referenceId
-        ? [previous, current]
-        : current.machine === referenceId
-          ? [current, previous]
-          : [null, null];
-    if (!reference || !other) return;
-    ratios.set(other.machine, [
-      ...(ratios.get(other.machine) ?? []),
-      reference.value / other.value,
-    ]);
-  });
+  for (const session of sessions) {
+    if (session.machine === referenceId) continue;
+    const next = references.findIndex((item) => item.time >= session.time);
+    const after = next === -1 ? undefined : references[next];
+    const before =
+      after?.time === session.time
+        ? after
+        : references[(next === -1 ? references.length : next) - 1];
+    let expected: number | null = null;
+    if (before && after && after.time - before.time <= BRIDGE_DAYS * DAY_MS) {
+      const span = after.time - before.time;
+      expected = span
+        ? before.value + ((after.value - before.value) * (session.time - before.time)) / span
+        : (before.value + after.value) / 2;
+    } else {
+      const nearest = [before, after]
+        .filter((item) => item && Math.abs(item.time - session.time) <= NEAREST_DAYS * DAY_MS)
+        .sort((a, b) => Math.abs(a!.time - session.time) - Math.abs(b!.time - session.time))[0];
+      expected = nearest?.value ?? null;
+    }
+    if (expected) {
+      ratios.set(session.machine, [
+        ...(ratios.get(session.machine) ?? []),
+        expected / session.value,
+      ]);
+    }
+  }
   for (const [machine, values] of ratios) {
-    if (values.length < MIN_SWITCHES) continue;
-    const sorted = values.slice().sort((first, second) => first - second);
-    const middle = sorted.length / 2;
-    const median =
-      sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
-    suggestions.set(machine, { factor: Math.round(median * 100) / 100, switches: values.length });
+    if (values.length < MIN_SESSIONS) continue;
+    suggestions.set(machine, {
+      factor: Math.round(median(values) * 100) / 100,
+      sessions: values.length,
+    });
   }
   return suggestions;
+}
+
+/** How far a conversion is from the suggestion, as a fraction, and whether it's within 3%. */
+export function zoneStatus(factor: number, suggestion: FactorSuggestion) {
+  const offset = factor / suggestion.factor - 1;
+  return { offset, within: Math.abs(offset) <= ZONE_TOLERANCE + 1e-9 };
 }
 
 /** The slider's range of conversions, from half to double the reference's weights. */

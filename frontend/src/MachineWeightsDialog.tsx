@@ -1,21 +1,24 @@
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from './api';
 import { HelpPopup } from './HelpPopup';
 import {
   FACTOR_RANGE,
   clampFactor,
-  defaultReferenceId,
+  recentSessionCounts,
+  recommendedReferenceId,
   pairFactor,
   progressViewPoints,
   suggestFactors,
   withReference,
+  zoneStatus,
+  ZONE_TOLERANCE,
   type FactorSuggestion,
 } from './machineWeights';
 import { PopupDialog } from './PopupDialog';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 import type { ExerciseProgress, WeightMapping } from './types';
 import { weightFromKg, weightInputKg, weightInputValue, type WeightUnit } from './weightUnits';
-import { decimalNumberOrNull } from './utils';
+import { decimalNumberOrNull, localDate } from './utils';
 import './machineWeights.css';
 
 type PairText = { machine: string; reference: string };
@@ -62,6 +65,25 @@ function withSuggestions(
   return next;
 }
 
+/** Where a conversion sits along the slider, from 0 to 1. */
+function zonePosition(factor: number): number {
+  const position = (factor - FACTOR_RANGE.min) / (FACTOR_RANGE.max - FACTOR_RANGE.min);
+  return Math.min(1, Math.max(0, position));
+}
+
+/** Whether a conversion lines its sessions up with the reference trend, within 3%. */
+function ZoneBadge({ factor, suggestion }: { factor: number; suggestion: FactorSuggestion }) {
+  const { offset, within } = zoneStatus(factor, suggestion);
+  const percent = Math.round(Math.abs(offset) * 100);
+  return within ? (
+    <em className="machine-weights-zone-badge is-within">Within 3%</em>
+  ) : (
+    <em className="machine-weights-zone-badge">
+      {percent}% {offset > 0 ? 'high' : 'low'}
+    </em>
+  );
+}
+
 /** Choose a reference machine and how each other machine's weights compare with it. */
 export function MachineWeightsDialog({
   exerciseId,
@@ -97,6 +119,8 @@ export function MachineWeightsDialog({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const reference = draft.machines.find((machine) => machine.id === draft.reference_machine_id);
+  const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
+  const recommendedId = recommendedReferenceId(draft, recent);
   const suggestions = useMemo(
     () => suggestFactors(progress, draft.reference_machine_id),
     [progress, draft.reference_machine_id],
@@ -188,7 +212,7 @@ export function MachineWeightsDialog({
     const next = {
       ...draft,
       enabled: !draft.enabled,
-      reference_machine_id: draft.reference_machine_id ?? defaultReferenceId(draft),
+      reference_machine_id: draft.reference_machine_id ?? recommendedId,
     };
     setDraft(next);
     if (next.enabled) {
@@ -240,8 +264,9 @@ export function MachineWeightsDialog({
                 and watch the preview.
               </p>
               <p>
-                Suggestions compare your est. 1RM either side of each switch to or from the
-                reference within two weeks, and need at least two switches.
+                Suggestions compare the est. 1RM from each session’s weight and reps with the
+                reference machine’s trend around that date. Within 3% means that machine’s sessions
+                line up with the reference trend.
               </p>
               <p>
                 Sessions without a machine count as the reference. Logged sets and History keep the
@@ -295,8 +320,12 @@ export function MachineWeightsDialog({
                   <span>
                     <strong>{machine.caption}</strong>
                     <small>
-                      {machine.workout_count} {machine.workout_count === 1 ? 'workout' : 'workouts'}
+                      {machine.workout_count} {machine.workout_count === 1 ? 'workout' : 'workouts'}{' '}
+                      · {recent.get(machine.id) ?? 0} in 3 months
                     </small>
+                    {draft.enabled && !isReference && machine.id === recommendedId && (
+                      <em className="machine-weights-recommended">Recommended reference</em>
+                    )}
                   </span>
                   {isReference ? (
                     <em className="machine-weights-reference">Reference</em>
@@ -343,28 +372,46 @@ export function MachineWeightsDialog({
                       {weightUnit} on {reference.caption}
                     </label>
                     <div className="machine-weights-slider">
-                      <input
-                        type="range"
-                        min={FACTOR_RANGE.min}
-                        max={FACTOR_RANGE.max}
-                        step={FACTOR_RANGE.step}
-                        value={clampFactor(factor)}
-                        aria-label={`Conversion for ${machine.caption}`}
-                        aria-valuetext={`times ${factor.toFixed(2)}`}
-                        onChange={(event) =>
-                          setPair(
-                            machine.id,
-                            pairForFactor(text, Number(event.target.value), weightUnit),
-                          )
+                      <div
+                        className="machine-weights-track"
+                        style={
+                          suggestion
+                            ? ({
+                                '--zone-start': zonePosition(
+                                  suggestion.factor * (1 - ZONE_TOLERANCE),
+                                ),
+                                '--zone-end': zonePosition(
+                                  suggestion.factor * (1 + ZONE_TOLERANCE),
+                                ),
+                              } as CSSProperties)
+                            : undefined
                         }
-                      />
+                      >
+                        {suggestion && <span className="machine-weights-zone" aria-hidden="true" />}
+                        <input
+                          type="range"
+                          min={FACTOR_RANGE.min}
+                          max={FACTOR_RANGE.max}
+                          step={FACTOR_RANGE.step}
+                          value={clampFactor(factor)}
+                          aria-label={`Conversion for ${machine.caption}`}
+                          aria-valuetext={`times ${factor.toFixed(2)}`}
+                          onChange={(event) =>
+                            setPair(
+                              machine.id,
+                              pairForFactor(text, Number(event.target.value), weightUnit),
+                            )
+                          }
+                        />
+                      </div>
                       <b className="num">×{factor.toFixed(2)}</b>
                     </div>
                     {suggestion && (
                       <p className="machine-weights-suggestion">
                         <span>
-                          Suggested ×{suggestion.factor.toFixed(2)} · {suggestion.switches} switches
+                          Suggested ×{suggestion.factor.toFixed(2)} · {suggestion.sessions} sessions
                         </span>
+                        <ZoneBadge factor={factor} suggestion={suggestion} />
                         {Math.abs(factor - suggestion.factor) >= 0.005 && (
                           <button
                             type="button"
