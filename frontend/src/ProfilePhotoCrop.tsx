@@ -23,6 +23,10 @@ export function ProfilePhotoCrop({
   const [crop, setCrop] = useState(initialCrop);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const heicSource =
+    typeof source !== 'string' &&
+    (/^image\/hei[cf]/i.test(source.type) || /\.hei[cf]$/i.test(source.name));
+  const useCentreCrop = heicSource && !size && Boolean(error);
   useEffect(() => {
     active.current = true;
     const objectUrl = typeof source === 'string' ? source : URL.createObjectURL(source);
@@ -107,7 +111,11 @@ export function ProfilePhotoCrop({
               }}
               onError={() => {
                 setSize(null);
-                setError('This photo could not be opened. Try a JPEG, PNG or WebP image.');
+                setError(
+                  heicSource
+                    ? 'This browser cannot preview this format. Use a centre crop or choose a JPEG, PNG or WebP.'
+                    : 'This photo could not be opened. Try a JPEG, PNG or WebP image.',
+                );
               }}
             />
           )}
@@ -150,10 +158,13 @@ export function ProfilePhotoCrop({
         <button
           type="button"
           className="popup-primary-action"
-          disabled={busy || !size}
-          onClick={() => void apply()}
+          disabled={busy || (!size && !useCentreCrop)}
+          onClick={() => {
+            if (useCentreCrop && typeof source !== 'string') onUse(source, DEFAULT_PHOTO_CROP);
+            else void apply();
+          }}
         >
-          {busy ? 'Cropping…' : 'Use crop'}
+          {busy ? 'Cropping…' : useCentreCrop ? 'Use centre crop' : 'Use crop'}
         </button>
       </div>
     </PopupDialog>

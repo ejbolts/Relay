@@ -85,6 +85,14 @@
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/a2dbb3279be967cff16a9d58fa3ab99a6c682674/docs/screenshots/releases/1.2.0-cardio-without-zone-popup.png",
         "alt": "Cardio screen after saving a sample session, with updated totals and no zone confirmation popup."
       }
+    },
+    {
+      "title": "Your photo, your crop",
+      "description": "Drag and zoom to frame your photo, or use the position sliders.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/20f203eb1105c39b5f7319e523fe4f4edcf25ac2/docs/screenshots/releases/1.2.0-profile-photo-crop.png",
+        "alt": "Circular profile photo editor with an adjusted synthetic portrait, zoom and horizontal and vertical position controls."
+      }
     }
   ]
 }

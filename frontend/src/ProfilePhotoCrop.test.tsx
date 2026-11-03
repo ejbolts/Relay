@@ -120,3 +120,19 @@ it('moves the crop with pointer dragging, clamps at the edge and stops on cancel
   await pointer('pointermove', 100);
   expect(sliders()[1].value).toBe('1');
 });
+
+it('preserves HEIC uploads with an explicit centre-crop fallback when the browser cannot decode them', async () => {
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:heic'), revokeObjectURL: vi.fn() });
+  const file = new File(['heic'], 'camera.HEIC', { type: 'image/heic' });
+  await act(async () =>
+    root.render(<ProfilePhotoCrop source={file} onUse={onUse} onClose={onClose} />),
+  );
+  const image = document.querySelector<HTMLImageElement>('.profile-crop-preview img')!;
+  await act(async () => image.dispatchEvent(new Event('error')));
+  expect(document.querySelector('[role=alert]')?.textContent).toContain(
+    'cannot preview this format',
+  );
+  await act(async () => button('Use centre crop').click());
+  expect(onUse).toHaveBeenCalledWith(file, { zoom: 1, x: 0.5, y: 0.5 });
+  expect(cropProfilePhoto).not.toHaveBeenCalled();
+});
