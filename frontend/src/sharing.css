@@ -802,9 +802,9 @@
 
 .friend-activity-list li {
   position: relative;
-  display: flex;
+  display: grid;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   padding: 0.625rem 0;
   transition: opacity 160ms ease;
 }
@@ -1164,7 +1164,6 @@
 
 .friend-cards {
   display: grid;
-  gap: 0.75rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1173,12 +1172,13 @@
 .friend-cards > li {
   position: relative;
   display: grid;
-  gap: 0.7rem;
-  border: 1px solid var(--p-line);
-  border-radius: 14px;
-  padding: 0.85rem 0.85rem 0.75rem;
-  background: var(--p-surface-2);
+  gap: 0.4rem;
+  padding: 0.625rem 0;
   transition: opacity 160ms ease;
+}
+
+.friend-cards > li + li {
+  border-top: 1px solid var(--p-line);
 }
 
 /* While choosing a reaction, the other friends fade back. */
@@ -1222,6 +1222,10 @@
 }
 
 .friend-card-name small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   color: var(--p-muted);
   font-size: 0.75rem;
 }
@@ -1265,13 +1269,21 @@
 
 .friend-card-latest {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.6rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  padding: 0.55rem 0.55rem 0.55rem 0.7rem;
-  background: var(--p-surface);
+  gap: 0.4rem 0.5rem;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.friend-activity-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  min-width: 0;
+  container-type: inline-size;
 }
 
 .friend-card-session {
@@ -1279,10 +1291,35 @@
   flex: 1;
   display: grid;
   gap: 0.15rem;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.friend-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.friend-card-meta > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-card-meta .friend-activity-kind {
+  padding: 0 0.3rem;
+  font-size: 0.625rem;
 }
 
 .friend-card-title {
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--p-ink);
   font-size: 0.875rem;
   font-weight: 600;
@@ -1291,9 +1328,9 @@
 .friend-workout-link {
   justify-self: start;
   max-width: 100%;
-  min-height: 2.25rem;
+  min-height: 1.5rem;
   border: 0;
-  padding: 0.25rem 0;
+  padding: 0;
   background: transparent;
   color: var(--p-accent-text);
   font-family: inherit;
@@ -1316,9 +1353,6 @@
 
 .friend-card-empty {
   margin: 0;
-  border: 1px dashed var(--p-line-strong);
-  border-radius: 12px;
-  padding: 0.6rem 0.7rem;
   color: var(--p-muted);
   font-size: 0.8125rem;
 }
@@ -1395,17 +1429,49 @@
   padding: 0.4rem 0.75rem 0.4rem 0.1rem;
   border-radius: 0 24px 24px 0;
 }
-.friend-card-latest {
-  flex-wrap: wrap;
+:is(.friend-card-latest, .friend-activity-session-row) > .workout-discussion {
+  display: contents;
 }
-.friend-card-latest > .workout-discussion {
-  flex-basis: 100%;
+
+:is(.friend-card-latest, .friend-activity-session-row) .workout-discussion-actions {
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: flex-end;
+  max-width: 55cqi;
+  gap: 0.25rem;
 }
-.friend-activity-list > li {
-  flex-wrap: wrap;
+
+:is(.friend-card-latest, .friend-activity-session-row) .discussion-button {
+  padding: 0.35rem 0.4rem;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  background: transparent;
 }
-.friend-activity-list > li > .workout-discussion {
-  flex-basis: 100%;
+
+:is(.friend-card-latest, .friend-activity-session-row) .discussion-button .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+:is(.friend-card-latest, .friend-activity-session-row) .discussion-reaction-summary.is-yours {
+  padding: 0;
+  background: var(--p-accent-soft);
+}
+
+:is(.friend-card-latest, .friend-activity-session-row)
+  .discussion-reaction-summary
+  > .friend-react-button {
+  padding: 0.35rem 0.15rem 0.35rem 0.5rem;
+}
+
+:is(.friend-card-latest, .friend-activity-session-row) .discussion-reaction-count {
+  padding: 0.35rem 0.5rem 0.35rem 0.1rem;
+}
+
+:is(.friend-card-latest, .friend-activity-session-row)
+  :is(.friend-react-picker, .workout-discussion-thread) {
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 .workout-discussion > .friend-react-picker {
   position: static;
@@ -1885,17 +1951,8 @@
   animation: presence-blink 1.4s ease-in-out infinite;
 }
 
-.friend-cards > li.is-live {
-  border-color: color-mix(in srgb, var(--p-accent) 40%, var(--p-line));
-}
-
 .friend-card-latest.is-live {
-  border-color: color-mix(in srgb, var(--p-accent) 30%, var(--p-line));
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--p-accent) 13%, var(--p-surface)),
-    var(--p-surface) 70%
-  );
+  display: flex;
 }
 
 .friend-week > span.is-live {

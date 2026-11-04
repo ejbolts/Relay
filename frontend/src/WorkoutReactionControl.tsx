@@ -175,7 +175,7 @@ export function WorkoutReactionControl({
           onClick={() => show(shown === 'comments' ? null : 'comments')}
         >
           <Icon name="comment" />
-          {commentLabel}
+          {comments}
         </button>
       </div>
       {shown === 'people' && (
