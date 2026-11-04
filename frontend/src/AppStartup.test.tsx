@@ -294,7 +294,8 @@ describe('App startup', () => {
       const markup = renderSignedIn(hash, account);
 
       expect(markup).toContain('<h1>Social</h1>');
-      expect(markup).toContain('Loading your friends');
+      expect(markup).toContain('friends-loading-skeleton');
+      expect(markup).toContain('aria-label="Loading your friends"');
       expect(markup).not.toContain('today-loading-skeleton');
       expect(markup).not.toContain('Loading your training summary');
       expect(markup).toContain('aria-label="Main navigation"');
