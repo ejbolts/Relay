@@ -1,14 +1,24 @@
 import { useSyncExternalStore } from 'react';
 
 let usingSavedData = false;
+let savedAnswers = 0;
 const listeners = new Set<() => void>();
 
 function notify() {
   for (const listener of listeners) listener();
 }
 
+/**
+ * How many reads have answered from saved copies. A refresh compares this before and after, so
+ * it does not mark server data as loaded when a slow read showed an older saved copy instead.
+ */
+export function savedDataAnswerCount(): number {
+  return savedAnswers;
+}
+
 /** A screen is showing this device's saved copy because the server could not be reached. */
 export function reportSavedDataUsed(): void {
+  savedAnswers += 1;
   if (usingSavedData) return;
   usingSavedData = true;
   notify();
