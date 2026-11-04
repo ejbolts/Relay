@@ -288,6 +288,19 @@ describe('App startup', () => {
     expect(markup).toContain('aria-label="Main navigation"');
   });
 
+  it.each(['#social', '#shared'])(
+    'keeps Social in charge of its loading state on %s while training data is pending',
+    (hash) => {
+      const markup = renderSignedIn(hash, account);
+
+      expect(markup).toContain('<h1>Social</h1>');
+      expect(markup).toContain('Loading your friends');
+      expect(markup).not.toContain('today-loading-skeleton');
+      expect(markup).not.toContain('Loading your training summary');
+      expect(markup).toContain('aria-label="Main navigation"');
+    },
+  );
+
   it('shows the recommendation, weekly totals, muscles, Zone 2 and quick check-in on Today', () => {
     const markup = renderToday();
 
