@@ -1,4 +1,5 @@
 import type { Exercise, MachineSetting, WorkoutSetInput } from './types';
+import type { ExerciseMachineChoices } from './exerciseMachineChoices';
 import type { StoredDraftMovement } from './workoutDraft';
 
 export type WorkoutDraftSet = WorkoutSetInput & {
@@ -55,4 +56,23 @@ export function replaceMovementExercise(
         }
       : movement,
   );
+}
+
+/**
+ * The machine for a movement added from the exercise picker. A picked machine, or the baseline
+ * exercise (`null`), is final; without a choice the logger restores the last-used machine.
+ */
+export function machineSelection(
+  exerciseId: string,
+  choices: ExerciseMachineChoices,
+): Pick<WorkoutDraftMovement, 'machinePhotoIds' | 'machinePhotosInitialized' | 'machineSettings'> {
+  if (!Object.hasOwn(choices, exerciseId)) {
+    return { machinePhotoIds: [], machinePhotosInitialized: false, machineSettings: undefined };
+  }
+  const machineId = choices[exerciseId];
+  return {
+    machinePhotoIds: machineId ? [machineId] : [],
+    machinePhotosInitialized: true,
+    machineSettings: undefined,
+  };
 }
