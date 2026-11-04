@@ -15,6 +15,16 @@
   opacity: 0.5;
 }
 
+/* The title takes the spare width, so Save sits beside the close button. */
+dialog.popup-dialog.machine-weights-dialog > header {
+  gap: 0.5rem;
+}
+
+dialog.popup-dialog.machine-weights-dialog > header > div {
+  flex: 1;
+  min-width: 0;
+}
+
 .machine-weights-dialog[open] {
   display: flex;
   flex-direction: column;
