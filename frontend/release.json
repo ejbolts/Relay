@@ -2,7 +2,7 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X. The body trend chart extends to a future goal date with a dotted goal line. Tap saved workout names in Social to open the exact workout, expanded and focused. Cardio saves no longer show zone confirmation popups. Pinch to zoom and drag to frame profile photos, with dimmed edges that fade after a second.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X. The body trend chart extends to a future goal date with a dotted goal line. Tap saved workout names in Social to open the exact workout, expanded and focused. Cardio saves no longer show zone confirmation popups. Home and Social use flat friend rows with dividers, with reaction and comment controls beside the workout. Comment buttons show a speech bubble and count, and Social friend subtext truncates after two lines. Body weight and body-fat check-ins save on this device immediately, work offline and sync in the background. Pinch to zoom and drag to frame profile photos, with dimmed edges that fade after a second.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
@@ -22,6 +22,8 @@
     "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
     "**Social workout links:** Tap a saved workout name to open that friend's workout, expanded and focused. Tap their name to open the profile normally.",
     "**Cardio saves:** Removed zone confirmation popups after saving workouts or adding and editing cardio. Zone classification and goal totals still update.",
+    "**Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Tap a workout name to open it. Comment buttons show only the speech-bubble icon and count; Social friend subtext truncates after two lines. Expanded comments and reaction pickers use the full row width.",
+    "**Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.",
     "**Profile photos:** Pinch to zoom and drag to reposition new or existing photos. The area outside the circle is dimmed while adjusting and fades away after one idle second. Use crop stages the change until Save profile. Photo changes save without a success popup."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
@@ -84,6 +86,14 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/a2dbb3279be967cff16a9d58fa3ab99a6c682674/docs/screenshots/releases/1.2.0-cardio-without-zone-popup.png",
         "alt": "Cardio screen after saving a sample session, with updated totals and no zone confirmation popup."
+      }
+    },
+    {
+      "title": "Offline body check-ins",
+      "description": "Weight and body fat save immediately on this device and sync in the background.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/531a152e4afced3862506232e169c2faa6d9bb5a/docs/screenshots/releases/1.2.0-offline-body-check-ins.png",
+        "alt": "Body screen offline with 84.6 kg and 18.5% body fat, and one check-in saved locally waiting to sync. Isolated sample data."
       }
     },
     {
