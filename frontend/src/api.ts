@@ -87,6 +87,15 @@ import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
 import type { HomeLayout } from './homeLayout';
 import { localDate } from './utils';
+import {
+  deleteLocalBodyMeasurement,
+  listLocalBodyMeasurements,
+  localBodyMeasurements,
+  refreshBodyMeasurements,
+  saveLocalBodyMeasurement,
+  syncBodyMeasurements,
+  type BodyMeasurementTransport,
+} from './bodyMeasurementStore';
 
 export class ApiError extends Error {
   constructor(
@@ -283,6 +292,19 @@ async function listOlderHistory(
 }
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
+
+const bodyMeasurementTransport: BodyMeasurementTransport = {
+  list: (signal) => request<BodyMeasurement[]>('/api/body-measurements', { signal }),
+  save: (payload, signal) =>
+    request<BodyMeasurement>('/api/body-measurements', {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  remove: (id, signal) =>
+    request<void>(`/api/body-measurements/${id}`, { method: 'DELETE', signal }),
+};
 
 export const api = {
   youtube: {
@@ -681,29 +703,23 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   deleteBodySizes: (date: string) => request<void>(`/api/body-sizes/${date}`, { method: 'DELETE' }),
-  listBodyMeasurements: () => accountRead<BodyMeasurement[]>('/api/body-measurements'),
-  saveBodyMeasurement: (payload: {
-    measurement_date: string;
-    weight_kg: number;
-    body_fat_pct: number | null;
-    notes: string | null;
-  }) =>
-    request<BodyMeasurement>('/api/body-measurements', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
-  deleteBodyMeasurement: (id: string) =>
-    request<void>(`/api/body-measurements/${id}`, { method: 'DELETE' }),
+  listBodyMeasurements: () => listLocalBodyMeasurements(bodyMeasurementTransport),
+  localBodyMeasurements,
+  refreshBodyMeasurements: () => refreshBodyMeasurements(bodyMeasurementTransport),
+  syncBodyMeasurements: (retry = false) => syncBodyMeasurements(bodyMeasurementTransport, retry),
+  saveBodyMeasurement: saveLocalBodyMeasurement,
+  deleteBodyMeasurement: deleteLocalBodyMeasurement,
   exportBodyMeasurements: (range: DateRange = {}) =>
     requestBlob(`/api/body-measurements/export.csv${dateRangeQuery(range)}`),
-  importBodyMeasurements: (file: File) => {
+  importBodyMeasurements: async (file: File) => {
     const form = new FormData();
     form.append('file', file, file.name);
-    return request<BodyMeasurementCsvImportResult>('/api/body-measurements/import', {
+    const result = await request<BodyMeasurementCsvImportResult>('/api/body-measurements/import', {
       method: 'POST',
       body: form,
     });
+    await refreshBodyMeasurements(bodyMeasurementTransport).catch(() => undefined);
+    return result;
   },
   getFfmiProfile: () => accountRead<FfmiProfile>('/api/ffmi-profile'),
   updateFfmiProfile: (payload: FfmiProfile) =>

@@ -11,6 +11,7 @@ import {
 import type { User } from './types';
 import { clearActiveWorkoutDraft, readActiveWorkoutDraft } from './workoutDraft';
 import { clearWorkoutCache } from './workoutCache';
+import { clearBodyMeasurementQueue, reconcileBodyMeasurementQueue } from './bodyMeasurementStore';
 
 export { LAST_USER_KEY, readLastUser, rememberUser } from './deviceAccount';
 
@@ -30,9 +31,9 @@ export function browserDeps(): CleanupDeps {
  * its data, the unfinished-workout draft, and the active-workout reminder record. Device
  * preferences such as reduced motion and the rest-timer toggle are intentionally kept.
  *
- * When a session merely expires, `keepUnsyncedWorkout` keeps a finished workout that has not
- * reached the server yet, so it syncs after the same account signs in again. It stays tied to
- * that account and is discarded if a different account signs in.
+ * When a session merely expires, `keepUnsyncedWorkout` keeps finished workouts and queued body
+ * check-ins that have not reached the server yet. They sync after the same account signs in
+ * again, and are discarded if a different account signs in.
  */
 export async function clearUserDeviceData(
   deps: CleanupDeps = browserDeps(),
@@ -40,6 +41,7 @@ export async function clearUserDeviceData(
 ): Promise<void> {
   const { storage } = deps;
   if (storage) {
+    if (!keepUnsyncedWorkout) clearBodyMeasurementQueue(storage);
     if (!keepUnsyncedWorkout || !readActiveWorkoutDraft(storage)?.pendingSave)
       clearActiveWorkoutDraft(storage);
     clearActiveWorkoutReminderKey(storage);
@@ -71,6 +73,7 @@ export async function reconcileSignedInUser(
     await deps.clearCache();
   }
   rememberUser(user, deps.storage);
+  reconcileBodyMeasurementQueue(user.id, deps.storage);
   return wiped;
 }
 

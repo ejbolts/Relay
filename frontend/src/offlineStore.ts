@@ -206,11 +206,12 @@ export async function writeOffline(
   value: unknown,
   owner: string,
   isCurrent = () => true,
+  required = false,
 ): Promise<void> {
   const started = generation;
   try {
     await clearing;
-    if (started !== generation || !isCurrent()) return;
+    if (started !== generation || !isCurrent()) throw new Error('The signed-in account changed.');
     const json = new TextEncoder().encode(JSON.stringify(value));
     const compressed = canCompress();
     const plain = compressed
@@ -218,7 +219,8 @@ export async function writeOffline(
       : new Uint8Array(json).buffer;
     const cryptoKey = await currentDeviceKey();
     // Saved server copies are refetchable. Never silently persist plaintext if encryption fails.
-    if (!cryptoKey || started !== generation || !isCurrent()) return;
+    if (!cryptoKey || started !== generation || !isCurrent())
+      throw new Error('Could not save on this device. Free some storage and try again.');
     const record: StoredRecord = {
       format: RECORD_FORMAT,
       owner,
@@ -234,8 +236,10 @@ export async function writeOffline(
         new Uint8Array(plain),
       );
     }
-    if (started === generation && isCurrent()) await backend.put(key, record);
-  } catch {
+    if (started !== generation || !isCurrent()) throw new Error('The signed-in account changed.');
+    await backend.put(key, record);
+  } catch (reason) {
+    if (required) throw reason;
     // IndexedDB can be unavailable or full. The server remains the source of truth.
   }
 }
