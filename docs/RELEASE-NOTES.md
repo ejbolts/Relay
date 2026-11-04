@@ -88,6 +88,10 @@ _Relay was called Gym Logger before version 1.0._
 
 **The same layout on Home** - Workout names open the matching session, with compact controls alongside. Isolated sample data.
 
+![Body screen offline with weight and body-fat values saved locally and waiting to sync.](screenshots/releases/1.2.0-offline-body-check-ins.png)
+
+**Save now, sync later** - Log weight and body fat immediately, including offline. Isolated sample data.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -107,6 +111,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
 - **Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.
+- **Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.
 
 ## 1.1.0
 

@@ -10478,6 +10478,16 @@ body.chart-fullscreen-open {
   margin-bottom: 16px;
 }
 
+.pulse-card.body-check-in-sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  width: min(calc(100% - 1.75rem), 692px);
+  margin: calc(env(safe-area-inset-top) + 0.6rem) auto 0;
+  font-size: 0.8125rem;
+}
+
 .pending-workout-heading,
 .pending-workout-actions {
   display: flex;
