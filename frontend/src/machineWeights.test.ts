@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isNormalised,
+  latestWeightKg,
   machineFactor,
   machinesWithSessions,
   progressViewPoints,
@@ -200,5 +201,17 @@ describe('machine weight normalisation', () => {
     expect(suggestions.has('techno')).toBe(false);
     expect(suggestFactors(data, null).size).toBe(0);
     expect(suggestFactors(data, 'life').get('hammer')?.sessions).toBe(2);
+  });
+
+  it("starts each machine's equation from your latest weight on it", () => {
+    const data = progress([
+      point('a', '2026-10-01', 'life', 60),
+      point('b', '2026-10-15', 'life', 64),
+      point('c', '2026-10-08', 'life', 70),
+      point('d', '2026-10-20', 'hammer', 80),
+    ]);
+    expect(latestWeightKg(data, 'life')).toBe(64);
+    expect(latestWeightKg(data, 'hammer')).toBe(80);
+    expect(latestWeightKg(data, 'techno')).toBeNull();
   });
 });

@@ -126,11 +126,12 @@ it('filters progress by machine and normalises All machines once mapped', async 
 
   await click(button('Machine weights'));
   await click(document.querySelector('[role="switch"][aria-label="Normalise weights"]')!);
-  // The most used machine becomes the reference.
-  expect(document.querySelector('.machine-weights-list .is-reference')?.textContent).toContain(
-    'Hammer',
-  );
-  // Two switches between Hammer and Life Fitness suggest ×1.24 and pre-fill its pair.
+  // The most used machine becomes the reference and leads the tree, with an arrow to Life Fitness.
+  const items = [...document.querySelectorAll('.machine-weights-list.is-tree > li')];
+  expect(items.map((item) => item.className)).toEqual(['is-reference', 'is-spoke']);
+  expect(items[0].textContent).toContain('Reference');
+  expect(items[0].textContent).toContain('Hammer');
+  // Two sessions on the Hammer trend suggest ×1.24, pre-filled from the latest Life Fitness weight.
   const field = (label: string) =>
     document.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!;
   const factor = () => document.querySelector('.machine-weights-slider b')?.textContent;
@@ -139,9 +140,10 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(document.querySelector('.machine-weights-suggestion')?.textContent).toContain(
     'Suggested ×1.24 · 2 sessions',
   );
-  expect(field('Weight on Life Fitness').value).toBe('50');
-  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('62');
+  expect(field('Weight on Life Fitness').value).toBe('69');
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('85.6');
   expect(factor()).toBe('×1.24');
+  expect(items[1].querySelector('.machine-weights-ratio')?.textContent).toBe('×1.24');
   const suggestedLine = previewLine();
   expect(suggestedLine).toBeTruthy();
 
@@ -151,13 +153,17 @@ it('filters progress by machine and normalises All machines once mapped', async 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '1.5');
     slider.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('75');
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('103.5');
   expect(factor()).toBe('×1.50');
+  expect(items[1].querySelector('.machine-weights-ratio')?.textContent).toBe('×1.50');
   expect(previewLine()).not.toBe(suggestedLine);
   await click(button('Use suggested ×1.24 for Life Fitness'));
   expect(factor()).toBe('×1.24');
 
+  // Changing your weight keeps the conversion.
   await type('Weight on Life Fitness', '40');
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('49.6');
+  expect(factor()).toBe('×1.24');
   await type('Matching weight on Hammer for Life Fitness', '');
   await click(button('Save'));
   expect(document.querySelector('.machine-weights-error')?.textContent).toBe(

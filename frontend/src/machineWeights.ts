@@ -270,3 +270,13 @@ export const FACTOR_RANGE = { min: 0.5, max: 2, step: 0.01 } as const;
 export function clampFactor(factor: number): number {
   return Math.min(FACTOR_RANGE.max, Math.max(FACTOR_RANGE.min, Math.round(factor * 100) / 100));
 }
+
+/** The heaviest set from your latest session on a machine, as its default "your weight". */
+export function latestWeightKg(progress: ExerciseProgress, machineId: string): number | null {
+  let latest: MachineProgressPoint | null = null;
+  for (const point of progress.machine_points ?? []) {
+    if (point.machine_photo_id !== machineId || point.best_weight_kg <= 0) continue;
+    if (!latest || point.workout_date >= latest.workout_date) latest = point;
+  }
+  return latest?.best_weight_kg ?? null;
+}
