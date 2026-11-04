@@ -64,6 +64,7 @@ import type {
   WorkoutInput,
   WorkoutCacheRevision,
   WorkoutSnapshot,
+  WeightMapping,
   WorkoutSession,
   TrainingPreferences,
   TrainingSplit,
@@ -610,6 +611,22 @@ export const api = {
         body: JSON.stringify({ settings }),
       },
     ),
+  getWeightMapping: (exerciseId: string) =>
+    accountRead<WeightMapping>(`/api/exercises/${exerciseId}/weight-mapping`),
+  saveWeightMapping: (exerciseId: string, mapping: WeightMapping) =>
+    request<WeightMapping>(`/api/exercises/${exerciseId}/weight-mapping`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: mapping.enabled,
+        reference_machine_id: mapping.reference_machine_id,
+        machines: mapping.machines.map(({ id, machine_kg, reference_kg }) => ({
+          id,
+          machine_kg,
+          reference_kg,
+        })),
+      }),
+    }),
   listAllMachinePhotos: () => accountRead<MachinePhotoUsage[]>('/api/machine-photos'),
   machinePhotoWorkouts: (photoId: string) =>
     request<TrackedWorkout[]>(`/api/machine-photos/${photoId}/workouts`),

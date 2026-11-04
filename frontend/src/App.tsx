@@ -29,6 +29,14 @@ import { api } from './api';
 import { SetDragHandle } from './SetDragHandle';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
+import { MachineWeightsDialog } from './MachineWeightsDialog';
+import {
+  isNormalised,
+  machinesWithSessions,
+  progressViewPoints,
+  runningBestIds,
+  type MachineView,
+} from './machineWeights';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
@@ -65,6 +73,7 @@ import type {
   MachinePhoto,
   MachinePhotoUsage,
   MachineSetting,
+  WeightMapping,
   PersonalRecord,
   SharedProfileSummary,
   TrackedSet,
@@ -6620,6 +6629,8 @@ function LandscapeChartFrame({
     : frame;
 }
 
+const MAPPING_NOTICE_MS = 4000;
+
 const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
   { value: 'estimated_1rm', label: 'Est. 1RM', series: 'Est. 1RM' },
   { value: 'best_weight_kg', label: 'Top set', series: 'Top weight' },
@@ -6692,6 +6703,17 @@ export function ProgressScreen({
   const [visibleSessions, setVisibleSessions] = useState(browseFirst ? 5 : HISTORY_PAGE_SIZE);
   const [pickerRequest, setPickerRequest] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [loadedMapping, setMapping] = useState<{
+    exerciseId: string;
+    mapping: WeightMapping;
+  } | null>(null);
+  const mapping = loadedMapping?.exerciseId === exerciseId ? loadedMapping.mapping : null;
+  const [machineView, setMachineView] = useState<{ exerciseId: string; view: MachineView }>({
+    exerciseId,
+    view: 'all',
+  });
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [mappingNotice, setMappingNotice] = useState(0);
   const libraryRoot = useRef<HTMLDivElement>(null);
   const libraryScroll = useRef(0);
   const metricIndicatorRef = useSlidingIndicator<HTMLDivElement>(metric);
@@ -6754,8 +6776,43 @@ export function ProgressScreen({
     };
   }, [exerciseId, progressAttempt, dataRevision, libraryMode, browseFirst]);
 
+  useEffect(() => {
+    if (!exerciseId || libraryMode) return;
+    let cancelled = false;
+    void api
+      .getWeightMapping(exerciseId)
+      .then((next) => {
+        if (!cancelled) setMapping({ exerciseId, mapping: next });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [exerciseId, dataRevision, libraryMode]);
+  useEffect(() => {
+    if (!mappingNotice) return;
+    const timer = setTimeout(() => setMappingNotice(0), MAPPING_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [mappingNotice]);
+
+  const machineOptions = progress ? machinesWithSessions(progress, mapping) : [];
+  const view =
+    machineView.exerciseId === exerciseId &&
+    machineOptions.some((machine) => machine.id === machineView.view)
+      ? machineView.view
+      : 'all';
+  const normalised = isNormalised(mapping, view);
+  const referenceMachine = normalised
+    ? mapping?.machines.find((machine) => machine.id === mapping.reference_machine_id)
+    : undefined;
+  const viewPoints = useMemo(
+    () => (progress ? progressViewPoints(progress, mapping, view) : []),
+    [progress, mapping, view],
+  );
+  const defaultView = view === 'all' && !normalised;
+  const approx = normalised ? '≈ ' : '';
   const metricInfo = PROGRESS_METRICS.find((item) => item.value === metric)!;
-  const inRange = progress ? progressPointsForChart(progress.points, metric, displayRange) : [];
+  const inRange = progress ? progressPointsForChart(viewPoints, metric, displayRange) : [];
   const weekly = !browseFirst && metric !== 'volume_kg' && displayRange !== '1m';
   const charted = weekly ? weeklyBestPoints(inRange, (point) => point[metric]) : inRange;
   const latestPoint = inRange.at(-1) ?? null;
@@ -6769,14 +6826,17 @@ export function ProgressScreen({
       ? (change / firstPoint[metric]) * 100
       : null;
   const heaviestSetPoint = progress
-    ? personalBestProgressPoint(progress.points, 'best_weight_kg')
+    ? personalBestProgressPoint(viewPoints, 'best_weight_kg')
     : null;
   const estimatedOneRepMaxPoint = progress
-    ? personalBestProgressPoint(progress.points, 'estimated_1rm')
+    ? personalBestProgressPoint(viewPoints, 'estimated_1rm')
     : null;
-  const volumePoint = progress ? personalBestProgressPoint(progress.points, 'volume_kg') : null;
+  const volumePoint = progress ? personalBestProgressPoint(viewPoints, 'volume_kg') : null;
+  const bestEstimatedOneRepMax = defaultView
+    ? (progress?.personal_best_estimated_1rm ?? 0)
+    : (estimatedOneRepMaxPoint?.estimated_1rm ?? 0);
   const bodyweight = measurements[0]?.weight_kg ?? null;
-  const recordIds = useMemo(
+  const tableRecordIds = useMemo(
     () =>
       new Set(
         personalRecords
@@ -6789,7 +6849,8 @@ export function ProgressScreen({
       ),
     [personalRecords, exerciseId],
   );
-  const sessionsNewestFirst = (progress?.points ?? []).slice().reverse();
+  const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
+  const sessionsNewestFirst = viewPoints.slice().reverse();
   const formatMetric = (value: number) =>
     metric === 'volume_kg'
       ? Math.round(value).toLocaleString('en-GB')
@@ -6799,7 +6860,7 @@ export function ProgressScreen({
     date: point.workout_date,
     value: weightFromKg(point[metric], weightUnit),
     id: point.workout_id,
-    detail: `${formatWeight(point.best_weight_kg, weightUnit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
+    detail: `${formatWeight(point.raw_best_weight_kg, weightUnit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
   }));
 
   const rangeControls = (
@@ -6955,18 +7016,90 @@ export function ProgressScreen({
                 </button>
               ))}
             </div>
-            {progress.points.length ? (
+            {(machineOptions.length > 0 || (mapping?.machines.length ?? 0) > 1) && (
+              <div className="progress-machine-filter">
+                {machineOptions.length > 0 && (
+                  <div className="progress-machine-chips" role="group" aria-label="Machine">
+                    <button
+                      type="button"
+                      aria-pressed={view === 'all'}
+                      onClick={() => setMachineView({ exerciseId, view: 'all' })}
+                    >
+                      {mapping?.enabled ? 'All machines ≈' : 'All machines'}
+                    </button>
+                    {machineOptions.map((machine) => (
+                      <button
+                        type="button"
+                        key={machine.id}
+                        aria-pressed={view === machine.id}
+                        title={machine.caption}
+                        onClick={() => setMachineView({ exerciseId, view: machine.id })}
+                      >
+                        {machine.caption}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {(mapping?.machines.length ?? 0) > 1 && (
+                  <button
+                    type="button"
+                    className="progress-machine-settings"
+                    aria-label="Machine weights"
+                    onClick={() => setMappingOpen(true)}
+                  >
+                    <Icon name="settings" />
+                  </button>
+                )}
+              </div>
+            )}
+            {mappingOpen && mapping && (
+              <MachineWeightsDialog
+                exerciseId={progress.exercise.id}
+                exerciseName={progress.exercise.name}
+                mapping={mapping}
+                progress={progress}
+                weightUnit={weightUnit}
+                onClose={() => setMappingOpen(false)}
+                onSaved={(next) => {
+                  setMapping({ exerciseId: progress.exercise.id, mapping: next });
+                  setMappingOpen(false);
+                  setMappingNotice((serial) => serial + 1);
+                }}
+              />
+            )}
+            {mappingNotice > 0 &&
+              createPortal(
+                <div
+                  key={mappingNotice}
+                  className="undo-toast top-toast"
+                  role="status"
+                  aria-atomic="true"
+                  style={{ '--undo-toast-duration': `${MAPPING_NOTICE_MS}ms` } as CSSProperties}
+                >
+                  <span>Machine weights saved</span>
+                  <button
+                    type="button"
+                    className="undo-toast-close"
+                    aria-label="Dismiss machine weights notification"
+                    onClick={() => setMappingNotice(0)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </div>,
+                document.body,
+              )}
+            {viewPoints.length ? (
               <>
                 <section className={browseFirst ? 'pulse-card exercise-progress-chart' : undefined}>
                   <div className="progress-hero">
                     <div className="progress-hero-summary">
                       <strong className="progress-hero-value">
-                        {latestPoint ? formatMetricKg(latestPoint[metric]) : '–'}
+                        {latestPoint ? `${approx}${formatMetricKg(latestPoint[metric])}` : '–'}
                         <small>{weightUnit}</small>
                       </strong>
                       <p className="progress-hero-caption">
                         {latestPoint
-                          ? `${metricInfo.series} · latest session ${shortDate(latestPoint.workout_date)}`
+                          ? `${metricInfo.series}${referenceMachine ? ` in ${referenceMachine.caption} weights` : ''} · latest session ${shortDate(latestPoint.workout_date)}`
                           : 'No sessions in this range'}
                       </p>
                       {change !== null && firstPoint && (
@@ -7024,7 +7157,7 @@ export function ProgressScreen({
                       <span>Heaviest set</span>
                       <b className="num">
                         {heaviestSetPoint
-                          ? `${formatWeight(heaviestSetPoint.best_weight_kg, weightUnit)} × ${heaviestSetPoint.best_reps}`
+                          ? `${approx}${formatWeight(heaviestSetPoint.best_weight_kg, weightUnit)} × ${heaviestSetPoint.best_reps}`
                           : '–'}
                       </b>
                       <small>
@@ -7036,7 +7169,8 @@ export function ProgressScreen({
                     <div>
                       <span>Best est. 1RM</span>
                       <b className="num">
-                        {formatWeight(progress.personal_best_estimated_1rm, weightUnit, 1)}
+                        {approx}
+                        {formatWeight(bestEstimatedOneRepMax, weightUnit, 1)}
                       </b>
                       <small>
                         {estimatedOneRepMaxPoint
@@ -7047,7 +7181,9 @@ export function ProgressScreen({
                     <div>
                       <span>Best session volume</span>
                       <b className="num">
-                        {volumePoint ? formatWeight(volumePoint.volume_kg, weightUnit, 0) : '–'}
+                        {volumePoint
+                          ? `${approx}${formatWeight(volumePoint.volume_kg, weightUnit, 0)}`
+                          : '–'}
                       </b>
                       <small>
                         {volumePoint ? shortDate(volumePoint.workout_date) : 'Working sets'}
@@ -7056,8 +7192,8 @@ export function ProgressScreen({
                     <div>
                       <span>Relative strength</span>
                       <b className="num">
-                        {bodyweight && progress.personal_best_estimated_1rm
-                          ? `${(progress.personal_best_estimated_1rm / bodyweight).toFixed(2)} × BW`
+                        {bodyweight && bestEstimatedOneRepMax
+                          ? `${approx}${(bestEstimatedOneRepMax / bodyweight).toFixed(2)} × BW`
                           : '–'}
                       </b>
                       <small>
@@ -7092,10 +7228,14 @@ export function ProgressScreen({
                               {recordIds.has(point.workout_id) && <em className="pr-chip">PR</em>}
                             </span>
                             <span className="session-set num">
-                              {formatWeight(point.best_weight_kg, weightUnit)} × {point.best_reps}
+                              {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
+                              {point.best_reps}
                               {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
                             </span>
-                            <b className="num">{formatMetricKg(point[metric])}</b>
+                            <b className="num">
+                              {approx}
+                              {formatMetricKg(point[metric])}
+                            </b>
                             <Icon name="chevron-right" />
                           </button>
                         </li>

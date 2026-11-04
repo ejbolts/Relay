@@ -16,11 +16,11 @@ export function personalBestProgressPoint(
   }, null);
 }
 
-export function progressPointsForChart(
-  points: ProgressPoint[],
+export function progressPointsForChart<T extends ProgressPoint>(
+  points: T[],
   metric: ProgressMetric,
   range: TimeRange,
-): ProgressPoint[] {
+): T[] {
   const ordered = points
     .filter((point) => Number.isFinite(point[metric]) && point[metric] > 0)
     .slice()

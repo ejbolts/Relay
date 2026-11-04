@@ -849,9 +849,16 @@ class ProgressPoint(BaseModel):
     best_rpe: float | None
 
 
+class MachineProgressPoint(ProgressPoint):
+    """One workout's sets on one saved machine; None when no single machine was pinned."""
+
+    machine_photo_id: str | None
+
+
 class ExerciseProgressRead(BaseModel):
     exercise: ExerciseRead
     points: list[ProgressPoint]
+    machine_points: list[MachineProgressPoint] = []
     personal_best_weight_kg: float
     personal_best_estimated_1rm: float
 

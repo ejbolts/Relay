@@ -118,6 +118,7 @@ from .tracker_schemas import (
     MachinePhotoMerge,
     MachinePhotoRead,
     MachinePhotoUsageRead,
+    MachineProgressPoint,
     MuscleFrequencyRead,
     MuscleSetCreditCreate,
     MuscleVolumeRead,
@@ -2934,6 +2935,33 @@ def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[Exercise
     return summaries
 
 
+def movement_machine_id(movement: WorkoutMovement) -> str | None:
+    """The one saved machine a movement pinned, or None when it pinned none or several."""
+    machine_ids = {photo.merged_into_id or photo.id for photo in movement.machine_photos}
+    return machine_ids.pop() if len(machine_ids) == 1 else None
+
+
+def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) -> ProgressPoint:
+    best_set = max(sets, key=lambda item: ((item.weight_kg or 0), (item.reps or 0)))
+    best_e1rm = max(
+        (
+            estimated_one_rep_max(item.weight_kg or 0, item.reps or 0)
+            for item in sets
+            if is_pr_eligible(item)
+        ),
+        default=0.0,
+    )
+    return ProgressPoint(
+        workout_date=workout_date,
+        workout_id=workout_id,
+        best_weight_kg=best_set.weight_kg or 0,
+        best_reps=best_set.reps or 0,
+        estimated_1rm=round(best_e1rm, 1),
+        volume_kg=round(sum((item.weight_kg or 0) * (item.reps or 0) for item in sets), 1),
+        best_rpe=best_set.rpe,
+    )
+
+
 @router.get("/progress/{exercise_id}", response_model=ExerciseProgressRead)
 def exercise_progress(exercise_id: str, db: DbSession, user: CurrentUser) -> ExerciseProgressRead:
     exercise = get_owned(db, Exercise, exercise_id, user.id)
@@ -2943,42 +2971,40 @@ def exercise_progress(exercise_id: str, db: DbSession, user: CurrentUser) -> Exe
         db.scalars(
             select(WorkoutMovement)
             .where(WorkoutMovement.exercise_id == exercise_id)
-            .options(selectinload(WorkoutMovement.workout), selectinload(WorkoutMovement.sets))
+            .options(
+                selectinload(WorkoutMovement.workout),
+                selectinload(WorkoutMovement.sets),
+                selectinload(WorkoutMovement.machine_photos),
+            )
             .order_by(WorkoutMovement.workout_id)
         )
     )
     grouped: dict[tuple[date, str], list[WorkoutSet]] = defaultdict(list)
+    by_machine: dict[tuple[date, str, str | None], list[WorkoutSet]] = defaultdict(list)
     for movement in movements:
-        grouped[(movement.workout.workout_date, movement.workout_id)].extend(
-            item for item in movement.sets if is_working_set(item)
+        working = [item for item in movement.sets if is_working_set(item)]
+        grouped[(movement.workout.workout_date, movement.workout_id)].extend(working)
+        machine_id = movement_machine_id(movement)
+        by_machine[(movement.workout.workout_date, movement.workout_id, machine_id)].extend(working)
+    points = [
+        progress_point(workout_date, workout_id, sets)
+        for (workout_date, workout_id), sets in sorted(grouped.items())
+        if sets
+    ]
+    machine_points = [
+        MachineProgressPoint(
+            **progress_point(workout_date, workout_id, sets).model_dump(),
+            machine_photo_id=machine_id,
         )
-    points: list[ProgressPoint] = []
-    for (workout_date, workout_id), sets in sorted(grouped.items()):
-        if not sets:
-            continue
-        best_set = max(sets, key=lambda item: ((item.weight_kg or 0), (item.reps or 0)))
-        best_e1rm = max(
-            (
-                estimated_one_rep_max(item.weight_kg or 0, item.reps or 0)
-                for item in sets
-                if is_pr_eligible(item)
-            ),
-            default=0.0,
+        for (workout_date, workout_id, machine_id), sets in sorted(
+            by_machine.items(), key=lambda item: (item[0][0], item[0][1], item[0][2] or "")
         )
-        points.append(
-            ProgressPoint(
-                workout_date=workout_date,
-                workout_id=workout_id,
-                best_weight_kg=best_set.weight_kg or 0,
-                best_reps=best_set.reps or 0,
-                estimated_1rm=round(best_e1rm, 1),
-                volume_kg=round(sum((item.weight_kg or 0) * (item.reps or 0) for item in sets), 1),
-                best_rpe=best_set.rpe,
-            )
-        )
+        if sets
+    ]
     return ExerciseProgressRead(
         exercise=exercise,
         points=points,
+        machine_points=machine_points,
         personal_best_weight_kg=max((point.best_weight_kg for point in points), default=0),
         personal_best_estimated_1rm=max((point.estimated_1rm for point in points), default=0),
     )
