@@ -1,0 +1,413 @@
+.machine-weights-save {
+  flex: none;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: var(--p-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.machine-weights-save:disabled {
+  opacity: 0.5;
+}
+
+/* The title takes the spare width, so Save sits beside the close button. */
+dialog.popup-dialog.machine-weights-dialog > header {
+  gap: 0.5rem;
+}
+
+dialog.popup-dialog.machine-weights-dialog > header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.machine-weights-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.machine-weights-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  padding: 1rem 1rem 0;
+}
+
+.machine-weights-form > :last-child {
+  padding-bottom: 1rem;
+}
+
+.machine-weights-preview {
+  flex: none;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  padding: 0.35rem 0.5rem 0.5rem;
+  background: var(--p-surface);
+}
+
+.machine-weights-preview-key {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0 0.4rem;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+}
+
+.machine-weights-preview-key .is-line {
+  width: 0.9rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--p-accent);
+}
+
+.machine-weights-preview-key .is-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.6rem;
+  border-radius: 50%;
+  background: var(--p-deemph);
+}
+
+.machine-weights-slider {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.machine-weights-slider input {
+  flex: 1;
+  min-width: 0;
+  margin: 0.35rem 0;
+  accent-color: var(--p-accent);
+}
+
+.machine-weights-slider b {
+  min-width: 3.2rem;
+  color: var(--p-ink);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.machine-weights-suggestion {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.machine-weights-suggestion .text-link {
+  font-size: 0.78rem;
+}
+
+.machine-weights-toggle-label {
+  display: flex !important;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.machine-weights-list {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 0.5rem;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+  list-style: none;
+}
+
+.machine-weights-list > li {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  padding: 0.65rem;
+  background: var(--p-surface-2);
+}
+
+/* The reference leads the tree, with a gold arrow to each machine measured against it. */
+.machine-weights-list.is-tree {
+  padding-left: 1.9rem;
+}
+
+.machine-weights-list > li.is-reference {
+  margin-left: -1.9rem;
+  border: 1.5px solid var(--p-gold);
+  background: linear-gradient(180deg, var(--p-gold-soft), var(--p-surface-2) 75%);
+}
+
+.machine-weights-list > li.is-spoke {
+  position: relative;
+}
+
+/* Trunk: from the card above down to this card's arrow, and on to the next card. */
+.machine-weights-list > li.is-spoke::before {
+  position: absolute;
+  top: calc(-0.5rem - 1px);
+  bottom: -0.5rem;
+  left: -1.05rem;
+  border-left: 2px solid var(--p-gold);
+  content: '';
+}
+
+.machine-weights-list > li.is-spoke:last-child::before {
+  bottom: calc(100% - 1.75rem);
+}
+
+/* Branch into the card. */
+.machine-weights-list > li.is-spoke::after {
+  position: absolute;
+  top: 1.75rem;
+  left: -1.05rem;
+  width: 0.55rem;
+  border-top: 2px solid var(--p-gold);
+  content: '';
+}
+
+.machine-weights-arrow {
+  position: absolute;
+  top: calc(1.75rem - 5px);
+  left: -0.55rem;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid var(--p-gold);
+}
+
+.machine-weights-ratio {
+  position: absolute;
+  top: 2.35rem;
+  left: -1.85rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.3rem;
+  background: var(--p-gold);
+  color: var(--p-on-gold);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.machine-weights-machine {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.machine-weights-machine img {
+  width: 2.6rem;
+  height: 2.6rem;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--p-surface-3);
+}
+
+.machine-weights-machine > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.machine-weights-machine strong {
+  overflow-wrap: break-word;
+  color: var(--p-ink);
+  font-size: 0.9rem;
+}
+
+.machine-weights-machine small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.machine-weights-machine .text-link {
+  justify-self: start;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+}
+
+.machine-weights-reference {
+  color: var(--p-gold);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.machine-weights-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  color: var(--p-ink-2);
+  font-size: 0.8rem;
+}
+
+.machine-weights-equation {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.machine-weights-plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0.2rem 0.45rem 0.2rem 0.3rem;
+  background: var(--p-surface);
+  color: var(--p-muted);
+  font-size: 0.78rem;
+}
+
+.machine-weights-plate.is-reference {
+  border-color: color-mix(in srgb, var(--p-gold) 60%, transparent);
+}
+
+.machine-weights-plate:focus-within {
+  border-color: var(--p-accent);
+}
+
+.machine-weights-plate:has(input[aria-invalid='true']) {
+  border-color: var(--p-danger);
+}
+
+.machine-weights-thumb {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--p-surface-3);
+}
+
+.machine-weights-plate input {
+  width: 3.4rem;
+  min-height: 2rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.machine-weights-plate input:focus {
+  outline: none;
+}
+
+.machine-weights-star {
+  color: var(--p-gold);
+}
+
+.machine-weights-equals {
+  color: var(--p-muted);
+  font-weight: 700;
+}
+
+.machine-weights-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--p-danger);
+  font-size: 0.75rem;
+}
+
+.progress-machine-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+}
+
+.progress-machine-chips {
+  display: flex;
+  flex: 1;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.progress-machine-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.progress-machine-chips > button {
+  flex-shrink: 0;
+  max-width: 12rem;
+  min-height: 2.2rem;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: var(--p-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-machine-chips > button[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  box-shadow: inset 0 0 0 1px var(--p-accent);
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}
+
+.progress-machine-settings {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  margin-left: auto;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--p-muted);
+}
+
+.machine-weights-recommended {
+  justify-self: start;
+  margin-top: 0.25rem;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Narrow phones keep both weights on one line; the gold star still marks the reference. */
+@media (max-width: 380px) {
+  .machine-weights-thumb {
+    display: none;
+  }
+}
