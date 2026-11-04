@@ -2,7 +2,7 @@
   "version": "1.2.0",
   "date": "2026-11-01",
   "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X. The body trend chart extends to a future goal date with a dotted goal line. Tap saved workout names in Social to open the exact workout, expanded and focused. Cardio saves no longer show zone confirmation popups. Home and Social use flat friend rows with dividers, with reaction and comment controls beside the workout. Comment buttons show a speech bubble and count, and Social friend subtext truncates after two lines. Body weight and body-fat check-ins save on this device immediately, work offline and sync in the background. Pinch to zoom and drag to frame profile photos, with dimmed edges that fade after a second. Filter exercise progress by machine and optionally map machines to a reference, with a recommended reference, suggested conversions and a live preview, for one comparable trend.",
+  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X and explain how to add and tick off a set before finishing. The body trend chart extends to a future goal date with a dotted goal line. Tap saved workout names in Social to open the exact workout, expanded and focused. Cardio saves no longer show zone confirmation popups. Home and Social use flat friend rows with dividers, with reaction and comment controls beside the workout. Comment buttons show a speech bubble and count, and Social friend subtext truncates after two lines. Body weight and body-fat check-ins save on this device immediately, work offline and sync in the background. Pinch to zoom and drag to frame profile photos, with dimmed edges that fade after a second.",
   "changes": [
     "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
     "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
@@ -18,14 +18,13 @@
     "**Split editor:** Editing a split opens a compact full screen led by a Weekly volume chart of the sets each muscle gets per week and your planned cardio, against your weekly goals. Days fold into one-line rows, each exercise has a sets stepper with a ? for its direct and partial set credits, and tapping a muscle shows which days train it.",
     "**Split days:** Split cards list each exercise with a coloured block per planned set instead of every set's reps and weight, with a Muscles button to show what each exercise trains.",
     "**Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.",
-    "**Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.",
+    "**Workout errors:** If no sets are complete, the error explains how to add or fill in a set and tick it off before finishing. Empty workouts prompt you to add an exercise first. Tap the X to close an error.",
     "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
     "**Social workout links:** Tap a saved workout name to open that friend's workout, expanded and focused. Tap their name to open the profile normally.",
     "**Cardio saves:** Removed zone confirmation popups after saving workouts or adding and editing cardio. Zone classification and goal totals still update.",
     "**Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Tap a workout name to open it. Comment buttons show only the speech-bubble icon and count; Social friend subtext truncates after two lines. Expanded comments and reaction pickers use the full row width.",
     "**Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.",
-    "**Profile photos:** Pinch to zoom and drag to reposition new or existing photos. The area outside the circle is dimmed while adjusting and fades away after one idle second. Use crop stages the change until Save profile. Photo changes save without a success popup.",
-    "**Machine weights:** Progress has a chip for each saved machine. Turn on Normalise weights from the settings button; the machine you used most in the last three months is recommended as the reference. Relay suggests each other machine's conversion from your logged weights and reps so its sessions line up with the reference trend. Adjust it with a slider or a pair of equal weights while a preview chart redraws; All machines ≈ then shows one trend in the reference machine's weights. Logged sets, History and records keep the weights you entered."
+    "**Profile photos:** Pinch to zoom and drag to reposition new or existing photos. The area outside the circle is dimmed while adjusting and fades away after one idle second. Use crop stages the change until Save profile. Photo changes save without a success popup."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
@@ -103,14 +102,6 @@
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/54239d3369bd4955ab65156b3eec66bd26b7d077/docs/screenshots/releases/1.2.0-profile-photo-crop.gif",
         "alt": "Adjusting an isolated synthetic profile photo with pinch zoom and dragging, dimmed margins fading after one idle second, then the saved circular avatar."
-      }
-    },
-    {
-      "title": "Machine weights",
-      "description": "Filter progress by machine, or map machines to a reference for one comparable trend.",
-      "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/22bd7cff3acb33f4cb6e947d7feabff767e712ca/docs/screenshots/releases/1.2.0-machine-weights.png",
-        "alt": "Machine Chest Press progress with All machines ≈ selected, showing a steady est. 1RM line in the reference machine's weights. Isolated sample data."
       }
     }
   ]

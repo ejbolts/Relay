@@ -3433,7 +3433,11 @@ function WorkoutLogger({
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
     if (!movements.length || !completed.length) {
-      setError('Add an exercise and complete at least one set before saving.');
+      setError(
+        !movements.length
+          ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
+          : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
+      );
       return;
     }
     if (initialWorkout && Boolean(startTime) !== Boolean(endTime)) {

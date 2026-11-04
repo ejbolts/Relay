@@ -64,21 +64,13 @@ _Relay was called Gym Logger before version 1.0._
 
 **Your reaction, once** - Matching emojis share a count. Only your selection has a blue border. Isolated sample data.
 
-![Workout logger showing the red error "Add an exercise and complete at least one set before saving." with an X close button on its right.](screenshots/releases/1.2.0-dismissible-workout-error.png)
+![Workout error explaining how to add or fill in a set and tap the tick beside that set or its exercise before saving.](screenshots/releases/1.2.0-workout-completion-error.png)
 
-**Dismissible workout errors** - Close a workout error with the X inside it. Isolated sample data.
+**Clearer workout errors** - Follow the steps to tick off a set before finishing, or close the message with the X. Isolated sample data.
 
 ![Body trend chart extended to December, with a dotted goal line rising from the goal's start weight in October to 85 kg at the end of December.](screenshots/releases/1.2.0-goal-future-line.png)
 
 **Goal line to your target date** - The trend chart runs on to a future goal date with a dotted line from where you started. Isolated sample data.
-
-![Machine Chest Press progress with All machines ≈ selected, showing a steady est. 1RM line in Hammer Strength Iso-Lateral weights and ≈ personal bests.](screenshots/releases/1.2.0-machine-weights.png)
-
-![Machine weights dialog with Life Fitness Signature as the recommended reference. Dragging the Hammer Strength Iso-Lateral slider away from the suggested ×0.81 breaks the preview's trend line, and Use restores the straight trend.](screenshots/releases/1.2.0-machine-weights-slider.gif)
-
-_Drag a machine's slider and the preview redraws as you go. Isolated sample data._
-
-**Machine weights** - Filter an exercise's progress by machine, or map each machine to a reference so All machines shows one comparable trend. Relay recommends a reference from your last three months and suggests each conversion from your logged weights and reps. Isolated sample data.
 
 ![Alex Rivera's shared Upper body workout opened with its completed sets after tapping the workout name in Social.](screenshots/releases/1.2.0-social-workout-link.png)
 
@@ -118,10 +110,8 @@ _Drag a machine's slider and the preview redraws as you go. Isolated sample data
 - **Split editor:** Editing a split now opens a compact full screen with Save at the top. A **Weekly volume** chart leads, showing the working sets each muscle gets per week and your planned cardio minutes against your weekly set and cardio goals, and it updates as you build. Days fold into one-line rows with their exercise and set counts, and one opens at a time. Each exercise has a sets stepper (cardio steps in 5-minute amounts), and stepping below one set removes it. The **?** beside each exercise shows its direct and partial set credits, and turning partial sets on or off there updates the chart. Tap a muscle in the chart to see which days train it and how many sets each adds. Cycles that aren't seven days long use weekly averages.
 - **Split days:** Split cards, including friends' shared splits and **Exercises & sets** on your active split, list each exercise with a coloured block for every planned set and a total for each day, instead of each set's reps and weight. Cardio shows its minutes, and the **Muscles** button shows what each exercise trains.
 - **Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.
-- **Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.
+- **Workout errors:** If no sets are complete, the error explains how to add or fill in a set and tap the tick beside that set or its exercise. Empty workouts prompt you to add an exercise first. Close errors with the X.
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
-- **Machine weights:** An exercise's progress has a chip for each saved machine, so you can see one machine's sessions on their own. Tap the settings button beside the chips and turn on **Normalise weights** to pick a reference machine and enter one pair of weights that feel the same on each other machine, such as 40 kg here = 50 kg on the reference, or drag its slider while a preview chart redraws. The machine you used most in the last three months is recommended, and chosen when you first turn it on. Relay suggests each other machine's conversion by comparing every session's est. 1RM, from its weight and reps, with the reference machine's trend around that date so the line runs as straight as your training allows, fills it in for machines without one, and **Use** restores it after you change it. **All machines ≈** then shows every session in the reference machine's weights, with **≈** beside converted values and personal bests. Sessions without a pinned machine count as the reference. Logged sets, History and personal records keep the weights you entered.
-
 - **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
 - **Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.

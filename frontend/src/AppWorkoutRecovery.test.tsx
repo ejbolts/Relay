@@ -1404,6 +1404,46 @@ describe('phantom workout prevention', () => {
 });
 
 describe('finishing workouts in the background', () => {
+  it('explains how to finish an empty workout without discarding it', async () => {
+    const draft = storedDraft({ movements: [] });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await confirmFinish();
+    expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+      'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick',
+    );
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expectPreserved(draft);
+  });
+
+  it.each(['no sets', 'blank set', 'unticked set'])(
+    'explains the completion tick when an exercise has %s and preserves the workout',
+    async (state) => {
+      const draft = storedDraft();
+      draft.movements = draft.movements.map((movement) => ({
+        ...movement,
+        sets:
+          state === 'no sets'
+            ? []
+            : [
+                {
+                  ...(state === 'blank set' ? createWorkoutSet('strength') : movement.sets[0]),
+                  key: movement.sets[0].key,
+                  completed: false,
+                },
+              ],
+      }));
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      await confirmFinish();
+      expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+        'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise.',
+      );
+      expect(api.createWorkout).not.toHaveBeenCalled();
+      expectPreserved(draft);
+    },
+  );
+
   it.each([false, true])(
     'keeps a 23:30–00:30 workout on its start day (restored after midnight: %s)',
     async (restoreAfterMidnight) => {
