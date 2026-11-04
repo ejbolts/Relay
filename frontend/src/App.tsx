@@ -1676,6 +1676,7 @@ function AppContent() {
           {loading &&
             tab !== 'dashboard' &&
             tab !== 'videos' &&
+            tab !== 'social' &&
             tab !== 'profile' &&
             tab !== 'shared-profile' &&
             tab !== 'admin' && <TodaySkeleton />}

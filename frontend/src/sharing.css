@@ -1128,6 +1128,54 @@
   gap: 0.45rem;
 }
 
+.friends-loading-skeleton .friend-card-person {
+  cursor: default;
+}
+
+.friends-loading-skeleton .friend-card-name {
+  flex: 1;
+  gap: 0.4rem;
+}
+
+.friend-skeleton-count {
+  width: 1.3rem;
+  height: 0.9rem;
+}
+
+.friends-loading-skeleton .friend-skeleton-avatar {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+}
+
+.friend-skeleton-name {
+  width: min(7rem, 100%);
+  height: 0.9rem;
+}
+
+.friend-skeleton-meta {
+  width: min(9rem, 100%);
+  height: 0.65rem;
+}
+
+.friend-skeleton-week {
+  flex-shrink: 0;
+  width: 5.5rem;
+  height: 1.75rem;
+}
+
+.friend-skeleton-session {
+  width: min(8.5rem, 100%);
+  height: 1rem;
+}
+
+.friend-skeleton-actions {
+  grid-column: 2;
+  width: 4.5rem;
+  height: 2rem;
+}
+
 .friends-list-count {
   border-radius: 999px;
   padding: 0.05rem 0.45rem;

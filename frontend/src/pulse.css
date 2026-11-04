@@ -1283,7 +1283,8 @@ button.pulse-card:hover {
   white-space: nowrap;
 }
 
-.today-loading-skeleton .skeleton-block {
+.today-loading-skeleton .skeleton-block,
+.friends-loading-skeleton .skeleton-block {
   display: block;
   border-radius: 8px;
   background: linear-gradient(
@@ -2987,7 +2988,8 @@ html.edge-swipe-ready .edge-swipe-indicator {
 @media (prefers-reduced-motion: reduce) {
   .live-workout-label i,
   .app-tab-start .live-dot,
-  .today-loading-skeleton .skeleton-block {
+  .today-loading-skeleton .skeleton-block,
+  .friends-loading-skeleton .skeleton-block {
     animation: none;
   }
 }

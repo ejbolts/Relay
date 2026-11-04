@@ -120,6 +120,47 @@ it('opens your own profile from the avatar separately from sharing settings', as
   expect(chooseSharing).not.toHaveBeenCalled();
 });
 
+it('shows accessible friend-row skeletons until the initial friends response arrives', async () => {
+  let resolve!: (value: FriendConnections) => void;
+  vi.mocked(api.sharing.friends).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  await render();
+
+  const skeleton = host.querySelector('.friends-loading-skeleton')!;
+  expect(skeleton.getAttribute('role')).toBe('status');
+  expect(skeleton.getAttribute('aria-label')).toBe('Loading your friends');
+  expect(skeleton.getAttribute('aria-busy')).toBe('true');
+  expect(skeleton.querySelectorAll('.friend-cards > li')).toHaveLength(3);
+  expect(skeleton.querySelector('ul')?.getAttribute('aria-hidden')).toBe('true');
+  expect(skeleton.querySelectorAll('button, a, input')).toHaveLength(0);
+  expect(host.textContent).not.toContain('Loading your friends');
+
+  await act(async () => resolve(connections));
+  expect(host.querySelector('.friends-loading-skeleton')).toBeNull();
+  expect(host.textContent).toContain('Alex Sample');
+});
+
+it('keeps the existing friends visible during a slow background refresh', async () => {
+  await render();
+  let resolve!: (value: FriendConnections) => void;
+  vi.mocked(api.sharing.friends).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  await act(async () => window.dispatchEvent(new Event('focus')));
+
+  expect(api.sharing.friends).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('.friends-loading-skeleton')).toBeNull();
+  expect(host.textContent).toContain('Alex Sample');
+  await act(async () => resolve({ ...connections, friends: [casey] }));
+  expect(host.textContent).not.toContain('Alex Sample');
+  expect(host.textContent).toContain('Casey Sample');
+});
+
 it('lists each friend once with their week and latest session, and opens their profile', async () => {
   await render();
   expect(tab('Friends').getAttribute('aria-selected')).toBe('true');
