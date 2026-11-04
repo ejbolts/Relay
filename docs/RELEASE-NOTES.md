@@ -92,6 +92,10 @@ _Relay was called Gym Logger before version 1.0._
 
 **Save now, sync later** - Log weight and body fat immediately, including offline. Isolated sample data.
 
+![Pinch zoom and dragging in the profile photo editor, with dimmed outer edges fading after one idle second, then the saved circular avatar.](screenshots/releases/1.2.0-profile-photo-crop.gif)
+
+**Your photo, your crop** - Pinch to zoom and drag to frame your photo. Dimmed edges fade after one idle second and return when you move again. Automated touch-pointer interaction with an isolated synthetic profile.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -112,6 +116,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
 - **Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.
 - **Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.
+- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Pinch with two fingers to zoom and drag to reposition. The image outside the circle is dimmed while adjusting, fades away after one idle second and returns when movement resumes. Sliders have been removed; keyboard users can focus the photo, move with arrow keys and zoom with +/-. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop. Photo changes save without a success popup.
 
 ## 1.1.0
 

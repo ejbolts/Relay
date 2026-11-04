@@ -4,9 +4,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileIdentity } from './ProfileIdentity';
+import { cropProfilePhoto } from './profilePhotoGeometry';
 import type { User } from './types';
 
 vi.mock('./photoOptimise', () => ({ optimisePhoto: async (file: File) => file }));
+vi.mock('./profilePhotoGeometry', async (original) => ({
+  ...(await original<typeof import('./profilePhotoGeometry')>()),
+  cropProfilePhoto: vi.fn(
+    async () => new File(['cropped'], 'profile-photo.jpg', { type: 'image/jpeg' }),
+  ),
+}));
 
 const user: User = {
   id: 'sample',
@@ -22,6 +29,12 @@ let container: HTMLDivElement;
 
 beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
     setTimeout(callback, 0),
   );
@@ -64,7 +77,7 @@ async function changeName() {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
-async function choosePhoto() {
+async function choosePhoto(apply = true) {
   const input = container.querySelector<HTMLInputElement>('input[type=file]')!;
   await act(async () => {
     Object.defineProperty(input, 'files', {
@@ -73,6 +86,14 @@ async function choosePhoto() {
     });
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  if (apply) await applyCrop();
+}
+async function applyCrop() {
+  const image = document.querySelector<HTMLImageElement>('.profile-crop-preview img')!;
+  Object.defineProperties(image, { naturalWidth: { value: 1200 }, naturalHeight: { value: 800 } });
+  await act(async () => image.dispatchEvent(new Event('load')));
+  const use = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Use crop')!;
+  await act(async () => use.click());
 }
 async function save() {
   await act(async () =>
@@ -176,7 +197,7 @@ describe('profile viewing and editing', () => {
     expect(api.uploadProfilePhoto).toHaveBeenCalledTimes(1);
     expect(container.querySelector('input')).toBeNull();
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/saved-photo.png');
-    expect(container.textContent).toContain('Profile saved.');
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
   });
   it('keeps a failed photo draft available to retry and explains partially saved details', async () => {
     vi.mocked(api.uploadProfilePhoto).mockRejectedValueOnce(new Error('Offline'));
@@ -204,5 +225,44 @@ describe('profile viewing and editing', () => {
     await save();
     expect(api.removeProfilePhoto).toHaveBeenCalledTimes(1);
     expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('cancels a selected crop without changing or uploading the current photo', async () => {
+    await act(async () => button('Edit profile').click());
+    await choosePhoto(false);
+    expect(document.querySelector('dialog[open]')).not.toBeNull();
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="Close Adjust profile photo"]')!
+        .click(),
+    );
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('/sample-photo.png');
+    expect(button('Save profile').disabled).toBe(true);
+    expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
+  });
+
+  it('re-crops the current photo, stages the square and uploads only on Save', async () => {
+    await act(async () => button('Edit profile').click());
+    await act(async () => button('Adjust crop').click());
+    expect(document.querySelector('dialog img')?.getAttribute('src')).toBe('/sample-photo.png');
+    await applyCrop();
+    expect(cropProfilePhoto).toHaveBeenCalled();
+    expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
+    await save();
+    expect(api.uploadProfilePhoto).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'profile-photo.jpg', type: 'image/jpeg' }),
+    );
+    expect(api.updateProfile).not.toHaveBeenCalled();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it('keeps the existing confirmation for a name-only save', async () => {
+    await act(async () => button('Edit profile').click());
+    await changeName();
+    await save();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Profile saved.',
+    );
+    expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
   });
 });
