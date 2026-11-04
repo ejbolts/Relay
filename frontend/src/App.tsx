@@ -334,7 +334,7 @@ import {
   workoutSetForAutoSave,
 } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
-import { isUsingSavedData } from './connectionStatus';
+import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import {
@@ -880,6 +880,7 @@ function AppContent() {
       if (!current()) return;
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
+      const savedAnswersBefore = savedDataAnswerCount();
       const results = await Promise.allSettled([
         api.dashboard(windowStart).then((nextDashboard) => {
           if (!current()) return;
@@ -948,8 +949,12 @@ function AppContent() {
         }),
       ]);
       if (!current()) return;
-      // Failed reads do not acknowledge the revision, so quiet sync will retry them.
-      if (results.every((result) => result.status === 'fulfilled')) {
+      // Failed reads, and slow reads answered from this device's saved copy, do not acknowledge
+      // the revision, so quiet sync retries them instead of keeping older data until a reload.
+      if (
+        results.every((result) => result.status === 'fulfilled') &&
+        savedDataAnswerCount() === savedAnswersBefore
+      ) {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
       }

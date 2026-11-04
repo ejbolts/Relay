@@ -6,6 +6,7 @@ import { App } from './App';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api, ApiError } from './api';
+import { reportSavedDataUsed, reportServerReached } from './connectionStatus';
 import { WORKOUT_SAVE_TIMEOUT_MS } from './usePendingWorkoutSave';
 import * as push from './push';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
@@ -2465,6 +2466,27 @@ describe('cross-device training updates', () => {
     vi.mocked(api.listWorkouts).mockResolvedValue([remoteWorkout()]);
     await focusApp();
     expect(container.querySelector('.history-card')?.textContent).toContain('Phone workout');
+    expect(api.listWorkouts).toHaveBeenCalledTimes(3);
+  });
+  it('retries a refresh that a slow server answered from the saved copy', async () => {
+    await mount();
+    // Like the real request, a revision answer means the server is reachable again.
+    vi.mocked(api.workoutRevision).mockImplementation(async () => {
+      reportServerReached();
+      return { revision: 'phone-workout' };
+    });
+    // Too slow to wait for: the read shows this device's older saved copy instead.
+    vi.mocked(api.listWorkouts).mockImplementationOnce(async () => {
+      reportSavedDataUsed();
+      return [];
+    });
+    await focusApp();
+    expect(container.querySelectorAll('.history-card')).toHaveLength(0);
+    vi.mocked(api.listWorkouts).mockResolvedValue([remoteWorkout()]);
+    await focusApp();
+    expect(container.querySelector('.history-card')?.textContent).toContain('Phone workout');
+    expect(api.listWorkouts).toHaveBeenCalledTimes(3);
+    await focusApp();
     expect(api.listWorkouts).toHaveBeenCalledTimes(3);
   });
   it('rechecks a change made during a refresh on the next check', async () => {
