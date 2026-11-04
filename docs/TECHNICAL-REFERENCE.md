@@ -300,6 +300,13 @@ frontend `RoutinePanel` and workout recovery tests.
 
 ## Checks
 
+Feature authors add their own [release fragment](../release-fragments/README.md)
+instead of editing shared announcement files. Validate pending fragments with
+`python backend/tools/release_fragments.py check` and run
+`python -m pytest backend/tests/test_release_fragments.py` when changing fragment
+tooling or content. One release coordinator explicitly selects and assembles the
+contributions before deployment; the renderer never writes application metadata.
+
 While developing, run the tests for the behaviour you changed. From the repository root,
 after activating the virtual environment:
 
