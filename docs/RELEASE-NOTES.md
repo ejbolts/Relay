@@ -80,6 +80,30 @@ _Drag a machine's slider and the preview redraws as you go. Isolated sample data
 
 **Machine weights** - Filter an exercise's progress by machine, or map each machine to a reference so All machines shows one comparable trend. Relay recommends a reference from your last three months and suggests each conversion from your logged weights and reps. Isolated sample data.
 
+![Alex Rivera's shared Upper body workout opened with its completed sets after tapping the workout name in Social.](screenshots/releases/1.2.0-social-workout-link.png)
+
+**Open the workout** - Tap a saved workout name in Social to open that exact workout, expanded and focused. Isolated sample data.
+
+![Cardio screen after saving a sample session, with updated minutes and no zone notification popup.](screenshots/releases/1.2.0-cardio-without-zone-popup.png)
+
+**Quieter cardio saves** - Zone and goal totals still update, without the zone confirmation popup. Isolated sample data.
+
+![Social showing one flat friends list with thin dividers, weekly activity and compact workout controls.](screenshots/releases/1.2.0-social-flat-friend-list.png)
+
+**Compact friend rows** - Social matches Home's Recent Friends Activity with flat rows and thin dividers, leaving more room for names and workouts. Speech bubbles show only the count; long secondary text ends after two lines with an ellipsis. Isolated sample data.
+
+![Home Recent Friends Activity with workout links and compact reaction and comment controls on the same row.](screenshots/releases/1.2.0-compact-friend-rows-home.png)
+
+**The same layout on Home** - Workout names open the matching session, with compact controls alongside. Isolated sample data.
+
+![Body screen offline with weight and body-fat values saved locally and waiting to sync.](screenshots/releases/1.2.0-offline-body-check-ins.png)
+
+**Save now, sync later** - Log weight and body fat immediately, including offline. Isolated sample data.
+
+![Pinch zoom and dragging in the profile photo editor, with dimmed outer edges fading after one idle second, then the saved circular avatar.](screenshots/releases/1.2.0-profile-photo-crop.gif)
+
+**Your photo, your crop** - Pinch to zoom and drag to frame your photo. Dimmed edges fade after one idle second and return when you move again. Automated touch-pointer interaction with an isolated synthetic profile.
+
 - **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
 - **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
 - **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
@@ -97,6 +121,12 @@ _Drag a machine's slider and the preview redraws as you go. Isolated sample data
 - **Workout errors:** Tap the X on the right of a workout error, such as a missing completed set, to close it.
 - **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
 - **Machine weights:** An exercise's progress has a chip for each saved machine, so you can see one machine's sessions on their own. Tap the settings button beside the chips and turn on **Normalise weights** to pick a reference machine and enter one pair of weights that feel the same on each other machine, such as 40 kg here = 50 kg on the reference, or drag its slider while a preview chart redraws. The machine you used most in the last three months is recommended, and chosen when you first turn it on. Relay suggests each other machine's conversion by comparing every session's est. 1RM, from its weight and reps, with the reference machine's trend around that date so the line runs as straight as your training allows, fills it in for machines without one, and **Use** restores it after you change it. **All machines ≈** then shows every session in the reference machine's weights, with **≈** beside converted values and personal bests. Sessions without a pinned machine count as the reference. Logged sets, History and personal records keep the weights you entered.
+
+- **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
+- **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
+- **Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.
+- **Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.
+- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Pinch with two fingers to zoom and drag to reposition. The image outside the circle is dimmed while adjusting, fades away after one idle second and returns when movement resumes. Sliders have been removed; keyboard users can focus the photo, move with arrow keys and zoom with +/-. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop. Photo changes save without a success popup.
 
 ## 1.1.0
 

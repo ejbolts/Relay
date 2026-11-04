@@ -39,6 +39,7 @@ import {
 } from './machineWeights';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
+import { useBodyMeasurementSync } from './useBodyMeasurementSync';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -164,7 +165,7 @@ import { CardioTrendCard } from './CardioTrendCard';
 import { groupCardioHistory } from './cardioTrend';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
 import { CardioZoneSettings } from './CardioZoneSettings';
-import { cardioZoneNotice, DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
+import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
@@ -641,6 +642,7 @@ function AppContent() {
   const loadingOlderHistoryRef = useRef(false);
   const [historyBaselines, setHistoryBaselines] = useState<HistoryBaselines | null>(null);
   const [measurements, setMeasurements] = useState<BodyMeasurement[]>([]);
+  const bodyMeasurementSync = useBodyMeasurementSync(user?.id ?? null, setMeasurements);
   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
   const [completionRecords, setCompletionRecords] = useState<PersonalRecord[]>([]);
   const [restTimerEnabled, setRestTimerEnabled] = useState(restTimerPreferenceEnabled);
@@ -673,6 +675,7 @@ function AppContent() {
     id: string;
     name: string;
     opened: number;
+    workout?: Pick<TrackedWorkout, 'id' | 'workout_date'>;
     /** Opened from a friend QR code, before its name has loaded. */
     invite?: boolean;
   } | null>(null);
@@ -1189,18 +1192,6 @@ function AppContent() {
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     setEditingWorkout(null);
 
-    if (saved.movements.some((movement) => movement.exercise.kind === 'cardio')) {
-      void api
-        .cardioOverview()
-        .then((overview) => {
-          const preferences = overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES;
-          const sessions = overview.sessions.filter((item) => item.source_workout_id === saved.id);
-          if (sessions.length)
-            setMessage(sessions.map((item) => cardioZoneNotice(item, preferences)).join(' '));
-        })
-        .catch(() => undefined);
-    }
-
     if (!wasEditing) {
       const signature = (record: PersonalRecord) =>
         `${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
@@ -1237,6 +1228,7 @@ function AppContent() {
   async function undoWorkoutImport(id: string) {
     const result = await withBackgroundActivity('Undoing import…', async () => {
       const undone = await api.undoImportBatch(id);
+      await api.refreshBodyMeasurements().catch(() => undefined);
       await refreshData({ activityLabel: null });
       return undone;
     });
@@ -1248,6 +1240,7 @@ function AppContent() {
   async function importWorkoutCsv(file: File, options?: WorkoutImportOptions) {
     const result = await withBackgroundActivity('Importing workouts…', async () => {
       const imported = await api.importWorkouts(file, options);
+      await api.refreshBodyMeasurements().catch(() => undefined);
       await workoutTypes.reload();
       await refreshData({ activityLabel: null });
       return imported;
@@ -1275,6 +1268,7 @@ function AppContent() {
     try {
       await withBackgroundActivity('Removing sample workouts…', async () => {
         await api.deleteSampleData();
+        await api.refreshBodyMeasurements().catch(() => undefined);
         await refreshData({ activityLabel: null });
       });
       setMessage('Sample workouts removed. They will not be seeded again.');
@@ -1330,18 +1324,14 @@ function AppContent() {
     body_fat_pct: number | null;
     notes: string | null;
   }) {
-    await withBackgroundActivity('Saving measurement…', async () => {
-      await api.saveBodyMeasurement(payload);
-      await refreshData({ activityLabel: null });
-    });
+    await api.saveBodyMeasurement(payload);
+    setMeasurements(await api.localBodyMeasurements());
   }
 
   async function deleteMeasurement(id: string) {
     try {
-      await withBackgroundActivity('Deleting measurement…', async () => {
-        await api.deleteBodyMeasurement(id);
-        await refreshData({ activityLabel: null });
-      });
+      await api.deleteBodyMeasurement(id);
+      setMeasurements(await api.localBodyMeasurements());
       setMessage('Body measurement deleted.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not delete that measurement.');
@@ -1460,6 +1450,7 @@ function AppContent() {
 
   function openSharedProfile(
     profile: Pick<SharedProfileSummary, 'id' | 'display_name'> & { is_you?: boolean },
+    workout?: Pick<TrackedWorkout, 'id' | 'workout_date'>,
   ) {
     if (profile.id === user?.id) {
       setTab('profile');
@@ -1469,6 +1460,7 @@ function AppContent() {
       id: profile.id,
       name: profile.is_you ? 'Your shared profile' : profile.display_name,
       opened: (current?.opened ?? 0) + 1,
+      workout,
     }));
     setTab('shared-profile');
   }
@@ -1654,6 +1646,28 @@ function AppContent() {
               }
             />
           )}
+          {bodyMeasurementSync.pending > 0 && (
+            <section
+              className="pulse-card pending-workout-save body-check-in-sync"
+              aria-label="Check-in sync"
+              role="status"
+            >
+              <strong>
+                {bodyMeasurementSync.pending}{' '}
+                {bodyMeasurementSync.pending === 1 ? 'check-in' : 'check-ins'} saved locally
+              </strong>
+              {bodyMeasurementSync.error ? (
+                <>
+                  <p className="error">{bodyMeasurementSync.error}</p>
+                  <button className="secondary" onClick={bodyMeasurementSync.retry}>
+                    Retry sync
+                  </button>
+                </>
+              ) : (
+                <span className="badge">Waiting to sync</span>
+              )}
+            </section>
+          )}
           {loading &&
             tab !== 'dashboard' &&
             tab !== 'videos' &&
@@ -1683,11 +1697,11 @@ function AppContent() {
                         localDate(),
                         bodyFat,
                       );
-                      await refreshData({ activityLabel: null });
+                      setMeasurements(await api.localBodyMeasurements());
                       return async () => {
                         await withBackgroundActivity('Undoing check-in…', async () => {
                           await undo();
-                          await refreshData({ activityLabel: null });
+                          setMeasurements(await api.localBodyMeasurements());
                         });
                       };
                     })
@@ -1699,11 +1713,11 @@ function AppContent() {
                         localDate(),
                         weight,
                       );
-                      await refreshData({ activityLabel: null });
+                      setMeasurements(await api.localBodyMeasurements());
                       return async () => {
                         await withBackgroundActivity('Undoing check-in…', async () => {
                           await undo();
-                          await refreshData({ activityLabel: null });
+                          setMeasurements(await api.localBodyMeasurements());
                         });
                       };
                     })
@@ -2014,6 +2028,7 @@ function AppContent() {
                   onOpenMember={openSharedProfile}
                   onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
+                  targetWorkout={sharedProfile.workout}
                   invite={sharedProfile.invite}
                   onLoaded={(profile) =>
                     setSharedProfile((current) =>
@@ -8966,7 +8981,6 @@ export function CardioScreen({
   };
   const [overview, setOverview] = useState<CardioOverview | null>(null);
   const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
-  const [zoneNotice, setZoneNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
   const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
   const [saving, setSaving] = useState(false);
@@ -9078,12 +9092,8 @@ export function CardioScreen({
         qualifies_zone2: false,
       };
       setSaving(true);
-      const saved = editingId
-        ? await api.updateCardio(editingId, payload)
-        : await api.createCardio(payload);
-      setZoneNotice(
-        cardioZoneNotice(saved, overview?.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
-      );
+      if (editingId) await api.updateCardio(editingId, payload);
+      else await api.createCardio(payload);
       setDraft(empty);
       setScanStatus(null);
       setEditingId(null);
@@ -9112,9 +9122,6 @@ export function CardioScreen({
   const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
   return (
     <div className="cardio-screen">
-      {zoneNotice && (
-        <NotificationDialog message={zoneNotice} onClose={() => setZoneNotice(null)} />
-      )}
       {zoneSettingsOpen && (
         <CardioZoneSettings
           preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
@@ -9132,10 +9139,7 @@ export function CardioScreen({
           session={metricSession}
           onClose={() => setMetricSession(null)}
           onSave={async (metrics) => {
-            const saved = await api.updateCardioMetrics(metricSession.id, metrics);
-            setZoneNotice(
-              cardioZoneNotice(saved, overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES),
-            );
+            await api.updateCardioMetrics(metricSession.id, metrics);
             await onDataChange();
             await load();
           }}
@@ -10100,6 +10104,7 @@ function HistoryScreen({
 /** Another member's shared workouts, grouped by week like History but read-only. */
 function SharedWorkoutHistory({
   workouts,
+  focusWorkoutId,
   personalRecords,
   onFilterMachine,
   renderWorkoutAction,
@@ -10107,7 +10112,9 @@ function SharedWorkoutHistory({
   weekStartDay,
 }: SharedWorkoutListProps & { categoryColors: WorkoutTypeColors; weekStartDay: number }) {
   const weightUnit = useWeightUnit();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(focusWorkoutId ?? null);
+  const summaryRef = useRef<HTMLButtonElement>(null);
+  const revealed = useRef(false);
   const [expandedPhoto, setExpandedPhoto] = useState<MachinePhoto | null>(null);
   const targetExerciseRef = useRef<HTMLDivElement>(null);
   const today = localDate();
@@ -10116,6 +10123,20 @@ function SharedWorkoutHistory({
     [weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
+
+  useEffect(() => {
+    if (!focusWorkoutId || revealed.current || !summaryRef.current) return;
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => {
+        const target = summaryRef.current;
+        if (!target) return;
+        revealed.current = true;
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({ behavior: 'instant', block: 'start' });
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusWorkoutId, workouts]);
 
   return weekGroups.map((group) => {
     const label = weekGroupLabel(group.weekStart, today, weekStartDay);
@@ -10135,7 +10156,7 @@ function SharedWorkoutHistory({
               key={workout.id}
               workout={workout}
               open={openId === workout.id}
-              summaryRef={null}
+              summaryRef={workout.id === focusWorkoutId ? summaryRef : null}
               targetExerciseId={null}
               targetExerciseRef={targetExerciseRef}
               categoryColor={workout.workout_type?.color ?? categoryColors[workout.category]}

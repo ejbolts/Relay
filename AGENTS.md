@@ -4,6 +4,10 @@ Follow this repository's README and checks, together with the user's shared veri
 
 Keep server release runbooks and private operator notes local. Do not commit them or include their contents in pull requests. Consult the operator's local instructions before an explicitly authorized deployment.
 
+## Tailscale preview sign-in
+
+When asked for a Tailscale URL for this project, include the preview URL and a verified test-account username and password for that preview. Create or reuse an isolated sample-data account; keep credentials out of Git and PRs.
+
 ## Temporary UI feedback
 
 - Show brief action confirmations, such as "Routine saved", "Copied" or "Split updated", in a non-blocking popup/toast using the app's existing feedback components. Prefer a dismissible popup that clears automatically; do not add temporary success text inline beside buttons, above cards or beneath controls, where it persists or shifts the layout.

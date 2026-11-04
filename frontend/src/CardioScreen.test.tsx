@@ -129,7 +129,7 @@ afterEach(async () => {
 });
 
 describe('cardio weekly trend screen', () => {
-  it('automatically classifies saved cardio and shows a text-only result', async () => {
+  it('automatically classifies saved cardio without showing a zone popup', async () => {
     vi.mocked(api.cardioOverview).mockResolvedValue({
       ...overview,
       cardio_preferences: {
@@ -169,9 +169,7 @@ describe('cardio weekly trend screen', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ zone: null, qualifies_zone2: false }),
     );
-    const notice = document.querySelector('.app-notification-toast')!;
-    expect(notice.textContent).toContain('Zone 2 · 120 bpm average (110–139 bpm)');
-    expect(notice.querySelector('svg, canvas')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
     await click(container.querySelector('[aria-label="Edit heart-rate zones and goals"]')!);
     expect(document.querySelector('dialog')!.textContent).toContain('Personal ranges (bpm)');
   });

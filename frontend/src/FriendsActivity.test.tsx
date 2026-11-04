@@ -191,8 +191,8 @@ it("shows each friend's latest session with one reaction button and opens their 
 
   const rows = [...host.querySelectorAll('.friend-activity-list li')];
   expect(rows.map((row) => row.textContent)).toEqual([
-    'JJordan PreviewStrengthLeg day · 1h 11minToday · 2 sets👍 1❤️ 20 comments',
-    'AAlex PreviewCardioIncline walk · 35minYesterday · 2.8 km0 comments',
+    'JJordan PreviewLeg day · 1h 11minStrengthToday · 2 sets👍 1❤️ 20',
+    'AAlex PreviewIncline walk · 35minCardioYesterday · 2.8 km0',
   ]);
   // One picker trigger and one comments button per friend, alongside per-emoji counts.
   expect(host.querySelectorAll('.friend-react-button')).toHaveLength(2);
@@ -201,6 +201,8 @@ it("shows each friend's latest session with one reaction button and opens their 
 
   await act(async () => host.querySelector<HTMLButtonElement>('.friend-activity-open')!.click());
   expect(openFriend).toHaveBeenCalledWith(jordan.friend);
+  await act(async () => button('Open Jordan Preview’s Leg day workout').click());
+  expect(openFriend).toHaveBeenLastCalledWith(jordan.friend, jordan.workout);
 });
 
 it('shows the original logged time in local time beside the workout day for strength and cardio', async () => {
@@ -231,13 +233,13 @@ it('shows the original logged time in local time beside the workout day for stre
     with_sessions: 3,
   });
   await render();
-  expect([...host.querySelectorAll('.friend-activity-meta')].map((row) => row.textContent)).toEqual(
-    [
-      `Today · ${localTime} · 2 sets`,
-      `Yesterday · ${localTime} · 2.8 km`,
-      `Today · ${localTime} · 2 sets`,
-    ],
-  );
+  expect(
+    [...host.querySelectorAll('.friend-card-meta > span:last-child')].map((row) => row.textContent),
+  ).toEqual([
+    `Today · ${localTime} · 2 sets`,
+    `Yesterday · ${localTime} · 2.8 km`,
+    `Today · ${localTime} · 2 sets`,
+  ]);
 });
 
 it('omits unavailable logged times without displaying an invalid time', async () => {
@@ -247,9 +249,9 @@ it('omits unavailable logged times without displaying an invalid time', async ()
     with_sessions: 2,
   });
   await render();
-  expect([...host.querySelectorAll('.friend-activity-meta')].map((row) => row.textContent)).toEqual(
-    ['Today · 2 sets', 'Yesterday · 2.8 km'],
-  );
+  expect(
+    [...host.querySelectorAll('.friend-card-meta > span:last-child')].map((row) => row.textContent),
+  ).toEqual(['Today · 2 sets', 'Yesterday · 2.8 km']);
 });
 
 it('opens comments without the reaction picker, and reactions without the comments', async () => {
@@ -336,7 +338,7 @@ it('refreshes an already reacted session to the newest workout and keeps the ser
     await vi.advanceTimersByTimeAsync(30_000);
   });
   const rows = [...host.querySelectorAll('.friend-activity-list li')];
-  expect(rows[0].textContent).toContain('Alex PreviewStrengthNew upper day');
+  expect(rows[0].textContent).toContain('Alex PreviewNew upper day');
   expect(rows[1].textContent).toContain('Jordan Preview');
   expect(rows[0].querySelector('.friend-react-button')?.getAttribute('aria-label')).toBe(
     'React to Alex Preview’s New upper day',

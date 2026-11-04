@@ -1099,6 +1099,7 @@ function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: 
 
 export interface SharedWorkoutListProps {
   workouts: TrackedWorkout[];
+  focusWorkoutId?: string;
   personalRecords: PersonalRecord[];
   onFilterMachine?: (photo: MachinePhoto) => void;
   renderWorkoutAction?: (workout: TrackedWorkout) => ReactNode;
@@ -1172,6 +1173,7 @@ export function SharedProfileScreen({
   onOpenSplits,
   dataRevision = null,
   profileId,
+  targetWorkout,
   renderWorkouts,
   onChooseSharing,
   active = true,
@@ -1183,6 +1185,7 @@ export function SharedProfileScreen({
   onOpenSplits?: (routineId?: string) => void;
   dataRevision?: string | null;
   profileId: string;
+  targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>;
   active?: boolean;
   ownProfile?: { user: User; onSaved: (user: User) => void };
   /** Opened from a friend QR code or invite link. */
@@ -1207,8 +1210,8 @@ export function SharedProfileScreen({
     category: '',
     exercise_id: '',
     machine_photo_id: '',
-    start_date: '',
-    end_date: '',
+    start_date: targetWorkout?.workout_date ?? '',
+    end_date: targetWorkout?.workout_date ?? '',
   });
   const [filterOptions, setFilterOptions] = useState<SharedWorkoutFilterOptions>({
     exercises: [],
@@ -1216,6 +1219,16 @@ export function SharedProfileScreen({
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [loadingWorkouts, setLoadingWorkouts] = useState(false);
+  const linkedWorkoutId =
+    targetWorkout &&
+    filters.start_date === targetWorkout.workout_date &&
+    filters.end_date === targetWorkout.workout_date &&
+    !filters.category &&
+    !filters.workout_type_id &&
+    !filters.exercise_id &&
+    !filters.machine_photo_id
+      ? targetWorkout.id
+      : undefined;
   const invalidDates = Boolean(
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
@@ -1279,7 +1292,7 @@ export function SharedProfileScreen({
         nextProfile = await inviteRequest.current.done;
       }
       // A friends-only profile of a non-friend shares only its name and photo.
-      const [page, options] = initial
+      const [firstPage, options] = initial
         ? [initial[1], initial[2]]
         : nextProfile.can_view
           ? await Promise.all([
@@ -1291,6 +1304,29 @@ export function SharedProfileScreen({
               { exercises: [], machines: [] },
             ];
       if (cancelled) return;
+      let page = firstPage;
+      // A session link can refer to an older workout, including beyond the first page that day.
+      if (linkedWorkoutId) {
+        while (
+          !page.workouts.some((workout) => workout.id === linkedWorkoutId) &&
+          page.workouts.length < page.total
+        ) {
+          const more = await api.sharing.workouts(
+            profileId,
+            page.workouts.length,
+            SHARED_WORKOUT_PAGE_SIZE,
+            filters,
+          );
+          if (cancelled) return;
+          if (!more.workouts.length) break;
+          page = {
+            ...more,
+            workouts: [...page.workouts, ...more.workouts],
+            personal_records: [...page.personal_records, ...more.personal_records],
+            reactions: { ...page.reactions, ...more.reactions },
+          };
+        }
+      }
       if (inviteRequest.current) inviteRequest.current.shown = true;
       loadedFilters.current = filterKey;
       setProfile(nextProfile);
@@ -1315,7 +1351,18 @@ export function SharedProfileScreen({
     return () => {
       cancelled = true;
     };
-  }, [profileId, attempt, filters, filterKey, invalidDates, active, preload, dataRevision, invite]);
+  }, [
+    profileId,
+    attempt,
+    filters,
+    filterKey,
+    invalidDates,
+    active,
+    preload,
+    dataRevision,
+    invite,
+    linkedWorkoutId,
+  ]);
 
   async function loadMore() {
     if (loadingMore || loadingWorkouts || invalidDates) return;
@@ -1596,6 +1643,13 @@ export function SharedProfileScreen({
               <h2 id="shared-workouts-title">Workouts</h2>
               <span className="num">{plural(total, 'workout')}</span>
             </header>
+            {linkedWorkoutId &&
+              !loadingWorkouts &&
+              !workouts.some((workout) => workout.id === linkedWorkoutId) && (
+                <p className="inline-error" role="alert">
+                  This workout is no longer available.
+                </p>
+              )}
             <SharedWorkoutFilters
               filters={filters}
               options={filterOptions}
@@ -1621,6 +1675,7 @@ export function SharedProfileScreen({
             ) : (
               renderWorkouts({
                 workouts,
+                focusWorkoutId: linkedWorkoutId,
                 personalRecords: records,
                 renderWorkoutAction: (workout) => (
                   <WorkoutReactionControl
