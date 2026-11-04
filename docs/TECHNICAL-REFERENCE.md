@@ -327,19 +327,46 @@ to CI: run one locally only when changing its test infrastructure or configurati
 rerun the specific tests behind a CI failure. Do not rerun unrelated passing checks after
 every small edit. Documentation-only changes need documentation checks, not application suites.
 
-The GitHub **Checks** workflow runs full frontend and backend jobs in parallel on every PR
-(including stacked PRs), on `main` pushes, and on manual dispatch. It caches dependencies
-and cancels superseded runs. Before merging, require both **Frontend checks** and
-**Backend checks** to pass for the current PR revision. Making these checks mandatory in a
-GitHub ruleset is a separate maintainer action after the workflow is available; adding the
-workflow does not change existing branch protection or authorise a merge or deployment.
+The GitHub **Checks** workflow selects relevant full suites for feature PRs, including
+stacked PRs, from the changed files in the exact tested merge commit:
+
+- `frontend/` changes run frontend checks; `backend/`, `pyproject.toml` and
+  `alembic.ini` changes run backend checks.
+- Backend route, schema, model and frontend-serving modules, plus
+  `frontend/src/api.ts` and `frontend/src/types.ts`, run both suites. The detector's
+  tests guard the route-module mapping when new API routers are added.
+- CI, deployment, shared configuration and unknown paths run both suites.
+- Changes confined to `docs/`, the README, contributor/agent instructions or license
+  files need neither application suite on feature PRs.
+- PRs into `main`, `main` pushes and manual dispatch always run both suites.
+
+Both required job names, **Frontend checks** and **Backend checks**, remain present.
+An unaffected job reports success without checking out code, installing dependencies
+or running its suite. Detection failure, cancellation or invalid output fails both
+required jobs. Labels do not control selection, and the workflow is never suppressed
+by path filters. Detection uses a depth-two checkout and a NUL-delimited Git diff,
+including both paths of renames, without the file-count limits of API/path filtering.
+
+Test the detector and the actual shell gates without application dependencies:
+
+```sh
+python -m unittest discover -s .github/scripts -p 'test_*.py'
+ruff format --check .github/scripts
+ruff check .github/scripts
+```
+
+The workflow caches dependencies and cancels superseded runs. Before merging, require
+both check jobs to pass for the current PR revision. An explicit not-needed result is
+valid; a pending or failed job is not. Workflow changes do not alter branch protection
+or authorise a merge or deployment. The separate **Dependency security** workflow is
+unchanged and still audits both dependency sets.
 
 CI runs the full verification below. Run it locally only for the exceptions above, from
 the repository root:
 
 ```powershell
-ruff format --check backend
-ruff check backend
+ruff format --check backend .github/scripts
+ruff check backend .github/scripts
 python -m pytest --durations=10
 Set-Location frontend; npm run format:check; npm run lint; npm run build; npm test
 ```
