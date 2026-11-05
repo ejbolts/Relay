@@ -37,6 +37,7 @@ vi.mock('./api', async (importOriginal) => {
       lastUsedMachinePhotos: vi.fn(),
       uploadMachinePhoto: vi.fn(),
       deleteMachinePhoto: vi.fn(),
+      updateMachinePhoto: vi.fn(),
       listAllMachinePhotos: vi.fn(),
       machinePhotoWorkouts: vi.fn(),
       exerciseLibrary: vi.fn().mockResolvedValue([]),
@@ -352,6 +353,79 @@ describe('saving and pinning a machine photo while logging', () => {
     const rail = container.querySelector('.machine-photo-rail')!;
     expect(rail.getAttribute('aria-label')).toBe('Saved equipment photos for Leg Press');
     expect(rail.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('confirms a saved machine name, restarts the timeout and allows early dismissal', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    vi.mocked(api.updateMachinePhoto).mockImplementation(async (_id, caption) => ({
+      ...homeGym,
+      caption,
+    }));
+    await act(async () => root.render(<App />));
+    await click(button(`Expand ${homeGym.caption}`));
+    const input = container.querySelector<HTMLInputElement>('.photo-detail-caption input')!;
+    const notice = () => document.querySelector('.app-notification-toast');
+
+    await type(input, '  Hammer leg press  ');
+    input.focus();
+    await click(button('Save name'));
+    expect(api.updateMachinePhoto).toHaveBeenCalledWith(homeGym.id, 'Hammer leg press');
+    expect(notice()?.textContent).toContain('Machine name saved');
+    expect(container.querySelector('.photo-detail')?.getAttribute('aria-label')).toBe(
+      'Hammer leg press',
+    );
+    expect(document.activeElement).toBe(input);
+
+    await act(async () => vi.advanceTimersByTime(4000));
+    await type(input, 'Hammer leg press 2');
+    await click(button('Save name'));
+    await act(async () => vi.advanceTimersByTime(7999));
+    expect(notice()).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(notice()).toBeNull();
+
+    await type(input, 'Hammer leg press 3');
+    await click(button('Save name'));
+    expect(notice()).not.toBeNull();
+    await click(button('Close notification'));
+    expect(notice()).toBeNull();
+  });
+
+  it('waits for the machine name to save and keeps failures beside the input', async () => {
+    let rejectSave!: (error: Error) => void;
+    vi.mocked(api.updateMachinePhoto).mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectSave = reject;
+      }),
+    );
+    await act(async () => root.render(<App />));
+    await click(button(`Expand ${homeGym.caption}`));
+    const input = container.querySelector<HTMLInputElement>('.photo-detail-caption input')!;
+    await type(input, 'Hammer leg press');
+    await click(button('Save name'));
+    expect(button('Save name').disabled).toBe(true);
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+
+    await act(async () => rejectSave(new Error('Could not save machine name.')));
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(container.querySelector('.photo-detail [role="alert"]')?.textContent).toContain(
+      'Could not save machine name.',
+    );
+    expect(input.value).toBe('Hammer leg press');
+    expect(button('Save name').disabled).toBe(false);
+  });
+
+  it('does not confirm blank or unchanged machine names', async () => {
+    await act(async () => root.render(<App />));
+    await click(button(`Expand ${homeGym.caption}`));
+    await click(button('Save name'));
+    await type(container.querySelector<HTMLInputElement>('.photo-detail-caption input')!, '   ');
+    await click(button('Save name'));
+    expect(api.updateMachinePhoto).not.toHaveBeenCalled();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
   });
 
   it('explains deletion from saved workouts and lets the user cancel', async () => {

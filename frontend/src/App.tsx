@@ -6009,6 +6009,7 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
   const images = photo.images?.length ? photo.images : [photo];
   const image = images[Math.min(imageIndex, images.length - 1)];
@@ -6021,7 +6022,9 @@ function MachinePhotoDetail({
     setError(null);
     try {
       await onUpdate(photo, caption.trim());
+      setSaveNotice((current) => current + 1);
     } catch (saveError) {
+      setSaveNotice(0);
       setError(saveError instanceof Error ? saveError.message : 'Could not update the caption.');
     } finally {
       setSaving(false);
@@ -6046,6 +6049,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {saveNotice > 0 && (
+        <NotificationDialog
+          key={saveNotice}
+          message="Machine name saved"
+          onClose={() => setSaveNotice(0)}
+        />
+      )}
       <div>
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
