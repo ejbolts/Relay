@@ -5,6 +5,8 @@ import type { StoredDraftMovement } from './workoutDraft';
 export type WorkoutDraftSet = WorkoutSetInput & {
   key: string;
   fromPrevious?: boolean;
+  restRevealed?: boolean;
+  restConfirmed?: boolean;
 };
 
 export type WorkoutDraftMovement = {

@@ -712,7 +712,14 @@ describe('saved training splits on Home', () => {
     expect(draft.workoutTypeId).toBe(custom.id);
     expect(draft.movements[0].exerciseId).toBe(bench.id);
     expect(draft.movements[0].sets).toMatchObject([
-      { reps: 10, weight_kg: 35, rest_seconds: 120, completed: false, fromPrevious: true },
+      {
+        reps: 10,
+        weight_kg: 35,
+        rest_seconds: 120,
+        completed: false,
+        fromPrevious: true,
+        restRevealed: false,
+      },
       { reps: 8, weight_kg: 37.5, rest_seconds: 90, completed: false, set_type: 'drop' },
     ]);
     expect(api.createWorkout).not.toHaveBeenCalled();
@@ -765,6 +772,55 @@ describe('saved training splits on Home', () => {
 });
 
 describe('rest time controls', () => {
+  it('reveals rests only for newly added or completed sets and keeps that state after reload', async () => {
+    const draft = storedDraft();
+    const suggested = draft.movements[0].sets[0];
+    suggested.completed = false;
+    suggested.fromPrevious = true;
+    suggested.restRevealed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    expect(restControl()).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('.add-set-button')!.click());
+    expect(restControl()).toBeNull();
+    expect(container.querySelector('[aria-label="Rest after set 2"]')).not.toBeNull();
+    await click('Complete set 1');
+    expect(restControl()?.value).toBe('180');
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
+    await click('Mark set 1 incomplete');
+    expect(restControl()).not.toBeNull();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(restControl()).not.toBeNull();
+    expect(container.querySelector('[aria-label="Rest after set 2"]')).not.toBeNull();
+  });
+
+  it('does not reveal a suggested rest just because its weight is edited', async () => {
+    const draft = storedDraft();
+    const set = draft.movements[0].sets[0];
+    set.completed = false;
+    set.fromPrevious = true;
+    set.restRevealed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await click('Options for set 1');
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
+        .find((button) => button.textContent?.includes('Edit set'))!
+        .click(),
+    );
+    const input = container.querySelector<HTMLInputElement>('[data-set-key="set-0"] input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '85');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].fromPrevious).toBe(false);
+    expect(restControl()).toBeNull();
+    await click('Complete set 1');
+    expect(restControl()).not.toBeNull();
+  });
+
   function restControl() {
     return (
       container
@@ -2228,6 +2284,8 @@ describe('inactive workout suggestions', () => {
 
   it('does not turn planned sets into performed sets when rest is edited', async () => {
     const draft = expiredSuggestions(false);
+    // A manually added set can still have suggested performance and a visible rest.
+    draft.movements[0].sets[0].restRevealed = true;
     writeActiveWorkoutDraft(draft);
     await mount();
     const rest = container.querySelector<HTMLSelectElement>('[aria-label="Rest after set 1"]')!;

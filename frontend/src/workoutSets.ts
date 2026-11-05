@@ -38,7 +38,7 @@ export function createSuggestedWorkoutSet(
 ): WorkoutSetInput {
   return {
     ...createWorkoutSet(kind, previous, false),
-    rest_seconds: kind === 'strength' ? DEFAULT_REST_SECONDS : null,
+    rest_seconds: kind === 'strength' ? previous.rest_seconds : null,
   };
 }
 

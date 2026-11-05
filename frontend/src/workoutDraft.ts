@@ -20,6 +20,8 @@ export interface DraftStorage {
 export interface StoredDraftSet extends WorkoutSetInput {
   key: string;
   fromPrevious?: boolean;
+  restRevealed?: boolean;
+  restConfirmed?: boolean;
 }
 
 export interface StoredDraftMovement {
@@ -136,6 +138,8 @@ function isStoredSet(value: unknown): value is StoredDraftSet {
     typeof value.key === 'string' &&
     typeof value.completed === 'boolean' &&
     (value.fromPrevious === undefined || typeof value.fromPrevious === 'boolean') &&
+    (value.restRevealed === undefined || typeof value.restRevealed === 'boolean') &&
+    (value.restConfirmed === undefined || typeof value.restConfirmed === 'boolean') &&
     (value.notes === null || typeof value.notes === 'string')
   );
 }

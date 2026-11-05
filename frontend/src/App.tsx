@@ -198,6 +198,7 @@ import {
   saveRestTimesPreference,
 } from './restTimerPreference';
 import { RestTimeSelect } from './RestTimeSelect';
+import { SetRestControl } from './SetRestControl';
 import { cancelRestTimerPushSchedule, restSecondsLeft } from './restTimer';
 import {
   disablePhonePushNotifications,
@@ -397,6 +398,7 @@ function emptySet(
   return {
     key: crypto.randomUUID(),
     ...createWorkoutSet(kind, previous, isFirstSet),
+    restRevealed: true,
     ...(previous && { fromPrevious: true }),
   };
 }
@@ -429,6 +431,7 @@ function suggestedSetsFromHistory(
     key: crypto.randomUUID(),
     ...createSuggestedWorkoutSet(exercise.kind, previous),
     fromPrevious: true,
+    restRevealed: false,
   }));
 }
 
@@ -2717,6 +2720,7 @@ function WorkoutLogger({
                   warmup: set.set_type === 'warmup',
                   completed: false,
                   fromPrevious: true,
+                  restRevealed: false,
                 }))
               : suggestedSetsFromHistory(
                   historicalWorkouts,
@@ -3371,7 +3375,14 @@ function WorkoutLogger({
       current.map((movement) => {
         if (movement.key !== movementKey) return movement;
         const sets = movement.sets.map((item) =>
-          item.key === setKey ? workoutSetAfterEdit(item, update) : item,
+          item.key === setKey
+            ? workoutSetAfterEdit(item, {
+                restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
+                ...update,
+                ...(update.completed === true && { restRevealed: true }),
+                ...(update.rest_seconds !== undefined && { restConfirmed: true }),
+              })
+            : item,
         );
         return {
           ...movement,
@@ -3942,9 +3953,9 @@ function WorkoutLogger({
                   : null
               }
               history={recentExerciseHistory(
-                historicalWorkouts,
+                historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
-                initialWorkout?.id,
+                initialWorkout?.id ?? resumedWorkoutId ?? undefined,
                 undefined,
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
@@ -5468,30 +5479,29 @@ function MovementCard({
                   {open ? renderSetEditor(item, index) : renderSetSummary(item, index)}
                 </div>
               </SwipeToDeleteSetRow>
-              {!cardio && showRestTimes && (item.rest_seconds ?? 0) > 0 && (
-                <SwipeToDeleteSetRow
-                  flipKey={`${item.key}:rest`}
-                  label={`rest after set ${index + 1}`}
-                  onDelete={() => removeRest(item)}
-                >
-                  <div className="rest-between">
-                    <i />
-                    <label>
-                      <RestTimeSelect
-                        seconds={item.rest_seconds!}
-                        label={`Rest after set ${index + 1}`}
-                        onChange={(seconds) => {
-                          clearRestEdit(item.key);
-                          if (seconds === 0) removeRest(item);
-                          else onUpdateSet(item.key, { rest_seconds: seconds });
-                        }}
-                      />
-                      <span>rest</span>
-                    </label>
-                    <i />
-                  </div>
-                </SwipeToDeleteSetRow>
-              )}
+              {!cardio &&
+                showRestTimes &&
+                (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+                (item.rest_seconds ?? 0) > 0 && (
+                  <SwipeToDeleteSetRow
+                    flipKey={`${item.key}:rest`}
+                    label={`rest after set ${index + 1}`}
+                    onDelete={() => removeRest(item)}
+                  >
+                    <SetRestControl
+                      seconds={item.rest_seconds!}
+                      setIndex={index}
+                      sets={movement.sets}
+                      history={history}
+                      suggested={!item.completed && !item.restConfirmed}
+                      onChange={(seconds) => {
+                        clearRestEdit(item.key);
+                        if (seconds === 0) removeRest(item);
+                        else onUpdateSet(item.key, { rest_seconds: seconds });
+                      }}
+                    />
+                  </SwipeToDeleteSetRow>
+                )}
             </Fragment>
           );
         })}
