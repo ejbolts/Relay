@@ -152,6 +152,8 @@ import { usePresenceConnection } from './presence';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
+import { OfflineNotice } from './OfflineNotice';
+import { useOfflineNotice } from './useOfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
@@ -592,6 +594,7 @@ function AppContent() {
   usePresenceConnection(user?.id ?? null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
+  const offlineNotice = useOfflineNotice();
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
   const [guideWaiting, setGuideWaiting] = useState(() => user !== null && appGuideWaiting(user.id));
   const [guideRequested, setGuideRequested] = useState(false);
@@ -1574,7 +1577,7 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}${offlineNotice.visible ? ' has-offline-notice' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner
@@ -1584,6 +1587,7 @@ function AppContent() {
             onRefresh={() => void appUpdates.refresh()}
           />
         )}
+        {offlineNotice.visible && <OfflineNotice onDismiss={offlineNotice.dismiss} />}
         {prompt === 'release' && (
           <ReleaseAnnouncement
             release={announcement.release}
