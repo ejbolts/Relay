@@ -81,13 +81,16 @@ def select_event(event_name: str, event: dict, merge_sha: str, root: Path = ROOT
         raise ValueError("PR commit identifiers are invalid")
     actual = git(root, "rev-parse", "HEAD").decode().strip()
     parents = git(root, "show", "-s", "--format=%P", "HEAD").decode().split()
-    if actual != merge_sha or parents != [base, head]:
+    if actual != merge_sha or len(parents) != 2 or parents[1] != head or parents[0] == head:
         raise ValueError("Checkout does not match the event's PR merge and parents")
+    # The event's base SHA can lag behind the base branch tip that GitHub merged
+    # into the tested commit, so compare against the merge's actual base parent.
+    tested_base = parents[0]
     # The depth-two checkout contains the merge and both parents. Comparing its
     # base parent with the tested tree avoids API pagination/file-count limits,
     # unrelated base-branch changes and the need to download all repository history.
     # Disable rename detection so both sides of a cross-area move are considered.
-    names = git(root, "diff", "--name-only", "--no-renames", "-z", base, actual, "--")
+    names = git(root, "diff", "--name-only", "--no-renames", "-z", tested_base, actual, "--")
     if names and not names.endswith(b"\0"):
         raise ValueError("Incomplete changed-file output")
     return select_paths([os.fsdecode(name) for name in names.split(b"\0") if name])
