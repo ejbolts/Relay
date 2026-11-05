@@ -5239,21 +5239,6 @@ function MovementCard({
             >
               {movement.exercise.name}
             </button>
-            <ExerciseMuscleHelp exercise={movement.exercise} />
-            <button
-              type="button"
-              className="movement-expand-toggle"
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
-              aria-expanded={expanded}
-              onClick={(event) => {
-                event.stopPropagation();
-                setExpanded((current) => !current);
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="m4 7 6 6 6-6" />
-              </svg>
-            </button>
           </h2>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
@@ -5271,6 +5256,18 @@ function MovementCard({
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
+          <ExerciseMuscleHelp exercise={movement.exercise} />
+          <button
+            type="button"
+            className="movement-expand-toggle"
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="m4 7 6 6 6-6" />
+            </svg>
+          </button>
           {barType && (
             <button
               type="button"
@@ -6018,6 +6015,7 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
   const images = photo.images?.length ? photo.images : [photo];
   const image = images[Math.min(imageIndex, images.length - 1)];
@@ -6030,7 +6028,9 @@ function MachinePhotoDetail({
     setError(null);
     try {
       await onUpdate(photo, caption.trim());
+      setSaveNotice((current) => current + 1);
     } catch (saveError) {
+      setSaveNotice(0);
       setError(saveError instanceof Error ? saveError.message : 'Could not update the caption.');
     } finally {
       setSaving(false);
@@ -6055,6 +6055,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {saveNotice > 0 && (
+        <NotificationDialog
+          key={saveNotice}
+          message="Machine name saved"
+          onClose={() => setSaveNotice(0)}
+        />
+      )}
       <div>
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
