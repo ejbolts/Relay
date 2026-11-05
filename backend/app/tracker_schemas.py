@@ -39,6 +39,10 @@ class MuscleSetCreditCreate(BaseModel):
         return value
 
 
+class ExerciseMerge(BaseModel):
+    target_exercise_id: str = Field(min_length=1, max_length=36)
+
+
 class ExerciseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     category: WorkoutCategory
@@ -78,6 +82,7 @@ class ExercisePartialSetWeekRead(BaseModel):
 
 
 class ExerciseRead(BaseModel):
+    merged_from_ids: list[str] = Field(default_factory=list)
     model_config = ConfigDict(from_attributes=True)
 
     id: str
