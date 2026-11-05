@@ -304,7 +304,11 @@ frontend `RoutinePanel` and workout recovery tests.
 
 Exercise merges use `POST /api/exercises/{source_id}/merge` with `target_exercise_id`.
 Both exercises must belong to the signed-in account, the source must be custom and their
-kinds must match. The transaction transfers movements, machine photos and saved routine
+kinds, equipment categories and complete configured muscle-group lists must match.
+Muscle matching includes partial credits even when weekly partial counting is disabled;
+credit factors and muscle order do not need to match. Equipment spelling aliases follow
+the library's categories (for example, DB and Dumbbell). The transaction transfers
+movements, machine photos and saved routine
 references, retains the destination's muscle credits and existing defaults, and rebuilds
 records against the combined history. Photo-specific presets move with their photos;
 an existing destination weight mapping wins because separate reference scales cannot be

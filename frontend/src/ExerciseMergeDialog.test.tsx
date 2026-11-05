@@ -59,7 +59,14 @@ beforeEach(async () => {
   await act(async () =>
     root.render(
       <ExerciseMergeDialog
-        exercises={[official, custom, other, cardio]}
+        exercises={[
+          official,
+          custom,
+          other,
+          cardio,
+          { ...official, id: 'dumbbell', name: 'Dumbbell press', equipment: 'Dumbbell' },
+          { ...official, id: 'squat', name: 'Squat', muscle_group: 'Quads' },
+        ]}
         onMerged={merged}
         onClose={close}
       />,
@@ -80,6 +87,10 @@ it('allows only custom sources, matching kinds, and reviews the chosen destinati
   await source('custom');
   expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain('My run');
   expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain('My bench');
+  expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain(
+    'Dumbbell press',
+  );
+  expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain('Squat');
   expect(submit().disabled).toBe(true);
   await search('bench');
   await click(destination('Barbell Bench Press'));
@@ -99,12 +110,12 @@ it('resets the destination when changing source and supports another custom exer
   await source('cardio');
   expect(submit().disabled).toBe(true);
   expect(document.querySelector('.exercise-merge-targets')?.textContent).toContain(
-    'No matching cardio exercises',
+    'No exercises match these muscle groups and equipment',
   );
   await source('custom');
   await search('nonsense');
   expect(document.querySelector('.exercise-merge-targets')?.textContent).toContain(
-    'No matching strength exercises',
+    'No exercises match these muscle groups and equipment',
   );
   await search('');
   await click(destination('Custom press'));

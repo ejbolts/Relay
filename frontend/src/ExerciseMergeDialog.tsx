@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import { exerciseSearchScore } from './exerciseSearch';
+import { canMergeExercises } from './exerciseMergeCompatibility';
 import type { Exercise } from './types';
 import './exerciseMerge.css';
 
@@ -23,14 +24,13 @@ export function ExerciseMergeDialog({
   const [error, setError] = useState('');
   const busy = useRef(false);
   const source = exercises.find((item) => item.id === sourceId);
-  const target = exercises.find((item) => item.id === targetId);
+  const target = exercises.find(
+    (item) => item.id === targetId && source && canMergeExercises(source, item),
+  );
   const targets = exercises
     .filter(
       (item) =>
-        source &&
-        item.id !== source.id &&
-        item.kind === source.kind &&
-        exerciseSearchScore(item, query) !== null,
+        source && canMergeExercises(source, item) && exerciseSearchScore(item, query) !== null,
     )
     .sort(
       (a, b) =>
@@ -39,7 +39,7 @@ export function ExerciseMergeDialog({
     );
 
   async function merge() {
-    if (!source || !target || busy.current) return;
+    if (!source || !target || !canMergeExercises(source, target) || busy.current) return;
     busy.current = true;
     setSaving(true);
     setError('');
@@ -98,7 +98,7 @@ export function ExerciseMergeDialog({
                 <input
                   type="search"
                   aria-label="Search merge destination"
-                  placeholder="Search exercises"
+                  placeholder="Search matching exercises"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -125,7 +125,9 @@ export function ExerciseMergeDialog({
                     </span>
                   </label>
                 ))}
-                {!targets.length && <p role="status">No matching {source.kind} exercises.</p>}
+                {!targets.length && (
+                  <p role="status">No exercises match these muscle groups and equipment.</p>
+                )}
               </div>
             </>
           )}

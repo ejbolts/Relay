@@ -10,7 +10,15 @@ from app.models import CardioSession, UserSetting
 
 
 def custom(client, name="My cable press", **changes):
-    response = client.post("/api/exercises", json=exercise_payload(name=name, **changes))
+    template = official(
+        client, "Running" if changes.get("kind") == "cardio" else "Barbell Bench Press"
+    )
+    defaults = {key: template[key] for key in ("category", "kind", "muscle_group", "equipment")}
+    if template["kind"] == "strength":
+        defaults["muscle_set_credits"] = template["default_muscle_set_credits"]
+    response = client.post(
+        "/api/exercises", json=exercise_payload(name=name, **(defaults | changes))
+    )
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -133,6 +141,9 @@ def test_records_are_recalculated_against_the_combined_history(client):
         ("foreign_source", 404),
         ("foreign_target", 404),
         ("missing", 404),
+        ("equipment", 422),
+        ("muscles", 422),
+        ("muscle_subset", 422),
     ],
 )
 def test_invalid_merges_are_atomic_and_account_scoped(client, other_client, case, status):
@@ -149,12 +160,56 @@ def test_invalid_merges_are_atomic_and_account_scoped(client, other_client, case
         target = official(other_client)
     elif case == "missing":
         target = {"id": "missing"}
+    elif case == "equipment":
+        target = official(client, "Dumbbell Bench Press")
+    elif case == "muscles":
+        target = official(client, "Overhead Press")
+    elif case == "muscle_subset":
+        target = custom(
+            client, "Partial match", muscle_set_credits=[{"muscle_name": "Pectorals", "sets": 1}]
+        )
     before = client.get("/api/exercises").json()
     revision = client.get("/api/workouts/revision").json()
     response = merge(client, source, target)
     assert response.status_code == status, response.text
     assert client.get("/api/exercises").json() == before
     assert client.get("/api/workouts/revision").json() == revision
+
+
+def test_merge_matches_all_muscles_independent_of_order_aliases_and_partial_set_settings(client):
+    source = custom(
+        client,
+        equipment=" BB ",
+        muscle_set_credits=[
+            {"muscle_name": "TRICEPS", "sets": 1},
+            {"muscle_name": "Upper pectorals", "sets": 0.5},
+            {"muscle_name": "Anterior deltoids", "sets": 1},
+        ],
+    )
+    target = official(client)
+    client.patch(
+        f"/api/exercises/{source['id']}/partial-sets", json={"partial_sets_enabled": False}
+    )
+    assert merge(client, source, target).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "first, second, allowed",
+    [
+        (None, None, True),
+        ("Smith-machine", "smith", True),
+        ("DB", "Dumbbells", True),
+        ("Machine A", " machine a ", True),
+        ("Machine A", "Machine B", False),
+        (None, "Barbell", False),
+    ],
+)
+def test_equipment_matching_is_normalized_but_keeps_distinct_types(client, first, second, allowed):
+    source, target = (
+        custom(client, "Source", equipment=first),
+        custom(client, "Target", equipment=second),
+    )
+    assert merge(client, source, target).status_code == (200 if allowed else 422)
 
 
 def test_cardio_merge_preserves_metrics_and_updates_activity(client):

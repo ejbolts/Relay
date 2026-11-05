@@ -1,6 +1,7 @@
 """Account-local exercise merges, including references in saved splits and old drafts."""
 
 import json
+import re
 
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
@@ -14,9 +15,41 @@ from .models import (
     UserSetting,
     WorkoutMovement,
 )
-from .training_metrics import rebuild_personal_records, set_setting
+from .training_metrics import (
+    MUSCLE_GROUP_ALIASES,
+    muscle_credits,
+    rebuild_personal_records,
+    set_setting,
+)
 
 ALIAS_PREFIX = "exercise_merge:"
+
+EQUIPMENT_GROUPS = (
+    ("barbell", "bb", "barbells"),
+    ("dumbbell", "db", "dumbbells"),
+    ("cable", "cables"),
+    ("machine", "machines"),
+    ("smith machine", "smith"),
+    ("ez bar", "ez curl bar"),
+    ("trap bar", "hex bar"),
+    ("kettlebell", "kb", "kettlebells"),
+    ("resistance band", "band", "bands", "resistance bands"),
+    ("bodyweight", "body weight"),
+)
+EQUIPMENT_ALIASES = {alias: group[0] for group in EQUIPMENT_GROUPS for alias in group}
+
+
+def merge_equipment(exercise: Exercise) -> str:
+    value = " ".join(re.sub(r"[-_]", " ", exercise.equipment or "").split()).casefold()
+    return EQUIPMENT_ALIASES.get(value, value or "unspecified")
+
+
+def merge_muscles(exercise: Exercise) -> set[str]:
+    # Use the full configured muscle list, independent of weekly partial-set toggles.
+    names = [name for name, _ in muscle_credits(exercise, include_partial=True)]
+    aliases = {key.casefold(): value.casefold() for key, value in MUSCLE_GROUP_ALIASES.items()}
+    cleaned = {" ".join(name.split()).casefold() for name in names or [exercise.muscle_group]}
+    return {aliases.get(name, name) for name in cleaned}
 
 
 def exercise_aliases(db: Session, user_id: str) -> dict[str, str]:
@@ -46,6 +79,10 @@ def merge_exercise(db: Session, user_id: str, source_id: str, target_id: str) ->
         raise HTTPException(422, "Only a custom exercise can be merged into another exercise.")
     if source.kind != target.kind:
         raise HTTPException(422, "Choose two strength exercises or two cardio exercises.")
+    if merge_equipment(source) != merge_equipment(target):
+        raise HTTPException(422, "Exercises must use the same equipment to merge.")
+    if merge_muscles(source) != merge_muscles(target):
+        raise HTTPException(422, "Exercises must have the same muscle groups to merge.")
 
     target.is_favorite = target.is_favorite or source.is_favorite
     # Keep movement rows (even when both exercises appear in a workout), sets,
