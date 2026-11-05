@@ -215,8 +215,13 @@ class MergeSelectionTests(unittest.TestCase):
     def test_wrong_commit_or_event_parents_fail_closed(self):
         self.write("frontend/original.txt", "changed")
         event, merge = self.merge()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as caught:
             select_event("pull_request", event, "a" * 40, self.root)
+        # The failure names the commits involved so a mismatch can be diagnosed
+        # from the CI log alone.
+        message = str(caught.exception)
+        for sha in ("a" * 40, merge, event["pull_request"]["head"]["sha"]):
+            self.assertIn(sha, message)
         event["pull_request"]["head"]["sha"] = event["pull_request"]["base"]["sha"]
         with self.assertRaises(ValueError):
             select_event("pull_request", event, merge, self.root)

@@ -82,7 +82,12 @@ def select_event(event_name: str, event: dict, merge_sha: str, root: Path = ROOT
     actual = git(root, "rev-parse", "HEAD").decode().strip()
     parents = git(root, "show", "-s", "--format=%P", "HEAD").decode().split()
     if actual != merge_sha or len(parents) != 2 or parents[1] != head or parents[0] == head:
-        raise ValueError("Checkout does not match the event's PR merge and parents")
+        raise ValueError(
+            "Checkout does not match the event's PR merge and parents: "
+            f"expected merge {merge_sha} with head parent {head} "
+            f"(event base {base}); checked out {actual} "
+            f"with parents {' '.join(parents) or 'none'}"
+        )
     # The event's base SHA can lag behind the base branch tip that GitHub merged
     # into the tested commit, so compare against the merge's actual base parent.
     tested_base = parents[0]
