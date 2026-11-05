@@ -36,10 +36,13 @@ describe('new workout sets', () => {
     expect(createWorkoutSet('strength').rest_seconds).toBe(180);
   });
 
-  it('uses three minutes for a set suggested from the previous workout', () => {
+  it('keeps the matching previous rest for a suggested set, including no rest', () => {
     expect(
       createSuggestedWorkoutSet('strength', { ...previousSet, rest_seconds: 120 }).rest_seconds,
-    ).toBe(180);
+    ).toBe(120);
+    expect(
+      createSuggestedWorkoutSet('strength', { ...previousSet, rest_seconds: null }).rest_seconds,
+    ).toBeNull();
   });
 
   it('defaults the first set to a warm-up', () => {
