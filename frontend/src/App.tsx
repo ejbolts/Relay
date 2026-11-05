@@ -5230,21 +5230,6 @@ function MovementCard({
             >
               {movement.exercise.name}
             </button>
-            <ExerciseMuscleHelp exercise={movement.exercise} />
-            <button
-              type="button"
-              className="movement-expand-toggle"
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
-              aria-expanded={expanded}
-              onClick={(event) => {
-                event.stopPropagation();
-                setExpanded((current) => !current);
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="m4 7 6 6 6-6" />
-              </svg>
-            </button>
           </h2>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
@@ -5262,6 +5247,18 @@ function MovementCard({
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
+          <ExerciseMuscleHelp exercise={movement.exercise} />
+          <button
+            type="button"
+            className="movement-expand-toggle"
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="m4 7 6 6 6-6" />
+            </svg>
+          </button>
           {barType && (
             <button
               type="button"
