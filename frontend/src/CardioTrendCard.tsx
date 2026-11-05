@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CardioOverview } from './types';
 import { CardioEnergyCard } from './CardioEnergyCard';
-import { cardioTrendWeeks } from './cardioTrend';
+import { cardioDistanceGroups, cardioTrendWeeks, distanceGroupFor } from './cardioTrend';
 import { Icon } from './Icon';
 
 const metrics = [
@@ -17,9 +17,27 @@ const shortDate = (value: string) =>
 export function CardioTrendCard({ overview, today }: { overview: CardioOverview; today: string }) {
   const [metricKey, setMetricKey] = useState<(typeof metrics)[number]['key']>('time');
   const [selectedStart, setSelectedStart] = useState<string | null>(null);
-  const weeks = cardioTrendWeeks(overview.sessions, overview.current_week.week_start, today);
-  const selected = weeks.slice(1).find((week) => week.start === selectedStart) ?? weeks[8];
-  const previous = weeks[weeks.indexOf(selected) - 1];
+  const [distanceKey, setDistanceKey] = useState<string | null>(null);
+  const currentStart = overview.current_week.week_start;
+  const allWeeks = cardioTrendWeeks(overview.sessions, currentStart, today);
+  const distanceGroups = cardioDistanceGroups(overview.sessions, allWeeks[1].start, today);
+  const distanceGroup =
+    distanceGroups.find((group) => group.key === distanceKey) ?? distanceGroups[0] ?? null;
+  const distanceWeeks = distanceGroup
+    ? cardioTrendWeeks(
+        overview.sessions.filter(
+          (session) => distanceGroupFor(session.activity_type).key === distanceGroup.key,
+        ),
+        currentStart,
+        today,
+      )
+    : allWeeks;
+  const weeks = metricKey === 'distance' ? distanceWeeks : allWeeks;
+  const found = weeks.findIndex((week, i) => i > 0 && week.start === selectedStart);
+  const index = found > 0 ? found : 8;
+  const selected = weeks[index];
+  const previous = weeks[index - 1];
+  const selectedDistance = distanceWeeks[index].distance;
   const metric = metrics.find((item) => item.key === metricKey)!;
   const value = selected[metricKey];
   const previousValue = previous[metricKey];
@@ -45,6 +63,21 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
           </button>
         ))}
       </div>
+      {metricKey === 'distance' && distanceGroups.length > 1 && (
+        <div className="cardio-distance-groups" role="group" aria-label="Distance activity">
+          {distanceGroups.map((group) => (
+            <button
+              key={group.key}
+              type="button"
+              className={distanceGroup?.key === group.key ? 'active' : ''}
+              aria-pressed={distanceGroup?.key === group.key}
+              onClick={() => setDistanceKey(group.key)}
+            >
+              {group.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div aria-live="polite" aria-atomic="true">
         <h2 className="cardio-trend-period">
           {selected.start === overview.current_week.week_start ? 'This week' : 'Week'} ·{' '}
@@ -52,7 +85,13 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
         </h2>
         <div className="cardio-week-value">
           {value === null ? '—' : format(value)}{' '}
-          <small>{'suffix' in metric ? `${metric.unit} ${metric.suffix}` : metric.unit}</small>
+          <small>
+            {'suffix' in metric
+              ? `${metric.unit} ${metric.suffix}`
+              : metricKey === 'distance' && distanceGroups.length === 1
+                ? `${metric.unit} · ${distanceGroups[0].label.toLocaleLowerCase()}`
+                : metric.unit}
+          </small>
         </div>
         <div className="cardio-week-comparison">
           {selected.sessions} {selected.sessions === 1 ? 'session' : 'sessions'}
@@ -109,14 +148,14 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
           <dd>{selected.mets === null ? '—' : selected.mets.toFixed(1)}</dd>
         </div>
         <div>
-          <dt>{metricKey === 'time' ? 'Distance' : 'Time'}</dt>
+          <dt>{metricKey === 'time' ? (distanceGroup?.label ?? 'Distance') : 'Time'}</dt>
           <dd>
             {metricKey === 'time' ? (
-              selected.distance === null ? (
+              selectedDistance === null ? (
                 '—'
               ) : (
                 <>
-                  {format(selected.distance)} <small>km</small>
+                  {format(selectedDistance)} <small>km</small>
                 </>
               )
             ) : (

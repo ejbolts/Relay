@@ -208,6 +208,30 @@ describe('cardio weekly trend screen', () => {
     },
   );
 
+  it('splits distance by activity group and switches between groups', async () => {
+    const hero = () => container.querySelector('.cardio-week-value')!.textContent;
+    const comparison = () => container.querySelector('.cardio-week-comparison')!.textContent;
+    const distanceTile = container.querySelectorAll('.cardio-week-stats > div')[2];
+    expect(distanceTile.querySelector('dt')!.textContent).toBe('Cycling');
+    expect(distanceTile.querySelector('dd')!.textContent).toBe('10 km');
+    expect(container.querySelector('.cardio-distance-groups')).toBeNull();
+    await click(named('Distance'));
+    const groups = container.querySelector('[aria-label="Distance activity"]')!;
+    expect([...groups.querySelectorAll('button')].map((item) => item.textContent)).toEqual([
+      'Cycling',
+      'Walk & run',
+    ]);
+    expect(hero()).toContain('10 km');
+    expect(comparison()).toContain('1 session');
+    expect(comparison()).toContain('No change');
+    await click(named('Walk & run'));
+    expect(named('Walk & run').getAttribute('aria-pressed')).toBe('true');
+    expect(hero()).toContain('10 km');
+    expect(comparison()).toBe('1 session');
+    await click(named('Time'));
+    expect(distanceTile.querySelector('dt')!.textContent).toBe('Walk & run');
+  });
+
   it('opens all stats, switches periods and explains METs in a dismissible popup', async () => {
     await click(container.querySelector('.cardio-all-stats > summary')!);
     expect(container.querySelector('details.cardio-all-stats')!.hasAttribute('open')).toBe(true);
