@@ -30,6 +30,7 @@ _Home: your next workout and training dashboard. Select the screenshot to view i
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
+- Use **Training > Exercises > list options > Merge exercises** to combine a custom exercise with an official or another custom exercise of the same kind. History, records, machine photos and saved splits move to the destination; its muscle credits and existing settings are kept. Merges cannot be undone.
 - Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.
 - Keep logging without a connection. After you have signed in once on a device, Relay opens from the data it saved there, shows **Offline** by the screen title, and syncs a finished workout when the server is reachable again.

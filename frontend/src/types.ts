@@ -107,6 +107,7 @@ export interface MuscleContribution {
 }
 
 export interface Exercise {
+  merged_from_ids?: string[];
   id: string;
   name: string;
   category: WorkoutCategory;

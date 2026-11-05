@@ -44,6 +44,7 @@ from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
 from .exercise_aliases import canonical_exercise_name
+from .exercise_merge import exercise_aliases, merge_exercise, resolve_exercise_id
 from .machine_photos import canonical_photo, merge_machine_photos
 from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
@@ -106,6 +107,7 @@ from .tracker_schemas import (
     ExerciseHistoryBaselineRead,
     ExerciseLatestSessionRead,
     ExerciseLibrarySummaryRead,
+    ExerciseMerge,
     ExercisePartialSetsUpdate,
     ExerciseProgressRead,
     ExerciseRead,
@@ -650,7 +652,9 @@ def replace_workout_contents(
     workout.superset_groups.extend(groups.values())
     db.flush()
     for movement_index, movement_payload in enumerate(payload.movements):
-        exercise = get_owned(db, Exercise, movement_payload.exercise_id, user_id)
+        exercise = get_owned(
+            db, Exercise, resolve_exercise_id(db, user_id, movement_payload.exercise_id), user_id
+        )
         if not exercise:
             raise HTTPException(
                 status_code=422,
@@ -820,16 +824,33 @@ def sync_all_workout_cardio_sessions(db: Session, user_id: str | None = None) ->
         sync_workout_cardio_sessions(db, workout)
 
 
+def exercise_read(db: Session, user_id: str, exercise: Exercise) -> ExerciseRead:
+    aliases = exercise_aliases(db, user_id)
+    return ExerciseRead.model_validate(exercise).model_copy(
+        update={
+            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id]
+        }
+    )
+
+
 @router.get("/exercises", response_model=list[ExerciseRead])
 def list_exercises(
     db: DbSession,
     user: CurrentUser,
     search: str | None = Query(default=None, max_length=100),
-) -> list[Exercise]:
+) -> list[ExerciseRead]:
     query = select(Exercise).where(Exercise.user_id == user.id).order_by(Exercise.name)
     if search:
         query = query.where(Exercise.name.ilike(f"%{search.strip()}%"))
-    return list(db.scalars(query))
+    aliases = exercise_aliases(db, user.id)
+    return [
+        ExerciseRead.model_validate(item).model_copy(
+            update={
+                "merged_from_ids": [old for old, target in aliases.items() if target == item.id]
+            }
+        )
+        for item in db.scalars(query)
+    ]
 
 
 @router.get("/body-measurements", response_model=list[BodyMeasurementRead])
@@ -983,10 +1004,25 @@ def create_exercise(
         ) from error
 
 
+@router.post(
+    "/exercises/{exercise_id}/merge",
+    response_model=ExerciseRead,
+    dependencies=[Depends(limit_save_rate)],
+)
+def merge_custom_exercise(
+    exercise_id: str, payload: ExerciseMerge, db: DbSession, user: CurrentUser
+) -> ExerciseRead:
+    target = merge_exercise(db, user.id, exercise_id, payload.target_exercise_id)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    db.refresh(target)
+    return exercise_read(db, user.id, target)
+
+
 @router.patch("/exercises/{exercise_id}/favorite", response_model=ExerciseRead)
 def update_exercise_favorite(
     exercise_id: str, payload: ExerciseFavoriteUpdate, db: DbSession, user: CurrentUser
-) -> Exercise:
+) -> ExerciseRead:
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
@@ -994,13 +1030,13 @@ def update_exercise_favorite(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(exercise)
-    return exercise
+    return exercise_read(db, user.id, exercise)
 
 
 @router.patch("/exercises/{exercise_id}/partial-sets", response_model=ExerciseRead)
 def update_exercise_partial_sets(
     exercise_id: str, payload: ExercisePartialSetsUpdate, db: DbSession, user: CurrentUser
-) -> Exercise:
+) -> ExerciseRead:
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
@@ -1021,7 +1057,7 @@ def update_exercise_partial_sets(
     db.commit()
     db.refresh(exercise)
     db.expire(exercise, ["partial_set_weeks"])
-    return exercise
+    return exercise_read(db, user.id, exercise)
 
 
 def machine_photo_usage(
@@ -1661,7 +1697,9 @@ def create_cardio_session(
             "workouts_per_account",
             CARDIO_NOT_SAVED,
         )
-        exercise = get_owned(db, Exercise, payload.exercise_id, user.id)
+        exercise = get_owned(
+            db, Exercise, resolve_exercise_id(db, user.id, payload.exercise_id), user.id
+        )
         if not exercise or exercise.kind != ExerciseKind.CARDIO:
             raise HTTPException(status_code=422, detail="Choose a cardio exercise.")
 
@@ -2347,10 +2385,12 @@ def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> Import
             else:
                 preserved += 1
     db.flush()
+    merged_targets = set(exercise_aliases(db, user.id).values())
     for snapshot in batch.exercises:
         exercise = get_owned(db, Exercise, snapshot["id"], user.id)
         if (
             exercise is not None
+            and exercise.id not in merged_targets
             and exercise_snapshot(exercise) == snapshot
             and not exercise.is_favorite
             and not exercise.movements

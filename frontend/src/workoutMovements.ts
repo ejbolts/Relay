@@ -25,6 +25,9 @@ export function restoreWorkoutDraftMovements(
   exercises: Exercise[],
 ): WorkoutDraftMovement[] | null {
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  for (const exercise of exercises) {
+    for (const id of exercise.merged_from_ids ?? []) exerciseById.set(id, exercise);
+  }
   if (stored.some((movement) => !exerciseById.has(movement.exerciseId))) return null;
   return stored.map((movement) => ({
     key: movement.key,

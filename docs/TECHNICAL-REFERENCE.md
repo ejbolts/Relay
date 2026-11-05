@@ -300,6 +300,20 @@ routine keeps the schedule and restores history-based suggestions. Mutations inv
 the account's training revision. Test with `backend/tests/test_routines.py` and the
 frontend `RoutinePanel` and workout recovery tests.
 
+## Exercise merges
+
+Exercise merges use `POST /api/exercises/{source_id}/merge` with `target_exercise_id`.
+Both exercises must belong to the signed-in account, the source must be custom and their
+kinds must match. The transaction transfers movements, machine photos and saved routine
+references, retains the destination's muscle credits and existing defaults, and rebuilds
+records against the combined history. Photo-specific presets move with their photos;
+an existing destination weight mapping wins because separate reference scales cannot be
+combined safely. Account-local `exercise_merge:` settings flatten old IDs to the destination
+and are included in account backups. The catalogue's `merged_from_ids` restores old local
+drafts; workout/cardio saves and stale routine editors also resolve those IDs. Import undo
+keeps destinations referenced by merges. Test with `backend/tests/test_exercise_merge.py`,
+`ExerciseMergeDialog.test.tsx` and workout recovery tests.
+
 ## Checks
 
 While developing, run the tests for the behaviour you changed. From the repository root,

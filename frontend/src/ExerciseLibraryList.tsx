@@ -53,11 +53,13 @@ export function ExerciseLibraryList({
   library,
   onOpen,
   onCreate,
+  onMerge,
 }: {
   exercises: Exercise[];
   library: ExerciseLibraryState;
   onOpen: (id: string) => void;
   onCreate?: () => void;
+  onMerge?: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const [query, setQuery] = useState('');
@@ -239,6 +241,18 @@ export function ExerciseLibraryList({
               ))}
             </select>
           </label>
+          {onMerge && (
+            <button
+              type="button"
+              className="pulse-button secondary"
+              onClick={() => {
+                setOptionsOpen(false);
+                onMerge();
+              }}
+            >
+              Merge exercises
+            </button>
+          )}
         </PopupDialog>
       )}
       {loading && summaries === null && (

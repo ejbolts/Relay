@@ -54,6 +54,27 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 const emptyLibrary = { summaries: [], loading: false, error: false, retry: () => {} };
+it('opens exercise merging from list options when available', async () => {
+  const onMerge = vi.fn();
+  await act(async () =>
+    root.render(
+      <ExerciseLibraryList
+        exercises={exercises}
+        library={emptyLibrary}
+        onOpen={open}
+        onMerge={onMerge}
+      />,
+    ),
+  );
+  await click(button('Exercise list options'));
+  await click(
+    [...document.querySelectorAll('dialog button')].find(
+      (item) => item.textContent === 'Merge exercises',
+    )!,
+  );
+  expect(onMerge).toHaveBeenCalledOnce();
+  expect(document.querySelector('dialog')).toBeNull();
+});
 async function render(items = exercises) {
   await act(async () =>
     root.render(<ExerciseLibraryList exercises={items} library={emptyLibrary} onOpen={open} />),

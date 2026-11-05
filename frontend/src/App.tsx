@@ -183,6 +183,7 @@ import { optimisePhoto } from './photoOptimise';
 import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
+import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
@@ -6838,6 +6839,7 @@ export function ProgressScreen({
   onOpenSettings,
   onDetailChange,
   onCreateExercise,
+  onExercisesMerged,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
@@ -6852,8 +6854,16 @@ export function ProgressScreen({
   onOpenSettings?: () => void;
   onDetailChange?: (header: ExerciseDetailHeader | null) => void;
   onCreateExercise?: () => void;
+  onExercisesMerged?: () => Promise<void>;
 }) {
   const weightUnit = useWeightUnit();
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeNotice, setMergeNotice] = useState(false);
+  useEffect(() => {
+    if (!mergeNotice) return;
+    const timer = setTimeout(() => setMergeNotice(false), 4000);
+    return () => clearTimeout(timer);
+  }, [mergeNotice]);
   const strengthExercises = useMemo(
     () => exercises.filter((exercise) => exercise.kind === 'strength'),
     [exercises],
@@ -7074,6 +7084,11 @@ export function ProgressScreen({
             exercises={strengthExercises}
             library={exerciseLibrary}
             onCreate={onCreateExercise}
+            onMerge={
+              onExercisesMerged && exercises.some((item) => item.is_custom)
+                ? () => setMergeOpen(true)
+                : undefined
+            }
             onOpen={(id) => {
               libraryScroll.current = window.scrollY;
               setExerciseId(id);
@@ -7086,6 +7101,33 @@ export function ProgressScreen({
           />
         </div>
       )}
+      {mergeOpen && (
+        <ExerciseMergeDialog
+          exercises={exercises}
+          onClose={() => setMergeOpen(false)}
+          onMerged={(_sourceId, target) => {
+            setMergeOpen(false);
+            setMergeNotice(true);
+            setExerciseId(target.id);
+            void onExercisesMerged?.();
+          }}
+        />
+      )}
+      {mergeNotice &&
+        createPortal(
+          <div className="undo-toast top-toast" role="status">
+            <span>Exercises merged</span>
+            <button
+              type="button"
+              className="undo-toast-close"
+              aria-label="Dismiss exercise merge notification"
+              onClick={() => setMergeNotice(false)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
       {sessionId && selectedExercise && (
         <ExerciseSessionSheet
           key={sessionId}
@@ -10140,6 +10182,7 @@ function HistoryScreen({
             browseFirst
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
+            onExercisesMerged={onDataChange}
             initialExerciseId={initialExerciseId}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}
