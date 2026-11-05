@@ -6857,7 +6857,7 @@ export function ProgressScreen({
   onExercisesMerged?: () => Promise<void>;
 }) {
   const weightUnit = useWeightUnit();
-  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
   const [mergeNotice, setMergeNotice] = useState(false);
   useEffect(() => {
     if (!mergeNotice) return;
@@ -7086,7 +7086,7 @@ export function ProgressScreen({
             onCreate={onCreateExercise}
             onMerge={
               onExercisesMerged && exercises.some((item) => item.is_custom)
-                ? () => setMergeOpen(true)
+                ? () => setMergeRequest({})
                 : undefined
             }
             onOpen={(id) => {
@@ -7101,12 +7101,13 @@ export function ProgressScreen({
           />
         </div>
       )}
-      {mergeOpen && (
+      {mergeRequest && (
         <ExerciseMergeDialog
           exercises={exercises}
-          onClose={() => setMergeOpen(false)}
+          initialSourceId={mergeRequest.sourceId}
+          onClose={() => setMergeRequest(null)}
           onMerged={(_sourceId, target) => {
-            setMergeOpen(false);
+            setMergeRequest(null);
             setMergeNotice(true);
             setExerciseId(target.id);
             void onExercisesMerged?.();
@@ -7180,6 +7181,17 @@ export function ProgressScreen({
               </>
             }
           />
+        )}
+        {selectedExercise?.is_custom && onExercisesMerged && (
+          <button
+            type="button"
+            className="pulse-button secondary exercise-detail-merge"
+            aria-haspopup="dialog"
+            onClick={() => setMergeRequest({ sourceId: selectedExercise.id })}
+          >
+            <Icon name="link" />
+            Merge with another exercise
+          </button>
         )}
         {!browseFirst && (
           <section className="progress-controls">

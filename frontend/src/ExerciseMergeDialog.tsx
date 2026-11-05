@@ -7,14 +7,16 @@ import './exerciseMerge.css';
 
 export function ExerciseMergeDialog({
   exercises,
+  initialSourceId = '',
   onMerged,
   onClose,
 }: {
   exercises: Exercise[];
+  initialSourceId?: string;
   onMerged: (sourceId: string, target: Exercise) => void;
   onClose: () => void;
 }) {
-  const [sourceId, setSourceId] = useState('');
+  const [sourceId, setSourceId] = useState(initialSourceId);
   const [targetId, setTargetId] = useState('');
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);

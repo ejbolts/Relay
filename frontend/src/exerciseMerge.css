@@ -1,6 +1,10 @@
 .exercise-merge-dialog {
   width: min(540px, calc(100vw - 24px));
 }
+.exercise-detail-merge {
+  width: 100%;
+  margin-bottom: 16px;
+}
 .exercise-merge-dialog form {
   padding: 16px;
 }
