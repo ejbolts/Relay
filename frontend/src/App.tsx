@@ -138,6 +138,8 @@ import {
 } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import type { MuscleSetsWeek } from './liveMuscleSets';
+import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
   MachineFilterBanner,
   MachineFilterPicker,
@@ -644,6 +646,7 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
+  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts);
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -1507,6 +1510,11 @@ function AppContent() {
   }
 
   async function openMuscleWorkout(contribution: WeeklyMuscleContribution) {
+    if (contribution.workout_id === muscleSets.workoutId) {
+      if (activeWorkoutStartedAt !== null) setTab('log');
+      else setMessage('This workout is waiting to sync.');
+      return;
+    }
     if (
       !workouts.some(
         (workout) =>
@@ -1700,6 +1708,7 @@ function AppContent() {
                 <TodayScreen
                   home={home}
                   data={dashboard}
+                  muscleSets={muscleSets}
                   workouts={workouts}
                   measurements={measurements}
                   personalRecords={personalRecords}
@@ -1937,8 +1946,8 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
-                weeklySets={dashboard?.weekly_sets}
-                weeklySetsHistory={dashboard?.weekly_sets_history}
+                weeklySets={muscleSets.weeklySets}
+                weeklySetsHistory={muscleSets.history}
                 onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
@@ -5241,21 +5250,6 @@ function MovementCard({
             >
               {movement.exercise.name}
             </button>
-            <ExerciseMuscleHelp exercise={movement.exercise} />
-            <button
-              type="button"
-              className="movement-expand-toggle"
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
-              aria-expanded={expanded}
-              onClick={(event) => {
-                event.stopPropagation();
-                setExpanded((current) => !current);
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="m4 7 6 6 6-6" />
-              </svg>
-            </button>
           </h2>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
@@ -5273,6 +5267,18 @@ function MovementCard({
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
+          <ExerciseMuscleHelp exercise={movement.exercise} />
+          <button
+            type="button"
+            className="movement-expand-toggle"
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="m4 7 6 6 6-6" />
+            </svg>
+          </button>
           {barType && (
             <button
               type="button"
@@ -6019,6 +6025,7 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
   const images = photo.images?.length ? photo.images : [photo];
   const image = images[Math.min(imageIndex, images.length - 1)];
@@ -6031,7 +6038,9 @@ function MachinePhotoDetail({
     setError(null);
     try {
       await onUpdate(photo, caption.trim());
+      setSaveNotice((current) => current + 1);
     } catch (saveError) {
+      setSaveNotice(0);
       setError(saveError instanceof Error ? saveError.message : 'Could not update the caption.');
     } finally {
       setSaving(false);
@@ -6056,6 +6065,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {saveNotice > 0 && (
+        <NotificationDialog
+          key={saveNotice}
+          message="Machine name saved"
+          onClose={() => setSaveNotice(0)}
+        />
+      )}
       <div>
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
@@ -9862,8 +9878,8 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
-  weeklySets: DashboardData['weekly_sets'] | undefined;
-  weeklySetsHistory: DashboardData['weekly_sets_history'];
+  weeklySets: MuscleSetsWeek | undefined;
+  weeklySetsHistory: MuscleSetsWeek[] | undefined;
   onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;

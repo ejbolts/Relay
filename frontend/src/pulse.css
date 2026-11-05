@@ -3353,7 +3353,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .movement-card > header {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   padding: 0.75rem 0.875rem 0.625rem;
 }
 
@@ -3372,6 +3372,14 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .movement-card h2 {
   font-size: 1.0625rem;
   font-weight: 650;
+}
+
+.logger-screen .movement-header-actions {
+  gap: 0.15rem;
+}
+
+.logger-screen .movement-header-actions .exercise-muscle-help-button {
+  width: 2.25rem;
 }
 
 .segmented-control button {
