@@ -2411,6 +2411,122 @@ async function navigateTo(label: string) {
   expect(button).toBeDefined();
   await act(async () => button.click());
 }
+describe('live muscle totals while logging', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#dashboard');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T12:00:00'));
+    vi.mocked(api.listExercises).mockResolvedValue([
+      {
+        ...bench,
+        muscle_set_credits: [
+          { muscle_name: 'Chest', sets: 1 },
+          { muscle_name: 'Triceps', sets: 0.5 },
+        ],
+      },
+      row,
+    ]);
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      weekly_sets: {
+        week_start: '2026-10-19',
+        week_end: '2026-10-25',
+        muscle_groups: [],
+      },
+    } as unknown as DashboardData);
+    const draft = storedDraft({ workoutDate: '2026-10-20' });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        sets: [{ ...draft.movements[0].sets[0], completed: false, rest_seconds: 0 }],
+      },
+    ];
+    writeActiveWorkoutDraft(draft);
+  });
+  const chestTotals = () =>
+    [...container.querySelectorAll('.muscle-bars li')]
+      .filter((item) => item.textContent?.includes('Chest'))
+      .map((item) => item.querySelector('b')?.textContent);
+
+  it('keeps the final credits through a slow completion and dashboard refresh', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].sets[0].completed = true;
+    writeActiveWorkoutDraft(draft);
+    let finish!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+    );
+    await confirmFinish();
+    expect(chestTotals()).toEqual(['1']);
+    let refresh!: (data: DashboardData) => void;
+    vi.mocked(api.dashboard).mockReturnValueOnce(
+      new Promise((resolve) => {
+        refresh = resolve;
+      }),
+    );
+    const saved = {
+      ...remoteWorkout(),
+      client_session_id: readActiveWorkoutDraft()!.clientSessionId,
+    };
+    await act(async () => finish(saved));
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(chestTotals()).toEqual(['1']);
+    await act(async () =>
+      refresh({
+        recommendation: null,
+        weekly_sets: {
+          week_start: '2026-10-19',
+          week_end: '2026-10-25',
+          muscle_groups: [{ muscle_group: 'Chest', raw_sets: 1, contributions: [] }],
+        },
+      } as unknown as DashboardData),
+    );
+    expect(chestTotals()).toEqual(['1']);
+  });
+
+  it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
+    await mount();
+    await navigateTo('Home');
+    await navigateTo('Training');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+    );
+    expect(chestTotals()).toEqual(['1', '1']);
+    expect(api.dashboard).toHaveBeenCalledOnce();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
+    });
+    await navigateTo('Home');
+    await act(async () =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          '[aria-label="Exercises contributing to Chest"]',
+        ),
+      ]
+        .find((button) => !button.closest('[hidden]'))!
+        .click(),
+    );
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('.muscle-contribution-list button')!.click(),
+    );
+    expect(window.location.hash).toBe('#log');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Mark set 1 incomplete"]')!.click(),
+    );
+    expect(chestTotals()).toEqual([]);
+  });
+});
 async function focusApp() {
   await act(async () => window.dispatchEvent(new Event('focus')));
 }
