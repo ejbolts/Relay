@@ -1,9 +1,49 @@
 .exercise-merge-dialog {
   width: min(540px, calc(100vw - 24px));
 }
-.exercise-detail-merge {
+.exercise-options {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.exercise-options-trigger .pulse-icon {
+  transform: rotate(90deg);
+}
+.exercise-options-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 244px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-surface-2);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
+}
+.exercise-options-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  margin-bottom: 16px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: left;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 13px;
+}
+.exercise-options-menu button:is(:hover, :focus-visible) {
+  background: var(--p-accent-soft);
+}
+.exercise-options-menu .pulse-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 .exercise-merge-dialog form {
   padding: 16px;

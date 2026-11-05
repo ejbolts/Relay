@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
+import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
 import { useExerciseLibrary } from './useExerciseLibrary';
 import type { Exercise, ExerciseLibrarySummary, ExerciseProgress, TrackedWorkout } from './types';
 
@@ -143,22 +144,34 @@ it('opens merging from a custom exercise detail with that exercise selected', as
   vi.mocked(api.exerciseProgress).mockImplementation(async (id) =>
     progress(id === custom.id ? custom : row),
   );
-  await act(async () =>
-    root.render(
-      <ProgressScreen
-        exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
-        exercises={[custom, row]}
-        measurements={[]}
-        personalRecords={[]}
-        onOpenWorkout={onOpenWorkout}
-        onExercisesMerged={refreshed}
-        onDetailChange={vi.fn()}
-        embedded
-        browseFirst
-      />,
-    ),
-  );
+  function Screen() {
+    const [header, setHeader] = useState<{
+      exercise: Exercise;
+      onMerge?: (trigger: HTMLButtonElement) => void;
+    } | null>(null);
+    return (
+      <>
+        {header?.onMerge && (
+          <ExerciseOptionsMenu exerciseName={header.exercise.name} onMerge={header.onMerge} />
+        )}
+        <ProgressScreen
+          exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
+          exercises={[custom, row]}
+          measurements={[]}
+          personalRecords={[]}
+          onOpenWorkout={onOpenWorkout}
+          onExercisesMerged={refreshed}
+          onDetailChange={setHeader}
+          embedded
+          browseFirst
+        />
+      </>
+    );
+  }
+  await act(async () => root.render(<Screen />));
   await click(host.querySelector('[data-exercise-id="custom-row"]')!);
+  expect(host.querySelector('[role="menuitem"]')).toBeNull();
+  await click(host.querySelector('[aria-label="Options for My cable row"]')!);
   await click(named('Merge with another exercise'));
   const select = document.querySelector<HTMLSelectElement>('dialog select')!;
   expect(select.value).toBe(custom.id);
@@ -172,7 +185,7 @@ it('opens merging from a custom exercise detail with that exercise selected', as
   expect(refreshed).toHaveBeenCalledOnce();
   expect(document.querySelector('dialog')).toBeNull();
   expect(document.body.textContent).toContain('Exercises merged');
-  expect(host.querySelector('.exercise-detail-merge')).toBeNull();
+  expect(host.querySelector('.exercise-options')).toBeNull();
 });
 it('keeps merge unavailable for official exercises', async () => {
   await act(async () =>
@@ -190,7 +203,7 @@ it('keeps merge unavailable for official exercises', async () => {
     ),
   );
   await click(host.querySelector('[data-exercise-id="pec"]')!);
-  expect(host.querySelector('.exercise-detail-merge')).toBeNull();
+  expect(host.querySelector('.exercise-options')).toBeNull();
 });
 it('combines equipment, muscle and reordered search, retaining equipment after detail', async () => {
   await render();

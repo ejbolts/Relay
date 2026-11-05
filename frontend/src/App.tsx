@@ -184,6 +184,7 @@ import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
+import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
@@ -6823,6 +6824,7 @@ interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
   onBack: () => void;
+  onMerge?: (trigger: HTMLButtonElement) => void;
 }
 
 export function ProgressScreen({
@@ -6858,6 +6860,7 @@ export function ProgressScreen({
 }) {
   const weightUnit = useWeightUnit();
   const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
+  const mergeTrigger = useRef<HTMLButtonElement | null>(null);
   const [mergeNotice, setMergeNotice] = useState(false);
   useEffect(() => {
     if (!mergeNotice) return;
@@ -6902,6 +6905,14 @@ export function ProgressScreen({
   const metricIndicatorRef = useSlidingIndicator<HTMLDivElement>(metric);
   const rangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const selectedExercise = strengthExercises.find((exercise) => exercise.id === exerciseId) ?? null;
+  const canMergeSelected = Boolean(selectedExercise?.is_custom && onExercisesMerged);
+  const openSelectedMerge = useCallback(
+    (trigger: HTMLButtonElement) => {
+      mergeTrigger.current = trigger;
+      setMergeRequest({ sourceId: exerciseId });
+    },
+    [exerciseId],
+  );
 
   const backToExercises = useCallback(() => {
     setFullProgress(false);
@@ -6921,6 +6932,7 @@ export function ProgressScreen({
             exercise: selectedExercise,
             sessionCount: progressSessionCount,
             onBack: backToExercises,
+            onMerge: canMergeSelected ? openSelectedMerge : undefined,
           }
         : null,
     );
@@ -6931,6 +6943,8 @@ export function ProgressScreen({
     selectedExercise,
     progressSessionCount,
     backToExercises,
+    canMergeSelected,
+    openSelectedMerge,
   ]);
   useEffect(() => () => onDetailChange?.(null), [onDetailChange]);
 
@@ -7105,7 +7119,12 @@ export function ProgressScreen({
         <ExerciseMergeDialog
           exercises={exercises}
           initialSourceId={mergeRequest.sourceId}
-          onClose={() => setMergeRequest(null)}
+          onClose={() => {
+            setMergeRequest(null);
+            requestAnimationFrame(
+              () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
+            );
+          }}
           onMerged={(_sourceId, target) => {
             setMergeRequest(null);
             setMergeNotice(true);
@@ -7168,6 +7187,13 @@ export function ProgressScreen({
             actions={
               <>
                 {selectedExercise && <ExerciseMuscleHelp exercise={selectedExercise} />}
+                {canMergeSelected && selectedExercise && (
+                  <ExerciseOptionsMenu
+                    key={selectedExercise.id}
+                    exerciseName={selectedExercise.name}
+                    onMerge={openSelectedMerge}
+                  />
+                )}
                 {!browseFirst && (
                   <button
                     className="icon-button-pulse"
@@ -7181,17 +7207,6 @@ export function ProgressScreen({
               </>
             }
           />
-        )}
-        {selectedExercise?.is_custom && onExercisesMerged && (
-          <button
-            type="button"
-            className="pulse-button secondary exercise-detail-merge"
-            aria-haspopup="dialog"
-            onClick={() => setMergeRequest({ sourceId: selectedExercise.id })}
-          >
-            <Icon name="link" />
-            Merge with another exercise
-          </button>
         )}
         {!browseFirst && (
           <section className="progress-controls">
@@ -10109,7 +10124,18 @@ function HistoryScreen({
             .join(' \u00b7 ')}
           onBack={exerciseHeader.onBack}
           backLabel="Back to exercises"
-          actions={<ExerciseMuscleHelp exercise={exerciseHeader.exercise} />}
+          actions={
+            <>
+              <ExerciseMuscleHelp exercise={exerciseHeader.exercise} />
+              {exerciseHeader.onMerge && (
+                <ExerciseOptionsMenu
+                  key={exerciseHeader.exercise.id}
+                  exerciseName={exerciseHeader.exercise.name}
+                  onMerge={exerciseHeader.onMerge}
+                />
+              )}
+            </>
+          }
         />
       ) : (
         <>
