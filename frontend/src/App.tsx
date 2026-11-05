@@ -138,6 +138,8 @@ import {
 } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import type { MuscleSetsWeek } from './liveMuscleSets';
+import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
   MachineFilterBanner,
   MachineFilterPicker,
@@ -641,6 +643,7 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
+  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts);
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -1504,6 +1507,11 @@ function AppContent() {
   }
 
   async function openMuscleWorkout(contribution: WeeklyMuscleContribution) {
+    if (contribution.workout_id === muscleSets.workoutId) {
+      if (activeWorkoutStartedAt !== null) setTab('log');
+      else setMessage('This workout is waiting to sync.');
+      return;
+    }
     if (
       !workouts.some(
         (workout) =>
@@ -1697,6 +1705,7 @@ function AppContent() {
                 <TodayScreen
                   home={home}
                   data={dashboard}
+                  muscleSets={muscleSets}
                   workouts={workouts}
                   measurements={measurements}
                   personalRecords={personalRecords}
@@ -1934,8 +1943,8 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
-                weeklySets={dashboard?.weekly_sets}
-                weeklySetsHistory={dashboard?.weekly_sets_history}
+                weeklySets={muscleSets.weeklySets}
+                weeklySetsHistory={muscleSets.history}
                 onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
@@ -9852,8 +9861,8 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
-  weeklySets: DashboardData['weekly_sets'] | undefined;
-  weeklySetsHistory: DashboardData['weekly_sets_history'];
+  weeklySets: MuscleSetsWeek | undefined;
+  weeklySetsHistory: MuscleSetsWeek[] | undefined;
   onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
