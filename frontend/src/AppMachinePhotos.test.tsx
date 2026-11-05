@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
 import { optimisePhoto } from './photoOptimise';
@@ -282,6 +282,64 @@ describe('saving and pinning a machine photo while logging', () => {
     });
     return { picker, file };
   }
+
+  it('adds exercises with the machine chosen in the picker, keeping a baseline choice unpinned', async () => {
+    const chestPress: Exercise = {
+      ...legPress,
+      id: 'chest-press',
+      name: 'Chest Press',
+      category: 'push',
+      muscle_group: 'Chest',
+    };
+    const rowPull: Exercise = { ...chestPress, id: 'row-pull', name: 'Seated Row' };
+    const chestHammer = {
+      ...photo('chest-hammer', 'Hammer chest press'),
+      exercise_id: chestPress.id,
+    };
+    const rowCybex = { ...photo('row-cybex', 'Cybex row'), exercise_id: rowPull.id };
+    const rowMatrix = { ...photo('row-matrix', 'Matrix row'), exercise_id: rowPull.id };
+    vi.mocked(api.listExercises).mockResolvedValue([legPress, chestPress, rowPull]);
+    vi.mocked(api.listAllMachinePhotos).mockResolvedValue([
+      { ...usage(chestHammer, 3, '2026-10-20'), exercise_name: chestPress.name },
+      { ...usage(rowCybex, 2, '2026-10-18'), exercise_name: rowPull.name },
+      { ...usage(rowMatrix, 1, '2026-09-01'), exercise_name: rowPull.name },
+    ]);
+    // Without the picker's choice, the logger would pin these last-used machines itself.
+    vi.mocked(api.lastUsedMachinePhotos).mockImplementation(async (exerciseId) =>
+      exerciseId === chestPress.id ? [chestHammer] : exerciseId === rowPull.id ? [rowCybex] : [],
+    );
+    // jsdom has no element scrolling; the picker resets its list scroll when it opens.
+    HTMLElement.prototype.scrollTo = vi.fn();
+    onTestFinished(() => {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
+    });
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.add-exercise-button')!);
+    const row = (id: string) => document.querySelector<HTMLElement>(`[data-exercise-id="${id}"]`)!;
+    const card = (id: string) =>
+      document.querySelector<HTMLButtonElement>(`.exercise-machine-card[data-machine-id="${id}"]`)!;
+
+    await click(row(chestPress.id).querySelector<HTMLButtonElement>('.exercise-option-select')!);
+    expect(card(chestHammer.id).getAttribute('aria-pressed')).toBe('true');
+    await click(card(chestHammer.id));
+    expect(row(chestPress.id).querySelector('.exercise-option-machine')?.textContent).toBe(
+      'Baseline exercise',
+    );
+    await click(row(rowPull.id).querySelector<HTMLButtonElement>('.exercise-option-select')!);
+    await click(card(rowMatrix.id));
+    await click(document.querySelector<HTMLButtonElement>('.add-selected-button')!);
+
+    const movements = readActiveWorkoutDraft()!.movements;
+    expect(
+      movements.map(({ exerciseId, machinePhotoIds }) => ({ exerciseId, machinePhotoIds })),
+    ).toEqual([
+      { exerciseId: legPress.id, machinePhotoIds: [] },
+      { exerciseId: chestPress.id, machinePhotoIds: [] },
+      { exerciseId: rowPull.id, machinePhotoIds: [rowMatrix.id] },
+    ]);
+    expect(api.lastUsedMachinePhotos).not.toHaveBeenCalledWith(chestPress.id);
+    expect(api.lastUsedMachinePhotos).not.toHaveBeenCalledWith(rowPull.id);
+  });
 
   it('shows when each saved machine was last used', async () => {
     await act(async () => root.render(<App />));

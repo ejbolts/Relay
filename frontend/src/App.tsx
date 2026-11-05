@@ -128,6 +128,14 @@ import { FfmiCard } from './FfmiCard';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
+import { ExerciseMachineStrip } from './ExerciseMachineStrip';
+import {
+  lastUsedMachineId,
+  machinesByExercise,
+  resolveMachineChoices,
+  toggledMachineChoice,
+  type ExerciseMachineChoices,
+} from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import {
@@ -328,6 +336,7 @@ import {
 } from './workoutSets';
 import { finalizeWorkoutIdentity, workoutNameForCategory } from './workoutCategory';
 import {
+  machineSelection,
   replaceMovementExercise,
   restoreWorkoutDraftMovements,
   type WorkoutDraftMovement as DraftMovement,
@@ -3071,7 +3080,11 @@ function WorkoutLogger({
     );
   }
 
-  function addExercises(selected: Exercise[], createSuperset = false) {
+  function addExercises(
+    selected: Exercise[],
+    createSuperset = false,
+    machineChoices: ExerciseMachineChoices = {},
+  ) {
     setMovements((current) => {
       const merged = mergeUniqueById(
         current.map((item) => item.exercise),
@@ -3081,8 +3094,7 @@ function WorkoutLogger({
         key: crypto.randomUUID(),
         exercise,
         notes: '',
-        machinePhotoIds: [],
-        machinePhotosInitialized: false,
+        ...machineSelection(exercise.id, machineChoices),
         supersetKey: null,
         isComplete: false,
         sets: suggestedSetsForExercise(exercise),
@@ -3105,13 +3117,19 @@ function WorkoutLogger({
     setSwitchingMovementKey(null);
   }
 
-  function switchExercise(selected: Exercise[]) {
+  function switchExercise(selected: Exercise[], machineChoices: ExerciseMachineChoices = {}) {
     const replacement = selected[0];
     if (!switchingMovementKey || !replacement) return;
     const suggestedSets = suggestedSetsForExercise(replacement);
     setMovements((current) =>
       replaceMovementExercise(current, switchingMovementKey, replacement).map((movement) =>
-        movement.key === switchingMovementKey ? { ...movement, sets: suggestedSets } : movement,
+        movement.key === switchingMovementKey
+          ? {
+              ...movement,
+              ...machineSelection(replacement.id, machineChoices),
+              sets: suggestedSets,
+            }
+          : movement,
       ),
     );
     closeExercisePicker();
@@ -4112,8 +4130,14 @@ function WorkoutLogger({
           onFavoriteChange={onExerciseFavorite}
           onCreateExercise={onCreateExercise}
           singleSelect={switchingMovementKey !== null}
-          onChoose={switchingMovementKey ? switchExercise : addExercises}
-          onCreateSuperset={(selected) => addExercises(selected, true)}
+          onChoose={(selected, machineChoices) =>
+            switchingMovementKey
+              ? switchExercise(selected, machineChoices)
+              : addExercises(selected, false, machineChoices)
+          }
+          onCreateSuperset={(selected, machineChoices) =>
+            addExercises(selected, true, machineChoices)
+          }
           onClose={closeExercisePicker}
         />
       )}
@@ -6125,11 +6149,17 @@ export function ExercisePicker({
   onFavoriteChange: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   singleSelect?: boolean;
-  onChoose: (exercises: Exercise[]) => void;
-  onCreateSuperset?: (exercises: Exercise[]) => void;
+  onChoose: (exercises: Exercise[], machineChoices: ExerciseMachineChoices) => void;
+  onCreateSuperset?: (exercises: Exercise[], machineChoices: ExerciseMachineChoices) => void;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [savedMachines, setSavedMachines] = useState<ReadonlyMap<string, MachinePhotoUsage[]>>(
+    () => new Map(),
+  );
+  // Only choices the user made; selected exercises otherwise preselect their last-used machine.
+  const [machineChoices, setMachineChoices] = useState<ExerciseMachineChoices>({});
+  const [openMachinesId, setOpenMachinesId] = useState<string | null>(null);
   const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
   const [customOnly, setCustomOnly] = useState(false);
   const [filter, setFilter] = useState<'all' | 'favorites' | 'recent'>('all');
@@ -6198,6 +6228,70 @@ export function ExercisePicker({
     (count, section) => count + section.exercises.length,
     0,
   );
+  const resolvedMachineChoices = resolveMachineChoices(selectedIds, savedMachines, machineChoices);
+
+  function addToSelection(exerciseId: string) {
+    setSelectedIds((current) => (singleSelect ? [exerciseId] : [...current, exerciseId]));
+  }
+
+  function toggleExercise(exercise: Exercise) {
+    const wasSelected = selectedIds.includes(exercise.id);
+    setSelectedIds((current) =>
+      current.includes(exercise.id)
+        ? current.filter((id) => id !== exercise.id)
+        : singleSelect
+          ? [exercise.id]
+          : [...current, exercise.id],
+    );
+    if (wasSelected) {
+      setMachineChoices((current) => {
+        const next = { ...current };
+        delete next[exercise.id];
+        return next;
+      });
+      if (openMachinesId === exercise.id) setOpenMachinesId(null);
+    } else {
+      if (singleSelect) setMachineChoices({});
+      if (savedMachines.get(exercise.id)?.length) setOpenMachinesId(exercise.id);
+    }
+    searchRef.current?.blur();
+  }
+
+  /** Records a machine for an exercise, picking the exercise too when it was not selected. */
+  function recordMachineChoice(exercise: Exercise, machineId: string | null) {
+    const selected = selectedIds.includes(exercise.id);
+    setMachineChoices((current) =>
+      singleSelect && !selected
+        ? { [exercise.id]: machineId }
+        : { ...current, [exercise.id]: machineId },
+    );
+    if (!selected) addToSelection(exercise.id);
+  }
+
+  /** Tapping the chosen machine again returns to the baseline exercise. */
+  function chooseMachine(exercise: Exercise, machineId: string) {
+    const selected = selectedIds.includes(exercise.id);
+    recordMachineChoice(
+      exercise,
+      selected
+        ? toggledMachineChoice(resolvedMachineChoices[exercise.id] ?? null, machineId)
+        : machineId,
+    );
+  }
+
+  async function addMachine(exercise: Exercise, file: File, caption: string) {
+    const upload = await optimisePhoto(file);
+    const photo = await api.uploadMachinePhoto(exercise.id, upload, caption);
+    setSavedMachines((current) => {
+      const next = new Map(current);
+      next.set(exercise.id, [
+        ...(current.get(exercise.id) ?? []),
+        { ...photo, exercise_name: exercise.name, workout_count: 0, last_used_date: null },
+      ]);
+      return next;
+    });
+    recordMachineChoice(exercise, photo.id);
+  }
 
   async function toggleFavorite(exercise: Exercise) {
     if (favoriteSavingIds.includes(exercise.id)) return;
@@ -6214,22 +6308,23 @@ export function ExercisePicker({
 
   function renderExercise(exercise: Exercise) {
     const selected = selectedIds.includes(exercise.id);
+    const machines = savedMachines.get(exercise.id) ?? [];
+    const hasMachines = machines.length > 0;
+    const machinesOpen = hasMachines && openMachinesId === exercise.id;
+    const chosenMachineId = selected ? (resolvedMachineChoices[exercise.id] ?? null) : null;
+    const chosenMachine = machines.find((machine) => machine.id === chosenMachineId);
+    const machinePanelId = `exercise-machines-${exercise.id}`;
     return (
-      <div className={`exercise-option ${selected ? 'selected' : ''}`} key={exercise.id}>
+      <div
+        className={`exercise-option ${selected ? 'selected' : ''} ${hasMachines ? 'has-machines' : ''} ${machinesOpen ? 'machines-open' : ''}`}
+        key={exercise.id}
+        data-exercise-id={exercise.id}
+      >
         <button
           type="button"
           className="exercise-option-select"
           aria-pressed={selected}
-          onClick={() => {
-            setSelectedIds((current) =>
-              current.includes(exercise.id)
-                ? current.filter((id) => id !== exercise.id)
-                : singleSelect
-                  ? [exercise.id]
-                  : [...current, exercise.id],
-            );
-            searchRef.current?.blur();
-          }}
+          onClick={() => toggleExercise(exercise)}
         >
           <ExerciseIcon exercise={exercise} />
           <span className="exercise-option-copy">
@@ -6241,10 +6336,27 @@ export function ExercisePicker({
               <em>{exercise.muscle_group}</em>
               {exercise.equipment && <em>{exercise.equipment}</em>}
             </small>
+            {selected && hasMachines && (
+              <small className="exercise-option-machine">
+                {chosenMachine?.caption ?? 'Baseline exercise'}
+              </small>
+            )}
           </span>
           {selected && <b className="exercise-option-selected">✓</b>}
         </button>
         <ExerciseMuscleHelp exercise={exercise} />
+        {hasMachines && (
+          <button
+            type="button"
+            className="exercise-machine-toggle"
+            aria-label={`${machinesOpen ? 'Hide' : 'Show'} machines for ${exercise.name}`}
+            aria-expanded={machinesOpen}
+            aria-controls={machinePanelId}
+            onClick={() => setOpenMachinesId(machinesOpen ? null : exercise.id)}
+          >
+            <Icon name="chevron-down" />
+          </button>
+        )}
         <button
           type="button"
           className={`exercise-favorite-button ${exercise.is_favorite ? 'active' : ''}`}
@@ -6257,6 +6369,20 @@ export function ExercisePicker({
             <path d="M6 3h12v18l-6-4-6 4V3Z" />
           </svg>
         </button>
+        {hasMachines && (
+          <div className="exercise-machine-accordion" id={machinePanelId} inert={!machinesOpen}>
+            <div className="exercise-machine-clip">
+              <ExerciseMachineStrip
+                exercise={exercise}
+                machines={machines}
+                chosenId={chosenMachineId}
+                lastUsedId={lastUsedMachineId(machines)}
+                onToggle={(machineId) => chooseMachine(exercise, machineId)}
+                onAddMachine={(file, caption) => addMachine(exercise, file, caption)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -6264,6 +6390,45 @@ export function ExercisePicker({
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
   }, [search, filter, bodyPart, equipment, customOnly]);
+
+  useEffect(() => {
+    let active = true;
+    api.listAllMachinePhotos().then(
+      (machines) => {
+        if (active) setSavedMachines(machinesByExercise(machines));
+      },
+      // Without saved machines the picker still adds exercises; the logger offers machines.
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Once the strip has opened, keep the exercise and its machines in view.
+    if (!openMachinesId) return;
+    const timer = window.setTimeout(
+      () => {
+        const list = listRef.current;
+        const row = [...(list?.querySelectorAll<HTMLElement>('[data-exercise-id]') ?? [])].find(
+          (item) => item.dataset.exerciseId === openMachinesId,
+        );
+        if (!list || !row) return;
+        const listBox = list.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        const overflow = Math.min(rowBox.bottom - listBox.bottom, rowBox.top - listBox.top);
+        if (overflow > 0) {
+          list.scrollTo?.({
+            top: list.scrollTop + overflow + 8,
+            behavior: motionReduced() ? 'auto' : 'smooth',
+          });
+        }
+      },
+      motionReduced() ? 0 : 380,
+    );
+    return () => window.clearTimeout(timer);
+  }, [openMachinesId]);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -6432,7 +6597,12 @@ export function ExercisePicker({
               className="create-superset-button"
               type="button"
               disabled={selectedIds.length < 2}
-              onClick={() => onCreateSuperset?.(itemsInSelectionOrder(exercises, selectedIds))}
+              onClick={() =>
+                onCreateSuperset?.(
+                  itemsInSelectionOrder(exercises, selectedIds),
+                  resolvedMachineChoices,
+                )
+              }
             >
               Add super set
             </button>
@@ -6441,7 +6611,9 @@ export function ExercisePicker({
             className="add-selected-button"
             type="button"
             disabled={!selectedIds.length}
-            onClick={() => onChoose(itemsInSelectionOrder(exercises, selectedIds))}
+            onClick={() =>
+              onChoose(itemsInSelectionOrder(exercises, selectedIds), resolvedMachineChoices)
+            }
           >
             {singleSelect ? (
               'Switch exercise'
