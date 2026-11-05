@@ -41,12 +41,6 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.open = false;
-  };
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -56,7 +50,7 @@ afterEach(async () => {
 });
 
 describe('compact rest controls', () => {
-  it('shows grey previous time, history icon and REST, then keeps history after editing', async () => {
+  it('shows a dim previous time beside REST and confirms an explicitly chosen time', async () => {
     const change = vi.fn();
     const render = (seconds: number, suggested: boolean) =>
       act(async () =>
@@ -74,6 +68,7 @@ describe('compact rest controls', () => {
     await render(150, true);
     expect(container.querySelector('.rest-is-suggested')).not.toBeNull();
     expect(container.querySelector('.rest-between-controls')?.textContent).toContain('rest');
+    expect(container.querySelector('button')).toBeNull();
     const select = container.querySelector('select')!;
     await act(async () => {
       select.value = '180';
@@ -82,19 +77,13 @@ describe('compact rest controls', () => {
     expect(change).toHaveBeenCalledWith(180);
     await render(180, false);
     expect(container.querySelector('.rest-is-suggested')).toBeNull();
-    const button = container.querySelector('button')!;
-    await act(async () => button.click());
-    expect(document.querySelector('dialog')?.textContent).toContain('2:30');
-    expect(document.querySelector('time')?.dateTime).toBe('2026-11-01');
-    await act(async () =>
-      document.querySelector<HTMLButtonElement>('.popup-dialog-close')!.click(),
-    );
+    expect(container.querySelector('select')?.value).toBe('180');
+    expect(container.querySelector('.rest-between-controls')?.textContent).toContain('rest');
+    expect(container.querySelector('button')).toBeNull();
     expect(document.querySelector('dialog')).toBeNull();
-    await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-    expect(document.activeElement).toBe(button);
   });
 
-  it('omits an empty history control and never marks an unmatched current value as previous', async () => {
+  it('never marks an unmatched current value as previous', async () => {
     await act(async () =>
       root.render(
         <SetRestControl
