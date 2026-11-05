@@ -176,6 +176,26 @@ class MergeSelectionTests(unittest.TestCase):
         self.assertTrue(selected.frontend)
         self.assertFalse(selected.backend)
 
+    def test_stale_event_base_uses_merge_base_parent(self):
+        # GitHub can report the PR's older base SHA after the base branch advances,
+        # while the tested merge commit uses the current base tip as its parent.
+        self.write("frontend/original.txt", "frontend feature")
+        head = self.commit()
+        git(self.root, "checkout", "integration")
+        self.write("backend/helper.txt", "separate feature integrated after the PR base")
+        self.commit()
+        git(self.root, "merge", "--no-ff", "-m", "Sample PR merge", "feature")
+        merge = git(self.root, "rev-parse", "HEAD").decode().strip()
+        event = {
+            "pull_request": {
+                "base": {"ref": "develop", "sha": self.base},
+                "head": {"sha": head},
+            }
+        }
+        selected = select_event("pull_request", event, merge, self.root)
+        self.assertTrue(selected.frontend)
+        self.assertFalse(selected.backend)
+
     def test_deleted_backend_file_is_not_skipped(self):
         git(self.root, "rm", "backend/helper.txt")
         event, merge = self.merge()
@@ -195,11 +215,34 @@ class MergeSelectionTests(unittest.TestCase):
     def test_wrong_commit_or_event_parents_fail_closed(self):
         self.write("frontend/original.txt", "changed")
         event, merge = self.merge()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as caught:
             select_event("pull_request", event, "a" * 40, self.root)
-        event["pull_request"]["base"]["sha"] = event["pull_request"]["head"]["sha"]
+        # The failure names the commits involved so a mismatch can be diagnosed
+        # from the CI log alone.
+        message = str(caught.exception)
+        for sha in ("a" * 40, merge, event["pull_request"]["head"]["sha"]):
+            self.assertIn(sha, message)
+        event["pull_request"]["head"]["sha"] = event["pull_request"]["base"]["sha"]
         with self.assertRaises(ValueError):
             select_event("pull_request", event, merge, self.root)
+        event["pull_request"]["head"]["sha"] = "b" * 40
+        with self.assertRaises(ValueError):
+            select_event("pull_request", event, merge, self.root)
+        event["pull_request"]["base"]["sha"] = "not-a-sha"
+        with self.assertRaises(ValueError):
+            select_event("pull_request", event, merge, self.root)
+
+    def test_non_merge_checkout_fails_closed(self):
+        self.write("frontend/original.txt", "changed")
+        head = self.commit()
+        event = {
+            "pull_request": {
+                "base": {"ref": "develop", "sha": self.base},
+                "head": {"sha": head},
+            }
+        }
+        with self.assertRaises(ValueError):
+            select_event("pull_request", event, head, self.root)
 
 
 class RequiredCheckTests(unittest.TestCase):
