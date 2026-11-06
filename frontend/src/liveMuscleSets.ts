@@ -97,7 +97,8 @@ export function liveMuscleSets(
   return { ...week, muscle_groups: [...groups.values()] };
 }
 
-function creditsForWeek(exercise: Exercise, weekStart: string) {
+/** The muscles one working set of `exercise` credits in the week starting `weekStart`. */
+export function creditsForWeek(exercise: Exercise, weekStart: string) {
   if (exercise.kind === 'cardio' || exercise.category === 'cardio') return [];
   const credits = exercise.default_muscle_set_credits ??
     exercise.muscle_set_credits ?? [{ muscle_name: exercise.muscle_group.trim(), sets: 1 }];

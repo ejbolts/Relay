@@ -74,6 +74,7 @@ export function WorkoutTimerDock({
   onHide,
   onShow,
   onEnd,
+  joined = false,
 }: {
   restSeconds: number;
   restTotal: number;
@@ -85,6 +86,8 @@ export function WorkoutTimerDock({
   onHide: () => void;
   onShow: () => void;
   onEnd: () => void;
+  /** The weekly sets shelf sits on top, so the pill squares its top corners to join it. */
+  joined?: boolean;
 }) {
   const notchRef = useRef<HTMLButtonElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -102,7 +105,11 @@ export function WorkoutTimerDock({
   if (restSeconds <= 0) return null;
   if (!restHidden) {
     return (
-      <div className={`workout-timer-dock rest-pill${state}`} role="group" aria-label="Rest timer">
+      <div
+        className={`workout-timer-dock rest-pill${state}${joined ? ' has-weekly-shelf' : ''}`}
+        role="group"
+        aria-label="Rest timer"
+      >
         <span className="rest-pill-fill" aria-hidden="true" style={{ transform: progress }} />
         <button
           ref={toggleRef}

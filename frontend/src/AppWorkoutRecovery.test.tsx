@@ -772,6 +772,42 @@ describe('saved training splits on Home', () => {
 });
 
 describe('rest time controls', () => {
+  it('adds a logged working set to its weekly totals above the rest, but not a warm-up', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      weekly_sets: {
+        week_start: '2026-10-12',
+        week_end: '2026-10-18',
+        muscle_groups: [{ muscle_group: 'Chest', raw_sets: 4, contributions: [] }],
+      },
+    } as unknown as DashboardData);
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].rest_seconds = 90;
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-warmup',
+      set_type: 'warmup',
+      warmup: true,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const shelf = () => container.querySelector('.weekly-sets-shelf');
+    await click('Complete set 2');
+    expect(shelf()).toBeNull();
+    await click('Complete set 1');
+    // The row's completed set already counts towards Chest, so this set moves it from 5 to 6.
+    expect(shelf()?.classList.contains('is-pill')).toBe(true);
+    expect(container.querySelector('.rest-pill')?.classList.contains('has-weekly-shelf')).toBe(
+      true,
+    );
+    expect(container.querySelector('.weekly-shelf-name')?.textContent).toBe('Chest');
+    expect(container.querySelector('.weekly-shelf-gain')?.textContent).toBe('+1');
+    expect(container.querySelector('.weekly-shelf-roll')?.textContent).toBe('56');
+    await click('Mark set 1 incomplete');
+    expect(shelf()).toBeNull();
+  });
+
   it('reveals rests only for newly added or completed sets and keeps that state after reload', async () => {
     const draft = storedDraft();
     const suggested = draft.movements[0].sets[0];
