@@ -54,13 +54,52 @@ describe('weekly sets shelf', () => {
     expect(cells[0].classList.contains('is-met')).toBe(false);
     expect(cells[1].classList.contains('just-met')).toBe(true);
     expect(cells[1].querySelector('.weekly-shelf-met')).not.toBeNull();
-    // The goal tick sits at 10 of a 12.5-set scale.
-    expect(cells[0].querySelector<HTMLElement>('.weekly-shelf-bar-goal')?.style.left).toBe('80%');
-    expect(cells[0].querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.width).toBe('8%');
+    // The bar's end is the goal: 6 of 10 sets before, plus one more.
+    expect(cells[0].querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe(
+      '60%',
+    );
+    expect(cells[0].querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.width).toBe('10%');
+    expect(cells[1].querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.left).toBe('95%');
+    expect(cells[1].querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.width).toBe('5%');
+    expect(host.querySelector('.weekly-shelf-bar-goal')).toBeNull();
     expect(shelf()?.classList.contains('is-pill')).toBe(true);
     expect(host.querySelector('[role="status"]')?.textContent).toBe(
       'Lower back 7 of 10 weekly sets, up 1. Glutes 10 of 10 weekly sets, up 0.5. Hamstrings 10 of 10 weekly sets, up 0.5',
     );
+  });
+
+  it('keeps the bar full past the goal', async () => {
+    await act(async () =>
+      root.render(
+        <WeeklySetsShelf
+          update={{ id: 1, gains: [{ muscle: 'Glutes', before: 12, gain: 1, after: 13 }] }}
+          goal={10}
+          placement="pill"
+          onDismiss={vi.fn()}
+        />,
+      ),
+    );
+    expect(host.querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe('100%');
+    expect(host.querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.width).toBe('0%');
+  });
+
+  it('replaces the shown set when another is logged while it is up', async () => {
+    const render = (next: WeeklySetsUpdate) =>
+      act(async () =>
+        root.render(
+          <WeeklySetsShelf update={next} goal={10} placement="pill" onDismiss={vi.fn()} />,
+        ),
+      );
+    await render(update);
+    await render({
+      id: 2,
+      gains: [{ muscle: 'Quadriceps', before: 9, gain: 1, after: 10 }],
+    });
+    expect(host.querySelectorAll('.weekly-shelf-cells')).toHaveLength(1);
+    expect([...host.querySelectorAll('.weekly-shelf-name')].map((n) => n.textContent)).toEqual([
+      'Quadriceps',
+    ]);
+    expect(host.querySelectorAll('.weekly-shelf-countdown')).toHaveLength(1);
   });
 
   it('folds away by itself, unless touched to keep it open until touched again', async () => {

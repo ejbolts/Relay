@@ -74,7 +74,7 @@ export function WeeklySetsShelf({
         onClick={() => (held ? setLeavingFor(update.id) : setHeldFor(update.id))}
       >
         <span
-          key={update.id}
+          key={`cells-${update.id}`}
           className="weekly-shelf-cells"
           style={{ '--count': update.gains.length } as CSSProperties}
           aria-hidden="true"
@@ -84,7 +84,11 @@ export function WeeklySetsShelf({
           ))}
         </span>
         {!held && !leaving && (
-          <span key={update.id} className="weekly-shelf-countdown" aria-hidden="true" />
+          <span
+            key={`countdown-${update.id}`}
+            className="weekly-shelf-countdown"
+            aria-hidden="true"
+          />
         )}
       </button>
       <span className="sr-only" role="status">
@@ -103,9 +107,9 @@ function WeeklySetsCell({
   goal: number;
   index: number;
 }) {
-  // A little headroom past the goal, so its tick sits inside the bar.
-  const maximum = Math.max(goal * 1.25, item.after);
-  const percent = (value: number) => Math.round(Math.min(100, (value / maximum) * 100) * 100) / 100;
+  // The bar's end is the goal; sets past it keep the bar full.
+  const percent = (value: number) =>
+    goal > 0 ? Math.round(Math.min(100, (value / goal) * 100) * 100) / 100 : 100;
   const met = item.after >= goal;
   const justMet = met && item.before < goal;
   return (
@@ -138,7 +142,6 @@ function WeeklySetsCell({
             width: `${percent(item.after) - percent(item.before)}%`,
           }}
         />
-        <span className="weekly-shelf-bar-goal" style={{ left: `${percent(goal)}%` }} />
       </span>
     </span>
   );

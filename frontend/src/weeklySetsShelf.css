@@ -170,15 +170,6 @@
     backwards;
 }
 
-.weekly-shelf-bar > .weekly-shelf-bar-goal {
-  top: -0.1875rem;
-  bottom: -0.1875rem;
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--p-ink-2);
-}
-
 .weekly-shelf-cell.is-met .weekly-shelf-gain {
   background: color-mix(in srgb, var(--p-good) 16%, transparent);
   color: var(--p-good);
