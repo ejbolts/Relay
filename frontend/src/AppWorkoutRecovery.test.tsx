@@ -944,6 +944,20 @@ describe('rest time controls', () => {
     expect(document.querySelector('.app-notification-toast')).toBeNull();
   });
 
+  it('moves the rest fill by the whole 30 seconds when time is added or taken off', async () => {
+    await startRest();
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    const fill = () => container.querySelector<HTMLElement>('.rest-pill-fill');
+    expect(fill()?.style.transform).toBe(`scaleX(${25 / 30})`);
+    await click('Add 30 seconds to the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
+    expect(fill()?.style.transform).toBe('scaleX(1)');
+    expect(fill()?.classList.contains('is-jump')).toBe(true);
+    await click('Take 30 seconds off the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(fill()?.style.transform).toBe(`scaleX(${25 / 55})`);
+  });
+
   it('ends the rest from its X without announcing it or pausing the workout', async () => {
     await startRest(true);
     vi.spyOn(api, 'cancelRestTimerNotification').mockResolvedValue(undefined);

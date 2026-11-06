@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { restTimerProgress } from './restTimer';
 import { formatSeconds } from './utils';
@@ -101,6 +101,13 @@ export function WorkoutTimerDock({
   const verb = paused ? 'Resume' : 'Pause';
   const progress = `scaleX(${restTimerProgress(restSeconds, restTotal)})`;
   const state = paused ? ' is-paused' : '';
+  // The fill glides through each second, but snaps quickly to a jump such as -30 or +30.
+  const [shownSeconds, setShownSeconds] = useState(restSeconds);
+  const [jumped, setJumped] = useState(false);
+  if (restSeconds !== shownSeconds) {
+    setShownSeconds(restSeconds);
+    setJumped(Math.abs(restSeconds - shownSeconds) > 1);
+  }
 
   if (restSeconds <= 0) return null;
   if (!restHidden) {
@@ -110,7 +117,11 @@ export function WorkoutTimerDock({
         role="group"
         aria-label="Rest timer"
       >
-        <span className="rest-pill-fill" aria-hidden="true" style={{ transform: progress }} />
+        <span
+          className={`rest-pill-fill${jumped ? ' is-jump' : ''}`}
+          aria-hidden="true"
+          style={{ transform: progress }}
+        />
         <button
           ref={toggleRef}
           type="button"
@@ -183,9 +194,6 @@ export function WorkoutTimerDock({
         onShow();
       }}
     >
-      <span className="rest-notch-bar" aria-hidden="true">
-        <span style={{ transform: progress }} />
-      </span>
       <Icon name={paused ? 'pause' : 'timer'} />
       <strong role="timer" aria-label={`Rest timer ${time}`}>
         {time}

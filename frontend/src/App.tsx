@@ -3295,12 +3295,13 @@ function WorkoutLogger({
       // A paused rest keeps waiting; the change applies when the workout resumes.
       timer.pausedLeft = left;
       setRestLeft(left);
-      setRestTotal((total) => Math.max(left, total + deltaSeconds));
+      setRestTotal((total) => Math.max(left, total));
       return;
     }
     timer.endsAt = Date.now() + left * 1000;
     setRestLeft(left);
-    setRestTotal((total) => Math.max(left, total + deltaSeconds));
+    // The rest's full length stays put, so the pill's fill moves by the whole 30 seconds.
+    setRestTotal((total) => Math.max(left, total));
     onRestTimerChange?.(timer.endsAt);
     // Scheduling again replaces this device's pending "Rest complete" notification.
     const endpoint = restNotificationEndpointRef.current;

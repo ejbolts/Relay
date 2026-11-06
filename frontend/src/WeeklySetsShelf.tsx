@@ -5,13 +5,13 @@ import type { WeeklySetGain } from './weeklySetsUpdate';
 import './weeklySetsShelf.css';
 
 /** How long the shelf stays up after a set unless it is touched. */
-export const WEEKLY_SETS_SHELF_MS = 4500;
+export const WEEKLY_SETS_SHELF_MS = 3000;
 const LEAVE_MS = 200;
 
 const credits = (value: number) => Number(value.toFixed(3)).toLocaleString();
 
 export interface WeeklySetsUpdate {
-  /** Changes for each logged set, replaying the shelf's animation. */
+  /** Changes for each logged set, rolling each total and growing its bar again. */
   id: number;
   gains: WeeklySetGain[];
 }
@@ -42,6 +42,9 @@ export function WeeklySetsShelf({
   const [leavingFor, setLeavingFor] = useState<number | null>(null);
   const held = heldFor === update.id;
   const leaving = leavingFor === update.id;
+  // A set logged while the shelf is up updates it in place: no unfold, and sooner.
+  const [firstId] = useState(update.id);
+  const followUp = update.id !== firstId;
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
 
@@ -68,19 +71,24 @@ export function WeeklySetsShelf({
     <>
       <button
         type="button"
-        className={`weekly-sets-shelf is-${placement}${held ? ' is-held' : ''}${leaving ? ' is-leaving' : ''}`}
+        className={`weekly-sets-shelf is-${placement}${followUp ? ' is-follow-up' : ''}${held ? ' is-held' : ''}${leaving ? ' is-leaving' : ''}`}
         style={{ '--weekly-shelf-ms': `${WEEKLY_SETS_SHELF_MS}ms` } as CSSProperties}
         aria-label={held ? 'Close weekly sets' : 'Keep weekly sets open'}
         onClick={() => (held ? setLeavingFor(update.id) : setHeldFor(update.id))}
       >
         <span
-          key={`cells-${update.id}`}
           className="weekly-shelf-cells"
           style={{ '--count': update.gains.length } as CSSProperties}
           aria-hidden="true"
         >
           {update.gains.map((item, index) => (
-            <WeeklySetsCell key={item.muscle} item={item} goal={goal} index={index} />
+            <WeeklySetsCell
+              key={item.muscle}
+              item={item}
+              goal={goal}
+              index={index}
+              updateId={update.id}
+            />
           ))}
         </span>
         {!held && !leaving && (
@@ -102,12 +110,15 @@ function WeeklySetsCell({
   item,
   goal,
   index,
+  updateId,
 }: {
   item: WeeklySetGain;
   goal: number;
   index: number;
+  updateId: number;
 }) {
-  // The bar's end is the goal; sets past it keep the bar full.
+  // A muscle carried over from the last set keeps its column and gain badge; only its total and
+  // the bar's new chunk, keyed to the update, move again. The bar's end is the goal.
   const percent = (value: number) =>
     goal > 0 ? Math.round(Math.min(100, (value / goal) * 100) * 100) / 100 : 100;
   const met = item.after >= goal;
@@ -121,7 +132,7 @@ function WeeklySetsCell({
       <span className="weekly-shelf-gain">+{credits(item.gain)}</span>
       <span className="weekly-shelf-value">
         <span className="weekly-shelf-roll">
-          <span>
+          <span key={updateId}>
             <span>{credits(item.before)}</span>
             <span>{credits(item.after)}</span>
           </span>
@@ -136,6 +147,7 @@ function WeeklySetsCell({
       <span className="weekly-shelf-bar">
         <span className="weekly-shelf-bar-before" style={{ width: `${percent(item.before)}%` }} />
         <span
+          key={updateId}
           className="weekly-shelf-bar-gain"
           style={{
             left: `${percent(item.before)}%`,

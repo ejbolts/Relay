@@ -64,6 +64,11 @@
   padding: 0.625rem 0.625rem 0.75rem 0.75rem;
 }
 
+/* A set logged while the shelf is up: the columns are already there, so the totals move at once. */
+.weekly-sets-shelf.is-follow-up .weekly-shelf-cell {
+  --delay: calc(var(--i, 0) * 110ms);
+}
+
 .weekly-shelf-cell + .weekly-shelf-cell {
   border-left: 1px solid var(--p-line-strong);
 }
@@ -214,7 +219,7 @@
   border-radius: 2px;
   background: color-mix(in srgb, var(--p-accent-text) 50%, transparent);
   transform-origin: left;
-  animation: weekly-shelf-countdown var(--weekly-shelf-ms, 4500ms) linear forwards;
+  animation: weekly-shelf-countdown var(--weekly-shelf-ms, 3000ms) linear forwards;
 }
 
 @keyframes weekly-shelf-in {

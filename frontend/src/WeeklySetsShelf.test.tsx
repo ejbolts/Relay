@@ -102,6 +102,40 @@ describe('weekly sets shelf', () => {
     expect(host.querySelectorAll('.weekly-shelf-countdown')).toHaveLength(1);
   });
 
+  it('keeps a carried-over muscle and its gain badge in place, rolling only its total again', async () => {
+    const render = (next: WeeklySetsUpdate) =>
+      act(async () =>
+        root.render(
+          <WeeklySetsShelf update={next} goal={10} placement="pill" onDismiss={vi.fn()} />,
+        ),
+      );
+    await render(update);
+    const cell = () =>
+      [...host.querySelectorAll('.weekly-shelf-cell')].find(
+        (item) => item.querySelector('.weekly-shelf-name')?.textContent === 'Lower back',
+      )!;
+    const badge = cell().querySelector('.weekly-shelf-gain');
+    const roll = cell().querySelector('.weekly-shelf-roll > span');
+    const gainBar = cell().querySelector('.weekly-shelf-bar-gain');
+    expect(shelf()?.classList.contains('is-follow-up')).toBe(false);
+
+    await render({
+      id: 2,
+      gains: [
+        { muscle: 'Lower back', before: 7, gain: 1, after: 8 },
+        { muscle: 'Quadriceps', before: 2, gain: 0.5, after: 2.5 },
+      ],
+    });
+    expect(shelf()?.classList.contains('is-follow-up')).toBe(true);
+    expect(cell().querySelector('.weekly-shelf-gain')).toBe(badge);
+    expect(badge?.textContent).toBe('+1');
+    // The total and the bar's new chunk are fresh, so they roll and grow from 7 to 8.
+    expect(cell().querySelector('.weekly-shelf-roll > span')).not.toBe(roll);
+    expect(cell().querySelector('.weekly-shelf-roll')?.textContent).toBe('78');
+    expect(cell().querySelector('.weekly-shelf-bar-gain')).not.toBe(gainBar);
+    expect(cell().querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe('70%');
+  });
+
   it('folds away by itself, unless touched to keep it open until touched again', async () => {
     const onDismiss = vi.fn();
     await act(async () =>
