@@ -102,7 +102,7 @@ describe('weekly sets shelf', () => {
     expect(host.querySelectorAll('.weekly-shelf-countdown')).toHaveLength(1);
   });
 
-  it('keeps a carried-over muscle and its gain badge in place, rolling only its total again', async () => {
+  it('keeps a carried-over muscle and its gain badge in place, extending its glow', async () => {
     const render = (next: WeeklySetsUpdate) =>
       act(async () =>
         root.render(
@@ -129,11 +129,17 @@ describe('weekly sets shelf', () => {
     expect(shelf()?.classList.contains('is-follow-up')).toBe(true);
     expect(cell().querySelector('.weekly-shelf-gain')).toBe(badge);
     expect(badge?.textContent).toBe('+1');
-    // The total and the bar's new chunk are fresh, so they roll and grow from 7 to 8.
+    // The total rolls again from 7 to 8, while the glow stays put and extends to cover both sets.
     expect(cell().querySelector('.weekly-shelf-roll > span')).not.toBe(roll);
     expect(cell().querySelector('.weekly-shelf-roll')?.textContent).toBe('78');
-    expect(cell().querySelector('.weekly-shelf-bar-gain')).not.toBe(gainBar);
-    expect(cell().querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe('70%');
+    expect(cell().querySelector('.weekly-shelf-bar-gain')).toBe(gainBar);
+    expect((gainBar as HTMLElement).style.left).toBe('60%');
+    expect((gainBar as HTMLElement).style.width).toBe('20%');
+    expect(cell().querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe('60%');
+    // A muscle new to this set starts its own glow.
+    const quads = [...host.querySelectorAll('.weekly-shelf-cell')][1];
+    expect(quads.querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.left).toBe('20%');
+    expect(quads.querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.width).toBe('5%');
   });
 
   it('folds away by itself, unless touched to keep it open until touched again', async () => {

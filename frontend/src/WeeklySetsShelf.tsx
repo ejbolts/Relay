@@ -117,8 +117,11 @@ function WeeklySetsCell({
   index: number;
   updateId: number;
 }) {
-  // A muscle carried over from the last set keeps its column and gain badge; only its total and
-  // the bar's new chunk, keyed to the update, move again. The bar's end is the goal.
+  // A muscle carried over from the last set keeps its column and gain badge; its total rolls again
+  // and the bar's glowing chunk extends to cover every set since the shelf opened. The bar's end is
+  // the goal.
+  const [glowStart] = useState(item.before);
+  const from = Math.min(glowStart, item.before);
   const percent = (value: number) =>
     goal > 0 ? Math.round(Math.min(100, (value / goal) * 100) * 100) / 100 : 100;
   const met = item.after >= goal;
@@ -145,13 +148,12 @@ function WeeklySetsCell({
         )}
       </span>
       <span className="weekly-shelf-bar">
-        <span className="weekly-shelf-bar-before" style={{ width: `${percent(item.before)}%` }} />
+        <span className="weekly-shelf-bar-before" style={{ width: `${percent(from)}%` }} />
         <span
-          key={updateId}
           className="weekly-shelf-bar-gain"
           style={{
-            left: `${percent(item.before)}%`,
-            width: `${percent(item.after) - percent(item.before)}%`,
+            left: `${percent(from)}%`,
+            width: `${percent(item.after) - percent(from)}%`,
           }}
         />
       </span>

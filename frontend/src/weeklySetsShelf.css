@@ -173,6 +173,8 @@
   transform-origin: left;
   animation: weekly-shelf-grow 600ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--delay) + 80ms)
     backwards;
+  /* Another set while the shelf is up extends the glow from where it ends. */
+  transition: width 600ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--delay) + 80ms);
 }
 
 .weekly-shelf-cell.is-met .weekly-shelf-gain {
