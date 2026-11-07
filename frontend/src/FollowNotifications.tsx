@@ -22,7 +22,7 @@ import type {
 } from './types';
 import './FollowNotifications.css';
 
-export const NOTIFICATIONS_PER_PAGE = 15;
+export const NOTIFICATIONS_PER_PAGE = 10;
 
 type NotificationRow =
   | { kind: 'release'; item: Release }
@@ -32,13 +32,18 @@ type NotificationRow =
   | { kind: 'accepted'; item: SharingConnection };
 
 function notificationRows(items: SharingNotifications, release?: Release): NotificationRow[] {
-  return [
+  const rows: NotificationRow[] = [
     ...(release ? [{ kind: 'release' as const, item: release }] : []),
     ...(items.comments ?? []).map((item) => ({ kind: 'comment' as const, item })),
     ...items.requests.map((item) => ({ kind: 'request' as const, item })),
     ...(items.reactions ?? []).map((item) => ({ kind: 'reaction' as const, item })),
     ...items.accepted.map((item) => ({ kind: 'accepted' as const, item })),
   ];
+  const timestamp = (row: NotificationRow) => {
+    const value = Date.parse(row.kind === 'release' ? (row.item.date ?? '') : row.item.since);
+    return Number.isNaN(value) ? 0 : value;
+  };
+  return rows.sort((a, b) => timestamp(b) - timestamp(a));
 }
 
 function notificationPage(

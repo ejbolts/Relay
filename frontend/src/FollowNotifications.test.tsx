@@ -220,7 +220,7 @@ it('keeps the release unread on opening, opens its notes with View, closes back 
   expect(document.querySelector('.release-notification-new')).toBeNull();
 });
 
-it('counts the release in the 15-row page but only acknowledges displayed social events', async () => {
+it('counts the release in the 10-row page but only acknowledges displayed social events', async () => {
   snapshot = {
     requests: Array.from({ length: 15 }, (_, index) => ({ ...person, id: `request-${index}` })),
     accepted: [],
@@ -228,16 +228,16 @@ it('counts the release in the 15-row page but only acknowledges displayed social
   await releaseInbox('inbox-pagination-sample');
   await click('Notifications, 16 unread');
   const rows = () => document.querySelectorAll('.follow-notification-list > li');
-  expect(rows()).toHaveLength(15);
+  expect(rows()).toHaveLength(10);
   expect(rows()[0].classList.contains('release-notification-row')).toBe(true);
-  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toHaveLength(14);
-  expect(unreadNotificationReferences(snapshot)).toHaveLength(1);
-  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 2 unread');
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toHaveLength(9);
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(6);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 7 unread');
   await click('Next notifications page');
-  expect(rows()).toHaveLength(1);
+  expect(rows()).toHaveLength(6);
   expect(document.querySelector('.release-notification-row')).toBeNull();
   expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
-  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toHaveLength(1);
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0]).toHaveLength(6);
   expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
 });
 
@@ -273,7 +273,7 @@ it('reads requests, accepted requests and reactions on open without removing the
   expect(api.sharing.markNotificationsRead).toHaveBeenCalledTimes(1);
   expect(document.querySelector('dialog')?.textContent).not.toContain('Manage friends');
 });
-it('shows 15 notifications per page with pagination instead of a Manage friends link', async () => {
+it('shows 10 notifications per page with pagination instead of a Manage friends link', async () => {
   snapshot = {
     requests: [person],
     accepted: [],
@@ -291,12 +291,12 @@ it('shows 15 notifications per page with pagination instead of a Manage friends 
   expect(dialog()).toContain('Sam Preview');
   expect(dialog()).toContain('Page 1 of 2');
   expect(dialog()).not.toContain('Manage friends');
-  expect(unreadNotificationReferences(snapshot)).toHaveLength(5);
-  expect(vi.mocked(api.sharing.markNotificationsRead).mock.calls[0][0]).toHaveLength(15);
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(10);
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.calls[0][0]).toHaveLength(10);
   await click('Next notifications page');
   expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
-  expect(vi.mocked(api.sharing.markNotificationsRead).mock.calls[1][0]).toHaveLength(5);
-  expect(rows()).toHaveLength(5);
+  expect(vi.mocked(api.sharing.markNotificationsRead).mock.calls[1][0]).toHaveLength(10);
+  expect(rows()).toHaveLength(10);
   expect(dialog()).toContain('Friend 19');
   expect(dialog()).not.toContain('Sam Preview');
   await click('Choose a notifications page');
@@ -380,11 +380,11 @@ it('paginates mixed comment notices and reads only displayed events, retrying a 
   };
   await render();
   await click('Notifications, 17 unread');
-  expect(document.querySelectorAll('.follow-notification-list li')).toHaveLength(15);
+  expect(document.querySelectorAll('.follow-notification-list li')).toHaveLength(10);
   expect(document.querySelector('dialog')?.textContent).toContain('Reply 6');
-  expect(unreadNotificationReferences(snapshot)).toHaveLength(2);
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(7);
   const first = vi.mocked(api.sharing.markNotificationsRead).mock.calls[0][0];
-  expect(first).toHaveLength(15);
+  expect(first).toHaveLength(10);
   expect(first.filter((ref) => ref.kind === 'comment')).toEqual(
     Array.from({ length: 6 }, (_, i) => ({
       kind: 'comment',
@@ -394,19 +394,55 @@ it('paginates mixed comment notices and reads only displayed events, retrying a 
   );
   vi.mocked(api.sharing.markNotificationsRead).mockRejectedValueOnce(new Error('Offline'));
   await click('Next notifications page');
-  expect(document.querySelectorAll('.follow-notification-list li')).toHaveLength(2);
+  expect(document.querySelectorAll('.follow-notification-list li')).toHaveLength(7);
   expect(document.querySelector('dialog')?.textContent).toContain('Page 2 of 2');
   expect(document.querySelector('[role="alert"]')).toBeTruthy();
-  expect(unreadNotificationReferences(snapshot)).toHaveLength(2);
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(7);
   await click('Try again');
   expect(document.querySelector('[role="alert"]')).toBeNull();
   expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
   const last = vi.mocked(api.sharing.markNotificationsRead).mock.lastCall![0];
   expect(last).toEqual([
     { kind: 'accepted', id: 'accepted', since: person.since },
-    { kind: 'reaction', id: 'reaction-8', since: person.since, workout_id: 'w1' },
+    ...Array.from({ length: 6 }, (_, i) => ({
+      kind: 'reaction',
+      id: `reaction-${i + 3}`,
+      since: person.since,
+      workout_id: 'w1',
+    })),
   ]);
   const calls = vi.mocked(api.sharing.markNotificationsRead).mock.calls.length;
   await click('Previous notifications page');
   expect(api.sharing.markNotificationsRead).toHaveBeenCalledTimes(calls);
+});
+
+it('orders all notification types newest first before paginating', async () => {
+  snapshot = {
+    requests: [{ ...person, since: '2026-11-04T12:00:00Z' }],
+    accepted: [{ ...person, id: 'accepted', since: '2026-11-06T12:00:00Z' }],
+    reactions: [{ ...reaction, since: '2026-11-07T12:00:00Z' }],
+    comments: [
+      {
+        ...person,
+        notice_id: 'comment',
+        comment_id: 'c1',
+        workout_id: 'w1',
+        workout_name: 'Older workout',
+        kind: 'comment',
+        body: 'Sample comment',
+        reaction: null,
+        since: '2026-10-30T12:00:00Z',
+      },
+    ],
+  };
+  await releaseInbox('date-order-sample');
+  await click('Notifications, 5 unread');
+  const dates = [...document.querySelectorAll('.follow-notification-list time')].map((time) =>
+    Date.parse(time.getAttribute('datetime')!),
+  );
+  expect(dates).toEqual([...dates].sort((a, b) => b - a));
+  expect(document.querySelector('.follow-notification-list li')?.textContent).toContain('Leg day');
+  expect(document.querySelector('.follow-notification-list li:last-child')?.textContent).toContain(
+    'Sample comment',
+  );
 });
