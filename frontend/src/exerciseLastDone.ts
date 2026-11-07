@@ -1,8 +1,5 @@
 import type { ExerciseHistoryBaseline, TrackedWorkout } from './types';
 
-/** Dates further back than this read as overdue in the exercise picker. */
-export const LAST_DONE_STALE_DAYS = 30;
-
 /**
  * The latest workout date for each exercise, from the loaded workouts and the condensed
  * history before them. The workout being edited or resumed is left out, so an exercise
@@ -39,13 +36,4 @@ export function formatLastDone(date: string, today: string, locale?: string): st
       ? { day: 'numeric', month: 'short' }
       : { month: 'short', year: 'numeric' },
   );
-}
-
-function dayNumber(date: string): number {
-  const [year, month, day] = date.split('-').map(Number);
-  return Date.UTC(year, month - 1, day) / 86_400_000;
-}
-
-export function lastDoneIsStale(date: string, today: string): boolean {
-  return dayNumber(today) - dayNumber(date) > LAST_DONE_STALE_DAYS;
 }

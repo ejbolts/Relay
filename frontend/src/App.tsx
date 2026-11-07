@@ -275,7 +275,7 @@ import {
   type SessionTemplate,
 } from './trainingSummary';
 import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHistory';
-import { exerciseLastDoneDates, formatLastDone, lastDoneIsStale } from './exerciseLastDone';
+import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
 import { fuzzyHighlightIndices, rankExerciseSearchMatches } from './exerciseSearch';
@@ -6414,9 +6414,7 @@ export function ExercisePicker({
               <em>{exercise.muscle_group}</em>
               {exercise.equipment && <em>{exercise.equipment}</em>}
               {lastDone && (
-                <em
-                  className={`exercise-option-last-done ${lastDoneIsStale(lastDone, today) ? 'stale' : ''}`}
-                >
+                <em className="exercise-option-last-done">
                   <Icon name="calendar" />
                   <span className="sr-only">Last done </span>
                   {formatLastDone(lastDone, today)}

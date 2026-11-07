@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exerciseLastDoneDates, formatLastDone, lastDoneIsStale } from './exerciseLastDone';
+import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import type { ExerciseHistoryBaseline, TrackedWorkout } from './types';
 
 function workout(id: string, date: string, exerciseIds: string[]): TrackedWorkout {
@@ -73,13 +73,5 @@ describe('formatLastDone', () => {
   it('shows day and month this year, and month and year before it', () => {
     expect(formatLastDone('2026-11-05', '2026-11-07', 'en-GB')).toBe('5 Nov');
     expect(formatLastDone('2025-03-18', '2026-11-07', 'en-GB')).toBe('Mar 2025');
-  });
-});
-
-describe('lastDoneIsStale', () => {
-  it('marks dates more than 30 days ago, including across a year boundary', () => {
-    expect(lastDoneIsStale('2026-10-08', '2026-11-07')).toBe(false);
-    expect(lastDoneIsStale('2026-10-07', '2026-11-07')).toBe(true);
-    expect(lastDoneIsStale('2025-12-20', '2026-01-05')).toBe(false);
   });
 });

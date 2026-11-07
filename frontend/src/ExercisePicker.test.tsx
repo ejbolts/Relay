@@ -169,7 +169,7 @@ it('filters custom exercises independently of category, equipment and search', a
   expect(names()).toEqual(['Cable Biceps Curl']);
 });
 
-it('shows when each exercise was last done, marking old dates and skipping unlogged ones', async () => {
+it('shows when each exercise was last done and skips unlogged ones', async () => {
   const today = localDate();
   await act(async () =>
     root.render(
@@ -193,9 +193,7 @@ it('shows when each exercise was last done, marking old dates and skipping unlog
   const lastDone = (id: string) =>
     document.querySelector(`[data-exercise-id="${id}"] .exercise-option-last-done`);
   expect(lastDone('cable')?.textContent).toBe(`Last done ${formatLastDone(today, today)}`);
-  expect(lastDone('cable')?.classList.contains('stale')).toBe(false);
   expect(lastDone('db')?.textContent).toBe(`Last done ${formatLastDone('2020-01-15', today)}`);
-  expect(lastDone('db')?.classList.contains('stale')).toBe(true);
   expect(lastDone('push')).toBeNull();
 });
 
