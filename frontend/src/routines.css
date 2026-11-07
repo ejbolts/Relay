@@ -580,6 +580,7 @@
   font-weight: 600;
 }
 .routine-use .routine-progression {
+  position: relative;
   display: grid;
   gap: 6px;
   margin: 0;
@@ -595,16 +596,85 @@
   font-weight: 600;
 }
 .routine-use .routine-progression .segmented-control {
+  flex-direction: column;
   margin: 0;
 }
-.routine-use .routine-progression .segmented-control button {
+.routine-progression-option {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  border-radius: 10px;
+}
+.routine-progression-option.active {
+  background: var(--p-surface-3);
+}
+.routine-use .routine-progression-option button[role='radio'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
   border: 0;
+  padding: 0 8px 0 12px;
+  text-align: left;
   background: transparent;
   color: var(--p-muted);
 }
-.routine-use .routine-progression .segmented-control button.active {
+.routine-use .routine-progression-option.active button[role='radio'] {
+  color: var(--p-ink);
+}
+.routine-use .routine-progression-option .routine-progression-help {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  min-height: 22px;
+  height: 22px;
+  margin-right: 10px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+/* Keep a comfortable touch target around the small visible circle. */
+.routine-use .routine-progression-help::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.routine-use .routine-progression-help {
+  position: relative;
+}
+.routine-use .routine-progression-help[aria-expanded='true'],
+.routine-use .routine-progression-help:hover {
+  border-color: var(--p-accent-text);
+  color: var(--p-accent-text);
+}
+.routine-progression-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 12px 14px;
   background: var(--p-surface-3);
   color: var(--p-ink);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.35);
+  font-size: 13px;
+}
+.routine-progression-popover p {
+  margin: 0;
+  color: var(--p-ink-2);
+}
+.routine-progression-popover .routine-progression-flow {
+  color: var(--p-ink);
+  font-weight: 600;
 }
 .routine-editor .routine-share {
   display: flex;

@@ -19,6 +19,7 @@ import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } fro
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
+import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
 import type {
   Exercise,
@@ -667,28 +668,7 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
-            <fieldset className="routine-progression" disabled={busy}>
-              <legend>Schedule</legend>
-              <div className="segmented-control" role="radiogroup" aria-label="Schedule">
-                {(
-                  [
-                    ['calendar', 'By date'],
-                    ['workouts', 'Follow my workouts'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={progression === value}
-                    className={progression === value ? 'active' : ''}
-                    onClick={() => setProgression(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
             <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
