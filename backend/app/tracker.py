@@ -129,6 +129,7 @@ from .tracker_schemas import (
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
     TrainingSplit,
+    TrainingSplitRead,
     TrainingTimeRead,
     TrainingWorkoutCreate,
     TrainingWorkoutRead,
@@ -165,6 +166,7 @@ from .training_metrics import (
 from .training_split import (
     TRAINING_SPLIT_KEY,
     saved_training_split,
+    split_read,
     split_recommendation,
     validate_split_types,
 )
@@ -1478,22 +1480,24 @@ def update_ffmi_profile(payload: FfmiProfile, db: DbSession, user: CurrentUser) 
     return ffmi_profile(db, user.id)
 
 
-@router.get("/training-split", response_model=TrainingSplit | None)
-def get_training_split(db: DbSession, user: CurrentUser) -> TrainingSplit | None:
-    return saved_training_split(db, user.id)
+@router.get("/training-split", response_model=TrainingSplitRead | None)
+def get_training_split(
+    db: DbSession, user: CurrentUser, on_date: date | None = None
+) -> TrainingSplitRead | None:
+    return split_read(db, user.id, saved_training_split(db, user.id), on_date or date.today())
 
 
-@router.put("/training-split", response_model=TrainingSplit)
+@router.put("/training-split", response_model=TrainingSplitRead)
 def update_training_split(
-    payload: TrainingSplit, db: DbSession, user: CurrentUser
-) -> TrainingSplit:
+    payload: TrainingSplit, db: DbSession, user: CurrentUser, on_date: date | None = None
+) -> TrainingSplitRead:
     validate_split_types(db, user.id, payload)
     # Editing the schedule directly returns it to history-based workout suggestions.
     payload.routine_id = None
     set_setting(db, user.id, TRAINING_SPLIT_KEY, payload.model_dump_json())
     bump_workout_cache_revision(db, user.id)
     db.commit()
-    return payload
+    return split_read(db, user.id, payload, on_date or date.today())
 
 
 @router.get("/workout-type-colors", response_model=WorkoutTypeColors)

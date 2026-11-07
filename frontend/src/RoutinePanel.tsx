@@ -20,7 +20,14 @@ import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type { Exercise, Routine, RoutineDay, RoutineSet, TrainingSplit } from './types';
+import type {
+  Exercise,
+  Routine,
+  RoutineDay,
+  RoutineSet,
+  SplitProgression,
+  TrainingSplit,
+} from './types';
 import './routines.css';
 
 const emptySet = (): RoutineSet => ({
@@ -182,6 +189,7 @@ export function RoutinePanel({
   const [deleting, setDeleting] = useState<Routine | null>(null);
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
+  const [progression, setProgression] = useState<SplitProgression>('calendar');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -437,10 +445,11 @@ export function RoutinePanel({
                           ? (trainingSplit?.start_date ?? localDate())
                           : localDate(),
                       );
+                      setProgression(trainingSplit?.progression ?? 'calendar');
                       setUsing(routine);
                     }}
                   >
-                    {routine.id === activeId ? 'Change start' : 'Use split'}
+                    {routine.id === activeId ? 'Change schedule' : 'Use split'}
                   </button>
                 </>
               ) : (
@@ -634,8 +643,9 @@ export function RoutinePanel({
                         ...trainingSplit!,
                         start_date: startDate,
                         enabled: true,
+                        progression,
                       })
-                    : await api.routines.use(using.id, startDate);
+                    : await api.routines.use(using.id, startDate, progression);
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
@@ -657,6 +667,28 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
+            <fieldset className="routine-progression" disabled={busy}>
+              <legend>Schedule</legend>
+              <div className="segmented-control" role="radiogroup" aria-label="Schedule">
+                {(
+                  [
+                    ['calendar', 'By date'],
+                    ['workouts', 'Follow my workouts'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={progression === value}
+                    className={progression === value ? 'active' : ''}
+                    onClick={() => setProgression(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
@@ -758,7 +790,10 @@ function RoutineEditor({
   schedule?: TrainingSplit;
   busy: boolean;
   error: string | null;
-  onSave: (value: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) => void;
+  onSave: (
+    value: Routine,
+    schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
+  ) => void;
   onClose: () => void;
 }) {
   const formId = useId();
@@ -890,7 +925,12 @@ function RoutineEditor({
       setValidation('Choose an active workout type for every workout day.');
       return;
     }
-    onSave(value, schedule ? { start_date: startDate, enabled } : undefined);
+    onSave(
+      value,
+      schedule
+        ? { start_date: startDate, enabled, progression: schedule.progression ?? 'calendar' }
+        : undefined,
+    );
   }
   const canSave = !busy && !addingType && !types.loading && !types.error && !loadError;
   return (

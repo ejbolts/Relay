@@ -64,11 +64,17 @@ export function TrainingSplitEditor({
           initialOpenId={initialRoutineId}
           activeId={split?.enabled ? (split.routine_id ?? 'current-split') : null}
           renderPreview={(current) => (
-            <SplitPreview key={`${current.routine_id}:${current.start_date}`} split={current} />
+            <SplitPreview
+              key={`${current.routine_id}:${current.start_date}:${current.progression}`}
+              split={current}
+            />
           )}
           onUsed={(updated) => {
             setSplit(updated);
             void onSaved(updated);
+            // Saved routines return no progress, so ask where a workout-following split stands.
+            if (updated.progression === 'workouts' && updated.next_step == null)
+              void api.getTrainingSplit().then(setSplit, () => undefined);
           }}
         />
       )}
@@ -86,20 +92,19 @@ export function SplitPreview({ split }: { split: TrainingSplit }) {
   const labelFor = (id: string | null | undefined) =>
     id === null ? 'Rest' : id === undefined ? 'Not started' : (typeFor(id)?.name ?? 'Removed type');
   const today = localDate();
-  const previewStart = addDays(
-    split.start_date > today ? split.start_date : today,
-    previewWeek * 7,
-  );
+  const firstDay =
+    split.progression === 'workouts' ? (split.next_date ?? split.start_date) : split.start_date;
+  const previewStart = addDays(firstDay > today ? firstDay : today, previewWeek * 7);
   const preview = splitPreview(split, previewStart);
   const months = calendarView ? calendarMonths(today, 2) : [];
   const plannedDays = months.flatMap((month) =>
-    splitPreview(split, month.first, month.cells.filter(Boolean).length).map(
-      ({ date, typeId }) => ({
+    splitPreview(split, month.first, month.cells.filter(Boolean).length)
+      .filter(({ typeId }) => split.progression !== 'workouts' || typeId !== undefined)
+      .map(({ date, typeId }) => ({
         date,
         label: labelFor(typeId),
         color: typeId === undefined ? undefined : colourFor(typeId),
-      }),
-    ),
+      })),
   );
   const monthLabel = (date: string) =>
     parseLocalDate(date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });

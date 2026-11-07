@@ -67,6 +67,7 @@ import type {
   WeightMapping,
   WorkoutSession,
   TrainingPreferences,
+  SplitProgression,
   TrainingSplit,
   Routine,
   TrainingTime,
@@ -670,11 +671,15 @@ export const api = {
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
       DASHBOARD_CACHE_KEY,
     ),
-  getTrainingSplit: () => accountRead<TrainingSplit | null>('/api/training-split'),
+  getTrainingSplit: () =>
+    accountRead<TrainingSplit | null>(
+      `/api/training-split?${new URLSearchParams({ on_date: localDate() })}`,
+      'response:/api/training-split',
+    ),
   routines: {
     create: (
       routine: Omit<Routine, 'id'>,
-      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>,
+      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
     ) =>
       request<Routine>('/api/routines', {
         method: 'POST',
@@ -684,7 +689,10 @@ export const api = {
     list: () => accountRead<Routine[]>('/api/routines'),
     profile: (id: string) => request<Routine[]>(`/api/routines/profile/${encodeURIComponent(id)}`),
     fromSplit: () => request<Routine>('/api/routines/from-split', { method: 'POST' }),
-    save: (routine: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) =>
+    save: (
+      routine: Routine,
+      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
+    ) =>
       request<Routine>(`/api/routines/${routine.id}`, {
         method: 'PUT',
         headers: jsonHeaders,
@@ -693,15 +701,18 @@ export const api = {
     remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
     copy: (owner: string, id: string) =>
       request<Routine>(`/api/routines/profile/${owner}/${id}/copy`, { method: 'POST' }),
-    use: (id: string, start_date: string) =>
-      request<TrainingSplit>(`/api/routines/${id}/use`, {
-        method: 'POST',
-        headers: jsonHeaders,
-        body: JSON.stringify({ start_date }),
-      }),
+    use: (id: string, start_date: string, progression: SplitProgression = 'calendar') =>
+      request<TrainingSplit>(
+        `/api/routines/${id}/use?${new URLSearchParams({ on_date: localDate() })}`,
+        {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({ start_date, progression }),
+        },
+      ),
   },
   saveTrainingSplit: (payload: TrainingSplit) =>
-    request<TrainingSplit>('/api/training-split', {
+    request<TrainingSplit>(`/api/training-split?${new URLSearchParams({ on_date: localDate() })}`, {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify(payload),
