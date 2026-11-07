@@ -29,10 +29,12 @@ it('explains each schedule with a short flow and keeps choosing separate', async
   expect(popover()).toBeNull();
   await act(async () => help('By date').click());
   expect(help('By date').getAttribute('aria-expanded')).toBe('true');
-  expect(popover()?.textContent).toBe('By datePush → Rest day → Legs→ Pull is skipped');
+  expect(popover()?.textContent).toBe(
+    'By dateSplitUpper → Lower → RestDay off after UpperUpper → Day off → Rest → Upper→ Lower is skipped',
+  );
   await act(async () => help('Follow my workouts').click());
   expect(popover()?.textContent).toBe(
-    'Follow my workoutsPush → Rest day → Pull→ Your next planned rest is skipped',
+    'Follow my workoutsSplitUpper → Lower → RestDay off after UpperUpper → Day off → Lower → Upper→ Lower waits; the planned Rest is skipped',
   );
   expect(onChange).not.toHaveBeenCalled();
   await act(async () => help('Follow my workouts').click());

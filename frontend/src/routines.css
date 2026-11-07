@@ -652,12 +652,8 @@
   border-color: var(--p-accent-text);
   color: var(--p-accent-text);
 }
+/* Opens in place so the dialog grows to fit it rather than clipping it. */
 .routine-progression-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  left: 0;
-  z-index: 2;
   display: grid;
   gap: 6px;
   border: 1px solid var(--p-line-strong);
@@ -665,10 +661,26 @@
   padding: 12px 14px;
   background: var(--p-surface-3);
   color: var(--p-ink);
-  box-shadow: 0 12px 28px rgb(0 0 0 / 0.35);
   font-size: 13px;
 }
 .routine-progression-popover p {
+  margin: 0;
+  color: var(--p-ink-2);
+}
+.routine-progression-example {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+.routine-progression-example dt {
+  color: var(--p-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.routine-progression-example dt:not(:first-child) {
+  margin-top: 4px;
+}
+.routine-progression-example dd {
   margin: 0;
   color: var(--p-ink-2);
 }

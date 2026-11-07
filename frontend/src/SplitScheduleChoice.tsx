@@ -1,6 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { SplitProgression } from './types';
 
+/** One small split shows both options, so the only difference is what happens after a day off. */
+const EXAMPLE_SPLIT = ['Upper', 'Lower', 'Rest'];
+
 const OPTIONS: {
   value: SplitProgression;
   label: string;
@@ -10,16 +13,25 @@ const OPTIONS: {
   {
     value: 'workouts',
     label: 'Follow my workouts',
-    flow: ['Push', 'Rest day', 'Pull'],
-    result: 'Your next planned rest is skipped',
+    flow: ['Upper', 'Day off', 'Lower', 'Upper'],
+    result: 'Lower waits; the planned Rest is skipped',
   },
   {
     value: 'calendar',
     label: 'By date',
-    flow: ['Push', 'Rest day', 'Legs'],
-    result: 'Pull is skipped',
+    flow: ['Upper', 'Day off', 'Rest', 'Upper'],
+    result: 'Lower is skipped',
   },
 ];
+
+function Flow({ steps }: { steps: string[] }) {
+  return steps.map((step, index) => (
+    <span key={index}>
+      {index > 0 && <span aria-hidden="true"> → </span>}
+      {step}
+    </span>
+  ));
+}
 
 /** Chooses how a split moves on, with a small flow explaining each option. */
 export function SplitScheduleChoice({
@@ -99,14 +111,16 @@ export function SplitScheduleChoice({
           aria-label={open.label}
         >
           <strong>{open.label}</strong>
-          <p className="routine-progression-flow">
-            {open.flow.map((step, index) => (
-              <span key={step}>
-                {index > 0 && <span aria-hidden="true"> → </span>}
-                {step}
-              </span>
-            ))}
-          </p>
+          <dl className="routine-progression-example">
+            <dt>Split</dt>
+            <dd>
+              <Flow steps={EXAMPLE_SPLIT} />
+            </dd>
+            <dt>Day off after Upper</dt>
+            <dd className="routine-progression-flow">
+              <Flow steps={open.flow} />
+            </dd>
+          </dl>
           <p>
             <span aria-hidden="true">→ </span>
             {open.result}
