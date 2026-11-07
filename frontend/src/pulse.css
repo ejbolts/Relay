@@ -4636,6 +4636,30 @@ html.edge-swipe-ready .edge-swipe-indicator {
   content: '·';
 }
 
+.exercise-picker .exercise-option-tags em.exercise-option-last-done {
+  display: inline-flex;
+  align-items: center;
+  color: var(--p-accent-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.exercise-picker .exercise-option-tags em.exercise-option-last-done::before {
+  color: var(--p-muted);
+}
+
+.exercise-picker .exercise-option-tags em.exercise-option-last-done.stale {
+  color: var(--p-gold);
+}
+
+.exercise-option-last-done .pulse-icon {
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.2rem;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
 small.custom-exercise-label,
 .progress-exercise-results small.custom-exercise-label {
   display: block;

@@ -4,7 +4,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExercisePicker } from './App';
 import { api } from './api';
+import { formatLastDone } from './exerciseLastDone';
 import type { Exercise, MachinePhotoUsage } from './types';
+import { localDate } from './utils';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -165,6 +167,36 @@ it('filters custom exercises independently of category, equipment and search', a
   await act(async () => custom.click());
   expect(custom.getAttribute('aria-pressed')).toBe('false');
   expect(names()).toEqual(['Cable Biceps Curl']);
+});
+
+it('shows when each exercise was last done, marking old dates and skipping unlogged ones', async () => {
+  const today = localDate();
+  await act(async () =>
+    root.render(
+      <ExercisePicker
+        exercises={exercises}
+        excludedIds={['single']}
+        recentExerciseIds={['cable', 'db']}
+        lastDoneDates={
+          new Map([
+            ['cable', today],
+            ['db', '2020-01-15'],
+          ])
+        }
+        onChoose={onChoose}
+        onClose={vi.fn()}
+        onFavoriteChange={vi.fn()}
+        onCreateExercise={vi.fn()}
+      />,
+    ),
+  );
+  const lastDone = (id: string) =>
+    document.querySelector(`[data-exercise-id="${id}"] .exercise-option-last-done`);
+  expect(lastDone('cable')?.textContent).toBe(`Last done ${formatLastDone(today, today)}`);
+  expect(lastDone('cable')?.classList.contains('stale')).toBe(false);
+  expect(lastDone('db')?.textContent).toBe(`Last done ${formatLastDone('2020-01-15', today)}`);
+  expect(lastDone('db')?.classList.contains('stale')).toBe(true);
+  expect(lastDone('push')).toBeNull();
 });
 
 describe('choosing a machine beneath an exercise', () => {

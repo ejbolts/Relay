@@ -248,6 +248,12 @@
   background: var(--p-surface-2);
   color: var(--p-ink-2);
 }
+:root[data-colour-mode='light'] .exercise-option-tags em.exercise-option-last-done {
+  color: var(--p-accent-text);
+}
+:root[data-colour-mode='light'] .exercise-option-tags em.exercise-option-last-done.stale {
+  color: var(--p-gold);
+}
 :root[data-colour-mode='light'] .exercise-search-wrap > span {
   color: var(--p-muted);
 }
