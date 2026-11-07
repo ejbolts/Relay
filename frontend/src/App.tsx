@@ -3387,6 +3387,32 @@ function WorkoutLogger({
   const [weeklySetsUpdate, setWeeklySetsUpdate] = useState<WeeklySetsUpdate | null>(null);
   const weeklySetsUpdateId = useRef(0);
 
+  function completeExercise(movement: DraftMovement, isComplete: boolean) {
+    const sets = isComplete
+      ? completeRemainingSets(movement.exercise.kind, movement.sets)
+      : movement.sets;
+    const newlyCompletedWorkingSets = sets.filter(
+      (set, index) => !movement.sets[index].completed && isCompletedWorkingSet(set),
+    ).length;
+    if (newlyCompletedWorkingSets && !initialWorkout) {
+      const gains = weeklySetGains(
+        movement.exercise,
+        weeklySets,
+        workoutDate,
+        localDate(),
+        newlyCompletedWorkingSets,
+      );
+      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
+    }
+    setMovements((current) =>
+      current.map((item) =>
+        item.key === movement.key
+          ? { ...item, isComplete: isComplete && sets.every((set) => set.completed), sets }
+          : item,
+      ),
+    );
+  }
+
   function updateSet(movementKey: string, setKey: string, update: Partial<DraftSet>) {
     const movement = movements.find((item) => item.key === movementKey);
     const currentSet = movement?.sets.find((item) => item.key === setKey);
@@ -4006,21 +4032,7 @@ function WorkoutLogger({
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
-              onExerciseComplete={(isComplete) =>
-                setMovements((current) =>
-                  current.map((item) => {
-                    if (item.key !== movement.key) return item;
-                    const sets = isComplete
-                      ? completeRemainingSets(item.exercise.kind, item.sets)
-                      : item.sets;
-                    return {
-                      ...item,
-                      isComplete: isComplete && sets.every((set) => set.completed),
-                      sets,
-                    };
-                  }),
-                )
-              }
+              onExerciseComplete={(isComplete) => completeExercise(movement, isComplete)}
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
               onToggleSet={(item) => toggleSet(movement, item)}
               onAddSet={() => addSet(movement)}
