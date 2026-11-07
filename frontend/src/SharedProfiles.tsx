@@ -1541,7 +1541,7 @@ export function SharedProfileScreen({
       {ownIdentity ?? (
         <section className="settings-panel panel profile-summary" aria-label="Shared profile">
           <div className="profile-summary-main">
-            <ProfileAvatar className="profile-avatar" user={avatarUser(profile)} />
+            <ProfileAvatar className="profile-avatar" user={avatarUser(profile)} viewable />
             <div className="profile-summary-copy">
               <strong>
                 {profile.display_name}

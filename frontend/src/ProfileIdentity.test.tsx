@@ -130,6 +130,17 @@ function stubCardHeights() {
 }
 
 describe('profile viewing and editing', () => {
+  it('opens the saved photo for viewing while leaving photo editing behind Edit profile', async () => {
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.profile-photo-view')!.click(),
+    );
+    expect(document.querySelector('dialog img')?.getAttribute('src')).toBe('/sample-photo.png');
+    await act(async () => document.querySelector<HTMLButtonElement>('dialog button')!.click());
+    await act(async () => button('Edit profile').click());
+    expect(container.querySelector('.profile-photo-view')).toBeNull();
+    expect(container.querySelector('.profile-photo-edit')).not.toBeNull();
+  });
+
   afterEach(() => {
     Reflect.deleteProperty(HTMLElement.prototype, 'animate');
     document.documentElement.removeAttribute('data-reduce-motion');

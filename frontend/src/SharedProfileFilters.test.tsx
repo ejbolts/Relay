@@ -151,6 +151,23 @@ function button(prefix: string) {
 }
 
 describe('shared profile friend control', () => {
+  it('opens a visible shared profile photo in the square viewer', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      profile_photo_url: '/api/sharing/profiles/friend/photo?v=sample',
+      can_view: false,
+    });
+    await renderProfile('friend-with-photo');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.profile-photo-view')!.click(),
+    );
+    expect(document.querySelector('dialog img')?.getAttribute('src')).toBe(
+      '/api/sharing/profiles/friend/photo?v=sample',
+    );
+    await act(async () => document.querySelector<HTMLButtonElement>('dialog button')!.click());
+    expect(document.querySelector('dialog')).toBeNull();
+  });
+
   it('shows Friends with a menu holding the start month, Remove friend and Block', async () => {
     expect(container.textContent).not.toContain('Public');
     expect(container.querySelector('.profile-joined')?.textContent).toBe('Joined October 2026');
