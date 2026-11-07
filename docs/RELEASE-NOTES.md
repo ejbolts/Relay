@@ -4,119 +4,46 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.2.0
 
-1 November 2026
+7 November 2026
 
-### Weekly comparisons and body goals
+### Weekly volume and machine weights
 
-![Sets per muscle on Home with week arrows, this week's bars, outlines for the week before and the change for each muscle.](screenshots/releases/1.1.1-sets-per-muscle-compare.png)
+![Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data.](screenshots/releases/1.2.0-split-editor.png)
 
-**Week by week** — Step back and see the change on the week before.
+**Weekly volume while you build** — Plan splits against your weekly goals.
 
-![Swiping a goal line left in the monthly check-in history to reveal Delete, then the goal removed with an Undo popup.](screenshots/releases/1.1.1-swipe-remove-goal.png)
+![Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data.](screenshots/releases/1.2.0-inline-machine-picker.gif)
 
-**Swipe to remove** — Goals come off the history like rest times in a workout.
+**Machine with the exercise** — Your last-used machine is ready; swipe for another.
 
-![Workout set marked A with Attempted selected in the set-type menu.](screenshots/releases/1.2.0-attempted-set.png)
+![Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data.](screenshots/releases/1.2.0-machine-weights-slider.gif)
 
-**Attempted sets** — A replaces F in the set-type menu and workout rows. Isolated sample data.
+**Machine weights** — Compare progress across machines on one trend.
 
-![Paste screenshot beside Upload screenshot in an expanded cardio set with scanned sample workout metrics.](screenshots/releases/1.2.0-paste-screenshot.png)
+- **Merge exercises:** Combine duplicate custom exercises and keep their history.
+- **Every set counts:** See each set's weekly muscle gains above the rest timer.
+- **Sets per muscle:** Compare earlier weeks; totals update as you train.
+- **Split days:** A coloured block for each planned set.
+- **Attempted sets:** Failure sets are now Attempted, marked A.
+- **High-rep warnings:** Skip repeat warnings for one workout.
+- **Paste screenshot:** Paste a copied screenshot into a cardio set.
+- **Cardio distance:** Distance split by activity type.
+- **Cardio saves:** No more zone confirmation popups.
+- **Rest times:** Each set suggests its previous rest.
+- **Logging sets:** Hold to reorder, wrapping notes and synced ticks.
+- **Workout errors:** Clearer steps and an X to close.
+- **Exercise list:** Themed filters, aligned help and steadier search.
+- **Open a workout:** Tap a friend's workout name to open it.
+- **Social:** Compact friend rows and one emoji per reaction.
+- **Profile photos:** Pinch and drag to crop your photo.
+- **Offline check-ins:** Weight and body fat save offline.
+- **Offline notice:** A dismissible strip on every screen.
+- **Body goals:** Swipe goals away and see a line to your target date.
+- **Sync:** Other devices' workouts appear without reloading.
+- **CSV exports:** Cardio metrics survive export and reimport.
+- **iPhone:** Fields no longer zoom in when tapped.
 
-**Paste a screenshot** - Copy it, tap Paste screenshot and review the scanned values. Isolated sample data.
-
-![High-rep confirmation popup with the checkbox selected to stop further high-rep warnings for this workout.](screenshots/releases/1.2.0-high-rep-warning.png)
-
-**High-rep warnings** - Skip repeat rep warnings for one workout. High-weight warnings stay active. Isolated sample data.
-
-![Exercise filters with blue theme-coloured borders around the selected Custom and Biceps pills.](screenshots/releases/1.2.0-exercise-filter-pills.png)
-
-**Clearer filters** - Selected pills follow your theme; tap a selected muscle again to return to All. Isolated sample data.
-
-![Exercise library with muscle-credit help icons aligned in one column immediately beside the trend sparklines, with short and wrapped exercise names.](screenshots/releases/1.2.0-exercise-help-alignment.png)
-
-**Aligned exercise help** — Question marks stay beside the trends. Isolated sample data.
-
-![Holding a set's drag handle until a blue outline appears, then dragging the first set below the next two sets.](screenshots/releases/1.2.0-hold-to-reorder-sets.gif)
-
-**Hold to reorder** — Hold for half a second, then drag the outlined set. Isolated sample data.
-
-![Saved set notes and the multiline note editor wrapping long text within the workout card.](screenshots/releases/1.2.0-set-notes-wrap.png)
-
-**Wrapping set notes** - Notes stay inside the card while typing and after saving, including long words and manual line breaks. Isolated sample data.
-
-![Leg Extension with its exercise tick cleared after unticking the first working set, while the warm-up and second working set remain completed.](screenshots/releases/1.2.0-exercise-completion-sync.png)
-
-**Consistent exercise ticks** - Unticking a set clears the exercise tick. Tick the exercise again to complete its remaining entered sets. Isolated sample data.
-
-![Exercise picker showing two Lying search results immediately below the filters, with Lying Leg Curl selected and the add action at the bottom.](screenshots/releases/1.2.0-exercise-picker-layout.png)
-
-**Steady exercise search** - Filters and results stay together while searching and selecting exercises. Isolated sample data.
-
-![Split editor with the name, start date and Active chip on one row, a two-column Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers.](screenshots/releases/1.2.0-split-editor.png)
-
-**Weekly volume while you build** - See planned sets per muscle and cardio against your goals as you step sets. Isolated sample data.
-
-![Split card listing each day's exercises with a coloured block for every planned set, day totals, cardio minutes and a Muscles button.](screenshots/releases/1.2.0-split-days.png)
-
-**Split days at a glance** - Each planned set is a coloured block. Isolated sample data.
-
-![Social showing a smiley-plus button before reacting, one emoji per reaction type with its count, and a blue border only around your selected emoji.](screenshots/releases/1.2.0-workout-reactions.png)
-
-**Your reaction, once** - Matching emojis share a count. Only your selection has a blue border. Isolated sample data.
-
-![Workout error explaining how to add or fill in a set and tap the tick beside that set or its exercise before saving.](screenshots/releases/1.2.0-workout-completion-error.png)
-
-**Clearer workout errors** - Follow the steps to tick off a set before finishing, or close the message with the X. Isolated sample data.
-
-![Body trend chart extended to December, with a dotted goal line rising from the goal's start weight in October to 85 kg at the end of December.](screenshots/releases/1.2.0-goal-future-line.png)
-
-**Goal line to your target date** - The trend chart runs on to a future goal date with a dotted line from where you started. Isolated sample data.
-
-![Alex Rivera's shared Upper body workout opened with its completed sets after tapping the workout name in Social.](screenshots/releases/1.2.0-social-workout-link.png)
-
-**Open the workout** - Tap a saved workout name in Social to open that exact workout, expanded and focused. Isolated sample data.
-
-![Cardio screen after saving a sample session, with updated minutes and no zone notification popup.](screenshots/releases/1.2.0-cardio-without-zone-popup.png)
-
-**Quieter cardio saves** - Zone and goal totals still update, without the zone confirmation popup. Isolated sample data.
-
-![Social showing one flat friends list with thin dividers, weekly activity and compact workout controls.](screenshots/releases/1.2.0-social-flat-friend-list.png)
-
-**Compact friend rows** - Social matches Home's Recent Friends Activity with flat rows and thin dividers, leaving more room for names and workouts. Speech bubbles show only the count; long secondary text ends after two lines with an ellipsis. Isolated sample data.
-
-![Home Recent Friends Activity with workout links and compact reaction and comment controls on the same row.](screenshots/releases/1.2.0-compact-friend-rows-home.png)
-
-**The same layout on Home** - Workout names open the matching session, with compact controls alongside. Isolated sample data.
-
-![Body screen offline with weight and body-fat values saved locally and waiting to sync.](screenshots/releases/1.2.0-offline-body-check-ins.png)
-
-**Save now, sync later** - Log weight and body fat immediately, including offline. Isolated sample data.
-
-![Pinch zoom and dragging in the profile photo editor, with dimmed outer edges fading after one idle second, then the saved circular avatar.](screenshots/releases/1.2.0-profile-photo-crop.gif)
-
-**Your photo, your crop** - Pinch to zoom and drag to frame your photo. Dimmed edges fade after one idle second and return when you move again. Automated touch-pointer interaction with an isolated synthetic profile.
-
-- **Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.
-- **Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.
-- **Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.
-- **Screenshot paste:** Copy a screenshot and tap **Paste screenshot** beside **Upload screenshot** in a cardio set to scan it without saving it to Photos. Your browser may ask you to allow Paste.
-- **High-rep warnings:** The confirmation popup offers a checkbox to skip further high-rep warnings for this workout, including after recovery. New workouts warn again; unusually high-weight warnings stay active.
-- **Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.
-- **Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.
-- **Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.
-- **Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.
-- **Exercise completion:** Unticking a set also unticks its exercise. Adding a set or restoring an unfinished set with Undo clears the exercise tick too. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished. Recovery repairs inconsistent ticks from earlier versions.
-- **Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard.
-- **Split editor:** Editing a split now opens a compact full screen with Save at the top. A **Weekly volume** chart leads, showing the working sets each muscle gets per week and your planned cardio minutes against your weekly set and cardio goals, and it updates as you build. Days fold into one-line rows with their exercise and set counts, and one opens at a time. Each exercise has a sets stepper (cardio steps in 5-minute amounts), and stepping below one set removes it. The **?** beside each exercise shows its direct and partial set credits, and turning partial sets on or off there updates the chart. Tap a muscle in the chart to see which days train it and how many sets each adds. Cycles that aren't seven days long use weekly averages.
-- **Split days:** Split cards, including friends' shared splits and **Exercises & sets** on your active split, list each exercise with a coloured block for every planned set and a total for each day, instead of each set's reps and weight. Cardio shows its minutes, and the **Muscles** button shows what each exercise trains.
-- **Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.
-- **Workout errors:** If no sets are complete, the error explains how to add or fill in a set and tap the tick beside that set or its exercise. Empty workouts prompt you to add an exercise first. Close errors with the X.
-- **Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.
-- **Social workout links:** Tap a saved workout name to open the friend's shared profile with that exact workout expanded and focused. The friend's name still opens their profile normally. Older sessions load by date, and unavailable workouts show a clear message.
-- **Cardio saves:** Removed the zone confirmation popup after saving workouts, adding or editing cardio sessions, and editing cardio metrics. Zone classification and goal totals continue to update.
-- **Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Workout names open the matching session; friend names open their profile. Comment buttons show just the speech-bubble icon and count, while keeping descriptive screen-reader labels. Social friend subtext truncates after two lines. Extra reaction counts wrap within the control area, and expanded comments and reaction pickers use the full row width.
-- **Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.
-- **Profile photos:** Choose a photo or open **Edit profile > Adjust crop** for your current picture. Pinch with two fingers to zoom and drag to reposition. The image outside the circle is dimmed while adjusting, fades away after one idle second and returns when movement resumes. Sliders have been removed; keyboard users can focus the photo, move with arrow keys and zoom with +/-. **Use crop** previews your choice; **Save profile** saves it. Reset centres the source photo, and Cancel keeps the previous crop. Photo changes save without a success popup.
+[Full change details on GitHub](https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-DETAILS-1.2.md#120).
 
 ## 1.1.0
 
