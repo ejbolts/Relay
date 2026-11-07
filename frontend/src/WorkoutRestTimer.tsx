@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { restTimerProgress } from './restTimer';
 import { formatSeconds } from './utils';
@@ -74,6 +74,7 @@ export function WorkoutTimerDock({
   onHide,
   onShow,
   onEnd,
+  joined = false,
 }: {
   restSeconds: number;
   restTotal: number;
@@ -85,6 +86,8 @@ export function WorkoutTimerDock({
   onHide: () => void;
   onShow: () => void;
   onEnd: () => void;
+  /** The weekly sets shelf sits on top, so the pill squares its top corners to join it. */
+  joined?: boolean;
 }) {
   const notchRef = useRef<HTMLButtonElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -98,12 +101,27 @@ export function WorkoutTimerDock({
   const verb = paused ? 'Resume' : 'Pause';
   const progress = `scaleX(${restTimerProgress(restSeconds, restTotal)})`;
   const state = paused ? ' is-paused' : '';
+  // The fill glides through each second, but snaps quickly to a jump such as -30 or +30.
+  const [shownSeconds, setShownSeconds] = useState(restSeconds);
+  const [jumped, setJumped] = useState(false);
+  if (restSeconds !== shownSeconds) {
+    setShownSeconds(restSeconds);
+    setJumped(Math.abs(restSeconds - shownSeconds) > 1);
+  }
 
   if (restSeconds <= 0) return null;
   if (!restHidden) {
     return (
-      <div className={`workout-timer-dock rest-pill${state}`} role="group" aria-label="Rest timer">
-        <span className="rest-pill-fill" aria-hidden="true" style={{ transform: progress }} />
+      <div
+        className={`workout-timer-dock rest-pill${state}${joined ? ' has-weekly-shelf' : ''}`}
+        role="group"
+        aria-label="Rest timer"
+      >
+        <span
+          className={`rest-pill-fill${jumped ? ' is-jump' : ''}`}
+          aria-hidden="true"
+          style={{ transform: progress }}
+        />
         <button
           ref={toggleRef}
           type="button"
@@ -176,9 +194,6 @@ export function WorkoutTimerDock({
         onShow();
       }}
     >
-      <span className="rest-notch-bar" aria-hidden="true">
-        <span style={{ transform: progress }} />
-      </span>
       <Icon name={paused ? 'pause' : 'timer'} />
       <strong role="timer" aria-label={`Rest timer ${time}`}>
         {time}

@@ -772,6 +772,42 @@ describe('saved training splits on Home', () => {
 });
 
 describe('rest time controls', () => {
+  it('adds a logged working set to its weekly totals above the rest, but not a warm-up', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      weekly_sets: {
+        week_start: '2026-10-12',
+        week_end: '2026-10-18',
+        muscle_groups: [{ muscle_group: 'Chest', raw_sets: 4, contributions: [] }],
+      },
+    } as unknown as DashboardData);
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].rest_seconds = 90;
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-warmup',
+      set_type: 'warmup',
+      warmup: true,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const shelf = () => container.querySelector('.weekly-sets-shelf');
+    await click('Complete set 2');
+    expect(shelf()).toBeNull();
+    await click('Complete set 1');
+    // The row's completed set already counts towards Chest, so this set moves it from 5 to 6.
+    expect(shelf()?.classList.contains('is-pill')).toBe(true);
+    expect(container.querySelector('.rest-pill')?.classList.contains('has-weekly-shelf')).toBe(
+      true,
+    );
+    expect(container.querySelector('.weekly-shelf-name')?.textContent).toBe('Chest');
+    expect(container.querySelector('.weekly-shelf-gain')?.textContent).toBe('+1');
+    expect(container.querySelector('.weekly-shelf-roll')?.textContent).toBe('56');
+    await click('Mark set 1 incomplete');
+    expect(shelf()).toBeNull();
+  });
+
   it('reveals rests only for newly added or completed sets and keeps that state after reload', async () => {
     const draft = storedDraft();
     const suggested = draft.movements[0].sets[0];
@@ -906,6 +942,20 @@ describe('rest time controls', () => {
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
     expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it('moves the rest fill by the whole 30 seconds when time is added or taken off', async () => {
+    await startRest();
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    const fill = () => container.querySelector<HTMLElement>('.rest-pill-fill');
+    expect(fill()?.style.transform).toBe(`scaleX(${25 / 30})`);
+    await click('Add 30 seconds to the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
+    expect(fill()?.style.transform).toBe('scaleX(1)');
+    expect(fill()?.classList.contains('is-jump')).toBe(true);
+    await click('Take 30 seconds off the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(fill()?.style.transform).toBe(`scaleX(${25 / 55})`);
   });
 
   it('ends the rest from its X without announcing it or pausing the workout', async () => {

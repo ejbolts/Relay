@@ -155,6 +155,25 @@ describe('workout timer dock', () => {
     expect(document.activeElement).toBe(button('Pause workout and rest timer'));
   });
 
+  it('glides the fill through each second but snaps it to a jump', async () => {
+    await render({ restSeconds: 45 });
+    const fill = () => container.querySelector('.rest-pill-fill')!;
+    expect(fill().classList.contains('is-jump')).toBe(false);
+    await render({ restSeconds: 44 });
+    expect(fill().classList.contains('is-jump')).toBe(false);
+    await render({ restSeconds: 14 });
+    expect(fill().classList.contains('is-jump')).toBe(true);
+    await render({ restSeconds: 13 });
+    expect(fill().classList.contains('is-jump')).toBe(false);
+  });
+
+  it('shows only the time on the hidden notch, without a progress bar', async () => {
+    await render({ restHidden: true });
+    const notch = container.querySelector('.rest-notch')!;
+    expect(notch.querySelector('[role="timer"]')?.textContent).toBe('0:45');
+    expect(notch.querySelector('span')).toBeNull();
+  });
+
   it('says a hidden paused rest is paused', async () => {
     await render({ restHidden: true, paused: true });
     expect(button('Show paused rest timer, 0:45 left')).not.toBeNull();

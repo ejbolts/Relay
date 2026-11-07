@@ -315,6 +315,8 @@ import { canUploadVideos, useUserSession } from './userContext';
 import { usePendingWorkoutSave } from './usePendingWorkoutSave';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
+import { weeklySetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
   draftPause,
@@ -1844,6 +1846,9 @@ function AppContent() {
                       historyBaselines={historyBaselines}
                       restTimerEnabled={restTimerEnabled}
                       showRestTimes={showRestTimes}
+                      weeklySets={
+                        viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
+                      }
                       categoryColors={workoutTypeColors}
                       onExerciseHistory={(exerciseId) => openHistorySection('progress', exerciseId)}
                       onExerciseFavorite={updateExerciseFavorite}
@@ -2537,6 +2542,7 @@ function WorkoutLogger({
   historyBaselines = null,
   restTimerEnabled,
   showRestTimes,
+  weeklySets,
   onExerciseHistory,
   onExerciseFavorite,
   onCreateExercise,
@@ -2567,6 +2573,8 @@ function WorkoutLogger({
   historyBaselines?: HistoryBaselines | null;
   restTimerEnabled: boolean;
   showRestTimes: boolean;
+  /** This week's live working-set credits, for the shelf a logged working set opens. */
+  weeklySets?: MuscleSetsWeek;
   onExerciseHistory: (exerciseId: string) => void;
   onExerciseFavorite: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
@@ -3287,12 +3295,13 @@ function WorkoutLogger({
       // A paused rest keeps waiting; the change applies when the workout resumes.
       timer.pausedLeft = left;
       setRestLeft(left);
-      setRestTotal((total) => Math.max(left, total + deltaSeconds));
+      setRestTotal((total) => Math.max(left, total));
       return;
     }
     timer.endsAt = Date.now() + left * 1000;
     setRestLeft(left);
-    setRestTotal((total) => Math.max(left, total + deltaSeconds));
+    // The rest's full length stays put, so the pill's fill moves by the whole 30 seconds.
+    setRestTotal((total) => Math.max(left, total));
     onRestTimerChange?.(timer.endsAt);
     // Scheduling again replaces this device's pending "Rest complete" notification.
     const endpoint = restNotificationEndpointRef.current;
@@ -3360,6 +3369,10 @@ function WorkoutLogger({
   // A closed workout leaves no rest countdown on the tab bar.
   useEffect(() => () => onRestTimerChange?.(null), [onRestTimerChange]);
 
+  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const [weeklySetsUpdate, setWeeklySetsUpdate] = useState<WeeklySetsUpdate | null>(null);
+  const weeklySetsUpdateId = useRef(0);
+
   function updateSet(movementKey: string, setKey: string, update: Partial<DraftSet>) {
     const movement = movements.find((item) => item.key === movementKey);
     const currentSet = movement?.sets.find((item) => item.key === setKey);
@@ -3377,6 +3390,14 @@ function WorkoutLogger({
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
+    if (loggingSet && movement && currentSet && !initialWorkout) {
+      const gains = isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update))
+        ? weeklySetGains(movement.exercise, weeklySets, workoutDate, localDate())
+        : [];
+      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
+    } else if (update.completed === false && currentSet?.completed) {
+      setWeeklySetsUpdate(null);
+    }
     // Correcting the weight or reps of a logged set also moves the untouched suggestion after it.
     const correctingLoggedSet =
       currentSet?.completed === true &&
@@ -4068,6 +4089,15 @@ function WorkoutLogger({
           onHide={() => setRestHidden(true)}
           onShow={() => setRestHidden(false)}
           onEnd={cancelRestTimer}
+          joined={Boolean(weeklySetsUpdate)}
+        />
+      )}
+      {weeklySetsUpdate && (
+        <WeeklySetsShelf
+          update={weeklySetsUpdate}
+          goal={muscleSetGoal}
+          placement={!showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'}
+          onDismiss={() => setWeeklySetsUpdate(null)}
         />
       )}
       {!readOnly && (
