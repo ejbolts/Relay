@@ -6,44 +6,42 @@ _Relay was called Gym Logger before version 1.0._
 
 7 November 2026
 
-### Weekly volume, live set gains and machine weights
+### Weekly volume, live set gains and exercise merging
 
-![Split editor with a two-column Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data.](screenshots/releases/1.2.0-split-editor.png)
+![Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data.](screenshots/releases/1.2.0-split-editor.png)
 
-**Weekly volume while you build** — Plan each split against your weekly set and cardio goals.
+**Weekly volume while you build** — Plan splits against your weekly goals.
 
 ![Working sets logged back to back: the weekly sets card unfolds above the rest timer, +1 and +0.5 badges appear, totals roll up and Glutes turns green at 10 of 10. Isolated sample data.](screenshots/releases/1.2.0-weekly-sets-shelf.gif)
 
-**Weekly sets after every set** — See how each working set moves your weekly totals, right above the rest timer.
+**Every set counts** — Watch each set add to your weekly muscle totals.
 
-![Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data.](screenshots/releases/1.2.0-machine-weights-slider.gif)
+![Merge exercises dialog removing My bench press and keeping Bench press duplicate, with combined history, records, machine photos and saved splits. Isolated sample data.](screenshots/releases/1.2.0-exercise-merge.png)
 
-**Machine weights** — Map machines to a reference for one comparable progress trend.
+**Merge exercises** — Combine duplicates and keep their history.
 
-![Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data.](screenshots/releases/1.2.0-inline-machine-picker.gif)
-
-**Machine with the exercise** — Your last-used machine is ready; swipe for another or tap again for the baseline.
-
-![Adjusting an isolated synthetic profile photo with pinch zoom and dragging, dimmed margins fading after one idle second, then the saved circular avatar.](screenshots/releases/1.2.0-profile-photo-crop.gif)
-
-**Your photo, your crop** — Pinch to zoom and drag to frame your photo.
-
-- **Sets per muscle:** Compare with earlier weeks; totals update as you complete working sets.
-- **Body goals:** Swipe a goal away with Undo, and see a dotted line to its target date.
-- **Offline check-ins:** Body weight and body fat save instantly, even offline, and sync later.
-- **Offline notice:** A dismissible strip shows you're offline on every screen, including workouts.
-- **Split days:** Coloured blocks show each day's planned sets at a glance.
-- **Attempted sets:** Failure sets are now called Attempted and marked A.
-- **Rest times:** Each set suggests its previous rest, and ±30 seconds updates the timer instantly.
-- **Logging sets:** Hold to reorder, notes wrap, and unticking a set unticks its exercise.
-- **Workout prompts:** Skip repeat high-rep warnings per workout; clearer errors close with an X.
-- **Exercise headers:** Help, expand and tick line up; machine renames confirm with a popup.
-- **Exercise library:** Merge duplicate custom exercises, plus clearer filters, aligned help and steadier search.
-- **Cardio:** Paste screenshots, split distance by activity and save without zone popups.
-- **Social:** Compact friend rows, one emoji per reaction, tap-to-open workouts and loading placeholders.
-- **Sync:** Workouts logged on your other devices appear without reloading.
-- **CSV exports:** Cardio duration, distance, calories, heart rate and more survive export and reimport.
-- **iPhone:** Tapping a field no longer zooms the screen in.
+- **Machine weights:** Compare progress across machines on one trend.
+- **Machine picker:** Choose the machine as you pick the exercise.
+- **Sets per muscle:** Compare earlier weeks; totals update as you train.
+- **Split days:** A coloured block for each planned set.
+- **Attempted sets:** Failure sets are now Attempted, marked A.
+- **High-rep warnings:** Skip repeat warnings for one workout.
+- **Paste screenshot:** Paste a copied screenshot into a cardio set.
+- **Cardio distance:** Distance split by activity type.
+- **Cardio saves:** No more zone confirmation popups.
+- **Rest times:** Each set suggests its previous rest.
+- **Logging sets:** Hold to reorder, wrapping notes and synced ticks.
+- **Workout errors:** Clearer steps and an X to close.
+- **Exercise list:** Themed filters, aligned help and steadier search.
+- **Open a workout:** Tap a friend's workout name to open it.
+- **Social:** Compact friend rows and one emoji per reaction.
+- **Profile photos:** Pinch and drag to crop your photo.
+- **Offline check-ins:** Weight and body fat save offline.
+- **Offline notice:** A dismissible strip on every screen.
+- **Body goals:** Swipe goals away and see a line to your target date.
+- **Sync:** Other devices' workouts appear without reloading.
+- **CSV exports:** Cardio metrics survive export and reimport.
+- **iPhone:** Fields no longer zoom in when tapped.
 
 [Full change details on GitHub](https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-DETAILS-1.2.md#120).
 

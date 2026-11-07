@@ -6,7 +6,7 @@
 
 7 November 2026
 
-### Weekly volume, live set gains and machine weights
+### Weekly volume, live set gains and exercise merging
 
 #### Splits and weekly sets
 
