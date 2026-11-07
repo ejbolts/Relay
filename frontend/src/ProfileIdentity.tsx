@@ -230,7 +230,7 @@ export function ProfileIdentity({
             <Icon name="edit" />
           </button>
         ) : (
-          <ProfileAvatar className="profile-avatar" user={user} />
+          <ProfileAvatar className="profile-avatar" user={user} viewable />
         )}
         <div className="profile-summary-copy">
           <strong>
