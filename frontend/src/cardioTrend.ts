@@ -45,6 +45,55 @@ export function cardioTrendWeeks(sessions: CardioSession[], currentStart: string
   );
 }
 
+export interface CardioDistanceGroup {
+  key: string;
+  label: string;
+  sessions: number;
+  distance: number;
+}
+
+// Distances are only comparable within one kind of movement: a 5 km run and a
+// 20 km ride should not be added together. Walking and running share a group.
+const distanceKinds = [
+  {
+    key: 'foot',
+    label: 'Walk & run',
+    pattern: /\b(run|running|jog|jogging|walk|walking|hike|hiking|treadmill)\b/,
+  },
+  { key: 'cycle', label: 'Cycling', pattern: /(cycl|bike|spin)/ },
+  { key: 'row', label: 'Rowing', pattern: /\brow(ing|er)?\b/ },
+  { key: 'swim', label: 'Swimming', pattern: /\bswim/ },
+] as const;
+
+export function distanceGroupFor(activity: string): { key: string; label: string } {
+  const name = activity.trim().toLocaleLowerCase();
+  const kind = distanceKinds.find((item) => item.pattern.test(name));
+  return kind
+    ? { key: kind.key, label: kind.label }
+    : { key: `activity:${name}`, label: activity.trim() };
+}
+
+/** Activity groups with distance logged between `start` and `end`, most used first. */
+export function cardioDistanceGroups(
+  sessions: CardioSession[],
+  start: string,
+  end: string,
+): CardioDistanceGroup[] {
+  const groups = new Map<string, CardioDistanceGroup>();
+  for (const session of sessions) {
+    if (session.distance_km == null || session.session_date < start || session.session_date > end)
+      continue;
+    const { key, label } = distanceGroupFor(session.activity_type);
+    const group = groups.get(key) ?? { key, label, sessions: 0, distance: 0 };
+    group.sessions += 1;
+    group.distance += session.distance_km;
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort(
+    (a, b) => b.sessions - a.sessions || b.distance - a.distance || a.label.localeCompare(b.label),
+  );
+}
+
 export function groupCardioHistory(sessions: CardioSession[], weekStartDay: number) {
   const groups = new Map<string, CardioSession[]>();
   for (const session of sessions) {

@@ -357,3 +357,29 @@
 .cardio-screen {
   gap: 0;
 }
+.cardio-trend-card .cardio-distance-groups {
+  display: flex;
+  gap: 0.375rem;
+  margin: -0.25rem 0 0.85rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cardio-trend-card .cardio-distance-groups::-webkit-scrollbar {
+  display: none;
+}
+.cardio-trend-card .cardio-distance-groups button {
+  flex: none;
+  min-height: 2rem;
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  padding: 0 0.8rem;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.cardio-trend-card .cardio-distance-groups button.active {
+  border-color: var(--p-accent);
+  background: color-mix(in srgb, var(--p-accent) 16%, transparent);
+  color: var(--p-ink);
+}

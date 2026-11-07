@@ -1,9 +1,12 @@
 import type { Exercise, MachineSetting, WorkoutSetInput } from './types';
+import type { ExerciseMachineChoices } from './exerciseMachineChoices';
 import type { StoredDraftMovement } from './workoutDraft';
 
 export type WorkoutDraftSet = WorkoutSetInput & {
   key: string;
   fromPrevious?: boolean;
+  restRevealed?: boolean;
+  restConfirmed?: boolean;
 };
 
 export type WorkoutDraftMovement = {
@@ -24,6 +27,9 @@ export function restoreWorkoutDraftMovements(
   exercises: Exercise[],
 ): WorkoutDraftMovement[] | null {
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  for (const exercise of exercises) {
+    for (const id of exercise.merged_from_ids ?? []) exerciseById.set(id, exercise);
+  }
   if (stored.some((movement) => !exerciseById.has(movement.exerciseId))) return null;
   return stored.map((movement) => ({
     key: movement.key,
@@ -55,4 +61,23 @@ export function replaceMovementExercise(
         }
       : movement,
   );
+}
+
+/**
+ * The machine for a movement added from the exercise picker. A picked machine, or the baseline
+ * exercise (`null`), is final; without a choice the logger restores the last-used machine.
+ */
+export function machineSelection(
+  exerciseId: string,
+  choices: ExerciseMachineChoices,
+): Pick<WorkoutDraftMovement, 'machinePhotoIds' | 'machinePhotosInitialized' | 'machineSettings'> {
+  if (!Object.hasOwn(choices, exerciseId)) {
+    return { machinePhotoIds: [], machinePhotosInitialized: false, machineSettings: undefined };
+  }
+  const machineId = choices[exerciseId];
+  return {
+    machinePhotoIds: machineId ? [machineId] : [],
+    machinePhotosInitialized: true,
+    machineSettings: undefined,
+  };
 }

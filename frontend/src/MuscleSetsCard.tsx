@@ -2,7 +2,8 @@ import { useId, useState, type CSSProperties } from 'react';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { dayMonth, shortDate } from './trainingSummary';
-import type { WeeklyMuscleContribution, WeeklyMuscleSets, WeeklySets } from './types';
+import type { WeeklyMuscleContribution } from './types';
+import type { MuscleSetsWeek } from './liveMuscleSets';
 import './muscleSets.css';
 
 const credits = (value: number) => Number(value.toFixed(3)).toLocaleString();
@@ -23,9 +24,9 @@ export function MuscleSetsCard({
   goal,
   onOpenWorkout,
 }: {
-  weeklySets: WeeklySets | null | undefined;
+  weeklySets: MuscleSetsWeek | null | undefined;
   /** The weeks before `weeklySets`, newest first. Older cached dashboards have none. */
-  history?: WeeklySets[];
+  history?: MuscleSetsWeek[];
   goal: number;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
 }) {
@@ -49,8 +50,6 @@ export function MuscleSetsCard({
       groups.set(item.muscle_group, {
         muscle_group: item.muscle_group,
         raw_sets: 0,
-        effective_sets: 0,
-        average_rpe: null,
         contributions: [],
       });
     }
@@ -218,7 +217,7 @@ function MuscleContributionSheet({
   onClose,
   onOpenWorkout,
 }: {
-  muscle: WeeklyMuscleSets;
+  muscle: MuscleSetsWeek['muscle_groups'][number];
   current: boolean;
   weekLabel: string;
   goal: number;

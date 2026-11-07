@@ -1,0 +1,302 @@
+/* ───────── Weekly sets shelf: what a logged set adds, joined to the top of the rest pill ───────── */
+
+.weekly-sets-shelf {
+  position: fixed;
+  z-index: 89;
+  left: 50%;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  translate: -50% 0;
+  display: block;
+  width: min(calc(100% - 1.5rem), 26rem);
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 1.25rem;
+  padding: 0;
+  background: color-mix(in srgb, var(--p-surface) 90%, transparent);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: weekly-shelf-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* One card with the rest pill: the shelf's open bottom meets the pill's squared top. */
+.weekly-sets-shelf.is-pill {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom) + 3.5rem - 1px);
+  border-bottom: 0;
+  border-radius: 1.375rem 1.375rem 0 0;
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 22%);
+  animation-name: weekly-shelf-unfold;
+}
+
+.weekly-sets-shelf.is-notch {
+  bottom: calc(2.75rem + env(safe-area-inset-bottom));
+}
+
+.rest-pill.has-weekly-shelf {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.weekly-sets-shelf.is-leaving {
+  animation: weekly-shelf-out 200ms ease forwards;
+  pointer-events: none;
+}
+
+.weekly-sets-shelf:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.weekly-shelf-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--count, 3), minmax(0, 1fr));
+}
+
+.weekly-shelf-cell {
+  --delay: calc(var(--i, 0) * 110ms + 260ms);
+  position: relative;
+  display: block;
+  min-width: 0;
+  padding: 0.625rem 0.625rem 0.75rem 0.75rem;
+}
+
+/* A set logged while the shelf is up: the columns are already there, so the totals move at once. */
+.weekly-sets-shelf.is-follow-up .weekly-shelf-cell {
+  --delay: calc(var(--i, 0) * 110ms);
+}
+
+.weekly-shelf-cell + .weekly-shelf-cell {
+  border-left: 1px solid var(--p-line-strong);
+}
+
+.weekly-shelf-name {
+  display: block;
+  overflow: hidden;
+  padding-right: 2.25rem;
+  color: var(--p-ink-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.weekly-shelf-gain {
+  position: absolute;
+  top: 0.5625rem;
+  right: 0.5rem;
+  border-radius: 999px;
+  padding: 0.0625rem 0.375rem;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  animation: weekly-shelf-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--delay) backwards;
+}
+
+.weekly-shelf-value {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.0625rem;
+  font-size: 1.1875rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.weekly-shelf-value small {
+  margin-left: -0.125rem;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* The total rolls from its old value up to its new one. */
+.weekly-shelf-roll {
+  display: inline-block;
+  height: 1.2em;
+  overflow: hidden;
+}
+
+.weekly-shelf-roll > span {
+  display: flex;
+  flex-direction: column;
+  animation: weekly-shelf-roll 420ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--delay) + 140ms) both;
+}
+
+.weekly-shelf-met {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 0.9375rem;
+  height: 0.9375rem;
+  border-radius: 50%;
+  background: var(--p-good);
+  color: #0b0d0f;
+}
+
+.weekly-shelf-met .pulse-icon {
+  width: 0.625rem;
+  height: 0.625rem;
+  stroke-width: 3;
+}
+
+.weekly-shelf-bar {
+  position: relative;
+  display: block;
+  height: 0.3125rem;
+  margin-top: 0.375rem;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+
+.weekly-shelf-bar > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+}
+
+.weekly-shelf-bar-before {
+  left: 0;
+  background: color-mix(in srgb, var(--p-accent) 55%, var(--p-surface-3));
+}
+
+.weekly-shelf-bar-gain {
+  background: var(--p-accent-text);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--p-accent-text) 60%, transparent);
+  transform-origin: left;
+  animation: weekly-shelf-grow 600ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--delay) + 80ms)
+    backwards;
+  /* Another set while the shelf is up extends the glow from where it ends. */
+  transition: width 600ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--delay) + 80ms);
+}
+
+.weekly-shelf-cell.is-met .weekly-shelf-gain {
+  background: color-mix(in srgb, var(--p-good) 16%, transparent);
+  color: var(--p-good);
+}
+
+.weekly-shelf-cell.is-met .weekly-shelf-roll {
+  color: var(--p-good);
+}
+
+.weekly-shelf-cell.is-met .weekly-shelf-bar > span {
+  background: var(--p-good);
+  box-shadow: none;
+}
+
+/* Reaching the goal turns the column green once its bar has grown. */
+.weekly-shelf-cell.just-met .weekly-shelf-roll {
+  animation: weekly-shelf-ink-good 300ms ease calc(var(--delay) + 560ms) backwards;
+}
+
+.weekly-shelf-cell.just-met .weekly-shelf-bar > span {
+  animation: weekly-shelf-bar-good 300ms ease calc(var(--delay) + 560ms) backwards;
+}
+
+.weekly-shelf-cell.just-met .weekly-shelf-bar > .weekly-shelf-bar-gain {
+  animation:
+    weekly-shelf-grow 600ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--delay) + 80ms) backwards,
+    weekly-shelf-bar-good 300ms ease calc(var(--delay) + 560ms) backwards;
+}
+
+.weekly-shelf-cell.just-met .weekly-shelf-met {
+  animation: weekly-shelf-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--delay) + 560ms)
+    backwards;
+}
+
+/* Time left before the shelf folds away. */
+.weekly-shelf-countdown {
+  position: absolute;
+  right: 1rem;
+  bottom: 0;
+  left: 1rem;
+  height: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--p-accent-text) 50%, transparent);
+  transform-origin: left;
+  animation: weekly-shelf-countdown var(--weekly-shelf-ms, 3000ms) linear forwards;
+}
+
+@keyframes weekly-shelf-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+
+@keyframes weekly-shelf-unfold {
+  from {
+    opacity: 0;
+    transform: translateY(2.5rem);
+  }
+}
+
+@keyframes weekly-shelf-out {
+  to {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+
+@keyframes weekly-shelf-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem) scale(0.5);
+  }
+}
+
+@keyframes weekly-shelf-roll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes weekly-shelf-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes weekly-shelf-ink-good {
+  from {
+    color: var(--p-ink);
+  }
+}
+
+@keyframes weekly-shelf-bar-good {
+  from {
+    background-color: var(--p-accent-text);
+  }
+}
+
+@keyframes weekly-shelf-countdown {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weekly-sets-shelf,
+  .weekly-sets-shelf * {
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+  }
+
+  .weekly-shelf-countdown {
+    display: none;
+  }
+}
+
+html[data-reduce-motion] .weekly-shelf-countdown {
+  display: none;
+}

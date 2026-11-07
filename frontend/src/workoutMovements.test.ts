@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Exercise } from './types';
-import { replaceMovementExercise, type WorkoutDraftMovement } from './workoutMovements';
+import {
+  replaceMovementExercise,
+  restoreWorkoutDraftMovements,
+  type WorkoutDraftMovement,
+} from './workoutMovements';
 
 const exercise = (id: string, name: string): Exercise => ({
   id,
@@ -15,6 +19,28 @@ const exercise = (id: string, name: string): Exercise => ({
 });
 
 describe('switching an exercise', () => {
+  it('restores merged exercise IDs without dropping workout data', () => {
+    const target = { ...exercise('target', 'Leg Curl'), merged_from_ids: ['old', 'older'] };
+    const stored = ['old', 'older'].map((exerciseId) => ({
+      exerciseId,
+      key: exerciseId,
+      notes: 'Keep this',
+      machinePhotoIds: ['photo'],
+      machineSettings: [{ name: 'Seat', value: '3' }],
+      supersetKey: 'group',
+      isComplete: true,
+      sets: [],
+    }));
+    const restored = restoreWorkoutDraftMovements(stored, [target])!;
+    expect(restored.map((item) => item.exercise.id)).toEqual(['target', 'target']);
+    expect(restored[0].machinePhotoIds).toEqual(['photo']);
+    expect(restored[0].machineSettings).toEqual(stored[0].machineSettings);
+    expect(restored[0].notes).toBe('Keep this');
+    expect(restored[0].supersetKey).toBe('group');
+    expect(
+      restoreWorkoutDraftMovements([{ ...stored[0], exerciseId: 'missing' }], [target]),
+    ).toBeNull();
+  });
   it('keeps entered sets, notes, and supersets while resetting incompatible photos', () => {
     const sets = [
       {

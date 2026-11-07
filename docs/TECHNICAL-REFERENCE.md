@@ -29,11 +29,13 @@ Personal records have two types: **Weight PR** for a heavier completed working s
 
 Completed workout set history can be imported and exported from **Settings > Data & connections > Import & export** using CSV. Uncompleted planned or suggested rows are excluded, so importing an export cannot turn them into performed sets. Exports write `Date Lifted`, `Exercise`, `Weight (kg)`, `Weight (lb)`, `Reps`, `Bodyweight (kg)`, `Bodyweight (lb)`, `Percentile (%)`, `Warmup`, `Workout ID` and `Workout name`. Imports need a header row and one row per completed set; only `Date Lifted`, `Exercise` and `Reps` are required columns. The others are optional, and a file with neither weight column imports sets without weights and shows a warning. Column names match regardless of case and spacing, and order does not matter. Unrecognized columns are ignored and listed in the review; a known column that appears twice is rejected. `Workout ID` and `Workout name` keep separate sessions on the same date apart. IDs group rows within the file; importing always creates account-owned records with new IDs and never uses a supplied ID to overwrite a workout. Files without Workout ID remain valid, but all rows on one date become one session because they contain no session identity.
 
+Workout exports also include `Exercise kind`, `Duration (seconds)`, `Distance (km)`, `Calories (kcal)`, `Average heart rate (bpm)`, `Speed (km/h)` and `Incline (%)`. Missing measurements stay blank; recorded zeroes remain zeroes. Cardio session totals and averages are separate from individual sets: `Cardio session calories (kcal)`, `Cardio session average heart rate (bpm)`, `Cardio session distance (km)`, `Average speed (km/h)`, `Cardio session incline (%)`, `Average power (W)` and `Average METs`. Session values repeat on each set of that cardio movement and must agree; do not sum these repeated totals. These fields survive reimport, including values recorded only on the cardio session. Session-level measurements require a cardio exercise with at least 60 seconds of completed duration. The same account and inclusive date filters apply to workouts and cardio. Linked cardio is exported through its completed workout sets once; older standalone cardio uses one row with a `cardio:` Workout ID and imports as a cardio-only workout, with the usual duplicate checks, account ownership, limits and import undo. No real workout is created by exporting.
+
 Imports accept UTF-8 comma-separated or semicolon-separated CSV and tab-separated text copied from a spreadsheet, up to 20 MB. Dates must start with `YYYY-MM-DD`; a following time of day, such as `2026-10-17 07:30:00`, is ignored. Numbers accept a decimal point or a decimal comma with one or two decimal places (`82,5`); values with units, such as `80kg`, are rejected. `Warmup` accepts 1/0, true/false, yes/no or y/n. When only `Weight (lb)` or `Bodyweight (lb)` is filled, it is converted to kilograms and one summary warning gives the row count. Choose Strength Level, Hevy or Strong to import the original app export without renaming columns. Strong workout units are explicit; measurement files read their own units. Choose Relay for native workout or bodyweight CSVs, including Gym Logger exports, and template spreadsheets. The in-app CSV guide explains this layout and downloads a template in the person's weight unit.
 
 Relay and Gym Logger bodyweight exports are detected automatically in the same import picker. They require `Date` and `Weight (kg)`, with optional `Body Fat (%)` and `Notes`. The shared review shows check-in totals and skips existing dates, including dates created after preview. Missing entries retain body-fat values and notes. Select **Relay > Export data** to choose completed workout history, bodyweight check-ins or both plus one date range. Both prepares two labelled CSV files before starting either download. The range ends at the latest entry among the selected data types. CSV exports are history transfers, not full account backups.
 
-Choosing a file opens a read-only review of sessions, sets, new exercises, duplicates and warnings. **Cancel** saves nothing. **Save import** revalidates the file and current limits, skips identical existing sessions in your account, and atomically adds the remaining sessions and any missing exercises. Repeated identical sets within a session are retained. Duplicate matching uses the date and completed set content, so renaming a workout does not cause a duplicate. To preserve separate same-date sessions with identical sets, include them together with different Workout IDs in one file; importing identical sessions through separate files may skip them as duplicates. Exercise aliases are compared by canonical name and pound-only legacy weights are converted to kilograms. Existing workouts and body-weight check-ins are kept; only missing body-weight dates are added from imported sets. CSV covers these set fields and session names, rather than notes, photos, videos, cardio metrics or a complete account backup.
+Choosing a file opens a read-only review of sessions, sets, new exercises, duplicates and warnings. **Cancel** saves nothing. **Save import** revalidates the file and current limits, skips identical existing sessions in your account, and atomically adds the remaining sessions and any missing exercises. Repeated identical sets within a session are retained. Duplicate matching uses the date and completed set content, including supplied cardio metrics, so renaming a workout does not cause a duplicate. To preserve separate same-date sessions with identical sets, include them together with different Workout IDs in one file; importing identical sessions through separate files may skip them as duplicates. Exercise aliases are compared by canonical name and pound-only legacy weights are converted to kilograms. Existing workouts and body-weight check-ins are kept; only missing body-weight dates are added from imported sets. CSV covers these set fields, cardio measurements and session names, rather than notes, photos, videos or a complete account backup.
 
 Choose kilograms or pounds in **Settings > Training > Units & weekly goals** for weight entry and display across Home, the workout logger, History, Body, Progress and shared profiles. Changing this preference preserves saved weights and active entries. Workout CSVs keep both kg and lb columns; bodyweight CSVs continue to use the explicit `Weight (kg)` column regardless of the display preference.
 
@@ -298,6 +300,24 @@ routine keeps the schedule and restores history-based suggestions. Mutations inv
 the account's training revision. Test with `backend/tests/test_routines.py` and the
 frontend `RoutinePanel` and workout recovery tests.
 
+## Exercise merges
+
+Exercise merges use `POST /api/exercises/{source_id}/merge` with `target_exercise_id`.
+Both exercises must belong to the signed-in account, the source must be custom and their
+kinds, equipment categories and complete configured muscle-group lists must match.
+Muscle matching includes partial credits even when weekly partial counting is disabled;
+credit factors and muscle order do not need to match. Equipment spelling aliases follow
+the library's categories (for example, DB and Dumbbell). The transaction transfers
+movements, machine photos and saved routine
+references, retains the destination's muscle credits and existing defaults, and rebuilds
+records against the combined history. Photo-specific presets move with their photos;
+an existing destination weight mapping wins because separate reference scales cannot be
+combined safely. Account-local `exercise_merge:` settings flatten old IDs to the destination
+and are included in account backups. The catalogue's `merged_from_ids` restores old local
+drafts; workout/cardio saves and stale routine editors also resolve those IDs. Import undo
+keeps destinations referenced by merges. Test with `backend/tests/test_exercise_merge.py`,
+`ExerciseMergeDialog.test.tsx` and workout recovery tests.
+
 ## Checks
 
 While developing, run the tests for the behaviour you changed. From the repository root,
@@ -327,19 +347,46 @@ to CI: run one locally only when changing its test infrastructure or configurati
 rerun the specific tests behind a CI failure. Do not rerun unrelated passing checks after
 every small edit. Documentation-only changes need documentation checks, not application suites.
 
-The GitHub **Checks** workflow runs full frontend and backend jobs in parallel on every PR
-(including stacked PRs), on `main` pushes, and on manual dispatch. It caches dependencies
-and cancels superseded runs. Before merging, require both **Frontend checks** and
-**Backend checks** to pass for the current PR revision. Making these checks mandatory in a
-GitHub ruleset is a separate maintainer action after the workflow is available; adding the
-workflow does not change existing branch protection or authorise a merge or deployment.
+The GitHub **Checks** workflow selects relevant full suites for feature PRs, including
+stacked PRs, from the changed files in the exact tested merge commit:
+
+- `frontend/` changes run frontend checks; `backend/`, `pyproject.toml` and
+  `alembic.ini` changes run backend checks.
+- Backend route, schema, model and frontend-serving modules, plus
+  `frontend/src/api.ts` and `frontend/src/types.ts`, run both suites. The detector's
+  tests guard the route-module mapping when new API routers are added.
+- CI, deployment, shared configuration and unknown paths run both suites.
+- Changes confined to `docs/`, the README, contributor/agent instructions or license
+  files need neither application suite on feature PRs.
+- PRs into `main`, `main` pushes and manual dispatch always run both suites.
+
+Both required job names, **Frontend checks** and **Backend checks**, remain present.
+An unaffected job reports success without checking out code, installing dependencies
+or running its suite. Detection failure, cancellation or invalid output fails both
+required jobs. Labels do not control selection, and the workflow is never suppressed
+by path filters. Detection uses a depth-two checkout and a NUL-delimited Git diff,
+including both paths of renames, without the file-count limits of API/path filtering.
+
+Test the detector and the actual shell gates without application dependencies:
+
+```sh
+python -m unittest discover -s .github/scripts -p 'test_*.py'
+ruff format --check .github/scripts
+ruff check .github/scripts
+```
+
+The workflow caches dependencies and cancels superseded runs. Before merging, require
+both check jobs to pass for the current PR revision. An explicit not-needed result is
+valid; a pending or failed job is not. Workflow changes do not alter branch protection
+or authorise a merge or deployment. The separate **Dependency security** workflow is
+unchanged and still audits both dependency sets.
 
 CI runs the full verification below. Run it locally only for the exceptions above, from
 the repository root:
 
 ```powershell
-ruff format --check backend
-ruff check backend
+ruff format --check backend .github/scripts
+ruff check backend .github/scripts
 python -m pytest --durations=10
 Set-Location frontend; npm run format:check; npm run lint; npm run build; npm test
 ```

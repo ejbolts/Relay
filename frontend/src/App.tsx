@@ -128,8 +128,18 @@ import { FfmiCard } from './FfmiCard';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
+import { ExerciseMachineStrip } from './ExerciseMachineStrip';
+import {
+  lastUsedMachineId,
+  machinesByExercise,
+  resolveMachineChoices,
+  toggledMachineChoice,
+  type ExerciseMachineChoices,
+} from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import type { MuscleSetsWeek } from './liveMuscleSets';
+import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
   MachineFilterBanner,
   MachineFilterPicker,
@@ -142,6 +152,8 @@ import { usePresenceConnection } from './presence';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
+import { OfflineNotice } from './OfflineNotice';
+import { useOfflineNotice } from './useOfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
@@ -175,6 +187,8 @@ import { optimisePhoto } from './photoOptimise';
 import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
+import { ExerciseMergeDialog } from './ExerciseMergeDialog';
+import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
@@ -190,6 +204,7 @@ import {
   saveRestTimesPreference,
 } from './restTimerPreference';
 import { RestTimeSelect } from './RestTimeSelect';
+import { SetRestControl } from './SetRestControl';
 import { cancelRestTimerPushSchedule, restSecondsLeft } from './restTimer';
 import {
   disablePhonePushNotifications,
@@ -302,6 +317,8 @@ import { canUploadVideos, useUserSession } from './userContext';
 import { usePendingWorkoutSave } from './usePendingWorkoutSave';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
+import { weeklySetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
   draftPause,
@@ -328,6 +345,7 @@ import {
 } from './workoutSets';
 import { finalizeWorkoutIdentity, workoutNameForCategory } from './workoutCategory';
 import {
+  machineSelection,
   replaceMovementExercise,
   restoreWorkoutDraftMovements,
   type WorkoutDraftMovement as DraftMovement,
@@ -388,6 +406,7 @@ function emptySet(
   return {
     key: crypto.randomUUID(),
     ...createWorkoutSet(kind, previous, isFirstSet),
+    restRevealed: true,
     ...(previous && { fromPrevious: true }),
   };
 }
@@ -420,6 +439,7 @@ function suggestedSetsFromHistory(
     key: crypto.randomUUID(),
     ...createSuggestedWorkoutSet(exercise.kind, previous),
     fromPrevious: true,
+    restRevealed: false,
   }));
 }
 
@@ -576,6 +596,7 @@ function AppContent() {
   usePresenceConnection(user?.id ?? null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
+  const offlineNotice = useOfflineNotice();
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
   const [guideWaiting, setGuideWaiting] = useState(() => user !== null && appGuideWaiting(user.id));
   const [guideRequested, setGuideRequested] = useState(false);
@@ -632,6 +653,7 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
+  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts);
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -1495,6 +1517,11 @@ function AppContent() {
   }
 
   async function openMuscleWorkout(contribution: WeeklyMuscleContribution) {
+    if (contribution.workout_id === muscleSets.workoutId) {
+      if (activeWorkoutStartedAt !== null) setTab('log');
+      else setMessage('This workout is waiting to sync.');
+      return;
+    }
     if (
       !workouts.some(
         (workout) =>
@@ -1552,7 +1579,7 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}${offlineNotice.visible ? ' has-offline-notice' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner
@@ -1562,6 +1589,7 @@ function AppContent() {
             onRefresh={() => void appUpdates.refresh()}
           />
         )}
+        {offlineNotice.visible && <OfflineNotice onDismiss={offlineNotice.dismiss} />}
         {prompt === 'release' && (
           <ReleaseAnnouncement
             release={announcement.release}
@@ -1676,6 +1704,7 @@ function AppContent() {
           {loading &&
             tab !== 'dashboard' &&
             tab !== 'videos' &&
+            tab !== 'social' &&
             tab !== 'profile' &&
             tab !== 'shared-profile' &&
             tab !== 'admin' && <TodaySkeleton />}
@@ -1687,6 +1716,7 @@ function AppContent() {
                 <TodayScreen
                   home={home}
                   data={dashboard}
+                  muscleSets={muscleSets}
                   workouts={workouts}
                   measurements={measurements}
                   personalRecords={personalRecords}
@@ -1820,6 +1850,9 @@ function AppContent() {
                       historyBaselines={historyBaselines}
                       restTimerEnabled={restTimerEnabled}
                       showRestTimes={showRestTimes}
+                      weeklySets={
+                        viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
+                      }
                       categoryColors={workoutTypeColors}
                       onExerciseHistory={(exerciseId) => openHistorySection('progress', exerciseId)}
                       onExerciseFavorite={updateExerciseFavorite}
@@ -1924,8 +1957,8 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={dashboard?.heatmap ?? []}
-                weeklySets={dashboard?.weekly_sets}
-                weeklySetsHistory={dashboard?.weekly_sets_history}
+                weeklySets={muscleSets.weeklySets}
+                weeklySetsHistory={muscleSets.history}
                 onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={historySummary}
                 olderHistory={olderHistoryProps}
@@ -2513,6 +2546,7 @@ function WorkoutLogger({
   historyBaselines = null,
   restTimerEnabled,
   showRestTimes,
+  weeklySets,
   onExerciseHistory,
   onExerciseFavorite,
   onCreateExercise,
@@ -2543,6 +2577,8 @@ function WorkoutLogger({
   historyBaselines?: HistoryBaselines | null;
   restTimerEnabled: boolean;
   showRestTimes: boolean;
+  /** This week's live working-set credits, for the shelf a logged working set opens. */
+  weeklySets?: MuscleSetsWeek;
   onExerciseHistory: (exerciseId: string) => void;
   onExerciseFavorite: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
@@ -2707,6 +2743,7 @@ function WorkoutLogger({
                   warmup: set.set_type === 'warmup',
                   completed: false,
                   fromPrevious: true,
+                  restRevealed: false,
                 }))
               : suggestedSetsFromHistory(
                   historicalWorkouts,
@@ -3070,7 +3107,11 @@ function WorkoutLogger({
     );
   }
 
-  function addExercises(selected: Exercise[], createSuperset = false) {
+  function addExercises(
+    selected: Exercise[],
+    createSuperset = false,
+    machineChoices: ExerciseMachineChoices = {},
+  ) {
     setMovements((current) => {
       const merged = mergeUniqueById(
         current.map((item) => item.exercise),
@@ -3080,8 +3121,7 @@ function WorkoutLogger({
         key: crypto.randomUUID(),
         exercise,
         notes: '',
-        machinePhotoIds: [],
-        machinePhotosInitialized: false,
+        ...machineSelection(exercise.id, machineChoices),
         supersetKey: null,
         isComplete: false,
         sets: suggestedSetsForExercise(exercise),
@@ -3104,13 +3144,19 @@ function WorkoutLogger({
     setSwitchingMovementKey(null);
   }
 
-  function switchExercise(selected: Exercise[]) {
+  function switchExercise(selected: Exercise[], machineChoices: ExerciseMachineChoices = {}) {
     const replacement = selected[0];
     if (!switchingMovementKey || !replacement) return;
     const suggestedSets = suggestedSetsForExercise(replacement);
     setMovements((current) =>
       replaceMovementExercise(current, switchingMovementKey, replacement).map((movement) =>
-        movement.key === switchingMovementKey ? { ...movement, sets: suggestedSets } : movement,
+        movement.key === switchingMovementKey
+          ? {
+              ...movement,
+              ...machineSelection(replacement.id, machineChoices),
+              sets: suggestedSets,
+            }
+          : movement,
       ),
     );
     closeExercisePicker();
@@ -3253,12 +3299,13 @@ function WorkoutLogger({
       // A paused rest keeps waiting; the change applies when the workout resumes.
       timer.pausedLeft = left;
       setRestLeft(left);
-      setRestTotal((total) => Math.max(left, total + deltaSeconds));
+      setRestTotal((total) => Math.max(left, total));
       return;
     }
     timer.endsAt = Date.now() + left * 1000;
     setRestLeft(left);
-    setRestTotal((total) => Math.max(left, total + deltaSeconds));
+    // The rest's full length stays put, so the pill's fill moves by the whole 30 seconds.
+    setRestTotal((total) => Math.max(left, total));
     onRestTimerChange?.(timer.endsAt);
     // Scheduling again replaces this device's pending "Rest complete" notification.
     const endpoint = restNotificationEndpointRef.current;
@@ -3326,6 +3373,10 @@ function WorkoutLogger({
   // A closed workout leaves no rest countdown on the tab bar.
   useEffect(() => () => onRestTimerChange?.(null), [onRestTimerChange]);
 
+  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const [weeklySetsUpdate, setWeeklySetsUpdate] = useState<WeeklySetsUpdate | null>(null);
+  const weeklySetsUpdateId = useRef(0);
+
   function updateSet(movementKey: string, setKey: string, update: Partial<DraftSet>) {
     const movement = movements.find((item) => item.key === movementKey);
     const currentSet = movement?.sets.find((item) => item.key === setKey);
@@ -3343,6 +3394,14 @@ function WorkoutLogger({
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
+    if (loggingSet && movement && currentSet && !initialWorkout) {
+      const gains = isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update))
+        ? weeklySetGains(movement.exercise, weeklySets, workoutDate, localDate())
+        : [];
+      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
+    } else if (update.completed === false && currentSet?.completed) {
+      setWeeklySetsUpdate(null);
+    }
     // Correcting the weight or reps of a logged set also moves the untouched suggestion after it.
     const correctingLoggedSet =
       currentSet?.completed === true &&
@@ -3352,7 +3411,14 @@ function WorkoutLogger({
       current.map((movement) => {
         if (movement.key !== movementKey) return movement;
         const sets = movement.sets.map((item) =>
-          item.key === setKey ? workoutSetAfterEdit(item, update) : item,
+          item.key === setKey
+            ? workoutSetAfterEdit(item, {
+                restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
+                ...update,
+                ...(update.completed === true && { restRevealed: true }),
+                ...(update.rest_seconds !== undefined && { restConfirmed: true }),
+              })
+            : item,
         );
         return {
           ...movement,
@@ -3923,9 +3989,9 @@ function WorkoutLogger({
                   : null
               }
               history={recentExerciseHistory(
-                historicalWorkouts,
+                historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
-                initialWorkout?.id,
+                initialWorkout?.id ?? resumedWorkoutId ?? undefined,
                 undefined,
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
@@ -4027,6 +4093,15 @@ function WorkoutLogger({
           onHide={() => setRestHidden(true)}
           onShow={() => setRestHidden(false)}
           onEnd={cancelRestTimer}
+          joined={Boolean(weeklySetsUpdate)}
+        />
+      )}
+      {weeklySetsUpdate && (
+        <WeeklySetsShelf
+          update={weeklySetsUpdate}
+          goal={muscleSetGoal}
+          placement={!showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'}
+          onDismiss={() => setWeeklySetsUpdate(null)}
         />
       )}
       {!readOnly && (
@@ -4111,8 +4186,14 @@ function WorkoutLogger({
           onFavoriteChange={onExerciseFavorite}
           onCreateExercise={onCreateExercise}
           singleSelect={switchingMovementKey !== null}
-          onChoose={switchingMovementKey ? switchExercise : addExercises}
-          onCreateSuperset={(selected) => addExercises(selected, true)}
+          onChoose={(selected, machineChoices) =>
+            switchingMovementKey
+              ? switchExercise(selected, machineChoices)
+              : addExercises(selected, false, machineChoices)
+          }
+          onCreateSuperset={(selected, machineChoices) =>
+            addExercises(selected, true, machineChoices)
+          }
           onClose={closeExercisePicker}
         />
       )}
@@ -5205,21 +5286,6 @@ function MovementCard({
             >
               {movement.exercise.name}
             </button>
-            <ExerciseMuscleHelp exercise={movement.exercise} />
-            <button
-              type="button"
-              className="movement-expand-toggle"
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
-              aria-expanded={expanded}
-              onClick={(event) => {
-                event.stopPropagation();
-                setExpanded((current) => !current);
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="m4 7 6 6 6-6" />
-              </svg>
-            </button>
           </h2>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
@@ -5237,6 +5303,18 @@ function MovementCard({
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
+          <ExerciseMuscleHelp exercise={movement.exercise} />
+          <button
+            type="button"
+            className="movement-expand-toggle"
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${movement.exercise.name}`}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="m4 7 6 6 6-6" />
+            </svg>
+          </button>
           {barType && (
             <button
               type="button"
@@ -5443,30 +5521,29 @@ function MovementCard({
                   {open ? renderSetEditor(item, index) : renderSetSummary(item, index)}
                 </div>
               </SwipeToDeleteSetRow>
-              {!cardio && showRestTimes && (item.rest_seconds ?? 0) > 0 && (
-                <SwipeToDeleteSetRow
-                  flipKey={`${item.key}:rest`}
-                  label={`rest after set ${index + 1}`}
-                  onDelete={() => removeRest(item)}
-                >
-                  <div className="rest-between">
-                    <i />
-                    <label>
-                      <RestTimeSelect
-                        seconds={item.rest_seconds!}
-                        label={`Rest after set ${index + 1}`}
-                        onChange={(seconds) => {
-                          clearRestEdit(item.key);
-                          if (seconds === 0) removeRest(item);
-                          else onUpdateSet(item.key, { rest_seconds: seconds });
-                        }}
-                      />
-                      <span>rest</span>
-                    </label>
-                    <i />
-                  </div>
-                </SwipeToDeleteSetRow>
-              )}
+              {!cardio &&
+                showRestTimes &&
+                (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+                (item.rest_seconds ?? 0) > 0 && (
+                  <SwipeToDeleteSetRow
+                    flipKey={`${item.key}:rest`}
+                    label={`rest after set ${index + 1}`}
+                    onDelete={() => removeRest(item)}
+                  >
+                    <SetRestControl
+                      seconds={item.rest_seconds!}
+                      setIndex={index}
+                      sets={movement.sets}
+                      history={history}
+                      suggested={!item.completed && !item.restConfirmed}
+                      onChange={(seconds) => {
+                        clearRestEdit(item.key);
+                        if (seconds === 0) removeRest(item);
+                        else onUpdateSet(item.key, { rest_seconds: seconds });
+                      }}
+                    />
+                  </SwipeToDeleteSetRow>
+                )}
             </Fragment>
           );
         })}
@@ -5984,6 +6061,7 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption);
+  const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
   const images = photo.images?.length ? photo.images : [photo];
   const image = images[Math.min(imageIndex, images.length - 1)];
@@ -5996,7 +6074,9 @@ function MachinePhotoDetail({
     setError(null);
     try {
       await onUpdate(photo, caption.trim());
+      setSaveNotice((current) => current + 1);
     } catch (saveError) {
+      setSaveNotice(0);
       setError(saveError instanceof Error ? saveError.message : 'Could not update the caption.');
     } finally {
       setSaving(false);
@@ -6021,6 +6101,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {saveNotice > 0 && (
+        <NotificationDialog
+          key={saveNotice}
+          message="Machine name saved"
+          onClose={() => setSaveNotice(0)}
+        />
+      )}
       <div>
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
@@ -6124,11 +6211,17 @@ export function ExercisePicker({
   onFavoriteChange: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   singleSelect?: boolean;
-  onChoose: (exercises: Exercise[]) => void;
-  onCreateSuperset?: (exercises: Exercise[]) => void;
+  onChoose: (exercises: Exercise[], machineChoices: ExerciseMachineChoices) => void;
+  onCreateSuperset?: (exercises: Exercise[], machineChoices: ExerciseMachineChoices) => void;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [savedMachines, setSavedMachines] = useState<ReadonlyMap<string, MachinePhotoUsage[]>>(
+    () => new Map(),
+  );
+  // Only choices the user made; selected exercises otherwise preselect their last-used machine.
+  const [machineChoices, setMachineChoices] = useState<ExerciseMachineChoices>({});
+  const [openMachinesId, setOpenMachinesId] = useState<string | null>(null);
   const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
   const [customOnly, setCustomOnly] = useState(false);
   const [filter, setFilter] = useState<'all' | 'favorites' | 'recent'>('all');
@@ -6197,6 +6290,70 @@ export function ExercisePicker({
     (count, section) => count + section.exercises.length,
     0,
   );
+  const resolvedMachineChoices = resolveMachineChoices(selectedIds, savedMachines, machineChoices);
+
+  function addToSelection(exerciseId: string) {
+    setSelectedIds((current) => (singleSelect ? [exerciseId] : [...current, exerciseId]));
+  }
+
+  function toggleExercise(exercise: Exercise) {
+    const wasSelected = selectedIds.includes(exercise.id);
+    setSelectedIds((current) =>
+      current.includes(exercise.id)
+        ? current.filter((id) => id !== exercise.id)
+        : singleSelect
+          ? [exercise.id]
+          : [...current, exercise.id],
+    );
+    if (wasSelected) {
+      setMachineChoices((current) => {
+        const next = { ...current };
+        delete next[exercise.id];
+        return next;
+      });
+      if (openMachinesId === exercise.id) setOpenMachinesId(null);
+    } else {
+      if (singleSelect) setMachineChoices({});
+      if (savedMachines.get(exercise.id)?.length) setOpenMachinesId(exercise.id);
+    }
+    searchRef.current?.blur();
+  }
+
+  /** Records a machine for an exercise, picking the exercise too when it was not selected. */
+  function recordMachineChoice(exercise: Exercise, machineId: string | null) {
+    const selected = selectedIds.includes(exercise.id);
+    setMachineChoices((current) =>
+      singleSelect && !selected
+        ? { [exercise.id]: machineId }
+        : { ...current, [exercise.id]: machineId },
+    );
+    if (!selected) addToSelection(exercise.id);
+  }
+
+  /** Tapping the chosen machine again returns to the baseline exercise. */
+  function chooseMachine(exercise: Exercise, machineId: string) {
+    const selected = selectedIds.includes(exercise.id);
+    recordMachineChoice(
+      exercise,
+      selected
+        ? toggledMachineChoice(resolvedMachineChoices[exercise.id] ?? null, machineId)
+        : machineId,
+    );
+  }
+
+  async function addMachine(exercise: Exercise, file: File, caption: string) {
+    const upload = await optimisePhoto(file);
+    const photo = await api.uploadMachinePhoto(exercise.id, upload, caption);
+    setSavedMachines((current) => {
+      const next = new Map(current);
+      next.set(exercise.id, [
+        ...(current.get(exercise.id) ?? []),
+        { ...photo, exercise_name: exercise.name, workout_count: 0, last_used_date: null },
+      ]);
+      return next;
+    });
+    recordMachineChoice(exercise, photo.id);
+  }
 
   async function toggleFavorite(exercise: Exercise) {
     if (favoriteSavingIds.includes(exercise.id)) return;
@@ -6213,22 +6370,23 @@ export function ExercisePicker({
 
   function renderExercise(exercise: Exercise) {
     const selected = selectedIds.includes(exercise.id);
+    const machines = savedMachines.get(exercise.id) ?? [];
+    const hasMachines = machines.length > 0;
+    const machinesOpen = hasMachines && openMachinesId === exercise.id;
+    const chosenMachineId = selected ? (resolvedMachineChoices[exercise.id] ?? null) : null;
+    const chosenMachine = machines.find((machine) => machine.id === chosenMachineId);
+    const machinePanelId = `exercise-machines-${exercise.id}`;
     return (
-      <div className={`exercise-option ${selected ? 'selected' : ''}`} key={exercise.id}>
+      <div
+        className={`exercise-option ${selected ? 'selected' : ''} ${hasMachines ? 'has-machines' : ''} ${machinesOpen ? 'machines-open' : ''}`}
+        key={exercise.id}
+        data-exercise-id={exercise.id}
+      >
         <button
           type="button"
           className="exercise-option-select"
           aria-pressed={selected}
-          onClick={() => {
-            setSelectedIds((current) =>
-              current.includes(exercise.id)
-                ? current.filter((id) => id !== exercise.id)
-                : singleSelect
-                  ? [exercise.id]
-                  : [...current, exercise.id],
-            );
-            searchRef.current?.blur();
-          }}
+          onClick={() => toggleExercise(exercise)}
         >
           <ExerciseIcon exercise={exercise} />
           <span className="exercise-option-copy">
@@ -6240,10 +6398,27 @@ export function ExercisePicker({
               <em>{exercise.muscle_group}</em>
               {exercise.equipment && <em>{exercise.equipment}</em>}
             </small>
+            {selected && hasMachines && (
+              <small className="exercise-option-machine">
+                {chosenMachine?.caption ?? 'Baseline exercise'}
+              </small>
+            )}
           </span>
           {selected && <b className="exercise-option-selected">✓</b>}
         </button>
         <ExerciseMuscleHelp exercise={exercise} />
+        {hasMachines && (
+          <button
+            type="button"
+            className="exercise-machine-toggle"
+            aria-label={`${machinesOpen ? 'Hide' : 'Show'} machines for ${exercise.name}`}
+            aria-expanded={machinesOpen}
+            aria-controls={machinePanelId}
+            onClick={() => setOpenMachinesId(machinesOpen ? null : exercise.id)}
+          >
+            <Icon name="chevron-down" />
+          </button>
+        )}
         <button
           type="button"
           className={`exercise-favorite-button ${exercise.is_favorite ? 'active' : ''}`}
@@ -6256,6 +6431,20 @@ export function ExercisePicker({
             <path d="M6 3h12v18l-6-4-6 4V3Z" />
           </svg>
         </button>
+        {hasMachines && (
+          <div className="exercise-machine-accordion" id={machinePanelId} inert={!machinesOpen}>
+            <div className="exercise-machine-clip">
+              <ExerciseMachineStrip
+                exercise={exercise}
+                machines={machines}
+                chosenId={chosenMachineId}
+                lastUsedId={lastUsedMachineId(machines)}
+                onToggle={(machineId) => chooseMachine(exercise, machineId)}
+                onAddMachine={(file, caption) => addMachine(exercise, file, caption)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -6263,6 +6452,45 @@ export function ExercisePicker({
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
   }, [search, filter, bodyPart, equipment, customOnly]);
+
+  useEffect(() => {
+    let active = true;
+    api.listAllMachinePhotos().then(
+      (machines) => {
+        if (active) setSavedMachines(machinesByExercise(machines));
+      },
+      // Without saved machines the picker still adds exercises; the logger offers machines.
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Once the strip has opened, keep the exercise and its machines in view.
+    if (!openMachinesId) return;
+    const timer = window.setTimeout(
+      () => {
+        const list = listRef.current;
+        const row = [...(list?.querySelectorAll<HTMLElement>('[data-exercise-id]') ?? [])].find(
+          (item) => item.dataset.exerciseId === openMachinesId,
+        );
+        if (!list || !row) return;
+        const listBox = list.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        const overflow = Math.min(rowBox.bottom - listBox.bottom, rowBox.top - listBox.top);
+        if (overflow > 0) {
+          list.scrollTo?.({
+            top: list.scrollTop + overflow + 8,
+            behavior: motionReduced() ? 'auto' : 'smooth',
+          });
+        }
+      },
+      motionReduced() ? 0 : 380,
+    );
+    return () => window.clearTimeout(timer);
+  }, [openMachinesId]);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -6431,7 +6659,12 @@ export function ExercisePicker({
               className="create-superset-button"
               type="button"
               disabled={selectedIds.length < 2}
-              onClick={() => onCreateSuperset?.(itemsInSelectionOrder(exercises, selectedIds))}
+              onClick={() =>
+                onCreateSuperset?.(
+                  itemsInSelectionOrder(exercises, selectedIds),
+                  resolvedMachineChoices,
+                )
+              }
             >
               Add super set
             </button>
@@ -6440,7 +6673,9 @@ export function ExercisePicker({
             className="add-selected-button"
             type="button"
             disabled={!selectedIds.length}
-            onClick={() => onChoose(itemsInSelectionOrder(exercises, selectedIds))}
+            onClick={() =>
+              onChoose(itemsInSelectionOrder(exercises, selectedIds), resolvedMachineChoices)
+            }
           >
             {singleSelect ? (
               'Switch exercise'
@@ -6649,6 +6884,7 @@ interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
   onBack: () => void;
+  onMerge?: (trigger: HTMLButtonElement) => void;
 }
 
 export function ProgressScreen({
@@ -6665,6 +6901,7 @@ export function ProgressScreen({
   onOpenSettings,
   onDetailChange,
   onCreateExercise,
+  onExercisesMerged,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
@@ -6679,8 +6916,17 @@ export function ProgressScreen({
   onOpenSettings?: () => void;
   onDetailChange?: (header: ExerciseDetailHeader | null) => void;
   onCreateExercise?: () => void;
+  onExercisesMerged?: () => Promise<void>;
 }) {
   const weightUnit = useWeightUnit();
+  const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
+  const mergeTrigger = useRef<HTMLButtonElement | null>(null);
+  const [mergeNotice, setMergeNotice] = useState(false);
+  useEffect(() => {
+    if (!mergeNotice) return;
+    const timer = setTimeout(() => setMergeNotice(false), 4000);
+    return () => clearTimeout(timer);
+  }, [mergeNotice]);
   const strengthExercises = useMemo(
     () => exercises.filter((exercise) => exercise.kind === 'strength'),
     [exercises],
@@ -6719,6 +6965,14 @@ export function ProgressScreen({
   const metricIndicatorRef = useSlidingIndicator<HTMLDivElement>(metric);
   const rangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const selectedExercise = strengthExercises.find((exercise) => exercise.id === exerciseId) ?? null;
+  const canMergeSelected = Boolean(selectedExercise?.is_custom && onExercisesMerged);
+  const openSelectedMerge = useCallback(
+    (trigger: HTMLButtonElement) => {
+      mergeTrigger.current = trigger;
+      setMergeRequest({ sourceId: exerciseId });
+    },
+    [exerciseId],
+  );
 
   const backToExercises = useCallback(() => {
     setFullProgress(false);
@@ -6738,6 +6992,7 @@ export function ProgressScreen({
             exercise: selectedExercise,
             sessionCount: progressSessionCount,
             onBack: backToExercises,
+            onMerge: canMergeSelected ? openSelectedMerge : undefined,
           }
         : null,
     );
@@ -6748,6 +7003,8 @@ export function ProgressScreen({
     selectedExercise,
     progressSessionCount,
     backToExercises,
+    canMergeSelected,
+    openSelectedMerge,
   ]);
   useEffect(() => () => onDetailChange?.(null), [onDetailChange]);
 
@@ -6901,6 +7158,11 @@ export function ProgressScreen({
             exercises={strengthExercises}
             library={exerciseLibrary}
             onCreate={onCreateExercise}
+            onMerge={
+              onExercisesMerged && exercises.some((item) => item.is_custom)
+                ? () => setMergeRequest({})
+                : undefined
+            }
             onOpen={(id) => {
               libraryScroll.current = window.scrollY;
               setExerciseId(id);
@@ -6913,6 +7175,39 @@ export function ProgressScreen({
           />
         </div>
       )}
+      {mergeRequest && (
+        <ExerciseMergeDialog
+          exercises={exercises}
+          initialSourceId={mergeRequest.sourceId}
+          onClose={() => {
+            setMergeRequest(null);
+            requestAnimationFrame(
+              () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
+            );
+          }}
+          onMerged={(_sourceId, target) => {
+            setMergeRequest(null);
+            setMergeNotice(true);
+            setExerciseId(target.id);
+            void onExercisesMerged?.();
+          }}
+        />
+      )}
+      {mergeNotice &&
+        createPortal(
+          <div className="undo-toast top-toast" role="status">
+            <span>Exercises merged</span>
+            <button
+              type="button"
+              className="undo-toast-close"
+              aria-label="Dismiss exercise merge notification"
+              onClick={() => setMergeNotice(false)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
       {sessionId && selectedExercise && (
         <ExerciseSessionSheet
           key={sessionId}
@@ -6952,6 +7247,13 @@ export function ProgressScreen({
             actions={
               <>
                 {selectedExercise && <ExerciseMuscleHelp exercise={selectedExercise} />}
+                {canMergeSelected && selectedExercise && (
+                  <ExerciseOptionsMenu
+                    key={selectedExercise.id}
+                    exerciseName={selectedExercise.name}
+                    onMerge={openSelectedMerge}
+                  />
+                )}
                 {!browseFirst && (
                   <button
                     className="icon-button-pulse"
@@ -9679,8 +9981,8 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
-  weeklySets: DashboardData['weekly_sets'] | undefined;
-  weeklySetsHistory: DashboardData['weekly_sets_history'];
+  weeklySets: MuscleSetsWeek | undefined;
+  weeklySetsHistory: MuscleSetsWeek[] | undefined;
   onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
@@ -9882,7 +10184,18 @@ function HistoryScreen({
             .join(' \u00b7 ')}
           onBack={exerciseHeader.onBack}
           backLabel="Back to exercises"
-          actions={<ExerciseMuscleHelp exercise={exerciseHeader.exercise} />}
+          actions={
+            <>
+              <ExerciseMuscleHelp exercise={exerciseHeader.exercise} />
+              {exerciseHeader.onMerge && (
+                <ExerciseOptionsMenu
+                  key={exerciseHeader.exercise.id}
+                  exerciseName={exerciseHeader.exercise.name}
+                  onMerge={exerciseHeader.onMerge}
+                />
+              )}
+            </>
+          }
         />
       ) : (
         <>
@@ -9967,6 +10280,7 @@ function HistoryScreen({
             browseFirst
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
+            onExercisesMerged={onDataChange}
             initialExerciseId={initialExerciseId}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}

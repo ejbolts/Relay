@@ -1283,7 +1283,8 @@ button.pulse-card:hover {
   white-space: nowrap;
 }
 
-.today-loading-skeleton .skeleton-block {
+.today-loading-skeleton .skeleton-block,
+.friends-loading-skeleton .skeleton-block {
   display: block;
   border-radius: 8px;
   background: linear-gradient(
@@ -2987,7 +2988,8 @@ html.edge-swipe-ready .edge-swipe-indicator {
 @media (prefers-reduced-motion: reduce) {
   .live-workout-label i,
   .app-tab-start .live-dot,
-  .today-loading-skeleton .skeleton-block {
+  .today-loading-skeleton .skeleton-block,
+  .friends-loading-skeleton .skeleton-block {
     animation: none;
   }
 }
@@ -3351,7 +3353,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .movement-card > header {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   padding: 0.75rem 0.875rem 0.625rem;
 }
 
@@ -3370,6 +3372,14 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .movement-card h2 {
   font-size: 1.0625rem;
   font-weight: 650;
+}
+
+.logger-screen .movement-header-actions {
+  gap: 0.15rem;
+}
+
+.logger-screen .movement-header-actions .exercise-muscle-help-button {
+  width: 2.25rem;
 }
 
 .segmented-control button {
@@ -4274,6 +4284,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
   transition: transform 1s linear;
 }
 
+.rest-pill-fill.is-jump {
+  transition: transform 200ms var(--ease-out);
+}
+
 .rest-pill button {
   width: 2.75rem;
   height: 2.75rem;
@@ -4385,24 +4399,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-variant-numeric: tabular-nums;
 }
 
-.rest-notch-bar {
-  position: absolute;
-  top: 0;
-  right: 0.875rem;
-  left: 0.875rem;
-  height: 3px;
-  overflow: hidden;
-  border-radius: 0 0 3px 3px;
-}
-
-.rest-notch-bar > span {
-  display: block;
-  height: 100%;
-  background: var(--p-accent);
-  transform-origin: left;
-  transition: transform 1s linear;
-}
-
 /* Paused: the same controls in gold, with the play icon. */
 .rest-pill.is-paused .rest-pill-fill {
   background: var(--p-gold-soft);
@@ -4424,18 +4420,12 @@ html.edge-swipe-ready .edge-swipe-indicator {
   border-color: var(--p-gold);
 }
 
-.rest-notch.is-paused .rest-notch-bar > span {
-  background: var(--p-gold);
-  transition: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .workout-timer-dock {
     animation: none;
   }
 
   .rest-pill-fill,
-  .rest-notch-bar > span,
   .rest-pill .rest-pill-toggle {
     transition: none;
   }

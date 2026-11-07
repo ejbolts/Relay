@@ -712,7 +712,14 @@ describe('saved training splits on Home', () => {
     expect(draft.workoutTypeId).toBe(custom.id);
     expect(draft.movements[0].exerciseId).toBe(bench.id);
     expect(draft.movements[0].sets).toMatchObject([
-      { reps: 10, weight_kg: 35, rest_seconds: 120, completed: false, fromPrevious: true },
+      {
+        reps: 10,
+        weight_kg: 35,
+        rest_seconds: 120,
+        completed: false,
+        fromPrevious: true,
+        restRevealed: false,
+      },
       { reps: 8, weight_kg: 37.5, rest_seconds: 90, completed: false, set_type: 'drop' },
     ]);
     expect(api.createWorkout).not.toHaveBeenCalled();
@@ -765,6 +772,91 @@ describe('saved training splits on Home', () => {
 });
 
 describe('rest time controls', () => {
+  it('adds a logged working set to its weekly totals above the rest, but not a warm-up', async () => {
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      weekly_sets: {
+        week_start: '2026-10-12',
+        week_end: '2026-10-18',
+        muscle_groups: [{ muscle_group: 'Chest', raw_sets: 4, contributions: [] }],
+      },
+    } as unknown as DashboardData);
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].rest_seconds = 90;
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-warmup',
+      set_type: 'warmup',
+      warmup: true,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const shelf = () => container.querySelector('.weekly-sets-shelf');
+    await click('Complete set 2');
+    expect(shelf()).toBeNull();
+    await click('Complete set 1');
+    // The row's completed set already counts towards Chest, so this set moves it from 5 to 6.
+    expect(shelf()?.classList.contains('is-pill')).toBe(true);
+    expect(container.querySelector('.rest-pill')?.classList.contains('has-weekly-shelf')).toBe(
+      true,
+    );
+    expect(container.querySelector('.weekly-shelf-name')?.textContent).toBe('Chest');
+    expect(container.querySelector('.weekly-shelf-gain')?.textContent).toBe('+1');
+    expect(container.querySelector('.weekly-shelf-roll')?.textContent).toBe('56');
+    await click('Mark set 1 incomplete');
+    expect(shelf()).toBeNull();
+  });
+
+  it('reveals rests only for newly added or completed sets and keeps that state after reload', async () => {
+    const draft = storedDraft();
+    const suggested = draft.movements[0].sets[0];
+    suggested.completed = false;
+    suggested.fromPrevious = true;
+    suggested.restRevealed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    expect(restControl()).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('.add-set-button')!.click());
+    expect(restControl()).toBeNull();
+    expect(container.querySelector('[aria-label="Rest after set 2"]')).not.toBeNull();
+    await click('Complete set 1');
+    expect(restControl()?.value).toBe('180');
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
+    await click('Mark set 1 incomplete');
+    expect(restControl()).not.toBeNull();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(restControl()).not.toBeNull();
+    expect(container.querySelector('[aria-label="Rest after set 2"]')).not.toBeNull();
+  });
+
+  it('does not reveal a suggested rest just because its weight is edited', async () => {
+    const draft = storedDraft();
+    const set = draft.movements[0].sets[0];
+    set.completed = false;
+    set.fromPrevious = true;
+    set.restRevealed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await click('Options for set 1');
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
+        .find((button) => button.textContent?.includes('Edit set'))!
+        .click(),
+    );
+    const input = container.querySelector<HTMLInputElement>('[data-set-key="set-0"] input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '85');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].fromPrevious).toBe(false);
+    expect(restControl()).toBeNull();
+    await click('Complete set 1');
+    expect(restControl()).not.toBeNull();
+  });
+
   function restControl() {
     return (
       container
@@ -850,6 +942,20 @@ describe('rest time controls', () => {
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
     expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it('moves the rest fill by the whole 30 seconds when time is added or taken off', async () => {
+    await startRest();
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    const fill = () => container.querySelector<HTMLElement>('.rest-pill-fill');
+    expect(fill()?.style.transform).toBe(`scaleX(${25 / 30})`);
+    await click('Add 30 seconds to the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
+    expect(fill()?.style.transform).toBe('scaleX(1)');
+    expect(fill()?.classList.contains('is-jump')).toBe(true);
+    await click('Take 30 seconds off the rest');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(fill()?.style.transform).toBe(`scaleX(${25 / 55})`);
   });
 
   it('ends the rest from its X without announcing it or pausing the workout', async () => {
@@ -2228,6 +2334,8 @@ describe('inactive workout suggestions', () => {
 
   it('does not turn planned sets into performed sets when rest is edited', async () => {
     const draft = expiredSuggestions(false);
+    // A manually added set can still have suggested performance and a visible rest.
+    draft.movements[0].sets[0].restRevealed = true;
     writeActiveWorkoutDraft(draft);
     await mount();
     const rest = container.querySelector<HTMLSelectElement>('[aria-label="Rest after set 1"]')!;
@@ -2411,6 +2519,122 @@ async function navigateTo(label: string) {
   expect(button).toBeDefined();
   await act(async () => button.click());
 }
+describe('live muscle totals while logging', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '#dashboard');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T12:00:00'));
+    vi.mocked(api.listExercises).mockResolvedValue([
+      {
+        ...bench,
+        muscle_set_credits: [
+          { muscle_name: 'Chest', sets: 1 },
+          { muscle_name: 'Triceps', sets: 0.5 },
+        ],
+      },
+      row,
+    ]);
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      weekly_sets: {
+        week_start: '2026-10-19',
+        week_end: '2026-10-25',
+        muscle_groups: [],
+      },
+    } as unknown as DashboardData);
+    const draft = storedDraft({ workoutDate: '2026-10-20' });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        sets: [{ ...draft.movements[0].sets[0], completed: false, rest_seconds: 0 }],
+      },
+    ];
+    writeActiveWorkoutDraft(draft);
+  });
+  const chestTotals = () =>
+    [...container.querySelectorAll('.muscle-bars li')]
+      .filter((item) => item.textContent?.includes('Chest'))
+      .map((item) => item.querySelector('b')?.textContent);
+
+  it('keeps the final credits through a slow completion and dashboard refresh', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].sets[0].completed = true;
+    writeActiveWorkoutDraft(draft);
+    let finish!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+    );
+    await confirmFinish();
+    expect(chestTotals()).toEqual(['1']);
+    let refresh!: (data: DashboardData) => void;
+    vi.mocked(api.dashboard).mockReturnValueOnce(
+      new Promise((resolve) => {
+        refresh = resolve;
+      }),
+    );
+    const saved = {
+      ...remoteWorkout(),
+      client_session_id: readActiveWorkoutDraft()!.clientSessionId,
+    };
+    await act(async () => finish(saved));
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(chestTotals()).toEqual(['1']);
+    await act(async () =>
+      refresh({
+        recommendation: null,
+        weekly_sets: {
+          week_start: '2026-10-19',
+          week_end: '2026-10-25',
+          muscle_groups: [{ muscle_group: 'Chest', raw_sets: 1, contributions: [] }],
+        },
+      } as unknown as DashboardData),
+    );
+    expect(chestTotals()).toEqual(['1']);
+  });
+
+  it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
+    await mount();
+    await navigateTo('Home');
+    await navigateTo('Training');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+    );
+    expect(chestTotals()).toEqual(['1', '1']);
+    expect(api.dashboard).toHaveBeenCalledOnce();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
+    });
+    await navigateTo('Home');
+    await act(async () =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          '[aria-label="Exercises contributing to Chest"]',
+        ),
+      ]
+        .find((button) => !button.closest('[hidden]'))!
+        .click(),
+    );
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('.muscle-contribution-list button')!.click(),
+    );
+    expect(window.location.hash).toBe('#log');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Mark set 1 incomplete"]')!.click(),
+    );
+    expect(chestTotals()).toEqual([]);
+  });
+});
 async function focusApp() {
   await act(async () => window.dispatchEvent(new Event('focus')));
 }

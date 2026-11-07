@@ -7,6 +7,7 @@ import pytest
 
 from app.body_measurement_csv import export_body_measurements, parse_body_measurement_rows
 from app.csv_text import TEXT_ENCODING_HEADER, encode_text
+from app.models import ExerciseKind
 from app.tracker_csv import export_workouts, parse_rows
 
 
@@ -34,14 +35,25 @@ def test_workout_names_and_exercises_round_trip_without_formula_cells():
         percentile=None,
         warmup=False,
         completed=True,
+        duration_seconds=None,
+        distance_km=None,
+        calories_kcal=None,
+        average_heart_rate_bpm=None,
+        speed_kph=None,
+        incline_percent=None,
     )
-    movement = SimpleNamespace(order_index=0, exercise=SimpleNamespace(name="=1+1"), sets=[item])
+    movement = SimpleNamespace(
+        order_index=0,
+        exercise=SimpleNamespace(name="=1+1", kind=ExerciseKind.STRENGTH),
+        sets=[item],
+    )
     workout = SimpleNamespace(
         id="session-id",
         workout_date=date(2026, 11, 1),
         name="'literal",
         workout_type=None,
         movements=[movement],
+        created_at=None,
     )
     output = export_workouts([workout])
     row = next(csv.DictReader(io.StringIO(output)))

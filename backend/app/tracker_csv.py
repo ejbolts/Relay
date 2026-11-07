@@ -13,10 +13,12 @@ from statistics import median
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from .cardio_zones import cardio_preferences, classify_session
 from .csv_text import TEXT_ENCODING, TEXT_ENCODING_HEADER, decode_text, encode_text
 from .exercise_aliases import canonical_exercise_name
 from .models import (
     BodyMeasurement,
+    CardioSession,
     Exercise,
     ExerciseKind,
     ImportBatch,
@@ -43,6 +45,26 @@ CSV_HEADERS = (
 )
 SESSION_HEADERS = ("Workout ID", "Workout name")
 WORKOUT_TYPE_HEADERS = ("Workout type", "Workout type color")
+# Session metrics are kept separately from sets: assigning a session total to a
+# single set would change its meaning in a multi-set cardio movement.
+SET_METRICS = {
+    "Duration (seconds)": ("duration_seconds", int, 0, 172_800),
+    "Distance (km)": ("distance_km", float, 0, 10_000),
+    "Calories (kcal)": ("calories_kcal", int, 0, 100_000),
+    "Average heart rate (bpm)": ("average_heart_rate_bpm", int, 20, 250),
+    "Speed (km/h)": ("speed_kph", float, 0, 100),
+    "Incline (%)": ("incline_percent", float, 0, 100),
+}
+SESSION_METRICS = {
+    "Cardio session calories (kcal)": ("calories_kcal", int, 0, 100_000),
+    "Cardio session average heart rate (bpm)": ("average_heart_rate_bpm", int, 20, 250),
+    "Cardio session distance (km)": ("distance_km", float, 0, 10_000),
+    "Average speed (km/h)": ("average_speed_kph", float, 0, 100),
+    "Cardio session incline (%)": ("incline_percent", float, 0, 100),
+    "Average power (W)": ("average_power_watts", int, 1, 3_000),
+    "Average METs": ("average_mets", float, 0, 50),
+}
+CARDIO_HEADERS = ("Exercise kind", *SET_METRICS, *SESSION_METRICS)
 # Exports always write every column; hand-made files need only these.
 REQUIRED_HEADERS = ("Date Lifted", "Exercise", "Reps")
 WEIGHT_HEADERS = ("Weight (kg)", "Weight (lb)")
@@ -63,7 +85,13 @@ def header_key(name: str) -> str:
 
 KNOWN_HEADERS = {
     header_key(header): header
-    for header in (*CSV_HEADERS, *SESSION_HEADERS, *WORKOUT_TYPE_HEADERS, TEXT_ENCODING_HEADER)
+    for header in (
+        *CSV_HEADERS,
+        *SESSION_HEADERS,
+        *WORKOUT_TYPE_HEADERS,
+        *CARDIO_HEADERS,
+        TEXT_ENCODING_HEADER,
+    )
 }
 
 
@@ -96,6 +124,9 @@ class ParsedRow:
     duration_minutes: int | None = None
     detailed: bool = False
     exercise_id: str | None = None
+    exercise_kind: ExerciseKind | None = None
+    cardio_values: dict[str, float | int | None] | None = None
+    cardio_session_values: dict[str, float | int | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -284,6 +315,26 @@ def parse_rows(raw: bytes) -> tuple[list[ParsedRow], list[str]]:
         reps = optional_int(row.get("Reps"), "Reps", row_number)
         if reps is not None and not 0 <= reps <= 10_000:
             raise CsvImportError(f"Row {row_number}: Reps must be between 0 and 10000.")
+        kind = (row.get("Exercise kind") or "").strip().casefold()
+        if kind and kind not in {item.value for item in ExerciseKind}:
+            raise CsvImportError(f"Row {row_number}: Exercise kind must be strength or cardio.")
+        metrics = []
+        for specs in (SET_METRICS, SESSION_METRICS):
+            values = {}
+            for header, (attribute, number_type, minimum, maximum) in specs.items():
+                if header not in fieldnames:
+                    continue
+                parser = optional_int if number_type is int else optional_float
+                value = parser(row.get(header), header, row_number)
+                if value is not None and (
+                    not minimum <= value <= maximum or (attribute == "average_mets" and value == 0)
+                ):
+                    raise CsvImportError(
+                        f"Row {row_number}: {header} must be between {minimum} and {maximum}."
+                    )
+                values[attribute] = value
+            metrics.append(values or None)
+        set_values, session_values = metrics
         rows.append(
             ParsedRow(
                 workout_date=workout_date,
@@ -299,6 +350,11 @@ def parse_rows(raw: bytes) -> tuple[list[ParsedRow], list[str]]:
                 workout_type_color=type_color,
                 weight_from_lb=weight_from_lb,
                 bodyweight_from_lb=bodyweight_from_lb,
+                exercise_kind=ExerciseKind(kind) if kind else None,
+                cardio_values=set_values,
+                cardio_session_values=session_values,
+                duration_seconds=(set_values or {}).get("duration_seconds"),
+                distance_km=(set_values or {}).get("distance_km"),
             )
         )
     if not rows:
@@ -449,7 +505,11 @@ def same_number(left: float | None, right: float | None, *, from_lb: bool = Fals
     )
 
 
-def matching_session(rows: list[ParsedRow], workout: TrainingWorkout) -> bool:
+def matching_session(
+    rows: list[ParsedRow],
+    workout: TrainingWorkout,
+    cardio: dict[int, CardioSession] | None = None,
+) -> bool:
     if rows[0].workout_type_name:
         if workout.workout_type is None or (
             workout.workout_type.name.casefold() != rows[0].workout_type_name.casefold()
@@ -457,10 +517,13 @@ def matching_session(rows: list[ParsedRow], workout: TrainingWorkout) -> bool:
             return False
     existing: dict[str, list[WorkoutSet]] = defaultdict(list)
     incoming: dict[str, list[ParsedRow]] = defaultdict(list)
+    cardio_by_set = {}
     for movement in workout.movements:
         completed = [item for item in movement.sets if item.completed]
         if completed:
             existing[movement.exercise_id].extend(completed)
+            for item in completed:
+                cardio_by_set[id(item)] = (cardio or {}).get(movement.order_index)
     for row in rows:
         incoming[row.exercise_id or canonical_exercise_name(row.exercise_name).casefold()].append(
             row
@@ -483,6 +546,14 @@ def matching_session(rows: list[ParsedRow], workout: TrainingWorkout) -> bool:
                         row.bodyweight_kg, item.bodyweight_kg, from_lb=row.bodyweight_from_lb
                     )
                     and same_number(row.percentile, item.percentile)
+                    and all(
+                        value == getattr(item, key)
+                        for key, value in (row.cardio_values or {}).items()
+                    )
+                    and all(
+                        value == getattr(cardio_by_set[id(item)], key, None)
+                        for key, value in (row.cardio_session_values or {}).items()
+                    )
                     and (
                         not row.detailed
                         or (
@@ -568,13 +639,17 @@ def plan_import(
             target = by_id.get(mappings[row.exercise_name])
             if target is None:
                 raise CsvImportError("A mapped exercise is unavailable. Review the import again.")
-            kind = infer_exercise(row.exercise_name)[1]
-            if row.duration_seconds is not None or row.distance_km is not None:
+            kind = row.exercise_kind or infer_exercise(row.exercise_name)[1]
+            if not row.exercise_kind and (
+                row.duration_seconds is not None or row.distance_km is not None
+            ):
                 kind = ExerciseKind.CARDIO
             if target.kind != kind:
                 raise CsvImportError(
                     "Map strength exercises to strength entries and cardio to cardio entries."
                 )
+        if target and row.exercise_kind and target.kind != row.exercise_kind:
+            raise CsvImportError("Exercise kind disagrees with the selected exercise.")
         matches[row.exercise_name] = {
             "incoming_name": row.exercise_name,
             "exercise_id": target.id if target else None,
@@ -588,6 +663,24 @@ def plan_import(
     for row in rows:
         grouped[(row.workout_date, row.session_id)].append(row)
     existing: dict[date, list[TrainingWorkout]] = defaultdict(list)
+    cardio_by_workout: dict[str, dict[int, CardioSession]] = defaultdict(dict)
+    for session in db.scalars(
+        select(CardioSession).where(
+            CardioSession.user_id == user_id,
+            CardioSession.session_date.in_({row.workout_date for row in rows}),
+        )
+    ):
+        if session.source_workout_id:
+            cardio_by_workout[session.source_workout_id][session.source_movement_index] = session
+        else:
+            workout = standalone_cardio_workout(
+                session, exercises.get(canonical_exercise_name(session.activity_type).casefold())
+            )
+            existing[session.session_date].append(workout)
+            cardio_by_workout[workout.id][0] = session
+    standalone = any(row.session_id.startswith("cardio:") for row in rows)
+    if standalone:
+        warnings.append("Standalone cardio is imported as cardio-only workouts.")
     for workout in db.scalars(
         select(TrainingWorkout)
         .where(
@@ -604,12 +697,46 @@ def plan_import(
     sessions: list[ImportSession] = []
     new_exercises: dict[str, str] = {}
     for (workout_date, _), session_rows in sorted(grouped.items()):
+        movement_details = {}
+        exercise_kinds = {}
+        for row in session_rows:
+            exercise_key = row.exercise_id or canonical_exercise_name(row.exercise_name).casefold()
+            if row.exercise_kind:
+                if exercise_kinds.setdefault(exercise_key, row.exercise_kind) != row.exercise_kind:
+                    raise CsvImportError("Exercise kinds disagree for one exercise.")
+            details = row.cardio_session_values
+            if movement_details.setdefault(exercise_key, details) != details:
+                raise CsvImportError("Cardio session metrics disagree for one exercise.")
+        for exercise_key, details in movement_details.items():
+            if not details or not any(value is not None for value in details.values()):
+                continue
+            movement_rows = [
+                row
+                for row in session_rows
+                if (row.exercise_id or canonical_exercise_name(row.exercise_name).casefold())
+                == exercise_key
+            ]
+            first = movement_rows[0]
+            exercise = by_id.get(first.exercise_id)
+            kind = (
+                exercise.kind
+                if exercise
+                else first.exercise_kind or infer_exercise(first.exercise_name)[1]
+            )
+            if (
+                kind != ExerciseKind.CARDIO
+                or sum(row.duration_seconds or 0 for row in movement_rows) < 60
+            ):
+                raise CsvImportError(
+                    "Cardio session metrics need a cardio exercise with at least 60 seconds "
+                    "of completed duration."
+                )
         candidates = existing[workout_date]
         match = next(
             (
                 index
                 for index, workout in enumerate(candidates)
-                if matching_session(session_rows, workout)
+                if matching_session(session_rows, workout, cardio_by_workout.get(workout.id))
             ),
             None,
         )
@@ -713,6 +840,12 @@ def import_workouts(
             exercise = by_id.get(exercise_key) or exercises.get(exercise_key)
             if not exercise:
                 category, kind, muscle_group, equipment = infer_exercise(exercise_name)
+                if set_rows[0].exercise_kind == ExerciseKind.CARDIO:
+                    category, kind, muscle_group = (
+                        WorkoutCategory.CARDIO,
+                        ExerciseKind.CARDIO,
+                        "Cardio",
+                    )
                 exercise = Exercise(
                     user_id=user_id,
                     name=exercise_name,
@@ -747,6 +880,11 @@ def import_workouts(
                         rpe=row.rpe,
                         duration_seconds=row.duration_seconds,
                         distance_km=row.distance_km,
+                        **{
+                            key: value
+                            for key, value in (row.cardio_values or {}).items()
+                            if key not in {"duration_seconds", "distance_km"}
+                        },
                         set_type=row.set_type,
                         failed=row.failed,
                         completed=True,
@@ -777,6 +915,23 @@ def import_workouts(
         if on_workout and any(m.exercise.kind == ExerciseKind.CARDIO for m in workout.movements):
             db.flush()
             on_workout(db, workout)
+            db.flush()
+            for movement, set_rows in zip(workout.movements, movement_groups.values(), strict=True):
+                if movement.exercise.kind != ExerciseKind.CARDIO:
+                    continue
+                values = set_rows[0].cardio_session_values
+                if not values:
+                    continue
+                session = db.scalar(
+                    select(CardioSession).where(
+                        CardioSession.source_workout_id == workout.id,
+                        CardioSession.source_movement_index == movement.order_index,
+                    )
+                )
+                if session is not None:
+                    for key, value in values.items():
+                        setattr(session, key, value)
+                    classify_session(session, cardio_preferences(db, user_id))
     body_measurements_created, body_measurements_updated = sync_imported_bodyweights(
         db, user_id, bodyweights, plan.body_details, created_measurements
     )
@@ -805,7 +960,61 @@ def format_number(value: float | int | None) -> str:
     return f"{value:.3f}".rstrip("0").rstrip(".") if isinstance(value, float) else str(value)
 
 
-def export_workouts(workouts: list[TrainingWorkout]) -> str:
+def standalone_cardio_workout(
+    session: CardioSession, exercise: Exercise | None = None
+) -> TrainingWorkout:
+    """Represent legacy standalone cardio in the same one-row-per-set CSV schema.
+
+    These transient objects are never added to a database session. Imported rows
+    use the normal cardio-workout path, including limits, history and undo.
+    """
+    exercise = Exercise(
+        id=exercise.id if exercise else canonical_exercise_name(session.activity_type).casefold(),
+        name=session.activity_type,
+        kind=ExerciseKind.CARDIO,
+        category=WorkoutCategory.CARDIO,
+    )
+    return TrainingWorkout(
+        id=f"cardio:{session.id}",
+        workout_date=session.session_date,
+        created_at=session.created_at,
+        name=f"{session.activity_type} cardio",
+        movements=[
+            WorkoutMovement(
+                order_index=0,
+                exercise=exercise,
+                exercise_id=exercise.id,
+                sets=[
+                    WorkoutSet(
+                        order_index=0,
+                        completed=True,
+                        warmup=False,
+                        duration_seconds=session.duration_minutes * 60,
+                        distance_km=session.distance_km,
+                        calories_kcal=session.calories_kcal,
+                        average_heart_rate_bpm=session.average_heart_rate_bpm,
+                        speed_kph=session.average_speed_kph,
+                        incline_percent=session.incline_percent,
+                    )
+                ],
+            )
+        ],
+    )
+
+
+def export_workouts(
+    workouts: list[TrainingWorkout], cardio_sessions: list[CardioSession] | None = None
+) -> str:
+    cardio = {}
+    workouts = list(workouts)
+    for session in cardio_sessions or []:
+        if session.source_workout_id:
+            cardio[(session.source_workout_id, session.source_movement_index)] = session
+        else:
+            workout = standalone_cardio_workout(session)
+            workouts.append(workout)
+            cardio[(workout.id, 0)] = session
+    workouts.sort(key=lambda item: (item.workout_date, str(item.created_at), item.id))
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\r\n")
     encoded = any(
@@ -822,11 +1031,13 @@ def export_workouts(workouts: list[TrainingWorkout]) -> str:
             *CSV_HEADERS,
             *SESSION_HEADERS,
             *WORKOUT_TYPE_HEADERS,
+            *CARDIO_HEADERS,
             *((TEXT_ENCODING_HEADER,) if encoded else ()),
         )
     )
     for workout in workouts:
         for movement in sorted(workout.movements, key=lambda item: item.order_index):
+            session = cardio.get((workout.id, movement.order_index))
             for item in sorted(movement.sets, key=lambda entry: entry.order_index):
                 if not item.completed:
                     continue
@@ -853,6 +1064,17 @@ def export_workouts(workouts: list[TrainingWorkout]) -> str:
                         encode_text(workout.name),
                         encode_text(workout.workout_type.name) if workout.workout_type else "",
                         workout.workout_type.color if workout.workout_type else "",
+                        movement.exercise.kind.value,
+                        *(
+                            str(value) if value is not None else ""
+                            for value in (getattr(item, spec[0]) for spec in SET_METRICS.values())
+                        ),
+                        *(
+                            str(value) if value is not None else ""
+                            for value in (
+                                getattr(session, spec[0], None) for spec in SESSION_METRICS.values()
+                            )
+                        ),
                         *((TEXT_ENCODING,) if encoded else ()),
                     )
                 )

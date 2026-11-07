@@ -6,6 +6,7 @@ import { ConsistencyCard } from './ConsistencyCard';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
@@ -117,6 +118,7 @@ const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
   data: DashboardData | null;
+  muscleSets?: { weeklySets?: MuscleSetsWeek; history?: MuscleSetsWeek[] };
   workouts: TrackedWorkout[];
   measurements: BodyMeasurement[];
   personalRecords: PersonalRecord[];
@@ -162,6 +164,7 @@ export interface TodayScreenProps {
 export function TodayScreen({
   home,
   data,
+  muscleSets,
   workouts,
   measurements,
   personalRecords,
@@ -478,8 +481,8 @@ export function TodayScreen({
     ),
     'muscle-sets': (
       <MuscleSetsCard
-        weeklySets={data?.weekly_sets}
-        history={data?.weekly_sets_history}
+        weeklySets={muscleSets?.weeklySets ?? data?.weekly_sets}
+        history={muscleSets?.history ?? data?.weekly_sets_history}
         goal={muscleSetGoal}
         onOpenWorkout={onOpenWorkout}
       />

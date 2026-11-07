@@ -11,6 +11,7 @@ from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import CurrentUser, get_current_user
 from .database import get_db
+from .exercise_merge import exercise_aliases
 from .models import Exercise, ExerciseMuscleContribution, UserSetting, WorkoutType
 from .sharing import viewable_member
 from .tracker import bump_workout_cache_revision, workouts_between
@@ -88,9 +89,12 @@ def read_routine(db: Session, user_id: str, routine_id: str, content: RoutineInp
 
 
 def validate_content(db: Session, user_id: str, content: RoutineInput) -> None:
+    aliases = exercise_aliases(db, user_id)
     types = {item.id: item for item in workout_type_catalog(db, user_id)}
     ids = set(db.scalars(select(Exercise.id).where(Exercise.user_id == user_id)))
     for day in content.days:
+        for movement in day.movements:
+            movement.exercise_id = aliases.get(movement.exercise_id, movement.exercise_id)
         if day.workout_type_id is not None and (
             day.workout_type_id not in types or types[day.workout_type_id].archived
         ):

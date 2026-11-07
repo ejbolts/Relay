@@ -152,6 +152,46 @@ function FriendCard({
   );
 }
 
+function FriendsSkeleton() {
+  return (
+    <section
+      className="pulse-card friends-list friends-loading-skeleton"
+      role="status"
+      aria-label="Loading your friends"
+      aria-busy="true"
+    >
+      <header className="pulse-card-header" aria-hidden="true">
+        <h2>
+          Friends <span className="skeleton-block friend-skeleton-count" />
+        </h2>
+      </header>
+      <ul className="friend-cards" aria-hidden="true">
+        {[0, 1, 2].map((item) => (
+          <li key={item}>
+            <div className="friend-card-top">
+              <div className="friend-card-person">
+                <span className="skeleton-block friend-skeleton-avatar" />
+                <span className="friend-card-name">
+                  <span className="skeleton-block friend-skeleton-name" />
+                  <span className="skeleton-block friend-skeleton-meta" />
+                </span>
+              </div>
+              <span className="skeleton-block friend-skeleton-week" />
+            </div>
+            <div className="friend-card-latest">
+              <span className="friend-card-session">
+                <span className="skeleton-block friend-skeleton-session" />
+                <span className="skeleton-block friend-skeleton-meta" />
+              </span>
+              <span className="skeleton-block friend-skeleton-actions" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /**
  * Social's Friends tab: each friend once with their latest session, or the workout they are doing
  * now. Friends working out come first, then those online, then the most recently active.
@@ -189,9 +229,7 @@ export function FriendsList({
     return state === 'error' ? (
       <LoadProblem message={error ?? 'Could not load your friends.'} onRetry={onRetry} />
     ) : (
-      <p className="sharing-loading" role="status">
-        Loading your friends…
-      </p>
+      <FriendsSkeleton />
     );
   }
   const friends = byLiveActivity(connections.friends, (friend) => friend.presence);

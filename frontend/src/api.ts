@@ -579,6 +579,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  mergeExercise: (sourceId: string, targetId: string) =>
+    request<Exercise>(`/api/exercises/${sourceId}/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_exercise_id: targetId }),
+    }),
   updateExercisePartialSets: (exerciseId: string, enabled: boolean, weekStart: string) =>
     request<Exercise>(`/api/exercises/${exerciseId}/partial-sets`, {
       method: 'PATCH',

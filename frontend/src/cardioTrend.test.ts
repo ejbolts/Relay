@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { CardioSession } from './types';
-import { cardioTrendWeeks, cardioWeekTotals, groupCardioHistory } from './cardioTrend';
+import {
+  cardioDistanceGroups,
+  cardioTrendWeeks,
+  cardioWeekTotals,
+  distanceGroupFor,
+  groupCardioHistory,
+} from './cardioTrend';
 
 const session = (overrides: Partial<CardioSession> = {}): CardioSession => ({
   id: 'session',
@@ -102,5 +108,41 @@ describe('weekly cardio trend', () => {
     );
     expect(groups[0].start).toBe(start);
     expect(groups[0].sessions).toHaveLength(1);
+  });
+
+  it.each([
+    ['Running', 'foot'],
+    ['Incline Treadmill Walking', 'foot'],
+    ['Walking', 'foot'],
+    ['Cycling (Indoor)', 'cycle'],
+    ['Spin class', 'cycle'],
+    ['Rowing', 'row'],
+    ['Pool swim', 'swim'],
+    ['Elliptical', 'activity:elliptical'],
+  ])('classifies %s distance as %s', (activity, key) => {
+    expect(distanceGroupFor(activity).key).toBe(key);
+  });
+
+  it('lists only groups with distance in range, most used first', () => {
+    const groups = cardioDistanceGroups(
+      [
+        session({ id: 'ride', distance_km: 20 }),
+        session({ id: 'run', activity_type: 'Running', distance_km: 5 }),
+        session({ id: 'walk', activity_type: 'Walking', distance_km: 3 }),
+        session({ id: 'stairs', activity_type: 'Stair Climber' }),
+        session({
+          id: 'old row',
+          activity_type: 'Rowing',
+          session_date: '2026-09-01',
+          distance_km: 4,
+        }),
+      ],
+      '2026-10-01',
+      '2026-10-24',
+    );
+    expect(groups).toEqual([
+      { key: 'foot', label: 'Walk & run', sessions: 2, distance: 8 },
+      { key: 'cycle', label: 'Cycling', sessions: 1, distance: 20 },
+    ]);
   });
 });

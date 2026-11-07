@@ -17,11 +17,12 @@ When asked for a Tailscale URL for this project, include the preview URL and a v
 
 ## Efficient development verification
 
-- **Do not run the full frontend or backend suites locally.** GitHub's **Checks** workflow runs them on every PR and `main` push, and is the gate for full-suite regressions. Accept that a CI failure may need a follow-up fix and push.
+- **Do not run the full frontend or backend suites locally.** GitHub's **Checks** workflow runs the relevant full suites for feature PRs based on changed files, and both suites for PRs into `main`, `main` pushes and manual runs. It is the gate for full-suite regressions. Accept that a CI failure may need a follow-up fix and push.
 - **Always run new and changed tests locally**, together with the tests related to changed files, using the scoped commands in [the technical reference](docs/TECHNICAL-REFERENCE.md#checks). When adding a feature, add tests for it and confirm they pass before pushing. Also run file-level formatting/lint and the typecheck for edited code. Reuse passing results while their inputs remain unchanged.
 - When resolving merge conflicts, run the tests related to conflicted and auto-merged files rather than the whole suite.
 - Run a full suite locally only when changing that suite's test infrastructure or configuration (for example, the Vitest setup, pytest fixtures or the **Checks** workflow), or when the user asks. To investigate a CI failure, rerun only the failing tests locally.
 - Require both **Frontend checks** and **Backend checks** to pass on the current PR revision before merging; do not infer that a branch push passed CI. Report a pending remote check as pending. The workflow alone does not make checks mandatory in a GitHub ruleset or authorise changes to branch protection.
+- The required check jobs stay present when their suite is unaffected and report success without installing dependencies or running that suite. Failed, cancelled or invalid change detection fails both jobs. Do not use PR labels or whole-workflow path filters to bypass checks. Shared/unknown paths and API contract changes run both suites; documentation-only feature PRs need neither application suite.
 - Documentation-only edits do not require application test suites.
 - Preserve meaningful recovery, account isolation, import, backup and migration coverage. Do not remove tests merely to shorten a run, lower production password-hashing costs, or replace real authentication in tests intended to exercise it.
 - Visible changes still need proportionate sample-data interaction checks and reviewed feature media under the shared verification skill. CI does not replace that review.
