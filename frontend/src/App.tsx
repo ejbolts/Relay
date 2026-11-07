@@ -275,6 +275,7 @@ import {
   type SessionTemplate,
 } from './trainingSummary';
 import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHistory';
+import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
 import { fuzzyHighlightIndices, rankExerciseSearchMatches } from './exerciseSearch';
@@ -3096,6 +3097,15 @@ function WorkoutLogger({
     });
     return recent;
   }, [historicalWorkouts]);
+  const lastDoneDates = useMemo(
+    () =>
+      exerciseLastDoneDates(
+        historicalWorkouts,
+        historyBaselines?.byExercise ?? null,
+        initialWorkout?.id ?? resumedWorkoutId,
+      ),
+    [historicalWorkouts, historyBaselines, initialWorkout?.id, resumedWorkoutId],
+  );
 
   function suggestedSetsForExercise(exercise: Exercise): DraftSet[] {
     return suggestedSetsFromHistory(
@@ -4183,6 +4193,7 @@ function WorkoutLogger({
           exercises={exercises}
           excludedIds={movements.map((item) => item.exercise.id)}
           recentExerciseIds={recentExerciseIds}
+          lastDoneDates={lastDoneDates}
           onFavoriteChange={onExerciseFavorite}
           onCreateExercise={onCreateExercise}
           singleSelect={switchingMovementKey !== null}
@@ -6033,6 +6044,9 @@ function MachinePhotoChooser({
         {expanded && (
           <MachinePhotoDetail
             photo={expanded}
+            onSettingsSaved={(settings) => {
+              if (selectedIds.includes(expanded.id)) onChange(selectedIds, settings);
+            }}
             onClose={() => setExpanded(null)}
             onUpdate={updatePhoto}
             onDelete={deletePhoto}
@@ -6051,8 +6065,10 @@ function MachinePhotoDetail({
   onDelete,
   onChooseAnother,
   onShowHistory,
+  onSettingsSaved,
 }: {
   photo: MachinePhoto;
+  onSettingsSaved?: (settings: MachineSetting[]) => void;
   onClose: () => void;
   onUpdate?: (photo: MachinePhoto, caption: string) => Promise<void>;
   onDelete?: (photo: MachinePhoto) => Promise<void>;
@@ -6060,6 +6076,8 @@ function MachinePhotoDetail({
   /** Filters History to the workouts that pinned this machine. */
   onShowHistory?: () => void;
 }) {
+  const [editingSettings, setEditingSettings] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState(0);
   const [caption, setCaption] = useState(photo.caption);
   const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
@@ -6101,6 +6119,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {settingsNotice > 0 && (
+        <NotificationDialog
+          key={`settings-${settingsNotice}`}
+          message="Machine settings saved"
+          onClose={() => setSettingsNotice(0)}
+        />
+      )}
       {saveNotice > 0 && (
         <NotificationDialog
           key={saveNotice}
@@ -6143,6 +6168,15 @@ function MachinePhotoDetail({
               Save name
             </button>
           )}
+          {onUpdate && (
+            <button
+              type="button"
+              aria-label="Edit machine settings"
+              onClick={() => setEditingSettings(true)}
+            >
+              Edit settings
+            </button>
+          )}
           {onChooseAnother && (
             <button type="button" className="photo-choose-other" onClick={onChooseAnother}>
               Switch photo
@@ -6166,6 +6200,18 @@ function MachinePhotoDetail({
               }
               onConfirm={removePhoto}
               disabled={saving}
+            />
+          )}
+          {editingSettings && (
+            <MachineSettingsEditor
+              exerciseId={photo.exercise_id}
+              machinePhotoId={photo.id}
+              onChange={(settings) => onSettingsSaved?.(settings)}
+              onSaved={() => {
+                setEditingSettings(false);
+                setSettingsNotice((value) => value + 1);
+              }}
+              onCancel={() => setEditingSettings(false)}
             />
           )}
           {error && <p role="alert">{error}</p>}
@@ -6198,6 +6244,7 @@ export function ExercisePicker({
   exercises,
   excludedIds,
   recentExerciseIds,
+  lastDoneDates,
   onFavoriteChange,
   onCreateExercise,
   singleSelect = false,
@@ -6208,6 +6255,8 @@ export function ExercisePicker({
   exercises: Exercise[];
   excludedIds: string[];
   recentExerciseIds: string[];
+  /** Each exercise's latest workout date, shown beside its tags. */
+  lastDoneDates?: ReadonlyMap<string, string>;
   onFavoriteChange: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   singleSelect?: boolean;
@@ -6216,6 +6265,7 @@ export function ExercisePicker({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [today] = useState(localDate);
   const [savedMachines, setSavedMachines] = useState<ReadonlyMap<string, MachinePhotoUsage[]>>(
     () => new Map(),
   );
@@ -6376,6 +6426,7 @@ export function ExercisePicker({
     const chosenMachineId = selected ? (resolvedMachineChoices[exercise.id] ?? null) : null;
     const chosenMachine = machines.find((machine) => machine.id === chosenMachineId);
     const machinePanelId = `exercise-machines-${exercise.id}`;
+    const lastDone = lastDoneDates?.get(exercise.id);
     return (
       <div
         className={`exercise-option ${selected ? 'selected' : ''} ${hasMachines ? 'has-machines' : ''} ${machinesOpen ? 'machines-open' : ''}`}
@@ -6397,6 +6448,13 @@ export function ExercisePicker({
             <small className="exercise-option-tags">
               <em>{exercise.muscle_group}</em>
               {exercise.equipment && <em>{exercise.equipment}</em>}
+              {lastDone && (
+                <em className="exercise-option-last-done">
+                  <Icon name="calendar" />
+                  <span className="sr-only">Last done </span>
+                  {formatLastDone(lastDone, today)}
+                </em>
+              )}
             </small>
             {selected && hasMachines && (
               <small className="exercise-option-machine">
