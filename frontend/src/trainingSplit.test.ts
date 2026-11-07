@@ -30,7 +30,7 @@ describe('training split calendar cycles', () => {
   });
 
   it('keeps every-other-day training rolling over Mondays, months and skipped dates', () => {
-    const split = splitFromTemplate('fbeod', '2026-10-26');
+    const split = { ...splitFromTemplate('fbeod', '2026-10-26'), progression: 'calendar' as const };
     expect(splitStepOnDate(split, '2026-10-25')).toBeNull();
     expect(splitStepOnDate(split, '2026-10-26')).toBe(0);
     expect(splitPreview(split, '2026-11-02').map((day) => day.typeId)).toEqual([
@@ -66,6 +66,36 @@ describe('training split calendar cycles', () => {
       'custom-b',
       null,
       'custom-a',
+    ]);
+  });
+});
+
+describe('workout-following split previews', () => {
+  const split = {
+    ...splitFromTemplate('upper-lower', '2026-10-01'),
+    progression: 'workouts' as const,
+  };
+  it('starts at the next step and shows planned rests when no rest is saved', () => {
+    const preview = splitPreview(
+      { ...split, next_step: 1, next_date: '2026-11-08' },
+      '2026-11-07',
+      5,
+    );
+    expect(preview.map((day) => day.typeId)).toEqual([undefined, 'lower', null, 'upper', 'lower']);
+  });
+  it('lets a saved rest skip only the first planned rest', () => {
+    const preview = splitPreview(
+      { ...split, next_step: 0, rest_saved: true, next_date: '2026-11-07' },
+      '2026-11-07',
+      6,
+    );
+    expect(preview.map((day) => day.typeId)).toEqual([
+      'upper',
+      'lower',
+      'upper',
+      'lower',
+      null,
+      'upper',
     ]);
   });
 });

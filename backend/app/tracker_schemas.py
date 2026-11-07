@@ -499,9 +499,13 @@ class RoutineInput(BaseModel):
         return self
 
 
+SplitProgression = Literal["calendar", "workouts"]
+
+
 class RoutineSchedule(BaseModel):
     start_date: date
     enabled: bool = True
+    progression: SplitProgression = "workouts"
 
 
 class RoutineSaveInput(RoutineInput):
@@ -515,6 +519,7 @@ class RoutineRead(RoutineInput):
 
 class RoutineActivation(BaseModel):
     start_date: date
+    progression: SplitProgression = "workouts"
 
 
 class MuscleFrequencyRead(BaseModel):
@@ -747,6 +752,9 @@ class TrainingSplit(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     enabled: bool = True
     start_date: date
+    # "workouts" (the default) advances only as split workouts are logged; "calendar" pins
+    # each day to a date.
+    progression: SplitProgression = "workouts"
     steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
     routine_id: str | None = None
 
@@ -760,6 +768,13 @@ class TrainingSplit(BaseModel):
         if not any(step.workout_type_id is not None for step in self.steps):
             raise ValueError("Include at least one workout day in your split.")
         return self
+
+
+class TrainingSplitRead(TrainingSplit):
+    # Where a workout-following split currently stands; unset for calendar splits.
+    next_step: int | None = None
+    rest_saved: bool = False
+    next_date: date | None = None
 
 
 class TrainingPreferencesUpdate(BaseModel):

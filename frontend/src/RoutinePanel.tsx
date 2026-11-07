@@ -19,8 +19,16 @@ import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } fro
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
+import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type { Exercise, Routine, RoutineDay, RoutineSet, TrainingSplit } from './types';
+import type {
+  Exercise,
+  Routine,
+  RoutineDay,
+  RoutineSet,
+  SplitProgression,
+  TrainingSplit,
+} from './types';
 import './routines.css';
 
 const emptySet = (): RoutineSet => ({
@@ -182,6 +190,7 @@ export function RoutinePanel({
   const [deleting, setDeleting] = useState<Routine | null>(null);
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
+  const [progression, setProgression] = useState<SplitProgression>('workouts');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -437,10 +446,11 @@ export function RoutinePanel({
                           ? (trainingSplit?.start_date ?? localDate())
                           : localDate(),
                       );
+                      setProgression(trainingSplit?.progression ?? 'workouts');
                       setUsing(routine);
                     }}
                   >
-                    {routine.id === activeId ? 'Change start' : 'Use split'}
+                    {routine.id === activeId ? 'Change schedule' : 'Use split'}
                   </button>
                 </>
               ) : (
@@ -634,8 +644,9 @@ export function RoutinePanel({
                         ...trainingSplit!,
                         start_date: startDate,
                         enabled: true,
+                        progression,
                       })
-                    : await api.routines.use(using.id, startDate);
+                    : await api.routines.use(using.id, startDate, progression);
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
@@ -657,6 +668,7 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
+            <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
             <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
@@ -758,7 +770,10 @@ function RoutineEditor({
   schedule?: TrainingSplit;
   busy: boolean;
   error: string | null;
-  onSave: (value: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) => void;
+  onSave: (
+    value: Routine,
+    schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
+  ) => void;
   onClose: () => void;
 }) {
   const formId = useId();
@@ -890,7 +905,12 @@ function RoutineEditor({
       setValidation('Choose an active workout type for every workout day.');
       return;
     }
-    onSave(value, schedule ? { start_date: startDate, enabled } : undefined);
+    onSave(
+      value,
+      schedule
+        ? { start_date: startDate, enabled, progression: schedule.progression ?? 'workouts' }
+        : undefined,
+    );
   }
   const canSave = !busy && !addingType && !types.loading && !types.error && !loadError;
   return (

@@ -339,12 +339,20 @@ export interface WorkoutRecommendation {
   routine_day?: RoutineDay | null;
 }
 
+export type SplitProgression = 'calendar' | 'workouts';
+
 export interface TrainingSplit {
   name: string;
   enabled: boolean;
   start_date: string;
+  /** Splits follow logged workouts unless set to calendar, which pins each day to a date. */
+  progression?: SplitProgression;
   steps: { workout_type_id: string | null }[];
   routine_id?: string | null;
+  /** Where a workout-following split stands, from the server's replay of logged workouts. */
+  next_step?: number | null;
+  rest_saved?: boolean;
+  next_date?: string | null;
 }
 
 export interface RoutineSet {
