@@ -60,6 +60,18 @@ describe('weeklySetGains', () => {
     expect(gains.map((item) => item.muscle)).toEqual(['Glutes', 'Quads', 'Adductors']);
   });
 
+  it('combines direct and partial credits across newly completed working sets', () => {
+    const backExtension = exercise([
+      { muscle_name: 'Lower back', sets: 1 },
+      { muscle_name: 'Glutes', sets: 0.5 },
+    ]);
+    expect(weeklySetGains(backExtension, week, '2026-11-06', '2026-11-06', 3)).toEqual([
+      { muscle: 'Lower back', before: 6, gain: 3, after: 9 },
+      { muscle: 'Glutes', before: 9.5, gain: 1.5, after: 11 },
+    ]);
+    expect(weeklySetGains(backExtension, week, '2026-11-06', '2026-11-06', 0)).toEqual([]);
+  });
+
   it('shows nothing for a workout outside the live week or without one', () => {
     const backExtension = exercise([{ muscle_name: 'Lower back', sets: 1 }]);
     expect(weeklySetGains(backExtension, week, '2026-11-01', '2026-11-06')).toEqual([]);

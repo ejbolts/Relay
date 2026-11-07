@@ -2556,6 +2556,87 @@ describe('live muscle totals while logging', () => {
       .filter((item) => item.textContent?.includes('Chest'))
       .map((item) => item.querySelector('b')?.textContent);
 
+  it('shows combined gains for exercise completion without recounting logged sets or warmups', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    const base = draft.movements[0].sets[0];
+    draft.movements[0].sets = [
+      { ...base, key: 'warmup', set_type: 'warmup', warmup: true },
+      { ...base, key: 'logged', completed: true },
+      { ...base, key: 'working-1', fromPrevious: true },
+      { ...base, key: 'working-2' },
+      { ...base, key: 'drop', set_type: 'drop' },
+      { ...base, key: 'failed', failed: true, reps: 0 },
+      { ...createWorkoutSet('strength'), key: 'blank' },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+    );
+    const complete = () => container.querySelector<HTMLButtonElement>('.exercise-complete-button')!;
+    await act(async () => complete().click());
+    const cells = [...container.querySelectorAll('.weekly-shelf-cell')];
+    expect(cells.map((cell) => cell.querySelector('.weekly-shelf-name')?.textContent)).toEqual([
+      'Chest',
+      'Triceps',
+    ]);
+    expect(cells.map((cell) => cell.querySelector('.weekly-shelf-gain')?.textContent)).toEqual([
+      '+3',
+      '+1.5',
+    ]);
+    expect(cells.map((cell) => cell.querySelector('.weekly-shelf-roll')?.textContent)).toEqual([
+      '14',
+      '0.52',
+    ]);
+    expect(chestTotals()).toEqual(['4']);
+    expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.completed)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    const roll = cells[0].querySelector('.weekly-shelf-roll > span');
+    // A blank set keeps the exercise open; tapping again must not announce the same gains.
+    await act(async () => complete().click());
+    expect(container.querySelector('.weekly-shelf-roll > span')).toBe(roll);
+    expect(chestTotals()).toEqual(['4']);
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it.each(['warmup', 'cardio', 'logged'] as const)(
+    'does not show exercise-completion gains for %s sets',
+    async (kind) => {
+      const draft = readActiveWorkoutDraft()!;
+      if (kind === 'warmup') {
+        draft.movements[0].sets[0].set_type = 'warmup';
+        draft.movements[0].sets[0].warmup = true;
+      } else if (kind === 'logged') {
+        draft.movements[0].sets[0].completed = true;
+      } else {
+        vi.mocked(api.listExercises).mockResolvedValue([{ ...bench, kind: 'cardio' }]);
+        draft.movements[0].sets = [
+          { ...createWorkoutSet('cardio'), key: 'cardio', duration_seconds: 600 },
+        ];
+      }
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+      );
+      const complete = () =>
+        container.querySelector<HTMLButtonElement>('.exercise-complete-button')!;
+      await act(async () => complete().click());
+      expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
+      expect(container.querySelector('.weekly-sets-shelf')).toBeNull();
+      await act(async () => complete().click());
+      await act(async () => complete().click());
+      expect(container.querySelector('.weekly-sets-shelf')).toBeNull();
+    },
+  );
+
   it('keeps the final credits through a slow completion and dashboard refresh', async () => {
     const draft = readActiveWorkoutDraft()!;
     draft.movements[0].sets[0].completed = true;
