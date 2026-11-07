@@ -1,104 +1,67 @@
 {
   "version": "1.2.0",
-  "date": "2026-11-01",
-  "title": "Weekly comparisons and body goals",
-  "summary": "Compare muscle sets across weeks, swipe away body-weight goals with Undo and mark attempted sets more clearly. Paste copied screenshots directly into cardio sets. Skip repeated high-rep warnings for one workout. Exercise filter pills follow your theme and toggle off with another tap. Exercise help icons stay aligned beside trends. Hold briefly before reordering sets. Set notes wrap while typing and after saving. Unticking a set also unticks its exercise; tick the exercise again to complete the remaining sets. Exercise search keeps filters and results together when typing or selecting. See weekly volume while you build a split. Workout reactions show each emoji once and highlight only your selection. Workout errors close with an X and explain how to add and tick off a set before finishing. The body trend chart extends to a future goal date with a dotted goal line. Tap saved workout names in Social to open the exact workout, expanded and focused. Cardio saves no longer show zone confirmation popups. Home and Social use flat friend rows with dividers, with reaction and comment controls beside the workout. Comment buttons show a speech bubble and count, and Social friend subtext truncates after two lines. Body weight and body-fat check-ins save on this device immediately, work offline and sync in the background. Pinch to zoom and drag to frame profile photos, with dimmed edges that fade after a second.",
+  "date": "2026-11-07",
+  "title": "Weekly volume, live set gains and machine weights",
+  "summary": "Plan splits by weekly volume, watch each set add to your weekly totals and compare progress across machines.",
   "changes": [
-    "**Sets per muscle:** Arrows step back through the last eight weeks on Home and Training, with the week before shown as an outline and the change beside each muscle.",
-    "**Body goals:** Swipe a goal's dotted line left in the check-in history to remove it, with Undo for a few seconds.",
-    "**Attempted sets:** Failure is now labelled Attempted, with A replacing F in workouts and training splits. Saved workout history uses the same wording.",
-    "**Screenshot paste:** Copy a screenshot and tap Paste screenshot beside Upload screenshot in a cardio set to scan it without saving it to Photos.",
-    "**High-rep warnings:** Choose not to show rep warnings again for the current workout. The choice survives workout recovery; high-weight warnings stay on.",
-    "**Exercise filters:** Selected pills use your theme colour. Tap the selected muscle again to return to All; Custom toggles independently.",
-    "**Exercise list:** Muscle-credit help icons line up beside the trend sparklines, including when exercise names wrap.",
-    "**Set reordering:** Hold a set's drag handle for half a second until its blue outline appears, then drag to reorder. Quick taps and scrolling keep sets in place.",
-    "**Set notes:** Notes wrap onto new lines while typing and after saving, including long words. Manual line breaks are preserved.",
-    "**Exercise completion:** Unticking a set also unticks its exercise. Tick the exercise again to complete its remaining entered sets; blank sets keep it unfinished.",
-    "**Exercise picker:** Filters stay above the results without large gaps when searching, selecting exercises or opening and closing the keyboard.",
-    "**Split editor:** Editing a split opens a compact full screen led by a Weekly volume chart of the sets each muscle gets per week and your planned cardio, against your weekly goals. Days fold into one-line rows, each exercise has a sets stepper with a ? for its direct and partial set credits, and tapping a muscle shows which days train it.",
-    "**Split days:** Split cards list each exercise with a coloured block per planned set instead of every set's reps and weight, with a Muscles button to show what each exercise trains.",
-    "**Workout reactions:** Each emoji appears once with its count. Only your reaction has a blue border; before reacting, use the smiley-plus button. Tap your emoji to change or remove it, or a count to see who reacted.",
-    "**Workout errors:** If no sets are complete, the error explains how to add or fill in a set and tick it off before finishing. Empty workouts prompt you to add an exercise first. Tap the X to close an error.",
-    "**Goal trend line:** With a future target date, the Body trend chart extends to that date and draws a dotted line from your goal's starting weight to the target.",
-    "**Social workout links:** Tap a saved workout name to open that friend's workout, expanded and focused. Tap their name to open the profile normally.",
-    "**Cardio saves:** Removed zone confirmation popups after saving workouts or adding and editing cardio. Zone classification and goal totals still update.",
-    "**Compact friend rows:** Social matches Home's Recent Friends Activity with flat rows and thin dividers, giving names and workouts more room. Reaction and comment controls sit beside the workout details. Tap a workout name to open it. Comment buttons show only the speech-bubble icon and count; Social friend subtext truncates after two lines. Expanded comments and reaction pickers use the full row width.",
-    "**Offline check-ins:** Log body weight and body fat immediately on Home or Body, even offline. Entries survive reopening the app and sync when the connection returns. Edits, deletions and Undo also work locally.",
-    "**Profile photos:** Pinch to zoom and drag to reposition new or existing photos. The area outside the circle is dimmed while adjusting and fades away after one idle second. Use crop stages the change until Save profile. Photo changes save without a success popup."
+    "**Sets per muscle:** Compare with earlier weeks; totals update as you complete working sets.",
+    "**Body goals:** Swipe a goal away with Undo, and see a dotted line to its target date.",
+    "**Offline check-ins:** Body weight and body fat save instantly, even offline, and sync later.",
+    "**Offline notice:** A dismissible strip shows you're offline on every screen, including workouts.",
+    "**Split days:** Coloured blocks show each day's planned sets at a glance.",
+    "**Attempted sets:** Failure sets are now called Attempted and marked A.",
+    "**Rest times:** Each set suggests its previous rest, and ±30 seconds updates the timer instantly.",
+    "**Logging sets:** Hold to reorder, notes wrap, and unticking a set unticks its exercise.",
+    "**Workout prompts:** Skip repeat high-rep warnings per workout; clearer errors close with an X.",
+    "**Exercise headers:** Help, expand and tick line up; machine renames confirm with a popup.",
+    "**Exercise library:** Merge duplicate custom exercises, plus clearer filters, aligned help and steadier search.",
+    "**Cardio:** Paste screenshots, split distance by activity and save without zone popups.",
+    "**Social:** Compact friend rows, one emoji per reaction, tap-to-open workouts and loading placeholders.",
+    "**Sync:** Workouts logged on your other devices appear without reloading.",
+    "**CSV exports:** Cardio duration, distance, calories, heart rate and more survive export and reimport.",
+    "**iPhone:** Tapping a field no longer zooms the screen in."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/10b4b0f2a523923ee4ab3c74272b999f40b96190/docs/screenshots/releases/1.2.0-attempted-set.png",
-    "alt": "Workout set marked A with Attempted selected in the set-type menu. Isolated sample data."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
+    "alt": "Split editor with a two-column Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data."
   },
   "highlights": [
     {
-      "title": "Attempted sets",
-      "description": "A replaces F in the set-type menu and workout rows.",
-      "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/10b4b0f2a523923ee4ab3c74272b999f40b96190/docs/screenshots/releases/1.2.0-attempted-set.png",
-        "alt": "Workout set marked A with Attempted selected in the set-type menu. Isolated sample data."
-      }
-    },
-    {
-      "title": "Paste a screenshot",
-      "description": "Copy it, tap Paste screenshot and review the scanned values.",
-      "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/63c88969081b8ee05f36e2f1aa190dee78c8c558/docs/screenshots/releases/1.2.0-paste-screenshot.png",
-        "alt": "Paste screenshot beside Upload screenshot in a cardio set with scanned sample workout metrics."
-      }
-    },
-    {
-      "title": "High-rep warnings",
-      "description": "Skip repeat rep warnings for one workout. High-weight warnings stay active.",
-      "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2ee686f3a4c7954308c859c2a434d27ad5a9cb6c/docs/screenshots/releases/1.2.0-high-rep-warning.png",
-        "alt": "High-rep confirmation with the checkbox selected to stop repeat rep warnings for this workout. Isolated sample data."
-      }
-    },
-    {
       "title": "Weekly volume while you build",
-      "description": "See planned sets per muscle and cardio against your goals as you step sets.",
+      "description": "Plan each split against your weekly set and cardio goals.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
-        "alt": "Split editor with a two-column Weekly volume chart of planned sets per muscle and Day 1 open with set steppers. Isolated sample data."
+        "alt": "Split editor with a two-column Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data."
       }
     },
     {
-      "title": "Split days at a glance",
-      "description": "Each planned set is a coloured block, with totals for each day.",
+      "title": "Weekly sets after every set",
+      "description": "See how each working set moves your weekly totals, right above the rest timer.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-days.png",
-        "alt": "Split card listing each day's exercises with a coloured block for every planned set and day totals. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c042835a715042f5b33773b348f885bba6915bc8/docs/screenshots/releases/1.2.0-weekly-sets-shelf.gif",
+        "alt": "Working sets logged back to back: the weekly sets card unfolds above the rest timer, +1 and +0.5 badges appear, totals roll up and Glutes turns green at 10 of 10. Isolated sample data."
       }
     },
     {
-      "title": "Open the workout",
-      "description": "Tap a saved workout name in Social to open it, expanded and focused.",
+      "title": "Machine weights",
+      "description": "Map machines to a reference for one comparable progress trend.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a2dbb3279be967cff16a9d58fa3ab99a6c682674/docs/screenshots/releases/1.2.0-social-workout-link.png",
-        "alt": "Alex Rivera's shared Upper body workout opened with completed sample sets after tapping its name in Social."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3d52efdb54429173af6a4135d22317a857607474/docs/screenshots/releases/1.2.0-machine-weights-slider.gif",
+        "alt": "Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data."
       }
     },
     {
-      "title": "Quieter cardio saves",
-      "description": "Zone and goal totals update without the zone confirmation popup.",
+      "title": "Machine with the exercise",
+      "description": "Your last-used machine is ready; swipe for another or tap again for the baseline.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a2dbb3279be967cff16a9d58fa3ab99a6c682674/docs/screenshots/releases/1.2.0-cardio-without-zone-popup.png",
-        "alt": "Cardio screen after saving a sample session, with updated totals and no zone confirmation popup."
-      }
-    },
-    {
-      "title": "Offline body check-ins",
-      "description": "Weight and body fat save immediately on this device and sync in the background.",
-      "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/531a152e4afced3862506232e169c2faa6d9bb5a/docs/screenshots/releases/1.2.0-offline-body-check-ins.png",
-        "alt": "Body screen offline with 84.6 kg and 18.5% body fat, and one check-in saved locally waiting to sync. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c042835a715042f5b33773b348f885bba6915bc8/docs/screenshots/releases/1.2.0-inline-machine-picker.gif",
+        "alt": "Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data."
       }
     },
     {
       "title": "Your photo, your crop",
-      "description": "Pinch to zoom and drag to frame your photo. Dimmed edges fade after one idle second.",
+      "description": "Pinch to zoom and drag to frame your photo.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/54239d3369bd4955ab65156b3eec66bd26b7d077/docs/screenshots/releases/1.2.0-profile-photo-crop.gif",
         "alt": "Adjusting an isolated synthetic profile photo with pinch zoom and dragging, dimmed margins fading after one idle second, then the saved circular avatar."
