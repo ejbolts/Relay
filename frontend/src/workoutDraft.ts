@@ -1,3 +1,4 @@
+import { MAX_INACTIVE_WORKOUT_MS } from './activeWorkoutTimeout';
 import { validStoredPause } from './workoutPause';
 import type {
   MachineSetting,
@@ -261,6 +262,18 @@ export function clearActiveWorkoutDraft(storage?: DraftStorage | null): void {
 
 function announceDraftChange(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACTIVE_WORKOUT_CHANGE_EVENT));
+}
+
+/** Expire abandoned placeholders without removing entered workouts or recovery data. */
+export function isExpiredEmptyWorkoutDraft(draft: ActiveWorkoutDraft, now = Date.now()): boolean {
+  return (
+    !draft.pendingSave &&
+    !draft.resumingWorkoutId &&
+    draft.pausedAt == null &&
+    draft.movements.length === 0 &&
+    draft.notes.trim() === '' &&
+    now >= (draft.inactiveFinishAt ?? draft.startedAt + MAX_INACTIVE_WORKOUT_MS)
+  );
 }
 
 function completedSetSignature(

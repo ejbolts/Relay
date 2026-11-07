@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
+  isExpiredEmptyWorkoutDraft,
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
   writeActiveWorkoutDraft,
@@ -60,6 +61,56 @@ const draft: ActiveWorkoutDraft = {
     },
   ],
 };
+
+describe('empty workout expiration', () => {
+  const finishAt = draft.startedAt + 3 * 60 * 60 * 1000;
+  const empty = { ...draft, movements: [], notes: '', inactiveFinishAt: finishAt };
+
+  it('expires an empty draft at its deadline, including after several days away', () => {
+    expect(isExpiredEmptyWorkoutDraft(empty, finishAt - 1)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(empty, finishAt)).toBe(true);
+    expect(isExpiredEmptyWorkoutDraft(empty, draft.startedAt + 72 * 60 * 60 * 1000)).toBe(true);
+  });
+
+  it('respects an extended activity deadline', () => {
+    const extended = { ...empty, inactiveFinishAt: finishAt + 10 * 60 * 1000 };
+    expect(isExpiredEmptyWorkoutDraft(extended, finishAt)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(extended, extended.inactiveFinishAt)).toBe(true);
+  });
+
+  it('expires older empty drafts without a stored deadline after three hours', () => {
+    const legacy = { ...empty, inactiveFinishAt: undefined };
+    expect(isExpiredEmptyWorkoutDraft(legacy, finishAt - 1)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(legacy, finishAt)).toBe(true);
+  });
+
+  it.each<Partial<ActiveWorkoutDraft>>([
+    { notes: 'Keep my workout notes' },
+    { movements: draft.movements },
+    { movements: [{ ...draft.movements[0], sets: [] }] },
+    { pausedAt: draft.updatedAt },
+    { resumingWorkoutId: 'saved-workout' },
+    {
+      pendingSave: {
+        userId: 'sample-owner',
+        finishedAt: finishAt,
+        workoutId: null,
+        payload: {
+          name: draft.name,
+          workout_date: draft.workoutDate,
+          category: draft.category,
+          notes: null,
+          duration_minutes: 180,
+          start_time: null,
+          end_time: null,
+          movements: [],
+        },
+      },
+    },
+  ])('preserves entered data and recovery state: %j', (overrides) => {
+    expect(isExpiredEmptyWorkoutDraft({ ...empty, ...overrides }, finishAt)).toBe(false);
+  });
+});
 
 describe('active workout draft persistence', () => {
   it('keeps the high-rep preference with its draft and rejects malformed preferences', () => {

@@ -2298,6 +2298,92 @@ describe('cardio set editing defaults', () => {
 });
 
 describe('inactive workout suggestions', () => {
+  function emptyDraft() {
+    const startedAt = Date.now() - 72 * 60 * 60 * 1000;
+    return storedDraft({
+      startedAt,
+      updatedAt: startedAt,
+      lastActiveAt: startedAt,
+      inactiveFinishAt: startedAt + 3 * 60 * 60 * 1000,
+      movements: [],
+      notes: '',
+    });
+  }
+
+  it.each(['#dashboard', '#log'])(
+    'clears a three-day-old empty draft from %s without changing saved workouts',
+    async (location) => {
+      window.history.replaceState(null, '', location);
+      const deleteWorkout = vi.spyOn(api, 'deleteWorkout');
+      vi.mocked(api.listWorkouts).mockResolvedValue([remoteWorkout()]);
+      writeActiveWorkoutDraft(emptyDraft());
+      await mount();
+      expect(readActiveWorkoutDraft()).toBeNull();
+      expect(window.location.hash).toBe('#dashboard');
+      expect(container.querySelector('.live-workout-card')).toBeNull();
+      expect(container.querySelector('.logger-screen')).toBeNull();
+      expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
+      expect(api.createWorkout).not.toHaveBeenCalled();
+      expect(api.updateWorkout).not.toHaveBeenCalled();
+      expect(deleteWorkout).not.toHaveBeenCalled();
+      await act(async () => window.dispatchEvent(new Event('pagehide')));
+      expect(readActiveWorkoutDraft()).toBeNull();
+    },
+  );
+
+  it.each(['focus', 'visibilitychange', 'timer'])(
+    'expires an empty draft on %s after its deadline while Home is open',
+    async (trigger) => {
+      vi.useFakeTimers();
+      window.history.replaceState(null, '', '#dashboard');
+      const draft = emptyDraft();
+      draft.startedAt = Date.now() - 3 * 60 * 60 * 1000 + 60_000;
+      draft.updatedAt = draft.lastActiveAt = draft.startedAt;
+      draft.inactiveFinishAt = Date.now() + 60_000;
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      expect(container.querySelector('.live-workout-card')).not.toBeNull();
+      expect(readActiveWorkoutDraft()).not.toBeNull();
+      await act(async () => {
+        if (trigger === 'timer') await vi.advanceTimersByTimeAsync(60_000);
+        else {
+          vi.setSystemTime(draft.inactiveFinishAt!);
+          if (trigger === 'focus') window.dispatchEvent(new Event('focus'));
+          else document.dispatchEvent(new Event('visibilitychange'));
+        }
+      });
+      expect(readActiveWorkoutDraft()).toBeNull();
+      expect(container.querySelector('.live-workout-card')).toBeNull();
+      expect(api.createWorkout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('clears an expired empty draft even when the exercise catalogue cannot load', async () => {
+    vi.mocked(api.listExercises).mockRejectedValue(new Error('offline'));
+    writeActiveWorkoutDraft(emptyDraft());
+    await mount();
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.live-workout-card')).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it.each(['notes', 'paused', 'resumed'])(
+    'preserves an overdue empty draft with %s',
+    async (state) => {
+      const draft = emptyDraft();
+      if (state === 'notes') draft.notes = 'Keep these notes';
+      if (state === 'paused') draft.pausedAt = draft.startedAt;
+      if (state === 'resumed') draft.resumingWorkoutId = 'saved-workout';
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      expectPreserved(draft);
+      expect(readActiveWorkoutDraft()?.pausedAt).toBe(draft.pausedAt ?? null);
+      expect(readActiveWorkoutDraft()?.resumingWorkoutId).toBe(draft.resumingWorkoutId);
+      expect(container.querySelector('.logger-screen')).not.toBeNull();
+      expect(api.createWorkout).not.toHaveBeenCalled();
+    },
+  );
+
   function expiredSuggestions(completedFirst: boolean) {
     const draft = storedDraft();
     draft.startedAt = Date.now() - 3 * 60 * 60 * 1000 - 1000;
