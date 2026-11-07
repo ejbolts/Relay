@@ -1449,6 +1449,13 @@
   width: 1.25rem;
   height: 1.25rem;
 }
+.workout-discussion-actions > .friend-react-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
 .workout-discussion .discussion-button.is-yours {
   border-color: var(--p-accent);
   background: var(--p-accent-soft);
