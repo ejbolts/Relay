@@ -579,6 +579,33 @@
   font-size: 12px;
   font-weight: 600;
 }
+.routine-use .routine-progression {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.routine-use .routine-progression legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.routine-use .routine-progression .segmented-control {
+  margin: 0;
+}
+.routine-use .routine-progression .segmented-control button {
+  border: 0;
+  background: transparent;
+  color: var(--p-muted);
+}
+.routine-use .routine-progression .segmented-control button.active {
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}
 .routine-editor .routine-share {
   display: flex;
   align-items: center;

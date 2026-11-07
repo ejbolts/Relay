@@ -215,5 +215,143 @@ def test_account_snapshot_preserves_only_the_owners_split_and_custom_types(clien
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == client.user["id"]
-        assert json.loads(rows[0][1]) == saved
+        progress = ("next_step", "rest_saved", "next_date")
+        stored = {key: value for key, value in saved.items() if key not in progress}
+        assert json.loads(rows[0][1]) == stored
         assert connection.execute("SELECT id FROM workout_types").fetchall() == [(custom["id"],)]
+
+
+def log_workout(client, on_date, category="push", workout_type_id=None, sample=False):
+    exercise = client.get("/api/exercises").json()[0]
+    response = client.post(
+        "/api/workouts",
+        json={
+            "name": f"{category} session",
+            "workout_date": on_date,
+            "category": category,
+            **({"workout_type_id": workout_type_id} if workout_type_id else {}),
+            "movements": [{"exercise_id": exercise["id"], "sets": [{"weight_kg": 40, "reps": 8}]}],
+        },
+    )
+    assert response.status_code == 201, response.text
+    if sample:
+        with SessionLocal() as db:
+            from app.models import TrainingWorkout
+
+            db.get(TrainingWorkout, response.json()["id"]).is_sample = True
+            db.commit()
+
+
+def up_next(client, on_date):
+    item = recommended(client, on_date)
+    return None if item["is_rest_day"] else item["category"]
+
+
+def test_calendar_is_the_default_progression(client):
+    assert save_split(client, "push", "pull", "lower")["progression"] == "calendar"
+    log_workout(client, "2026-10-26", "push")
+    # Calendar splits move on with the date even after an unplanned rest.
+    assert up_next(client, "2026-10-28") == "lower"
+
+
+def test_following_workouts_waits_after_an_unplanned_rest(client):
+    saved = save_split(client, "push", "pull", "lower", progression="workouts")
+    assert saved["progression"] == "workouts"
+    assert saved["next_step"] == 0
+    log_workout(client, "2026-10-26", "push")
+    assert up_next(client, "2026-10-26") == "pull"
+    assert up_next(client, "2026-10-27") == "pull"
+    # Rested on the 27th, so Pull is still next on the 28th instead of being skipped.
+    assert up_next(client, "2026-10-28") == "pull"
+    log_workout(client, "2026-10-28", "pull")
+    assert up_next(client, "2026-10-29") == "lower"
+
+
+def test_an_unplanned_rest_uses_up_only_the_next_planned_rest(client):
+    save_split(client, "upper", "lower", None, "upper", "lower", None, progression="workouts")
+    log_workout(client, "2026-10-26", "upper")
+    # 27th: unplanned rest. Lower stays next and one rest is saved.
+    item = recommended(client, "2026-10-28")
+    assert item["category"] == "lower"
+    assert "already rested" in item["reason"]
+    progress = client.get("/api/training-split", params={"on_date": "2026-10-28"}).json()
+    assert (progress["next_step"], progress["rest_saved"]) == (1, True)
+    assert progress["next_date"] == "2026-10-28"
+    log_workout(client, "2026-10-28", "lower")
+    progress = client.get("/api/training-split", params={"on_date": "2026-10-28"}).json()
+    assert (progress["next_step"], progress["next_date"]) == (3, "2026-10-29")
+    # The planned rest is skipped because the 27th already counted as it.
+    assert up_next(client, "2026-10-29") == "upper"
+    log_workout(client, "2026-10-29", "upper")
+    log_workout(client, "2026-10-30", "lower")
+    # No saved rest this time, so the next planned rest is shown, then completed by resting.
+    assert up_next(client, "2026-10-31") is None
+    assert up_next(client, "2026-11-01") == "upper"
+
+
+def test_at_most_one_rest_is_saved(client):
+    save_split(client, "push", None, "pull", None, progression="workouts")
+    log_workout(client, "2026-10-26", "push")
+    # 27th: planned rest. 28th to 30th: three unplanned rests, which save only one.
+    assert up_next(client, "2026-10-31") == "pull"
+    log_workout(client, "2026-10-31", "pull")
+    assert up_next(client, "2026-11-01") == "push"
+    log_workout(client, "2026-11-01", "push")
+    assert up_next(client, "2026-11-02") is None
+
+
+def test_consecutive_planned_rests_only_lose_one_to_a_saved_rest(client):
+    save_split(client, "full_body", None, None, progression="workouts")
+    # 26th: unplanned rest saved. Training on the 27th then skips one of the two rests.
+    log_workout(client, "2026-10-27", "full_body")
+    assert up_next(client, "2026-10-28") is None
+    assert up_next(client, "2026-10-29") == "full_body"
+
+
+def test_training_on_a_planned_rest_or_out_of_order_moves_past_that_workout(client):
+    save_split(client, "push", "pull", "lower", None, progression="workouts")
+    log_workout(client, "2026-10-26", "push")
+    log_workout(client, "2026-10-27", "pull")
+    log_workout(client, "2026-10-28", "lower")
+    assert up_next(client, "2026-10-29") is None
+    log_workout(client, "2026-10-29", "push")
+    assert up_next(client, "2026-10-30") == "pull"
+    log_workout(client, "2026-10-30", "lower")
+    assert up_next(client, "2026-10-31") is None
+
+
+def test_workouts_outside_the_split_and_sample_workouts_do_not_advance_it(client, other_client):
+    save_split(client, "upper", "lower", progression="workouts")
+    log_workout(client, "2026-10-26", "cardio")
+    log_workout(client, "2026-10-26", "upper", sample=True)
+    log_workout(other_client, "2026-10-26", "upper")
+    assert up_next(client, "2026-10-26") == "upper"
+    custom = client.post("/api/workout-types", json={"name": "Arms", "color": "#123456"}).json()
+    save_split(client, custom["id"], "lower", progression="workouts")
+    log_workout(client, "2026-10-26", "other", workout_type_id=custom["id"])
+    assert up_next(client, "2026-10-26") == "lower"
+
+
+def test_progression_round_trips_through_routines(client):
+    routine = client.post(
+        "/api/routines",
+        json={
+            "name": "PPL",
+            "days": [{"workout_type_id": t, "movements": []} for t in ("push", "pull", None)],
+            "schedule": {"start_date": "2026-10-26", "progression": "workouts"},
+        },
+    )
+    assert routine.status_code == 201, routine.text
+    assert client.get("/api/training-split").json()["progression"] == "workouts"
+    used = client.post(
+        f"/api/routines/{routine.json()['id']}/use",
+        json={"start_date": "2026-10-26"},
+        params={"on_date": "2026-10-27"},
+    ).json()
+    assert used["progression"] == "calendar"
+    used = client.post(
+        f"/api/routines/{routine.json()['id']}/use",
+        json={"start_date": "2026-10-26", "progression": "workouts"},
+        params={"on_date": "2026-10-27"},
+    ).json()
+    assert (used["progression"], used["next_step"], used["rest_saved"]) == ("workouts", 0, True)

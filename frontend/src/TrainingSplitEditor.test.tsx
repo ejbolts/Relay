@@ -233,7 +233,7 @@ it('activates a different split after date confirmation, expands it and refreshe
   await click('Use split');
   await input('.routine-use input[type="date"]', '2026-11-02');
   await submit('.routine-use');
-  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02');
+  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02', 'calendar');
   expect(host.querySelector('.routine-active')?.closest('.routine-card')?.textContent).toContain(
     'Another split',
   );
@@ -251,7 +251,7 @@ it('edits the active split and its start/enabled state in one save', async () =>
   await submit();
   expect(api.routines.save).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'Updated plan' }),
-    { start_date: '2026-11-03', enabled: false },
+    { start_date: '2026-11-03', enabled: false, progression: 'calendar' },
   );
   expect(host.querySelector('.routine-active')).toBeNull();
   expect(saved).toHaveBeenCalledWith(
@@ -269,6 +269,7 @@ it('preserves an existing unlinked split without writes and links it atomically 
   expect(api.routines.create).toHaveBeenCalledWith(expect.objectContaining({ name: plan.name }), {
     start_date: current.start_date,
     enabled: true,
+    progression: 'calendar',
   });
   expect(host.querySelectorAll('.routine-card')).toHaveLength(1);
   expect(saved).toHaveBeenCalledWith(
@@ -386,4 +387,46 @@ it('Enter adds the named custom workout type without submitting the split', asyn
   );
   expect(api.createWorkoutType).toHaveBeenCalledWith({ name: 'Full body B', color: '#a855f7' });
   expect(api.routines.create).not.toHaveBeenCalled();
+});
+
+it('switches the active split to follow logged workouts and previews from where it stands', async () => {
+  vi.mocked(api.routines.use).mockResolvedValue({
+    ...current,
+    steps: [{ workout_type_id: 'upper' }, { workout_type_id: 'lower' }, { workout_type_id: null }],
+    progression: 'workouts',
+    next_step: 1,
+    rest_saved: true,
+    next_date: '2026-10-26',
+  });
+  await mount();
+  await click('Change schedule');
+  const follow = button('Follow my workouts');
+  expect(button('By date').getAttribute('aria-checked')).toBe('true');
+  await act(async () => follow.click());
+  expect(follow.getAttribute('aria-checked')).toBe('true');
+  await submit('.routine-use');
+  expect(api.routines.use).toHaveBeenCalledWith('plan', '2026-10-26', 'workouts');
+  const days = [...host.querySelectorAll('.split-preview li')].map(
+    (li) => li.getAttribute('aria-label')?.split(': ')[1],
+  );
+  // Lower is still next; the saved rest skips the planned rest after it.
+  expect(days.slice(0, 4)).toEqual(['Lower body', 'Upper body', 'Lower body', 'Rest']);
+  await click('Change schedule');
+  expect(button('Follow my workouts').getAttribute('aria-checked')).toBe('true');
+});
+it('keeps a workout-following schedule when the active split is edited', async () => {
+  vi.mocked(api.getTrainingSplit).mockResolvedValue({
+    ...structuredClone(current),
+    progression: 'workouts',
+    next_step: 0,
+    next_date: '2026-10-26',
+  });
+  await mount();
+  await click('Edit split');
+  await submit();
+  expect(api.routines.save).toHaveBeenCalledWith(expect.objectContaining({ id: 'plan' }), {
+    start_date: '2026-10-26',
+    enabled: true,
+    progression: 'workouts',
+  });
 });
