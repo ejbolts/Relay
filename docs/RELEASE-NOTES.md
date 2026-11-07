@@ -6,22 +6,22 @@ _Relay was called Gym Logger before version 1.0._
 
 7 November 2026
 
-### Weekly volume, live set gains and machine weights
+### Weekly volume and machine weights
 
 ![Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data.](screenshots/releases/1.2.0-split-editor.png)
 
 **Weekly volume while you build** — Plan splits against your weekly goals.
 
-![Working sets logged back to back: the weekly sets card unfolds above the rest timer, +1 and +0.5 badges appear, totals roll up and Glutes turns green at 10 of 10. Isolated sample data.](screenshots/releases/1.2.0-weekly-sets-shelf.gif)
+![Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data.](screenshots/releases/1.2.0-inline-machine-picker.gif)
 
-**Every set counts** — Watch each set add to your weekly muscle totals.
+**Machine with the exercise** — Your last-used machine is ready; swipe for another.
 
 ![Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data.](screenshots/releases/1.2.0-machine-weights-slider.gif)
 
 **Machine weights** — Compare progress across machines on one trend.
 
 - **Merge exercises:** Combine duplicate custom exercises and keep their history.
-- **Machine picker:** Choose the machine as you pick the exercise.
+- **Every set counts:** See each set's weekly muscle gains above the rest timer.
 - **Sets per muscle:** Compare earlier weeks; totals update as you train.
 - **Split days:** A coloured block for each planned set.
 - **Attempted sets:** Failure sets are now Attempted, marked A.

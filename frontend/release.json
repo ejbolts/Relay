@@ -1,11 +1,11 @@
 {
   "version": "1.2.0",
   "date": "2026-11-07",
-  "title": "Weekly volume, live set gains and machine weights",
-  "summary": "Plan by weekly volume, see every set count and compare progress across machines.",
+  "title": "Weekly volume and machine weights",
+  "summary": "Plan by weekly volume, compare progress across machines and pick the machine with each exercise.",
   "changes": [
     "**Merge exercises:** Combine duplicate custom exercises and keep their history.",
-    "**Machine picker:** Choose the machine as you pick the exercise.",
+    "**Every set counts:** See each set's weekly muscle gains above the rest timer.",
     "**Sets per muscle:** Compare earlier weeks; totals update as you train.",
     "**Split days:** A coloured block for each planned set.",
     "**Attempted sets:** Failure sets are now Attempted, marked A.",
@@ -42,11 +42,11 @@
       }
     },
     {
-      "title": "Every set counts",
-      "description": "Watch each set add to your weekly muscle totals.",
+      "title": "Machine with the exercise",
+      "description": "Your last-used machine is ready; swipe for another.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c042835a715042f5b33773b348f885bba6915bc8/docs/screenshots/releases/1.2.0-weekly-sets-shelf.gif",
-        "alt": "Working sets logged back to back: the weekly sets card unfolds above the rest timer, +1 and +0.5 badges appear, totals roll up and Glutes turns green at 10 of 10. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c042835a715042f5b33773b348f885bba6915bc8/docs/screenshots/releases/1.2.0-inline-machine-picker.gif",
+        "alt": "Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data."
       }
     },
     {
