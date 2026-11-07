@@ -331,6 +331,7 @@ import {
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
+  isExpiredEmptyWorkoutDraft,
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
   writeActiveWorkoutDraft,
@@ -763,6 +764,26 @@ function AppContent() {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [activeWorkoutStartedAt]);
+  useEffect(() => {
+    if (loading || activeWorkoutStartedAt === null) return;
+    const expireEmptyDraft = () => {
+      const draft = readActiveWorkoutDraft();
+      if (draft?.startedAt !== activeWorkoutStartedAt || !isExpiredEmptyWorkoutDraft(draft)) return;
+      clearActiveWorkoutDraft();
+      setActiveWorkoutStartedAt(null);
+      setResumingWorkoutId(null);
+      setMessage('Your inactive empty workout was cleared.');
+    };
+    expireEmptyDraft();
+    const interval = window.setInterval(expireEmptyDraft, 30_000);
+    window.addEventListener('focus', expireEmptyDraft);
+    document.addEventListener('visibilitychange', expireEmptyDraft);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', expireEmptyDraft);
+      document.removeEventListener('visibilitychange', expireEmptyDraft);
+    };
+  }, [activeWorkoutStartedAt, loading]);
   useEffect(() => {
     // Accounts without upload access never reach the video screen, even from an old #videos link.
     if (tab !== 'videos' || videosAllowed) return;
