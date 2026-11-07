@@ -1,10 +1,10 @@
 {
   "version": "1.2.0",
   "date": "2026-11-07",
-  "title": "Weekly volume, live set gains and exercise merging",
-  "summary": "Plan by weekly volume, see every set count and merge duplicate exercises.",
+  "title": "Weekly volume, live set gains and machine weights",
+  "summary": "Plan by weekly volume, see every set count and compare progress across machines.",
   "changes": [
-    "**Machine weights:** Compare progress across machines on one trend.",
+    "**Merge exercises:** Combine duplicate custom exercises and keep their history.",
     "**Machine picker:** Choose the machine as you pick the exercise.",
     "**Sets per muscle:** Compare earlier weeks; totals update as you train.",
     "**Split days:** A coloured block for each planned set.",
@@ -50,11 +50,11 @@
       }
     },
     {
-      "title": "Merge exercises",
-      "description": "Combine duplicates and keep their history.",
+      "title": "Machine weights",
+      "description": "Compare progress across machines on one trend.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/1c97f5106b23ede941502bbae7694311cf1d3a4d/docs/screenshots/releases/1.2.0-exercise-merge.png",
-        "alt": "Merge exercises dialog removing My bench press and keeping Bench press duplicate, with combined history, records, machine photos and saved splits. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3d52efdb54429173af6a4135d22317a857607474/docs/screenshots/releases/1.2.0-machine-weights-slider.gif",
+        "alt": "Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data."
       }
     }
   ]

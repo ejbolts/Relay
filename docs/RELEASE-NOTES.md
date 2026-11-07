@@ -6,7 +6,7 @@ _Relay was called Gym Logger before version 1.0._
 
 7 November 2026
 
-### Weekly volume, live set gains and exercise merging
+### Weekly volume, live set gains and machine weights
 
 ![Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data.](screenshots/releases/1.2.0-split-editor.png)
 
@@ -16,11 +16,11 @@ _Relay was called Gym Logger before version 1.0._
 
 **Every set counts** — Watch each set add to your weekly muscle totals.
 
-![Merge exercises dialog removing My bench press and keeping Bench press duplicate, with combined history, records, machine photos and saved splits. Isolated sample data.](screenshots/releases/1.2.0-exercise-merge.png)
+![Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data.](screenshots/releases/1.2.0-machine-weights-slider.gif)
 
-**Merge exercises** — Combine duplicates and keep their history.
+**Machine weights** — Compare progress across machines on one trend.
 
-- **Machine weights:** Compare progress across machines on one trend.
+- **Merge exercises:** Combine duplicate custom exercises and keep their history.
 - **Machine picker:** Choose the machine as you pick the exercise.
 - **Sets per muscle:** Compare earlier weeks; totals update as you train.
 - **Split days:** A coloured block for each planned set.
