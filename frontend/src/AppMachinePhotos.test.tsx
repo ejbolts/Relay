@@ -342,6 +342,34 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(api.lastUsedMachinePhotos).not.toHaveBeenCalledWith(rowPull.id);
   });
 
+  it('edits settings for an existing machine and saves to that machine', async () => {
+    await act(async () => root.render(<App />));
+    await click(button(`Expand ${homeGym.caption}`));
+    await click(button('Edit machine settings'));
+    expect(api.getMachineSettings).toHaveBeenCalledWith(legPress.id, homeGym.id);
+    const input = container.querySelector<HTMLInputElement>('[aria-label="Setting 1 name"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, 'Seat');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const value = container.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(value, '4');
+      value.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(button('Save'));
+    expect(api.saveMachineSettings).toHaveBeenCalledWith(
+      legPress.id,
+      [{ name: 'Seat', value: '4' }],
+      homeGym.id,
+    );
+    expect(container.querySelector('.machine-settings')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Machine settings saved',
+    );
+  });
   it('shows when each saved machine was last used', async () => {
     await act(async () => root.render(<App />));
     const card = container.querySelector('.machine-photo-rail article')!;

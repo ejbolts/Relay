@@ -6033,6 +6033,9 @@ function MachinePhotoChooser({
         {expanded && (
           <MachinePhotoDetail
             photo={expanded}
+            onSettingsSaved={(settings) => {
+              if (selectedIds.includes(expanded.id)) onChange(selectedIds, settings);
+            }}
             onClose={() => setExpanded(null)}
             onUpdate={updatePhoto}
             onDelete={deletePhoto}
@@ -6051,8 +6054,10 @@ function MachinePhotoDetail({
   onDelete,
   onChooseAnother,
   onShowHistory,
+  onSettingsSaved,
 }: {
   photo: MachinePhoto;
+  onSettingsSaved?: (settings: MachineSetting[]) => void;
   onClose: () => void;
   onUpdate?: (photo: MachinePhoto, caption: string) => Promise<void>;
   onDelete?: (photo: MachinePhoto) => Promise<void>;
@@ -6060,6 +6065,8 @@ function MachinePhotoDetail({
   /** Filters History to the workouts that pinned this machine. */
   onShowHistory?: () => void;
 }) {
+  const [editingSettings, setEditingSettings] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState(0);
   const [caption, setCaption] = useState(photo.caption);
   const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
@@ -6101,6 +6108,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {settingsNotice > 0 && (
+        <NotificationDialog
+          key={`settings-${settingsNotice}`}
+          message="Machine settings saved"
+          onClose={() => setSettingsNotice(0)}
+        />
+      )}
       {saveNotice > 0 && (
         <NotificationDialog
           key={saveNotice}
@@ -6143,6 +6157,15 @@ function MachinePhotoDetail({
               Save name
             </button>
           )}
+          {onUpdate && (
+            <button
+              type="button"
+              aria-label="Edit machine settings"
+              onClick={() => setEditingSettings(true)}
+            >
+              Edit settings
+            </button>
+          )}
           {onChooseAnother && (
             <button type="button" className="photo-choose-other" onClick={onChooseAnother}>
               Switch photo
@@ -6166,6 +6189,18 @@ function MachinePhotoDetail({
               }
               onConfirm={removePhoto}
               disabled={saving}
+            />
+          )}
+          {editingSettings && (
+            <MachineSettingsEditor
+              exerciseId={photo.exercise_id}
+              machinePhotoId={photo.id}
+              onChange={(settings) => onSettingsSaved?.(settings)}
+              onSaved={() => {
+                setEditingSettings(false);
+                setSettingsNotice((value) => value + 1);
+              }}
+              onCancel={() => setEditingSettings(false)}
             />
           )}
           {error && <p role="alert">{error}</p>}
