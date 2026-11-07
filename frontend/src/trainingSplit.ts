@@ -34,8 +34,13 @@ export function splitStepOnDate(split: TrainingSplit, date: string): number | nu
   return elapsed < 0 || !split.steps.length ? null : elapsed % split.steps.length;
 }
 
+/** Splits follow logged workouts unless explicitly pinned to the calendar. */
+export function followsWorkouts(split: TrainingSplit): boolean {
+  return split.progression !== 'calendar';
+}
+
 export function splitPreview(split: TrainingSplit, from: string, count = 7) {
-  if (split.progression === 'workouts') return followedSplitPreview(split, from, count);
+  if (followsWorkouts(split)) return followedSplitPreview(split, from, count);
   return Array.from({ length: count }, (_, offset) => {
     const date = addDays(from, offset);
     const index = splitStepOnDate(split, date);

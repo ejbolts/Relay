@@ -19,6 +19,8 @@ def split_payload(*types, **overrides):
         "enabled": True,
         "start_date": "2026-10-26",
         "steps": [{"workout_type_id": item} for item in types],
+        # Calendar behaviour is spelled out; tests of the default omit it explicitly.
+        "progression": "calendar",
         **overrides,
     }
 
@@ -247,11 +249,25 @@ def up_next(client, on_date):
     return None if item["is_rest_day"] else item["category"]
 
 
-def test_calendar_is_the_default_progression(client):
-    assert save_split(client, "push", "pull", "lower")["progression"] == "calendar"
+def test_following_workouts_is_the_default_and_calendar_remains_available(client):
+    payload = split_payload("push", "pull", "lower")
+    del payload["progression"]
+    saved = client.put("/api/training-split", json=payload).json()
+    assert saved["progression"] == "workouts"
     log_workout(client, "2026-10-26", "push")
+    assert up_next(client, "2026-10-28") == "pull"
     # Calendar splits move on with the date even after an unplanned rest.
+    assert save_split(client, "push", "pull", "lower")["progression"] == "calendar"
     assert up_next(client, "2026-10-28") == "lower"
+
+
+def test_legacy_saved_splits_without_a_mode_follow_workouts(client):
+    with SessionLocal() as db:
+        legacy = split_payload("push", "pull", "lower")
+        del legacy["progression"]
+        set_setting(db, client.user["id"], TRAINING_SPLIT_KEY, json.dumps(legacy))
+        db.commit()
+    assert client.get("/api/training-split").json()["progression"] == "workouts"
 
 
 def test_following_workouts_waits_after_an_unplanned_rest(client):
@@ -345,13 +361,13 @@ def test_progression_round_trips_through_routines(client):
     assert client.get("/api/training-split").json()["progression"] == "workouts"
     used = client.post(
         f"/api/routines/{routine.json()['id']}/use",
-        json={"start_date": "2026-10-26"},
+        json={"start_date": "2026-10-26", "progression": "calendar"},
         params={"on_date": "2026-10-27"},
     ).json()
     assert used["progression"] == "calendar"
     used = client.post(
         f"/api/routines/{routine.json()['id']}/use",
-        json={"start_date": "2026-10-26", "progression": "workouts"},
+        json={"start_date": "2026-10-26"},
         params={"on_date": "2026-10-27"},
     ).json()
     assert (used["progression"], used["next_step"], used["rest_saved"]) == ("workouts", 0, True)

@@ -30,7 +30,7 @@ describe('training split calendar cycles', () => {
   });
 
   it('keeps every-other-day training rolling over Mondays, months and skipped dates', () => {
-    const split = splitFromTemplate('fbeod', '2026-10-26');
+    const split = { ...splitFromTemplate('fbeod', '2026-10-26'), progression: 'calendar' as const };
     expect(splitStepOnDate(split, '2026-10-25')).toBeNull();
     expect(splitStepOnDate(split, '2026-10-26')).toBe(0);
     expect(splitPreview(split, '2026-11-02').map((day) => day.typeId)).toEqual([

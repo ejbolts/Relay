@@ -345,7 +345,7 @@ export interface TrainingSplit {
   name: string;
   enabled: boolean;
   start_date: string;
-  /** Calendar splits pin each day to a date; workout splits wait for the next logged workout. */
+  /** Splits follow logged workouts unless set to calendar, which pins each day to a date. */
   progression?: SplitProgression;
   steps: { workout_type_id: string | null }[];
   routine_id?: string | null;

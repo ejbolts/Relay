@@ -190,7 +190,7 @@ export function RoutinePanel({
   const [deleting, setDeleting] = useState<Routine | null>(null);
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
-  const [progression, setProgression] = useState<SplitProgression>('calendar');
+  const [progression, setProgression] = useState<SplitProgression>('workouts');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -446,7 +446,7 @@ export function RoutinePanel({
                           ? (trainingSplit?.start_date ?? localDate())
                           : localDate(),
                       );
-                      setProgression(trainingSplit?.progression ?? 'calendar');
+                      setProgression(trainingSplit?.progression ?? 'workouts');
                       setUsing(routine);
                     }}
                   >
@@ -908,7 +908,7 @@ function RoutineEditor({
     onSave(
       value,
       schedule
-        ? { start_date: startDate, enabled, progression: schedule.progression ?? 'calendar' }
+        ? { start_date: startDate, enabled, progression: schedule.progression ?? 'workouts' }
         : undefined,
     );
   }

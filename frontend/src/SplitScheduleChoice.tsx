@@ -8,16 +8,16 @@ const OPTIONS: {
   result: string;
 }[] = [
   {
-    value: 'calendar',
-    label: 'By date',
-    flow: ['Push', 'Rest day', 'Legs'],
-    result: 'Pull is skipped',
-  },
-  {
     value: 'workouts',
     label: 'Follow my workouts',
     flow: ['Push', 'Rest day', 'Pull'],
     result: 'Your next planned rest is skipped',
+  },
+  {
+    value: 'calendar',
+    label: 'By date',
+    flow: ['Push', 'Rest day', 'Legs'],
+    result: 'Pull is skipped',
   },
 ];
 

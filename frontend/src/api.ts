@@ -701,7 +701,7 @@ export const api = {
     remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
     copy: (owner: string, id: string) =>
       request<Routine>(`/api/routines/profile/${owner}/${id}/copy`, { method: 'POST' }),
-    use: (id: string, start_date: string, progression: SplitProgression = 'calendar') =>
+    use: (id: string, start_date: string, progression: SplitProgression = 'workouts') =>
       request<TrainingSplit>(
         `/api/routines/${id}/use?${new URLSearchParams({ on_date: localDate() })}`,
         {

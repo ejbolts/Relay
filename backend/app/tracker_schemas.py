@@ -505,7 +505,7 @@ SplitProgression = Literal["calendar", "workouts"]
 class RoutineSchedule(BaseModel):
     start_date: date
     enabled: bool = True
-    progression: SplitProgression = "calendar"
+    progression: SplitProgression = "workouts"
 
 
 class RoutineSaveInput(RoutineInput):
@@ -519,7 +519,7 @@ class RoutineRead(RoutineInput):
 
 class RoutineActivation(BaseModel):
     start_date: date
-    progression: SplitProgression = "calendar"
+    progression: SplitProgression = "workouts"
 
 
 class MuscleFrequencyRead(BaseModel):
@@ -752,8 +752,9 @@ class TrainingSplit(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     enabled: bool = True
     start_date: date
-    # "calendar" pins each day to a date; "workouts" advances only as split workouts are logged.
-    progression: SplitProgression = "calendar"
+    # "workouts" (the default) advances only as split workouts are logged; "calendar" pins
+    # each day to a date.
+    progression: SplitProgression = "workouts"
     steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
     routine_id: str | None = None
 
