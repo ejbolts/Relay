@@ -649,6 +649,8 @@ export interface BodyWeightGoalInput {
   target_date: string;
   start_weight_kg: number;
   target_weight_kg: number;
+  maintenance_min_kg?: number | null;
+  maintenance_max_kg?: number | null;
   active: boolean;
 }
 

@@ -38,6 +38,8 @@ export interface BodyWeightGoalPath {
   target_date: string;
   start_weight_kg: number;
   target_weight_kg: number;
+  maintenance_min_kg?: number | null;
+  maintenance_max_kg?: number | null;
 }
 
 function dateOnlyUtc(date: string): Date {
@@ -65,6 +67,7 @@ export function clipBodyWeightGoalPath(
   };
 
   return {
+    ...goal,
     start_date: new Date(clippedStart).toISOString().slice(0, 10),
     target_date: new Date(clippedEnd).toISOString().slice(0, 10),
     start_weight_kg: weightAt(clippedStart),

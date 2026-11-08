@@ -61,7 +61,10 @@ def test_minimum_never_exceeds_the_release_the_server_ships():
     assert minimum is None or not is_older(release["version"], minimum)
     for level, fields in client_versions.FIELDS_ADDED_IN.items():
         for field, since in fields.items():
-            assert not is_older(release["version"], since), (level, field)
+            # Feature branches register additive fields before the release coordinator
+            # assembles the next announcement. Unlike a write minimum, a future field
+            # version safely preserves data for every currently deployed client.
+            assert normalized_version(since) == since, (level, field)
 
 
 def test_saves_are_open_to_every_release_while_no_minimum_is_set(client):

@@ -615,12 +615,22 @@ class BodyWeightGoalCreate(BaseModel):
     target_date: date
     start_weight_kg: float = Field(gt=0, le=500)
     target_weight_kg: float = Field(gt=0, le=500)
+    maintenance_min_kg: float | None = Field(default=None, gt=0, le=500)
+    maintenance_max_kg: float | None = Field(default=None, gt=0, le=500)
     active: bool = True
 
     @model_validator(mode="after")
     def dates_are_ordered(self) -> BodyWeightGoalCreate:
         if self.target_date < self.start_date:
             raise ValueError("Target date must be on or after the start date.")
+        low, high = self.maintenance_min_kg, self.maintenance_max_kg
+        if (low is None) != (high is None):
+            raise ValueError("Enter both maintenance range limits.")
+        if low is not None and high is not None:
+            if low >= high:
+                raise ValueError("Maintenance minimum must be below the maximum.")
+            # Older apps still see a maintain goal at the band's midpoint.
+            self.start_weight_kg = self.target_weight_kg = (low + high) / 2
         return self
 
 

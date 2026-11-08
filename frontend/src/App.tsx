@@ -99,6 +99,9 @@ import type { BodyTrendDuration, BodyTrendRange, BodyTrendStatistic } from './bo
 import {
   bodyGoalKind,
   bodyGoalName,
+  bodyGoalTarget,
+  maintenanceRange,
+  maintenanceStatus,
   bodyHistoryWithWeightChanges,
   summarizeBodyHistory,
 } from './bodyMeasurementHistory';
@@ -8476,6 +8479,8 @@ export function BodyCompositionScreen({
   const [goals, setGoals] = useState<BodyWeightGoal[]>([]);
   const [goalRemovalError, setGoalRemovalError] = useState<string | null>(null);
   const [goalTarget, setGoalTarget] = useState<number | null>(null);
+  const [goalMinimum, setGoalMinimum] = useState<number | null>(null);
+  const [goalMaximum, setGoalMaximum] = useState<number | null>(null);
   const [goalKind, setGoalKind] = useState<BodyGoalKind>('loss');
   const [goalDate, setGoalDate] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
@@ -8589,15 +8594,25 @@ export function BodyCompositionScreen({
 
   function chooseGoalKind(kind: BodyGoalKind) {
     setGoalKind(kind);
-    // Maintaining usually means holding today's weight, so start from it.
-    if (kind === 'maintain' && goalTarget === null && latest) setGoalTarget(latest.weight_kg);
   }
 
   async function saveGoal() {
-    if (!latest || !hasValidTarget || !goalDate) {
+    const range = maintenanceRange({
+      maintenance_min_kg: goalMinimum,
+      maintenance_max_kg: goalMaximum,
+    });
+    if (goalKind === 'maintain' && !range) {
+      setError(
+        `Enter a minimum and a higher maximum, both above 0 and at most ${formatWeight(500, weightUnit)}.`,
+      );
+      return;
+    }
+    if (!latest || (goalKind !== 'maintain' && !hasValidTarget) || !goalDate) {
       setError('Log a current weight, target weight, and target date first.');
       return;
     }
+    const savedTarget =
+      range && goalKind === 'maintain' ? (range[0] + range[1]) / 2 : targetWeight!;
     const direction = bodyGoalKind({
       start_weight_kg: latest.weight_kg,
       target_weight_kg: targetWeight!,
@@ -8614,14 +8629,18 @@ export function BodyCompositionScreen({
       const goal = await api.createBodyWeightGoal({
         start_date: localDate(),
         target_date: goalDate,
-        // A maintain goal holds one weight, so its start and target are the same.
-        start_weight_kg: goalKind === 'maintain' ? targetWeight! : latest.weight_kg,
-        target_weight_kg: targetWeight!,
+        start_weight_kg: goalKind === 'maintain' ? savedTarget : latest.weight_kg,
+        target_weight_kg: savedTarget,
+        ...(goalKind === 'maintain' && range
+          ? { maintenance_min_kg: range[0], maintenance_max_kg: range[1] }
+          : {}),
         active: true,
       });
       setGoals((current) => [goal, ...current.map((item) => ({ ...item, active: false }))]);
       await onDataChange();
       setGoalTarget(null);
+      setGoalMinimum(null);
+      setGoalMaximum(null);
       setGoalDate('');
       setGoalOpen(false);
     } catch (saveError) {
@@ -8728,9 +8747,10 @@ export function BodyCompositionScreen({
               ? `${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} Goal`
               : 'Weight Goal'}
           </span>
-          <strong>
-            {activeGoal ? formatWeight(activeGoal.target_weight_kg, weightUnit) : '–'}
-          </strong>
+          <strong>{activeGoal ? bodyGoalTarget(activeGoal, weightUnit) : '–'}</strong>
+          {activeGoal && latest && maintenanceRange(activeGoal) && (
+            <small>{maintenanceStatus(activeGoal, latest.weight_kg)}</small>
+          )}
         </div>
         <div>
           <span>Body Fat</span>
@@ -8805,6 +8825,8 @@ export function BodyCompositionScreen({
           onClick={() => {
             setError(null);
             setGoalKind(activeGoal ? bodyGoalKind(activeGoal) : 'loss');
+            setGoalMinimum(activeGoal?.maintenance_min_kg ?? null);
+            setGoalMaximum(activeGoal?.maintenance_max_kg ?? null);
             setGoalOpen(true);
             setEntryOpen(false);
           }}
@@ -8834,7 +8856,7 @@ export function BodyCompositionScreen({
                 <div>
                   <strong>{formatWeight(latest.weight_kg, weightUnit)}</strong>
                   <span>
-                    Maintaining {formatWeight(activeGoal.target_weight_kg, weightUnit)} until{' '}
+                    Maintaining {bodyGoalTarget(activeGoal, weightUnit)} until{' '}
                     {prettyDate(activeGoal.target_date)}
                   </span>
                 </div>
@@ -8879,10 +8901,23 @@ export function BodyCompositionScreen({
               ))}
             </div>
             <div className="goal-entry-fields">
-              <label>
-                {goalKind === 'maintain' ? 'Maintain' : 'Target'} ({weightUnit})
-                <WeightInput weightKg={goalTarget} onWeightChange={setGoalTarget} />
-              </label>
+              {goalKind === 'maintain' ? (
+                <>
+                  <label>
+                    Minimum ({weightUnit})
+                    <WeightInput weightKg={goalMinimum} onWeightChange={setGoalMinimum} />
+                  </label>
+                  <label>
+                    Maximum ({weightUnit})
+                    <WeightInput weightKg={goalMaximum} onWeightChange={setGoalMaximum} />
+                  </label>
+                </>
+              ) : (
+                <label>
+                  Target ({weightUnit})
+                  <WeightInput weightKg={goalTarget} onWeightChange={setGoalTarget} />
+                </label>
+              )}
               <label>
                 {goalKind === 'maintain' ? 'Until' : 'Target date'}
                 <input
@@ -9273,7 +9308,13 @@ function BodyTrendChart({
             startValue: weightFromKg(clippedGoal.start_weight_kg, weightUnit),
             endDate: clippedGoal.target_date,
             endValue: weightFromKg(clippedGoal.target_weight_kg, weightUnit),
-            label: `Goal ${formatWeight(activeGoal!.target_weight_kg, weightUnit)}`,
+            ...(maintenanceRange(activeGoal!)
+              ? {
+                  minValue: weightFromKg(activeGoal!.maintenance_min_kg!, weightUnit),
+                  maxValue: weightFromKg(activeGoal!.maintenance_max_kg!, weightUnit),
+                }
+              : {}),
+            label: `Goal ${bodyGoalTarget(activeGoal!, weightUnit)}`,
           }
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -9282,6 +9323,8 @@ function BodyTrendChart({
       clippedGoal?.target_date,
       clippedGoal?.start_weight_kg,
       clippedGoal?.target_weight_kg,
+      activeGoal?.maintenance_min_kg,
+      activeGoal?.maintenance_max_kg,
       series,
       weightUnit,
     ],

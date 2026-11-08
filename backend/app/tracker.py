@@ -40,7 +40,12 @@ from .cardio_zones import (
     classify_session,
     effective_zone,
 )
-from .client_versions import ClientVersion, preserve_unknown_workout_fields
+from .client_versions import (
+    ClientVersion,
+    fields_unknown_to,
+    preserve_fields,
+    preserve_unknown_workout_fields,
+)
 from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
@@ -1932,7 +1937,11 @@ def create_body_weight_goal(
 
 @router.put("/body-weight-goals/{goal_id}", response_model=BodyWeightGoalRead)
 def update_body_weight_goal(
-    goal_id: str, payload: BodyWeightGoalCreate, db: DbSession, user: CurrentUser
+    goal_id: str,
+    payload: BodyWeightGoalCreate,
+    db: DbSession,
+    user: CurrentUser,
+    client_version: ClientVersion = None,
 ) -> BodyWeightGoal:
     goal = get_owned(db, BodyWeightGoal, goal_id, user.id)
     if not goal:
@@ -1945,7 +1954,11 @@ def update_body_weight_goal(
         ):
             if other.id != goal_id:
                 other.active = False
-    values = payload.model_dump()
+    values = BodyWeightGoalCreate.model_validate(
+        preserve_fields(
+            payload.model_dump(), goal, fields_unknown_to(client_version, "body_weight_goal")
+        )
+    ).model_dump()
     for key, value in values.items():
         setattr(goal, key, value)
     bump_workout_cache_revision(db, user.id)

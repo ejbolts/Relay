@@ -1,5 +1,11 @@
 import { useWeightUnit } from './trainingPreferencesContext';
-import { bodyGoalKind } from './bodyMeasurementHistory';
+import {
+  bodyGoalKind,
+  bodyGoalName,
+  bodyGoalTarget,
+  maintenanceRange,
+  maintenanceStatus,
+} from './bodyMeasurementHistory';
 import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
 import {
   useEffect,
@@ -970,7 +976,13 @@ function bodyWeightGoalPath(
     startValue: weightFromKg(clipped.start_weight_kg, weightUnit),
     endDate: clipped.target_date,
     endValue: weightFromKg(clipped.target_weight_kg, weightUnit),
-    label: `Goal ${formatWeight(goal.target_weight_kg, weightUnit)}`,
+    ...(maintenanceRange(goal)
+      ? {
+          minValue: weightFromKg(goal.maintenance_min_kg!, weightUnit),
+          maxValue: weightFromKg(goal.maintenance_max_kg!, weightUnit),
+        }
+      : {}),
+    label: `Goal ${bodyGoalTarget(goal, weightUnit)}`,
   };
 }
 
@@ -1071,9 +1083,12 @@ function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: 
           <>
             <span>
               {bodyGoalKind(goal) === 'maintain'
-                ? `Maintain ${formatWeight(goal.target_weight_kg, weightUnit, 1)} until ${longDate(goal.target_date)}`
+                ? `${bodyGoalName(goal, weightUnit)} until ${longDate(goal.target_date)}`
                 : `${formatWeight(goal.start_weight_kg, weightUnit, 1)} → ${formatWeight(goal.target_weight_kg, weightUnit, 1)} by ${longDate(goal.target_date)}`}
             </span>
+            {latestWeight !== null && maintenanceRange(goal) && (
+              <small>{maintenanceStatus(goal, latestWeight)}</small>
+            )}
             {progress !== null && (
               <>
                 <ProgressBar value={progress} label="Body-weight goal progress" />
