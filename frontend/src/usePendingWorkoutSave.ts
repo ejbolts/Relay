@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
+import { isClientOutdated } from './clientVersion';
 import type { TrackedWorkout, WorkoutInput } from './types';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
@@ -99,6 +100,13 @@ export function usePendingWorkoutSave(
         savedCallback.current(workout, pending!.workoutId);
       } catch (reason) {
         if (stopped || !ownsSnapshot()) return;
+        if (reason instanceof ApiError && isClientOutdated(reason.status, reason.code)) {
+          // The completion stays on this device; the updated app sends it after refreshing.
+          rejected = true;
+          setNeedsReview(false);
+          setError('Saved on this device. Update Relay to sync it.');
+          return;
+        }
         // Validation/permission failures need a deliberate review, not endless replay.
         rejected =
           reason instanceof ApiError &&

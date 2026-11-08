@@ -23,6 +23,7 @@ from .auth import (
     get_current_user,
     require_video_access,
 )
+from .client_versions import ClientVersionGateMiddleware
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
@@ -176,6 +177,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.login_throttle = LoginThrottle()
     app.state.save_rate_limiter = SaveRateLimiter()
     app.state.push_rate_limiter = SaveRateLimiter()
+    app.add_middleware(ClientVersionGateMiddleware)
     app.add_middleware(CsrfOriginMiddleware)
 
     @app.exception_handler(HTTPException)

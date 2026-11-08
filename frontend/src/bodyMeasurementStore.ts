@@ -260,7 +260,8 @@ export function syncBodyMeasurements(
           status &&
           status >= 400 &&
           status < 500 &&
-          ![401, 408, 429].includes(status)
+          // 426: this release is too old to save; the updated app syncs the change instead.
+          ![401, 408, 426, 429].includes(status)
         ) {
           await locked(async () => {
             const next = queue(owner);

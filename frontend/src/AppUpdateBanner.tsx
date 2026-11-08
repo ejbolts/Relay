@@ -1,10 +1,13 @@
 export function AppUpdateBanner({
   version,
+  required = false,
   refreshing,
   error,
   onRefresh,
 }: {
   version?: string;
+  /** The server needs this update before it accepts saves from the app. */
+  required?: boolean;
   refreshing: boolean;
   error: string | null;
   onRefresh: () => void;
@@ -13,9 +16,18 @@ export function AppUpdateBanner({
     <aside className="app-update-banner" aria-label="App update" role="status">
       <div>
         <strong>
-          {version ? `Version ${version} is available` : 'An app update is available'}
+          {required
+            ? 'Update needed to save'
+            : version
+              ? `Version ${version} is available`
+              : 'An app update is available'}
         </strong>
-        <span>{error ?? 'Keep logging, or refresh to update.'}</span>
+        <span>
+          {error ??
+            (required
+              ? 'Refresh to update. Workouts in progress stay on this device.'
+              : 'Keep logging, or refresh to update.')}
+        </span>
       </div>
       <button
         type="button"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from . import client_versions
 from .account_limits import (
     AccountLimits,
     AccountLimitsRead,
@@ -45,6 +46,9 @@ from .server_settings import (
 from .session_events import session_events
 
 DbDependency = Annotated[Session, Depends(get_db)]
+
+# Sign-ins unused for longer are left out of the app versions still in use.
+CLIENT_VERSION_WINDOW = timedelta(days=30)
 
 # Sessions the background processor still has to work on, in pipeline order.
 VIDEO_QUEUE_STATUSES = (
@@ -93,6 +97,14 @@ class DiskUsageRead(BaseModel):
     free_bytes: int
 
 
+class ClientVersionUsageRead(BaseModel):
+    # None: sessions that have not been used since releases started sending their version.
+    version: str | None
+    users: int
+    sessions: int
+    last_seen_at: datetime
+
+
 class ServerStatusRead(BaseModel):
     disk: DiskUsageRead
     database_bytes: int
@@ -100,6 +112,8 @@ class ServerStatusRead(BaseModel):
     photo_bytes: int
     video_file_bytes: int
     video_queue: dict[str, int]
+    client_versions: list[ClientVersionUsageRead]
+    minimum_write_version: str | None
 
 
 admin_router = APIRouter(
@@ -181,6 +195,35 @@ def _admin_user_reads(
         )
         for user in users
     ]
+
+
+def _client_version_usage(db: Session) -> list[ClientVersionUsageRead]:
+    now = utc_now()
+    rows = db.execute(
+        select(
+            UserSession.client_version,
+            func.count(func.distinct(UserSession.user_id)),
+            func.count(UserSession.id),
+            func.max(UserSession.last_seen_at),
+        )
+        .where(
+            UserSession.expires_at > now,
+            UserSession.last_seen_at >= now - CLIENT_VERSION_WINDOW,
+        )
+        .group_by(UserSession.client_version)
+    ).all()
+    usage = [
+        ClientVersionUsageRead(
+            version=version, users=users, sessions=sessions, last_seen_at=as_utc(last_seen)
+        )
+        for version, users, sessions, last_seen in rows
+    ]
+    # Newest release first; sessions without a version are the oldest.
+    return sorted(
+        usage,
+        key=lambda item: client_versions.parse_version(item.version) or (-1, -1, -1),
+        reverse=True,
+    )
 
 
 def _settings_read(db: Session, settings: Settings) -> ServerSettingsRead:
@@ -284,4 +327,6 @@ def server_status(db: DbDependency, settings: AppSettings) -> ServerStatusRead:
         photo_bytes=_tree_size([settings.machine_photos_dir]),
         video_file_bytes=video_file_bytes,
         video_queue={status.value: queued.get(status, 0) for status in VIDEO_QUEUE_STATUSES},
+        client_versions=_client_version_usage(db),
+        minimum_write_version=client_versions.MIN_WRITE_CLIENT_VERSION,
     )

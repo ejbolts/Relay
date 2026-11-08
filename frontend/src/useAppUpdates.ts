@@ -3,6 +3,7 @@ import releaseMetadata from '../release.json';
 import {
   checkForAppUpdate,
   isAppUpdateAvailable,
+  isAppUpdateRequired,
   refreshApp,
   subscribeAppUpdates,
 } from './appUpdates';
@@ -11,12 +12,19 @@ import type { Release } from './releaseMetadata';
 
 export type UpdateCheckStatus = 'idle' | 'checking' | 'current' | 'available' | 'error';
 
-export function useAppUpdates() {
-  const workerAvailable = useSyncExternalStore(
-    subscribeAppUpdates,
-    isAppUpdateAvailable,
-    () => false,
+// One primitive snapshot keeps both flags on a single subscription.
+const WORKER_AVAILABLE = 1;
+const UPDATE_REQUIRED = 2;
+function updateState(): number {
+  return (
+    (isAppUpdateAvailable() ? WORKER_AVAILABLE : 0) | (isAppUpdateRequired() ? UPDATE_REQUIRED : 0)
   );
+}
+
+export function useAppUpdates() {
+  const state = useSyncExternalStore(subscribeAppUpdates, updateState, () => 0);
+  const workerAvailable = (state & WORKER_AVAILABLE) !== 0;
+  const required = (state & UPDATE_REQUIRED) !== 0;
   const [availableRelease, setAvailableRelease] = useState<Release | null>(null);
   const [status, setStatus] = useState<UpdateCheckStatus>('idle');
   const [refreshing, setRefreshing] = useState(false);
@@ -72,5 +80,14 @@ export function useAppUpdates() {
     }
   }
 
-  return { available, availableRelease, status, check, refresh, refreshing, refreshError };
+  return {
+    available,
+    required,
+    availableRelease,
+    status,
+    check,
+    refresh,
+    refreshing,
+    refreshError,
+  };
 }

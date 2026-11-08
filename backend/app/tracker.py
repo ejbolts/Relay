@@ -40,6 +40,7 @@ from .cardio_zones import (
     classify_session,
     effective_zone,
 )
+from .client_versions import ClientVersion, preserve_unknown_workout_fields
 from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
@@ -2535,8 +2536,10 @@ def update_workout(
     db: DbSession,
     user: CurrentUser,
     settings: SettingsDependency,
+    client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
+    payload = preserve_unknown_workout_fields(payload, workout, client_version)
     check_workout_size(payload, load_account_limits(db, settings), user, existing=workout)
     replace_workout_contents(db, user.id, workout, payload)
     db.flush()
