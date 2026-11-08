@@ -2638,6 +2638,11 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   stroke-dasharray: 0.1 5;
 }
 
+.pulse-chart-goal-band {
+  fill: var(--accent);
+  fill-opacity: 0.12;
+}
+
 .pulse-chart-goal text {
   fill: var(--p-ink-2);
   font-size: 10.5px;

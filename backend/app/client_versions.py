@@ -39,6 +39,10 @@ FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
     "workout": {},
     "movement": {},
     "set": {},
+    "body_weight_goal": {
+        "maintenance_min_kg": "1.2.1",
+        "maintenance_max_kg": "1.2.1",
+    },
 }
 
 # Sign-in and sign-out keep working so an old app can always reach the update.
@@ -133,7 +137,7 @@ def preserve_unknown_workout_fields(payload, workout, client: str | None):
     """
     from .tracker_schemas import TrainingWorkoutCreate
 
-    unknown = {level: fields_unknown_to(client, level) for level in FIELDS_ADDED_IN}
+    unknown = {level: fields_unknown_to(client, level) for level in ("workout", "movement", "set")}
     if not any(unknown.values()):
         return payload
     data = preserve_fields(payload.model_dump(), workout, unknown["workout"])

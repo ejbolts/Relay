@@ -151,6 +151,39 @@ function button(prefix: string) {
 }
 
 describe('shared profile friend control', () => {
+  it('renders the shared maintenance band and its current status', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      body_weight: [
+        { measurement_date: '2026-10-17', weight_kg: 84, body_fat_pct: null },
+        { measurement_date: '2026-10-16', weight_kg: 84.5, body_fat_pct: null },
+      ],
+      goals: {
+        body_weight: {
+          start_date: '2026-10-01',
+          target_date: '2026-12-31',
+          start_weight_kg: 84,
+          target_weight_kg: 84,
+          maintenance_min_kg: 82,
+          maintenance_max_kg: 86,
+        },
+        zone2: {
+          week_start: '2026-10-12',
+          week_end: '2026-10-18',
+          goal_minutes: 150,
+          completed_minutes: 0,
+          remaining_minutes: 150,
+          percentage: 0,
+          complete: false,
+        },
+      },
+    });
+    await renderProfile('friend', undefined, true, 'range-update');
+    expect(container.textContent).toContain('Maintain 82–86 kg until');
+    expect(container.textContent).toContain('In range');
+    expect(container.querySelector('.pulse-chart-goal-band')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Body-weight goal progress"]')).toBeNull();
+  });
   it('opens a visible shared profile photo in the square viewer', async () => {
     vi.mocked(api.sharing.profile).mockResolvedValue({
       ...profile,

@@ -75,6 +75,8 @@ export interface GoalPath {
   endDate: string;
   endValue: number;
   label: string;
+  minValue?: number;
+  maxValue?: number;
 }
 
 const defaultFormat = (value: number) => Number(value.toFixed(1)).toLocaleString('en-GB');
@@ -109,6 +111,9 @@ export function TrendChart({
       ...backgroundPoints.map((point) => point.value),
       ...(goal === null ? [] : [goal]),
       ...(goalPath ? [goalPath.startValue, goalPath.endValue] : []),
+      ...(goalPath?.minValue != null && goalPath?.maxValue != null
+        ? [goalPath.minValue, goalPath.maxValue]
+        : []),
     ];
     const ticks = niceTicks(Math.min(...allValues), Math.max(...allValues), 4);
     const yMin = ticks[0];
@@ -338,10 +343,38 @@ export function TrendChart({
         )}
         {goalLine && (
           <g className="pulse-chart-goal pulse-chart-goal-path">
-            <line x1={goalLine.x1} y1={goalLine.y1} x2={goalLine.x2} y2={goalLine.y2} />
+            {goalPath?.minValue != null && goalPath?.maxValue != null ? (
+              <>
+                <rect
+                  className="pulse-chart-goal-band"
+                  x={goalLine.x1}
+                  y={y(goalPath.maxValue)}
+                  width={Math.max(1, goalLine.x2 - goalLine.x1)}
+                  height={y(goalPath.minValue) - y(goalPath.maxValue)}
+                />
+                <line
+                  x1={goalLine.x1}
+                  y1={y(goalPath.minValue)}
+                  x2={goalLine.x2}
+                  y2={y(goalPath.minValue)}
+                />
+                <line
+                  x1={goalLine.x1}
+                  y1={y(goalPath.maxValue)}
+                  x2={goalLine.x2}
+                  y2={y(goalPath.maxValue)}
+                />
+              </>
+            ) : (
+              <line x1={goalLine.x1} y1={goalLine.y1} x2={goalLine.x2} y2={goalLine.y2} />
+            )}
             <text
               x={Math.min(goalLine.x2, width - pad.right) - 4}
-              y={goalLine.y2 + (goalLine.y2 > goalLine.y1 ? 14 : -6)}
+              y={
+                goalPath?.maxValue != null
+                  ? y(goalPath.maxValue) - 6
+                  : goalLine.y2 + (goalLine.y2 > goalLine.y1 ? 14 : -6)
+              }
               textAnchor="end"
             >
               {goalLine.label}

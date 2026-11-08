@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   bodyGoalKind,
   bodyGoalOn,
+  bodyGoalName,
+  maintenanceStatus,
   bodyHistoryWithWeightChanges,
   summarizeBodyHistory,
   weightChangeAmount,
@@ -156,6 +158,32 @@ describe('bodyweight history changes', () => {
     // 83.5 and 82.5 kg are equally far from 83 kg, so crossing the target is neutral.
     const crossing = bodyHistoryWithWeightChanges(dated([83.5, 82.5]), maintain, byDate);
     expect(crossing[0].weight_change?.status).toBe('neutral');
+  });
+
+  it('treats movement inside the band as neutral and rewards approaching it from either side', () => {
+    const band = { ...goal('2026-01-01', 84, 84), maintenance_min_kg: 82, maintenance_max_kg: 86 };
+    for (const [current, previous, status] of [
+      [82, 86, 'neutral'],
+      [84, 82, 'neutral'],
+      [86, 87, 'favorable'],
+      [82, 81, 'favorable'],
+      [81, 82, 'unfavorable'],
+      [87, 86, 'unfavorable'],
+      [81, 87, 'neutral'],
+      [88, 89, 'favorable'],
+    ] as const) {
+      const [row] = bodyHistoryWithWeightChanges(dated([current, previous]), [band], byDate);
+      expect(row.weight_change?.status, `${previous} → ${current}`).toBe(status);
+    }
+    expect(bodyGoalName(band, 'kg')).toBe('Maintain 82–86 kg');
+    expect(bodyGoalName(band, 'lb')).toBe('Maintain 180.78–189.6 lb');
+    expect(
+      bodyGoalName({ ...band, maintenance_min_kg: 82.01, maintenance_max_kg: 82.02 }, 'kg'),
+    ).toBe('Maintain 82.01–82.02 kg');
+    expect(maintenanceStatus(band, 82)).toBe('In range');
+    expect(maintenanceStatus(band, 86)).toBe('In range');
+    expect(maintenanceStatus(band, 81)).toBe('Below range');
+    expect(maintenanceStatus(band, 87)).toBe('Above range');
   });
 
   it('omits arrows for ties, floating-point aggregate noise, missing or invalid comparisons', () => {

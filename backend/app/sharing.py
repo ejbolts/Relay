@@ -164,6 +164,8 @@ class SharedBodyWeightGoal(BaseModel):
     target_date: date
     start_weight_kg: float
     target_weight_kg: float
+    maintenance_min_kg: float | None = None
+    maintenance_max_kg: float | None = None
 
 
 class SharedGoals(BaseModel):

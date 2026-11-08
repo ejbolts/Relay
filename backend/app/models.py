@@ -624,6 +624,8 @@ class BodyWeightGoal(Base):
     target_date: Mapped[date] = mapped_column(Date)
     start_weight_kg: Mapped[float] = mapped_column(Float)
     target_weight_kg: Mapped[float] = mapped_column(Float)
+    maintenance_min_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maintenance_max_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()

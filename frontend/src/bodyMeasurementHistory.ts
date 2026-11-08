@@ -1,5 +1,5 @@
 import type { BodyTrendStatistic } from './bodyTrend';
-import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
+import { formatWeight, formatWeightNumber, weightFromKg, type WeightUnit } from './weightUnits';
 
 export type BodyHistoryPeriod = 'week' | 'month';
 
@@ -21,10 +21,12 @@ export interface BodyHistoryGoal {
   start_date: string;
   start_weight_kg: number;
   target_weight_kg: number;
+  maintenance_min_kg?: number | null;
+  maintenance_max_kg?: number | null;
   created_at?: string;
 }
 
-/** Maintain goals keep the same start and target weight; the others move towards the target. */
+/** Maintain goals use a band or a legacy exact weight. */
 export type BodyGoalKind = 'loss' | 'gain' | 'maintain';
 
 export interface BodyHistoryWeightChange {
@@ -46,10 +48,44 @@ function weightDirection(current: number, previous: number): 'up' | 'down' | nul
 }
 
 export function bodyGoalKind(
-  goal: Pick<BodyHistoryGoal, 'start_weight_kg' | 'target_weight_kg'>,
+  goal: Pick<
+    BodyHistoryGoal,
+    'start_weight_kg' | 'target_weight_kg' | 'maintenance_min_kg' | 'maintenance_max_kg'
+  >,
 ): BodyGoalKind {
+  if (maintenanceRange(goal)) return 'maintain';
   const direction = weightDirection(goal.target_weight_kg, goal.start_weight_kg);
   return direction === 'down' ? 'loss' : direction === 'up' ? 'gain' : 'maintain';
+}
+
+export function maintenanceRange(goal: {
+  maintenance_min_kg?: number | null;
+  maintenance_max_kg?: number | null;
+}): [number, number] | null {
+  const low = goal.maintenance_min_kg;
+  const high = goal.maintenance_max_kg;
+  return low != null &&
+    high != null &&
+    Number.isFinite(low) &&
+    Number.isFinite(high) &&
+    low > 0 &&
+    low < high &&
+    high <= 500
+    ? [low, high]
+    : null;
+}
+
+export function bodyGoalTarget(goal: BodyHistoryGoal, unit: WeightUnit, decimals = 2): string {
+  const range = maintenanceRange(goal);
+  return range
+    ? `${formatWeightNumber(range[0], unit)}–${formatWeight(range[1], unit)}`
+    : formatWeight(goal.target_weight_kg, unit, decimals);
+}
+
+export function maintenanceStatus(goal: BodyHistoryGoal, weight: number): string {
+  const range = maintenanceRange(goal);
+  if (!range) return '';
+  return weight < range[0] ? 'Below range' : weight > range[1] ? 'Above range' : 'In range';
 }
 
 /** The goal set most recently on or before a date; it stays in force until another replaces it. */
@@ -80,11 +116,12 @@ function changeStatus(
   if (kind !== 'maintain') {
     return direction === (kind === 'loss' ? 'down' : 'up') ? 'favorable' : 'unfavorable';
   }
-  // Maintaining rewards moving back towards the target weight from either side.
-  const distance = weightDirection(
-    Math.abs(current - goal.target_weight_kg),
-    Math.abs(previous - goal.target_weight_kg),
-  );
+  const range = maintenanceRange(goal);
+  const distanceFromGoal = (weight: number) =>
+    range
+      ? Math.max(range[0] - weight, 0, weight - range[1])
+      : Math.abs(weight - goal.target_weight_kg);
+  const distance = weightDirection(distanceFromGoal(current), distanceFromGoal(previous));
   return distance === 'down' ? 'favorable' : distance === 'up' ? 'unfavorable' : 'neutral';
 }
 
@@ -200,7 +237,7 @@ export function summarizeBodyHistory(
 /** "Lose to 82 kg", "Gain to 85 kg" or "Maintain 84 kg". */
 export function bodyGoalName(goal: BodyHistoryGoal, unit: WeightUnit): string {
   const kind = bodyGoalKind(goal);
-  const target = formatWeight(goal.target_weight_kg, unit, 1);
+  const target = bodyGoalTarget(goal, unit, 1);
   return kind === 'maintain'
     ? `Maintain ${target}`
     : `${kind === 'loss' ? 'Lose' : 'Gain'} to ${target}`;
