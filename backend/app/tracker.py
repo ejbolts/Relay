@@ -93,6 +93,7 @@ from .tracker_csv import (
 )
 from .tracker_schemas import (
     BlockHistoryBaselineRead,
+    BlockStatsRead,
     BodyMeasurementCreate,
     BodyMeasurementCsvImportRead,
     BodyMeasurementRead,
@@ -133,6 +134,7 @@ from .tracker_schemas import (
     MuscleVolumeRead,
     PersonalRecordRead,
     ProgressPoint,
+    TrainingBlockSummaryRead,
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
     TrainingSplit,
@@ -157,7 +159,7 @@ from .tracker_schemas import (
     WorkoutTypeUpdate,
     Zone2WeekRead,
 )
-from .training_blocks import block_on, training_blocks
+from .training_blocks import TrainingBlock, block_on, training_blocks
 from .training_metrics import (
     estimated_one_rep_max,
     get_setting,
@@ -2058,6 +2060,72 @@ def list_personal_records(
         ],
         key=lambda record: record.achieved_date,
         reverse=True,
+    )
+
+
+def block_stats(
+    block: TrainingBlock,
+    workouts: list[TrainingWorkout],
+    records: list[PersonalRecordRead],
+    today: date,
+) -> BlockStatsRead:
+    """Totals for the days a block owns: from its start until the next block or today."""
+
+    def owns(day: date) -> bool:
+        return block.start_date <= day <= today and (block.end_date is None or day < block.end_date)
+
+    owned = [workout for workout in workouts if owns(workout.workout_date)]
+    set_count, volume = 0, 0.0
+    for workout in owned:
+        for movement in workout.movements:
+            if movement.exercise.kind != ExerciseKind.STRENGTH:
+                continue
+            for item in movement.sets:
+                if is_working_set(item):
+                    set_count += 1
+                    volume += (item.weight_kg or 0) * (item.reps or 0)
+    return BlockStatsRead(
+        block_id=block.id,
+        name=block.name,
+        start_date=block.start_date,
+        deload=block.deload,
+        workout_count=len(owned),
+        set_count=set_count,
+        volume_kg=round(volume, 1),
+        pr_count=sum(1 for record in records if owns(record.achieved_date)),
+    )
+
+
+@router.get("/training-blocks/{block_id}/summary", response_model=TrainingBlockSummaryRead)
+def training_block_summary(
+    block_id: str, db: DbSession, user: CurrentUser
+) -> TrainingBlockSummaryRead:
+    config = training_blocks(db, user.id)
+    block = next((item for item in config.blocks if item.id == block_id), None)
+    if block is None:
+        raise HTTPException(404, "Training block was not found.")
+    # A deload has nothing to compare with; other blocks compare with the last regular one.
+    previous = None
+    if not block.deload:
+        earlier = [
+            item for item in config.blocks if item.start_date < block.start_date and not item.deload
+        ]
+        previous = earlier[-1] if earlier else None
+    today = date.today()
+    first = (previous or block).start_date
+    workouts = list(
+        db.scalars(
+            workout_query(user.id).where(
+                TrainingWorkout.workout_date >= first, TrainingWorkout.workout_date <= today
+            )
+        )
+    )
+    records = list_personal_records(
+        db=db, user=user, exercise_id=None, workout_id=None, include_blocks=True
+    )
+    return TrainingBlockSummaryRead(
+        block=block_stats(block, workouts, records, today),
+        previous=block_stats(previous, workouts, records, today) if previous else None,
     )
 
 

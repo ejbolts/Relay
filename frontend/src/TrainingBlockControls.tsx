@@ -3,7 +3,14 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
-import { blockDay, blockOn, blockProgress, blockRange, daysLeftLabel } from './trainingBlocks';
+import {
+  blockDay,
+  blockOn,
+  blockProgress,
+  blockRange,
+  daysLeftLabel,
+  weeksEnd,
+} from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { addDays } from './trainingSummary';
 import { localDate } from './utils';
@@ -14,8 +21,6 @@ import './trainingBlocks.css';
 type View = 'pick' | 'blocks' | 'form' | 'remove';
 type StartPreset = 'today' | 'january' | 'custom';
 type PlanPreset = 'none' | '8' | '12' | 'custom';
-
-const weeksEnd = (start: string, weeks: number) => addDays(start, weeks * 7 - 1);
 
 function planFor(start: string, end: string | null | undefined): PlanPreset {
   if (!end) return 'none';
@@ -336,6 +341,7 @@ export function TrainingBlockControls() {
                         <strong>
                           {item.name}
                           {item.id === current?.id && <span className="badge">Current</span>}
+                          {item.deload && <span className="badge deload">Deload</span>}
                         </strong>
                         <small>
                           {joined(
@@ -376,6 +382,7 @@ export function TrainingBlockControls() {
                         <strong>
                           {item.name}
                           {item.id === current?.id && <span className="badge">Current</span>}
+                          {item.deload && <span className="badge deload">Deload</span>}
                         </strong>
                         <small>{blockRange(item.start_date, item.end_date)}</small>
                         {item.id === current?.id && item.planned_end_date && (

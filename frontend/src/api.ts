@@ -39,6 +39,7 @@ import type {
   MuscleVolume,
   PersonalRecord,
   TrainingBlockInput,
+  TrainingBlockSummary,
   TrainingBlocks,
   ProfileUpdateInput,
   PushConfig,
@@ -811,6 +812,8 @@ export const api = {
       request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       }),
+    summary: (id: string) =>
+      request<TrainingBlockSummary>(`/api/training-blocks/${encodeURIComponent(id)}/summary`),
   },
   listPersonalRecords: (params?: { exerciseId?: string; workoutId?: string }) => {
     const query = new URLSearchParams();

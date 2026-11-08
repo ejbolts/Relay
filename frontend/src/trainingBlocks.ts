@@ -59,6 +59,36 @@ export function blockProgress(block: TrainingBlock, today: string) {
   };
 }
 
+/** The inclusive last day of a block of `weeks` whole weeks starting on `start`. */
+export const weeksEnd = (start: string, weeks: number) => addDays(start, weeks * 7 - 1);
+
+/** The planned end has passed, so the block's summary and next-block offer are due. */
+export function blockFinished(block: TrainingBlock, today: string) {
+  return !!block.planned_end_date && today > block.planned_end_date;
+}
+
+/** How a block's total compares with the previous block, for the summary tiles. */
+export function blockChange(current: number, previous: number | undefined, percent = false) {
+  if (previous === undefined) return null;
+  const difference = current - previous;
+  const direction = difference > 0 ? 'up' : difference < 0 ? 'down' : 'same';
+  if (direction === 'same') return { direction, text: 'Same as last block' } as const;
+  const amount = percent
+    ? previous > 0
+      ? `${Math.round((Math.abs(difference) / previous) * 100)}%`
+      : null
+    : Math.abs(difference).toLocaleString();
+  return {
+    direction,
+    text: amount ? `${amount} ${direction === 'up' ? 'more' : 'less'}` : 'New',
+  } as const;
+}
+
+/** “Block 3”: numbered after the regular blocks already saved. */
+export function nextBlockName(blocks: TrainingBlock[]) {
+  return `Block ${blocks.filter((block) => !block.deload).length + 1}`;
+}
+
 /** Days after today until the planned end: “Last day” on the planned end itself. */
 export function daysLeftLabel(daysLeft: number) {
   if (daysLeft === 0) return 'Last day';

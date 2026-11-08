@@ -388,6 +388,25 @@ class ExerciseLatestSessionRead(BaseModel):
     sets: list[WorkoutSetRead]
 
 
+class BlockStatsRead(BaseModel):
+    block_id: str
+    name: str
+    start_date: date
+    deload: bool = False
+    workout_count: int
+    set_count: int
+    volume_kg: float
+    # Weight and volume PRs dated inside the block, as listed when browsing it.
+    pr_count: int
+
+
+class TrainingBlockSummaryRead(BaseModel):
+    """A block's totals next to the last regular block before it, if there is one."""
+
+    block: BlockStatsRead
+    previous: BlockStatsRead | None = None
+
+
 class BlockHistoryBaselineRead(BaseModel):
     block_id: str
     best_weight_kg: float | None

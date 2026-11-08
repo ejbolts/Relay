@@ -512,3 +512,113 @@ button.pulse-card.training-block-home {
   flex: 1;
   background: var(--p-accent-text);
 }
+
+.training-block-starts.plan.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.training-block-dialog .badge.deload {
+  background: color-mix(in srgb, var(--p-gold) 15%, transparent);
+  color: var(--p-gold);
+}
+
+/* Finished block: Home card call to action and the summary dialog */
+.training-block-home-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  color: var(--p-accent-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.training-block-home-cta .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.training-block-home.is-finished .training-block-home-top em {
+  color: var(--p-good);
+}
+.training-block-summary-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+.training-block-summary .training-block-form {
+  padding-top: 14px;
+}
+.training-block-summary-body > p,
+.training-block-summary-body .error-message {
+  margin: 0;
+}
+.training-block-summary-range {
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+}
+.training-block-summary-compare {
+  color: var(--p-muted);
+  font-size: 0.78rem;
+}
+.training-block-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.training-block-tile {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--p-surface-2);
+}
+.training-block-tile dt {
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.training-block-tile dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.training-block-tile small {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.training-block-tile small.is-up {
+  color: var(--p-good);
+}
+.training-block-tile small .pulse-icon {
+  width: 12px;
+  height: 12px;
+}
+.training-block-summary-actions {
+  display: grid;
+  gap: 8px;
+}
+.training-block-dialog .training-block-summary-actions button {
+  min-height: 44px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-weight: 600;
+}
+.training-block-dialog .training-block-summary-actions .primary-action {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: white;
+}
+.training-block-summary-body .training-block-actions {
+  margin: 0;
+}
