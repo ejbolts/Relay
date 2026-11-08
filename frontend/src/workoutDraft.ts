@@ -46,6 +46,8 @@ export interface ActiveWorkoutDraft {
   lastActiveAt?: number;
   inactiveFinishAt?: number;
   durationOverrideMinutes?: number | null;
+  /** Derived from completed cardio sets, for the live clock outside the logger. */
+  cardioDurationSeconds?: number;
   /** Paused time already resumed; see workoutPause.ts. */
   pausedMs?: number;
   /** When the current pause began, or null while the live workout is running. */
@@ -201,6 +203,10 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
         Number.isInteger(value.durationOverrideMinutes) &&
         value.durationOverrideMinutes >= 1 &&
         value.durationOverrideMinutes <= 1440)) &&
+    (value.cardioDurationSeconds === undefined ||
+      (typeof value.cardioDurationSeconds === 'number' &&
+        Number.isFinite(value.cardioDurationSeconds) &&
+        value.cardioDurationSeconds >= 0)) &&
     validStoredPause(value.pausedMs, value.pausedAt) &&
     typeof value.updatedAt === 'number' &&
     typeof value.name === 'string' &&

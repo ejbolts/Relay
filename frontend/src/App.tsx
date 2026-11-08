@@ -362,7 +362,12 @@ import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { TrainingBlockControls } from './TrainingBlockControls';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
-import { completedWorkoutDurationMinutes } from './workoutResume';
+import {
+  cardioAdjustedEndTime,
+  completedCardioDurationSeconds,
+  completedWorkoutDurationMinutes,
+  workoutDurationSeconds,
+} from './workoutResume';
 import {
   isWorkoutSetAutoSavable,
   workoutSetAfterEdit,
@@ -2800,6 +2805,12 @@ function WorkoutLogger({
           })),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
+  const cardioDurationSeconds = completedCardioDurationSeconds(movements);
+  const effectiveEditedDurationMinutes = Math.max(
+    editedDurationMinutes,
+    Math.ceil(cardioDurationSeconds / 60),
+  );
+  const effectiveEndTime = cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds);
   const movementStackRef = useRef<HTMLDivElement>(null);
   useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));
   const [switchingMovementKey, setSwitchingMovementKey] = useState<string | null>(null);
@@ -2903,6 +2914,7 @@ function WorkoutLogger({
         lastActiveAt: lastActiveAtRef.current,
         inactiveFinishAt: inactiveFinishAtRef.current,
         durationOverrideMinutes,
+        cardioDurationSeconds,
         pausedMs: pause.pausedMs,
         pausedAt: pause.pausedAt,
         name,
@@ -2978,6 +2990,7 @@ function WorkoutLogger({
     startedAt,
     workoutDate,
     durationOverrideMinutes,
+    cardioDurationSeconds,
     pause,
     clientSessionId,
     isCurrentDraft,
@@ -3564,15 +3577,6 @@ function WorkoutLogger({
       return;
     }
     const finishedAt = automaticEndAt ?? Date.now();
-    const durationMinutes = initialWorkout
-      ? editedDurationMinutes
-      : completedWorkoutDurationMinutes(
-          previousDurationMinutes,
-          startedAt,
-          finishedAt,
-          durationOverrideMinutes,
-          pausedMsAt(pause, finishedAt),
-        );
     const movementsToSave =
       automaticEndAt === undefined
         ? movements
@@ -3580,6 +3584,16 @@ function WorkoutLogger({
             ...movement,
             sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
           }));
+    const durationMinutes = initialWorkout
+      ? effectiveEditedDurationMinutes
+      : completedWorkoutDurationMinutes(
+          previousDurationMinutes,
+          startedAt,
+          finishedAt,
+          durationOverrideMinutes,
+          pausedMsAt(pause, finishedAt),
+          completedCardioDurationSeconds(movementsToSave),
+        );
     const completed = movementsToSave
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
@@ -3595,9 +3609,15 @@ function WorkoutLogger({
       setError('Enter both a workout start time and end time, or leave both blank.');
       return;
     }
-    if (!initialWorkout && durationOverrideMinutes === null && durationMinutes > 1440) {
+    if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
+      setError('Clear the start and end times to save a 24-hour workout.');
+      return;
+    }
+    if (durationMinutes > 1440) {
       setError(
-        'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
+        completedCardioDurationSeconds(movementsToSave) > 1440 * 60
+          ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
+          : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
       );
       return;
     }
@@ -3633,7 +3653,7 @@ function WorkoutLogger({
         notes: notes.trim() || null,
         duration_minutes: durationMinutes,
         start_time: initialWorkout && startTime && endTime ? startTime : null,
-        end_time: initialWorkout && startTime && endTime ? endTime : null,
+        end_time: initialWorkout && startTime && endTime ? effectiveEndTime : null,
         movements: movementsToSave.map((movement) => ({
           exercise_id: movement.exercise.id,
           notes: movement.notes.trim() || null,
@@ -3699,8 +3719,8 @@ function WorkoutLogger({
     };
   }, [initialWorkout, movements, startedAt]);
 
-  const editedDurationHours = Math.floor(editedDurationMinutes / 60);
-  const editedDurationRemainder = editedDurationMinutes % 60;
+  const editedDurationHours = Math.floor(effectiveEditedDurationMinutes / 60);
+  const editedDurationRemainder = effectiveEditedDurationMinutes % 60;
   const overrideDurationHours =
     durationOverrideMinutes === null ? '' : Math.floor(durationOverrideMinutes / 60);
   const overrideDurationRemainder =
@@ -3726,10 +3746,13 @@ function WorkoutLogger({
   );
   const completedReps = completedSets.reduce((total, item) => total + (item.reps ?? 0), 0);
   const displayedDurationSeconds = initialWorkout
-    ? editedDurationMinutes * 60
-    : durationOverrideMinutes !== null
-      ? durationOverrideMinutes * 60
-      : previousDurationMinutes * 60 + elapsed;
+    ? effectiveEditedDurationMinutes * 60
+    : workoutDurationSeconds(
+        elapsed,
+        cardioDurationSeconds,
+        previousDurationMinutes,
+        durationOverrideMinutes,
+      );
   const openNameEditor = () => {
     setNameDraft(name);
     setNameEditorOpen(true);
@@ -3777,8 +3800,8 @@ function WorkoutLogger({
               initialWorkout
                 ? `${readOnly ? 'View only \u00b7 ' : ''}${formatDuration(displayedDurationSeconds)}`
                 : workoutPaused
-                  ? formatDuration(elapsed)
-                  : `Live ${formatDuration(elapsed)}`
+                  ? formatDuration(displayedDurationSeconds)
+                  : `Live ${formatDuration(displayedDurationSeconds)}`
             }
             paused={workoutPaused}
             onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
@@ -3920,7 +3943,9 @@ function WorkoutLogger({
                       <input
                         type="time"
                         value={startTime}
-                        onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
+                        onChange={(event) =>
+                          updateWorkoutTimes(event.target.value, effectiveEndTime)
+                        }
                         aria-label="Workout start time"
                       />
                     </label>
@@ -3928,7 +3953,7 @@ function WorkoutLogger({
                       End time
                       <input
                         type="time"
-                        value={endTime}
+                        value={effectiveEndTime}
                         onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
                         aria-label="Workout end time"
                       />
@@ -3999,7 +4024,7 @@ function WorkoutLogger({
                 {(!initialWorkout || hasCompleteTimeRange) && (
                   <small className="workout-timing-help">
                     {initialWorkout
-                      ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
+                      ? `${formatWorkoutTimeRange(startTime, effectiveEndTime)} · duration calculated automatically`
                       : resumedWorkoutId
                         ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
                         : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
