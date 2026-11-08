@@ -5,12 +5,14 @@ import { NotificationDialog } from './NotificationDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
 import {
   downloadWorkoutCard,
+  defaultWorkoutCardStats,
   workoutCardPng,
   workoutCardPreview,
   workoutCardStats,
   workoutCardSvg,
   type WorkoutCardStat,
   type WorkoutCardStyle,
+  type WorkoutCardLayout,
 } from './workoutCard';
 import './workoutShareCard.css';
 
@@ -25,19 +27,16 @@ export function WorkoutShareCard({
 }) {
   const unit = useWeightUnit();
   const [style, setStyle] = useState<WorkoutCardStyle>('midnight');
-  const [selected, setSelected] = useState<WorkoutCardStat[]>([
-    'duration',
-    'exercises',
-    'sets',
-    'reps',
-    'volume',
-    'records',
-  ]);
+  const [selected, setSelected] = useState<WorkoutCardStat[]>(() =>
+    defaultWorkoutCardStats(workout),
+  );
+  const [layout, setLayout] = useState<WorkoutCardLayout>('portrait');
   const [showDate, setShowDate] = useState(true);
   const [prepared, setPrepared] = useState<{ svg: string; file: File } | null>(null);
   const [retry, setRetry] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [action, setAction] = useState<'share' | 'copy' | null>(null);
+  const busy = action !== null;
   const [message, setMessage] = useState<string | null>(null);
   const stats = workoutCardStats(workout, unit, records);
   const svg = workoutCardSvg({
@@ -45,12 +44,15 @@ export function WorkoutShareCard({
     stats: stats.filter((stat) => selected.includes(stat.id)),
     style,
     showDate,
+    layout,
   });
   const preview = useMemo(() => workoutCardPreview(svg), [svg]);
   const file = prepared?.svg === svg ? prepared.file : null;
   const canShare = Boolean(
     file && typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] }),
   );
+  const canCopy =
+    typeof navigator.clipboard?.write === 'function' && typeof ClipboardItem === 'function';
 
   useEffect(() => {
     let cancelled = false;
@@ -78,8 +80,9 @@ export function WorkoutShareCard({
 
   async function share() {
     if (!file || busy) return;
-    setBusy(true);
+    setAction('share');
     setError(null);
+    setMessage(null);
     try {
       await navigator.share({ files: [file] });
       setMessage('Card shared');
@@ -92,7 +95,22 @@ export function WorkoutShareCard({
       ))
         setError('Could not share the card. Download the PNG instead.');
     } finally {
-      setBusy(false);
+      setAction(null);
+    }
+  }
+
+  async function copy() {
+    if (!file || busy || !canCopy) return;
+    setAction('copy');
+    setError(null);
+    setMessage(null);
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': file })]);
+      setMessage('Card copied');
+    } catch {
+      setError('Could not copy the image. Download the PNG instead.');
+    } finally {
+      setAction(null);
     }
   }
 
@@ -101,7 +119,7 @@ export function WorkoutShareCard({
       <PopupDialog title="Share workout" className="workout-share-dialog" onClose={onClose}>
         <div className="workout-share-layout">
           <div className="workout-share-preview">
-            <img src={preview} alt="Workout card preview" width="1080" height="1350" />
+            <img src={preview} alt="Workout card preview" width="1080" />
           </div>
           <div className="workout-share-controls">
             <fieldset disabled={busy} className="workout-share-styles">
@@ -116,6 +134,20 @@ export function WorkoutShareCard({
                     onChange={() => setStyle(option)}
                   />
                   <span>{option === 'midnight' ? 'Midnight' : 'Paper'}</span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset disabled={busy} className="workout-share-styles">
+              <legend>Layout</legend>
+              {(['portrait', 'compact'] as const).map((option) => (
+                <label key={option}>
+                  <input
+                    type="radio"
+                    name="workout-card-layout"
+                    checked={layout === option}
+                    onChange={() => setLayout(option)}
+                  />
+                  <span>{option === 'portrait' ? 'Portrait' : 'Compact'}</span>
                 </label>
               ))}
             </fieldset>
@@ -163,6 +195,14 @@ export function WorkoutShareCard({
         <div className="popup-dialog-actions">
           <button
             type="button"
+            disabled={!file || busy || !canCopy}
+            title={canCopy ? undefined : 'Image copying is unavailable in this browser'}
+            onClick={() => void copy()}
+          >
+            {action === 'copy' ? 'Copying…' : 'Copy image'}
+          </button>
+          <button
+            type="button"
             className={canShare ? undefined : 'popup-primary-action'}
             disabled={!file || busy}
             onClick={() => {
@@ -181,7 +221,7 @@ export function WorkoutShareCard({
               disabled={busy}
               onClick={() => void share()}
             >
-              {busy ? 'Sharing…' : 'Share image'}
+              {action === 'share' ? 'Sharing…' : 'Share image'}
             </button>
           )}
         </div>
@@ -190,5 +230,30 @@ export function WorkoutShareCard({
         )}
       </PopupDialog>
     </>
+  );
+}
+
+export function WorkoutSharePrompt({
+  workout,
+  records,
+  onClose,
+}: {
+  workout: TrackedWorkout;
+  records: number;
+  onClose: () => void;
+}) {
+  const [sharing, setSharing] = useState(false);
+  if (sharing) return <WorkoutShareCard workout={workout} records={records} onClose={onClose} />;
+  return (
+    <PopupDialog title="Share this workout?" className="workout-share-prompt" onClose={onClose}>
+      <div className="popup-dialog-actions">
+        <button type="button" onClick={onClose}>
+          Not now
+        </button>
+        <button type="button" className="popup-primary-action" onClick={() => setSharing(true)}>
+          Share card
+        </button>
+      </div>
+    </PopupDialog>
   );
 }

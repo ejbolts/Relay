@@ -1,16 +1,100 @@
-import type { TrackedWorkout } from './types';
+import type { CardioSession, TrackedWorkout } from './types';
 import { workingSets, workoutDisplayName, workoutVolumeKg } from './trainingSummary';
 import { isCompletedWorkingSet } from './workoutSets';
 import { formatWeight, type WeightUnit } from './weightUnits';
 import relayLogo from '../public/relay-logo.png?inline';
 
 export type WorkoutCardStyle = 'midnight' | 'paper';
+export type WorkoutCardLayout = 'portrait' | 'compact';
 export type WorkoutCardStat =
   'duration' | 'exercises' | 'sets' | 'reps' | 'volume' | 'distance' | 'calories' | 'records';
 export interface CardStat {
   id: WorkoutCardStat;
   label: string;
   value: string;
+}
+
+export function defaultWorkoutCardStats(workout: TrackedWorkout): WorkoutCardStat[] {
+  const cardio =
+    workout.category === 'cardio' ||
+    workout.movements.some(
+      (movement) =>
+        movement.exercise.kind === 'cardio' && movement.sets.some((set) => set.completed),
+    );
+  const strength = workout.movements.some(
+    (movement) => movement.exercise.kind !== 'cardio' && movement.sets.some(isCompletedWorkingSet),
+  );
+  if (cardio && !strength) return ['duration', 'distance', 'calories'];
+  return [
+    'duration',
+    'exercises',
+    'sets',
+    'reps',
+    'volume',
+    'records',
+    ...(cardio ? (['distance', 'calories'] as const) : []),
+  ];
+}
+
+/** A display-only adapter; standalone cardio exports never create or change a saved workout. */
+export function cardioWorkoutForSharing(session: CardioSession): TrackedWorkout {
+  return {
+    id: session.id,
+    name: session.activity_type,
+    workout_date: session.session_date,
+    category: 'cardio',
+    notes: null,
+    duration_minutes: session.duration_minutes,
+    start_time: null,
+    end_time: null,
+    is_sample: false,
+    created_at: session.created_at,
+    updated_at: session.updated_at,
+    movements: [
+      {
+        id: session.id,
+        order_index: 0,
+        notes: null,
+        machine_photos: [],
+        superset_group_id: null,
+        superset_name: null,
+        exercise: {
+          id: session.id,
+          name: session.activity_type,
+          kind: 'cardio',
+          category: 'cardio',
+          muscle_group: 'Cardio',
+          equipment: null,
+          is_custom: false,
+          is_favorite: false,
+          muscle_contributions: [],
+        },
+        sets: [
+          {
+            id: session.id,
+            order_index: 0,
+            reps: null,
+            weight_kg: null,
+            rpe: null,
+            rest_seconds: null,
+            duration_seconds: session.duration_minutes * 60,
+            distance_km: session.distance_km ?? null,
+            calories_kcal: session.calories_kcal ?? null,
+            incline_percent: null,
+            speed_kph: null,
+            bodyweight_kg: null,
+            percentile: null,
+            warmup: false,
+            set_type: 'normal',
+            failed: false,
+            target_reps: null,
+            notes: null,
+            completed: true,
+          },
+        ],
+      },
+    ],
+  };
 }
 
 export function workoutCardStats(
@@ -99,11 +183,13 @@ export function workoutCardSvg({
   stats,
   style,
   showDate,
+  layout = 'portrait',
 }: {
   workout: TrackedWorkout;
   stats: CardStat[];
   style: WorkoutCardStyle;
   showDate: boolean;
+  layout?: WorkoutCardLayout;
 }): string {
   const paper = style === 'paper';
   const color = paper
@@ -131,17 +217,31 @@ export function workoutCardSvg({
       })
     : '';
   const lines = titleLines(workoutDisplayName(workout));
-  const columns = stats.length === 1 ? 1 : 2;
+  const compact = layout === 'compact';
+  const columns = compact ? Math.max(1, Math.min(3, stats.length)) : stats.length === 1 ? 1 : 2;
   const rows = Math.max(1, Math.ceil(stats.length / columns));
-  const height = Math.min(260, (636 - (rows - 1) * 18) / rows);
-  const width = columns === 1 ? 952 : 467;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350" role="img" aria-label="Workout summary">
-    <rect width="1080" height="1350" fill="${color.bg}"/>
+  const height = compact ? 132 : Math.min(260, (636 - (rows - 1) * 18) / rows);
+  const margin = compact ? 48 : 64;
+  const gap = compact ? 16 : 18;
+  const width = (1080 - margin * 2 - gap * (columns - 1)) / columns;
+  const titleY = compact ? 214 : 278;
+  const titleStep = compact ? 64 : 82;
+  const titleSize = compact ? 56 : 76;
+  const dateY = compact ? titleY + (lines.length - 1) * titleStep + 46 : 408;
+  const dividerY = compact
+    ? (showDate ? dateY : titleY + (lines.length - 1) * titleStep) + 38
+    : 450;
+  const statsY = compact ? dividerY + 32 : 490;
+  const cardHeight = compact
+    ? statsY + (stats.length ? rows * (height + gap) - gap : 0) + 48
+    : 1350;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="${cardHeight}" viewBox="0 0 1080 ${cardHeight}" role="img" aria-label="Workout summary">
+    <rect width="1080" height="${cardHeight}" fill="${color.bg}"/>
     <g fill="none" stroke="${color.line}" stroke-width="2"><circle cx="1000" cy="115" r="212"/><circle cx="1000" cy="115" r="160"/><circle cx="1000" cy="115" r="108"/></g>
     <g font-family="Arial, Helvetica, sans-serif">
-      <image x="64" y="52" width="72" height="72" href="${relayLogo}"/>
-      <text x="156" y="100" fill="${color.ink}" font-size="34" font-weight="700" letter-spacing="5">RELAY</text>
-      <text x="64" y="180" fill="${color.accent}" font-size="23" font-weight="700" letter-spacing="4">WORKOUT COMPLETE</text>
+      <image x="${margin}" y="${compact ? 32 : 52}" width="72" height="72" href="${relayLogo}"/>
+      <text x="${margin + 92}" y="${compact ? 80 : 100}" fill="${color.ink}" font-size="34" font-weight="700" letter-spacing="5">RELAY</text>
+      <text x="${margin}" y="${compact ? 146 : 180}" fill="${color.accent}" font-size="23" font-weight="700" letter-spacing="4">WORKOUT COMPLETE</text>
       ${lines
         .map((line, index) => {
           // Bound wide capitals and Unicode too, rather than relying on character count alone.
@@ -150,25 +250,28 @@ export function workoutCardSvg({
               (sum, char) =>
                 sum + (char.codePointAt(0)! > 255 ? 1.1 : 'MW@%'.includes(char) ? 1 : 0.7),
               0,
-            ) * 76;
-          return `<text x="60" y="${278 + index * 82}" fill="${color.ink}" font-size="76" font-weight="700"${width > 940 ? ' textLength="940" lengthAdjust="spacingAndGlyphs"' : ''}>${xml(line)}</text>`;
+            ) * titleSize;
+          return `<text x="${margin - 4}" y="${titleY + index * titleStep}" fill="${color.ink}" font-size="${titleSize}" font-weight="700"${width > 940 ? ' textLength="940" lengthAdjust="spacingAndGlyphs"' : ''}>${xml(line)}</text>`;
         })
         .join('')}
-      ${showDate ? `<text x="64" y="408" fill="${color.muted}" font-size="29">${xml(date)}</text>` : ''}
-      <path d="M64 450H1016" stroke="${color.line}" stroke-width="2"/>
+      ${showDate ? `<text x="${margin}" y="${dateY}" fill="${color.muted}" font-size="29">${xml(date)}</text>` : ''}
+      <path d="M${margin} ${dividerY}H${1080 - margin}" stroke="${color.line}" stroke-width="2"/>
       ${stats
         .map((stat, index) => {
-          const x = 64 + (index % columns) * 485;
-          const y = 490 + Math.floor(index / columns) * (height + 18);
-          const size = stat.value.length > 11 ? 43 : 56;
+          const x = margin + (index % columns) * (width + gap);
+          const y = statsY + Math.floor(index / columns) * (height + gap);
+          const size = compact
+            ? stat.value.length > 9
+              ? 34
+              : 46
+            : stat.value.length > 11
+              ? 43
+              : 56;
           return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="22" fill="${color.panel}"/>
           <text x="${x + 30}" y="${y + height / 2 - 4}" fill="${index === 0 ? color.accent : color.ink}" font-size="${size}" font-weight="700">${xml(stat.value)}</text>
-          <text x="${x + 30}" y="${y + height / 2 + 40}" fill="${color.muted}" font-size="25">${xml(stat.label)}</text>`;
+          <text x="${x + 30}" y="${y + height / 2 + (compact ? 32 : 40)}" fill="${color.muted}" font-size="${compact ? 22 : 25}">${xml(stat.label)}</text>`;
         })
         .join('')}
-      <path d="M64 1190H1016" stroke="${color.line}" stroke-width="2"/>
-      <text x="64" y="1253" fill="${color.muted}" font-size="24" letter-spacing="2">BUILT ONE SESSION AT A TIME.</text>
-      <path d="m952 1230 18 18 32-36" fill="none" stroke="${color.accent}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
   </svg>`;
 }
@@ -185,8 +288,8 @@ export async function workoutCardPng(svg: string): Promise<Blob> {
     image.src = workoutCardPreview(svg);
   });
   const canvas = document.createElement('canvas');
-  canvas.width = 1080;
-  canvas.height = 1350;
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Image export is unavailable in this browser.');
   context.drawImage(image, 0, 0);

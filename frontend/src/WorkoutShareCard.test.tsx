@@ -2,15 +2,17 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WorkoutShareCard } from './WorkoutShareCard';
+import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
 import {
   downloadWorkoutCard,
+  defaultWorkoutCardStats,
+  cardioWorkoutForSharing,
   workoutCardPng,
   workoutCardStats,
   workoutCardSvg,
 } from './workoutCard';
 import { createWorkoutSet } from './workoutSets';
-import type { Exercise, TrackedSet, TrackedWorkout } from './types';
+import type { CardioSession, Exercise, TrackedSet, TrackedWorkout } from './types';
 
 vi.mock('./workoutCard', async (original) => ({
   ...(await original<typeof import('./workoutCard')>()),
@@ -144,6 +146,65 @@ describe('card data and drawing', () => {
       }),
     ).toContain('textLength="940"');
   });
+
+  it('defaults cardio and mixed workouts to distance/calories and keeps unfinished cardio out of defaults', () => {
+    const cardio = { ...workout.movements[0], exercise: { ...exercise, kind: 'cardio' as const } };
+    expect(defaultWorkoutCardStats({ ...workout, movements: [cardio] })).toEqual([
+      'duration',
+      'distance',
+      'calories',
+    ]);
+    expect(
+      defaultWorkoutCardStats({ ...workout, movements: [...workout.movements, cardio] }),
+    ).toContain('distance');
+    expect(
+      defaultWorkoutCardStats({
+        ...workout,
+        movements: [{ ...cardio, sets: [set({ completed: false })] }],
+      }),
+    ).not.toContain('calories');
+    expect(defaultWorkoutCardStats(workout)).not.toContain('distance');
+    expect(defaultWorkoutCardStats({ ...workout, category: 'cardio', movements: [] })).toEqual([
+      'duration',
+      'distance',
+      'calories',
+    ]);
+  });
+
+  it('creates a compact self-contained card from standalone cardio without notes or a slogan', () => {
+    const cardio = cardioWorkoutForSharing({
+      id: 'run',
+      activity_type: 'Running',
+      session_date: '2026-11-08',
+      duration_minutes: 30,
+      distance_km: 5,
+      calories_kcal: 300,
+      notes: 'PRIVATE',
+      created_at: '',
+      updated_at: '',
+    } as CardioSession);
+    const stats = workoutCardStats(cardio, 'kg', 0).filter((stat) =>
+      defaultWorkoutCardStats(cardio).includes(stat.id),
+    );
+    expect(stats.map((stat) => stat.value)).toEqual(['30 min', '5 km', '300 kcal']);
+    const svg = workoutCardSvg({
+      workout: cardio,
+      stats,
+      style: 'midnight',
+      showDate: true,
+      layout: 'compact',
+    });
+    const drawing = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    expect(Number(drawing.documentElement.getAttribute('height'))).toBeLessThan(800);
+    expect(svg).not.toContain('BUILT ONE SESSION');
+    expect(svg).not.toContain('PRIVATE');
+    expect(drawing.querySelector('image')?.getAttribute('href')).toMatch(
+      /^data:image\/png;base64,/,
+    );
+    expect(workoutCardSvg({ workout, stats: [], style: 'paper', showDate: false })).not.toContain(
+      'BUILT ONE SESSION',
+    );
+  });
 });
 
 let root: Root;
@@ -181,6 +242,7 @@ beforeEach(() => {
   vi.mocked(workoutCardPng).mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
   Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
   Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined });
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -275,4 +337,46 @@ it('shares a prepared PNG synchronously from the click, treats cancellation quie
   expect(button('Download PNG').disabled).toBe(false);
   await act(async () => button('Share image').click());
   expect(document.querySelector('dialog [role="status"]')?.textContent).toContain('Card shared');
+});
+
+it('copies the prepared compact PNG and preserves a download fallback if clipboard access is denied', async () => {
+  const write = vi
+    .fn()
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'));
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write } });
+  vi.stubGlobal(
+    'ClipboardItem',
+    class {
+      constructor(public data: Record<string, Blob>) {}
+    },
+  );
+  await mount();
+  await act(async () => checkbox('Compact').click());
+  expect(previewSvg()).not.toContain('height="1350"');
+  expect(workoutCardPng).toHaveBeenLastCalledWith(previewSvg());
+  await act(async () => button('Copy image').click());
+  expect(write.mock.calls[0][0][0].data['image/png'].type).toBe('image/png');
+  expect(document.querySelector('dialog [role="status"]')?.textContent).toContain('Card copied');
+  await act(async () => button('Copy image').click());
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'Download the PNG instead',
+  );
+  expect(button('Download PNG').disabled).toBe(false);
+});
+
+it('keeps unsupported clipboard disabled and lets a saved-workout prompt be declined or open the card', async () => {
+  await mount();
+  expect(button('Copy image').disabled).toBe(true);
+  await act(async () =>
+    root.render(
+      <WorkoutSharePrompt key="prompt" workout={workout} records={2} onClose={onClose} />,
+    ),
+  );
+  expect(document.querySelector('dialog h2')?.textContent).toBe('Share this workout?');
+  await act(async () => button('Not now').click());
+  expect(onClose).toHaveBeenCalledOnce();
+  await act(async () => button('Share card').click());
+  expect(document.querySelector('dialog h2')?.textContent).toBe('Share workout');
+  expect(document.querySelectorAll('dialog')).toHaveLength(1);
 });

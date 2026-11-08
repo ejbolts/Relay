@@ -1704,6 +1704,11 @@ describe('finishing workouts in the background', () => {
     ]);
     await confirmFinish();
     expect(document.querySelector('.workout-completion-toast')?.textContent).toContain('1 new PR');
+    await act(async () =>
+      [...document.querySelectorAll<HTMLButtonElement>('.workout-share-prompt button')]
+        .find((button) => button.textContent === 'Not now')!
+        .click(),
+    );
     expect(document.querySelector('[aria-modal="true"], #root[inert]')).toBeNull();
     expect(document.body.style.overflow).not.toBe('hidden');
     await navigateTo('Training');
@@ -2759,6 +2764,7 @@ describe('live muscle totals while logging', () => {
     );
     await confirmFinish();
     expect(chestTotals()).toEqual(['1']);
+    expect(document.querySelector('.workout-share-prompt')).toBeNull();
     let refresh!: (data: DashboardData) => void;
     vi.mocked(api.dashboard).mockReturnValueOnce(
       new Promise((resolve) => {
@@ -2772,6 +2778,14 @@ describe('live muscle totals while logging', () => {
     await act(async () => finish(saved));
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(chestTotals()).toEqual(['1']);
+    expect(document.querySelector('.workout-share-prompt h2')?.textContent).toBe(
+      'Share this workout?',
+    );
+    await act(async () =>
+      [...document.querySelectorAll<HTMLButtonElement>('.workout-share-prompt button')]
+        .find((button) => button.textContent === 'Not now')!
+        .click(),
+    );
     await act(async () =>
       refresh({
         recommendation: null,
@@ -2783,6 +2797,7 @@ describe('live muscle totals while logging', () => {
       } as unknown as DashboardData),
     );
     expect(chestTotals()).toEqual(['1']);
+    expect(document.querySelector('.workout-share-prompt')).toBeNull();
   });
 
   it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
@@ -2946,6 +2961,7 @@ describe('navigation while saving an old workout', () => {
     await navigateTo('Body');
     await act(async () => finish(remoteWorkout('Saved changes')));
     expect(window.location.hash).toBe('#body');
+    expect(document.querySelector('.workout-share-prompt')).toBeNull();
   });
   it('keeps the editor mounted for a failed edit while another screen stays usable', async () => {
     let fail!: (error: Error) => void;
