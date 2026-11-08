@@ -146,6 +146,37 @@ def test_multiple_goals_exclude_wrong_zones_future_and_previous_week_and_react_t
     assert client.get("/api/dashboard").json()["cardio_goals"][0]["completed_minutes"] == 30
 
 
+def test_dashboard_cardio_weeks_split_minutes_by_week_and_goal_zone(client):
+    save_preferences(client)
+    log_session(client, average_heart_rate_bpm=120)
+    weeks = client.get("/api/dashboard").json()["cardio_weeks"]
+    this_week = date.fromisoformat(weeks[0]["week_start"])
+    log_session(
+        client,
+        average_heart_rate_bpm=170,
+        duration_minutes=20,
+        session_date=(this_week - timedelta(days=3)).isoformat(),
+    )
+    log_session(
+        client,
+        average_heart_rate_bpm=120,
+        duration_minutes=10,
+        session_date=(this_week - timedelta(days=10)).isoformat(),
+    )
+    log_session(client, average_heart_rate_bpm=60, duration_minutes=5)
+    weeks = client.get("/api/dashboard").json()["cardio_weeks"]
+    assert len(weeks) == 9
+    assert [date.fromisoformat(week["week_start"]) for week in weeks] == [
+        this_week - timedelta(weeks=offset) for offset in range(9)
+    ]
+    assert [week["total_minutes"] for week in weeks[:3]] == [35, 20, 10]
+    by_zone = [
+        {goal["zone"]: goal["completed_minutes"] for goal in week["goals"]} for week in weeks
+    ]
+    assert by_zone[:3] == [{2: 30, 4: 0}, {2: 0, 4: 20}, {2: 10, 4: 0}]
+    assert weeks[0]["goals"] == client.get("/api/dashboard").json()["cardio_goals"]
+
+
 @pytest.mark.parametrize(
     "invalid", ["overlap", "reversed", "missing", "duplicate", "zero", "fraction", "outside"]
 )

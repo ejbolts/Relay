@@ -418,8 +418,17 @@ export interface TrainingTime {
   total_minutes: number;
 }
 
+/** Cardio for one week: all minutes, and each goal zone's progress. */
+export interface CardioWeek {
+  week_start: string;
+  total_minutes: number;
+  goals: CardioGoalWeek[];
+}
+
 export interface DashboardData {
   cardio_goals?: CardioGoalWeek[];
+  /** The current week then earlier weeks, newest first; absent from dashboards cached by earlier releases. */
+  cardio_weeks?: CardioWeek[];
   workouts_this_week: number;
   sets_this_week: number;
   volume_this_week_kg: number;

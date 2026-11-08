@@ -44,6 +44,13 @@ export const HOME_SECTIONS = [
     size: 'stat',
   },
   {
+    id: 'weekly-review',
+    title: 'Weekly review',
+    description: 'What changed against last week',
+    icon: 'trend',
+    size: 'full',
+  },
+  {
     id: 'consistency',
     title: 'Consistency',
     description: 'Streak and training calendar',

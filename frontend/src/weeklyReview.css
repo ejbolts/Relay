@@ -1,0 +1,170 @@
+/* Weekly review: one card that answers "what changed this week?" against the week before. */
+.weekly-review-popup {
+  width: min(28rem, calc(100% - 2rem));
+}
+.weekly-review-popup-body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+.weekly-review-popup .weekly-review-stats {
+  gap: 0.375rem;
+}
+.weekly-review-popup .weekly-review-stats > div {
+  padding: 0.5rem 0.625rem;
+}
+
+.weekly-review-range {
+  margin: 0 0 0.75rem;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.weekly-review-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+.weekly-review-stats > div {
+  min-width: 0;
+  border-radius: 14px;
+  padding: 0.625rem 0.75rem;
+  background: var(--p-surface-2);
+}
+.weekly-review-stats dt {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.weekly-review-stats dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  margin: 0.125rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.weekly-delta {
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.weekly-delta.is-good {
+  color: var(--p-good);
+}
+.weekly-delta.is-bad {
+  color: var(--p-danger);
+}
+.weekly-delta.is-neutral {
+  color: var(--p-muted);
+}
+
+.weekly-review-block {
+  margin-top: 1rem;
+  border-top: 1px solid var(--p-line);
+  padding-top: 0.75rem;
+}
+.weekly-review-block h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.weekly-review-block h3 > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+.weekly-review-block .text-link {
+  margin-top: 0.5rem;
+}
+
+.weekly-review-records,
+.weekly-review-movers,
+.weekly-review-zones {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weekly-review-records button {
+  width: 100%;
+  min-height: 2.75rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.375rem 0.5rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.weekly-review-records button:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+.weekly-review-records .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--p-gold);
+}
+.weekly-review-records span {
+  min-width: 0;
+  display: grid;
+}
+.weekly-review-records b,
+.weekly-review-records small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.weekly-review-records small {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+}
+
+.weekly-review-movers li,
+.weekly-review-zones li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+.weekly-review-movers b,
+.weekly-review-zones b {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-weight: 600;
+}
+
+.weekly-review-zones li {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+  align-items: center;
+}
+.weekly-review-zone-bar {
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+.weekly-review-zone-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-accent);
+}

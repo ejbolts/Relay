@@ -107,6 +107,7 @@ from .tracker_schemas import (
     CardioScreenshotRead,
     CardioSessionCreate,
     CardioSessionRead,
+    CardioWeekRead,
     CsvImportPreviewRead,
     CsvImportRead,
     CsvImportSessionRead,
@@ -3023,10 +3024,24 @@ def dashboard(
         if cardio_week_start <= session.session_date <= today
     )
     muscle_totals = muscle_volume(workouts, week_start, today)
+    personal_cardio = cardio_preferences(db, user.id)
+    cardio_weeks = []
+    for weeks_ago in range(WEEKLY_SETS_HISTORY_WEEKS + 1):
+        start = cardio_week_start - timedelta(weeks=weeks_ago)
+        cardio_weeks.append(
+            CardioWeekRead(
+                week_start=start,
+                total_minutes=sum(
+                    session.duration_minutes
+                    for session in cardio_sessions
+                    if start <= session.session_date <= min(start + timedelta(days=6), today)
+                ),
+                goals=cardio_goal_weeks(cardio_sessions, start, personal_cardio, today),
+            )
+        )
     return DashboardRead(
-        cardio_goals=cardio_goal_weeks(
-            cardio_sessions, cardio_week_start, cardio_preferences(db, user.id), today
-        ),
+        cardio_goals=cardio_goal_weeks(cardio_sessions, cardio_week_start, personal_cardio, today),
+        cardio_weeks=cardio_weeks,
         workouts_this_week=len(this_week),
         sets_this_week=sum(len(completed_working_sets(workout)) for workout in this_week),
         volume_this_week_kg=round(volume_this_week, 1),
