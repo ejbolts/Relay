@@ -71,11 +71,6 @@
 .weekly-review-block .text-link {
   margin-top: 0.5rem;
 }
-.weekly-review-line {
-  margin: 0;
-  color: var(--p-ink-2);
-  font-size: 0.8125rem;
-}
 
 .weekly-review-records,
 .weekly-review-movers,

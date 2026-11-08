@@ -238,24 +238,19 @@ export function WeeklyReviewCard({
           )}
         </h3>
         {muscles && muscles.totalSets > 0 ? (
-          <>
-            <p className="weekly-review-line">
-              {trim(muscles.totalSets)} sets across muscles; goal is {muscles.goal} each.
-            </p>
-            {muscles.movers.length > 0 && (
-              <ul className="weekly-review-movers" aria-label="Biggest changes on the week before">
-                {muscles.movers.map((item) => (
-                  <li key={item.muscle}>
-                    <span>{item.muscle}</span>
-                    <b className="num">
-                      {trim(item.sets)}
-                      <Delta change={item.change} />
-                    </b>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
+          muscles.movers.length > 0 && (
+            <ul className="weekly-review-movers" aria-label="Biggest changes on the week before">
+              {muscles.movers.map((item) => (
+                <li key={item.muscle}>
+                  <span>{item.muscle}</span>
+                  <b className="num">
+                    {trim(item.sets)}
+                    <Delta change={item.change} />
+                  </b>
+                </li>
+              ))}
+            </ul>
+          )
         ) : (
           <p className="pulse-empty-line">No working sets logged.</p>
         )}
@@ -325,13 +320,7 @@ export function WeeklyReviewCard({
             </span>
           )}
         </h3>
-        {body.averageKg === null ? (
-          <p className="pulse-empty-line">No check-ins logged.</p>
-        ) : (
-          <p className="weekly-review-line">
-            Average of {body.checkIns} check-in{body.checkIns === 1 ? '' : 's'}.
-          </p>
-        )}
+        {body.averageKg === null && <p className="pulse-empty-line">No check-ins logged.</p>}
         <button type="button" className="text-link" onClick={onOpenBody}>
           Body
         </button>
