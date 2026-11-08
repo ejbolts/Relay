@@ -255,6 +255,7 @@ import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayS
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
+import { WorkoutShareCard } from './WorkoutShareCard';
 import {
   dayMonth,
   formatVolume,
@@ -10692,6 +10693,7 @@ function HistoryWorkoutCard({
   reactionAction?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
+  const [shareOpen, setShareOpen] = useState(false);
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
@@ -10862,6 +10864,9 @@ function HistoryWorkoutCard({
           )}
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
+              <button type="button" onClick={() => setShareOpen(true)}>
+                Share card
+              </button>
               {!activeWorkout && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
                   Resume from now
@@ -10877,6 +10882,13 @@ function HistoryWorkoutCard({
                 onConfirm={onDelete}
               />
             </div>
+          )}
+          {shareOpen && (
+            <WorkoutShareCard
+              workout={workout}
+              records={records}
+              onClose={() => setShareOpen(false)}
+            />
           )}
         </div>
       )}

@@ -54,3 +54,15 @@ it('offers dismissal and escapes message content', async () => {
   );
   expect(close).toHaveBeenCalledOnce();
 });
+
+it('can keep a toast inside the modal top layer without a second dialog', async () => {
+  await act(async () =>
+    root.render(
+      <dialog open>
+        <NotificationDialog message="Card downloaded" onClose={vi.fn()} portal={false} />
+      </dialog>,
+    ),
+  );
+  expect(host.querySelector('dialog [role="status"]')?.textContent).toContain('Card downloaded');
+  expect(document.querySelectorAll('dialog')).toHaveLength(1);
+});

@@ -1,7 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export function NotificationDialog({ message, onClose }: { message: string; onClose: () => void }) {
+export function NotificationDialog({
+  message,
+  onClose,
+  portal = true,
+}: {
+  message: string;
+  onClose: () => void;
+  /** Render inside an open modal's top layer. */ portal?: boolean;
+}) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
@@ -9,7 +17,7 @@ export function NotificationDialog({ message, onClose }: { message: string; onCl
     return () => window.clearTimeout(timer);
   }, [message]);
 
-  return createPortal(
+  const toast = (
     <aside className="app-notification-toast" role="status" aria-live="polite" aria-atomic="true">
       <p>{message}</p>
       <button
@@ -20,7 +28,7 @@ export function NotificationDialog({ message, onClose }: { message: string; onCl
       >
         ×
       </button>
-    </aside>,
-    document.body,
+    </aside>
   );
+  return portal ? createPortal(toast, document.body) : toast;
 }
