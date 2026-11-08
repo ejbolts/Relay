@@ -10463,6 +10463,32 @@ body.chart-fullscreen-open {
   white-space: nowrap;
 }
 
+.notification-toast-countdown {
+  position: absolute;
+  inset: auto 12px 3px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--p-line);
+}
+
+.notification-toast-countdown > span {
+  display: block;
+  height: 100%;
+  background: var(--p-accent);
+  transform-origin: left;
+  animation: notification-toast-countdown linear forwards;
+}
+
+@keyframes notification-toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 .workout-completion-toast.pr-summary {
   position: fixed;
   z-index: 125;

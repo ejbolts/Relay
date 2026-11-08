@@ -247,6 +247,8 @@ export function WorkoutSharePrompt({
   return (
     <NotificationDialog
       message="Workout saved"
+      durationMs={3000}
+      countdown
       onClose={onClose}
       action={{ label: 'Share card', onClick: () => setSharing(true) }}
     />

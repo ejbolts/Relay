@@ -94,3 +94,27 @@ it('offers an optional action without taking focus and retains the eight-second 
   expect(close).toHaveBeenCalledOnce();
   input.remove();
 });
+
+it('matches the countdown bar to a three-second timeout without restarting on rerender', async () => {
+  const close = vi.fn();
+  const render = () =>
+    root.render(
+      <NotificationDialog
+        message="Workout saved"
+        onClose={() => close()}
+        durationMs={3000}
+        countdown
+      />,
+    );
+  await act(async () => render());
+  const bar = document.querySelector<HTMLElement>('.notification-toast-countdown > span')!;
+  expect(bar.style.animationDuration).toBe('3000ms');
+  expect(bar.parentElement?.getAttribute('aria-hidden')).toBe('true');
+  await act(async () => vi.advanceTimersByTime(1500));
+  await act(async () => render());
+  expect(document.querySelector('.notification-toast-countdown > span')).toBe(bar);
+  await act(async () => vi.advanceTimersByTime(1499));
+  expect(close).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTime(1));
+  expect(close).toHaveBeenCalledOnce();
+});
