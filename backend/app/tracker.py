@@ -112,7 +112,6 @@ from .tracker_schemas import (
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
-    FfmiProfile,
     HeatmapDay,
     ImportBatchRead,
     ImportUndoRead,
@@ -1456,28 +1455,6 @@ def delete_body_sizes(measurement_date: date, db: DbSession, user: CurrentUser) 
     bump_workout_cache_revision(db, user.id)
     db.commit()
     return Response(status_code=204)
-
-
-FFMI_PROFILE_KEY = "ffmi_profile"
-
-
-def ffmi_profile(db: Session, user_id: str) -> FfmiProfile:
-    try:
-        return FfmiProfile.model_validate_json(get_setting(db, user_id, FFMI_PROFILE_KEY, "{}"))
-    except ValueError:
-        return FfmiProfile()
-
-
-@router.get("/ffmi-profile", response_model=FfmiProfile)
-def get_ffmi_profile(db: DbSession, user: CurrentUser) -> FfmiProfile:
-    return ffmi_profile(db, user.id)
-
-
-@router.put("/ffmi-profile", response_model=FfmiProfile)
-def update_ffmi_profile(payload: FfmiProfile, db: DbSession, user: CurrentUser) -> FfmiProfile:
-    set_setting(db, user.id, FFMI_PROFILE_KEY, payload.model_dump_json())
-    db.commit()
-    return ffmi_profile(db, user.id)
 
 
 @router.get("/training-split", response_model=TrainingSplitRead | None)

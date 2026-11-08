@@ -11,7 +11,6 @@ import type {
   BodyMeasurementCsvImportResult,
   BodyWeightGoal,
   BodyWeightGoalInput,
-  FfmiProfile,
   CardioOverview,
   CardioPreferences,
   CardioScreenshotScan,
@@ -755,13 +754,6 @@ export const api = {
     await refreshBodyMeasurements(bodyMeasurementTransport).catch(() => undefined);
     return result;
   },
-  getFfmiProfile: () => accountRead<FfmiProfile>('/api/ffmi-profile'),
-  updateFfmiProfile: (payload: FfmiProfile) =>
-    request<FfmiProfile>('/api/ffmi-profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
   listBodyWeightGoals: () => accountRead<BodyWeightGoal[]>('/api/body-weight-goals'),
   createBodyWeightGoal: (payload: BodyWeightGoalInput) =>
     request<BodyWeightGoal>('/api/body-weight-goals', {
