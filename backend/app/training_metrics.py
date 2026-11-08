@@ -15,6 +15,7 @@ Rules:
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import date, timedelta
 from math import floor
 from uuid import uuid4
@@ -427,53 +428,54 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
             )
         )
     )
+    for workout, movement, item, record_type in personal_record_events(workouts):
+        display_weight = normalized_weight(item.weight_kg, unit)
+        db.add(
+            _pr(
+                workout,
+                movement,
+                item,
+                record_type,
+                display_weight if record_type == PersonalRecordType.WEIGHT else float(item.reps),
+                unit if record_type == PersonalRecordType.WEIGHT else "reps",
+                display_weight,
+            )
+        )
+    db.flush()
+
+
+def personal_record_events(
+    workouts: list[TrainingWorkout],
+) -> Iterator[tuple[TrainingWorkout, WorkoutMovement, WorkoutSet, PersonalRecordType]]:
+    """Chronological records, with first attempts establishing each scope's baseline."""
     state: dict[str, dict[str, object]] = defaultdict(lambda: {"weight": -1.0, "reps": {}})
-    for workout in workouts:
-        for movement in sorted(workout.movements, key=lambda item: item.order_index):
+    # SQLite returns naive UTC timestamps; newly flushed rows can still carry UTC tzinfo.
+    for workout in sorted(
+        workouts, key=lambda row: (row.workout_date, row.created_at.replace(tzinfo=None))
+    ):
+        for movement in sorted(workout.movements, key=lambda row: row.order_index):
             if movement.exercise.kind != ExerciseKind.STRENGTH:
                 continue
             current = state[movement.exercise_id]
-            for item in sorted(movement.sets, key=lambda set_item: set_item.order_index):
+            for item in sorted(movement.sets, key=lambda row: row.order_index):
                 if (
                     not is_pr_eligible(item)
                     or item.weight_kg is None
+                    or item.weight_kg < 0
                     or item.reps is None
                     or item.reps <= 0
                 ):
                     continue
                 weight = floor(item.weight_kg * 10_000 + 0.5) / 10_000
-                display_weight = normalized_weight(item.weight_kg, unit)
                 if float(current["weight"]) >= 0 and weight > float(current["weight"]):
-                    db.add(
-                        _pr(
-                            workout,
-                            movement,
-                            item,
-                            PersonalRecordType.WEIGHT,
-                            display_weight,
-                            unit,
-                            display_weight,
-                        )
-                    )
+                    yield workout, movement, item, PersonalRecordType.WEIGHT
                 current["weight"] = max(float(current["weight"]), weight)
-                if item.reps is not None:
-                    rep_bests = current["reps"]
-                    assert isinstance(rep_bests, dict)
-                    previous_reps = rep_bests.get(weight)
-                    if previous_reps is not None and item.reps > int(previous_reps):
-                        db.add(
-                            _pr(
-                                workout,
-                                movement,
-                                item,
-                                PersonalRecordType.REPS_AT_WEIGHT,
-                                float(item.reps),
-                                "reps",
-                                display_weight,
-                            )
-                        )
-                    rep_bests[weight] = max(int(previous_reps or 0), item.reps)
-    db.flush()
+                rep_bests = current["reps"]
+                assert isinstance(rep_bests, dict)
+                previous_reps = rep_bests.get(weight)
+                if previous_reps is not None and item.reps > int(previous_reps):
+                    yield workout, movement, item, PersonalRecordType.REPS_AT_WEIGHT
+                rep_bests[weight] = max(int(previous_reps or 0), item.reps)
 
 
 def _pr(

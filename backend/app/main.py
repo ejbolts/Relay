@@ -73,6 +73,7 @@ from .storage import (
 )
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
+from .training_blocks import router as training_blocks_router
 from .training_metrics import rebuild_personal_records
 from .weight_mapping import router as weight_mapping_router
 from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
@@ -675,6 +676,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(protected)
     app.include_router(video)
     app.include_router(tracker_router)
+    app.include_router(training_blocks_router)
     app.include_router(routines_router)
     app.include_router(home_layout_router)
     app.include_router(machine_settings_router)
