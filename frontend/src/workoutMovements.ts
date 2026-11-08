@@ -18,6 +18,8 @@ export type WorkoutDraftMovement = {
   machineSettings?: MachineSetting[];
   supersetKey: string | null;
   isComplete: boolean;
+  /** The exercise this movement replaced mid-workout, shown on its card. */
+  swappedFrom?: string;
   sets: WorkoutDraftSet[];
 };
 
@@ -40,6 +42,7 @@ export function restoreWorkoutDraftMovements(
     machineSettings: movement.machineSettings,
     supersetKey: movement.supersetKey,
     isComplete: Boolean(movement.isComplete) && movement.sets.every((set) => set.completed),
+    ...(typeof movement.swappedFrom === 'string' && { swappedFrom: movement.swappedFrom }),
     sets: movement.sets,
   }));
 }

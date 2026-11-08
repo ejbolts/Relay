@@ -191,6 +191,8 @@ import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
+import { ExerciseSwapSheet } from './ExerciseSwapSheet';
+import { swapMovementExercise } from './exerciseSwap';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
@@ -350,7 +352,6 @@ import {
 import { finalizeWorkoutIdentity, workoutNameForCategory } from './workoutCategory';
 import {
   machineSelection,
-  replaceMovementExercise,
   restoreWorkoutDraftMovements,
   type WorkoutDraftMovement as DraftMovement,
   type WorkoutDraftSet as DraftSet,
@@ -2803,6 +2804,14 @@ function WorkoutLogger({
   const movementStackRef = useRef<HTMLDivElement>(null);
   useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));
   const [switchingMovementKey, setSwitchingMovementKey] = useState<string | null>(null);
+  const [swapSheetMovementKey, setSwapSheetMovementKey] = useState<string | null>(null);
+  const [swapUndo, setSwapUndo] = useState<{
+    movements: DraftMovement[];
+    exerciseName: string;
+  } | null>(null);
+  const swapSheetMovement = swapSheetMovementKey
+    ? (movements.find((movement) => movement.key === swapSheetMovementKey) ?? null)
+    : null;
   const [supersetPickerKey, setSupersetPickerKey] = useState<string | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [finishConfirmationOpen, setFinishConfirmationOpen] = useState(false);
@@ -2920,6 +2929,7 @@ function WorkoutLogger({
           machineSettings: movement.machineSettings,
           supersetKey: movement.supersetKey,
           isComplete: movement.isComplete,
+          ...(movement.swappedFrom && { swappedFrom: movement.swappedFrom }),
           sets: movement.sets,
         })),
       });
@@ -3045,6 +3055,12 @@ function WorkoutLogger({
     const timer = window.setTimeout(() => setUndoDeletion(null), UNDO_TOAST_MS);
     return () => window.clearTimeout(timer);
   }, [undoDeletion]);
+
+  useEffect(() => {
+    if (!swapUndo) return;
+    const timer = window.setTimeout(() => setSwapUndo(null), UNDO_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [swapUndo]);
 
   // Older history only precedes workouts inside the window it was condensed for. An earlier
   // date (editing an older loaded workout) compares with the loaded workouts alone.
@@ -3198,22 +3214,35 @@ function WorkoutLogger({
     setSwitchingMovementKey(null);
   }
 
+  /** Logged sets stay with the original exercise; planned sets move to the replacement. */
+  function swapExercise(
+    movementKey: string,
+    replacement: Exercise,
+    machineChoices: ExerciseMachineChoices = {},
+  ) {
+    const next = swapMovementExercise(
+      movements,
+      movementKey,
+      replacement,
+      suggestedSetsForExercise(replacement),
+      machineSelection(replacement.id, machineChoices),
+    );
+    if (next === movements) return;
+    setSwapUndo({ movements, exerciseName: replacement.name });
+    setMovements(next);
+  }
+
   function switchExercise(selected: Exercise[], machineChoices: ExerciseMachineChoices = {}) {
     const replacement = selected[0];
     if (!switchingMovementKey || !replacement) return;
-    const suggestedSets = suggestedSetsForExercise(replacement);
-    setMovements((current) =>
-      replaceMovementExercise(current, switchingMovementKey, replacement).map((movement) =>
-        movement.key === switchingMovementKey
-          ? {
-              ...movement,
-              ...machineSelection(replacement.id, machineChoices),
-              sets: suggestedSets,
-            }
-          : movement,
-      ),
-    );
+    swapExercise(switchingMovementKey, replacement, machineChoices);
     closeExercisePicker();
+  }
+
+  function undoSwap() {
+    if (!swapUndo) return;
+    setMovements(swapUndo.movements);
+    setSwapUndo(null);
   }
 
   function moveMovement(index: number, direction: -1 | 1) {
@@ -4080,10 +4109,7 @@ function WorkoutLogger({
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
               onToggleSet={(item) => toggleSet(movement, item)}
               onAddSet={() => addSet(movement)}
-              onSwitch={() => {
-                setSwitchingMovementKey(movement.key);
-                setPickerOpen(true);
-              }}
+              onSwitch={() => setSwapSheetMovementKey(movement.key)}
               onRemove={() => removeMovement(movement.key)}
               onMoveUp={() => moveMovement(movementIndex, -1)}
               onMoveDown={() => moveMovement(movementIndex, 1)}
@@ -4123,10 +4149,30 @@ function WorkoutLogger({
         </div>
       )}
 
-      {undoDeletion && (
+      {(undoDeletion || swapUndo) && (
         // Popups that stay up while you train sit at the bottom, above the timer dock.
         <div className={`logger-bottom-toasts ${dockSpacing}`}>
-          {
+          {swapUndo && (
+            <div
+              className="undo-toast"
+              role="status"
+              style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
+            >
+              <span>Swapped to {swapUndo.exerciseName}</span>
+              <button className="undo-toast-action" type="button" onClick={undoSwap}>
+                Undo
+              </button>
+              <button
+                className="undo-toast-close"
+                type="button"
+                onClick={() => setSwapUndo(null)}
+                aria-label="Dismiss swap notification"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
+          {undoDeletion && (
             <div
               className="undo-toast"
               role="status"
@@ -4145,7 +4191,7 @@ function WorkoutLogger({
                 <Icon name="close" />
               </button>
             </div>
-          }
+          )}
         </div>
       )}
       {showTimerDock && (
@@ -4240,6 +4286,29 @@ function WorkoutLogger({
             setName(nameDraft.trim());
             setNameEditorOpen(false);
           }}
+        />
+      )}
+
+      {swapSheetMovement && (
+        <ExerciseSwapSheet
+          key={swapSheetMovement.key}
+          exercise={swapSheetMovement.exercise}
+          plannedSetCount={swapSheetMovement.sets.filter((item) => !item.completed).length}
+          loggedSetCount={swapSheetMovement.sets.filter((item) => item.completed).length}
+          exercises={exercises}
+          excludedIds={movements.map((item) => item.exercise.id)}
+          recentExerciseIds={recentExerciseIds}
+          lastDoneDates={lastDoneDates}
+          onChoose={(replacement) => {
+            setSwapSheetMovementKey(null);
+            swapExercise(swapSheetMovement.key, replacement);
+          }}
+          onBrowseAll={() => {
+            setSwapSheetMovementKey(null);
+            setSwitchingMovementKey(swapSheetMovement.key);
+            setPickerOpen(true);
+          }}
+          onClose={() => setSwapSheetMovementKey(null)}
         />
       )}
 
@@ -5369,6 +5438,11 @@ function MovementCard({
           {!cardio && history[0] && (
             <p className="movement-last-session">Last {shortDate(history[0].workoutDate)}</p>
           )}
+          {movement.swappedFrom && (
+            <p className="movement-last-session movement-swapped-from">
+              Swapped from {movement.swappedFrom}
+            </p>
+          )}
           {!expanded && (
             <span className="movement-completed-summary">
               {completedWorkingSetCount} completed {completedWorkingSetCount === 1 ? 'set' : 'sets'}
@@ -5464,7 +5538,7 @@ function MovementCard({
                 }}
               >
                 <span aria-hidden="true">⇄</span>
-                Switch Exercise
+                Swap Exercise
               </button>
               <button
                 type="button"
@@ -6798,7 +6872,7 @@ export function ExercisePicker({
             }
           >
             {singleSelect ? (
-              'Switch exercise'
+              'Swap exercise'
             ) : (
               <>
                 <span>Add selected exercises</span> <b>{selectedIds.length}</b>
