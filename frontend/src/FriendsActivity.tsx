@@ -211,10 +211,10 @@ export function FriendsActivityCard({
                         type="button"
                         className="friend-card-title friend-activity-title friend-workout-link"
                         aria-label={`Open ${subject} workout`}
-                        title={session.title}
+                        title={session.name}
                         onClick={() => onOpenFriend(item.friend, item.workout)}
                       >
-                        {session.title}
+                        {session.name}
                       </button>
                       <div className="friend-card-meta">
                         <span

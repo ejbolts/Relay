@@ -1388,6 +1388,10 @@
   text-underline-offset: 0.2em;
 }
 
+.friend-activity-session-row .friend-workout-link {
+  text-decoration: none;
+}
+
 .friend-workout-link:focus-visible {
   outline: 2px solid var(--p-accent);
   outline-offset: 3px;

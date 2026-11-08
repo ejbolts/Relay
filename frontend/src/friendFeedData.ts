@@ -19,6 +19,8 @@ export function reactionEmoji(kind: WorkoutReactionKind): string {
 
 export interface FriendSession {
   cardio: boolean;
+  /** Workout name alone. */
+  name: string;
   /** Workout name and logged duration. */
   title: string;
   /** Completed sets for strength, or distance for cardio. */
@@ -39,6 +41,7 @@ export function friendSession(workout: FriendFeedItem['workout']): FriendSession
   const name = cardio ? workout.name.replace(/ cardio$/i, '') : workout.name;
   return {
     cardio,
+    name,
     title: [name, workout.duration_minutes ? formatMinutesDuration(workout.duration_minutes) : null]
       .filter(Boolean)
       .join(' · '),
