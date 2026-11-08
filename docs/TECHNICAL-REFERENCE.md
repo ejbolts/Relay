@@ -112,6 +112,8 @@ fetch are coalesced into a follow-up fetch, and 30-second visible polling remain
 
 Sign-in uses cookie-based sessions with per-user accounts and authorization checks on each request. A sign-in lasts until the person signs out or goes 90 days (`GYM_SESSION_DAYS`) without using the app; each day of use restarts the count. Signing out, changing the password (other devices), disabling an account, or deleting it ends sessions immediately.
 
+There is no self-service password recovery. An administrator resets a forgotten password from **Admin console → Accounts → Reset password** (`POST /api/admin/users/{id}/reset-password`), which signs the person out everywhere, clears any sign-in lockout and returns a one-time temporary password for the admin to pass on. The account is flagged `must_change_password`: its only working endpoints are the sign-in check, sign-out and the password change (`password_change_required` otherwise), and the app shows a choose-a-new-password screen until it is changed. `python -m app.manage reset-password --username <name>` sets a password of the operator's choosing from the server without the forced change.
+
 ## Prerequisites
 
 - Python 3.12

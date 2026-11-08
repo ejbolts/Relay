@@ -31,7 +31,7 @@ from .auth import (
     clear_session_cookie,
     client_ip,
     create_user_session,
-    get_current_user,
+    get_auth_context,
     get_login_throttle,
     hash_password,
     hash_token,
@@ -193,6 +193,8 @@ class UserRead(BaseModel):
     is_admin: bool
     can_upload_videos: bool
     created_at: datetime
+    # True after an admin reset: the app asks for a new password before anything else.
+    must_change_password: bool = False
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
 
@@ -206,6 +208,7 @@ def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
         is_admin=user.is_admin,
         can_upload_videos=can_upload_videos(user, video_uploads),
         created_at=as_utc(user.created_at),
+        must_change_password=user.must_change_password,
         profile_photo_url=(
             f"/api/profile/photo?v={user.profile_photo_filename.removesuffix('.webp')}"
             if user.profile_photo_filename
@@ -383,7 +386,9 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"], dependencies=[Depends
 profile_router = APIRouter(
     prefix="/api/profile",
     tags=["profile"],
-    dependencies=[Depends(no_store), Depends(get_current_user)],
+    # Authenticates every route; the routes that take CurrentUser also refuse an account that
+    # must choose a new password first, which the password change itself has to allow.
+    dependencies=[Depends(no_store), Depends(get_auth_context)],
 )
 
 
@@ -513,8 +518,9 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
 
 
 @auth_router.get("/me", response_model=UserRead)
-def me(user: CurrentUser, db: DbDependency, settings: AppSettings) -> UserRead:
-    return user_to_read(db, user, settings)
+def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) -> UserRead:
+    # Uses the auth context directly so it still answers while a new password is required.
+    return user_to_read(db, context.user, settings)
 
 
 @profile_router.patch("", response_model=UserRead)
@@ -614,7 +620,12 @@ def change_password(
 ) -> None:
     user = context.user
     _check_current_password(user, payload.current_password, throttle)
+    if user.must_change_password and payload.new_password == payload.current_password:
+        raise api_error(
+            400, "password_unchanged", "Choose a different password from the temporary one."
+        )
     user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
     # A password change signs out every other device.
     db.execute(
         delete(UserSession).where(

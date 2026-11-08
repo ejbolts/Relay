@@ -9,6 +9,7 @@ const owner: AdminUser = {
   display_name: 'Owner',
   is_admin: true,
   disabled_at: null,
+  must_change_password: false,
   created_at: '2026-10-01T10:00:00Z',
   last_active_at: '2026-10-10T10:00:00Z',
   signed_in_devices: 1,
@@ -78,10 +79,13 @@ function view(overrides: Partial<AdminScreenViewProps> = {}) {
       savingSetting={false}
       savingLimits={false}
       busyUserId={null}
+      temporaryPassword={null}
       onVideoUploadsChange={vi.fn()}
       onSaveLimits={vi.fn()}
       onRegistrationChange={vi.fn()}
       onUserDisabledChange={vi.fn()}
+      onResetPassword={vi.fn()}
+      onTemporaryPasswordDismiss={vi.fn()}
       onRefresh={vi.fn()}
       {...overrides}
     />,
@@ -154,6 +158,28 @@ describe('AdminScreenView', () => {
     expect(markup).toContain('2 devices');
     expect(markup).toContain('>You<');
     expect(markup.match(/Disable account/g)).toHaveLength(1);
+  });
+
+  it('offers a password reset for other accounts only, and flags a pending temporary password', () => {
+    const markup = view();
+    expect(markup.match(/Reset password/g)).toHaveLength(1);
+    expect(markup).not.toContain('Temporary password');
+
+    const pending = view({ users: [owner, { ...tester, must_change_password: true }] });
+    expect(pending).toContain('>Temporary password<');
+  });
+
+  it('shows a temporary password under the account it belongs to', () => {
+    const markup = view({
+      temporaryPassword: { userId: 'tester', displayName: 'Tester', password: 'abcde-fghjk-mnpqr' },
+    });
+
+    expect(markup).toContain('aria-label="Temporary password for Tester"');
+    expect(markup.match(/abcde-fghjk-mnpqr/g)).toHaveLength(1);
+    const other = view({
+      temporaryPassword: { userId: 'someone-else', displayName: 'Else', password: 'zzzzz-zzzzz' },
+    });
+    expect(other).not.toContain('zzzzz-zzzzz');
   });
 
   it('marks disabled accounts and offers to enable them', () => {

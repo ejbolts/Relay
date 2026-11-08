@@ -10,6 +10,7 @@ from conftest import TEST_INVITE_CODE, TEST_PASSWORD, create_session, register_u
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select, text
 
+from app.auth import ACCOUNT_LOGIN_MAX_FAILURES
 from app.config import get_settings
 from app.database import SessionLocal
 from app.main import create_app
@@ -18,6 +19,7 @@ from app.models import Exercise, MachinePhoto, SessionStatus, WorkoutSession
 ADMIN_ROUTES = (
     ("GET", "/api/admin/users"),
     ("PATCH", "/api/admin/users/anything"),
+    ("POST", "/api/admin/users/anything/reset-password"),
     ("GET", "/api/admin/settings"),
     ("PATCH", "/api/admin/settings"),
     ("GET", "/api/admin/status"),
@@ -229,3 +231,95 @@ def test_migration_adds_account_status_and_server_settings():
         columns = {column["name"] for column in inspect(connection).get_columns("users")}
         assert columns == {"id"}
         assert "server_settings" not in inspect(connection).get_table_names()
+
+
+def reset_password(test_client: TestClient, user_id: str):
+    return test_client.post(f"/api/admin/users/{user_id}/reset-password")
+
+
+def test_resetting_a_password_signs_the_person_out_and_gives_a_one_time_password(
+    client, other_client
+):
+    response = reset_password(client, other_client.user["id"])
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    temporary = response.json()["temporary_password"]
+    assert len(temporary) >= 10
+    assert other_client.get("/api/auth/me").status_code == 401
+    fresh = TestClient(client.app)
+    assert login(fresh, "other").status_code == 401
+    signed_in = login(fresh, "other", temporary)
+    assert signed_in.status_code == 200
+    assert signed_in.json()["must_change_password"] is True
+    listed = {user["username"]: user for user in client.get("/api/admin/users").json()}
+    assert listed["other"]["must_change_password"] is True
+    assert listed["owner"]["must_change_password"] is False
+    assert "temporary_password" not in listed["other"]
+    # Every reset produces a different password.
+    assert reset_password(client, other_client.user["id"]).json()["temporary_password"] != temporary
+
+
+def test_a_temporary_password_only_allows_choosing_a_new_one(client, other_client):
+    temporary = reset_password(client, other_client.user["id"]).json()["temporary_password"]
+    fresh = TestClient(client.app)
+    assert login(fresh, "other", temporary).status_code == 200
+
+    # The app cannot be used, but the person can still see their state and sign out.
+    blocked = fresh.get("/api/workouts")
+    assert blocked.status_code == 403
+    assert blocked.json()["error"]["code"] == "password_change_required"
+    assert fresh.get("/api/auth/me").json()["must_change_password"] is True
+
+    reused = fresh.put(
+        "/api/profile/password",
+        json={"current_password": temporary, "new_password": temporary},
+    )
+    assert reused.status_code == 400
+    assert reused.json()["error"]["code"] == "password_unchanged"
+    assert fresh.get("/api/workouts").status_code == 403
+
+    changed = fresh.put(
+        "/api/profile/password",
+        json={"current_password": temporary, "new_password": "a brand new passphrase"},
+    )
+    assert changed.status_code == 204
+    assert fresh.get("/api/auth/me").json()["must_change_password"] is False
+    assert fresh.get("/api/workouts").status_code == 200
+    assert login(TestClient(client.app), "other", "a brand new passphrase").status_code == 200
+    listed = {user["username"]: user for user in client.get("/api/admin/users").json()}
+    assert listed["other"]["must_change_password"] is False
+
+
+def test_a_flagged_person_can_sign_out(client, other_client):
+    temporary = reset_password(client, other_client.user["id"]).json()["temporary_password"]
+    fresh = TestClient(client.app)
+    assert login(fresh, "other", temporary).status_code == 200
+
+    assert fresh.post("/api/auth/logout").status_code == 204
+
+    assert fresh.get("/api/auth/me").status_code == 401
+
+
+def test_resetting_clears_a_sign_in_lockout(client, other_client):
+    throttle = client.app.state.login_throttle
+    for _ in range(ACCOUNT_LOGIN_MAX_FAILURES):
+        throttle.record_failure("username:other")
+    locked = login(TestClient(client.app), "other")
+    assert locked.json()["error"]["code"] == "too_many_attempts"
+
+    temporary = reset_password(client, other_client.user["id"]).json()["temporary_password"]
+
+    assert login(TestClient(client.app), "other", temporary).status_code == 200
+
+
+def test_reset_password_is_for_other_existing_accounts_only(client, other_client):
+    own = reset_password(client, client.user["id"])
+    assert own.status_code == 409
+    assert own.json()["error"]["code"] == "cannot_reset_self"
+    assert login(TestClient(client.app), "owner").status_code == 200
+    assert reset_password(client, "missing").status_code == 404
+    refused = reset_password(other_client, client.user["id"])
+    assert refused.status_code == 403
+    assert refused.json()["error"]["code"] == "admin_required"
+    assert login(TestClient(client.app), "owner").status_code == 200

@@ -103,6 +103,9 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(32, collation="NOCASE"), unique=True)
     display_name: Mapped[str] = mapped_column(String(80))
     password_hash: Mapped[str] = mapped_column(String(300))
+    # Set when an admin hands out a temporary password; the account can do nothing but choose a
+    # new password until it does.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # A square WebP in data/profile-photos/; a new upload gets a new name, which busts caches.
     profile_photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -233,6 +233,14 @@ AuthContextDependency = Annotated[AuthContext, Depends(get_auth_context)]
 
 
 def get_current_user(context: AuthContextDependency) -> User:
+    # Endpoints that must work before a new password is chosen (sign-in check, sign-out and
+    # the password change itself) use the auth context directly instead of this dependency.
+    if context.user.must_change_password:
+        raise api_error(
+            403,
+            "password_change_required",
+            "Choose a new password to continue.",
+        )
     return context.user
 
 
