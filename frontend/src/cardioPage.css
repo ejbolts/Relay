@@ -147,11 +147,8 @@
   margin-bottom: 0;
   background: var(--p-page);
 }
-.cardio-history-row {
+.cardio-history-row.cardio-history-new-day {
   border-top: 1px solid var(--p-line);
-}
-.cardio-history-row:first-of-type {
-  border-top: 0;
 }
 .cardio-history-row > summary {
   display: flex;

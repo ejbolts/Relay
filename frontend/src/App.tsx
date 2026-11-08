@@ -9927,14 +9927,17 @@ export function CardioScreen({
                 min
               </span>
             </h3>
-            {group.sessions.map((session) => {
+            {group.sessions.map((session, index) => {
               const workoutContext =
                 session.workout_context === 'workout_plus_cardio'
                   ? 'workout_plus_cardio'
                   : 'pure_cardio';
               const workoutName = session.source_workout_name?.replace(/\s+workout$/i, '');
               return (
-                <details className="cardio-history-row" key={session.id}>
+                <details
+                  className={`cardio-history-row${index > 0 && group.sessions[index - 1].session_date !== session.session_date ? ' cardio-history-new-day' : ''}`}
+                  key={session.id}
+                >
                   <summary>
                     <span className="cardio-activity-icon">
                       <Icon name="pulse" />
