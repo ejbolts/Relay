@@ -39,10 +39,15 @@ class CardioGoalCardSettings(BaseModel):
     style: Literal["progress", "ring", "list"] = "progress"
 
 
+class TrainingBlockCardSettings(BaseModel):
+    style: Literal["progress", "timeline", "both"] = "both"
+
+
 class HomeSectionSettings(BaseModel):
     """Per-section display options. Add a field here when a section becomes configurable."""
 
     zone2: CardioGoalCardSettings = Field(default_factory=CardioGoalCardSettings)
+    training_block: TrainingBlockCardSettings = Field(default_factory=TrainingBlockCardSettings)
 
 
 class HomeLayout(BaseModel):

@@ -3,18 +3,12 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
-import {
-  blockDay,
-  blockOn,
-  blockProgress,
-  blockRange,
-  daysLeftLabel,
-  MONTHS,
-} from './trainingBlocks';
+import { blockDay, blockOn, blockProgress, blockRange, daysLeftLabel } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
+import { addDays } from './trainingSummary';
 import { localDate } from './utils';
 import type { TrainingBlock, TrainingBlocks } from './types';
+import { BlockTimeline, TONES } from './TrainingBlockTimeline';
 import './trainingBlocks.css';
 
 type View = 'pick' | 'blocks' | 'form' | 'remove';
@@ -29,8 +23,6 @@ function planFor(start: string, end: string | null | undefined): PlanPreset {
   return end === weeksEnd(start, 12) ? '12' : 'custom';
 }
 
-const TONES = 4;
-
 const workouts = (count: number | undefined) =>
   count === undefined ? '' : `${count.toLocaleString()} workout${count === 1 ? '' : 's'}`;
 const joined = (...parts: string[]) => parts.filter(Boolean).join(' · ');
@@ -39,62 +31,6 @@ function presetFor(start: string): StartPreset {
   const today = localDate();
   if (start === today) return 'today';
   return start === `${today.slice(0, 4)}-01-01` ? 'january' : 'custom';
-}
-
-/** Proportional strip showing how blocks divide the logged history. */
-function BlockTimeline({ config, currentId }: { config: TrainingBlocks; currentId?: string }) {
-  const today = localDate();
-  const first = config.blocks[0];
-  if (!first) return null;
-  const earlierStart =
-    config.history_start && config.history_start < first.start_date && config.earlier_workout_count
-      ? config.history_start
-      : null;
-  const segments = [
-    ...(earlierStart
-      ? [{ id: 'earlier', name: 'Before blocks', start: earlierStart, end: first.start_date }]
-      : []),
-    ...config.blocks.map((block) => ({
-      id: block.id,
-      name: block.name,
-      start: block.start_date,
-      end: block.end_date ?? addDays(today, 1),
-    })),
-  ];
-  const origin = segments[0].start;
-  return (
-    <div className="training-block-timeline">
-      <div
-        className="training-block-bar"
-        role="img"
-        aria-label={`Timeline: ${segments.map((item) => item.name).join(', ')}`}
-      >
-        {segments.map((item) => {
-          const index = config.blocks.findIndex((block) => block.id === item.id);
-          const tone =
-            item.id === 'earlier'
-              ? 'earlier'
-              : item.id === currentId
-                ? 'current'
-                : `tone-${index % TONES}`;
-          return (
-            <span
-              key={item.id}
-              className={`training-block-segment ${tone}`}
-              style={{ flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0` }}
-              title={item.name}
-            >
-              {item.id === 'earlier' ? 'Before' : item.name}
-            </span>
-          );
-        })}
-      </div>
-      <div className="training-block-axis" aria-hidden="true">
-        <span>{`${MONTHS[parseLocalDate(origin).getMonth()]} ${origin.slice(0, 4)}`}</span>
-        <span>Today</span>
-      </div>
-    </div>
-  );
 }
 
 export function TrainingBlockControls() {

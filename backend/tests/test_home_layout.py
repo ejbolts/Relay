@@ -4,7 +4,10 @@ from app.database import SessionLocal
 from app.home_layout import OPTIONAL_CHECK_INS, SECTION_IDS
 from app.training_metrics import set_setting
 
-DEFAULT_SETTINGS = {"zone2": {"zone": None, "style": "progress"}}
+DEFAULT_SETTINGS = {
+    "zone2": {"zone": None, "style": "progress"},
+    "training_block": {"style": "both"},
+}
 
 
 def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client):
@@ -19,7 +22,10 @@ def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client)
         "order": list(reversed(SECTION_IDS)),
         "hidden": ["consistency", "workouts"],
         "widths": {"combined-check-in": "compact", "workouts": "full", "friends": "third"},
-        "settings": {"zone2": {"zone": 4, "style": "ring"}},
+        "settings": {
+            "zone2": {"zone": 4, "style": "ring"},
+            "training_block": {"style": "timeline"},
+        },
     }
     response = client.put("/api/home-layout", json=layout)
     assert response.status_code == 200

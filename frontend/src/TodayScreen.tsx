@@ -53,7 +53,7 @@ import {
 import { formatElapsed, useLiveWorkoutClock } from './elapsed';
 import { useOffline } from './connectionStatus';
 import { OfflineBadge } from './OfflineBadge';
-import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { TrainingBlockCardSettingsForm, TrainingBlockHomeCard } from './TrainingBlockHomeCard';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 
@@ -434,7 +434,9 @@ export function TodayScreen({
     'training-block': currentBlock ? (
       <TrainingBlockHomeCard
         block={currentBlock}
+        config={trainingBlocks.config}
         today={today}
+        style={homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style}
         onOpen={() => {
           trainingBlocks.select('current');
           onOpenProgress();
@@ -670,6 +672,14 @@ export function TodayScreen({
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          'training-block': (
+            <TrainingBlockCardSettingsForm
+              value={homeSectionSettings(home.draft, 'training_block')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'training_block', change))
+              }
+            />
+          ),
           zone2: (
             <CardioGoalCardSettingsForm
               goals={cardioGoals.map((goal) => ({ zone: goal.zone, minutes: goal.goal_minutes }))}

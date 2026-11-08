@@ -123,9 +123,14 @@ export interface CardioGoalCardSettings {
   zone: number | null;
   style: CardioGoalCardStyle;
 }
+export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
+export interface TrainingBlockCardSettings {
+  style: TrainingBlockCardStyle;
+}
 /** Display options for configurable sections, keyed by section. */
 export interface HomeSectionSettings {
   zone2: CardioGoalCardSettings;
+  training_block: TrainingBlockCardSettings;
 }
 export interface HomeLayout {
   order: HomeSectionId[];
@@ -137,6 +142,7 @@ export interface HomeLayout {
 
 export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
   zone2: { zone: null, style: 'progress' },
+  training_block: { style: 'both' },
 };
 
 export function homeSectionSettings<Id extends keyof HomeSectionSettings>(

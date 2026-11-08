@@ -474,3 +474,41 @@ button.pulse-card.training-block-home {
 .training-block-home-bar.past > span {
   background: var(--p-gold);
 }
+.training-block-home .training-block-timeline {
+  margin-top: 8px;
+}
+.training-block-home .training-block-axis {
+  margin-bottom: 0;
+}
+.training-block-style-preview {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  width: 100%;
+  height: 34px;
+  padding: 0 6px;
+}
+.training-block-style-preview .bar {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--p-accent) 65%, var(--p-surface-3) 65%);
+}
+.training-block-style-preview .strip {
+  display: flex;
+  gap: 2px;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+.training-block-style-preview .strip i {
+  flex: 3;
+  background: #8aa4bd;
+}
+.training-block-style-preview .strip i:nth-child(2) {
+  flex: 2;
+  background: #c9a35a;
+}
+.training-block-style-preview .strip i:last-child {
+  flex: 1;
+  background: var(--p-accent-text);
+}

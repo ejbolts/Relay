@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProgressScreen } from './App';
 import { blockProgress, blockRange, daysLeftLabel } from './trainingBlocks';
-import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { TrainingBlockCardSettingsForm, TrainingBlockHomeCard } from './TrainingBlockHomeCard';
 import { addDays } from './trainingSummary';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { Exercise, TrainingBlocks, PersonalRecord } from './types';
@@ -351,7 +351,15 @@ it('shows the current block on the home card and opens it', async () => {
     planned_end_date: '2026-11-29',
   };
   await act(async () =>
-    root.render(<TrainingBlockHomeCard block={block} today="2026-11-08" onOpen={onOpen} />),
+    root.render(
+      <TrainingBlockHomeCard
+        block={block}
+        config={{ blocks: [block] }}
+        today="2026-11-08"
+        style="progress"
+        onOpen={onOpen}
+      />,
+    ),
   );
   expect(host.textContent).toBe('Training block21 days leftStrength rebuildWeek 13 of 16');
   expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('81');
@@ -361,7 +369,9 @@ it('shows the current block on the home card and opens it', async () => {
     root.render(
       <TrainingBlockHomeCard
         block={{ ...block, planned_end_date: null }}
+        config={{ blocks: [block] }}
         today="2026-11-08"
+        style="progress"
         onOpen={onOpen}
       />,
     ),
@@ -369,8 +379,78 @@ it('shows the current block on the home card and opens it', async () => {
   expect(host.textContent).toBe('Training blockStrength rebuildWeek 13 · since 10 Aug');
   expect(host.querySelector('[role="progressbar"]')).toBeNull();
   await act(async () =>
-    root.render(<TrainingBlockHomeCard block={block} today="2026-12-02" onOpen={onOpen} />),
+    root.render(
+      <TrainingBlockHomeCard
+        block={block}
+        config={{ blocks: [block] }}
+        today="2026-12-02"
+        style="progress"
+        onOpen={onOpen}
+      />,
+    ),
   );
   expect(host.textContent).toContain('3 days past plan');
   expect(host.textContent).toContain('Week 17 · planned 16');
+});
+
+it('adds the block timeline to the home card for the timeline and combined designs', async () => {
+  const earlier = {
+    ...config.blocks[0],
+    id: 'base',
+    name: 'Base',
+    start_date: '2026-01-01',
+    end_date: '2026-08-10',
+  };
+  const block = {
+    ...config.blocks[0],
+    name: 'Strength rebuild',
+    start_date: '2026-08-10',
+    planned_end_date: '2026-11-29',
+  };
+  const blocks = {
+    blocks: [earlier, block],
+    history_start: '2025-06-01',
+    earlier_workout_count: 9,
+  };
+  const render = (style: 'progress' | 'timeline' | 'both') =>
+    act(async () =>
+      root.render(
+        <TrainingBlockHomeCard
+          block={block}
+          config={blocks}
+          today="2026-11-08"
+          style={style}
+          onOpen={() => {}}
+        />,
+      ),
+    );
+  await render('both');
+  expect(host.querySelector('[role="progressbar"]')).not.toBeNull();
+  expect(host.querySelector('.training-block-bar')?.getAttribute('aria-label')).toBe(
+    'Timeline: Before blocks, Base, Strength rebuild',
+  );
+  expect(host.querySelector('.training-block-segment.current')?.textContent).toBe(
+    'Strength rebuild',
+  );
+  await render('timeline');
+  expect(host.querySelector('[role="progressbar"]')).toBeNull();
+  expect(host.querySelector('.training-block-bar')).not.toBeNull();
+  await render('progress');
+  expect(host.querySelector('.training-block-bar')).toBeNull();
+});
+
+it('chooses the home card design', async () => {
+  const onChange = vi.fn();
+  await act(async () =>
+    root.render(<TrainingBlockCardSettingsForm value={{ style: 'both' }} onChange={onChange} />),
+  );
+  const inputs = [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  expect(inputs.map((item) => item.closest('label')?.textContent)).toEqual([
+    'Progress',
+    'Timeline',
+    'Both',
+  ]);
+  expect(inputs[2].checked).toBe(true);
+  await act(async () => inputs[1].click());
+  expect(onChange).toHaveBeenCalledWith({ style: 'timeline' });
 });
