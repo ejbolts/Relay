@@ -144,6 +144,17 @@ describe('durable local body check-ins', () => {
     expect(bodyMeasurementSyncStatus()).toEqual({ pending: 0, error: null });
   });
 
+  it('keeps a check-in pending without an error while this release is too old to save', async () => {
+    await saveLocalBodyMeasurement(input);
+    vi.mocked(transport.save).mockRejectedValueOnce(
+      new ApiError('Relay needs to update before it can save this.', 'client_outdated', 426),
+    );
+    await expect(syncBodyMeasurements(transport)).rejects.toThrow('needs to update');
+    expect(bodyMeasurementSyncStatus()).toEqual({ pending: 1, error: null });
+    await syncBodyMeasurements(transport);
+    expect(bodyMeasurementSyncStatus()).toEqual({ pending: 0, error: null });
+  });
+
   it('removes a new check-in offline without sending its stale values', async () => {
     const saved = await saveLocalBodyMeasurement(input);
     await deleteLocalBodyMeasurement(saved.id);

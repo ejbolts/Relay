@@ -23,6 +23,7 @@ from .auth import (
     get_current_user,
     require_video_access,
 )
+from .client_versions import ClientVersionGateMiddleware
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
@@ -73,6 +74,7 @@ from .storage import (
 )
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
+from .training_blocks import router as training_blocks_router
 from .training_metrics import rebuild_personal_records
 from .weight_mapping import router as weight_mapping_router
 from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
@@ -176,6 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.login_throttle = LoginThrottle()
     app.state.save_rate_limiter = SaveRateLimiter()
     app.state.push_rate_limiter = SaveRateLimiter()
+    app.add_middleware(ClientVersionGateMiddleware)
     app.add_middleware(CsrfOriginMiddleware)
 
     @app.exception_handler(HTTPException)
@@ -675,6 +678,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(protected)
     app.include_router(video)
     app.include_router(tracker_router)
+    app.include_router(training_blocks_router)
     app.include_router(routines_router)
     app.include_router(home_layout_router)
     app.include_router(machine_settings_router)

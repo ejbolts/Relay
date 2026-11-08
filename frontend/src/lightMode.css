@@ -306,9 +306,6 @@
 :root[data-colour-mode='light'] .home-guide-action-button {
   color: #1c1c1e;
 }
-:root[data-colour-mode='light'] .live-workout-card {
-  background: linear-gradient(160deg, var(--p-accent-soft) 0%, var(--p-surface) 70%);
-}
 :root[data-colour-mode='light'] .body-history-goal-name {
   color: #2565b5;
 }

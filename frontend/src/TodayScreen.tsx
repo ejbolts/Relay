@@ -50,9 +50,11 @@ import {
   weightInputValue,
   weightUnitName,
 } from './weightUnits';
-import { formatElapsed, useLiveWorkoutClock } from './elapsed';
 import { useOffline } from './connectionStatus';
 import { OfflineBadge } from './OfflineBadge';
+import { TrainingBlockCardSettingsForm, TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { blockOn } from './trainingBlocks';
+import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
@@ -133,7 +135,6 @@ export interface TodayScreenProps {
   onStartEmpty: () => void;
   onStartRecommended?: () => void;
   onEditSplit?: () => void;
-  onResumeWorkout: () => void;
   onOpenHistory: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
   onOpenProgress: (exerciseId?: string) => void;
@@ -179,7 +180,6 @@ export function TodayScreen({
   onStartEmpty,
   onStartRecommended,
   onEditSplit,
-  onResumeWorkout,
   onOpenHistory,
   onOpenWorkout,
   onOpenProgress,
@@ -202,6 +202,8 @@ export function TodayScreen({
   const weightUnit = useWeightUnit();
   const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
+  const trainingBlocks = useTrainingBlocks();
+  const currentBlock = blockOn(trainingBlocks.config.blocks, today);
   const weeks = useMemo(
     () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
@@ -349,7 +351,7 @@ export function TodayScreen({
             ) : (
               template && (
                 <small>
-                  {recommendation?.routine_day
+                  {recommendation?.routine_day?.movements.length
                     ? 'Routine'
                     : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
                 </small>
@@ -426,6 +428,18 @@ export function TodayScreen({
           </div>
         </section>
       ) : null,
+    'training-block': currentBlock ? (
+      <TrainingBlockHomeCard
+        block={currentBlock}
+        config={trainingBlocks.config}
+        today={today}
+        style={homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style}
+        onOpen={() => {
+          trainingBlocks.select('current');
+          onOpenProgress();
+        }}
+      />
+    ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
@@ -643,18 +657,19 @@ export function TodayScreen({
       <p className="sr-only" role="status">
         {home.message}
       </p>
-      {workoutStartedAt !== null && (
-        <LiveWorkoutCard
-          startedAt={workoutStartedAt}
-          saving={workoutSaving}
-          onResume={onResumeWorkout}
-        />
-      )}
       <HomeLayoutSections
         layout={home.editing ? home.draft : home.layout}
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          'training-block': (
+            <TrainingBlockCardSettingsForm
+              value={homeSectionSettings(home.draft, 'training_block')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'training_block', change))
+              }
+            />
+          ),
           zone2: (
             <CardioGoalCardSettingsForm
               goals={cardioGoals.map((goal) => ({ zone: goal.zone, minutes: goal.goal_minutes }))}
@@ -676,40 +691,6 @@ export function TodayScreen({
         }
       />
     </section>
-  );
-}
-
-function LiveWorkoutCard({
-  startedAt,
-  saving,
-  onResume,
-}: {
-  startedAt: number;
-  saving: boolean;
-  onResume: () => void;
-}) {
-  const { elapsed, paused } = useLiveWorkoutClock(startedAt);
-  return (
-    <button
-      className={`pulse-card live-workout-card${paused && !saving ? ' is-paused' : ''}`}
-      type="button"
-      onClick={onResume}
-      disabled={saving}
-    >
-      <span className="live-workout-label">
-        <i aria-hidden="true" />
-        {saving ? 'Workout finished' : paused ? 'Workout paused' : 'Workout live'}
-      </span>
-      {!saving && (
-        <time className="live-workout-duration num" dateTime={`PT${elapsed}S`}>
-          {formatElapsed(elapsed)}
-        </time>
-      )}
-      <span className="live-workout-resume">
-        {saving ? 'Saving in the background…' : 'Resume'}
-        {!saving && <Icon name="chevron-right" />}
-      </span>
-    </button>
   );
 }
 

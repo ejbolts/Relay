@@ -18,6 +18,7 @@ DOC_FILES = {"README.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md", "LICENSE"
 CONTRACT_MODULES = {
     "accounts.py",
     "admin.py",
+    "client_versions.py",
     "feedback.py",
     "frontend.py",
     "home_layout.py",
@@ -29,6 +30,7 @@ CONTRACT_MODULES = {
     "session_events.py",
     "sharing.py",
     "tracker.py",
+    "training_blocks.py",
     "weight_mapping.py",
     "youtube_connections.py",
 }

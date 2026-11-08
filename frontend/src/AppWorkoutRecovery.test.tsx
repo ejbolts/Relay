@@ -1602,7 +1602,7 @@ describe('finishing workouts in the background', () => {
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="Saving workout"]')?.disabled,
     ).toBe(true);
-    expect(container.querySelector('.live-workout-card')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
       'Workout finished',
     );
@@ -1861,6 +1861,26 @@ describe('durable workout completion', () => {
     expect(readActiveWorkoutDraft()?.pendingSave).toBeUndefined();
     expect(readActiveWorkoutDraft()?.durationOverrideMinutes).toBe(10);
     expectPreserved(draft);
+  });
+
+  it('keeps a completion on the device without a review while this release is too old to save', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(
+      new ApiError('Relay needs to update before it can save this.', 'client_outdated', 426),
+    );
+    await mount();
+    await confirmFinish();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Saved on this device. Update Relay to sync it.');
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Review workout',
+      ),
+    ).toBe(false);
+    await act(async () => window.dispatchEvent(new Event('online')));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(readActiveWorkoutDraft()?.pendingSave?.payload.name).toBe(draft.name);
   });
 
   it('does not replay another account’s completion even if old device metadata is missing', async () => {
@@ -2320,7 +2340,7 @@ describe('inactive workout suggestions', () => {
       await mount();
       expect(readActiveWorkoutDraft()).toBeNull();
       expect(window.location.hash).toBe('#dashboard');
-      expect(container.querySelector('.live-workout-card')).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
       expect(container.querySelector('.logger-screen')).toBeNull();
       expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
       expect(api.createWorkout).not.toHaveBeenCalled();
@@ -2342,7 +2362,7 @@ describe('inactive workout suggestions', () => {
       draft.inactiveFinishAt = Date.now() + 60_000;
       writeActiveWorkoutDraft(draft);
       await mount();
-      expect(container.querySelector('.live-workout-card')).not.toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
       expect(readActiveWorkoutDraft()).not.toBeNull();
       await act(async () => {
         if (trigger === 'timer') await vi.advanceTimersByTimeAsync(60_000);
@@ -2353,7 +2373,7 @@ describe('inactive workout suggestions', () => {
         }
       });
       expect(readActiveWorkoutDraft()).toBeNull();
-      expect(container.querySelector('.live-workout-card')).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
       expect(api.createWorkout).not.toHaveBeenCalled();
     },
   );
@@ -2363,7 +2383,7 @@ describe('inactive workout suggestions', () => {
     writeActiveWorkoutDraft(emptyDraft());
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
-    expect(container.querySelector('.live-workout-card')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 

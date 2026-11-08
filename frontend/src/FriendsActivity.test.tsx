@@ -99,11 +99,13 @@ async function render(onOpenFriend = vi.fn(), onOpenFriends = vi.fn()) {
 it('summarises strength and cardio sessions, dates and reactions', () => {
   expect(friendSession(strength)).toEqual({
     cardio: false,
+    name: 'Leg day',
     title: 'Leg day · 1h 11min',
     detail: '2 sets',
   });
   expect(friendSession(cardio)).toEqual({
     cardio: true,
+    name: 'Incline walk',
     title: 'Incline walk · 35min',
     detail: '2.8 km',
   });
@@ -191,8 +193,8 @@ it("shows each friend's latest session with one reaction button and opens their 
 
   const rows = [...host.querySelectorAll('.friend-activity-list li')];
   expect(rows.map((row) => row.textContent)).toEqual([
-    'JJordan PreviewLeg day · 1h 11minStrengthToday · 2 sets👍 1❤️ 20',
-    'AAlex PreviewIncline walk · 35minCardioYesterday · 2.8 km0',
+    'JJordan PreviewLeg dayStrengthToday · 2 sets👍 1❤️ 20',
+    'AAlex PreviewIncline walkCardioYesterday · 2.8 km0',
   ]);
   // One picker trigger and one comments button per friend, alongside per-emoji counts.
   expect(host.querySelectorAll('.friend-react-button')).toHaveLength(2);
@@ -475,8 +477,6 @@ it('puts friends working out first, showing the live workout instead of reaction
     'Jordan Preview',
     'Alex Preview',
   ]);
-  expect(rows()[1].querySelector('.friend-activity-title')?.textContent).toBe(
-    'Incline walk · 35min',
-  );
+  expect(rows()[1].querySelector('.friend-activity-title')?.textContent).toBe('Incline walk');
   expect(rows()[1].querySelector('.friend-react-button')).not.toBeNull();
 });

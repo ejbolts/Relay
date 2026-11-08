@@ -1,5 +1,11 @@
-import type { ExerciseHistoryBaseline, TrackedWorkout, WorkoutSetInput } from './types';
+import type {
+  ExerciseHistoryBaseline,
+  TrackedWorkout,
+  WorkoutSetInput,
+  TrainingBlock,
+} from './types';
 import type { WorkoutDraftMovement as DraftMovement } from './workoutMovements';
+import { blockOn } from './trainingBlocks';
 
 // Compare canonical kilograms, independently of the preferred display unit.
 // Four decimals absorb conversion noise without merging distinct plate weights.
@@ -81,4 +87,59 @@ export function calculateDraftPrs(
     result.set(movement.key, badges);
   }
   return result;
+}
+
+export function calculateScopedDraftPrs(
+  movements: DraftMovement[],
+  historicalWorkouts: TrackedWorkout[],
+  excludedWorkoutId: string | null,
+  workoutDate: string,
+  olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
+  blocks: TrainingBlock[],
+) {
+  const lifetime = calculateDraftPrs(
+    movements,
+    historicalWorkouts,
+    excludedWorkoutId,
+    workoutDate,
+    olderHistory,
+  );
+  if (!blocks.length) return lifetime;
+  const block = blockOn(blocks, workoutDate);
+  const scopedOlder = new Map<string, ExerciseHistoryBaseline>();
+  if (block)
+    for (const [id, baseline] of olderHistory ?? []) {
+      const best = baseline.block_bests?.find((item) => item.block_id === block.id);
+      if (best) scopedOlder.set(id, { ...baseline, ...best });
+    }
+  const scoped = block
+    ? calculateDraftPrs(
+        movements,
+        historicalWorkouts.filter(
+          (workout) =>
+            workout.workout_date >= block.start_date &&
+            (!block.end_date || workout.workout_date < block.end_date),
+        ),
+        excludedWorkoutId,
+        workoutDate,
+        scopedOlder,
+      )
+    : new Map<string, Map<string, string[]>>();
+  return new Map(
+    movements.map((movement) => {
+      const badges = new Map<string, string[]>();
+      for (const item of movement.sets) {
+        const all = lifetime.get(movement.key)?.get(item.key) ?? [];
+        const current = scoped.get(movement.key)?.get(item.key) ?? [];
+        const labels = [
+          ...all.map((label) => `All-time ${label.charAt(0).toLowerCase()}${label.slice(1)}`),
+          ...current
+            .filter((label) => !all.includes(label))
+            .map((label) => `Block ${label.charAt(0).toLowerCase()}${label.slice(1)}`),
+        ];
+        if (labels.length) badges.set(item.key, labels);
+      }
+      return [movement.key, badges];
+    }),
+  );
 }

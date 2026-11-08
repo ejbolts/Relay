@@ -95,10 +95,36 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
             == 200
         )
 
+    owner_blocks = client.post(
+        "/api/training-blocks",
+        json={
+            "name": "Owner block",
+            "start_date": "2026-01-01",
+        },
+    ).json()
+    other_client.post(
+        "/api/training-blocks",
+        json={
+            "name": "Other block",
+            "start_date": "2026-02-01",
+        },
+    )
     backup = snapshot("owner")
 
     folder = backup_folder(get_settings(), owner_id, backup.id)
     database = folder / BACKUP_DATABASE
+    saved_blocks = rows(database, "SELECT value FROM user_settings WHERE key = 'training_blocks'")
+    assert len(saved_blocks) == 1
+    # Workout counts are derived on read; only the boundaries are stored.
+    assert json.loads(saved_blocks[0][0]) == {
+        "blocks": [
+            {
+                key: block[key]
+                for key in ("id", "name", "start_date", "planned_end_date", "end_date")
+            }
+            for block in owner_blocks["blocks"]
+        ],
+    }
     assert backup.user_id == owner_id
     assert rows(database, "SELECT id, password_hash FROM users") == [(owner_id, "")]
     assert rows(database, "SELECT id FROM training_workouts") == [(owner_workout,)]

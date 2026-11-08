@@ -40,6 +40,7 @@ from .cardio_zones import (
     classify_session,
     effective_zone,
 )
+from .client_versions import ClientVersion, preserve_unknown_workout_fields
 from .config import Settings, get_settings
 from .database import get_db
 from .errors import api_error
@@ -59,6 +60,7 @@ from .models import (
     MachinePhoto,
     MuscleRole,
     PersonalRecord,
+    PersonalRecordType,
     SupersetGroup,
     TrainingWorkout,
     User,
@@ -85,6 +87,7 @@ from .tracker_csv import (
     plan_import,
 )
 from .tracker_schemas import (
+    BlockHistoryBaselineRead,
     BodyMeasurementCreate,
     BodyMeasurementCsvImportRead,
     BodyMeasurementRead,
@@ -112,7 +115,6 @@ from .tracker_schemas import (
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
-    FfmiProfile,
     HeatmapDay,
     ImportBatchRead,
     ImportUndoRead,
@@ -150,6 +152,7 @@ from .tracker_schemas import (
     WorkoutTypeUpdate,
     Zone2WeekRead,
 )
+from .training_blocks import block_on, training_blocks
 from .training_metrics import (
     estimated_one_rep_max,
     get_setting,
@@ -157,11 +160,14 @@ from .training_metrics import (
     is_working_set,
     muscle_credits,
     muscle_volume,
+    normalized_weight,
+    personal_record_events,
     preferred_weight_unit,
     rebuild_personal_records,
     seed_muscle_mappings,
     set_setting,
     start_of_week,
+    workout_query,
 )
 from .training_split import (
     TRAINING_SPLIT_KEY,
@@ -1458,28 +1464,6 @@ def delete_body_sizes(measurement_date: date, db: DbSession, user: CurrentUser) 
     return Response(status_code=204)
 
 
-FFMI_PROFILE_KEY = "ffmi_profile"
-
-
-def ffmi_profile(db: Session, user_id: str) -> FfmiProfile:
-    try:
-        return FfmiProfile.model_validate_json(get_setting(db, user_id, FFMI_PROFILE_KEY, "{}"))
-    except ValueError:
-        return FfmiProfile()
-
-
-@router.get("/ffmi-profile", response_model=FfmiProfile)
-def get_ffmi_profile(db: DbSession, user: CurrentUser) -> FfmiProfile:
-    return ffmi_profile(db, user.id)
-
-
-@router.put("/ffmi-profile", response_model=FfmiProfile)
-def update_ffmi_profile(payload: FfmiProfile, db: DbSession, user: CurrentUser) -> FfmiProfile:
-    set_setting(db, user.id, FFMI_PROFILE_KEY, payload.model_dump_json())
-    db.commit()
-    return ffmi_profile(db, user.id)
-
-
 @router.get("/training-split", response_model=TrainingSplitRead | None)
 def get_training_split(
     db: DbSession, user: CurrentUser, on_date: date | None = None
@@ -1986,7 +1970,8 @@ def list_personal_records(
     user: CurrentUser,
     exercise_id: str | None = None,
     workout_id: str | None = None,
-) -> list[PersonalRecord]:
+    include_blocks: bool = False,
+) -> list[PersonalRecordRead]:
     query = (
         select(PersonalRecord)
         .where(PersonalRecord.user_id == user.id)
@@ -1996,10 +1981,70 @@ def list_personal_records(
         query = query.where(PersonalRecord.exercise_id == exercise_id)
     if workout_id:
         query = query.where(PersonalRecord.workout_id == workout_id)
-    return list(
-        db.scalars(
+    records = [
+        PersonalRecordRead.model_validate(record)
+        for record in db.scalars(
             query.order_by(PersonalRecord.achieved_date.desc(), PersonalRecord.created_at.desc())
         )
+    ]
+    if include_blocks:
+        config = training_blocks(db, user.id)
+        if config.blocks:
+            workouts = list(
+                db.scalars(
+                    workout_query(user.id).where(
+                        TrainingWorkout.workout_date >= config.blocks[0].start_date
+                    )
+                )
+            )
+            grouped = defaultdict(list)
+            for workout in workouts:
+                block = block_on(config, workout.workout_date)
+                if block:
+                    grouped[block.id].append(workout)
+            unit = preferred_weight_unit(db, user.id)
+            for block in config.blocks:
+                for workout, movement, item, record_type in personal_record_events(
+                    grouped[block.id]
+                ):
+                    if (workout_id and workout.id != workout_id) or (
+                        exercise_id and movement.exercise_id != exercise_id
+                    ):
+                        continue
+                    weight = normalized_weight(item.weight_kg, unit)
+                    records.append(
+                        PersonalRecordRead(
+                            id=f"block:{block.id}:{item.id}:{record_type.value}",
+                            scope="block",
+                            block_id=block.id,
+                            block_name=block.name,
+                            exercise_id=movement.exercise_id,
+                            workout_id=workout.id,
+                            set_id=item.id,
+                            achieved_date=workout.workout_date,
+                            record_type=record_type,
+                            value=weight
+                            if record_type == PersonalRecordType.WEIGHT
+                            else float(item.reps),
+                            unit=unit if record_type == PersonalRecordType.WEIGHT else "reps",
+                            normalized_weight=weight,
+                            weight_kg=item.weight_kg,
+                            formula=None,
+                            exercise_name=movement.exercise.name,
+                        )
+                    )
+    # One achievement per metric/set: lifetime wins if it is also a block record.
+    lifetime = {
+        (record.set_id, record.record_type) for record in records if record.scope == "all_time"
+    }
+    return sorted(
+        [
+            record
+            for record in records
+            if record.scope == "all_time" or (record.set_id, record.record_type) not in lifetime
+        ],
+        key=lambda record: record.achieved_date,
+        reverse=True,
     )
 
 
@@ -2121,6 +2166,8 @@ def exercise_history_baselines(
             WorkoutMovement.order_index,
         )
     )
+    config = training_blocks(db, user.id)
+    block_weights = defaultdict(lambda: defaultdict(dict))
     reps_by_weight: dict[str, dict[float, int]] = {}
     latest: dict[str, ExerciseLatestSessionRead] = {}
     latest_movement_ids: dict[str, str] = {}
@@ -2147,6 +2194,10 @@ def exercise_history_baselines(
         # Four decimals absorb unit-conversion noise, as in the client's comparison.
         weight = round(row.weight_kg, 4)
         weights[weight] = max(weights.get(weight, 0), row.reps)
+        block = block_on(config, row.workout_date)
+        if block:
+            scoped = block_weights[row.exercise_id][block.id]
+            scoped[weight] = max(scoped.get(weight, 0), row.reps)
 
     if latest_movement_ids:
         for item in db.scalars(
@@ -2170,6 +2221,17 @@ def exercise_history_baselines(
                 for weight, reps in sorted(weights.items())
             ],
             latest=latest.get(exercise_id),
+            block_bests=[
+                BlockHistoryBaselineRead(
+                    block_id=block_id,
+                    best_weight_kg=max(values) if values else None,
+                    reps_by_weight=[
+                        WeightRepsRead(weight_kg=weight, reps=reps)
+                        for weight, reps in sorted(values.items())
+                    ],
+                )
+                for block_id, values in block_weights[exercise_id].items()
+            ],
         )
         for exercise_id, weights in reps_by_weight.items()
     ]
@@ -2535,8 +2597,10 @@ def update_workout(
     db: DbSession,
     user: CurrentUser,
     settings: SettingsDependency,
+    client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
+    payload = preserve_unknown_workout_fields(payload, workout, client_version)
     check_workout_size(payload, load_account_limits(db, settings), user, existing=workout)
     replace_workout_contents(db, user.id, workout, payload)
     db.flush()
@@ -2916,7 +2980,9 @@ def dashboard(
 
 
 @router.get("/progress", response_model=list[ExerciseLibrarySummaryRead])
-def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[ExerciseLibrarySummaryRead]:
+def exercise_library_progress(
+    db: DbSession, user: CurrentUser, block_id: str | None = None
+) -> list[ExerciseLibrarySummaryRead]:
     """Account-owned strength summaries, with an eight-week sparkline up to each lift's latest."""
     today = date.today()
     rows = db.execute(
@@ -2936,8 +3002,17 @@ def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[Exercise
             TrainingWorkout.workout_date <= today,
         )
     )
+    block = None
+    if block_id:
+        block = next((b for b in training_blocks(db, user.id).blocks if b.id == block_id), None)
+        if block is None:
+            raise HTTPException(404, "Training block was not found.")
     sessions: dict[str, dict[tuple[date, str], float]] = defaultdict(dict)
     for item, exercise_id, workout_date, workout_id in rows:
+        if block and (
+            workout_date < block.start_date or (block.end_date and workout_date >= block.end_date)
+        ):
+            continue
         if not is_working_set(item):
             continue
         key = (workout_date, workout_id)
@@ -3012,7 +3087,9 @@ def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) 
 
 
 @router.get("/progress/{exercise_id}", response_model=ExerciseProgressRead)
-def exercise_progress(exercise_id: str, db: DbSession, user: CurrentUser) -> ExerciseProgressRead:
+def exercise_progress(
+    exercise_id: str, db: DbSession, user: CurrentUser, block_id: str | None = None
+) -> ExerciseProgressRead:
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
@@ -3028,6 +3105,16 @@ def exercise_progress(exercise_id: str, db: DbSession, user: CurrentUser) -> Exe
             .order_by(WorkoutMovement.workout_id)
         )
     )
+    if block_id:
+        block = next((b for b in training_blocks(db, user.id).blocks if b.id == block_id), None)
+        if block is None:
+            raise HTTPException(404, "Training block was not found.")
+        movements = [
+            m
+            for m in movements
+            if m.workout.workout_date >= block.start_date
+            and (block.end_date is None or m.workout.workout_date < block.end_date)
+        ]
     grouped: dict[tuple[date, str], list[WorkoutSet]] = defaultdict(list)
     by_machine: dict[tuple[date, str, str | None], list[WorkoutSet]] = defaultdict(list)
     for movement in movements:

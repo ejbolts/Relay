@@ -132,7 +132,6 @@ function renderToday(
         onSaveBodyweight={vi.fn()}
         onStartTemplate={vi.fn()}
         onStartEmpty={vi.fn()}
-        onResumeWorkout={vi.fn()}
         onOpenHistory={vi.fn()}
         onOpenProgress={vi.fn()}
         onOpenCardio={vi.fn()}
@@ -375,12 +374,10 @@ describe('App startup', () => {
     expect(Math.max(...labels)).toBeLessThan(unit === 'kg' ? 90 : 200);
   });
 
-  it('replaces the recommendation with a resumable live workout', () => {
+  it('replaces the recommendation while a workout is live', () => {
     const markup = renderToday({ workoutStartedAt: Date.now() - 65_000, todayBodyweight: 84.1 });
 
-    expect(markup).toContain('live-workout-card');
-    expect(markup).toContain('Workout live');
-    expect(markup).toContain('1:05');
+    expect(markup).not.toContain('live-workout-card');
     expect(markup).toContain('Saved today · 84.1 kg');
     expect(markup).not.toContain('next-session-title');
   });

@@ -345,6 +345,8 @@ class UserSession(Base):
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
     user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # The app release this sign-in last used, from the X-Relay-Version header.
+    client_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class YouTubeConnection(Base):

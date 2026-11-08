@@ -233,6 +233,41 @@ function LimitsPanel({
   );
 }
 
+function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: number }) {
+  const versions = status.client_versions ?? [];
+  return (
+    <section className="settings-panel panel" aria-labelledby="admin-versions-title">
+      <header>
+        <div>
+          <p className="section-kicker">LAST 30 DAYS</p>
+          <h2 id="admin-versions-title">App versions in use</h2>
+        </div>
+      </header>
+      <dl className="admin-stats">
+        {versions.map((usage) => (
+          <div key={usage.version ?? 'unreported'}>
+            <dt>{usage.version ? `Version ${usage.version}` : 'Not reported'}</dt>
+            <dd>
+              {plural(usage.users, 'account')} · {plural(usage.sessions, 'device')} ·{' '}
+              {formatLastActive(usage.last_seen_at, new Date(now))}
+            </dd>
+          </div>
+        ))}
+        {versions.length === 0 && (
+          <div>
+            <dt>Signed-in devices</dt>
+            <dd>None</dd>
+          </div>
+        )}
+        <div>
+          <dt>Oldest version that can save</dt>
+          <dd>{status.minimum_write_version ?? 'Any'}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 function StatusPanel({ status }: { status: ServerStatus }) {
   const { total_bytes, used_bytes, free_bytes } = status.disk;
   const usedPercent = total_bytes ? Math.round((used_bytes / total_bytes) * 100) : 0;
@@ -526,6 +561,7 @@ export function AdminScreenView({
         />
       )}
       {status && <StatusPanel status={status} />}
+      {status && <ClientVersionsPanel status={status} now={now} />}
       {feedback && (
         <section className="settings-panel panel" aria-labelledby="admin-feedback-title">
           <header>

@@ -388,9 +388,16 @@ class ExerciseLatestSessionRead(BaseModel):
     sets: list[WorkoutSetRead]
 
 
+class BlockHistoryBaselineRead(BaseModel):
+    block_id: str
+    best_weight_kg: float | None
+    reps_by_weight: list[WeightRepsRead]
+
+
 class ExerciseHistoryBaselineRead(BaseModel):
     """An exercise's history before a date, condensed for PR checks and set suggestions."""
 
+    block_bests: list[BlockHistoryBaselineRead] = Field(default_factory=list)
     exercise_id: str
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -625,6 +632,10 @@ class BodyWeightGoalRead(BodyWeightGoalCreate):
 
 
 class PersonalRecordRead(BaseModel):
+    scope: Literal["all_time", "block"] = "all_time"
+    block_id: str | None = None
+    block_name: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -786,16 +797,6 @@ class TrainingPreferencesUpdate(BaseModel):
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):
     weekly_muscle_set_goal: int = 10
-
-
-class FfmiProfile(BaseModel):
-    """Body frame inputs for FFMI and natural muscular potential estimates."""
-
-    sex: Literal["male", "female"] | None = None
-    height_cm: float | None = Field(default=None, ge=100, le=250)
-    wrist_cm: float | None = Field(default=None, ge=10, le=30)
-    ankle_cm: float | None = Field(default=None, ge=12, le=40)
-    target_body_fat_pct: float = Field(default=10, ge=3, le=40)
 
 
 class WorkoutTypeColors(BaseModel):

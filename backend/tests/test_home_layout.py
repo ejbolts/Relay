@@ -4,7 +4,10 @@ from app.database import SessionLocal
 from app.home_layout import OPTIONAL_CHECK_INS, SECTION_IDS
 from app.training_metrics import set_setting
 
-DEFAULT_SETTINGS = {"zone2": {"zone": None, "style": "progress"}}
+DEFAULT_SETTINGS = {
+    "zone2": {"zone": None, "style": "progress"},
+    "training_block": {"style": "both"},
+}
 
 
 def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client):
@@ -19,7 +22,10 @@ def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client)
         "order": list(reversed(SECTION_IDS)),
         "hidden": ["consistency", "workouts"],
         "widths": {"combined-check-in": "compact", "workouts": "full", "friends": "third"},
-        "settings": {"zone2": {"zone": 4, "style": "ring"}},
+        "settings": {
+            "zone2": {"zone": 4, "style": "ring"},
+            "training_block": {"style": "timeline"},
+        },
     }
     response = client.put("/api/home-layout", json=layout)
     assert response.status_code == 200
@@ -76,6 +82,19 @@ def test_older_layout_appends_new_sections_without_unhiding_old_sections(client)
     assert set(result["order"]) == set(SECTION_IDS)
     assert result["hidden"] == old["hidden"] + OPTIONAL_CHECK_INS
     assert result["widths"] == {}
+
+
+def test_saved_layout_gains_the_block_card_after_the_next_workout(client):
+    with SessionLocal() as db:
+        set_setting(
+            db,
+            client.user["id"],
+            "home_layout",
+            '{"order":["profile","consistency","next-workout","workouts"],"hidden":[]}',
+        )
+        db.commit()
+    order = client.get("/api/home-layout").json()["order"]
+    assert order[:5] == ["profile", "consistency", "next-workout", "training-block", "workouts"]
 
 
 def test_corrupt_saved_layout_recovers_to_default(client):

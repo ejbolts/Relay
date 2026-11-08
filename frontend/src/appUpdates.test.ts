@@ -19,6 +19,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.doUnmock('./workoutDraft');
 });
 
 async function flushPromises() {
@@ -261,5 +262,165 @@ describe('app updates', () => {
     await app.refreshApp();
     expect(register).not.toHaveBeenCalled();
     expect(window.location.reload).toHaveBeenCalledTimes(1);
+  });
+
+  describe('automatic updates', () => {
+    let draft: { pendingSave?: object } | null;
+
+    async function opened() {
+      draft = null;
+      vi.doMock('./workoutDraft', () => ({ readActiveWorkoutDraft: () => draft }));
+      const context = await setup();
+      const document = Object.assign(context.document, {
+        activeElement: null as Element | null,
+        querySelector: vi.fn().mockReturnValue(null),
+      });
+      return { ...context, document };
+    }
+
+    function waitingWorker(registration: { waiting: Worker | null }) {
+      const worker = new Worker();
+      worker.state = 'installed';
+      registration.waiting = worker;
+      return worker;
+    }
+
+    async function takeControl(context: Awaited<ReturnType<typeof opened>>, worker: Worker) {
+      await flushPromises();
+      expect(worker.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' });
+      context.registration.waiting = null;
+      context.serviceWorker.controller = worker;
+      context.serviceWorker.dispatchEvent(new Event('controllerchange'));
+      await flushPromises();
+    }
+
+    it('applies an update found right after opening when nothing is in progress', async () => {
+      const context = await opened();
+      const worker = waitingWorker(context.registration);
+      context.app.registerAppUpdates();
+      await takeControl(context, worker);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('also applies a release that finishes downloading shortly after opening', async () => {
+      const context = await opened();
+      context.app.registerAppUpdates();
+      await flushPromises();
+      context.registration.installing = new Worker();
+      context.registration.dispatchEvent(new Event('updatefound'));
+      const worker = finishInstallation(context.registration);
+      await takeControl(context, worker);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('never interrupts an unfinished workout, a form, a dialog or a save', async () => {
+      const context = await opened();
+      context.app.registerAppUpdates();
+      await flushPromises();
+      const worker = waitingWorker(context.registration);
+      const blockers: Array<[() => void, () => void]> = [
+        [() => (draft = {}), () => (draft = null)],
+        [
+          () =>
+            (context.document.activeElement = {
+              matches: (selector: string) => selector.includes('input'),
+            } as unknown as Element),
+          () => (context.document.activeElement = null),
+        ],
+        [
+          () => context.document.querySelector.mockReturnValue({}),
+          () => context.document.querySelector.mockReturnValue(null),
+        ],
+      ];
+      for (const [block, unblock] of blockers) {
+        block();
+        await context.app.checkForAppUpdate();
+        await flushPromises();
+        expect(worker.postMessage).not.toHaveBeenCalled();
+        unblock();
+      }
+      const endSave = context.app.beginWrite();
+      await context.app.checkForAppUpdate();
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      const cancel = (event: Event) => {
+        if ((event as CustomEvent<{ automatic: boolean }>).detail?.automatic)
+          event.preventDefault();
+      };
+      context.window.addEventListener(context.app.BEFORE_APP_REFRESH_EVENT, cancel);
+      endSave();
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      context.window.removeEventListener(context.app.BEFORE_APP_REFRESH_EVENT, cancel);
+      // A finished workout waiting to sync is already stored, so it does not hold the update.
+      draft = { pendingSave: {} };
+      endSave();
+      await context.app.checkForAppUpdate();
+      await takeControl(context, worker);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks again shortly after a startup screen or dialog closes', async () => {
+      const context = await opened();
+      context.document.querySelector.mockReturnValue({});
+      const worker = waitingWorker(context.registration);
+      context.app.registerAppUpdates();
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      context.document.querySelector.mockReturnValue(null);
+      await vi.advanceTimersByTimeAsync(1000);
+      await takeControl(context, worker);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits after the first touch or a minute of use until the app is opened again', async () => {
+      const context = await opened();
+      context.app.registerAppUpdates();
+      await flushPromises();
+      context.window.dispatchEvent(new Event('pointerdown'));
+      const worker = waitingWorker(context.registration);
+      await context.app.checkForAppUpdate();
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      expect(context.app.isAppUpdateAvailable()).toBe(true);
+
+      const reopen = async (awayMs: number) => {
+        context.document.visibilityState = 'hidden';
+        context.document.dispatchEvent(new Event('visibilitychange'));
+        vi.advanceTimersByTime(awayMs);
+        context.document.visibilityState = 'visible';
+        context.document.dispatchEvent(new Event('visibilitychange'));
+        await flushPromises();
+      };
+      await reopen(context.app.REOPEN_AFTER_HIDDEN_MS - 1000);
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      await reopen(context.app.REOPEN_AFTER_HIDDEN_MS);
+      await takeControl(context, worker);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not apply an update found more than a minute after opening', async () => {
+      const context = await opened();
+      context.app.registerAppUpdates();
+      await flushPromises();
+      vi.advanceTimersByTime(context.app.AUTO_UPDATE_WINDOW_MS + 1);
+      const worker = waitingWorker(context.registration);
+      await context.app.checkForAppUpdate();
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  it('marks an update as required when the server turns away a save', async () => {
+    const { app, update, window } = await setup();
+    const notify = vi.fn();
+    app.subscribeAppUpdates(notify);
+    app.reportClientOutdated();
+    await flushPromises();
+    expect(app.isAppUpdateRequired()).toBe(true);
+    expect(app.isAppUpdateAvailable()).toBe(true);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(window.location.reload).not.toHaveBeenCalled();
   });
 });

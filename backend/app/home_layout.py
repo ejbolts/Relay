@@ -14,6 +14,7 @@ from .training_metrics import get_setting, set_setting
 HomeSection = Literal[
     "profile",
     "next-workout",
+    "training-block",
     "workouts",
     "cardio-sessions",
     "weekly-bodyweight",
@@ -38,10 +39,15 @@ class CardioGoalCardSettings(BaseModel):
     style: Literal["progress", "ring", "list"] = "progress"
 
 
+class TrainingBlockCardSettings(BaseModel):
+    style: Literal["progress", "timeline", "both"] = "both"
+
+
 class HomeSectionSettings(BaseModel):
     """Per-section display options. Add a field here when a section becomes configurable."""
 
     zone2: CardioGoalCardSettings = Field(default_factory=CardioGoalCardSettings)
+    training_block: TrainingBlockCardSettings = Field(default_factory=TrainingBlockCardSettings)
 
 
 class HomeLayout(BaseModel):
@@ -87,9 +93,13 @@ class HomeLayout(BaseModel):
         if len(self.order) != len(set(self.order)) or len(self.hidden) != len(set(self.hidden)):
             raise ValueError("Sections must not be repeated.")
         # The profile header leads layouts saved before it existed; other new sections are
-        # appended. Neither changes the relative positions of saved sections.
+        # appended unless placed below. Neither changes the relative positions of saved sections.
         if "profile" not in self.order:
             self.order.insert(0, "profile")
+        # The block indicator belongs beside the next workout rather than at the end. It only
+        # renders while a training block exists.
+        if "training-block" not in self.order and "next-workout" in self.order:
+            self.order.insert(self.order.index("next-workout") + 1, "training-block")
         # Append newly introduced sections without changing existing saved positions.
         self.order.extend(section for section in SECTION_IDS if section not in self.order)
         return self

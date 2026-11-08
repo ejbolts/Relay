@@ -24,21 +24,19 @@ export function useUpNextSession(
   const isRestDay = active?.is_rest_day === true;
   const needsSplitUpdate =
     active?.needs_split_update === true || !!(active?.split_name && archived);
-  const template = useMemo(
-    () =>
-      active && !isRestDay && !needsSplitUpdate
-        ? active.routine_day
-          ? routineSessionTemplate(active.routine_day, active.session_name, today, weightUnit)
-          : sessionTemplateFor(
-              workouts,
-              active.category,
-              today,
-              weightUnit,
-              type?.is_custom ? type.id : null,
-            )
-        : null,
-    [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type],
-  );
+  const template = useMemo(() => {
+    if (!active || isRestDay || needsSplitUpdate) return null;
+    // A routine day with exercises wins; an empty one falls back to the last session of its type.
+    if (active.routine_day?.movements.length)
+      return routineSessionTemplate(active.routine_day, active.session_name, today, weightUnit);
+    return sessionTemplateFor(
+      workouts,
+      active.category,
+      today,
+      weightUnit,
+      type?.is_custom ? type.id : null,
+    );
+  }, [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type]);
   const label = active
     ? isRestDay
       ? 'Rest'

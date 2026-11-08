@@ -11,7 +11,6 @@ import type {
   BodyMeasurementCsvImportResult,
   BodyWeightGoal,
   BodyWeightGoalInput,
-  FfmiProfile,
   CardioOverview,
   CardioPreferences,
   CardioScreenshotScan,
@@ -39,6 +38,8 @@ import type {
   MachineSetting,
   MuscleVolume,
   PersonalRecord,
+  TrainingBlockInput,
+  TrainingBlocks,
   ProfileUpdateInput,
   PushConfig,
   RegisterInput,
@@ -87,6 +88,13 @@ import { isUsingSavedData, reportSavedDataUsed, reportServerReached } from './co
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
+import { beginWrite, reportClientOutdated, trackWrite } from './appUpdates';
+import {
+  CLIENT_VERSION,
+  CLIENT_VERSION_HEADER,
+  isClientOutdated,
+  withClientVersion,
+} from './clientVersion';
 import type { HomeLayout } from './homeLayout';
 import { localDate } from './utils';
 import {
@@ -135,7 +143,13 @@ async function request<T>(
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
-  const response = await fetch(path, { ...init, credentials: 'same-origin' });
+  const sent = fetch(path, {
+    ...init,
+    headers: withClientVersion(init?.headers),
+    credentials: 'same-origin',
+  });
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
   checkAccount();
   if (!GATEWAY_FAILURES.has(response.status)) reportServerReached();
   if (!response.ok) {
@@ -143,6 +157,7 @@ async function request<T>(
       error?: { code?: string; message?: string };
     } | null;
     checkAccount();
+    if (isClientOutdated(response.status, body?.error?.code)) reportClientOutdated();
     if (
       signalExpiredSession &&
       response.status === 401 &&
@@ -236,7 +251,10 @@ async function requestBlob(path: string): Promise<Blob> {
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
-  const response = await fetch(path, { credentials: 'same-origin' });
+  const response = await fetch(path, {
+    headers: withClientVersion(),
+    credentials: 'same-origin',
+  });
   checkAccount();
   if (!response.ok) {
     if (response.status === 401) emitAuthExpired();
@@ -760,13 +778,6 @@ export const api = {
     await refreshBodyMeasurements(bodyMeasurementTransport).catch(() => undefined);
     return result;
   },
-  getFfmiProfile: () => accountRead<FfmiProfile>('/api/ffmi-profile'),
-  updateFfmiProfile: (payload: FfmiProfile) =>
-    request<FfmiProfile>('/api/ffmi-profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
   listBodyWeightGoals: () => accountRead<BodyWeightGoal[]>('/api/body-weight-goals'),
   createBodyWeightGoal: (payload: BodyWeightGoalInput) =>
     request<BodyWeightGoal>('/api/body-weight-goals', {
@@ -782,10 +793,30 @@ export const api = {
     }),
   deleteBodyWeightGoal: (id: string) =>
     request<void>(`/api/body-weight-goals/${id}`, { method: 'DELETE' }),
+  trainingBlocks: {
+    get: () => accountRead<TrainingBlocks>('/api/training-blocks'),
+    create: (payload: TrainingBlockInput) =>
+      request<TrainingBlocks>('/api/training-blocks', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    update: (id: string, payload: TrainingBlockInput) =>
+      request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    remove: (id: string) =>
+      request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+  },
   listPersonalRecords: (params?: { exerciseId?: string; workoutId?: string }) => {
     const query = new URLSearchParams();
     if (params?.exerciseId) query.set('exercise_id', params.exerciseId);
     if (params?.workoutId) query.set('workout_id', params.workoutId);
+    query.set('include_blocks', 'true');
     const path = `/api/personal-records${query.size ? `?${query}` : ''}`;
     // A just-saved workout's records only matter online; saving a copy per workout would pile up.
     return params?.workoutId
@@ -927,8 +958,14 @@ export const api = {
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
-  exerciseProgress: (id: string) => accountRead<ExerciseProgress>(`/api/progress/${id}`),
-  exerciseLibrary: () => accountRead<ExerciseLibrarySummary[]>('/api/progress'),
+  exerciseProgress: (id: string, blockId?: string) =>
+    accountRead<ExerciseProgress>(
+      `/api/progress/${id}${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,
+    ),
+  exerciseLibrary: (blockId?: string) =>
+    accountRead<ExerciseLibrarySummary[]>(
+      `/api/progress${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,
+    ),
   getWorkout: (id: string) => request<TrackedWorkout>(`/api/workouts/${id}`),
   getSession: (id: string) => request<WorkoutSession>(`/api/sessions/${id}`),
   deleteSession: (id: string) =>
@@ -968,6 +1005,8 @@ export const api = {
       form.append('file', clip.file, clip.file.name);
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/sessions/${sessionId}/clips`);
+      xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
+      xhr.onloadend = beginWrite();
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };
@@ -981,6 +1020,7 @@ export const api = {
           return;
         }
         if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE) emitAuthExpired();
+        if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
         reject(
           new ApiError(
             body?.error?.message ?? `Upload failed (${xhr.status})`,
