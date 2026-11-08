@@ -362,7 +362,11 @@ import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { TrainingBlockControls } from './TrainingBlockControls';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
-import { completedWorkoutDurationMinutes } from './workoutResume';
+import {
+  cardioAdjustedEndTime,
+  completedCardioDurationSeconds,
+  completedWorkoutDurationMinutes,
+} from './workoutResume';
 import {
   isWorkoutSetAutoSavable,
   workoutSetAfterEdit,
@@ -3564,15 +3568,6 @@ function WorkoutLogger({
       return;
     }
     const finishedAt = automaticEndAt ?? Date.now();
-    const durationMinutes = initialWorkout
-      ? editedDurationMinutes
-      : completedWorkoutDurationMinutes(
-          previousDurationMinutes,
-          startedAt,
-          finishedAt,
-          durationOverrideMinutes,
-          pausedMsAt(pause, finishedAt),
-        );
     const movementsToSave =
       automaticEndAt === undefined
         ? movements
@@ -3580,6 +3575,17 @@ function WorkoutLogger({
             ...movement,
             sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
           }));
+    const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
+    const durationMinutes = initialWorkout
+      ? Math.max(editedDurationMinutes, Math.ceil(cardioDurationSeconds / 60))
+      : completedWorkoutDurationMinutes(
+          previousDurationMinutes,
+          startedAt,
+          finishedAt,
+          durationOverrideMinutes,
+          pausedMsAt(pause, finishedAt),
+          cardioDurationSeconds,
+        );
     const completed = movementsToSave
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
@@ -3595,9 +3601,15 @@ function WorkoutLogger({
       setError('Enter both a workout start time and end time, or leave both blank.');
       return;
     }
-    if (!initialWorkout && durationOverrideMinutes === null && durationMinutes > 1440) {
+    if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
+      setError('Clear the start and end times to save a 24-hour workout.');
+      return;
+    }
+    if (durationMinutes > 1440) {
       setError(
-        'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
+        cardioDurationSeconds > 1440 * 60
+          ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
+          : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
       );
       return;
     }
@@ -3633,7 +3645,10 @@ function WorkoutLogger({
         notes: notes.trim() || null,
         duration_minutes: durationMinutes,
         start_time: initialWorkout && startTime && endTime ? startTime : null,
-        end_time: initialWorkout && startTime && endTime ? endTime : null,
+        end_time:
+          initialWorkout && startTime && endTime
+            ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
+            : null,
         movements: movementsToSave.map((movement) => ({
           exercise_id: movement.exercise.id,
           notes: movement.notes.trim() || null,

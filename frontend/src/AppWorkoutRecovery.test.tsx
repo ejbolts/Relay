@@ -2165,6 +2165,186 @@ describe('cardio set editing defaults', () => {
     equipment: 'Treadmill',
   };
 
+  function cardioDraft(overrides: Partial<ActiveWorkoutDraft> = {}) {
+    const draft = storedDraft({ category: 'cardio', ...overrides });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: treadmill.id,
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'cardio-set',
+            duration_seconds: 1800,
+            completed: false,
+            fromPrevious: true,
+          },
+        ],
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+    return draft;
+  }
+
+  const workoutTime = () => container.querySelector('.workout-summary-metrics strong')?.textContent;
+
+  it('keeps live time unchanged by logging cardio, recovery and unticking', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    writeActiveWorkoutDraft(cardioDraft());
+    await mount();
+    expect(workoutTime()).toBe('10:00');
+    const tick = () => container.querySelector<HTMLButtonElement>('.row-complete-button')!;
+    await act(async () => tick().click());
+    expect(workoutTime()).toBe('10:00');
+    expect(container.querySelector('.logger-screen .overlay-screen-header')?.textContent).toContain(
+      'Live 10:00',
+    );
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(workoutTime()).toBe('10:00');
+    await act(async () => tick().click());
+    expect(workoutTime()).toBe('10:00');
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
+    });
+    expect(container.querySelector('.app-tab-start.live .num')?.textContent).toBe('10:00');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.app-tab-start.live')!.click(),
+    );
+    await act(async () => tick().click());
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
+    });
+    expect(container.querySelector('.app-tab-start.live .num')?.textContent).toBe('10:00');
+  });
+
+  it.each([
+    { label: 'new', overrides: {}, live: 10, expected: 30 },
+    {
+      label: 'longer timer',
+      overrides: { startedAt: Date.now() - 40 * 60_000 },
+      live: 40,
+      expected: 40,
+    },
+    {
+      label: 'resumed',
+      overrides: { resumingWorkoutId: 'existing', previousDurationMinutes: 45 },
+      live: 55,
+      expected: 55,
+    },
+    { label: 'corrected', overrides: { durationOverrideMinutes: 15 }, live: 15, expected: 30 },
+    {
+      label: 'paused',
+      overrides: { pausedMs: 5 * 60_000, pausedAt: Date.now() },
+      live: 5,
+      expected: 30,
+    },
+  ])(
+    'saves $label workout time without double-counting cardio',
+    async ({ overrides, live, expected }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const draft = cardioDraft({
+        ...overrides,
+        ...(overrides.startedAt && { startedAt: Date.now() - 40 * 60_000 }),
+        ...(overrides.pausedAt && { pausedAt: Date.now() }),
+      });
+      draft.movements[0].sets[0].completed = true;
+      writeActiveWorkoutDraft(draft);
+      vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+      vi.mocked(api.updateWorkout).mockResolvedValue(remoteWorkout());
+      await mount();
+      expect(workoutTime()).toBe(`${live}:00`);
+      await confirmFinish();
+      const payload = overrides.resumingWorkoutId
+        ? vi.mocked(api.updateWorkout).mock.lastCall![1]
+        : vi.mocked(api.createWorkout).mock.lastCall![0];
+      expect(payload.duration_minutes).toBe(expected);
+    },
+  );
+
+  it('includes entered cardio promoted to completed by an automatic save', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const draft = cardioDraft({
+      startedAt: Date.now() - 181 * 60_000,
+      inactiveFinishAt: Date.now() - 60_000,
+    });
+    draft.lastActiveAt = draft.updatedAt = draft.startedAt;
+    Object.assign(draft.movements[0].sets[0], { duration_seconds: 240 * 60, fromPrevious: false });
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(vi.mocked(api.createWorkout).mock.lastCall![0]).toMatchObject({ duration_minutes: 240 });
+  });
+
+  it.each([45, 1440, 1441])(
+    'keeps saved timing consistent when cardio is edited to %i minutes',
+    async (minutes) => {
+      window.history.replaceState(null, '', '#training');
+      const saved = remoteWorkout();
+      saved.start_time = '23:45';
+      saved.end_time = '00:15';
+      saved.movements[0].exercise = treadmill;
+      saved.movements[0].sets[0] = {
+        ...saved.movements[0].sets[0],
+        ...createWorkoutSet('cardio'),
+        duration_seconds: 1800,
+        completed: true,
+      };
+      vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+      vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+      vi.mocked(api.updateWorkout).mockResolvedValue(saved);
+      await mount();
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
+      );
+      const edit = [
+        ...container.querySelectorAll<HTMLButtonElement>('.workout-actions button'),
+      ].find((button) => button.textContent === 'Edit')!;
+      await act(async () => edit.click());
+      await act(async () =>
+        container.querySelector<HTMLElement>('.completed-set-summary')!.click(),
+      );
+      const duration = container.querySelector<HTMLInputElement>(
+        '[aria-label="Duration minutes"]',
+      )!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          duration,
+          String(minutes),
+        );
+        duration.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      if (minutes >= 1440) {
+        await act(async () =>
+          container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
+        );
+        expect(api.updateWorkout).not.toHaveBeenCalled();
+        expect(container.textContent).toContain(
+          minutes === 1440 ? 'Clear the start and end times' : 'Correct the cardio durations',
+        );
+        return;
+      }
+      expect(workoutTime()).toBe('30:00');
+      expect(
+        container.querySelector<HTMLInputElement>('[aria-label="Workout end time"]')?.value,
+      ).toBe('00:15');
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
+      );
+      expect(vi.mocked(api.updateWorkout).mock.lastCall![1]).toMatchObject({
+        duration_minutes: 45,
+        start_time: '23:45',
+        end_time: '00:30',
+      });
+    },
+  );
+
   it.each([treadmill, bench])(
     'starts $kind suggestions with the expected editor and preserves uncompleted values',
     async (exercise) => {
