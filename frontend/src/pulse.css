@@ -3346,6 +3346,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
   background: transparent;
 }
 
+.logger-screen .movement-card.superset-card {
+  border: 1px solid rgb(167 139 250 / 55%);
+}
+
 .logger-screen .movement-card > .superset-ribbon {
   border-radius: calc(var(--p-radius) - 1px) calc(var(--p-radius) - 1px) 0 0;
 }
