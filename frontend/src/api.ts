@@ -88,6 +88,13 @@ import { isUsingSavedData, reportSavedDataUsed, reportServerReached } from './co
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
+import { beginWrite, reportClientOutdated, trackWrite } from './appUpdates';
+import {
+  CLIENT_VERSION,
+  CLIENT_VERSION_HEADER,
+  isClientOutdated,
+  withClientVersion,
+} from './clientVersion';
 import type { HomeLayout } from './homeLayout';
 import { localDate } from './utils';
 import {
@@ -136,7 +143,13 @@ async function request<T>(
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
-  const response = await fetch(path, { ...init, credentials: 'same-origin' });
+  const sent = fetch(path, {
+    ...init,
+    headers: withClientVersion(init?.headers),
+    credentials: 'same-origin',
+  });
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
   checkAccount();
   if (!GATEWAY_FAILURES.has(response.status)) reportServerReached();
   if (!response.ok) {
@@ -144,6 +157,7 @@ async function request<T>(
       error?: { code?: string; message?: string };
     } | null;
     checkAccount();
+    if (isClientOutdated(response.status, body?.error?.code)) reportClientOutdated();
     if (
       signalExpiredSession &&
       response.status === 401 &&
@@ -237,7 +251,10 @@ async function requestBlob(path: string): Promise<Blob> {
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
-  const response = await fetch(path, { credentials: 'same-origin' });
+  const response = await fetch(path, {
+    headers: withClientVersion(),
+    credentials: 'same-origin',
+  });
   checkAccount();
   if (!response.ok) {
     if (response.status === 401) emitAuthExpired();
@@ -983,6 +1000,8 @@ export const api = {
       form.append('file', clip.file, clip.file.name);
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/sessions/${sessionId}/clips`);
+      xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
+      xhr.onloadend = beginWrite();
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };
@@ -996,6 +1015,7 @@ export const api = {
           return;
         }
         if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE) emitAuthExpired();
+        if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
         reject(
           new ApiError(
             body?.error?.message ?? `Upload failed (${xhr.status})`,

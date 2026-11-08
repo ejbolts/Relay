@@ -1863,6 +1863,26 @@ describe('durable workout completion', () => {
     expectPreserved(draft);
   });
 
+  it('keeps a completion on the device without a review while this release is too old to save', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(
+      new ApiError('Relay needs to update before it can save this.', 'client_outdated', 426),
+    );
+    await mount();
+    await confirmFinish();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Saved on this device. Update Relay to sync it.');
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Review workout',
+      ),
+    ).toBe(false);
+    await act(async () => window.dispatchEvent(new Event('online')));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(readActiveWorkoutDraft()?.pendingSave?.payload.name).toBe(draft.name);
+  });
+
   it('does not replay another account’s completion even if old device metadata is missing', async () => {
     writeActiveWorkoutDraft(storedDraft());
     vi.mocked(api.createWorkout).mockReturnValue(new Promise(() => {}));

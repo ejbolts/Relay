@@ -1623,6 +1623,7 @@ function AppContent() {
         {appUpdates.available && (
           <AppUpdateBanner
             version={appUpdates.availableRelease?.version}
+            required={appUpdates.required}
             refreshing={appUpdates.refreshing}
             error={appUpdates.refreshError}
             onRefresh={() => void appUpdates.refresh()}

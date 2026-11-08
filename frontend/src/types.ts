@@ -813,6 +813,18 @@ export interface ServerStatus {
   photo_bytes: number;
   video_file_bytes: number;
   video_queue: Record<string, number>;
+  /** Releases used by sign-ins in the last 30 days, newest first. */
+  client_versions?: ClientVersionUsage[];
+  /** Saves from older releases are refused; null accepts every release. */
+  minimum_write_version?: string | null;
+}
+
+export interface ClientVersionUsage {
+  /** Null for sign-ins not used since releases started reporting their version. */
+  version: string | null;
+  users: number;
+  sessions: number;
+  last_seen_at: string;
 }
 
 export interface AuthConfig {

@@ -46,7 +46,7 @@ it('sends JSON comment mutations to the server with its required content type', 
   await api.sharing.editComment('c2', 'Updated');
   await api.sharing.reactToComment('c2', 'love');
   for (const [, options] of fetcher.mock.calls) {
-    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(new Headers(options.headers).get('Content-Type')).toBe('application/json');
   }
 });
 beforeEach(() => {

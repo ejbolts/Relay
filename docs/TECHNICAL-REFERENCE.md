@@ -182,7 +182,7 @@ On Windows, `./start-app.ps1` builds and starts a local copy. Use `./start-app.p
 
 Vite forwards HTTP and WebSocket `/api` requests to FastAPI. For access through a private development hostname, set the `GYM_DEV_HOST` environment variable to that hostname before starting Vite; localhost works without it.
 
-The menu has one current dark/blue theme, with three total stats above three weekly/bodyweight-trend stats. The old powerlifting stars menu is retired. Building replaces the previous `frontend/dist` assets. The server revalidates HTML, the service worker, and the manifest; fingerprinted assets may be cached. Release information is checked every minute while visible and online, and when returning or reconnecting. A new release displays a top notification with a refresh arrow; **Settings > What's new > Check for updates** also checks the worker. Replacement workers download in the background and wait, preserving the current cached assets. No screen reloads automatically, including when another tab activates an update. The refresh arrow waits for installation and activation, then reloads. An active workout flushes its local draft first; storage failure, an in-flight workout save or editing a previously saved workout blocks the refresh until the work is saved. Release popups describe the loaded version and remember dismissal per account/version in this browser. The Vite development server replaces any installed production worker with a cache-clearing pass-through worker while preserving push support. Workout data, drafts, settings, and push subscriptions are retained. A local workout draft needs the exercise catalogue to reload successfully before it can be restored; failed or incomplete requests preserve the draft for retry.
+The menu has one current dark/blue theme, with three total stats above three weekly/bodyweight-trend stats. The old powerlifting stars menu is retired. Building replaces the previous `frontend/dist` assets. The server revalidates HTML, the service worker, and the manifest; fingerprinted assets may be cached. Release information is checked every minute while visible and online, and when returning or reconnecting. A new release displays a top notification with a refresh arrow; **Settings > What's new > Check for updates** also checks the worker. Replacement workers download in the background and wait, preserving the current cached assets. An update applies by itself only when it is ready within a minute of opening the app (a cold start, or returning after at least five minutes away), before anything is touched, with no unfinished workout draft, focused field, open dialog or save/upload in flight; see [App versions and API compatibility](#app-versions-and-api-compatibility). Otherwise nothing reloads automatically, including when another tab activates an update. The refresh arrow waits for installation and activation, then reloads. An active workout flushes its local draft first; storage failure, an in-flight workout save or editing a previously saved workout blocks the refresh until the work is saved. Release popups describe the loaded version and remember dismissal per account/version in this browser. The Vite development server replaces any installed production worker with a cache-clearing pass-through worker while preserving push support. Workout data, drafts, settings, and push subscriptions are retained. A local workout draft needs the exercise catalogue to reload successfully before it can be restored; failed or incomplete requests preserve the draft for retry.
 
 Choose the pencil on **Today** to customise the Home Screen directly. The cards gently wiggle and show a drag handle at the top right, a width button beside it and a minus button at the top left. Drag a handle to move its card, or focus it and use the keyboard arrow keys; use the width button to expand or shrink a card, minus to hide a card and **Add sections** to restore it. Sections with display options also show **Customise**; the cardio goal card can track one zone goal or every goal, with a progress bar, ring or list design. **Save layout** stores order, widths, visibility and these options in your account across devices; **Cancel**, choosing the highlighted pencil again or switching away from Today discards unsaved edits, and **Reset layout** restores the original arrangement and sizing before saving. An active workout's Resume card always stays visible. Card actions pause while editing, and reduced-motion settings disable the wiggle. These preferences use the existing account settings table and need no migration.
 
@@ -408,6 +408,28 @@ real server-side session. Tests marked `auth_flow` (including the auth and accou
 management suites) create their fixture accounts through real registration and login.
 Use that marker for tests whose purpose includes those authentication flows; explicit
 calls to registration/login and password hashing always use the real implementation.
+
+## App versions and API compatibility
+
+Installed apps can keep an old bundle open for days, so the API must keep working with
+releases that are already deployed. The rules for changing it are in `AGENTS.md`;
+`backend/app/client_versions.py` holds the mechanisms:
+
+- Every API request sends its `frontend/release.json` version in `X-Relay-Version`. Each
+  signed-in session stores the latest one, and **Admin > App versions in use** lists the
+  releases seen in the last 30 days (sessions not used since the header existed show as
+  *Not reported*).
+- `MIN_WRITE_CLIENT_VERSION` (default `None`) makes the API refuse saves from older or
+  unreported releases with `426 client_outdated`. Reads and `/api/auth/*` stay open. The app
+  then shows **Update needed to save**, keeps a finished workout or body check-in queued on
+  the device without asking for a review, and sends it once refreshed.
+- `FIELDS_ADDED_IN` lists fields added to a full-replace save by the release that introduced
+  them. When an older release replaces that record, the stored value is kept rather than reset.
+  Workout updates (`PUT /api/workouts/{id}`) apply it to workout, exercise and set fields,
+  matching exercises by position and exercise and sets by position.
+- An update downloaded within a minute of opening the app applies by itself when nothing is
+  in progress (see [Detailed app behavior](#detailed-app-behavior)), so most devices move to
+  a new release the next time they are opened.
 
 ## Switching to real YouTube uploads
 

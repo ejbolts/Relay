@@ -22,6 +22,7 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .client_versions import CLIENT_VERSION_HEADER, normalized_version
 from .config import DEFAULT_SESSION_COOKIE, Settings
 from .database import get_db
 from .errors import api_error
@@ -215,6 +216,10 @@ def get_auth_context(
         db.delete(session)
         db.commit()
         raise not_authenticated()
+    version = normalized_version(request.headers.get(CLIENT_VERSION_HEADER))
+    version_changed = version is not None and version != session.client_version
+    if version_changed:
+        session.client_version = version
     lifetime = session_lifetime(settings)
     if expires_at - now < lifetime - min(SESSION_REFRESH_INTERVAL, lifetime / 2):
         # Sliding expiry: a sign-in only ends after a full lifetime without use. Refresh the
@@ -223,7 +228,7 @@ def get_auth_context(
         session.last_seen_at = user.last_active_at = now
         db.commit()
         set_session_cookie(response, token, settings)
-    elif now - as_utc(session.last_seen_at) > LAST_SEEN_WRITE_INTERVAL:
+    elif version_changed or now - as_utc(session.last_seen_at) > LAST_SEEN_WRITE_INTERVAL:
         session.last_seen_at = user.last_active_at = now
         db.commit()
     return AuthContext(user=user, session=session)

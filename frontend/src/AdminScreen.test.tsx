@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AdminScreenView, type AdminScreenViewProps } from './AdminScreen';
-import type { AccountLimits, AccountLimitsSettings, AdminUser } from './types';
+import type { AccountLimits, AccountLimitsSettings, AdminUser, ServerStatus } from './types';
 
 const owner: AdminUser = {
   id: 'owner',
@@ -53,24 +53,26 @@ const limits: AccountLimitsSettings = {
   ) as AccountLimitsSettings['bounds'],
 };
 
+const serverStatus: ServerStatus = {
+  disk: {
+    total_bytes: 100 * 1024 ** 3,
+    used_bytes: 25 * 1024 ** 3,
+    free_bytes: 75 * 1024 ** 3,
+  },
+  database_bytes: 2 * 1024 * 1024,
+  photos: 3,
+  photo_bytes: 900 * 1024,
+  video_file_bytes: 0,
+  video_queue: { queued: 1, normalizing: 0 },
+};
+
 function view(overrides: Partial<AdminScreenViewProps> = {}) {
   return renderToStaticMarkup(
     <AdminScreenView
       currentUserId="owner"
       users={[owner, tester]}
       settings={{ video_uploads: 'off', allow_registration: true, invite_code_required: true }}
-      status={{
-        disk: {
-          total_bytes: 100 * 1024 ** 3,
-          used_bytes: 25 * 1024 ** 3,
-          free_bytes: 75 * 1024 ** 3,
-        },
-        database_bytes: 2 * 1024 * 1024,
-        photos: 3,
-        photo_bytes: 900 * 1024,
-        video_file_bytes: 0,
-        video_queue: { queued: 1, normalizing: 0 },
-      }}
+      status={serverStatus}
       limits={null}
       loading={false}
       error={null}
@@ -144,6 +146,28 @@ describe('AdminScreenView', () => {
     expect(markup).toContain('aria-valuenow="25"');
     expect(markup).toContain('3 photos · 900 KB');
     expect(markup).toContain('1 waiting');
+  });
+
+  it('lists the app versions still in use and the oldest version that can save', () => {
+    const recent = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+    const markup = view({
+      status: {
+        ...serverStatus,
+        client_versions: [
+          { version: '1.3.0', users: 2, sessions: 3, last_seen_at: new Date().toISOString() },
+          { version: null, users: 1, sessions: 1, last_seen_at: recent },
+        ],
+        minimum_write_version: null,
+      },
+    });
+
+    expect(markup).toContain('App versions in use');
+    expect(markup).toContain('Version 1.3.0</dt><dd>2 accounts · 3 devices · Just now');
+    expect(markup).toContain('Not reported</dt><dd>1 account · 1 device · 2 h ago');
+    expect(markup).toContain('Oldest version that can save</dt><dd>Any');
+    expect(view({ status: { ...serverStatus, minimum_write_version: '1.3.0' } })).toContain(
+      'Signed-in devices</dt><dd>None',
+    );
   });
 
   it('lists accounts and never offers to disable the signed-in admin', () => {
