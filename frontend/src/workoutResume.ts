@@ -18,18 +18,6 @@ export function completedCardioDurationSeconds(
   );
 }
 
-export function workoutDurationSeconds(
-  elapsedSeconds: number,
-  cardioSeconds: number,
-  previousDurationMinutes = 0,
-  overrideMinutes: number | null = null,
-): number {
-  return Math.max(
-    cardioSeconds,
-    overrideMinutes === null ? previousDurationMinutes * 60 + elapsedSeconds : overrideMinutes * 60,
-  );
-}
-
 /** Keep a saved workout's time range consistent when its logged cardio runs longer. */
 export function cardioAdjustedEndTime(start: string, end: string, cardioSeconds: number): string {
   const duration = workoutDurationMinutes(start, end);
@@ -52,8 +40,6 @@ export function completedWorkoutDurationMinutes(
   return Math.max(
     1,
     Math.ceil(cardioSeconds / 60),
-    Math.round(
-      workoutDurationSeconds(elapsedSeconds, 0, previousDurationMinutes, overrideMinutes) / 60,
-    ),
+    overrideMinutes ?? previousDurationMinutes + Math.round(elapsedSeconds / 60),
   );
 }

@@ -63,17 +63,6 @@ const draft: ActiveWorkoutDraft = {
 };
 
 describe('empty workout expiration', () => {
-  it('keeps older drafts readable and restores the optional cardio clock minimum', () => {
-    const storage = new MemoryStorage();
-    writeActiveWorkoutDraft(draft, storage);
-    expect(readActiveWorkoutDraft(storage)).toEqual(draft);
-    const withCardio = { ...draft, cardioDurationSeconds: 1800 };
-    writeActiveWorkoutDraft(withCardio, storage);
-    expect(readActiveWorkoutDraft(storage)).toEqual(withCardio);
-    writeActiveWorkoutDraft({ ...draft, cardioDurationSeconds: -1 }, storage);
-    expect(readActiveWorkoutDraft(storage)).toBeNull();
-  });
-
   const finishAt = draft.startedAt + 3 * 60 * 60 * 1000;
   const empty = { ...draft, movements: [], notes: '', inactiveFinishAt: finishAt };
 

@@ -3,7 +3,6 @@ import {
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
-  workoutDurationSeconds,
 } from './workoutResume';
 import { createWorkoutSet } from './workoutSets';
 
@@ -20,16 +19,18 @@ describe('logged cardio workout time', () => {
     ).toBe(1800);
   });
 
-  it.each([
-    [600, 1800, 0, null, 1800],
-    [2400, 1800, 0, null, 2400],
-    [600, 1800, 45, null, 3300],
-    [600, 1800, 45, 20, 1800],
-    [600, 1800, 45, 60, 3600],
+  it.each<[number, number, number, number | null, number]>([
+    [600, 1800, 0, null, 30],
+    [2400, 1800, 0, null, 40],
+    [600, 1800, 45, null, 55],
+    [600, 1800, 45, 20, 30],
+    [600, 1800, 45, 60, 60],
   ])(
-    'uses the greater of cardio and timer/corrected time',
+    'finishes with the greater of cardio and timer/corrected time',
     (elapsed, cardio, previous, override, total) => {
-      expect(workoutDurationSeconds(elapsed, cardio!, previous!, override)).toBe(total);
+      expect(
+        completedWorkoutDurationMinutes(previous, 0, elapsed * 1000, override, 0, cardio),
+      ).toBe(total);
     },
   );
 

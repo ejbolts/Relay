@@ -2190,22 +2190,21 @@ describe('cardio set editing defaults', () => {
 
   const workoutTime = () => container.querySelector('.workout-summary-metrics strong')?.textContent;
 
-  it('updates workout time when cardio is logged, restores it, and removes unticked time', async () => {
+  it('keeps live time unchanged by logging cardio, recovery and unticking', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     writeActiveWorkoutDraft(cardioDraft());
     await mount();
     expect(workoutTime()).toBe('10:00');
     const tick = () => container.querySelector<HTMLButtonElement>('.row-complete-button')!;
     await act(async () => tick().click());
-    expect(workoutTime()).toBe('30:00');
+    expect(workoutTime()).toBe('10:00');
     expect(container.querySelector('.logger-screen .overlay-screen-header')?.textContent).toContain(
-      'Live 30:00',
+      'Live 10:00',
     );
-    expect(readActiveWorkoutDraft()?.cardioDurationSeconds).toBe(1800);
     await act(async () => root.unmount());
     root = createRoot(container);
     await mount();
-    expect(workoutTime()).toBe('30:00');
+    expect(workoutTime()).toBe('10:00');
     await act(async () => tick().click());
     expect(workoutTime()).toBe('10:00');
     await act(async () => {
@@ -2221,22 +2220,33 @@ describe('cardio set editing defaults', () => {
       container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
-    expect(container.querySelector('.app-tab-start.live .num')?.textContent).toBe('30:00');
+    expect(container.querySelector('.app-tab-start.live .num')?.textContent).toBe('10:00');
   });
 
   it.each([
-    { label: 'new', overrides: {}, expected: 30 },
-    { label: 'longer timer', overrides: { startedAt: Date.now() - 40 * 60_000 }, expected: 40 },
+    { label: 'new', overrides: {}, live: 10, expected: 30 },
+    {
+      label: 'longer timer',
+      overrides: { startedAt: Date.now() - 40 * 60_000 },
+      live: 40,
+      expected: 40,
+    },
     {
       label: 'resumed',
       overrides: { resumingWorkoutId: 'existing', previousDurationMinutes: 45 },
+      live: 55,
       expected: 55,
     },
-    { label: 'corrected', overrides: { durationOverrideMinutes: 15 }, expected: 30 },
-    { label: 'paused', overrides: { pausedMs: 5 * 60_000, pausedAt: Date.now() }, expected: 30 },
+    { label: 'corrected', overrides: { durationOverrideMinutes: 15 }, live: 15, expected: 30 },
+    {
+      label: 'paused',
+      overrides: { pausedMs: 5 * 60_000, pausedAt: Date.now() },
+      live: 5,
+      expected: 30,
+    },
   ])(
     'saves $label workout time without double-counting cardio',
-    async ({ overrides, expected }) => {
+    async ({ overrides, live, expected }) => {
       vi.useFakeTimers({ toFake: ['Date'] });
       const draft = cardioDraft({
         ...overrides,
@@ -2248,7 +2258,7 @@ describe('cardio set editing defaults', () => {
       vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
       vi.mocked(api.updateWorkout).mockResolvedValue(remoteWorkout());
       await mount();
-      expect(workoutTime()).toBe(`${expected}:00`);
+      expect(workoutTime()).toBe(`${live}:00`);
       await confirmFinish();
       const payload = overrides.resumingWorkoutId
         ? vi.mocked(api.updateWorkout).mock.lastCall![1]
@@ -2320,10 +2330,10 @@ describe('cardio set editing defaults', () => {
         );
         return;
       }
-      expect(workoutTime()).toBe('45:00');
+      expect(workoutTime()).toBe('30:00');
       expect(
         container.querySelector<HTMLInputElement>('[aria-label="Workout end time"]')?.value,
-      ).toBe('00:30');
+      ).toBe('00:15');
       await act(async () =>
         container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
       );
@@ -2443,7 +2453,6 @@ describe('cardio set editing defaults', () => {
       notes: 'Keep this note',
     });
     expect(container.querySelector('.set-details')?.getAttribute('data-expanded')).toBe('false');
-    expect(workoutTime()).toBe('40:00');
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
