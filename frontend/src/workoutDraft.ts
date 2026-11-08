@@ -33,6 +33,7 @@ export interface StoredDraftMovement {
   machineSettings?: MachineSetting[];
   supersetKey: string | null;
   isComplete?: boolean;
+  swappedFrom?: string;
   sets: StoredDraftSet[];
 }
 
