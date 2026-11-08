@@ -169,7 +169,11 @@ describe('cardio weekly trend screen', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ zone: null, qualifies_zone2: false }),
     );
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Workout saved',
+    );
+    expect(document.querySelector('dialog, [aria-modal="true"]')).toBeNull();
+    expect(document.querySelector('.notification-toast-action')?.textContent).toBe('Share card');
     await click(container.querySelector('[aria-label="Edit heart-rate zones and goals"]')!);
     expect(document.querySelector('dialog')!.textContent).toContain('Personal ranges (bpm)');
   });

@@ -10451,6 +10451,44 @@ body.chart-fullscreen-open {
   pointer-events: auto;
 }
 
+.app-notification-toast .notification-toast-action {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 0.65rem;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.notification-toast-countdown {
+  position: absolute;
+  inset: auto 12px 3px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--p-line);
+}
+
+.notification-toast-countdown > span {
+  display: block;
+  height: 100%;
+  background: var(--p-accent);
+  transform-origin: left;
+  animation: notification-toast-countdown linear forwards;
+}
+
+@keyframes notification-toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 .workout-completion-toast.pr-summary {
   position: fixed;
   z-index: 125;

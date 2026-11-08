@@ -258,6 +258,9 @@ import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayS
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
+import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
+import { cardioWorkoutForSharing } from './workoutCard';
+import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
   formatVolume,
@@ -744,6 +747,7 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
+  const [completedForSharing, setCompletedForSharing] = useState<TrackedWorkout | null>(null);
   const notifyRestComplete = useCallback(
     () => setMessage('Rest complete. Time for your next set.'),
     [],
@@ -1266,6 +1270,7 @@ function AppContent() {
     setEditingWorkout(null);
 
     if (!wasEditing) {
+      setCompletedForSharing(saved);
       const signature = (record: PersonalRecord) =>
         `${record.scope ?? 'all_time'}:${record.block_id ?? ''}:${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
       const existing = new Set(
@@ -1508,6 +1513,7 @@ function AppContent() {
     // Onboarding waits until a new member has seen the profile their invite opened.
     hasOtherDialog:
       message !== null ||
+      completedForSharing !== null ||
       completionRecords.length > 0 ||
       (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
@@ -1689,6 +1695,13 @@ function AppContent() {
           <WorkoutCompletionToast
             records={completionRecords}
             onClose={() => setCompletionRecords([])}
+          />
+        )}
+        {completedForSharing && (
+          <WorkoutSharePrompt
+            workout={completedForSharing}
+            records={recordCountsByWorkout(personalRecords).get(completedForSharing.id) ?? 0}
+            onClose={() => setCompletedForSharing(null)}
           />
         )}
 
@@ -8191,6 +8204,15 @@ function SettingsScreen({
               <>
                 <section
                   className="settings-panel panel"
+                  aria-labelledby="workout-sharing-settings-title"
+                >
+                  <header>
+                    <h2 id="workout-sharing-settings-title">Workout sharing</h2>
+                  </header>
+                  <WorkoutShareReminderSetting />
+                </section>
+                <section
+                  className="settings-panel panel"
                   aria-labelledby="notification-settings-title"
                 >
                   <header>
@@ -9494,6 +9516,10 @@ export function CardioScreen({
   const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
   const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
+  const [cardioSharing, setCardioSharing] = useState<{
+    session: CardioSession;
+    prompt: boolean;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<{ message: string; warning: boolean } | null>(null);
@@ -9604,7 +9630,10 @@ export function CardioScreen({
       };
       setSaving(true);
       if (editingId) await api.updateCardio(editingId, payload);
-      else await api.createCardio(payload);
+      else {
+        const saved = await api.createCardio(payload);
+        setCardioSharing({ session: saved, prompt: true });
+      }
       setDraft(empty);
       setScanStatus(null);
       setEditingId(null);
@@ -9633,6 +9662,20 @@ export function CardioScreen({
   const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
   return (
     <div className="cardio-screen">
+      {cardioSharing &&
+        (cardioSharing.prompt ? (
+          <WorkoutSharePrompt
+            workout={cardioWorkoutForSharing(cardioSharing.session)}
+            records={0}
+            onClose={() => setCardioSharing(null)}
+          />
+        ) : (
+          <WorkoutShareCard
+            workout={cardioWorkoutForSharing(cardioSharing.session)}
+            records={0}
+            onClose={() => setCardioSharing(null)}
+          />
+        ))}
       {zoneSettingsOpen && (
         <CardioZoneSettings
           preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
@@ -10031,6 +10074,12 @@ export function CardioScreen({
                     </small>
                   </div>
                   <div className="cardio-session-actions">
+                    <button
+                      type="button"
+                      onClick={() => setCardioSharing({ session, prompt: false })}
+                    >
+                      Share card
+                    </button>
                     <button
                       type="button"
                       onClick={() => setMetricSession(session)}
@@ -10753,6 +10802,7 @@ function HistoryWorkoutCard({
   reactionAction?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
+  const [shareOpen, setShareOpen] = useState(false);
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
@@ -10923,6 +10973,9 @@ function HistoryWorkoutCard({
           )}
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
+              <button type="button" onClick={() => setShareOpen(true)}>
+                Share card
+              </button>
               {!activeWorkout && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
                   Resume from now
@@ -10938,6 +10991,13 @@ function HistoryWorkoutCard({
                 onConfirm={onDelete}
               />
             </div>
+          )}
+          {shareOpen && (
+            <WorkoutShareCard
+              workout={workout}
+              records={records}
+              onClose={() => setShareOpen(false)}
+            />
           )}
         </div>
       )}
