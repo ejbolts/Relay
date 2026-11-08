@@ -171,6 +171,7 @@ def test_register_requires_explicit_login_before_access(anonymous_client):
         "is_admin",
         "can_upload_videos",
         "created_at",
+        "must_change_password",
         "profile_photo_url",
     }
     assert body["profile_photo_url"] is None

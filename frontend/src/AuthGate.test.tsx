@@ -63,6 +63,18 @@ describe('AuthGateView', () => {
     expect(markup).not.toContain('id="app"');
   });
 
+  it('asks for a new password instead of the app after an admin reset', () => {
+    const markup = view({
+      status: 'authenticated',
+      user: { ...user, must_change_password: true },
+      offline: false,
+    });
+
+    expect(markup).toContain('choose a new password');
+    expect(markup).toContain('temporary password');
+    expect(markup).not.toContain('id="app"');
+  });
+
   it('renders the app with the user in context once authenticated', () => {
     const markup = view({ status: 'authenticated', user, offline: false });
 

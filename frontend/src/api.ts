@@ -367,6 +367,11 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ disabled }),
       }),
+    resetUserPassword: (userId: string) =>
+      request<{ temporary_password: string }>(
+        `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
+        { method: 'POST' },
+      ),
     settings: () => request<ServerSettings>('/api/admin/settings'),
     updateSettings: (payload: ServerSettingsUpdate) =>
       request<ServerSettings>('/api/admin/settings', {

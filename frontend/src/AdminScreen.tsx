@@ -27,6 +27,13 @@ import type {
 } from './types';
 import { useUserSession } from './userContext';
 
+/** A temporary password an admin has just generated; shown once, then discarded. */
+export interface TemporaryPasswordReveal {
+  userId: string;
+  displayName: string;
+  password: string;
+}
+
 export interface AdminScreenViewProps {
   feedback?: AppFeedback[] | null;
   currentUserId: string;
@@ -41,11 +48,14 @@ export interface AdminScreenViewProps {
   savingLimits: boolean;
   busyUserId: string | null;
   busyFeedbackId?: string | null;
+  temporaryPassword: TemporaryPasswordReveal | null;
   onFeedbackResolvedChange?: (item: AppFeedback, resolved: boolean) => void;
   onVideoUploadsChange: (mode: VideoUploadMode) => void;
   onSaveLimits: (values: AccountLimits) => void;
   onRegistrationChange: (open: boolean) => void;
   onUserDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
+  onResetPassword: (user: AdminUser) => Promise<void>;
+  onTemporaryPasswordDismiss: () => void;
   onRefresh: () => void;
 }
 
@@ -306,18 +316,64 @@ function StatusPanel({ status }: { status: ServerStatus }) {
   );
 }
 
+function TemporaryPasswordPanel({
+  reveal,
+  onDismiss,
+}: {
+  reveal: TemporaryPasswordReveal;
+  onDismiss: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(reveal.password);
+      setCopied(true);
+    } catch {
+      // The password stays selectable, so it can still be copied by hand.
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div
+      className="admin-temp-password"
+      role="group"
+      aria-label={`Temporary password for ${reveal.displayName}`}
+    >
+      <strong>Temporary password</strong>
+      <code>{reveal.password}</code>
+      <small>Shown once. {reveal.displayName} must choose a new password after signing in.</small>
+      <div className="admin-temp-password-actions">
+        <button type="button" className="profile-secondary" onClick={() => void copy()}>
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+        <button type="button" className="profile-primary" onClick={onDismiss}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UserRow({
   user,
   now,
   isSelf,
   busy,
+  temporaryPassword,
   onDisabledChange,
+  onResetPassword,
+  onTemporaryPasswordDismiss,
 }: {
   user: AdminUser;
   now: number;
   isSelf: boolean;
   busy: boolean;
+  temporaryPassword: TemporaryPasswordReveal | null;
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
+  onResetPassword: (user: AdminUser) => Promise<void>;
+  onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
   const online = !disabled && user.presence?.online;
@@ -330,6 +386,7 @@ function UserRow({
           {user.is_admin && <span className="profile-badge">Admin</span>}
           {isSelf && <span className="admin-tag">You</span>}
           {disabled && <span className="admin-tag is-danger">Disabled</span>}
+          {user.must_change_password && <span className="admin-tag">Temporary password</span>}
         </strong>
         <span>{user.username}</span>
       </div>
@@ -371,26 +428,41 @@ function UserRow({
           <dd>{user.video_sessions}</dd>
         </div>
       </dl>
-      {!isSelf &&
-        (disabled ? (
-          <button
-            type="button"
+      {temporaryPassword && (
+        <TemporaryPasswordPanel reveal={temporaryPassword} onDismiss={onTemporaryPasswordDismiss} />
+      )}
+      {!isSelf && (
+        <div className="admin-user-actions">
+          <InlineConfirmButton
+            label="Reset password"
+            confirmLabel="Reset and sign out"
+            workingLabel="Resetting…"
+            confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
             className="profile-secondary"
             disabled={busy}
-            onClick={() => void onDisabledChange(user, false)}
-          >
-            {busy ? 'Enabling…' : 'Enable account'}
-          </button>
-        ) : (
-          <InlineConfirmButton
-            label="Disable account"
-            confirmLabel="Disable and sign out"
-            workingLabel="Disabling…"
-            className="profile-danger"
-            disabled={busy}
-            onConfirm={() => onDisabledChange(user, true)}
+            onConfirm={() => onResetPassword(user)}
           />
-        ))}
+          {disabled ? (
+            <button
+              type="button"
+              className="profile-secondary"
+              disabled={busy}
+              onClick={() => void onDisabledChange(user, false)}
+            >
+              {busy ? 'Enabling…' : 'Enable account'}
+            </button>
+          ) : (
+            <InlineConfirmButton
+              label="Disable account"
+              confirmLabel="Disable and sign out"
+              workingLabel="Disabling…"
+              className="profile-danger"
+              disabled={busy}
+              onConfirm={() => onDisabledChange(user, true)}
+            />
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -444,11 +516,14 @@ export function AdminScreenView({
   savingLimits,
   busyUserId,
   busyFeedbackId = null,
+  temporaryPassword,
   onFeedbackResolvedChange,
   onVideoUploadsChange,
   onRegistrationChange,
   onSaveLimits,
   onUserDisabledChange,
+  onResetPassword,
+  onTemporaryPasswordDismiss,
   onRefresh,
 }: AdminScreenViewProps) {
   const now = useNow(users !== null, 60_000);
@@ -536,7 +611,10 @@ export function AdminScreenView({
                 now={now}
                 isSelf={user.id === currentUserId}
                 busy={busyUserId === user.id}
+                temporaryPassword={temporaryPassword?.userId === user.id ? temporaryPassword : null}
                 onDisabledChange={onUserDisabledChange}
+                onResetPassword={onResetPassword}
+                onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
               />
             ))}
           </ul>
@@ -563,6 +641,12 @@ export function AdminScreen({ active }: { active: boolean }) {
   const [savingSetting, setSavingSetting] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [busyFeedbackId, setBusyFeedbackId] = useState<string | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState<TemporaryPasswordReveal | null>(null);
+
+  useEffect(() => {
+    // A temporary password is only kept in memory while this screen is in view.
+    if (!active) setTemporaryPassword(null);
+  }, [active]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -654,6 +738,34 @@ export function AdminScreen({ active }: { active: boolean }) {
     }
   }
 
+  async function resetUserPassword(target: AdminUser) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    setTemporaryPassword(null);
+    try {
+      const { temporary_password } = await api.admin.resetUserPassword(target.id);
+      setUsers((current) =>
+        current
+          ? current.map((row) =>
+              row.id === target.id
+                ? { ...row, must_change_password: true, signed_in_devices: 0 }
+                : row,
+            )
+          : current,
+      );
+      setTemporaryPassword({
+        userId: target.id,
+        displayName: target.display_name,
+        password: temporary_password,
+      });
+    } catch (reason) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
   async function changeFeedbackResolved(target: AppFeedback, resolved: boolean) {
     if (busyFeedbackId) return;
     setBusyFeedbackId(target.id);
@@ -694,11 +806,14 @@ export function AdminScreen({ active }: { active: boolean }) {
       savingLimits={savingLimits}
       busyUserId={busyUserId}
       busyFeedbackId={busyFeedbackId}
+      temporaryPassword={temporaryPassword}
       onFeedbackResolvedChange={(item, resolved) => void changeFeedbackResolved(item, resolved)}
       onVideoUploadsChange={(mode) => void saveSettings({ video_uploads: mode })}
       onSaveLimits={(values) => void saveLimits(values)}
       onRegistrationChange={(open) => void saveSettings({ allow_registration: open })}
       onUserDisabledChange={changeUserDisabled}
+      onResetPassword={resetUserPassword}
+      onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
       onRefresh={() => void load()}
     />
   );

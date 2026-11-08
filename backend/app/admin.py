@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 import shutil
 from collections.abc import Iterable
 from datetime import datetime, timedelta
@@ -21,7 +22,16 @@ from .account_limits import (
     save_account_limits,
 )
 from .accounts import no_store
-from .auth import AdminUser, AppSettings, as_utc, require_admin, utc_now
+from .auth import (
+    AdminUser,
+    AppSettings,
+    LoginThrottle,
+    as_utc,
+    get_login_throttle,
+    hash_password,
+    require_admin,
+    utc_now,
+)
 from .config import Settings
 from .database import get_db
 from .errors import api_error
@@ -46,6 +56,13 @@ from .server_settings import (
 from .session_events import session_events
 
 DbDependency = Annotated[Session, Depends(get_db)]
+Throttle = Annotated[LoginThrottle, Depends(get_login_throttle)]
+
+# Lowercase letters and digits without look-alikes (no i, l, o, 0 or 1), so a temporary password
+# can be read out or typed without mix-ups.
+TEMPORARY_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+TEMPORARY_PASSWORD_GROUPS = 3
+TEMPORARY_PASSWORD_GROUP_LENGTH = 5
 
 # Sign-ins unused for longer are left out of the app versions still in use.
 CLIENT_VERSION_WINDOW = timedelta(days=30)
@@ -66,6 +83,8 @@ class AdminUserRead(BaseModel):
     display_name: str
     is_admin: bool
     disabled_at: datetime | None
+    # An admin reset the password and the person has not chosen a new one yet.
+    must_change_password: bool
     created_at: datetime
     last_active_at: datetime | None
     presence: FriendPresence
@@ -78,6 +97,10 @@ class AdminUserRead(BaseModel):
 
 class AdminUserUpdate(BaseModel):
     disabled: bool
+
+
+class TemporaryPasswordRead(BaseModel):
+    temporary_password: str
 
 
 class ServerSettingsRead(BaseModel):
@@ -184,6 +207,7 @@ def _admin_user_reads(
             display_name=user.display_name,
             is_admin=user.is_admin,
             disabled_at=as_utc(user.disabled_at) if user.disabled_at else None,
+            must_change_password=user.must_change_password,
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
             presence=activity[user.id],
@@ -195,6 +219,16 @@ def _admin_user_reads(
         )
         for user in users
     ]
+
+
+def generate_temporary_password() -> str:
+    return "-".join(
+        "".join(
+            secrets.choice(TEMPORARY_PASSWORD_ALPHABET)
+            for _ in range(TEMPORARY_PASSWORD_GROUP_LENGTH)
+        )
+        for _ in range(TEMPORARY_PASSWORD_GROUPS)
+    )
 
 
 def _client_version_usage(db: Session) -> list[ClientVersionUsageRead]:
@@ -272,6 +306,35 @@ def update_user(
     session_events.changed(user.id)
     db.refresh(user)
     return _admin_user_reads(db, settings, [user])[0]
+
+
+@admin_router.post("/users/{user_id}/reset-password", response_model=TemporaryPasswordRead)
+def reset_user_password(
+    user_id: str,
+    admin: AdminUser,
+    db: DbDependency,
+    throttle: Throttle,
+) -> TemporaryPasswordRead:
+    """Replace a forgotten password with a temporary one, shown to the admin once."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise api_error(404, "user_not_found", "That account was not found.")
+    if user.id == admin.id:
+        raise api_error(
+            409,
+            "cannot_reset_self",
+            "Change your own password from Account settings instead.",
+        )
+    temporary_password = generate_temporary_password()
+    user.password_hash = hash_password(temporary_password)
+    user.must_change_password = True
+    # Signed out everywhere, so nobody holding the old password stays in.
+    db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+    db.commit()
+    # Failed sign-ins before the reset must not lock the person out of the new password.
+    throttle.reset(f"username:{user.username}", f"user:{user.id}")
+    session_events.changed(user.id)
+    return TemporaryPasswordRead(temporary_password=temporary_password)
 
 
 @admin_router.get("/settings", response_model=ServerSettingsRead)

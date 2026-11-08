@@ -1076,3 +1076,39 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 .admin-user-workout dd {
   color: var(--p-accent-text);
 }
+
+.admin-user-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-temp-password {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: var(--p-surface);
+}
+
+.admin-temp-password code {
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: var(--p-page);
+  color: var(--p-ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.admin-temp-password small {
+  color: var(--p-ink-2);
+}
+
+.admin-temp-password-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}

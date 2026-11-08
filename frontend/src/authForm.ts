@@ -49,6 +49,8 @@ export function authErrorMessage(reason: unknown): string {
         return 'That invite code is not valid. Check it and try again.';
       case 'invalid_password':
         return 'That password is not correct.';
+      case 'password_unchanged':
+        return 'Choose a different password from the temporary one.';
       case 'account_disabled':
         return 'This account has been disabled. Contact the person who runs this server.';
       case 'not_authenticated':

@@ -748,6 +748,8 @@ export interface User {
   is_admin: boolean;
   can_upload_videos: boolean;
   created_at: string;
+  /** Set after an admin reset: a new password must be chosen before the app can be used. */
+  must_change_password?: boolean;
   /** Versioned URL of the account's profile photo; null when it has none. */
   profile_photo_url?: string | null;
 }
@@ -761,6 +763,8 @@ export interface AdminUser {
   display_name: string;
   is_admin: boolean;
   disabled_at: string | null;
+  /** An admin reset the password and the person has not chosen a new one yet. */
+  must_change_password: boolean;
   created_at: string;
   last_active_at: string | null;
   /** Admin-only live activity, including accounts that do not share with friends. */
