@@ -452,8 +452,16 @@ export interface TrainingBlock {
   name: string;
   start_date: string;
   end_date: string | null;
+  /** Optional inclusive target for “days left”; it never ends the block. */
+  planned_end_date?: string | null;
   /** Derived by the server on read. */
   workout_count?: number;
+}
+
+export interface TrainingBlockInput {
+  name: string;
+  start_date: string;
+  planned_end_date: string | null;
 }
 
 export interface TrainingBlocks {

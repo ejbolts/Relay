@@ -4,7 +4,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProgressScreen } from './App';
-import { blockRange } from './trainingBlocks';
+import { blockProgress, blockRange, daysLeftLabel } from './trainingBlocks';
+import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { addDays } from './trainingSummary';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { Exercise, TrainingBlocks, PersonalRecord } from './types';
 
@@ -187,6 +189,7 @@ it('creates a named custom block and shows an automatically dismissing toast', a
   expect(api.trainingBlocks.create).toHaveBeenCalledWith({
     name: 'Winter strength',
     start_date: '2026-07-01',
+    planned_end_date: null,
   });
   expect(document.querySelector('[role="status"]')?.textContent).toContain(
     'Training block started',
@@ -202,11 +205,17 @@ it('starts the first block from the all-time view', async () => {
   expect(radio('This block')).toBeUndefined();
   await click('Start a block');
   await input('Block name', 'Rebuild');
-  await act(async () => radio('1 January2026').click());
+  await act(async () => radio(`1 January${new Date().getFullYear()}`).click());
+  await act(async () =>
+    [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Ends"] [role="radio"]')]
+      .find((item) => item.textContent?.startsWith('12 weeks'))!
+      .click(),
+  );
   await submitForm();
   expect(api.trainingBlocks.create).toHaveBeenCalledWith({
     name: 'Rebuild',
     start_date: `${new Date().getFullYear()}-01-01`,
+    planned_end_date: addDays(`${new Date().getFullYear()}-01-01`, 83),
   });
 });
 
@@ -227,6 +236,7 @@ it('keeps failed saves editable and supports renaming and removing only the boun
   expect(api.trainingBlocks.update).toHaveBeenCalledWith('rebuild', {
     name: 'Rebuild',
     start_date: '2026-06-01',
+    planned_end_date: null,
   });
   expect(document.querySelector('.training-block-cards')).not.toBeNull();
   await click('Edit Rebuild');
@@ -293,4 +303,78 @@ it('refreshes synced boundaries without changing an explicitly selected all-time
   expect(radio('All time').getAttribute('aria-checked')).toBe('true');
   await act(async () => radio('This block').click());
   expect(button('Training block: Renamed block')).toBeDefined();
+});
+
+it('keeps a custom planned end when editing and validates it after the start', async () => {
+  vi.mocked(api.trainingBlocks.get).mockResolvedValue({
+    ...config,
+    blocks: [{ ...config.blocks[0], planned_end_date: '2026-09-30' }],
+  });
+  vi.spyOn(api.trainingBlocks, 'update').mockResolvedValue(config);
+  await mount();
+  await click('Training block: Rebuild');
+  await click('Edit blocks');
+  await click('Edit Rebuild');
+  const ends = [...document.querySelectorAll('[aria-label="Ends"] [role="radio"]')];
+  expect(ends.find((item) => item.getAttribute('aria-checked') === 'true')?.textContent).toBe(
+    'Pick date30 Sep',
+  );
+  expect(document.querySelector<HTMLInputElement>('input[min="2026-06-02"]')?.value).toBe(
+    '2026-09-30',
+  );
+  await submitForm();
+  expect(api.trainingBlocks.update).toHaveBeenCalledWith('rebuild', {
+    name: 'Rebuild',
+    start_date: '2026-06-01',
+    planned_end_date: '2026-09-30',
+  });
+});
+
+it('reports week number, planned length and days left', () => {
+  const block = { ...config.blocks[0], start_date: '2026-08-10' };
+  expect(blockProgress(block, '2026-08-10')).toEqual({
+    week: 1,
+    weeks: null,
+    daysLeft: null,
+    progress: null,
+  });
+  const planned = { ...block, planned_end_date: '2026-11-29' };
+  expect(blockProgress(planned, '2026-11-08')).toMatchObject({ week: 13, weeks: 16, daysLeft: 21 });
+  expect(daysLeftLabel(21)).toBe('21 days left');
+  expect(daysLeftLabel(1)).toBe('1 day left');
+  expect(daysLeftLabel(0)).toBe('Last day');
+  expect(daysLeftLabel(-3)).toBe('3 days past plan');
+});
+
+it('shows the current block on the home card and opens it', async () => {
+  const onOpen = vi.fn();
+  const block = {
+    ...config.blocks[0],
+    name: 'Strength rebuild',
+    start_date: '2026-08-10',
+    planned_end_date: '2026-11-29',
+  };
+  await act(async () =>
+    root.render(<TrainingBlockHomeCard block={block} today="2026-11-08" onOpen={onOpen} />),
+  );
+  expect(host.textContent).toBe('Training block21 days leftStrength rebuildWeek 13 of 16');
+  expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('81');
+  await act(async () => host.querySelector('button')!.click());
+  expect(onOpen).toHaveBeenCalled();
+  await act(async () =>
+    root.render(
+      <TrainingBlockHomeCard
+        block={{ ...block, planned_end_date: null }}
+        today="2026-11-08"
+        onOpen={onOpen}
+      />,
+    ),
+  );
+  expect(host.textContent).toBe('Training blockStrength rebuildWeek 13 · since 10 Aug');
+  expect(host.querySelector('[role="progressbar"]')).toBeNull();
+  await act(async () =>
+    root.render(<TrainingBlockHomeCard block={block} today="2026-12-02" onOpen={onOpen} />),
+  );
+  expect(host.textContent).toContain('3 days past plan');
+  expect(host.textContent).toContain('Week 17 · planned 16');
 });

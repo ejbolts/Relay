@@ -371,6 +371,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+.training-block-starts.plan {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.training-block-cards .training-block-plan {
+  color: var(--p-accent-text);
+  font-weight: 600;
+}
 .training-block-starts > span {
   grid-column: 1 / -1;
   color: var(--p-ink-2);
@@ -454,4 +461,53 @@
 .logger-screen .set-weight-value,
 .logger-screen .completed-set-weight .pr-badge {
   white-space: nowrap;
+}
+
+/* Home indicator */
+button.pulse-card.training-block-home {
+  display: grid;
+  gap: 4px;
+}
+.training-block-home-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.training-block-home-top em {
+  color: var(--p-accent-text);
+  font-style: normal;
+  font-weight: 700;
+}
+.training-block-home-top em.past {
+  color: var(--p-gold);
+}
+.training-block-home > strong {
+  overflow: hidden;
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.training-block-home-week {
+  color: var(--p-ink-2);
+  font-size: 0.8rem;
+}
+.training-block-home-bar {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+.training-block-home-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-accent);
+}
+.training-block-home-bar.past > span {
+  background: var(--p-gold);
 }

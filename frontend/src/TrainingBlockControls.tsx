@@ -3,7 +3,14 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
-import { blockDay, blockRange, blockOn, MONTHS } from './trainingBlocks';
+import {
+  blockDay,
+  blockOn,
+  blockProgress,
+  blockRange,
+  daysLeftLabel,
+  MONTHS,
+} from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
 import { localDate } from './utils';
@@ -12,6 +19,15 @@ import './trainingBlocks.css';
 
 type View = 'pick' | 'blocks' | 'form' | 'remove';
 type StartPreset = 'today' | 'january' | 'custom';
+type PlanPreset = 'none' | '8' | '12' | 'custom';
+
+const weeksEnd = (start: string, weeks: number) => addDays(start, weeks * 7 - 1);
+
+function planFor(start: string, end: string | null | undefined): PlanPreset {
+  if (!end) return 'none';
+  if (end === weeksEnd(start, 8)) return '8';
+  return end === weeksEnd(start, 12) ? '12' : 'custom';
+}
 
 const TONES = 4;
 
@@ -92,6 +108,8 @@ export function TrainingBlockControls() {
   const [name, setName] = useState('');
   const [start, setStart] = useState(localDate());
   const [preset, setPreset] = useState<StartPreset>('today');
+  const [plan, setPlan] = useState<PlanPreset>('none');
+  const [planEnd, setPlanEnd] = useState('');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +152,8 @@ export function TrainingBlockControls() {
     const date = item?.start_date ?? today;
     setStart(date);
     setPreset(presetFor(date));
+    setPlan(planFor(date, item?.planned_end_date));
+    setPlanEnd(item?.planned_end_date ?? weeksEnd(date, 4));
     setFormBack(back);
     setError(null);
     setView('form');
@@ -164,7 +184,7 @@ export function TrainingBlockControls() {
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    const payload = { name: name.trim(), start_date: start };
+    const payload = { name: name.trim(), start_date: start, planned_end_date: plannedEnd };
     if (editing) {
       void save(
         () => api.trainingBlocks.update(editing.id, payload),
@@ -185,6 +205,8 @@ export function TrainingBlockControls() {
     );
   }
 
+  const plannedEnd =
+    plan === 'none' ? null : plan === 'custom' ? planEnd : weeksEnd(start, Number(plan));
   const viewing = block ?? null;
   const dialogTitle =
     view === 'pick'
@@ -420,6 +442,14 @@ export function TrainingBlockControls() {
                           {item.id === current?.id && <span className="badge">Current</span>}
                         </strong>
                         <small>{blockRange(item.start_date, item.end_date)}</small>
+                        {item.id === current?.id && item.planned_end_date && (
+                          <small className="training-block-plan">
+                            {joined(
+                              daysLeftLabel(blockProgress(item, today).daysLeft!),
+                              `Planned end ${blockDay(item.planned_end_date, item.planned_end_date.slice(0, 4) !== today.slice(0, 4))}`,
+                            )}
+                          </small>
+                        )}
                         {item.workout_count !== undefined && (
                           <small>{workouts(item.workout_count)}</small>
                         )}
@@ -519,6 +549,40 @@ export function TrainingBlockControls() {
                       max={today}
                       value={start}
                       onChange={(event) => setStart(event.target.value)}
+                    />
+                  </label>
+                )}
+                <div className="training-block-starts plan" role="radiogroup" aria-label="Ends">
+                  <span aria-hidden="true">Ends</span>
+                  {(
+                    [
+                      ['none', 'No end', ''],
+                      ['8', '8 weeks', blockDay(weeksEnd(start, 8), false)],
+                      ['12', '12 weeks', blockDay(weeksEnd(start, 12), false)],
+                      ['custom', 'Pick date', plan === 'custom' ? blockDay(planEnd, false) : ''],
+                    ] as const
+                  ).map(([value, label, detail]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={plan === value}
+                      onClick={() => setPlan(value)}
+                    >
+                      <strong>{label}</strong>
+                      {detail && <small>{detail}</small>}
+                    </button>
+                  ))}
+                </div>
+                {plan === 'custom' && (
+                  <label>
+                    Planned end
+                    <input
+                      required
+                      type="date"
+                      min={addDays(start, 1)}
+                      value={planEnd}
+                      onChange={(event) => setPlanEnd(event.target.value)}
                     />
                   </label>
                 )}

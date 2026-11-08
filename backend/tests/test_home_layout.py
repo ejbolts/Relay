@@ -78,6 +78,19 @@ def test_older_layout_appends_new_sections_without_unhiding_old_sections(client)
     assert result["widths"] == {}
 
 
+def test_saved_layout_gains_the_block_card_after_the_next_workout(client):
+    with SessionLocal() as db:
+        set_setting(
+            db,
+            client.user["id"],
+            "home_layout",
+            '{"order":["profile","consistency","next-workout","workouts"],"hidden":[]}',
+        )
+        db.commit()
+    order = client.get("/api/home-layout").json()["order"]
+    assert order[:5] == ["profile", "consistency", "next-workout", "training-block", "workouts"]
+
+
 def test_corrupt_saved_layout_recovers_to_default(client):
     with SessionLocal() as db:
         set_setting(db, client.user["id"], "home_layout", "invalid json")

@@ -202,3 +202,24 @@ def test_block_list_counts_workouts_per_block_without_saving_counts(client):
     with SessionLocal() as db:
         user_id = db.execute(text("select user_id from training_workouts limit 1")).scalar_one()
         assert "workout_count" not in get_setting(db, user_id, "training_blocks", "")
+
+
+def test_planned_end_is_optional_validated_and_editable(client):
+    created = client.post(
+        "/api/training-blocks",
+        json={"name": "Peak", "start_date": "2026-06-01", "planned_end_date": "2026-08-23"},
+    )
+    assert created.status_code == 201, created.text
+    peak = created.json()["blocks"][0]
+    assert peak["planned_end_date"] == "2026-08-23"
+    assert peak["end_date"] is None
+    invalid = client.put(
+        f"/api/training-blocks/{peak['id']}",
+        json={"name": "Peak", "start_date": "2026-06-01", "planned_end_date": "2026-06-01"},
+    )
+    assert invalid.status_code == 422
+    cleared = client.put(
+        f"/api/training-blocks/{peak['id']}",
+        json={"name": "Peak", "start_date": "2026-06-01", "planned_end_date": None},
+    ).json()
+    assert cleared["blocks"][0]["planned_end_date"] is None

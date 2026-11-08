@@ -8,7 +8,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,8 @@ KEY = "training_blocks"
 class BlockInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     start_date: date
+    # Optional inclusive target used for "days left"; it never ends the block by itself.
+    planned_end_date: date | None = None
 
     @field_validator("name")
     @classmethod
@@ -31,6 +33,12 @@ class BlockInput(BaseModel):
         if not value.strip():
             raise ValueError("Enter a block name.")
         return value.strip()
+
+    @model_validator(mode="after")
+    def planned_end_after_start(self) -> BlockInput:
+        if self.planned_end_date and self.planned_end_date <= self.start_date:
+            raise ValueError("The planned end must be after the start date.")
+        return self
 
 
 class TrainingBlock(BlockInput):
@@ -147,6 +155,7 @@ def update_block(
     ):
         raise HTTPException(422, "Choose a unique start date that is not in the future.")
     block.name, block.start_date = payload.name, payload.start_date
+    block.planned_end_date = payload.planned_end_date
     return save_blocks(db, user.id, config)
 
 

@@ -1,4 +1,4 @@
-import { addDays, parseLocalDate } from './trainingSummary';
+import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
 import type { PersonalRecord, TrainingBlock } from './types';
 import { localDate } from './utils';
 
@@ -43,4 +43,25 @@ export function blockRange(start: string, endExclusive: string | null | undefine
   const last = addDays(endExclusive, -1);
   if (last <= start) return blockDay(start, true);
   return `${blockDay(start, start.slice(0, 4) !== last.slice(0, 4))} – ${blockDay(last, true)}`;
+}
+
+/** Week number, and the planned length and days left when the block has a planned end. */
+export function blockProgress(block: TrainingBlock, today: string) {
+  const elapsed = Math.max(0, daysBetween(block.start_date, today));
+  const week = Math.floor(elapsed / 7) + 1;
+  if (!block.planned_end_date) return { week, weeks: null, daysLeft: null, progress: null };
+  const length = daysBetween(block.start_date, block.planned_end_date) + 1;
+  return {
+    week,
+    weeks: Math.ceil(length / 7),
+    daysLeft: daysBetween(today, block.planned_end_date),
+    progress: Math.min(1, (elapsed + 1) / length),
+  };
+}
+
+/** Days after today until the planned end: “Last day” on the planned end itself. */
+export function daysLeftLabel(daysLeft: number) {
+  if (daysLeft === 0) return 'Last day';
+  const days = Math.abs(daysLeft);
+  return `${days} day${days === 1 ? '' : 's'} ${daysLeft > 0 ? 'left' : 'past plan'}`;
 }

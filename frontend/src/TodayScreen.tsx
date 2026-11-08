@@ -53,6 +53,9 @@ import {
 import { formatElapsed, useLiveWorkoutClock } from './elapsed';
 import { useOffline } from './connectionStatus';
 import { OfflineBadge } from './OfflineBadge';
+import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { blockOn } from './trainingBlocks';
+import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
@@ -202,6 +205,8 @@ export function TodayScreen({
   const weightUnit = useWeightUnit();
   const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
+  const trainingBlocks = useTrainingBlocks();
+  const currentBlock = blockOn(trainingBlocks.config.blocks, today);
   const weeks = useMemo(
     () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
@@ -426,6 +431,16 @@ export function TodayScreen({
           </div>
         </section>
       ) : null,
+    'training-block': currentBlock ? (
+      <TrainingBlockHomeCard
+        block={currentBlock}
+        today={today}
+        onOpen={() => {
+          trainingBlocks.select('current');
+          onOpenProgress();
+        }}
+      />
+    ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>

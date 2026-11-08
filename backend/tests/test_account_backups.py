@@ -119,7 +119,10 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
     assert json.loads(saved_blocks[0][0]) == {
         "auto_yearly": owner_blocks["auto_yearly"],
         "blocks": [
-            {key: block[key] for key in ("id", "name", "start_date", "end_date")}
+            {
+                key: block[key]
+                for key in ("id", "name", "start_date", "planned_end_date", "end_date")
+            }
             for block in owner_blocks["blocks"]
         ],
     }

@@ -39,6 +39,7 @@ import type {
   MachineSetting,
   MuscleVolume,
   PersonalRecord,
+  TrainingBlockInput,
   TrainingBlocks,
   ProfileUpdateInput,
   PushConfig,
@@ -780,13 +781,13 @@ export const api = {
     request<void>(`/api/body-weight-goals/${id}`, { method: 'DELETE' }),
   trainingBlocks: {
     get: () => accountRead<TrainingBlocks>('/api/training-blocks'),
-    create: (payload: { name: string; start_date: string }) =>
+    create: (payload: TrainingBlockInput) =>
       request<TrainingBlocks>('/api/training-blocks', {
         method: 'POST',
         headers: jsonHeaders,
         body: JSON.stringify(payload),
       }),
-    update: (id: string, payload: { name: string; start_date: string }) =>
+    update: (id: string, payload: TrainingBlockInput) =>
       request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: jsonHeaders,

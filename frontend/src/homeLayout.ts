@@ -16,6 +16,13 @@ export const HOME_SECTIONS = [
     size: 'full',
   },
   {
+    id: 'training-block',
+    title: 'Training block',
+    description: 'Current block and days left',
+    icon: 'level',
+    size: 'full',
+  },
+  {
     id: 'workouts',
     title: 'Workouts',
     description: 'Weekly count and trend',
