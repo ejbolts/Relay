@@ -1791,7 +1791,6 @@ function AppContent() {
                     )
                   }
                   onEditSplit={openSplitSchedule}
-                  onResumeWorkout={() => setTab('log')}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
                   onOpenProgress={(exerciseId) =>

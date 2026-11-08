@@ -1602,7 +1602,7 @@ describe('finishing workouts in the background', () => {
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="Saving workout"]')?.disabled,
     ).toBe(true);
-    expect(container.querySelector('.live-workout-card')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
       'Workout finished',
     );
@@ -2320,7 +2320,7 @@ describe('inactive workout suggestions', () => {
       await mount();
       expect(readActiveWorkoutDraft()).toBeNull();
       expect(window.location.hash).toBe('#dashboard');
-      expect(container.querySelector('.live-workout-card')).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
       expect(container.querySelector('.logger-screen')).toBeNull();
       expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
       expect(api.createWorkout).not.toHaveBeenCalled();
@@ -2342,7 +2342,7 @@ describe('inactive workout suggestions', () => {
       draft.inactiveFinishAt = Date.now() + 60_000;
       writeActiveWorkoutDraft(draft);
       await mount();
-      expect(container.querySelector('.live-workout-card')).not.toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
       expect(readActiveWorkoutDraft()).not.toBeNull();
       await act(async () => {
         if (trigger === 'timer') await vi.advanceTimersByTimeAsync(60_000);
@@ -2353,7 +2353,7 @@ describe('inactive workout suggestions', () => {
         }
       });
       expect(readActiveWorkoutDraft()).toBeNull();
-      expect(container.querySelector('.live-workout-card')).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
       expect(api.createWorkout).not.toHaveBeenCalled();
     },
   );
@@ -2363,7 +2363,7 @@ describe('inactive workout suggestions', () => {
     writeActiveWorkoutDraft(emptyDraft());
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
-    expect(container.querySelector('.live-workout-card')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 

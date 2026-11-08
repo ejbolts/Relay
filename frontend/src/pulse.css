@@ -701,26 +701,6 @@ button.pulse-card:hover {
   color: var(--p-gold);
 }
 
-.live-workout-card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0.25rem 1rem;
-  margin-bottom: 0.75rem;
-  border-color: rgb(57 135 229 / 35%);
-  background: linear-gradient(160deg, #15263a 0%, var(--p-surface) 70%);
-}
-
-.live-workout-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--p-ink-2);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.live-workout-label i,
 .app-tab-start .live-dot {
   width: 0.5rem;
   height: 0.5rem;
@@ -731,41 +711,10 @@ button.pulse-card:hover {
 }
 
 /* A paused workout keeps a still gold dot and a gold, frozen time. */
-.app-tab-start.live .live-dot.paused,
-.live-workout-card.is-paused .live-workout-label i {
+.app-tab-start.live .live-dot.paused {
   background: var(--p-gold);
   box-shadow: none;
   animation: none;
-}
-
-.live-workout-card.is-paused .live-workout-duration {
-  color: var(--p-gold);
-}
-
-.live-workout-duration {
-  grid-row: 2;
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.live-workout-resume {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  border-radius: 12px;
-  padding: 0.625rem 0.875rem;
-  background: var(--p-accent);
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.live-workout-resume .pulse-icon {
-  width: 1rem;
-  height: 1rem;
 }
 
 @keyframes pulse-live {
@@ -2986,7 +2935,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-workout-label i,
   .app-tab-start .live-dot,
   .today-loading-skeleton .skeleton-block,
   .friends-loading-skeleton .skeleton-block {
