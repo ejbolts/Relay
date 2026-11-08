@@ -52,7 +52,8 @@ import {
 } from './weightUnits';
 import { useOffline } from './connectionStatus';
 import { OfflineBadge } from './OfflineBadge';
-import { TrainingBlockCardSettingsForm, TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
+import { TrainingBlockHome } from './TrainingBlockSummary';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 
@@ -429,7 +430,7 @@ export function TodayScreen({
         </section>
       ) : null,
     'training-block': currentBlock ? (
-      <TrainingBlockHomeCard
+      <TrainingBlockHome
         block={currentBlock}
         config={trainingBlocks.config}
         today={today}

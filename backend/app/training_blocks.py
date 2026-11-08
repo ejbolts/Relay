@@ -26,6 +26,9 @@ class BlockInput(BaseModel):
     start_date: date
     # Optional inclusive target used for "days left"; it never ends the block by itself.
     planned_end_date: date | None = None
+    # A lighter recovery block. Its summary has no comparison and later blocks compare with the
+    # last regular block instead. Older apps omit it, so updates keep the saved value.
+    deload: bool = False
 
     @field_validator("name")
     @classmethod
@@ -143,6 +146,8 @@ def update_block(
         raise HTTPException(422, "Choose a unique start date that is not in the future.")
     block.name, block.start_date = payload.name, payload.start_date
     block.planned_end_date = payload.planned_end_date
+    if "deload" in payload.model_fields_set:
+        block.deload = payload.deload
     return save_blocks(db, user.id, config)
 
 

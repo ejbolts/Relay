@@ -454,6 +454,8 @@ export interface TrainingBlock {
   end_date: string | null;
   /** Optional inclusive target for “days left”; it never ends the block. */
   planned_end_date?: string | null;
+  /** A recovery block: its summary has no comparison and later blocks skip it. */
+  deload?: boolean;
   /** Derived by the server on read. */
   workout_count?: number;
 }
@@ -462,6 +464,26 @@ export interface TrainingBlockInput {
   name: string;
   start_date: string;
   planned_end_date: string | null;
+  /** Omit to keep the saved value when editing. */
+  deload?: boolean;
+}
+
+export interface BlockStats {
+  block_id: string;
+  name: string;
+  start_date: string;
+  deload?: boolean;
+  workout_count: number;
+  set_count: number;
+  volume_kg: number;
+  /** Weight and volume PRs dated inside the block. */
+  pr_count: number;
+}
+
+/** A block's totals next to the last regular block before it. */
+export interface TrainingBlockSummary {
+  block: BlockStats;
+  previous: BlockStats | null;
 }
 
 export interface TrainingBlocks {

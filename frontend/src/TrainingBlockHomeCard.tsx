@@ -1,4 +1,5 @@
 import type { TrainingBlockCardSettings, TrainingBlockCardStyle } from './homeLayout';
+import { Icon } from './Icon';
 import { blockDay, blockProgress, daysLeftLabel } from './trainingBlocks';
 import { BlockTimeline } from './TrainingBlockTimeline';
 import type { TrainingBlock, TrainingBlocks } from './types';
@@ -10,12 +11,15 @@ export function TrainingBlockHomeCard({
   today,
   style = 'both',
   onOpen,
+  onSummary,
 }: {
   block: TrainingBlock;
   config: TrainingBlocks;
   today: string;
   style?: TrainingBlockCardStyle;
   onOpen: () => void;
+  /** Once the planned end has passed, the card opens the block's summary instead. */
+  onSummary?: () => void;
 }) {
   const { week, weeks, daysLeft, progress } = blockProgress(block, today);
   const since = blockDay(block.start_date, block.start_date.slice(0, 4) !== today.slice(0, 4));
@@ -25,6 +29,32 @@ export function TrainingBlockHomeCard({
       : week > weeks
         ? `Week ${week} · planned ${weeks}`
         : `Week ${week} of ${weeks}`;
+  if (onSummary && block.planned_end_date) {
+    const ended = blockDay(
+      block.planned_end_date,
+      block.planned_end_date.slice(0, 4) !== today.slice(0, 4),
+    );
+    return (
+      <button
+        type="button"
+        className="pulse-card training-block-home is-finished"
+        onClick={onSummary}
+      >
+        <span className="training-block-home-top">
+          <span>Training block</span>
+          <em>Finished</em>
+        </span>
+        <strong>{block.name}</strong>
+        <span className="training-block-home-week">
+          {`${weeks} week${weeks === 1 ? '' : 's'} · ended ${ended}`}
+        </span>
+        <span className="training-block-home-cta">
+          See your summary <Icon name="chevron-right" />
+        </span>
+        {style !== 'progress' && <BlockTimeline config={config} currentId={block.id} />}
+      </button>
+    );
+  }
   return (
     <button type="button" className="pulse-card training-block-home" onClick={onOpen}>
       <span className="training-block-home-top">

@@ -216,3 +216,68 @@ def test_planned_end_is_optional_validated_and_editable(client):
         json={"name": "Peak", "start_date": "2026-06-01", "planned_end_date": None},
     ).json()
     assert cleared["blocks"][0]["planned_end_date"] is None
+
+
+def test_summary_compares_a_block_with_the_previous_regular_block(client):
+    base = block(client, "Base", "2026-06-01")
+    log(client, 100, "2026-06-01")
+    log(client, 105, "2026-06-02")  # Beats 100 kg: one PR for the whole account's history.
+    nxt = block(client, "Next", "2026-07-01")
+    log(client, 90, "2026-07-01")
+    log(client, 95, "2026-07-02")  # Beats this block's 90 kg, but not the earlier 105 kg.
+
+    first = client.get(f"/api/training-blocks/{base['id']}/summary").json()
+    assert first["previous"] is None
+    assert first["block"] == {
+        "block_id": base["id"],
+        "name": "Base",
+        "start_date": "2026-06-01",
+        "deload": False,
+        "workout_count": 2,
+        "set_count": 4,
+        "volume_kg": 1680.0,  # (100 + 105) kg x 8 reps, plus a 20 kg single each day.
+        "pr_count": 1,
+    }
+
+    second = client.get(f"/api/training-blocks/{nxt['id']}/summary").json()
+    assert second["block"]["volume_kg"] == 1520.0
+    assert second["block"]["pr_count"] == 1
+    assert second["previous"] == first["block"]
+
+
+def test_summary_skips_deloads_and_deloads_have_no_comparison(client):
+    base = block(client, "Base", "2026-06-01")
+    log(client, 100, "2026-06-01")
+    deload = client.post(
+        "/api/training-blocks",
+        json={"name": "Deload", "start_date": "2026-07-01", "deload": True},
+    ).json()["blocks"][1]
+    assert deload["deload"] is True
+    log(client, 60, "2026-07-02")
+    nxt = block(client, "Next", "2026-07-08")
+
+    summary = client.get(f"/api/training-blocks/{nxt['id']}/summary").json()
+    assert summary["previous"]["block_id"] == base["id"]
+    assert summary["previous"]["workout_count"] == 1  # The deload week is not part of Base.
+    deload_summary = client.get(f"/api/training-blocks/{deload['id']}/summary").json()
+    assert deload_summary["previous"] is None
+    assert deload_summary["block"]["deload"] is True
+    assert deload_summary["block"]["workout_count"] == 1
+
+    # Apps that predate deloads omit the field on save; that must not turn the flag off.
+    saved = client.put(
+        f"/api/training-blocks/{deload['id']}",
+        json={"name": "Easy week", "start_date": "2026-07-01"},
+    ).json()
+    assert next(b for b in saved["blocks"] if b["id"] == deload["id"])["deload"] is True
+    saved = client.put(
+        f"/api/training-blocks/{deload['id']}",
+        json={"name": "Easy week", "start_date": "2026-07-01", "deload": False},
+    ).json()
+    assert next(b for b in saved["blocks"] if b["id"] == deload["id"])["deload"] is False
+
+
+def test_summary_is_private_and_needs_an_existing_block(client, other_client):
+    current = block(client)
+    assert client.get("/api/training-blocks/missing/summary").status_code == 404
+    assert other_client.get(f"/api/training-blocks/{current['id']}/summary").status_code == 404

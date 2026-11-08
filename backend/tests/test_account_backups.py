@@ -120,7 +120,7 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
         "blocks": [
             {
                 key: block[key]
-                for key in ("id", "name", "start_date", "planned_end_date", "end_date")
+                for key in ("id", "name", "start_date", "planned_end_date", "deload", "end_date")
             }
             for block in owner_blocks["blocks"]
         ],
