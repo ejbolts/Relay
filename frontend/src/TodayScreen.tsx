@@ -6,6 +6,7 @@ import { ConsistencyCard } from './ConsistencyCard';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import { WeeklyReviewCard } from './WeeklyReviewCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
@@ -28,6 +29,7 @@ import {
 } from './trainingSummary';
 import type {
   BodyMeasurement,
+  CardioWeek,
   DashboardData,
   PersonalRecord,
   TrackedWorkout,
@@ -116,6 +118,8 @@ const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
   reps_at_weight: 'Volume PR for this weight',
   weight: 'Weight PR',
 };
+
+const NO_CARDIO_WEEKS: CardioWeek[] = [];
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
@@ -254,6 +258,10 @@ export function TodayScreen({
     [measurements, today, weekStartDay],
   );
   const records = recentStrengthRecords(personalRecords, 3);
+  const reviewMuscleWeeks = useMemo(() => {
+    const current = muscleSets?.weeklySets ?? data?.weekly_sets;
+    return current ? [current, ...(muscleSets?.history ?? data?.weekly_sets_history ?? [])] : [];
+  }, [data?.weekly_sets, data?.weekly_sets_history, muscleSets]);
   const strengthRecordCount = useMemo(
     () =>
       personalRecords.filter((record) => record.value > 0 && record.record_type in RECORD_LABELS)
@@ -488,6 +496,22 @@ export function TodayScreen({
         />
       </button>
     ),
+    'weekly-review': data ? (
+      <WeeklyReviewCard
+        workouts={workouts}
+        records={personalRecords}
+        measurements={measurements}
+        muscleWeeks={reviewMuscleWeeks}
+        muscleGoal={muscleSetGoal}
+        cardioWeeks={data.cardio_weeks ?? NO_CARDIO_WEEKS}
+        weightUnit={weightUnit}
+        today={today}
+        weekStartDay={weekStartDay}
+        onOpenProgress={onOpenProgress}
+        onOpenCardio={onOpenCardio}
+        onOpenBody={onOpenBody}
+      />
+    ) : null,
     consistency: (
       <ConsistencyCard streak={data?.current_streak ?? 0} trainingDays={trainingDays}>
         {calendar}

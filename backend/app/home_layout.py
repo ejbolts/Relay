@@ -18,6 +18,7 @@ HomeSection = Literal[
     "workouts",
     "cardio-sessions",
     "weekly-bodyweight",
+    "weekly-review",
     "consistency",
     "muscle-sets",
     "zone2",

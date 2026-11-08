@@ -839,6 +839,14 @@ class CardioOverviewRead(BaseModel):
     energy_periods: list[CardioEnergyPeriodRead]
 
 
+class CardioWeekRead(BaseModel):
+    """One week of cardio for the weekly review: all minutes, and each goal zone's progress."""
+
+    week_start: date
+    total_minutes: int
+    goals: list[CardioGoalWeek]
+
+
 class DashboardRead(BaseModel):
     cardio_goals: list[CardioGoalWeek]
     workouts_this_week: int
@@ -854,6 +862,8 @@ class DashboardRead(BaseModel):
     weekly_sets: WeeklySetsRead
     # The weeks before ``weekly_sets``, newest first.
     weekly_sets_history: list[WeeklySetsRead] = Field(default_factory=list)
+    # Cardio for the current week and the weeks before it, newest first.
+    cardio_weeks: list[CardioWeekRead] = Field(default_factory=list)
     muscle_volume: list[MuscleVolumeRead]
     zone2: Zone2WeekRead
     recent_workouts: list[TrainingWorkoutRead]

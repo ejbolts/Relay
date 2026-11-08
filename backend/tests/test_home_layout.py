@@ -84,6 +84,24 @@ def test_older_layout_appends_new_sections_without_unhiding_old_sections(client)
     assert result["widths"] == {}
 
 
+def test_saved_layout_gains_the_weekly_review_visible_at_the_end(client):
+    saved = ["profile", "records", "consistency"]
+    with SessionLocal() as db:
+        set_setting(
+            db,
+            client.user["id"],
+            "home_layout",
+            json.dumps({"order": saved, "hidden": ["records"]}),
+        )
+        db.commit()
+    result = client.get("/api/home-layout").json()
+    assert "weekly-review" in SECTION_IDS
+    assert result["order"][:3] == saved
+    assert result["order"].count("weekly-review") == 1
+    assert "weekly-review" not in result["hidden"]
+    assert client.put("/api/home-layout", json=result).json() == result
+
+
 def test_saved_layout_gains_the_block_card_after_the_next_workout(client):
     with SessionLocal() as db:
         set_setting(
