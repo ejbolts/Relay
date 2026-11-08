@@ -365,7 +365,7 @@ it('copies the prepared compact PNG and preserves a download fallback if clipboa
   expect(button('Download PNG').disabled).toBe(false);
 });
 
-it('keeps unsupported clipboard disabled and lets a saved-workout prompt be declined or open the card', async () => {
+it('keeps unsupported clipboard disabled and offers sharing through a non-blocking dismissible toast', async () => {
   await mount();
   expect(button('Copy image').disabled).toBe(true);
   await act(async () =>
@@ -373,8 +373,11 @@ it('keeps unsupported clipboard disabled and lets a saved-workout prompt be decl
       <WorkoutSharePrompt key="prompt" workout={workout} records={2} onClose={onClose} />,
     ),
   );
-  expect(document.querySelector('dialog h2')?.textContent).toBe('Share this workout?');
-  await act(async () => button('Not now').click());
+  expect(document.querySelector('dialog, [aria-modal="true"]')).toBeNull();
+  expect(document.querySelector('.app-notification-toast')?.textContent).toContain('Workout saved');
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
+  );
   expect(onClose).toHaveBeenCalledOnce();
   await act(async () => button('Share card').click());
   expect(document.querySelector('dialog h2')?.textContent).toBe('Share workout');

@@ -245,15 +245,10 @@ export function WorkoutSharePrompt({
   const [sharing, setSharing] = useState(false);
   if (sharing) return <WorkoutShareCard workout={workout} records={records} onClose={onClose} />;
   return (
-    <PopupDialog title="Share this workout?" className="workout-share-prompt" onClose={onClose}>
-      <div className="popup-dialog-actions">
-        <button type="button" onClick={onClose}>
-          Not now
-        </button>
-        <button type="button" className="popup-primary-action" onClick={() => setSharing(true)}>
-          Share card
-        </button>
-      </div>
-    </PopupDialog>
+    <NotificationDialog
+      message="Workout saved"
+      onClose={onClose}
+      action={{ label: 'Share card', onClick: () => setSharing(true) }}
+    />
   );
 }

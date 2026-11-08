@@ -20,11 +20,6 @@
   padding: 16px 20px 20px;
 }
 
-.workout-share-prompt > .popup-dialog-actions {
-  margin-top: 0;
-  padding: 20px;
-}
-
 .workout-share-preview {
   border-radius: 16px;
   overflow: hidden;

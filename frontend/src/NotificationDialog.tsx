@@ -5,10 +5,12 @@ export function NotificationDialog({
   message,
   onClose,
   portal = true,
+  action,
 }: {
   message: string;
   onClose: () => void;
   /** Render inside an open modal's top layer. */ portal?: boolean;
+  action?: { label: string; onClick: () => void };
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -20,6 +22,11 @@ export function NotificationDialog({
   const toast = (
     <aside className="app-notification-toast" role="status" aria-live="polite" aria-atomic="true">
       <p>{message}</p>
+      {action && (
+        <button type="button" className="notification-toast-action" onClick={action.onClick}>
+          {action.label}
+        </button>
+      )}
       <button
         type="button"
         className="icon-button"

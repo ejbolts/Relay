@@ -66,3 +66,31 @@ it('can keep a toast inside the modal top layer without a second dialog', async 
   expect(host.querySelector('dialog [role="status"]')?.textContent).toContain('Card downloaded');
   expect(document.querySelectorAll('dialog')).toHaveLength(1);
 });
+
+it('offers an optional action without taking focus and retains the eight-second dismissal', async () => {
+  const close = vi.fn();
+  const share = vi.fn();
+  const input = document.createElement('input');
+  document.body.append(input);
+  input.focus();
+  await act(async () =>
+    root.render(
+      <NotificationDialog
+        message="Workout saved"
+        onClose={close}
+        action={{ label: 'Share card', onClick: share }}
+      />,
+    ),
+  );
+  expect(document.activeElement).toBe(input);
+  expect(document.querySelector('dialog, [aria-modal="true"], [inert]')).toBeNull();
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('.notification-toast-action')!.click(),
+  );
+  expect(share).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTime(7999));
+  expect(close).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTime(1));
+  expect(close).toHaveBeenCalledOnce();
+  input.remove();
+});
