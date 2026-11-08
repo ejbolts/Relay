@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from conftest import TEST_PASSWORD
 from sqlalchemy import create_engine, select, text
 
 from app import client_versions
+from app.auth import utc_now
 from app.client_versions import CLIENT_VERSION_HEADER, is_older, normalized_version
 from app.database import SessionLocal
 from app.models import UserSession
@@ -102,6 +104,69 @@ def test_sessions_record_their_release_for_the_admin_screen(client, other_client
     assert status["minimum_write_version"] is None
     usage = [(row["version"], row["users"], row["sessions"]) for row in status["client_versions"]]
     assert usage == [("1.2.1", 1, 1), (None, 1, 1)]
+
+
+def test_admin_user_versions_group_devices_and_follow_updates_and_sign_out(client, other_client):
+    now = utc_now()
+    with SessionLocal() as db:
+        for index, (version, expires_at, last_seen_at) in enumerate(
+            [
+                ("1.9.0", now + timedelta(days=1), now),
+                ("1.10.0", now + timedelta(days=1), now),
+                # An idle but still signed-in device belongs in the account's device total.
+                ("1.10.0", now + timedelta(days=1), now - timedelta(days=31)),
+                ("1.8.0", now - timedelta(seconds=1), now),
+            ]
+        ):
+            db.add(
+                UserSession(
+                    user_id=other_client.user["id"],
+                    token_hash=f"sample-version-session-{index}",
+                    client_version=version,
+                    expires_at=expires_at,
+                    last_seen_at=last_seen_at,
+                )
+            )
+        db.commit()
+
+    def accounts():
+        response = client.get("/api/admin/users", headers=as_version("1.12.0"))
+        assert response.status_code == 200
+        return {row["id"]: row for row in response.json()}
+
+    users = accounts()
+    assert users[client.user["id"]]["client_versions"] == [{"version": "1.12.0", "devices": 1}]
+    other = users[other_client.user["id"]]
+    assert other["signed_in_devices"] == 4
+    assert other["client_versions"] == [
+        {"version": "1.10.0", "devices": 2},
+        {"version": "1.9.0", "devices": 1},
+        {"version": None, "devices": 1},
+    ]
+    # A refreshed app reports its loaded version through the existing request header.
+    assert other_client.get("/api/exercises", headers=as_version("1.11.0")).status_code == 200
+    assert accounts()[other_client.user["id"]]["client_versions"] == [
+        {"version": "1.11.0", "devices": 1},
+        {"version": "1.10.0", "devices": 2},
+        {"version": "1.9.0", "devices": 1},
+    ]
+    assert other_client.post("/api/auth/logout").status_code == 204
+    other = accounts()[other_client.user["id"]]
+    # Relay's sign-out ends every sign-in for the account.
+    assert other["signed_in_devices"] == 0
+    assert other["client_versions"] == []
+    assert (
+        other_client.post(
+            "/api/auth/login", json={"username": "other", "password": TEST_PASSWORD}
+        ).status_code
+        == 200
+    )
+    assert accounts()[other_client.user["id"]]["signed_in_devices"] == 1
+    disabled = client.patch(f"/api/admin/users/{other_client.user['id']}", json={"disabled": True})
+    assert disabled.status_code == 200
+    assert disabled.json()["signed_in_devices"] == 0
+    assert disabled.json()["client_versions"] == []
+    assert accounts()[other_client.user["id"]]["client_versions"] == []
 
 
 @pytest.fixture

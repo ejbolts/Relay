@@ -184,6 +184,35 @@ describe('AdminScreenView', () => {
     expect(markup.match(/Disable account/g)).toHaveLength(1);
   });
 
+  it("shows each account's device versions, including mixed and unreported releases", () => {
+    const markup = view({
+      users: [
+        { ...owner, client_versions: [{ version: '1.3.0', devices: 1 }] },
+        {
+          ...tester,
+          signed_in_devices: 4,
+          client_versions: [
+            { version: '1.3.0', devices: 2 },
+            { version: '1.2.0', devices: 1 },
+            { version: null, devices: 1 },
+          ],
+        },
+      ],
+    });
+    expect(markup).toContain('App versions</dt><dd>v1.3.0 (1 device)</dd>');
+    expect(markup).toContain(
+      'App versions</dt><dd>v1.3.0 (2 devices), v1.2.0 (1 device), Not reported (1 device)</dd>',
+    );
+  });
+
+  it('handles older servers and accounts without signed-in devices', () => {
+    const markup = view({
+      users: [owner, { ...tester, signed_in_devices: 0, client_versions: [] }],
+    });
+    expect(markup).toContain('App versions</dt><dd>Not reported');
+    expect(markup).toContain('App versions</dt><dd>No signed-in devices');
+  });
+
   it('offers a password reset for other accounts only, and flags a pending temporary password', () => {
     const markup = view();
     expect(markup.match(/Reset password/g)).toHaveLength(1);
