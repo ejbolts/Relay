@@ -24,6 +24,14 @@ export interface SettingsDestination {
 
 export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   {
+    id: 'workout-sharing',
+    group: 'notifications',
+    title: 'Share workout reminder',
+    page: 'settings',
+    keywords: 'share workout notification popup toast reminder completion',
+    selector: '#workout-sharing-settings-title',
+  },
+  {
     id: 'training-split',
     group: 'training',
     title: 'Your split',

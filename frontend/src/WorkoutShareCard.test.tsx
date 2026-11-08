@@ -3,6 +3,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
+import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
+import { UserContext } from './userContext';
 import {
   downloadWorkoutCard,
   defaultWorkoutCardStats,
@@ -231,6 +233,7 @@ async function mount() {
   );
 }
 beforeEach(() => {
+  window.localStorage.clear();
   vi.clearAllMocks();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   HTMLDialogElement.prototype.showModal = function () {
@@ -382,4 +385,59 @@ it('keeps unsupported clipboard disabled and offers sharing through a non-blocki
   await act(async () => button('Share card').click());
   expect(document.querySelector('dialog h2')?.textContent).toBe('Share workout');
   expect(document.querySelectorAll('dialog')).toHaveLength(1);
+});
+
+it('keeps Settings and the card toggle synchronized, persists disabling and preserves manual sharing', async () => {
+  await act(async () =>
+    root.render(
+      <>
+        <WorkoutShareReminderSetting />
+        <WorkoutShareCard workout={workout} records={0} onClose={onClose} />
+      </>,
+    ),
+  );
+  const switches = () => [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="switch"][aria-label="Share workout reminder"]',
+    ),
+  ];
+  expect(switches().map((item) => item.getAttribute('aria-checked'))).toEqual(['true', 'true']);
+  await act(async () => switches()[1].click());
+  expect(switches().map((item) => item.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+  expect(document.querySelector('dialog')).not.toBeNull();
+  expect(window.localStorage.getItem('relay-workout-share-reminder:device')).toBe('off');
+  await act(async () =>
+    root.render(<WorkoutSharePrompt workout={workout} records={0} onClose={onClose} />),
+  );
+  expect(document.querySelector('.notification-toast-action')).toBeNull();
+  expect(onClose).toHaveBeenCalledOnce();
+  await mount();
+  expect(switches()[0].getAttribute('aria-checked')).toBe('false');
+  expect(button('Download PNG').disabled).toBe(false);
+  await act(async () => switches()[0].click());
+  await act(async () =>
+    root.render(<WorkoutSharePrompt workout={workout} records={0} onClose={onClose} />),
+  );
+  expect(document.querySelector('.notification-toast-action')).not.toBeNull();
+});
+
+it('keeps reminder choices isolated between signed-in accounts', async () => {
+  const user = (id: string) => ({
+    user: { id } as import('./types').User,
+    updateUser: () => {},
+    signOut: async () => {},
+    accountDeleted: async () => {},
+  });
+  const render = (id: string) =>
+    root.render(
+      <UserContext.Provider value={user(id)}>
+        <WorkoutShareReminderSetting />
+      </UserContext.Provider>,
+    );
+  await act(async () => render('first'));
+  await act(async () => document.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
+  await act(async () => render('second'));
+  expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+  await act(async () => render('first'));
+  expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
 });

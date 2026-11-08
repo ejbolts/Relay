@@ -15,6 +15,8 @@ import {
   type WorkoutCardLayout,
 } from './workoutCard';
 import './workoutShareCard.css';
+import { useWorkoutShareReminder } from './useWorkoutShareReminder';
+import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 
 export function WorkoutShareCard({
   workout,
@@ -180,6 +182,7 @@ export function WorkoutShareCard({
               />
               Workout date
             </label>
+            <WorkoutShareReminderSetting />
           </div>
         </div>
         {error && (
@@ -243,7 +246,12 @@ export function WorkoutSharePrompt({
   onClose: () => void;
 }) {
   const [sharing, setSharing] = useState(false);
+  const [enabled] = useWorkoutShareReminder();
+  useEffect(() => {
+    if (!enabled && !sharing) onClose();
+  }, [enabled, sharing, onClose]);
   if (sharing) return <WorkoutShareCard workout={workout} records={records} onClose={onClose} />;
+  if (!enabled) return null;
   return (
     <NotificationDialog
       message="Workout saved"

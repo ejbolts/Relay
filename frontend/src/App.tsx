@@ -257,6 +257,7 @@ import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
 import { cardioWorkoutForSharing } from './workoutCard';
+import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
   formatVolume,
@@ -8183,6 +8184,15 @@ function SettingsScreen({
             description: 'Rest alerts, workout reminders and video updates.',
             content: (
               <>
+                <section
+                  className="settings-panel panel"
+                  aria-labelledby="workout-sharing-settings-title"
+                >
+                  <header>
+                    <h2 id="workout-sharing-settings-title">Workout sharing</h2>
+                  </header>
+                  <WorkoutShareReminderSetting />
+                </section>
                 <section
                   className="settings-panel panel"
                   aria-labelledby="notification-settings-title"
