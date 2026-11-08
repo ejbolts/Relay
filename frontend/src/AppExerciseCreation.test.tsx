@@ -40,7 +40,7 @@ let root: Root;
 let host: HTMLDivElement;
 
 beforeEach(() => {
-  vi.spyOn(api.trainingBlocks, 'get').mockResolvedValue({ blocks: [], auto_yearly: false });
+  vi.spyOn(api.trainingBlocks, 'get').mockResolvedValue({ blocks: [] });
   vi.mocked(readDashboardCache).mockResolvedValue(null);
   vi.mocked(readWorkoutCache).mockResolvedValue(null);
   vi.mocked(writeDashboardCache).mockResolvedValue(undefined);

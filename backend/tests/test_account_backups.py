@@ -117,7 +117,6 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
     assert len(saved_blocks) == 1
     # Workout counts are derived on read; only the boundaries are stored.
     assert json.loads(saved_blocks[0][0]) == {
-        "auto_yearly": owner_blocks["auto_yearly"],
         "blocks": [
             {
                 key: block[key]

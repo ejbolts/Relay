@@ -48,7 +48,6 @@ class TrainingBlock(BlockInput):
 
 class TrainingBlocks(BaseModel):
     blocks: list[TrainingBlock] = Field(default_factory=list)
-    auto_yearly: bool = False
 
 
 class TrainingBlockRead(TrainingBlock):
@@ -59,29 +58,18 @@ class TrainingBlocksRead(BaseModel):
     """Response-only view: counts are derived on read and never saved with the boundaries."""
 
     blocks: list[TrainingBlockRead]
-    auto_yearly: bool
     earlier_workout_count: int = 0
     history_start: date | None = None
 
 
-class BlockPreferences(BaseModel):
-    auto_yearly: bool
-
-
-def training_blocks(db: Session, user_id: str, today: date | None = None) -> TrainingBlocks:
+def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
     saved = get_setting(db, user_id, KEY, "")
+    # Blocks are only ever created by the user; unknown saved keys are ignored.
     config = TrainingBlocks.model_validate_json(saved) if saved else TrainingBlocks()
-    today = today or date.today()
     blocks = sorted(config.blocks, key=lambda block: block.start_date)
-    if config.auto_yearly and blocks:
-        # Deterministic IDs make rollover stable across devices and backup/restore.
-        for year in range(blocks[-1].start_date.year + 1, today.year + 1):
-            blocks.append(
-                TrainingBlock(id=f"year:{year}", name=str(year), start_date=date(year, 1, 1))
-            )
     for index, block in enumerate(blocks):
         block.end_date = blocks[index + 1].start_date if index + 1 < len(blocks) else None
-    return TrainingBlocks(blocks=blocks, auto_yearly=config.auto_yearly)
+    return TrainingBlocks(blocks=blocks)
 
 
 def block_on(config: TrainingBlocks, day: date) -> TrainingBlock | None:
@@ -103,7 +91,6 @@ def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBl
             TrainingBlockRead(**block.model_dump(), workout_count=counts[index + 1])
             for index, block in enumerate(config.blocks)
         ],
-        auto_yearly=config.auto_yearly,
         earlier_workout_count=counts[0],
         history_start=min((day for day, _ in rows), default=None),
     )
@@ -165,17 +152,4 @@ def delete_block(block_id: str, db: DbSession, user: CurrentUser) -> TrainingBlo
     if not any(block.id == block_id for block in config.blocks):
         raise HTTPException(404, "Training block was not found.")
     config.blocks = [block for block in config.blocks if block.id != block_id]
-    # Deleting an automatic boundary must not immediately recreate it.
-    config.auto_yearly = False
-    return save_blocks(db, user.id, config)
-
-
-@router.patch("", response_model=TrainingBlocksRead)
-def update_preferences(
-    payload: BlockPreferences, db: DbSession, user: CurrentUser
-) -> TrainingBlocksRead:
-    config = training_blocks(db, user.id)
-    if payload.auto_yearly and not config.blocks:
-        raise HTTPException(422, "Start a training block before enabling yearly rollover.")
-    config.auto_yearly = payload.auto_yearly
     return save_blocks(db, user.id, config)

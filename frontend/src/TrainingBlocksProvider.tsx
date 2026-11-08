@@ -6,7 +6,7 @@ import { TrainingBlocksContext } from './trainingBlocksContext';
 import type { TrainingBlocks } from './types';
 
 export function TrainingBlocksProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<TrainingBlocks>({ blocks: [], auto_yearly: false });
+  const [config, setConfig] = useState<TrainingBlocks>({ blocks: [] });
   const [selection, select] = useState('current');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

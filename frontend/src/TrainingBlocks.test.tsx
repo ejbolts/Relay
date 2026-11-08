@@ -22,7 +22,6 @@ const bench: Exercise = {
   muscle_contributions: [],
 };
 const config: TrainingBlocks = {
-  auto_yearly: false,
   blocks: [{ id: 'rebuild', name: 'Rebuild', start_date: '2026-06-01', end_date: null }],
 };
 let host: HTMLDivElement, root: Root;
@@ -120,7 +119,6 @@ it('reuses the exercise chart for the current block and all-time view', async ()
 
 it('shows block ranges and workout counts in the picker and blocks page', async () => {
   vi.mocked(api.trainingBlocks.get).mockResolvedValue({
-    auto_yearly: false,
     earlier_workout_count: 40,
     history_start: '2024-03-01',
     blocks: [
@@ -199,7 +197,7 @@ it('creates a named custom block and shows an automatically dismissing toast', a
 });
 
 it('starts the first block from the all-time view', async () => {
-  vi.mocked(api.trainingBlocks.get).mockResolvedValue({ blocks: [], auto_yearly: false });
+  vi.mocked(api.trainingBlocks.get).mockResolvedValue({ blocks: [] });
   vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(structuredClone(config));
   await mount();
   expect(radio('This block')).toBeUndefined();
@@ -223,7 +221,7 @@ it('keeps failed saves editable and supports renaming and removing only the boun
   vi.spyOn(api.trainingBlocks, 'update')
     .mockRejectedValueOnce(new Error('A block already starts on that date.'))
     .mockResolvedValueOnce(config);
-  vi.spyOn(api.trainingBlocks, 'remove').mockResolvedValue({ blocks: [], auto_yearly: false });
+  vi.spyOn(api.trainingBlocks, 'remove').mockResolvedValue({ blocks: [] });
   await mount();
   await click('Training block: Rebuild');
   await click('Edit blocks');
@@ -248,15 +246,13 @@ it('keeps failed saves editable and supports renaming and removing only the boun
   expect(button('Start a block')).toBeDefined();
 });
 
-it('saves the optional yearly rollover without resetting the viewed chart', async () => {
-  vi.spyOn(api.trainingBlocks, 'preferences').mockResolvedValue({ ...config, auto_yearly: true });
+it('only lists user-created blocks with no automatic rollover option', async () => {
   await mount();
   await click('Training block: Rebuild');
   await click('Edit blocks');
-  await click('Start a new block each January');
-  expect(api.trainingBlocks.preferences).toHaveBeenCalledWith(true);
-  expect(button('Start a new block each January').getAttribute('aria-checked')).toBe('true');
-  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
+  expect(document.querySelectorAll('.training-block-cards li')).toHaveLength(1);
+  expect(document.querySelector('dialog[open] [role="switch"]')).toBeNull();
+  expect(document.querySelector('dialog[open]')?.textContent).not.toContain('January');
 });
 
 it('explains block and all-time records in a dismissable popover', async () => {

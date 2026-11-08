@@ -466,7 +466,6 @@ export interface TrainingBlockInput {
 
 export interface TrainingBlocks {
   blocks: TrainingBlock[];
-  auto_yearly: boolean;
   /** Workouts dated before the first block. */
   earlier_workout_count?: number;
   /** Date of the earliest logged workout. */

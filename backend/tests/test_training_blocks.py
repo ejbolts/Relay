@@ -1,10 +1,8 @@
-from datetime import date
-
 from sqlalchemy import text
 
 from app.database import SessionLocal
-from app.training_blocks import training_blocks
-from app.training_metrics import get_setting
+from app.training_blocks import TrainingBlocks, training_blocks
+from app.training_metrics import get_setting, set_setting
 
 
 def block(client, name="Rebuild", start="2026-06-01"):
@@ -122,25 +120,20 @@ def test_validation_isolation_and_revision(client, other_client):
         )
 
 
-def test_yearly_rollover_is_stable_and_can_be_disabled(client):
+def test_saved_rollover_settings_no_longer_create_blocks(client):
     current = block(client, "2024", "2024-05-01")
-    assert client.patch("/api/training-blocks", json={"auto_yearly": True}).status_code == 200
     with SessionLocal() as db:
-        config = training_blocks(db, client.user["id"], date(2027, 1, 2))
-        assert [b.start_date for b in config.blocks] == [
-            date(2024, 5, 1),
-            date(2025, 1, 1),
-            date(2026, 1, 1),
-            date(2027, 1, 1),
-        ]
-        assert config.blocks[-1].id == "year:2027"
-        assert config.blocks[0].id == current["id"]
-        assert config.blocks[0].end_date == date(2025, 1, 1)
-    existing = client.get("/api/training-blocks").json()["blocks"]
-    disabled = client.patch("/api/training-blocks", json={"auto_yearly": False}).json()
-    assert disabled["blocks"] == existing
-    with SessionLocal() as db:
-        assert len(training_blocks(db, client.user["id"], date(2028, 1, 1)).blocks) == len(existing)
+        set_setting(
+            db,
+            client.user["id"],
+            "training_blocks",
+            TrainingBlocks(blocks=training_blocks(db, client.user["id"]).blocks)
+            .model_dump_json()
+            .replace('"blocks"', '"auto_yearly":true,"blocks"'),
+        )
+        db.commit()
+    assert [b["id"] for b in client.get("/api/training-blocks").json()["blocks"]] == [current["id"]]
+    assert client.patch("/api/training-blocks", json={"auto_yearly": True}).status_code == 405
 
 
 def test_editing_and_deleting_workouts_recalculates_block_prs(client):

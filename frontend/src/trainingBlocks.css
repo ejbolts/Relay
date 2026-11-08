@@ -124,6 +124,8 @@
   font-weight: 700;
 }
 .training-block-dialog .training-block-new {
+  /* Sits beside the close button rather than centred between it and the title. */
+  margin-left: auto;
   border-color: var(--p-accent);
   background: var(--p-accent);
   color: white;
@@ -297,45 +299,6 @@
   color: var(--p-ink);
   font-size: 0.8rem;
   font-weight: 600;
-}
-.training-block-yearly {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
-  border: 1px solid var(--p-line);
-  border-radius: 14px;
-  padding: 12px;
-  background: var(--p-surface-2);
-  font-size: 0.85rem;
-}
-.training-block-dialog .training-block-yearly > button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  width: auto;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 999px;
-  padding: 0.45rem 0.65rem;
-  background: var(--p-surface-3);
-  color: var(--p-muted);
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-.training-block-yearly > button span {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: var(--p-muted);
-}
-.training-block-dialog .training-block-yearly > button.is-on {
-  border-color: var(--p-accent);
-  color: var(--p-accent-text);
-}
-.training-block-yearly > button.is-on span {
-  background: var(--p-accent-text);
 }
 
 /* New / edit form */

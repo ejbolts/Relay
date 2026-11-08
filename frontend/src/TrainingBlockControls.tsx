@@ -476,26 +476,6 @@ export function TrainingBlockControls() {
                   </li>
                 )}
               </ul>
-              <div className="training-block-yearly">
-                <strong>New block each January</strong>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-label="Start a new block each January"
-                  aria-checked={config.auto_yearly}
-                  className={config.auto_yearly ? 'is-on' : ''}
-                  disabled={busy}
-                  onClick={() =>
-                    void save(
-                      () => api.trainingBlocks.preferences(!config.auto_yearly),
-                      () => {},
-                    )
-                  }
-                >
-                  <span />
-                  {config.auto_yearly ? 'On' : 'Off'}
-                </button>
-              </div>
             </div>
           )}
           {view === 'form' && (
@@ -621,7 +601,7 @@ export function TrainingBlockControls() {
             <>
               <p>
                 Remove “{editing.name}”? Workouts stay saved. Block records will follow the
-                remaining dates, and yearly rollover will turn off.
+                remaining dates.
               </p>
               <div className="training-block-actions">
                 <button

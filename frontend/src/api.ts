@@ -797,12 +797,6 @@ export const api = {
       request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       }),
-    preferences: (auto_yearly: boolean) =>
-      request<TrainingBlocks>('/api/training-blocks', {
-        method: 'PATCH',
-        headers: jsonHeaders,
-        body: JSON.stringify({ auto_yearly }),
-      }),
   },
   listPersonalRecords: (params?: { exerciseId?: string; workoutId?: string }) => {
     const query = new URLSearchParams();

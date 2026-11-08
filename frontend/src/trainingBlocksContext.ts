@@ -10,7 +10,7 @@ export const TrainingBlocksContext = createContext<{
   error: string | null;
   retry: () => void;
 }>({
-  config: { blocks: [], auto_yearly: false },
+  config: { blocks: [] },
   block: null,
   select: () => {},
   changed: () => {},
