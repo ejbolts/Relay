@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0051_must_change_password"
-down_revision = "0050_split_follow_workouts"
+revision = "0052_must_change_password"
+down_revision = "0051_session_client_version"
 branch_labels = None
 depends_on = None
 
