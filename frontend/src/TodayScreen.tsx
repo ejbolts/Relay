@@ -349,7 +349,7 @@ export function TodayScreen({
             ) : (
               template && (
                 <small>
-                  {recommendation?.routine_day
+                  {recommendation?.routine_day?.movements.length
                     ? 'Routine'
                     : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
                 </small>
