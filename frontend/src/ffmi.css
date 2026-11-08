@@ -62,14 +62,96 @@ button.ffmi-methodology-link {
   font-weight: 600;
 }
 
-.ffmi-card > header + .ffmi-setup {
-  margin-top: 0;
+.ffmi-checklist-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 0.5rem;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
-.ffmi-card .ffmi-empty {
-  margin: 0;
+.ffmi-checklist-title span {
   color: var(--p-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ffmi-checklist ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--p-line);
+  border-radius: 13px;
+  list-style: none;
+}
+
+.ffmi-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.ffmi-checklist li + li {
+  border-top: 1px solid var(--p-line);
+}
+
+.ffmi-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 1.5px dashed var(--p-line-strong);
+  border-radius: 50%;
+  color: var(--p-page);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.ffmi-checklist li.done .ffmi-check {
+  border: 0;
+  background: var(--p-good);
+}
+
+.ffmi-check-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.ffmi-checklist li.done .ffmi-check-label {
+  color: var(--p-ink-2);
+  font-weight: 500;
+}
+
+.ffmi-check-value {
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ffmi-check-value.missing {
+  color: var(--p-muted);
+  font-weight: 500;
+}
+
+.ffmi-card .ffmi-check-action {
+  flex: none;
+  min-height: 2.25rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0 0.875rem;
+  background: transparent;
+  color: var(--p-accent-text);
   font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .ffmi-score {

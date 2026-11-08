@@ -43,6 +43,20 @@ function button(text: string): HTMLButtonElement {
   return match;
 }
 
+function labelled(label: string): HTMLButtonElement {
+  const match = host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (!match) throw new Error(`No ${label} button`);
+  return match;
+}
+
+function checklist(): string[] {
+  return [...host.querySelectorAll('.ffmi-checklist li')].map((item) =>
+    [item.classList.contains('done') ? 'done' : 'todo', item.textContent?.replace('✓', '')].join(
+      ': ',
+    ),
+  );
+}
+
 function modelButton(): HTMLButtonElement {
   return host.querySelector<HTMLButtonElement>('.ffmi-model-toggle')!;
 }
@@ -174,7 +188,12 @@ describe('FfmiCard', () => {
     await act(async () => modelButton().click());
     expect(api.updateFfmiProfile).toHaveBeenCalledWith({ ...emptyProfile, sex: 'male' });
     expect(host.querySelector('.ffmi-score')).toBeNull();
-    await act(async () => button('Add height and sex').click());
+    expect(checklist()).toEqual([
+      'done: SexAdded: Male',
+      'todo: HeightAdd',
+      'done: Weigh-in with body fat %Added: 23%',
+    ]);
+    await act(async () => labelled('Add height').click());
     expect(button('Male').getAttribute('aria-checked')).toBe('true');
   });
 
@@ -222,9 +241,16 @@ describe('FfmiCard', () => {
   });
   it('asks for height and sex, then saves them and shows the score', async () => {
     await render(emptyProfile);
-    expect(host.textContent).toContain('Add height and sex');
+    expect(host.querySelector('.ffmi-checklist-title')?.textContent).toBe(
+      'Needed for your score1 of 3',
+    );
+    expect(checklist()).toEqual([
+      'todo: SexChoose',
+      'todo: HeightAdd',
+      'done: Weigh-in with body fat %Added: 23%',
+    ]);
 
-    await act(async () => button('Add height and sex').click());
+    await act(async () => labelled('Choose sex').click());
     await act(async () => button('Male').click());
     await act(async () => {
       setInput('Height', '160');
@@ -254,7 +280,7 @@ describe('FfmiCard', () => {
 
   it('keeps the editor open with an error for an invalid height', async () => {
     await render(emptyProfile);
-    await act(async () => button('Add height and sex').click());
+    await act(async () => labelled('Add height').click());
     await act(async () => button('Female').click());
     expect(document.body.textContent).not.toContain('Wrist (cm)');
     await act(async () => setInput('Height', '20'));
@@ -267,7 +293,8 @@ describe('FfmiCard', () => {
   it('asks for a body fat check-in and frame sizes when they are missing', async () => {
     const profile = { ...emptyProfile, sex: 'male' as const, height_cm: 180 };
     await render(profile, [{ ...measurements[0], body_fat_pct: null }]);
-    expect(host.textContent).toContain('Log a weigh-in with body fat % to see your FFMI.');
+    expect(host.querySelector('.ffmi-score')).toBeNull();
+    expect(checklist()[2]).toBe('todo: Weigh-in with body fat %Missing');
 
     await render(profile);
     expect(host.querySelector('.ffmi-potential')).toBeNull();
@@ -275,6 +302,31 @@ describe('FfmiCard', () => {
     await render(profile, [{ ...measurements[0], weight_kg: 79.8, body_fat_pct: 14.6 }]);
     expect(host.querySelector('.ffmi-score strong')?.textContent).toBe('21.0');
     expect(host.textContent).toContain('Add wrist and ankle for a model reference');
+    expect(host.querySelector('.ffmi-checklist')).toBeNull();
+  });
+
+  it('opens the weigh-in entry from the checklist when body fat is missing', async () => {
+    const onLogWeighIn = vi.fn();
+    vi.mocked(api.getFfmiProfile).mockResolvedValue({
+      ...emptyProfile,
+      sex: 'female',
+      height_cm: 165,
+    });
+    await act(async () =>
+      root.render(
+        <FfmiCard
+          measurements={[{ ...measurements[0], body_fat_pct: null }]}
+          onLogWeighIn={onLogWeighIn}
+        />,
+      ),
+    );
+    expect(checklist()).toEqual([
+      'done: SexAdded: Female',
+      'done: HeightAdded: 165 cm',
+      'todo: Weigh-in with body fat %Log weigh-in',
+    ]);
+    await act(async () => labelled('Log weigh-in with body fat %').click());
+    expect(onLogWeighIn).toHaveBeenCalledOnce();
   });
 
   it('shows optional male height adjustment and sensitivity without changing the chart score', async () => {

@@ -8762,7 +8762,15 @@ export function BodyCompositionScreen({
       </div>
 
       <BodySizesCard dataRevision={dataRevision} />
-      <FfmiCard measurements={measurements} dataRevision={dataRevision} />
+      <FfmiCard
+        measurements={measurements}
+        dataRevision={dataRevision}
+        onLogWeighIn={() => {
+          setError(null);
+          setEntryOpen(true);
+          setGoalOpen(false);
+        }}
+      />
 
       {goalOpen && (
         <PopupDialog

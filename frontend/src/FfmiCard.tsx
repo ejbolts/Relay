@@ -79,10 +79,12 @@ export function FfmiCard({
   measurements,
   dataRevision = null,
   initialProfile = null,
+  onLogWeighIn,
 }: {
   measurements: BodyMeasurement[];
   dataRevision?: string | null;
   initialProfile?: FfmiProfile | null;
+  onLogWeighIn?: () => void;
 }) {
   const weightUnit = useWeightUnit();
   const lengthUnit = weightUnit === 'lb' ? 'in' : 'cm';
@@ -132,6 +134,47 @@ export function FfmiCard({
   const modelLabel = profile.sex
     ? `${profile.sex === 'male' ? 'Male' : 'Female'} FFMI model. Switch to ${nextSex}.`
     : 'Select male FFMI model';
+
+  const requirements: {
+    key: string;
+    label: string;
+    done: boolean;
+    value: string | null;
+    action?: () => void;
+    actionText?: string;
+    actionLabel?: string;
+  }[] = [
+    {
+      key: 'sex',
+      label: 'Sex',
+      done: profile.sex !== null,
+      value: profile.sex === 'male' ? 'Male' : profile.sex === 'female' ? 'Female' : null,
+      action: openEditor,
+      actionText: 'Choose',
+      actionLabel: 'Choose sex',
+    },
+    {
+      key: 'height',
+      label: 'Height',
+      done: profile.height_cm !== null,
+      value:
+        profile.height_cm === null
+          ? null
+          : `${lengthFromCm(profile.height_cm, weightUnit)} ${lengthUnit}`,
+      action: openEditor,
+      actionText: 'Add',
+      actionLabel: 'Add height',
+    },
+    {
+      key: 'body-fat',
+      label: 'Weigh-in with body fat %',
+      done: measurement !== null,
+      value: measurement ? `${measurement.body_fat_pct}%` : null,
+      action: onLogWeighIn,
+      actionText: 'Log weigh-in',
+      actionLabel: 'Log weigh-in with body fat %',
+    },
+  ];
 
   function openEditor() {
     const current = profile ?? DEFAULT_FFMI_PROFILE;
@@ -238,14 +281,43 @@ export function FfmiCard({
         </p>
       )}
 
-      {!ready && (
-        <button type="button" className="ffmi-setup" disabled={saving} onClick={openEditor}>
-          Add height and sex
-        </button>
-      )}
-
-      {ready && !measurement && (
-        <p className="ffmi-empty">Log a weigh-in with body fat % to see your FFMI.</p>
+      {ffmi === null && (
+        <div className="ffmi-checklist">
+          <p className="ffmi-checklist-title" id="ffmi-checklist-title">
+            Needed for your score
+            <span>
+              {requirements.filter((item) => item.done).length} of {requirements.length}
+            </span>
+          </p>
+          <ul aria-labelledby="ffmi-checklist-title">
+            {requirements.map((item) => (
+              <li key={item.key} className={item.done ? 'done' : ''}>
+                <span className="ffmi-check" aria-hidden="true">
+                  {item.done ? '✓' : ''}
+                </span>
+                <span className="ffmi-check-label">{item.label}</span>
+                {item.done ? (
+                  <span className="ffmi-check-value">
+                    <span className="sr-only">Added: </span>
+                    {item.value}
+                  </span>
+                ) : item.action ? (
+                  <button
+                    type="button"
+                    className="ffmi-check-action"
+                    aria-label={item.actionLabel}
+                    disabled={saving}
+                    onClick={item.action}
+                  >
+                    {item.actionText}
+                  </button>
+                ) : (
+                  <span className="ffmi-check-value missing">Missing</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {ffmi !== null && measurement && (
