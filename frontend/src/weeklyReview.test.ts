@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { weeklyReview, type WeeklyReviewInput } from './weeklyReview';
+import { reviewHasActivity, weeklyReview, type WeeklyReviewInput } from './weeklyReview';
 import { reviewCardioWeek, reviewRecord, reviewSet, reviewWorkout } from './weeklyReviewFixtures';
 
 // Sunday 8 Nov 2026, with Monday-start weeks: this week is 2–8 Nov, last week 26 Oct – 1 Nov.
@@ -14,9 +14,9 @@ const base: WeeklyReviewInput = {
   weekStartDay: 1,
   weeksAgo: 0,
 };
-const week = (muscle_groups: Array<[string, number]>) => ({
-  week_start: '2026-11-02',
-  week_end: '2026-11-08',
+const week = (muscle_groups: Array<[string, number]>, week_start = '2026-11-02') => ({
+  week_start,
+  week_end: week_start === '2026-11-02' ? '2026-11-08' : '2026-11-01',
   muscle_groups: muscle_groups.map(([muscle_group, raw_sets]) => ({
     muscle_group,
     raw_sets,
@@ -82,11 +82,14 @@ describe('weeklyReview', () => {
           ['Back', 10],
           ['Calves', 2],
         ]),
-        week([
-          ['Chest', 6],
-          ['Back', 14],
-          ['Biceps', 4],
-        ]),
+        week(
+          [
+            ['Chest', 6],
+            ['Back', 14],
+            ['Biceps', 4],
+          ],
+          '2026-10-26',
+        ),
       ],
     });
     expect(review.muscles).toMatchObject({
@@ -140,6 +143,41 @@ describe('weeklyReview', () => {
       zones: [{ zone: 2, minutes: 60, previousMinutes: null, goalMinutes: 150 }],
     });
     expect(weeklyReview({ ...base, cardioWeeks, weeksAgo: 2 }).cardio).toBeNull();
+  });
+
+  it('matches dashboard weeks by start date, so an older cached dashboard is not misread', () => {
+    const stale = weeklyReview({
+      ...base,
+      muscleWeeks: [week([['Chest', 12]], '2026-10-26')],
+      cardioWeeks: [reviewCardioWeek('2026-10-26', 60, { 2: [60, 150] })],
+    });
+    expect(stale.muscles).toBeNull();
+    expect(stale.cardio).toBeNull();
+    const lastWeek = weeklyReview({
+      ...base,
+      weeksAgo: 1,
+      muscleWeeks: [week([['Chest', 12]], '2026-10-26')],
+      cardioWeeks: [reviewCardioWeek('2026-10-26', 60, { 2: [60, 150] })],
+    });
+    expect(lastWeek.muscles).toMatchObject({ atGoal: 1, previousAtGoal: null });
+    expect(lastWeek.cardio?.totalMinutes).toBe(60);
+  });
+
+  it('reports whether a week has anything to review', () => {
+    expect(reviewHasActivity(weeklyReview(base))).toBe(false);
+    expect(
+      reviewHasActivity(
+        weeklyReview({ ...base, workouts: [reviewWorkout('w', '2026-11-03', [reviewSet(60, 5)])] }),
+      ),
+    ).toBe(true);
+    expect(
+      reviewHasActivity(
+        weeklyReview({
+          ...base,
+          cardioWeeks: [reviewCardioWeek('2026-11-02', 30, {})],
+        }),
+      ),
+    ).toBe(true);
   });
 
   it('averages body weight per week', () => {

@@ -160,6 +160,7 @@ import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
 import { HomeScreenGuide } from './HomeScreenGuide';
+import { WeeklyReviewPrompt } from './WeeklyReviewPrompt';
 import { useHomeScreenGuide } from './useHomeScreenGuide';
 import { runningAsInstalledApp } from './homeScreenGuideState';
 import { AppGuide } from './AppGuide';
@@ -665,6 +666,12 @@ function AppContent() {
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
   const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts);
+  const reviewMuscleWeeks = useMemo(() => {
+    const current = muscleSets.weeklySets ?? dashboard?.weekly_sets;
+    return current
+      ? [current, ...(muscleSets.history ?? dashboard?.weekly_sets_history ?? [])]
+      : [];
+  }, [dashboard?.weekly_sets, dashboard?.weekly_sets_history, muscleSets]);
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -1676,6 +1683,28 @@ function AppContent() {
           !importStepPending &&
           !announcement.open &&
           canShowPrompts && <HomeScreenGuide onClose={homeScreenGuide.dismiss} />}
+        {user && (
+          <WeeklyReviewPrompt
+            userId={user.id}
+            enabled={
+              canShowPrompts &&
+              prompt === null &&
+              !announcement.open &&
+              !homeScreenGuide.open &&
+              !guideWaiting &&
+              !importStepPending
+            }
+            dashboard={dashboard}
+            muscleWeeks={reviewMuscleWeeks}
+            workouts={workouts}
+            records={personalRecords}
+            measurements={measurements}
+            today={localDate()}
+            onOpenProgress={(exerciseId) => openHistorySection('progress', exerciseId ?? null)}
+            onOpenCardio={() => openHistorySection('cardio')}
+            onOpenBody={() => setTab('body')}
+          />
+        )}
         <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (

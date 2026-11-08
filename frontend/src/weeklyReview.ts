@@ -74,10 +74,10 @@ export interface WeeklyReviewInput {
   workouts: TrackedWorkout[];
   records: PersonalRecord[];
   measurements: Array<Pick<BodyMeasurement, 'measurement_date' | 'weight_kg'>>;
-  /** Weeks of per-muscle sets, newest first, starting with the current week. */
+  /** Weeks of per-muscle sets from the dashboard, matched to the review by their start date. */
   muscleWeeks: MuscleSetsWeek[];
   muscleGoal: number;
-  /** The current week then earlier weeks, newest first, from the dashboard. */
+  /** Weeks of cardio from the dashboard, matched to the review by their start date. */
   cardioWeeks: CardioWeek[];
   today: string;
   weekStartDay: number;
@@ -97,10 +97,14 @@ function trainingTotals(workouts: TrackedWorkout[]): WeeklyTrainingTotals {
   };
 }
 
-function cardioReview(weeks: CardioWeek[], weeksAgo: number): WeeklyCardioReview | null {
-  const week = weeks[weeksAgo];
+function cardioReview(
+  weeks: CardioWeek[],
+  start: string,
+  previousStart: string,
+): WeeklyCardioReview | null {
+  const week = weeks.find((item) => item.week_start === start);
   if (!week) return null;
-  const previous = weeks[weeksAgo + 1];
+  const previous = weeks.find((item) => item.week_start === previousStart);
   return {
     totalMinutes: week.total_minutes,
     previousTotalMinutes: previous ? previous.total_minutes : null,
@@ -119,12 +123,13 @@ function cardioReview(weeks: CardioWeek[], weeksAgo: number): WeeklyCardioReview
 
 function muscleReview(
   weeks: MuscleSetsWeek[],
-  weeksAgo: number,
+  start: string,
+  previousStart: string,
   goal: number,
 ): WeeklyMuscleReview | null {
-  const week = weeks[weeksAgo];
+  const week = weeks.find((item) => item.week_start === start);
   if (!week) return null;
-  const previous = weeks[weeksAgo + 1];
+  const previous = weeks.find((item) => item.week_start === previousStart);
   const previousSets = new Map(
     (previous?.muscle_groups ?? []).map((item) => [item.muscle_group, item.raw_sets]),
   );
@@ -156,6 +161,17 @@ function muscleReview(
   };
 }
 
+/** Whether the week has anything worth reviewing: training, cardio, records or a weigh-in. */
+export function reviewHasActivity(review: WeeklyReview): boolean {
+  return Boolean(
+    review.training.workouts ||
+    review.training.cardioSessions ||
+    review.cardio?.totalMinutes ||
+    review.records.length ||
+    review.body.checkIns,
+  );
+}
+
 /**
  * What changed in one week against the week before it. Like the rest of Home it counts every
  * logged workout, sample data included, and ignores unperformed sets (through `workingSets`).
@@ -181,8 +197,8 @@ export function weeklyReview(input: WeeklyReviewInput): WeeklyReview {
     records: recentStrengthRecords(recordsIn(start), Number.POSITIVE_INFINITY),
     previousRecordCount: recentStrengthRecords(recordsIn(previousStart), Number.POSITIVE_INFINITY)
       .length,
-    muscles: muscleReview(input.muscleWeeks, input.weeksAgo, input.muscleGoal),
-    cardio: cardioReview(input.cardioWeeks, input.weeksAgo),
+    muscles: muscleReview(input.muscleWeeks, start, previousStart, input.muscleGoal),
+    cardio: cardioReview(input.cardioWeeks, start, previousStart),
     body: {
       averageKg: averageOf(bodyWeights),
       previousAverageKg: averageOf(weights(previousStart)),
