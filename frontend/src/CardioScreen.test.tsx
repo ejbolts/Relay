@@ -253,6 +253,32 @@ describe('cardio weekly trend screen', () => {
     expect(document.querySelector('dialog')!.textContent).toContain('Cardio metrics');
   });
 
+  it('separates history days while keeping sessions on the same day together', async () => {
+    vi.mocked(api.cardioOverview).mockResolvedValue({
+      ...overview,
+      sessions: [
+        session(),
+        session({ id: 'same-day', activity_type: 'Incline walking' }),
+        session({ id: 'previous-day', session_date: '2026-10-23' }),
+      ],
+    });
+    await act(async () =>
+      root.render(
+        <CardioScreen
+          dataRevision="day-dividers"
+          exercises={[]}
+          onDataChange={vi.fn()}
+          onOpenWorkout={vi.fn()}
+        />,
+      ),
+    );
+    const rows = container.querySelectorAll('.cardio-history-row');
+    expect(rows).toHaveLength(3);
+    expect(rows[0].classList.contains('cardio-history-new-day')).toBe(false);
+    expect(rows[1].classList.contains('cardio-history-new-day')).toBe(false);
+    expect(rows[2].classList.contains('cardio-history-new-day')).toBe(true);
+  });
+
   it('opens the screenshot picker and previews imported values without saving', async () => {
     const scan = vi.spyOn(api, 'scanCardioScreenshot').mockResolvedValue({
       session_date: '2026-10-22',
