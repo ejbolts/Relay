@@ -199,7 +199,7 @@ it('updates individually selected stats, date and style in the drawing used for 
   await act(async () => checkbox('Paper').click());
   expect(previewSvg()).not.toContain('Volume');
   expect(previewSvg()).not.toContain('November');
-  expect(previewSvg()).toContain('#f6f2e9');
+  expect(previewSvg()).toContain('#f3f5f7');
   expect(workoutCardPng).toHaveBeenLastCalledWith(previewSvg());
   await act(async () => button('Download PNG').click());
   const file = vi.mocked(downloadWorkoutCard).mock.calls[0][0];

@@ -107,20 +107,20 @@ export function workoutCardSvg({
   const paper = style === 'paper';
   const color = paper
     ? {
-        bg: '#f6f2e9',
-        ink: '#202e2b',
-        muted: '#586862',
-        accent: '#286c56',
-        panel: '#e8e8dd',
-        line: '#d2d8c8',
+        bg: '#f3f5f7',
+        ink: '#14181c',
+        muted: '#48515a',
+        accent: '#1f62b4',
+        panel: '#ffffff',
+        line: '#d9dee2',
       }
     : {
-        bg: '#111d24',
-        ink: '#f2f6ed',
-        muted: '#a9bcb8',
-        accent: '#c1ef87',
-        panel: '#1b2d34',
-        line: '#30454a',
+        bg: '#15181b',
+        ink: '#f3f5f6',
+        muted: '#b4bcc2',
+        accent: '#6da7ec',
+        panel: '#1d2125',
+        line: '#353b41',
       };
   const date = showDate
     ? new Date(`${workout.workout_date}T12:00:00`).toLocaleDateString('en-GB', {
