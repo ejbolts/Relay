@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,11 @@ VIDEO_QUEUE_STATUSES = (
 )
 
 
+class AdminUserClientVersionRead(BaseModel):
+    version: str | None
+    devices: int
+
+
 class AdminUserRead(BaseModel):
     id: str
     username: str
@@ -89,6 +94,7 @@ class AdminUserRead(BaseModel):
     last_active_at: datetime | None
     presence: FriendPresence
     signed_in_devices: int
+    client_versions: list[AdminUserClientVersionRead] = Field(default_factory=list)
     workouts: int
     photos: int
     photo_bytes: int
@@ -195,7 +201,7 @@ def _admin_user_reads(
 ) -> list[AdminUserRead]:
     users = list(users)
     activity = admin_presence_by_member(db, users)
-    devices = _counts_by_user(db, UserSession, UserSession.expires_at > utc_now())
+    versions = _device_versions_by_user(db)
     workouts = _counts_by_user(db, TrainingWorkout)
     photos = _counts_by_user(db, MachinePhoto)
     video_sessions = _counts_by_user(db, WorkoutSession)
@@ -211,7 +217,8 @@ def _admin_user_reads(
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
             presence=activity[user.id],
-            signed_in_devices=devices.get(user.id, 0),
+            signed_in_devices=sum(item.devices for item in versions.get(user.id, [])),
+            client_versions=versions.get(user.id, []),
             workouts=workouts.get(user.id, 0),
             photos=photos.get(user.id, 0),
             photo_bytes=photo_bytes.get(user.id, 0),
@@ -219,6 +226,26 @@ def _admin_user_reads(
         )
         for user in users
     ]
+
+
+def _device_versions_by_user(db: Session) -> dict[str, list[AdminUserClientVersionRead]]:
+    """All unexpired sign-ins, matching each account's signed-in device count."""
+    rows = db.execute(
+        select(UserSession.user_id, UserSession.client_version, func.count())
+        .where(UserSession.expires_at > utc_now())
+        .group_by(UserSession.user_id, UserSession.client_version)
+    )
+    versions: dict[str, list[AdminUserClientVersionRead]] = {}
+    for user_id, version, devices in rows:
+        versions.setdefault(user_id, []).append(
+            AdminUserClientVersionRead(version=version, devices=devices)
+        )
+    for usage in versions.values():
+        usage.sort(
+            key=lambda item: client_versions.parse_version(item.version) or (-1, -1, -1),
+            reverse=True,
+        )
+    return versions
 
 
 def generate_temporary_password() -> str:

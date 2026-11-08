@@ -772,6 +772,8 @@ export interface AdminUser {
   /** Admin-only live activity, including accounts that do not share with friends. */
   presence?: FriendPresence;
   signed_in_devices: number;
+  /** Versions of all unexpired sign-ins, newest first; null means not reported. */
+  client_versions?: { version: string | null; devices: number }[];
   workouts: number;
   photos: number;
   photo_bytes: number;

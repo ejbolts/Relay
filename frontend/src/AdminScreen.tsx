@@ -378,6 +378,7 @@ function UserRow({
   const disabled = user.disabled_at !== null;
   const online = !disabled && user.presence?.online;
   const live = disabled ? null : user.presence?.workout;
+  const versions = user.client_versions ?? [];
   return (
     <li className={`admin-user ${disabled ? 'is-disabled' : ''}`}>
       <div className="admin-user-heading">
@@ -412,6 +413,21 @@ function UserRow({
         <div>
           <dt>Signed in on</dt>
           <dd>{plural(user.signed_in_devices, 'device')}</dd>
+        </div>
+        <div>
+          <dt>App versions</dt>
+          <dd>
+            {versions.length
+              ? versions
+                  .map(
+                    (usage) =>
+                      `${usage.version ? `v${usage.version}` : 'Not reported'} (${plural(usage.devices, 'device')})`,
+                  )
+                  .join(', ')
+              : user.signed_in_devices === 0
+                ? 'No signed-in devices'
+                : 'Not reported'}
+          </dd>
         </div>
         <div>
           <dt>Workouts</dt>
