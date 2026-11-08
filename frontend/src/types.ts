@@ -447,8 +447,38 @@ export interface WorkoutHistorySummary {
   has_sample_workouts: boolean;
 }
 
+export interface TrainingBlock {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string | null;
+  /** Optional inclusive target for “days left”; it never ends the block. */
+  planned_end_date?: string | null;
+  /** Derived by the server on read. */
+  workout_count?: number;
+}
+
+export interface TrainingBlockInput {
+  name: string;
+  start_date: string;
+  planned_end_date: string | null;
+}
+
+export interface TrainingBlocks {
+  blocks: TrainingBlock[];
+  /** Workouts dated before the first block. */
+  earlier_workout_count?: number;
+  /** Date of the earliest logged workout. */
+  history_start?: string | null;
+}
+
 /** An exercise's history before the loaded window, condensed by the server. */
 export interface ExerciseHistoryBaseline {
+  block_bests?: Array<{
+    block_id: string;
+    best_weight_kg: number | null;
+    reps_by_weight: Array<{ weight_kg: number; reps: number }>;
+  }>;
   exercise_id: string;
   best_weight_kg: number | null;
   reps_by_weight: Array<{ weight_kg: number; reps: number }>;
@@ -467,6 +497,9 @@ export interface MuscleVolume {
 }
 
 export interface PersonalRecord {
+  scope?: 'all_time' | 'block';
+  block_id?: string | null;
+  block_name?: string | null;
   id: string;
   exercise_id: string;
   workout_id: string;

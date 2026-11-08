@@ -354,7 +354,11 @@ import {
 } from './workoutMovements';
 import { applySupersetSelection, clearSuperset } from './workoutSupersets';
 import { initialHistoryVisibleCount, upsertWorkoutByRecency } from './workoutHistory';
-import { calculateDraftPrs } from './workoutPr';
+import { calculateScopedDraftPrs } from './workoutPr';
+import { TrainingBlocksProvider } from './TrainingBlocksProvider';
+import { TrainingBlockControls } from './TrainingBlockControls';
+import { useTrainingBlocks } from './trainingBlocksContext';
+import { recordsForBlock } from './trainingBlocks';
 import { completedWorkoutDurationMinutes } from './workoutResume';
 import {
   isWorkoutSetAutoSavable,
@@ -541,6 +545,7 @@ function WorkoutCompletionToast({
         <div key={record.id}>
           <strong>{record.exercise_name}</strong>
           <span>
+            {record.scope === 'block' ? 'Block ' : 'All-time '}
             {recordTypeLabel(record.record_type)} · {recordDisplayValue(record, weightUnit)}
             {record.record_type === 'reps_at_weight' && record.weight_kg != null
               ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
@@ -560,7 +565,9 @@ export function App() {
     <TrainingPreferencesProvider>
       <WorkoutTypesProvider>
         <ReleaseAnnouncementContext.Provider value={announcement}>
-          <AppContent />
+          <TrainingBlocksProvider key={user?.id}>
+            <AppContent />
+          </TrainingBlocksProvider>
         </ReleaseAnnouncementContext.Provider>
       </WorkoutTypesProvider>
     </TrainingPreferencesProvider>
@@ -1009,6 +1016,7 @@ function AppContent() {
       ) {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
+        window.dispatchEvent(new Event('training-data-refreshed'));
       }
       const firstFailure = results.find(
         (result, index): result is PromiseRejectedResult =>
@@ -1101,6 +1109,16 @@ function AppContent() {
     olderError: olderHistory.error,
     onLoadOlder: onLoadOlderHistory,
   };
+
+  useEffect(() => {
+    const updated = () => {
+      void refreshData({ silent: true, activityLabel: null });
+    };
+    window.addEventListener('training-blocks-updated', updated);
+    return () => window.removeEventListener('training-blocks-updated', updated);
+    // refreshData reads the current loaded history window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function refreshAfterMutation(): Promise<void> {
     return refreshData({ silent: true, activityLabel: trainingDataActivityLabel('mutation') });
@@ -1242,7 +1260,7 @@ function AppContent() {
 
     if (!wasEditing) {
       const signature = (record: PersonalRecord) =>
-        `${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
+        `${record.scope ?? 'all_time'}:${record.block_id ?? ''}:${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
       const existing = new Set(
         personalRecords.filter((record) => record.workout_id === resumedId).map(signature),
       );
@@ -2611,6 +2629,7 @@ function WorkoutLogger({
   onRestTimerChange?: (endsAt: number | null) => void;
   onRestTimerComplete: () => void;
 }) {
+  const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
   const restoredDraft = useState(() => (initialWorkout ? null : readActiveWorkoutDraft()))[0];
   const [name, setName] = useState(
@@ -3029,12 +3048,13 @@ function WorkoutLogger({
     historyBaselines && workoutDate >= historyBaselines.before ? historyBaselines.byExercise : null;
   const prBadges = useMemo(
     () =>
-      calculateDraftPrs(
+      calculateScopedDraftPrs(
         movements,
         historicalWorkouts,
         initialWorkout?.id ?? resumedWorkoutId,
         workoutDate,
         olderHistory,
+        trainingBlocks.blocks,
       ),
     [
       movements,
@@ -3043,6 +3063,7 @@ function WorkoutLogger({
       resumedWorkoutId,
       workoutDate,
       olderHistory,
+      trainingBlocks.blocks,
     ],
   );
   const completedSetKeysRef = useRef(
@@ -5087,10 +5108,16 @@ function MovementCard({
                 'Edit weight',
                 'completed-set-weight',
                 <>
-                  {item.weight_kg === null ? '–' : formatWeight(item.weight_kg, weightUnit)}
+                  <span className="set-weight-value">
+                    {item.weight_kg === null ? '–' : formatWeight(item.weight_kg, weightUnit)}
+                  </span>
                   {prBadges.has(item.key) && (
                     <b className="pr-badge" title={prBadges.get(item.key)?.join(', ')}>
-                      PR
+                      {prBadges.get(item.key)?.some((label) => label.startsWith('All-time'))
+                        ? 'All-time PR'
+                        : prBadges.get(item.key)?.some((label) => label.startsWith('Block'))
+                          ? 'Block PR'
+                          : 'PR'}
                     </b>
                   )}
                 </>,
@@ -7007,6 +7034,8 @@ export function ProgressScreen({
   onCreateExercise?: () => void;
   onExercisesMerged?: () => Promise<void>;
 }) {
+  const { block } = useTrainingBlocks();
+  const blockId = block?.id;
   const weightUnit = useWeightUnit();
   const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
   const mergeTrigger = useRef<HTMLButtonElement | null>(null);
@@ -7102,9 +7131,10 @@ export function ProgressScreen({
     let cancelled = false;
     setVisibleSessions(browseFirst ? 5 : HISTORY_PAGE_SIZE);
     setLoading(true);
+    setProgress(null);
     setProgressError(null);
     void api
-      .exerciseProgress(exerciseId)
+      .exerciseProgress(exerciseId, blockId)
       .then((nextProgress) => {
         if (!cancelled) setProgress(nextProgress);
       })
@@ -7120,7 +7150,16 @@ export function ProgressScreen({
     return () => {
       cancelled = true;
     };
-  }, [exerciseId, progressAttempt, dataRevision, libraryMode, browseFirst]);
+  }, [
+    exerciseId,
+    progressAttempt,
+    dataRevision,
+    libraryMode,
+    browseFirst,
+    blockId,
+    block?.start_date,
+    block?.end_date,
+  ]);
 
   useEffect(() => {
     if (!exerciseId || libraryMode) return;
@@ -7185,7 +7224,7 @@ export function ProgressScreen({
   const tableRecordIds = useMemo(
     () =>
       new Set(
-        personalRecords
+        recordsForBlock(personalRecords, block)
           .filter(
             (record) =>
               record.exercise_id === exerciseId &&
@@ -7193,7 +7232,7 @@ export function ProgressScreen({
           )
           .map((record) => record.workout_id),
       ),
-    [personalRecords, exerciseId],
+    [personalRecords, exerciseId, block],
   );
   const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
   const sessionsNewestFirst = viewPoints.slice().reverse();
@@ -7236,6 +7275,7 @@ export function ProgressScreen({
     <section
       className={`progress-screen ${embedded ? '' : 'content-page'}${browseFirst ? ' exercise-list-detail' : ''}`}
     >
+      <TrainingBlockControls />
       {browseFirst && fullProgress && !onDetailChange && (
         <button type="button" className="training-back text-link" onClick={backToExercises}>
           <Icon name="chevron-left" /> Exercises
@@ -7616,7 +7656,20 @@ export function ProgressScreen({
                           >
                             <span className="session-date">
                               {shortDate(point.workout_date)}
-                              {recordIds.has(point.workout_id) && <em className="pr-chip">PR</em>}
+                              {recordIds.has(point.workout_id) && (
+                                <em className="pr-chip">
+                                  {defaultView
+                                    ? personalRecords.some(
+                                        (record) =>
+                                          record.workout_id === point.workout_id &&
+                                          record.exercise_id === exerciseId &&
+                                          record.scope !== 'block',
+                                      )
+                                      ? 'All-time PR'
+                                      : 'Block PR'
+                                    : 'PR'}
+                                </em>
+                              )}
                             </span>
                             <span className="session-set num">
                               {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
@@ -10856,7 +10909,22 @@ function HistorySetFlow({
                     : ''}
             </em>
             {personalRecords.some((record) => record.set_id === item.id) && (
-              <strong className="pr-badge">PR</strong>
+              <strong
+                className="pr-badge"
+                title={personalRecords
+                  .filter((record) => record.set_id === item.id)
+                  .map(
+                    (record) =>
+                      `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)}`,
+                  )
+                  .join(', ')}
+              >
+                {personalRecords.some(
+                  (record) => record.set_id === item.id && record.scope !== 'block',
+                )
+                  ? 'All-time PR'
+                  : 'Block PR'}
+              </strong>
             )}
           </div>
           {index < sets.length - 1 && (

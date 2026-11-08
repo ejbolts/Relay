@@ -52,6 +52,9 @@ import {
 } from './weightUnits';
 import { useOffline } from './connectionStatus';
 import { OfflineBadge } from './OfflineBadge';
+import { TrainingBlockCardSettingsForm, TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { blockOn } from './trainingBlocks';
+import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
@@ -199,6 +202,8 @@ export function TodayScreen({
   const weightUnit = useWeightUnit();
   const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
+  const trainingBlocks = useTrainingBlocks();
+  const currentBlock = blockOn(trainingBlocks.config.blocks, today);
   const weeks = useMemo(
     () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
@@ -423,6 +428,18 @@ export function TodayScreen({
           </div>
         </section>
       ) : null,
+    'training-block': currentBlock ? (
+      <TrainingBlockHomeCard
+        block={currentBlock}
+        config={trainingBlocks.config}
+        today={today}
+        style={homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style}
+        onOpen={() => {
+          trainingBlocks.select('current');
+          onOpenProgress();
+        }}
+      />
+    ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
@@ -645,6 +662,14 @@ export function TodayScreen({
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          'training-block': (
+            <TrainingBlockCardSettingsForm
+              value={homeSectionSettings(home.draft, 'training_block')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'training_block', change))
+              }
+            />
+          ),
           zone2: (
             <CardioGoalCardSettingsForm
               goals={cardioGoals.map((goal) => ({ zone: goal.zone, minutes: goal.goal_minutes }))}

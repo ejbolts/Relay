@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { useTrainingBlocks } from './trainingBlocksContext';
 import type { Exercise, ExerciseLibrarySummary } from './types';
 
 export interface ExerciseLibraryState {
@@ -15,6 +16,10 @@ export function useExerciseLibrary(
   dataRevision: string | null,
   enabled = true,
 ): ExerciseLibraryState {
+  const { block } = useTrainingBlocks();
+  const blockId = block?.id;
+  const scope = `${blockId ?? 'all'}:${block?.start_date ?? ''}:${block?.end_date ?? ''}`;
+  const loadedScope = useRef(scope);
   const [summaries, setSummaries] = useState<ExerciseLibrarySummary[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -28,9 +33,13 @@ export function useExerciseLibrary(
     if (!enabled) return;
     let cancelled = false;
     setLoading(true);
+    if (loadedScope.current !== scope) {
+      setSummaries(null);
+      loadedScope.current = scope;
+    }
     setError(false);
     void api
-      .exerciseLibrary()
+      .exerciseLibrary(blockId)
       .then((result) => {
         if (!cancelled) setSummaries(result);
       })
@@ -43,7 +52,7 @@ export function useExerciseLibrary(
     return () => {
       cancelled = true;
     };
-  }, [enabled, dataRevision, ids, attempt]);
+  }, [enabled, dataRevision, ids, attempt, blockId, scope]);
 
   return { summaries, loading, error, retry: () => setAttempt((value) => value + 1) };
 }

@@ -38,6 +38,8 @@ import type {
   MachineSetting,
   MuscleVolume,
   PersonalRecord,
+  TrainingBlockInput,
+  TrainingBlocks,
   ProfileUpdateInput,
   PushConfig,
   RegisterInput,
@@ -769,10 +771,30 @@ export const api = {
     }),
   deleteBodyWeightGoal: (id: string) =>
     request<void>(`/api/body-weight-goals/${id}`, { method: 'DELETE' }),
+  trainingBlocks: {
+    get: () => accountRead<TrainingBlocks>('/api/training-blocks'),
+    create: (payload: TrainingBlockInput) =>
+      request<TrainingBlocks>('/api/training-blocks', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    update: (id: string, payload: TrainingBlockInput) =>
+      request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    remove: (id: string) =>
+      request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+  },
   listPersonalRecords: (params?: { exerciseId?: string; workoutId?: string }) => {
     const query = new URLSearchParams();
     if (params?.exerciseId) query.set('exercise_id', params.exerciseId);
     if (params?.workoutId) query.set('workout_id', params.workoutId);
+    query.set('include_blocks', 'true');
     const path = `/api/personal-records${query.size ? `?${query}` : ''}`;
     // A just-saved workout's records only matter online; saving a copy per workout would pile up.
     return params?.workoutId
@@ -914,8 +936,14 @@ export const api = {
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
-  exerciseProgress: (id: string) => accountRead<ExerciseProgress>(`/api/progress/${id}`),
-  exerciseLibrary: () => accountRead<ExerciseLibrarySummary[]>('/api/progress'),
+  exerciseProgress: (id: string, blockId?: string) =>
+    accountRead<ExerciseProgress>(
+      `/api/progress/${id}${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,
+    ),
+  exerciseLibrary: (blockId?: string) =>
+    accountRead<ExerciseLibrarySummary[]>(
+      `/api/progress${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,
+    ),
   getWorkout: (id: string) => request<TrackedWorkout>(`/api/workouts/${id}`),
   getSession: (id: string) => request<WorkoutSession>(`/api/sessions/${id}`),
   deleteSession: (id: string) =>

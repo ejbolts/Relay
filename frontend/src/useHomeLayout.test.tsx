@@ -21,7 +21,7 @@ let home: ReturnType<typeof useHomeLayout>;
 const saved: HomeLayout = {
   ...defaultHomeLayout(),
   widths: { 'combined-check-in': 'compact', workouts: 'full' },
-  settings: { zone2: { zone: 4, style: 'ring' } },
+  settings: { zone2: { zone: 4, style: 'ring' }, training_block: { style: 'timeline' } },
 };
 
 function Harness({ active }: { active: boolean }) {
