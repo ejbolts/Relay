@@ -2,6 +2,7 @@ import type { TrackedWorkout } from './types';
 import { workingSets, workoutDisplayName, workoutVolumeKg } from './trainingSummary';
 import { isCompletedWorkingSet } from './workoutSets';
 import { formatWeight, type WeightUnit } from './weightUnits';
+import relayLogo from '../public/relay-logo.png?inline';
 
 export type WorkoutCardStyle = 'midnight' | 'paper';
 export type WorkoutCardStat =
@@ -138,8 +139,8 @@ export function workoutCardSvg({
     <rect width="1080" height="1350" fill="${color.bg}"/>
     <g fill="none" stroke="${color.line}" stroke-width="2"><circle cx="1000" cy="115" r="212"/><circle cx="1000" cy="115" r="160"/><circle cx="1000" cy="115" r="108"/></g>
     <g font-family="Arial, Helvetica, sans-serif">
-      <rect x="64" y="68" width="36" height="8" rx="4" fill="${color.accent}"/>
-      <text x="114" y="84" fill="${color.ink}" font-size="34" font-weight="700" letter-spacing="5">RELAY</text>
+      <image x="64" y="52" width="72" height="72" href="${relayLogo}"/>
+      <text x="156" y="100" fill="${color.ink}" font-size="34" font-weight="700" letter-spacing="5">RELAY</text>
       <text x="64" y="180" fill="${color.accent}" font-size="23" font-weight="700" letter-spacing="4">WORKOUT COMPLETE</text>
       ${lines
         .map((line, index) => {

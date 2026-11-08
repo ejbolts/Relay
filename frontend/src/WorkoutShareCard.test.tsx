@@ -119,6 +119,7 @@ describe('card data and drawing', () => {
     const parsed = new DOMParser().parseFromString(drawing, 'image/svg+xml');
     expect(parsed.querySelector('parsererror')).toBeNull();
     expect(parsed.querySelector('script')).toBeNull();
+    expect(parsed.querySelector('image')?.getAttribute('href')).toMatch(/^data:image\/png;base64,/);
   });
 
   it('keeps long Unicode names and all eight stats within a fixed portrait export', () => {
