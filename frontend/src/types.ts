@@ -452,11 +452,17 @@ export interface TrainingBlock {
   name: string;
   start_date: string;
   end_date: string | null;
+  /** Derived by the server on read. */
+  workout_count?: number;
 }
 
 export interface TrainingBlocks {
   blocks: TrainingBlock[];
   auto_yearly: boolean;
+  /** Workouts dated before the first block. */
+  earlier_workout_count?: number;
+  /** Date of the earliest logged workout. */
+  history_start?: string | null;
 }
 
 /** An exercise's history before the loaded window, condensed by the server. */

@@ -1,7 +1,10 @@
 from datetime import date
 
+from sqlalchemy import text
+
 from app.database import SessionLocal
 from app.training_blocks import training_blocks
+from app.training_metrics import get_setting
 
 
 def block(client, name="Rebuild", start="2026-06-01"):
@@ -179,3 +182,23 @@ def test_imported_history_uses_the_block_dates(client):
     assert [(r["scope"], r["record_type"]) for r in records(client, workout)] == [
         ("block", "weight")
     ]
+
+
+def test_block_list_counts_workouts_per_block_without_saving_counts(client):
+    log(client, 100, "2025-03-01")
+    log(client, 100, "2026-05-31")
+    first = block(client, "Foundation", "2026-06-01")
+    log(client, 100, "2026-06-01")
+    log(client, 100, "2026-06-01")
+    second = block(client, "Peak", "2026-07-01")
+    log(client, 100, "2026-07-02")
+    listed = client.get("/api/training-blocks").json()
+    assert listed["history_start"] == "2025-03-01"
+    assert listed["earlier_workout_count"] == 2
+    assert [(b["id"], b["workout_count"]) for b in listed["blocks"]] == [
+        (first["id"], 2),
+        (second["id"], 1),
+    ]
+    with SessionLocal() as db:
+        user_id = db.execute(text("select user_id from training_workouts limit 1")).scalar_one()
+        assert "workout_count" not in get_setting(db, user_id, "training_blocks", "")

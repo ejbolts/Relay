@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProgressScreen } from './App';
+import { blockRange } from './trainingBlocks';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { Exercise, TrainingBlocks, PersonalRecord } from './types';
 
@@ -91,18 +92,79 @@ afterEach(async () => {
   host.remove();
   vi.restoreAllMocks();
 });
+const submitForm = () =>
+  act(async () =>
+    document
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+const radio = (label: string) =>
+  [...document.querySelectorAll('[role="radio"]')].find(
+    (item) => item.textContent?.trim() === label,
+  ) as HTMLButtonElement;
 
 it('reuses the exercise chart for the current block and all-time view', async () => {
   await mount();
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
   expect(host.querySelector('.progress-hero-value')?.textContent).toContain('90');
-  const select = document.querySelector<HTMLSelectElement>('[aria-label="Training block"]')!;
-  await act(async () => {
-    select.value = 'all';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  expect(radio('This block').getAttribute('aria-checked')).toBe('true');
+  await act(async () => radio('All time').click());
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', undefined);
   expect(host.querySelector('.progress-hero-value')?.textContent).toContain('120');
+  expect(button('Training block: Rebuild')).toBeUndefined();
+  await act(async () => radio('This block').click());
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
+});
+
+it('shows block ranges and workout counts in the picker and blocks page', async () => {
+  vi.mocked(api.trainingBlocks.get).mockResolvedValue({
+    auto_yearly: false,
+    earlier_workout_count: 40,
+    history_start: '2024-03-01',
+    blocks: [
+      {
+        id: 'base',
+        name: 'Base',
+        start_date: '2026-01-01',
+        end_date: '2026-06-01',
+        workout_count: 30,
+      },
+      { ...config.blocks[0], workout_count: 12 },
+    ],
+  });
+  await mount();
+  expect(button('Training block: Rebuild').textContent).toContain('12 workouts');
+  await click('Training block: Rebuild');
+  expect(
+    document.querySelector('[role="radiogroup"][aria-label="Training block"]')?.textContent,
+  ).toContain('1 Jan – 31 May 2026 · 30 workouts');
+  await act(async () => radio('Base1 Jan – 31 May 2026 · 30 workouts').click());
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'base');
+  await act(async () => radio('All time').click());
+  await act(async () => radio('This block').click());
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'base');
+  await click('Training block: Base');
+  await click('Edit blocks');
+  expect(document.querySelector('.training-block-bar')?.getAttribute('aria-label')).toBe(
+    'Timeline: Before blocks, Base, Rebuild',
+  );
+  expect(document.querySelector('.training-block-cards')?.textContent).toContain(
+    'Before blocks1 Mar 2024 – 31 Dec 202540 workouts',
+  );
+});
+
+it('formats ranges with the exclusive end date and the current year', () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 10, 8, 12));
+  try {
+    expect(blockRange('2026-08-10', null)).toBe('10 Aug – Today');
+    expect(blockRange('2025-08-10', null)).toBe('10 Aug 2025 – Today');
+    expect(blockRange('2026-04-12', '2026-08-10')).toBe('12 Apr – 9 Aug 2026');
+    expect(blockRange('2025-01-01', '2026-04-12')).toBe('1 Jan 2025 – 11 Apr 2026');
+    expect(blockRange('2026-04-12', '2026-04-13')).toBe('12 Apr 2026');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('creates a named custom block and shows an automatically dismissing toast', async () => {
@@ -115,14 +177,13 @@ it('creates a named custom block and shows an automatically dismissing toast', a
   };
   vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(next);
   await mount();
-  await click('Manage blocks');
+  await click('Training block: Rebuild');
+  await click('New block');
   await input('Block name', 'Winter strength');
+  expect(document.querySelector('input[type="date"]')).toBeNull();
+  await act(async () => radio('Pick date').click());
   await input('Start date', '2026-07-01');
-  await act(async () =>
-    document
-      .querySelector('form')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
+  await submitForm();
   expect(api.trainingBlocks.create).toHaveBeenCalledWith({
     name: 'Winter strength',
     start_date: '2026-07-01',
@@ -130,7 +191,23 @@ it('creates a named custom block and shows an automatically dismissing toast', a
   expect(document.querySelector('[role="status"]')?.textContent).toContain(
     'Training block started',
   );
+  expect(document.querySelector('dialog[open]')).toBeNull();
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'winter');
+});
+
+it('starts the first block from the all-time view', async () => {
+  vi.mocked(api.trainingBlocks.get).mockResolvedValue({ blocks: [], auto_yearly: false });
+  vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(structuredClone(config));
+  await mount();
+  expect(radio('This block')).toBeUndefined();
+  await click('Start a block');
+  await input('Block name', 'Rebuild');
+  await act(async () => radio('1 January2026').click());
+  await submitForm();
+  expect(api.trainingBlocks.create).toHaveBeenCalledWith({
+    name: 'Rebuild',
+    start_date: `${new Date().getFullYear()}-01-01`,
+  });
 });
 
 it('keeps failed saves editable and supports renaming and removing only the boundary', async () => {
@@ -139,41 +216,49 @@ it('keeps failed saves editable and supports renaming and removing only the boun
     .mockResolvedValueOnce(config);
   vi.spyOn(api.trainingBlocks, 'remove').mockResolvedValue({ blocks: [], auto_yearly: false });
   await mount();
-  await click('Manage blocks');
+  await click('Training block: Rebuild');
+  await click('Edit blocks');
   await click('Edit Rebuild');
-  await act(async () =>
-    document
-      .querySelector('form')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
+  expect(radio('Pick date1 Jun 2026').getAttribute('aria-checked')).toBe('true');
+  await submitForm();
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('already starts');
   expect(button('Save block').disabled).toBe(false);
-  await act(async () =>
-    document
-      .querySelector('form')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
+  await submitForm();
   expect(api.trainingBlocks.update).toHaveBeenCalledWith('rebuild', {
     name: 'Rebuild',
     start_date: '2026-06-01',
   });
-  await click('Manage blocks');
-  await click('Remove Rebuild');
+  expect(document.querySelector('.training-block-cards')).not.toBeNull();
+  await click('Edit Rebuild');
+  await click('Remove');
   expect(document.body.textContent).toContain('Workouts stay saved');
   await click('Remove block');
   expect(api.trainingBlocks.remove).toHaveBeenCalledWith('rebuild');
-  expect(document.querySelector<HTMLSelectElement>('[aria-label="Training block"]')?.value).toBe(
-    'all',
-  );
+  expect(document.querySelector('dialog[open]')).toBeNull();
+  expect(button('Start a block')).toBeDefined();
 });
 
 it('saves the optional yearly rollover without resetting the viewed chart', async () => {
   vi.spyOn(api.trainingBlocks, 'preferences').mockResolvedValue({ ...config, auto_yearly: true });
   await mount();
-  await click('Manage blocks');
-  await act(async () => document.querySelector<HTMLInputElement>('[type="checkbox"]')!.click());
+  await click('Training block: Rebuild');
+  await click('Edit blocks');
+  await click('Start a new block each January');
   expect(api.trainingBlocks.preferences).toHaveBeenCalledWith(true);
-  expect(document.querySelector<HTMLInputElement>('[type="checkbox"]')!.checked).toBe(true);
+  expect(button('Start a new block each January').getAttribute('aria-checked')).toBe('true');
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
+});
+
+it('explains block and all-time records in a dismissable popover', async () => {
+  await mount();
+  await click('How training blocks work');
+  const help = document.querySelector('[role="region"][aria-label="How training blocks work"]');
+  expect(help?.textContent).toContain('Block PR');
+  expect(help?.textContent).toContain('All-time PR');
+  await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  expect(
+    document.querySelector('[role="region"][aria-label="How training blocks work"]'),
+  ).toBeNull();
 });
 
 it('keeps record scope specific to the viewed exercise in mixed workouts', async () => {
@@ -199,16 +284,13 @@ it('keeps record scope specific to the viewed exercise in mixed workouts', async
 
 it('refreshes synced boundaries without changing an explicitly selected all-time view', async () => {
   await mount();
-  const select = document.querySelector<HTMLSelectElement>('[aria-label="Training block"]')!;
-  await act(async () => {
-    select.value = 'all';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await act(async () => radio('All time').click());
   vi.mocked(api.trainingBlocks.get).mockResolvedValue({
     ...config,
     blocks: [{ ...config.blocks[0], name: 'Renamed block', start_date: '2026-05-01' }],
   });
   await act(async () => window.dispatchEvent(new Event('training-data-refreshed')));
-  expect(select.textContent).toContain('Renamed block');
-  expect(select.value).toBe('all');
+  expect(radio('All time').getAttribute('aria-checked')).toBe('true');
+  await act(async () => radio('This block').click());
+  expect(button('Training block: Renamed block')).toBeDefined();
 });

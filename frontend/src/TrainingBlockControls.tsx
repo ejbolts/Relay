@@ -1,46 +1,151 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
+import { blockDay, blockRange, blockOn, MONTHS } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
+import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
 import { localDate } from './utils';
 import type { TrainingBlock, TrainingBlocks } from './types';
 import './trainingBlocks.css';
 
+type View = 'pick' | 'blocks' | 'form' | 'remove';
+type StartPreset = 'today' | 'january' | 'custom';
+
+const TONES = 4;
+
+const workouts = (count: number | undefined) =>
+  count === undefined ? '' : `${count.toLocaleString()} workout${count === 1 ? '' : 's'}`;
+const joined = (...parts: string[]) => parts.filter(Boolean).join(' · ');
+
+function presetFor(start: string): StartPreset {
+  const today = localDate();
+  if (start === today) return 'today';
+  return start === `${today.slice(0, 4)}-01-01` ? 'january' : 'custom';
+}
+
+/** Proportional strip showing how blocks divide the logged history. */
+function BlockTimeline({ config, currentId }: { config: TrainingBlocks; currentId?: string }) {
+  const today = localDate();
+  const first = config.blocks[0];
+  if (!first) return null;
+  const earlierStart =
+    config.history_start && config.history_start < first.start_date && config.earlier_workout_count
+      ? config.history_start
+      : null;
+  const segments = [
+    ...(earlierStart
+      ? [{ id: 'earlier', name: 'Before blocks', start: earlierStart, end: first.start_date }]
+      : []),
+    ...config.blocks.map((block) => ({
+      id: block.id,
+      name: block.name,
+      start: block.start_date,
+      end: block.end_date ?? addDays(today, 1),
+    })),
+  ];
+  const origin = segments[0].start;
+  return (
+    <div className="training-block-timeline">
+      <div
+        className="training-block-bar"
+        role="img"
+        aria-label={`Timeline: ${segments.map((item) => item.name).join(', ')}`}
+      >
+        {segments.map((item) => {
+          const index = config.blocks.findIndex((block) => block.id === item.id);
+          const tone =
+            item.id === 'earlier'
+              ? 'earlier'
+              : item.id === currentId
+                ? 'current'
+                : `tone-${index % TONES}`;
+          return (
+            <span
+              key={item.id}
+              className={`training-block-segment ${tone}`}
+              style={{ flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0` }}
+              title={item.name}
+            >
+              {item.id === 'earlier' ? 'Before' : item.name}
+            </span>
+          );
+        })}
+      </div>
+      <div className="training-block-axis" aria-hidden="true">
+        <span>{`${MONTHS[parseLocalDate(origin).getMonth()]} ${origin.slice(0, 4)}`}</span>
+        <span>Today</span>
+      </div>
+    </div>
+  );
+}
+
 export function TrainingBlockControls() {
   const { config, block, select, changed, loading, error: loadError, retry } = useTrainingBlocks();
-  const [open, setOpen] = useState(false);
+  const helpId = useId();
+  const [view, setView] = useState<View | null>(null);
+  const [formBack, setFormBack] = useState<View | null>(null);
+  const [lastBlock, setLastBlock] = useState('current');
+  const [help, setHelp] = useState(false);
   const [editing, setEditing] = useState<TrainingBlock | null>(null);
-  const [removing, setRemoving] = useState<TrainingBlock | null>(null);
   const [name, setName] = useState('');
   const [start, setStart] = useState(localDate());
+  const [preset, setPreset] = useState<StartPreset>('today');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
-  const trigger = useRef<HTMLButtonElement>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const helpRoot = useRef<HTMLDivElement>(null);
+  const current = blockOn(config.blocks, localDate());
+  const disabled = loading || !!loadError;
+  const today = localDate();
+  const january = `${today.slice(0, 4)}-01-01`;
+
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(''), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
+  useEffect(() => {
+    if (!help) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!helpRoot.current?.contains(event.target as Node)) setHelp(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [help]);
+
+  const open = (next: View, source: HTMLButtonElement) => {
+    trigger.current = source;
+    setError(null);
+    setView(next);
+  };
   const close = () => {
     if (busyRef.current) return;
-    setOpen(false);
-    setRemoving(null);
+    setView(null);
     setError(null);
-    requestAnimationFrame(() => trigger.current?.focus());
+    requestAnimationFrame(() => trigger.current?.isConnected && trigger.current.focus());
   };
-  const reset = () => {
-    setEditing(null);
-    setName('');
-    setStart(localDate());
+  const startForm = (item: TrainingBlock | null, back: View | null) => {
+    setEditing(item);
+    setName(item?.name ?? '');
+    const date = item?.start_date ?? today;
+    setStart(date);
+    setPreset(presetFor(date));
+    setFormBack(back);
+    setError(null);
+    setView('form');
   };
+  const choose = (id: string) => {
+    setLastBlock(id);
+    select(id);
+  };
+
   async function save(
     action: () => Promise<TrainingBlocks>,
-    message: string,
-    chooseStart?: string,
+    after: (next: TrainingBlocks) => void,
   ) {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -49,14 +154,7 @@ export function TrainingBlockControls() {
     try {
       const next = await action();
       changed(next);
-      if (chooseStart) select(next.blocks.find((item) => item.start_date === chooseStart)!.id);
-      if (chooseStart || removing) {
-        setOpen(false);
-        requestAnimationFrame(() => trigger.current?.focus());
-        setNotice(message);
-      }
-      reset();
-      setRemoving(null);
+      after(next);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save training blocks.');
     } finally {
@@ -66,48 +164,159 @@ export function TrainingBlockControls() {
   }
   function submit(event: FormEvent) {
     event.preventDefault();
+    const payload = { name: name.trim(), start_date: start };
+    if (editing) {
+      void save(
+        () => api.trainingBlocks.update(editing.id, payload),
+        () => setView('blocks'),
+      );
+      return;
+    }
     void save(
-      () =>
-        editing
-          ? api.trainingBlocks.update(editing.id, { name: name.trim(), start_date: start })
-          : api.trainingBlocks.create({ name: name.trim(), start_date: start }),
-      editing ? 'Training block updated' : 'Training block started',
-      start,
+      () => api.trainingBlocks.create(payload),
+      (next) => {
+        const created = next.blocks.find((item) => item.start_date === start);
+        if (created)
+          choose(created.id === blockOn(next.blocks, today)?.id ? 'current' : created.id);
+        setView(null);
+        requestAnimationFrame(() => trigger.current?.isConnected && trigger.current.focus());
+        setNotice('Training block started');
+      },
     );
   }
+
+  const viewing = block ?? null;
+  const dialogTitle =
+    view === 'pick'
+      ? 'Choose block'
+      : view === 'form'
+        ? editing
+          ? 'Edit block'
+          : 'New training block'
+        : view === 'remove'
+          ? 'Remove training block?'
+          : 'Training blocks';
+
   return (
     <>
-      <div className="training-block-controls">
-        <label>
-          Training block
-          <select
-            aria-label="Training block"
-            value={block?.id ?? 'all'}
-            disabled={loading || !!loadError}
-            onChange={(event) => select(event.target.value)}
+      <div className="training-block-scope" ref={helpRoot}>
+        {config.blocks.length ? (
+          <>
+            <div className="training-block-scope-row">
+              <div
+                className="segmented-control compact"
+                role="radiogroup"
+                aria-label="Progress scope"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!!viewing}
+                  className={viewing ? 'active' : ''}
+                  disabled={disabled}
+                  onClick={() =>
+                    select(
+                      config.blocks.some((item) => item.id === lastBlock) ? lastBlock : 'current',
+                    )
+                  }
+                >
+                  This block
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!viewing}
+                  className={viewing ? '' : 'active'}
+                  disabled={disabled}
+                  onClick={() => select('all')}
+                >
+                  All time
+                </button>
+              </div>
+              <button
+                type="button"
+                className="training-block-help"
+                aria-label="How training blocks work"
+                aria-expanded={help}
+                aria-controls={helpId}
+                onClick={() => setHelp((value) => !value)}
+              >
+                ?
+              </button>
+            </div>
+            <button
+              type="button"
+              className="training-block-pill"
+              aria-haspopup="dialog"
+              aria-label={viewing ? `Training block: ${viewing.name}` : undefined}
+              disabled={disabled || !viewing}
+              onClick={(event) => open('pick', event.currentTarget)}
+            >
+              <span>
+                <strong>{viewing ? viewing.name : 'Your whole history'}</strong>
+                <small>
+                  {viewing
+                    ? joined(
+                        blockRange(viewing.start_date, viewing.end_date),
+                        workouts(viewing.workout_count),
+                      )
+                    : joined(
+                        config.history_start ? `Since ${blockDay(config.history_start, true)}` : '',
+                        workouts(
+                          config.blocks.reduce(
+                            (total, item) => total + (item.workout_count ?? 0),
+                            config.earlier_workout_count ?? 0,
+                          ),
+                        ),
+                      )}
+                </small>
+              </span>
+              {viewing && <Icon name="chevron-down" />}
+            </button>
+          </>
+        ) : (
+          <div className="training-block-scope-row">
+            <strong className="training-block-empty">All time</strong>
+            <button
+              type="button"
+              className="training-block-help"
+              aria-label="How training blocks work"
+              aria-expanded={help}
+              aria-controls={helpId}
+              onClick={() => setHelp((value) => !value)}
+            >
+              ?
+            </button>
+            <button
+              type="button"
+              className="training-block-start"
+              disabled={disabled}
+              onClick={(event) => {
+                trigger.current = event.currentTarget;
+                startForm(null, null);
+              }}
+            >
+              <Icon name="plus" /> Start a block
+            </button>
+          </div>
+        )}
+        {help && (
+          <div
+            id={helpId}
+            className="training-block-popover"
+            role="region"
+            aria-label="How training blocks work"
+            onKeyDown={(event) => event.key === 'Escape' && setHelp(false)}
           >
-            <option value="all">All time</option>
-            {[...config.blocks].reverse().map((item, index) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-                {index === 0 ? ' · Current' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          ref={trigger}
-          type="button"
-          className="secondary"
-          disabled={loading || !!loadError}
-          onClick={() => {
-            reset();
-            setError(null);
-            setOpen(true);
-          }}
-        >
-          Manage blocks
-        </button>
+            <p>
+              <strong>Block PR</strong> Best since the block started.
+            </p>
+            <p>
+              <strong>All-time PR</strong> Best across your whole history.
+            </p>
+            <p>Workouts are never deleted. Each one belongs to the block covering its date.</p>
+          </div>
+        )}
       </div>
       {loadError && (
         <p role="alert">
@@ -132,16 +341,222 @@ export function TrainingBlockControls() {
           </div>,
           document.body,
         )}
-      {open && (
+      {view && (
         <PopupDialog
-          title={removing ? 'Remove training block?' : 'Training blocks'}
+          title={dialogTitle}
           onClose={close}
           className="training-block-dialog"
+          headerActions={
+            view === 'blocks' ? (
+              <button
+                type="button"
+                className="training-block-new"
+                disabled={busy}
+                onClick={() => startForm(null, 'blocks')}
+              >
+                <Icon name="plus" /> New
+              </button>
+            ) : undefined
+          }
         >
-          {removing ? (
+          {view === 'pick' && (
+            <>
+              <ul className="training-block-pick" role="radiogroup" aria-label="Training block">
+                {[...config.blocks].reverse().map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={viewing?.id === item.id}
+                      onClick={() => {
+                        choose(item.id === current?.id ? 'current' : item.id);
+                        close();
+                      }}
+                    >
+                      <span className="training-block-radio" aria-hidden="true" />
+                      <span>
+                        <strong>
+                          {item.name}
+                          {item.id === current?.id && <span className="badge">Current</span>}
+                        </strong>
+                        <small>
+                          {joined(
+                            blockRange(item.start_date, item.end_date),
+                            workouts(item.workout_count),
+                          )}
+                        </small>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="training-block-actions split">
+                <button type="button" onClick={() => startForm(null, 'pick')}>
+                  <Icon name="plus" /> New block
+                </button>
+                <button type="button" onClick={() => setView('blocks')}>
+                  Edit blocks
+                </button>
+              </div>
+            </>
+          )}
+          {view === 'blocks' && (
+            <div className="training-block-page">
+              <BlockTimeline config={config} currentId={current?.id} />
+              <ul className="training-block-cards">
+                {[...config.blocks].reverse().map((item) => {
+                  const index = config.blocks.indexOf(item);
+                  return (
+                    <li key={item.id}>
+                      <span
+                        className={`training-block-swatch ${
+                          item.id === current?.id ? 'current' : `tone-${index % TONES}`
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <div>
+                        <strong>
+                          {item.name}
+                          {item.id === current?.id && <span className="badge">Current</span>}
+                        </strong>
+                        <small>{blockRange(item.start_date, item.end_date)}</small>
+                        {item.workout_count !== undefined && (
+                          <small>{workouts(item.workout_count)}</small>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Edit ${item.name}`}
+                        disabled={busy}
+                        onClick={() => startForm(item, 'blocks')}
+                      >
+                        Edit
+                      </button>
+                    </li>
+                  );
+                })}
+                {!!config.earlier_workout_count && config.history_start && (
+                  <li className="earlier">
+                    <span className="training-block-swatch earlier" aria-hidden="true" />
+                    <div>
+                      <strong>Before blocks</strong>
+                      <small>{blockRange(config.history_start, config.blocks[0].start_date)}</small>
+                      <small>{workouts(config.earlier_workout_count)}</small>
+                    </div>
+                  </li>
+                )}
+              </ul>
+              <div className="training-block-yearly">
+                <strong>New block each January</strong>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label="Start a new block each January"
+                  aria-checked={config.auto_yearly}
+                  className={config.auto_yearly ? 'is-on' : ''}
+                  disabled={busy}
+                  onClick={() =>
+                    void save(
+                      () => api.trainingBlocks.preferences(!config.auto_yearly),
+                      () => {},
+                    )
+                  }
+                >
+                  <span />
+                  {config.auto_yearly ? 'On' : 'Off'}
+                </button>
+              </div>
+            </div>
+          )}
+          {view === 'form' && (
+            <form onSubmit={submit} className="training-block-form">
+              <fieldset disabled={busy}>
+                <label>
+                  Block name
+                  <input
+                    required
+                    maxLength={80}
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="e.g. Winter strength"
+                  />
+                </label>
+                <div className="training-block-starts" role="radiogroup" aria-label="Starts">
+                  <span aria-hidden="true">Starts</span>
+                  {(
+                    [
+                      ['today', 'Today', blockDay(today, false), today],
+                      ['january', '1 January', january.slice(0, 4), january],
+                      [
+                        'custom',
+                        'Pick date',
+                        preset === 'custom' ? blockDay(start, true) : '',
+                        start,
+                      ],
+                    ] as const
+                  ).map(([value, label, detail, date]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={preset === value}
+                      onClick={() => {
+                        setPreset(value);
+                        setStart(date);
+                      }}
+                    >
+                      <strong>{label}</strong>
+                      {detail && <small>{detail}</small>}
+                    </button>
+                  ))}
+                </div>
+                {preset === 'custom' && (
+                  <label>
+                    Start date
+                    <input
+                      required
+                      type="date"
+                      max={today}
+                      value={start}
+                      onChange={(event) => setStart(event.target.value)}
+                    />
+                  </label>
+                )}
+                <div className="training-block-actions">
+                  {editing && (
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => {
+                        setError(null);
+                        setView('remove');
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                  {formBack && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setView(formBack);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button type="submit" className="primary-action" disabled={!name.trim()}>
+                    {busy ? 'Saving…' : editing ? 'Save block' : 'Start block'}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          )}
+          {view === 'remove' && editing && (
             <>
               <p>
-                Remove “{removing.name}”? Workouts stay saved. Block records will follow the
+                Remove “{editing.name}”? Workouts stay saved. Block records will follow the
                 remaining dates, and yearly rollover will turn off.
               </p>
               <div className="training-block-actions">
@@ -149,8 +564,8 @@ export function TrainingBlockControls() {
                   type="button"
                   disabled={busy}
                   onClick={() => {
-                    setRemoving(null);
                     setError(null);
+                    setView('form');
                   }}
                 >
                   Cancel
@@ -161,116 +576,17 @@ export function TrainingBlockControls() {
                   disabled={busy}
                   onClick={() =>
                     void save(
-                      () => api.trainingBlocks.remove(removing.id),
-                      'Training block removed',
+                      () => api.trainingBlocks.remove(editing.id),
+                      (next) => {
+                        setEditing(null);
+                        setView(next.blocks.length ? 'blocks' : null);
+                      },
                     )
                   }
                 >
                   Remove block
                 </button>
               </div>
-            </>
-          ) : (
-            <>
-              {config.blocks.length > 0 && (
-                <ul className="training-block-list">
-                  {[...config.blocks].reverse().map((item, index) => (
-                    <li key={item.id}>
-                      <div>
-                        <strong>{item.name}</strong>
-                        {index === 0 && <span className="badge">Current</span>}
-                        <time>{item.start_date}</time>
-                      </div>
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Edit ${item.name}`}
-                        disabled={busy}
-                        onClick={() => {
-                          setEditing(item);
-                          setName(item.name);
-                          setStart(item.start_date);
-                          setError(null);
-                        }}
-                      >
-                        <Icon name="edit" />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Remove ${item.name}`}
-                        disabled={busy}
-                        onClick={() => {
-                          setRemoving(item);
-                          setError(null);
-                        }}
-                      >
-                        <Icon name="close" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <form onSubmit={submit} className="training-block-form">
-                <h3>{editing ? 'Edit block' : 'Start new block'}</h3>
-                <fieldset disabled={busy}>
-                  <label>
-                    Block name
-                    <input
-                      required
-                      maxLength={80}
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder="e.g. Winter strength"
-                    />
-                  </label>
-                  <label>
-                    Start date
-                    <input
-                      required
-                      type="date"
-                      max={localDate()}
-                      value={start}
-                      onChange={(event) => setStart(event.target.value)}
-                    />
-                  </label>
-                  <div className="training-block-actions">
-                    <button
-                      type="button"
-                      onClick={() => setStart(`${localDate().slice(0, 4)}-01-01`)}
-                    >
-                      1 January
-                    </button>
-                    <button type="button" onClick={() => setStart(localDate())}>
-                      Today
-                    </button>
-                  </div>
-                  <div className="training-block-actions">
-                    {editing && (
-                      <button type="button" onClick={reset}>
-                        Cancel edit
-                      </button>
-                    )}
-                    <button type="submit" className="primary-action" disabled={!name.trim()}>
-                      {busy ? 'Saving…' : editing ? 'Save block' : 'Start block'}
-                    </button>
-                  </div>
-                </fieldset>
-              </form>
-              <label className="training-block-yearly">
-                <input
-                  type="checkbox"
-                  checked={config.auto_yearly}
-                  disabled={busy || !config.blocks.length}
-                  onChange={(event) =>
-                    void save(
-                      () => api.trainingBlocks.preferences(event.target.checked),
-                      'Yearly rollover updated',
-                    )
-                  }
-                />
-                Start a new block each January
-              </label>
             </>
           )}
           {error && (

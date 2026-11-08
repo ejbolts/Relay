@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from datetime import date
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .account_limits import limit_save_rate
 from .auth import CurrentUser, get_current_user
 from .database import get_db
+from .models import TrainingWorkout
 from .training_metrics import get_setting, set_setting
 
 KEY = "training_blocks"
@@ -40,6 +43,19 @@ class TrainingBlocks(BaseModel):
     auto_yearly: bool = False
 
 
+class TrainingBlockRead(TrainingBlock):
+    workout_count: int = 0
+
+
+class TrainingBlocksRead(BaseModel):
+    """Response-only view: counts are derived on read and never saved with the boundaries."""
+
+    blocks: list[TrainingBlockRead]
+    auto_yearly: bool
+    earlier_workout_count: int = 0
+    history_start: date | None = None
+
+
 class BlockPreferences(BaseModel):
     auto_yearly: bool
 
@@ -64,11 +80,32 @@ def block_on(config: TrainingBlocks, day: date) -> TrainingBlock | None:
     return next((block for block in reversed(config.blocks) if block.start_date <= day), None)
 
 
-def save_blocks(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBlocks:
+def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBlocksRead:
+    rows = db.execute(
+        select(TrainingWorkout.workout_date, func.count())
+        .where(TrainingWorkout.user_id == user_id)
+        .group_by(TrainingWorkout.workout_date)
+    ).all()
+    starts = [block.start_date for block in config.blocks]
+    counts = [0] * (len(starts) + 1)  # Index 0 holds workouts before the first block.
+    for day, count in rows:
+        counts[bisect_right(starts, day)] += count
+    return TrainingBlocksRead(
+        blocks=[
+            TrainingBlockRead(**block.model_dump(), workout_count=counts[index + 1])
+            for index, block in enumerate(config.blocks)
+        ],
+        auto_yearly=config.auto_yearly,
+        earlier_workout_count=counts[0],
+        history_start=min((day for day, _ in rows), default=None),
+    )
+
+
+def save_blocks(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBlocksRead:
     set_setting(db, user_id, KEY, config.model_dump_json())
     set_setting(db, user_id, "workout_cache_revision", str(uuid4()))
     db.commit()
-    return training_blocks(db, user_id)
+    return with_counts(db, user_id, training_blocks(db, user_id))
 
 
 router = APIRouter(
@@ -79,13 +116,13 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-@router.get("", response_model=TrainingBlocks)
-def list_blocks(db: DbSession, user: CurrentUser) -> TrainingBlocks:
-    return training_blocks(db, user.id)
+@router.get("", response_model=TrainingBlocksRead)
+def list_blocks(db: DbSession, user: CurrentUser) -> TrainingBlocksRead:
+    return with_counts(db, user.id, training_blocks(db, user.id))
 
 
-@router.post("", response_model=TrainingBlocks, status_code=201)
-def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> TrainingBlocks:
+@router.post("", response_model=TrainingBlocksRead, status_code=201)
+def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> TrainingBlocksRead:
     config = training_blocks(db, user.id)
     if payload.start_date > date.today():
         raise HTTPException(422, "The start date cannot be in the future.")
@@ -97,10 +134,10 @@ def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> Train
     return save_blocks(db, user.id, config)
 
 
-@router.put("/{block_id}", response_model=TrainingBlocks)
+@router.put("/{block_id}", response_model=TrainingBlocksRead)
 def update_block(
     block_id: str, payload: BlockInput, db: DbSession, user: CurrentUser
-) -> TrainingBlocks:
+) -> TrainingBlocksRead:
     config = training_blocks(db, user.id)
     block = next((block for block in config.blocks if block.id == block_id), None)
     if block is None:
@@ -113,8 +150,8 @@ def update_block(
     return save_blocks(db, user.id, config)
 
 
-@router.delete("/{block_id}", response_model=TrainingBlocks)
-def delete_block(block_id: str, db: DbSession, user: CurrentUser) -> TrainingBlocks:
+@router.delete("/{block_id}", response_model=TrainingBlocksRead)
+def delete_block(block_id: str, db: DbSession, user: CurrentUser) -> TrainingBlocksRead:
     config = training_blocks(db, user.id)
     if not any(block.id == block_id for block in config.blocks):
         raise HTTPException(404, "Training block was not found.")
@@ -124,10 +161,10 @@ def delete_block(block_id: str, db: DbSession, user: CurrentUser) -> TrainingBlo
     return save_blocks(db, user.id, config)
 
 
-@router.patch("", response_model=TrainingBlocks)
+@router.patch("", response_model=TrainingBlocksRead)
 def update_preferences(
     payload: BlockPreferences, db: DbSession, user: CurrentUser
-) -> TrainingBlocks:
+) -> TrainingBlocksRead:
     config = training_blocks(db, user.id)
     if payload.auto_yearly and not config.blocks:
         raise HTTPException(422, "Start a training block before enabling yearly rollover.")

@@ -115,7 +115,14 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
     database = folder / BACKUP_DATABASE
     saved_blocks = rows(database, "SELECT value FROM user_settings WHERE key = 'training_blocks'")
     assert len(saved_blocks) == 1
-    assert json.loads(saved_blocks[0][0]) == owner_blocks
+    # Workout counts are derived on read; only the boundaries are stored.
+    assert json.loads(saved_blocks[0][0]) == {
+        "auto_yearly": owner_blocks["auto_yearly"],
+        "blocks": [
+            {key: block[key] for key in ("id", "name", "start_date", "end_date")}
+            for block in owner_blocks["blocks"]
+        ],
+    }
     assert backup.user_id == owner_id
     assert rows(database, "SELECT id, password_hash FROM users") == [(owner_id, "")]
     assert rows(database, "SELECT id FROM training_workouts") == [(owner_workout,)]
