@@ -53,12 +53,29 @@ it('appears once the app has stayed offline briefly, and leaves as soon as it re
   expect(notice()).toBeNull();
 });
 
-it('ignores a blip shorter than the delay', async () => {
+it('waits five seconds, ignoring a blip shorter than that', async () => {
+  expect(OFFLINE_NOTICE_DELAY_MS).toBe(5000);
   await goOffline();
   await advance(OFFLINE_NOTICE_DELAY_MS - 1);
   await goOnline();
   await advance(OFFLINE_NOTICE_DELAY_MS);
   expect(notice()).toBeNull();
+});
+
+it('waits out the full delay again after a reconnection instead of flashing back', async () => {
+  await goOffline();
+  await advance(OFFLINE_NOTICE_DELAY_MS);
+  expect(notice()).not.toBeNull();
+
+  await goOnline();
+  expect(notice()).toBeNull();
+  await advance(1000);
+  await goOffline();
+  expect(notice()).toBeNull();
+  await advance(OFFLINE_NOTICE_DELAY_MS - 1);
+  expect(notice()).toBeNull();
+  await advance(1);
+  expect(notice()).not.toBeNull();
 });
 
 it('stays closed through a short reconnection, and returns after a lasting one', async () => {

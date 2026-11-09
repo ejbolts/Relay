@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useOffline } from './connectionStatus';
 
-/** A brief blip should not slide the whole app down and back up. */
-export const OFFLINE_NOTICE_DELAY_MS = 1500;
+/** A flaky signal drops out for a few seconds at a time; only a lasting outage earns the strip. */
+export const OFFLINE_NOTICE_DELAY_MS = 5000;
 /** A dismissal lasts through short reconnections, so a patchy signal does not bring it back. */
 export const OFFLINE_NOTICE_RESET_MS = 10_000;
 
@@ -14,12 +14,17 @@ export function useOfflineNotice() {
   const [phase, setPhase] = useState<Phase>('hidden');
 
   useEffect(() => {
-    const timer = offline
-      ? window.setTimeout(
-          () => setPhase((current) => (current === 'dismissed' ? current : 'shown')),
-          OFFLINE_NOTICE_DELAY_MS,
-        )
-      : window.setTimeout(() => setPhase('hidden'), OFFLINE_NOTICE_RESET_MS);
+    if (offline) {
+      const timer = window.setTimeout(
+        () => setPhase((current) => (current === 'dismissed' ? current : 'shown')),
+        OFFLINE_NOTICE_DELAY_MS,
+      );
+      return () => window.clearTimeout(timer);
+    }
+    // Reconnecting hides the strip straight away, so the next drop waits out the full delay
+    // again instead of flashing the strip back the moment the signal blips.
+    setPhase((current) => (current === 'shown' ? 'hidden' : current));
+    const timer = window.setTimeout(() => setPhase('hidden'), OFFLINE_NOTICE_RESET_MS);
     return () => window.clearTimeout(timer);
   }, [offline]);
 
