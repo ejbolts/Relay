@@ -40,6 +40,7 @@ import {
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
+import { MuscleGoalEditor } from './MuscleGoalEditor';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -2070,6 +2071,7 @@ function AppContent() {
           {!loading && (tab === 'settings' || visitedTabs.has('settings')) && (
             <CachedTabPanel active={tab === 'settings'}>
               <SettingsScreen
+                exercises={exercises}
                 active={tab === 'settings'}
                 selectedGroup={settingsGroup}
                 onSelectGroup={setSettingsGroup}
@@ -3502,7 +3504,9 @@ function WorkoutLogger({
   // A closed workout leaves no rest countdown on the tab bar.
   useEffect(() => () => onRestTimerChange?.(null), [onRestTimerChange]);
 
-  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const [weeklySetsUpdate, setWeeklySetsUpdate] = useState<WeeklySetsUpdate | null>(null);
   const weeklySetsUpdateId = useRef(0);
 
@@ -4269,6 +4273,7 @@ function WorkoutLogger({
         <WeeklySetsShelf
           update={weeklySetsUpdate}
           goal={muscleSetGoal}
+          goals={muscleGoals}
           placement={!showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'}
           onDismiss={() => setWeeklySetsUpdate(null)}
         />
@@ -7846,6 +7851,7 @@ export function ProgressScreen({
 }
 
 function SettingsScreen({
+  exercises,
   active,
   selectedGroup,
   onSelectGroup,
@@ -7879,6 +7885,7 @@ function SettingsScreen({
   onOpenHomeScreenGuide,
   onOpenAppGuide,
 }: {
+  exercises: Exercise[];
   active: boolean;
   selectedGroup: SettingsGroupId | null;
   onSelectGroup: (group: SettingsGroupId | null) => void;
@@ -7929,6 +7936,12 @@ function SettingsScreen({
   const [trainingPreferencesError, setTrainingPreferencesError] = useState<string | null>(null);
   const [savingTrainingPreferences, setSavingTrainingPreferences] = useState(false);
   const workoutTypes = useWorkoutTypes();
+
+  useEffect(() => {
+    if (!trainingPreferencesStatus) return;
+    const timer = window.setTimeout(() => setTrainingPreferencesStatus(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [trainingPreferencesStatus]);
 
   useEffect(() => {
     if (!csvGuideOpen) return;
@@ -8008,9 +8021,12 @@ function SettingsScreen({
     if (
       !Number.isInteger(trainingPreferences.weekly_muscle_set_goal) ||
       trainingPreferences.weekly_muscle_set_goal < 1 ||
-      trainingPreferences.weekly_muscle_set_goal > 1000
+      trainingPreferences.weekly_muscle_set_goal > 1000 ||
+      Object.values(trainingPreferences.weekly_muscle_set_goals ?? {}).some(
+        (goal) => !Number.isInteger(goal) || goal < 1 || goal > 1000,
+      )
     ) {
-      setTrainingPreferencesError('Enter a weekly muscle set goal between 1 and 1,000 whole sets.');
+      setTrainingPreferencesError('Enter weekly muscle set goals between 1 and 1,000 whole sets.');
       setSavingTrainingPreferences(false);
       return;
     }
@@ -8074,7 +8090,6 @@ function SettingsScreen({
                       <h2 id="training-preferences-title">Units &amp; weekly goals</h2>
                     </div>
                   </header>
-                  <p>Set your units, week start and muscle-set goal. Saved to your account.</p>
                   {trainingPreferences && (
                     <div className="training-preferences-grid">
                       <label>
@@ -8111,14 +8126,13 @@ function SettingsScreen({
                         </select>
                       </label>
                       <label>
-                        Weekly sets per muscle
+                        Default weekly sets per muscle
                         <input
                           type="number"
                           min="1"
                           max="1000"
                           step="1"
                           value={trainingPreferences.weekly_muscle_set_goal || ''}
-                          aria-describedby="muscle-set-goal-help"
                           onChange={(event) => {
                             setTrainingPreferences({
                               ...trainingPreferences,
@@ -8128,24 +8142,46 @@ function SettingsScreen({
                           }}
                         />
                       </label>
-                      <button
-                        type="button"
-                        disabled={savingTrainingPreferences}
-                        onClick={() => void saveTrainingPreferences()}
-                      >
-                        {savingTrainingPreferences ? 'Saving…' : 'Save preferences'}
-                      </button>
                     </div>
                   )}
-                  <p id="muscle-set-goal-help">
-                    Counts working sets, excluding warmups. Shown as the goal on Home’s Sets per
-                    muscle bars.
-                  </p>
-                  {trainingPreferencesStatus && (
-                    <p className="training-preference-status" role="status">
-                      {trainingPreferencesStatus}
-                    </p>
+                  {trainingPreferences && (
+                    <MuscleGoalEditor
+                      exercises={exercises}
+                      defaultGoal={trainingPreferences.weekly_muscle_set_goal}
+                      goals={trainingPreferences.weekly_muscle_set_goals}
+                      onChange={(goals) => {
+                        setTrainingPreferences({
+                          ...trainingPreferences,
+                          weekly_muscle_set_goals: goals,
+                        });
+                        setTrainingPreferencesStatus(null);
+                      }}
+                    />
                   )}
+                  {trainingPreferences && (
+                    <button
+                      type="button"
+                      disabled={savingTrainingPreferences}
+                      onClick={() => void saveTrainingPreferences()}
+                    >
+                      {savingTrainingPreferences ? 'Saving…' : 'Save preferences'}
+                    </button>
+                  )}
+                  {trainingPreferencesStatus &&
+                    createPortal(
+                      <div className="undo-toast top-toast" role="status">
+                        <span>{trainingPreferencesStatus}</span>
+                        <button
+                          type="button"
+                          className="undo-toast-close"
+                          aria-label="Dismiss training preferences notification"
+                          onClick={() => setTrainingPreferencesStatus(null)}
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </div>,
+                      document.body,
+                    )}
                   {trainingPreferencesError && (
                     <p className="inline-error" role="alert">
                       {trainingPreferencesError}
@@ -10357,7 +10393,9 @@ function HistoryScreen({
     setCreatedExerciseName(null);
     setCreateExerciseOpen(true);
   };
-  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [extraVisibleCount, setExtraVisibleCount] = useState(0);
@@ -10772,6 +10810,7 @@ function HistoryScreen({
           weeklySets={weeklySets}
           history={weeklySetsHistory}
           goal={muscleSetGoal}
+          goals={muscleGoals}
           onOpenWorkout={onOpenMuscleWorkout}
         />
       )}

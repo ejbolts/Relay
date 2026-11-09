@@ -71,7 +71,28 @@
   transition: width 260ms var(--ease-out);
 }
 .muscle-sets-card .muscle-bars {
-  --muscle-value-width: 2.75rem;
+  --muscle-value-width: 4rem;
+}
+.muscle-sets-card .muscle-bars::after {
+  content: none;
+}
+.muscle-sets-card .muscle-bar-track::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: -0.5rem;
+  bottom: -0.5rem;
+  left: calc(100% * var(--muscle-goal-ratio));
+  width: 2px;
+  background: radial-gradient(circle, var(--p-ink) 1px, transparent 1.25px) center top / 2px 0.5rem
+    repeat-y;
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+.muscle-row-target {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 .muscle-sets-card .muscle-bars b {
   display: grid;
