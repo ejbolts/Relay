@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from './api';
 import { HelpPopup } from './HelpPopup';
 import {
@@ -11,6 +11,7 @@ import {
   progressViewPoints,
   suggestFactors,
   withReference,
+  type FactorSuggestion,
 } from './machineWeights';
 import { PopupDialog } from './PopupDialog';
 import { TrendChart, type TrendPoint } from './PulseCharts';
@@ -50,6 +51,17 @@ function pairForFactor(text: PairText, factor: number, base: number): PairText {
   const typed = decimalNumberOrNull(text.machine);
   const machine = typed && typed > 0 ? typed : base;
   return { machine: trimmed(machine), reference: trimmed(machine * factor) };
+}
+
+/** Where a conversion sits along the slider, from 0 at its minimum to 1 at its maximum. */
+function sliderPosition(factor: number): number {
+  return (clampFactor(factor) - FACTOR_RANGE.min) / (FACTOR_RANGE.max - FACTOR_RANGE.min);
+}
+
+/** Whether a conversion falls within the middle half of your sessions' conversions. */
+function inLikelyRange(factor: number, suggestion: FactorSuggestion): boolean {
+  const rounded = Math.round(factor * 100) / 100;
+  return rounded >= suggestion.low && rounded <= suggestion.high;
 }
 
 /** The conversion a typed pair describes, or null while either weight is missing. */
@@ -352,60 +364,105 @@ export function MachineWeightsDialog({
                 {tree && reference && !isReference && (
                   <div className="machine-weights-pair">
                     <div className="machine-weights-equation">
-                      <label className="machine-weights-plate">
-                        <MachineThumb machine={machine} />
-                        <input
-                          inputMode="decimal"
-                          value={text.machine}
-                          aria-label={`Weight on ${machine.caption}`}
-                          aria-invalid={Boolean(errors[machine.id])}
-                          aria-describedby={errors[machine.id] ? errorId : undefined}
-                          onChange={(event) =>
-                            setMachineWeight(machine.id, text, event.target.value)
-                          }
-                        />
-                        <span>{weightUnit}</span>
-                      </label>
+                      <div className="machine-weights-side">
+                        <label className="machine-weights-plate">
+                          <MachineThumb machine={machine} />
+                          <input
+                            inputMode="decimal"
+                            value={text.machine}
+                            aria-label={`Weight on ${machine.caption}`}
+                            aria-invalid={Boolean(errors[machine.id])}
+                            aria-describedby={errors[machine.id] ? errorId : undefined}
+                            onChange={(event) =>
+                              setMachineWeight(machine.id, text, event.target.value)
+                            }
+                          />
+                          <span>{weightUnit}</span>
+                        </label>
+                        <span className="machine-weights-side-name">
+                          <small>This machine</small>
+                          <span>{machine.caption}</span>
+                        </span>
+                      </div>
                       <span className="machine-weights-equals" aria-hidden="true">
                         =
                       </span>
-                      <label className="machine-weights-plate is-reference">
-                        <MachineThumb machine={reference} />
-                        <input
-                          inputMode="decimal"
-                          value={text.reference}
-                          aria-label={`Matching weight on ${reference.caption} for ${machine.caption}`}
-                          aria-invalid={Boolean(errors[machine.id])}
-                          aria-describedby={errors[machine.id] ? errorId : undefined}
-                          onChange={(event) =>
-                            setPair(machine.id, { ...text, reference: event.target.value })
-                          }
-                        />
-                        <span>{weightUnit}</span>
-                        <span className="machine-weights-star" aria-hidden="true">
-                          ★
+                      <div className="machine-weights-side is-reference">
+                        <label className="machine-weights-plate is-reference">
+                          <MachineThumb machine={reference} />
+                          <input
+                            inputMode="decimal"
+                            value={text.reference}
+                            aria-label={`Matching weight on ${reference.caption} for ${machine.caption}`}
+                            aria-invalid={Boolean(errors[machine.id])}
+                            aria-describedby={errors[machine.id] ? errorId : undefined}
+                            onChange={(event) =>
+                              setPair(machine.id, { ...text, reference: event.target.value })
+                            }
+                          />
+                          <span>{weightUnit}</span>
+                          <span className="machine-weights-star" aria-hidden="true">
+                            ★
+                          </span>
+                        </label>
+                        <span className="machine-weights-side-name">
+                          <small>★ Reference</small>
+                          <span>{reference.caption}</span>
                         </span>
-                      </label>
+                      </div>
                     </div>
                     <div className="machine-weights-slider">
-                      <input
-                        type="range"
-                        min={FACTOR_RANGE.min}
-                        max={FACTOR_RANGE.max}
-                        step={FACTOR_RANGE.step}
-                        value={clampFactor(factor)}
-                        aria-label={`Conversion for ${machine.caption}`}
-                        aria-valuetext={`times ${factor.toFixed(2)}`}
-                        onChange={(event) =>
-                          setPair(machine.id, pairForFactor(text, Number(event.target.value), base))
-                        }
-                      />
+                      <span
+                        className="machine-weights-track"
+                        style={{ '--fill': sliderPosition(factor) } as CSSProperties}
+                      >
+                        {suggestion && (
+                          <>
+                            <span
+                              className="machine-weights-band"
+                              aria-hidden="true"
+                              style={
+                                {
+                                  '--from': sliderPosition(suggestion.low),
+                                  '--to': sliderPosition(suggestion.high),
+                                } as CSSProperties
+                              }
+                            />
+                            <span
+                              className="machine-weights-marker"
+                              aria-hidden="true"
+                              style={{ '--at': sliderPosition(suggestion.factor) } as CSSProperties}
+                            />
+                          </>
+                        )}
+                        <input
+                          type="range"
+                          min={FACTOR_RANGE.min}
+                          max={FACTOR_RANGE.max}
+                          step={FACTOR_RANGE.step}
+                          value={clampFactor(factor)}
+                          aria-label={`Conversion for ${machine.caption}`}
+                          aria-valuetext={`times ${factor.toFixed(2)}`}
+                          onChange={(event) =>
+                            setPair(
+                              machine.id,
+                              pairForFactor(text, Number(event.target.value), base),
+                            )
+                          }
+                        />
+                      </span>
                       <b className="num">×{factor.toFixed(2)}</b>
                     </div>
                     {suggestion && (
                       <p className="machine-weights-suggestion">
-                        <span>
+                        <span className="machine-weights-suggested">
+                          <span className="machine-weights-diamond" aria-hidden="true" />
                           Suggested ×{suggestion.factor.toFixed(2)} · {suggestion.sessions} sessions
+                          {inLikelyRange(factor, suggestion) ? (
+                            <em className="machine-weights-fit is-in">In range</em>
+                          ) : (
+                            <em className="machine-weights-fit">Outside range</em>
+                          )}
                         </span>
                         {Math.abs(factor - suggestion.factor) >= 0.005 && (
                           <button

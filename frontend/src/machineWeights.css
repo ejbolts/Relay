@@ -83,11 +83,132 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   gap: 0.6rem;
 }
 
-.machine-weights-slider input {
+/* A custom track so the likely range and suggestion line up with the thumb's centre. */
+.machine-weights-track {
+  --thumb: 1.5rem;
+  position: relative;
+  display: flex;
   flex: 1;
+  align-items: center;
   min-width: 0;
-  margin: 0.35rem 0;
-  accent-color: var(--p-accent);
+  height: 2.25rem;
+}
+
+.machine-weights-track::before,
+.machine-weights-track::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 6px;
+  border-radius: 3px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.machine-weights-track::before {
+  right: 0;
+  z-index: 0;
+  background: var(--p-surface-3);
+}
+
+.machine-weights-track::after {
+  z-index: 2;
+  width: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--fill));
+  background: var(--p-accent);
+}
+
+.machine-weights-band,
+.machine-weights-marker {
+  position: absolute;
+  top: 50%;
+  pointer-events: none;
+}
+
+.machine-weights-band {
+  z-index: 1;
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * (var(--from) + var(--to)) / 2);
+  width: max(0.75rem, calc((100% - var(--thumb)) * (var(--to) - var(--from))));
+  height: 0.9rem;
+  border: 1px dashed color-mix(in srgb, var(--p-gold) 60%, transparent);
+  border-radius: 999px;
+  background: var(--p-gold-soft);
+  transform: translate(-50%, -50%);
+}
+
+.machine-weights-marker,
+.machine-weights-diamond {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  background: var(--p-gold);
+}
+
+/* Above the thumb, so the suggestion stays visible when the slider sits on it. */
+.machine-weights-marker {
+  z-index: 5;
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at));
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.machine-weights-track input {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.machine-weights-track input::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.machine-weights-track input::-moz-range-track {
+  background: transparent;
+}
+
+.machine-weights-track input::-webkit-slider-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: calc((2.25rem - var(--thumb)) / 2);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+  appearance: none;
+}
+
+.machine-weights-track input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+}
+
+.machine-weights-track input:focus {
+  outline: none;
+}
+
+.machine-weights-track input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 4px var(--p-accent-soft),
+    0 0 0 2px var(--p-accent);
+}
+
+.machine-weights-track input:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 4px var(--p-accent-soft),
+    0 0 0 2px var(--p-accent);
 }
 
 .machine-weights-slider b {
@@ -100,7 +221,6 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
 .machine-weights-suggestion {
   display: flex;
   flex-basis: 100%;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -111,6 +231,37 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
 
 .machine-weights-suggestion .text-link {
   font-size: 0.78rem;
+}
+
+.machine-weights-suggested {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.machine-weights-diamond {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: rotate(45deg);
+}
+
+.machine-weights-fit {
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  background: var(--p-gold-soft);
+  color: var(--p-gold);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.machine-weights-fit.is-in {
+  background: color-mix(in srgb, var(--p-good) 14%, transparent);
+  color: var(--p-good);
 }
 
 .machine-weights-toggle-label {
@@ -262,11 +413,63 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
 }
 
 .machine-weights-equation {
-  display: flex;
+  display: grid;
   flex-basis: 100%;
-  flex-wrap: wrap;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
   gap: 0.4rem;
+}
+
+.machine-weights-equation .machine-weights-equals {
+  padding-top: 0.75rem;
+}
+
+.machine-weights-side {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.machine-weights-side .machine-weights-plate {
+  display: flex;
+  min-width: 0;
+}
+
+.machine-weights-side .machine-weights-plate input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+}
+
+.machine-weights-side-name {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+  padding: 0 0.15rem;
+}
+
+.machine-weights-side-name small {
+  color: var(--p-muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.machine-weights-side.is-reference .machine-weights-side-name small {
+  color: var(--p-gold);
+}
+
+.machine-weights-side-name span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--p-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .machine-weights-plate {
