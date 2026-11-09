@@ -282,7 +282,14 @@ import {
   workoutVolumeKg,
   type SessionTemplate,
 } from './trainingSummary';
-import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHistory';
+import {
+  historyOnMachine,
+  machineAliases,
+  machineSuggestionSource,
+  recentExerciseHistory,
+  withSuggestedSets,
+  type ExerciseHistoryEntry,
+} from './exerciseHistory';
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
@@ -3213,7 +3220,21 @@ function WorkoutLogger({
     [historicalWorkouts, historyBaselines, initialWorkout?.id, resumedWorkoutId],
   );
 
-  function suggestedSetsForExercise(exercise: Exercise): DraftSet[] {
+  /** Suggestions from the chosen machine's last session, else the exercise's last session. */
+  function suggestedSetsForExercise(exercise: Exercise, machineId?: string): DraftSet[] {
+    const onMachine =
+      machineId &&
+      historyOnMachine(
+        recentExerciseHistory(
+          historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
+          exercise.id,
+          initialWorkout?.id,
+          Number.POSITIVE_INFINITY,
+        ),
+        machineId,
+        new Map(),
+      ).find((entry) => entry.sets.length)?.sets;
+    if (onMachine) return withSuggestedSets([], onMachine, exercise.kind);
     return suggestedSetsFromHistory(
       historicalWorkouts,
       exercise,
@@ -3233,15 +3254,18 @@ function WorkoutLogger({
         current.map((item) => item.exercise),
         selected,
       );
-      const additions = merged.slice(current.length).map((exercise) => ({
-        key: crypto.randomUUID(),
-        exercise,
-        notes: '',
-        ...machineSelection(exercise.id, machineChoices),
-        supersetKey: null,
-        isComplete: false,
-        sets: suggestedSetsForExercise(exercise),
-      }));
+      const additions = merged.slice(current.length).map((exercise) => {
+        const machine = machineSelection(exercise.id, machineChoices);
+        return {
+          key: crypto.randomUUID(),
+          exercise,
+          notes: '',
+          ...machine,
+          supersetKey: null,
+          isComplete: false,
+          sets: suggestedSetsForExercise(exercise, machine.machinePhotoIds[0]),
+        };
+      });
       const nextMovements = [...current, ...additions];
       return createSuperset && additions.length >= 2
         ? applySupersetSelection(
@@ -3266,12 +3290,13 @@ function WorkoutLogger({
     replacement: Exercise,
     machineChoices: ExerciseMachineChoices = {},
   ) {
+    const machine = machineSelection(replacement.id, machineChoices);
     const next = swapMovementExercise(
       movements,
       movementKey,
       replacement,
-      suggestedSetsForExercise(replacement),
-      machineSelection(replacement.id, machineChoices),
+      suggestedSetsForExercise(replacement, machine.machinePhotoIds[0]),
+      machine,
     );
     if (next === movements) return;
     setSwapUndo({ movements, exerciseName: replacement.name });
@@ -4158,7 +4183,7 @@ function WorkoutLogger({
                 historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
                 initialWorkout?.id ?? resumedWorkoutId ?? undefined,
-                undefined,
+                Number.POSITIVE_INFINITY,
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
@@ -4198,6 +4223,18 @@ function WorkoutLogger({
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key ? { ...item, machineSettings } : item,
+                  ),
+                )
+              }
+              onSuggestedSets={(previous) =>
+                setMovements((current) =>
+                  current.map((item) =>
+                    item.key === movement.key
+                      ? {
+                          ...item,
+                          sets: withSuggestedSets(item.sets, previous, item.exercise.kind),
+                        }
+                      : item,
                   ),
                 )
               }
@@ -4750,7 +4787,7 @@ function MovementCard({
   movement,
   showRestTimes,
   number,
-  history,
+  history: exerciseHistory,
   onExerciseHistory,
   onExerciseComplete,
   onUpdateSet,
@@ -4760,6 +4797,7 @@ function MovementCard({
   onRemove,
   onMachinePhotos,
   onMachineSettings,
+  onSuggestedSets,
   prBadges,
   supersetLabel,
   onMoveUp,
@@ -4786,6 +4824,8 @@ function MovementCard({
   onRemove: () => void;
   onMachinePhotos: (photoIds: string[], settings?: MachineSetting[]) => void;
   onMachineSettings: (settings: MachineSetting[]) => void;
+  /** Replace untouched suggested sets with these sets from an earlier session. */
+  onSuggestedSets: (previous: TrackedSet[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
   onMoveUp: () => void;
@@ -4806,6 +4846,14 @@ function MovementCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
   const pinnedMachinePhotoId = movement.machinePhotoIds.at(-1);
+  const [savedMachineAliases, setSavedMachineAliases] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  // With a machine pinned, its own sessions supply the last date, history and rests.
+  const history = useMemo(() => {
+    const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
+    return (onMachine.length ? onMachine : exerciseHistory).slice(0, 5);
+  }, [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases]);
   const machineSettingsUnloaded = movement.machineSettings === undefined;
   const onMachineSettingsRef = useRef(onMachineSettings);
 
@@ -5678,7 +5726,17 @@ function MovementCard({
           selectedIds={movement.machinePhotoIds}
           settings={movement.machineSettings}
           autoPinLastUsed={!movement.machinePhotosInitialized}
-          onChange={onMachinePhotos}
+          onChange={(photoIds, settings, chosen) => {
+            onMachinePhotos(photoIds, settings);
+            const pinned = photoIds.at(-1);
+            const canonical = (id: string | undefined) => (id && savedMachineAliases.get(id)) ?? id;
+            if (chosen && canonical(pinned) !== canonical(pinnedMachinePhotoId)) {
+              onSuggestedSets(
+                machineSuggestionSource(exerciseHistory, pinned, savedMachineAliases),
+              );
+            }
+          }}
+          onPhotosLoaded={(photos) => setSavedMachineAliases(machineAliases(photos))}
         />
       )}
 
@@ -5868,13 +5926,16 @@ function MachinePhotoChooser({
   settings,
   autoPinLastUsed,
   onChange,
+  onPhotosLoaded,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
   settings?: MachineSetting[];
   autoPinLastUsed: boolean;
-  onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
+  /** `chosen` marks a pin the user picked, rather than a restored or automatic one. */
+  onChange: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
+  onPhotosLoaded?: (photos: MachinePhoto[]) => void;
 }) {
   const [selectingForMerge, setSelectingForMerge] = useState(false);
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
@@ -5936,6 +5997,16 @@ function MachinePhotoChooser({
     };
   }, [exercise.id]);
 
+  const onPhotosLoadedRef = useRef(onPhotosLoaded);
+
+  useEffect(() => {
+    onPhotosLoadedRef.current = onPhotosLoaded;
+  }, [onPhotosLoaded]);
+
+  useEffect(() => {
+    onPhotosLoadedRef.current?.(photos);
+  }, [photos]);
+
   useEffect(
     () => () => {
       if (pending) URL.revokeObjectURL(pending.previewUrl);
@@ -5973,6 +6044,7 @@ function MachinePhotoChooser({
       onChange(
         choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])],
         machineSettings,
+        true,
       );
       setChoosingReplacement(false);
       setPending(null);
@@ -5988,7 +6060,7 @@ function MachinePhotoChooser({
     setPending(null);
     setExpanded(null);
     if (choosingReplacement) {
-      onChange([photoId]);
+      onChange([photoId], undefined, true);
       setChoosingReplacement(false);
       return;
     }
@@ -5996,6 +6068,8 @@ function MachinePhotoChooser({
       selectedIds.includes(photoId)
         ? selectedIds.filter((current) => current !== photoId)
         : [...selectedIds, photoId],
+      undefined,
+      true,
     );
   }
 
@@ -6010,7 +6084,11 @@ function MachinePhotoChooser({
   async function deletePhoto(photo: MachinePhoto) {
     await api.deleteMachinePhoto(photo.id, true);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
-    onChange(selectedIds.filter((id) => id !== photo.id));
+    onChange(
+      selectedIds.filter((id) => id !== photo.id),
+      undefined,
+      true,
+    );
     setExpanded(null);
   }
 

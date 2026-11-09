@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Exercise, TrackedSet, TrackedWorkout } from './types';
-import { recentExerciseHistory } from './exerciseHistory';
+import {
+  historyOnMachine,
+  machineAliases,
+  machineSuggestionSource,
+  recentExerciseHistory,
+  withSuggestedSets,
+} from './exerciseHistory';
 
 const exercise: Exercise = {
   id: 'bench-press',
@@ -126,5 +132,114 @@ describe('recent exercise history', () => {
     });
     expect(recentExerciseHistory([loaded], exercise.id, undefined, 1, older)).toHaveLength(1);
     expect(recentExerciseHistory([], exercise.id, 'older', 5, older)).toEqual([]);
+  });
+});
+
+describe('machine history', () => {
+  const entry = (id: string, machinePhotoIds: string[] | undefined, weight: number) => ({
+    workoutId: id,
+    workoutDate: '2026-07-01',
+    workoutName: id,
+    movementNotes: null,
+    sets: [{ ...trackedSet(`${id}-set`, 0), weight_kg: weight }],
+    machinePhotoIds,
+  });
+  const history = [
+    entry('recent-cybex', ['cybex'], 100),
+    entry('both', ['cybex', 'hammer'], 110),
+    entry('merged-hammer', ['hammer-old'], 120),
+    entry('older-baseline', undefined, 130),
+  ];
+  const aliases = machineAliases([
+    {
+      id: 'hammer',
+      exercise_id: exercise.id,
+      caption: 'Hammer',
+      thumbnail_url: '',
+      full_url: '',
+      width: 1,
+      height: 1,
+      created_at: '',
+      images: [
+        {
+          id: 'hammer-old',
+          exercise_id: exercise.id,
+          caption: 'Hammer',
+          thumbnail_url: '',
+          full_url: '',
+          width: 1,
+          height: 1,
+          created_at: '',
+        },
+      ],
+    },
+  ]);
+
+  it('keeps only sessions that pinned that one machine, including merged photos', () => {
+    expect(historyOnMachine(history, 'hammer', aliases).map((item) => item.workoutId)).toEqual([
+      'merged-hammer',
+    ]);
+    expect(historyOnMachine(history, 'cybex', aliases).map((item) => item.workoutId)).toEqual([
+      'recent-cybex',
+    ]);
+    expect(historyOnMachine(history, undefined, aliases)).toBe(history);
+  });
+
+  it("suggests the machine's latest sets, or the exercise's when it has none", () => {
+    const weights = (machine: string | null) =>
+      machineSuggestionSource(history, machine, aliases).map((item) => item.weight_kg);
+    expect(weights('hammer')).toEqual([120]);
+    expect(weights('new-machine')).toEqual([100]);
+    expect(weights(null)).toEqual([100]);
+  });
+});
+
+describe('replacing suggested sets', () => {
+  const draftSet = (key: string, weight: number, completed = false, fromPrevious = true) => ({
+    ...trackedSet(key, 0, completed),
+    key,
+    weight_kg: weight,
+    fromPrevious,
+  });
+  const previous = [100, 110, 120].map((weight, index) => ({
+    ...trackedSet(`previous-${index}`, index),
+    weight_kg: weight,
+    reps: 6,
+  }));
+
+  it('keeps logged and edited sets and swaps untouched suggestions row by row', () => {
+    const sets = withSuggestedSets(
+      [
+        draftSet('logged', 80, true, false),
+        draftSet('edited', 85, false, false),
+        draftSet('s', 90),
+      ],
+      previous,
+      'strength',
+    );
+    expect(sets.map(({ key, weight_kg }) => ({ key, weight_kg }))).toEqual([
+      { key: 'logged', weight_kg: 80 },
+      { key: 'edited', weight_kg: 85 },
+      { key: 's', weight_kg: 120 },
+    ]);
+    expect(sets[2]).toMatchObject({ reps: 6, fromPrevious: true, completed: false });
+  });
+
+  it('adds rows the other session had and drops untouched rows it did not', () => {
+    const longer = withSuggestedSets([draftSet('a', 90)], previous, 'strength');
+    expect(longer.map((item) => item.weight_kg)).toEqual([100, 110, 120]);
+    expect(longer[0].key).toBe('a');
+
+    const shorter = withSuggestedSets(
+      [draftSet('a', 90), draftSet('b', 90), draftSet('c', 90), draftSet('d', 90)],
+      previous.slice(0, 2),
+      'strength',
+    );
+    expect(shorter.map((item) => item.key)).toEqual(['a', 'b']);
+  });
+
+  it('leaves the sets alone when there is nothing to suggest', () => {
+    const current = [draftSet('a', 90)];
+    expect(withSuggestedSets(current, [], 'strength')).toBe(current);
   });
 });

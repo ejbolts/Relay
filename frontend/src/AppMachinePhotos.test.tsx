@@ -342,6 +342,32 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(api.lastUsedMachinePhotos).not.toHaveBeenCalledWith(rowPull.id);
   });
 
+  it("pre-fills an exercise added on a chosen machine from that machine's last session", async () => {
+    writeActiveWorkoutDraft({ ...readActiveWorkoutDraft()!, movements: [] });
+    HTMLElement.prototype.scrollTo = vi.fn();
+    onTestFinished(() => {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
+    });
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.add-exercise-button')!);
+    await click(
+      document
+        .querySelector(`[data-exercise-id="${legPress.id}"]`)!
+        .querySelector<HTMLButtonElement>('.exercise-option-select')!,
+    );
+    const homeCard = document.querySelector<HTMLButtonElement>(
+      `.exercise-machine-card[data-machine-id="${homeGym.id}"]`,
+    )!;
+    if (homeCard.getAttribute('aria-pressed') !== 'true') await click(homeCard);
+    await click(document.querySelector<HTMLButtonElement>('.add-selected-button')!);
+
+    const [movement] = readActiveWorkoutDraft()!.movements;
+    expect(movement.machinePhotoIds).toEqual([homeGym.id]);
+    // The latest session overall was on the travel gym's machine at 140 kg.
+    expect(movement.sets.map((item) => item.weight_kg)).toEqual([180]);
+    expect(container.querySelector('.movement-last-session')?.textContent).toContain('12 Oct');
+  });
+
   it('edits settings for an existing machine and saves to that machine', async () => {
     await act(async () => root.render(<App />));
     await click(button(`Expand ${homeGym.caption}`));
@@ -496,6 +522,47 @@ describe('saving and pinning a machine photo while logging', () => {
     );
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([travelGym.id]);
     expect(readActiveWorkoutDraft()?.movements[0].sets).toEqual(before.movements[0].sets);
+  });
+
+  it('swaps the suggested set and last date to each machine as it is pinned', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    writeActiveWorkoutDraft({
+      ...draft,
+      movements: [
+        {
+          ...draft.movements[0],
+          sets: [
+            {
+              ...createWorkoutSet('strength', undefined, false),
+              key: 'suggested',
+              reps: 8,
+              weight_kg: 100,
+              fromPrevious: true,
+            },
+          ],
+        },
+      ],
+    });
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(travelGym, 1, '2026-10-14'),
+      usage(homeGym, 2, '2025-10-12'),
+    ]);
+    await act(async () => root.render(<App />));
+    const rail = () => container.querySelectorAll<HTMLElement>('.machine-photo-rail article');
+    const lastSession = () => container.querySelector('.movement-last-session')?.textContent;
+    const suggestion = () => {
+      const [{ key, weight_kg, reps }] = readActiveWorkoutDraft()!.movements[0].sets;
+      return { key, weight_kg, reps };
+    };
+    expect(lastSession()).toContain('14 Oct');
+
+    await click(button('Pin to sets', rail()[1]));
+    expect(lastSession()).toContain('12 Oct');
+    expect(suggestion()).toEqual({ key: 'suggested', weight_kg: 180, reps: 10 });
+
+    await click(button('Pin to sets', rail()[0]));
+    expect(lastSession()).toContain('14 Oct');
+    expect(suggestion()).toEqual({ key: 'suggested', weight_kg: 140, reps: 10 });
   });
 
   it('keeps the photo and draft on failure and can retry deleting the last photo', async () => {
