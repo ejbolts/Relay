@@ -68,16 +68,13 @@ export function MuscleSetsCard({
   );
   const visibleMuscles = expanded ? allMuscles : muscles.slice(0, 8);
   const untrained = allMuscles.filter((item) => item.raw_sets <= 0).length;
-  // Each muscle uses its own target, with a stable scale while stepping through weeks.
-  const maximum = (muscle: string) =>
-    Math.max(
-      muscleSetGoal(muscle, goal, goals) * 1.15,
-      ...weeks.flatMap((item) =>
-        item.muscle_groups
-          .filter((group) => group.muscle_group === muscle)
-          .map((group) => group.raw_sets),
-      ),
-    );
+  // A shared set scale keeps volumes comparable; each muscle's target gets its own tick.
+  // Include all weeks so neither bars nor target ticks jump while stepping through history.
+  const scale = Math.max(
+    goal * 1.15,
+    ...allMuscles.map((item) => muscleSetGoal(item.muscle_group, goal, goals) * 1.15),
+    ...weeks.flatMap((item) => item.muscle_groups.map((group) => group.raw_sets)),
+  );
   const muscle = allMuscles.find((item) => item.muscle_group === selected);
   const name = weekName(weeksAgo);
   const current = weeksAgo === 0;
@@ -134,7 +131,6 @@ export function MuscleSetsCard({
           const last = before(item.muscle_group);
           const change = last === null ? null : item.raw_sets - last;
           const target = muscleSetGoal(item.muscle_group, goal, goals);
-          const scale = maximum(item.muscle_group);
           return (
             <li key={item.muscle_group}>
               <button

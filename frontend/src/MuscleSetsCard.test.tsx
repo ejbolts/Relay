@@ -284,7 +284,7 @@ it('works without earlier weeks from an older cached dashboard', async () => {
   expect(host.querySelector('.muscle-bar-previous')).toBeNull();
 });
 
-it('scales each muscle to its own target and uses it in the contribution sheet', async () => {
+it('positions each target independently on the volume scale and uses it in the contribution sheet', async () => {
   await act(async () =>
     root.render(
       <MuscleSetsCard
@@ -299,7 +299,15 @@ it('scales each muscle to its own target and uses it in the contribution sheet',
   const byName = (name: string) =>
     bars.find((bar) => bar.getAttribute('aria-label') === `${name} weekly target`)!;
   expect(parseFloat(byName('Chest').querySelector('i')!.style.width)).toBeCloseTo(29, 0);
-  expect(parseFloat(byName('Quads').querySelector('i')!.style.width)).toBeCloseTo(87, 0);
+  expect(byName('Quads').querySelector('i')!.style.width).toBe(
+    byName('Chest').querySelector('i')!.style.width,
+  );
+  expect(Number(byName('Chest').style.getPropertyValue('--muscle-goal-ratio'))).toBeCloseTo(
+    18 / 20.7,
+  );
+  expect(Number(byName('Quads').style.getPropertyValue('--muscle-goal-ratio'))).toBeCloseTo(
+    6 / 20.7,
+  );
   expect(host.querySelector('.muscle-set-goal-key')?.textContent).toContain('Weekly target');
   await act(async () =>
     host
