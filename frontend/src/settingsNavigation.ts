@@ -24,6 +24,14 @@ export interface SettingsDestination {
 
 export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   {
+    id: 'tips',
+    group: 'help',
+    title: 'Tips',
+    page: 'settings',
+    keywords: 'hints tips learn disable turn off suggestions',
+    selector: '#tips-settings-title',
+  },
+  {
     id: 'workout-sharing',
     group: 'notifications',
     title: 'Share workout reminder',

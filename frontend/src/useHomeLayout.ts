@@ -1,9 +1,11 @@
+import { useTips } from './Tips';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { DEFAULT_HOME_SECTION_SETTINGS, defaultHomeLayout } from './homeLayout';
 import { useUserSession } from './userContext';
 
 export function useHomeLayout(active = true) {
+  const { learn } = useTips();
   const { user } = useUserSession();
   const [layout, setLayout] = useState(defaultHomeLayout);
   const [loaded, setLoaded] = useState(!user);
@@ -44,6 +46,13 @@ export function useHomeLayout(active = true) {
       .getHomeLayout()
       .then((saved) => {
         if (!cancelled) {
+          const defaults = defaultHomeLayout();
+          if (
+            saved.order.join() !== defaults.order.join() ||
+            [...saved.hidden].sort().join() !== [...defaults.hidden].sort().join() ||
+            Object.keys(saved.widths ?? {}).length > 0
+          )
+            learn('home');
           setLayout(saved);
           setLoaded(true);
         }
@@ -54,7 +63,7 @@ export function useHomeLayout(active = true) {
     return () => {
       cancelled = true;
     };
-  }, [user, attempt]);
+  }, [user, attempt, learn]);
 
   function edit() {
     setDraft({
@@ -85,6 +94,7 @@ export function useHomeLayout(active = true) {
     setError(null);
     try {
       const saved = await api.saveHomeLayout(draft);
+      learn('home');
       setLayout(saved);
       setMessage('Home layout saved.');
       finish();
