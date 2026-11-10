@@ -144,6 +144,13 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('85.6');
   expect(factor()).toBe('×1.24');
   expect(items[1].querySelector('.machine-weights-ratio')?.textContent).toBe('×1.24');
+  // Each weight is named under its box, and the suggestion sits inside its likely range.
+  expect(
+    [...items[1].querySelectorAll('.machine-weights-side-name')].map((name) => name.textContent),
+  ).toEqual(['This machineLife Fitness', '★ ReferenceHammer']);
+  const fit = () => document.querySelector('.machine-weights-fit')?.textContent;
+  expect(fit()).toBe('In range');
+  expect(items[1].querySelector('.machine-weights-marker')).toBeTruthy();
   const suggestedLine = previewLine();
   expect(suggestedLine).toBeTruthy();
 
@@ -157,8 +164,10 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(factor()).toBe('×1.50');
   expect(items[1].querySelector('.machine-weights-ratio')?.textContent).toBe('×1.50');
   expect(previewLine()).not.toBe(suggestedLine);
+  expect(fit()).toBe('Outside range');
   await click(button('Use suggested ×1.24 for Life Fitness'));
   expect(factor()).toBe('×1.24');
+  expect(fit()).toBe('In range');
 
   // Changing your weight keeps the conversion.
   await type('Weight on Life Fitness', '40');
