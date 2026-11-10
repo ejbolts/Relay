@@ -4337,6 +4337,17 @@ body:has(.popup-dialog[open]) {
   color: white;
 }
 
+.machine-assignment-dialog > p {
+  margin: 0;
+  padding: 1rem;
+  line-height: 1.5;
+}
+
+.machine-assignment-dialog > .popup-dialog-actions {
+  margin: 0;
+  padding: 1rem;
+}
+
 .workout-import-review {
   padding: 0.25rem 1rem 1rem;
   font-size: 0.85rem;

@@ -4373,6 +4373,7 @@ function WorkoutLogger({
       {machineAssignmentError && (
         <PopupDialog
           title="Assign sets to machines"
+          className="machine-assignment-dialog"
           onClose={() => setMachineAssignmentError(null)}
         >
           <p>
