@@ -1,3 +1,5 @@
+import { MachineWeightTip, BodyWeightTip } from './FeatureDiscoveryTips';
+import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
 import { BodySizesCard } from './BodySizesCard';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
@@ -593,7 +595,9 @@ export function App() {
       <WorkoutTypesProvider>
         <ReleaseAnnouncementContext.Provider value={announcement}>
           <TrainingBlocksProvider key={user?.id}>
-            <AppContent />
+            <TipsProvider key={user?.id} account={user?.id ?? null}>
+              <AppContent />
+            </TipsProvider>
           </TrainingBlocksProvider>
         </ReleaseAnnouncementContext.Provider>
       </WorkoutTypesProvider>
@@ -622,6 +626,8 @@ function AppContentProviders({
 }
 
 function AppContent() {
+  const tips = useTips();
+  const { configure: configureTips } = tips;
   const [settingsJump, setSettingsJump] = useState<SettingsJump | null>(null);
   const settingsJumpSerial = useRef(0);
   const [settingsGroup, setSettingsGroup] = useState<SettingsGroupId | null>(() =>
@@ -1560,6 +1566,55 @@ function AppContent() {
       })
     : null;
 
+  useEffect(() => {
+    configureTips({
+      page: tab,
+      ready:
+        !loading &&
+        !signingIn &&
+        announcement.checked &&
+        !announcement.open &&
+        !prompt &&
+        !guideWaiting &&
+        !importStepPending &&
+        !csvGuideOpen &&
+        !releaseAfterImport &&
+        !homeScreenGuide.open &&
+        !home.editing &&
+        !message &&
+        !completedForSharing &&
+        completionRecords.length === 0 &&
+        !workoutSaveBlocked,
+      resting: restEndsAt !== null && restEndsAt > Date.now(),
+      workoutCount: Math.max(
+        (dashboard?.history?.total_workouts ?? workouts.length) -
+          workouts.filter((workout) => workout.is_sample).length,
+        workouts.filter((workout) => !workout.is_sample).length,
+      ),
+    });
+  }, [
+    configureTips,
+    tab,
+    loading,
+    signingIn,
+    announcement.checked,
+    announcement.open,
+    prompt,
+    guideWaiting,
+    importStepPending,
+    csvGuideOpen,
+    releaseAfterImport,
+    homeScreenGuide.open,
+    home.editing,
+    message,
+    completedForSharing,
+    completionRecords.length,
+    workoutSaveBlocked,
+    restEndsAt,
+    dashboard?.history?.total_workouts,
+    workouts,
+  ]);
+
   function openSharedProfile(
     profile: Pick<SharedProfileSummary, 'id' | 'display_name'> & { is_you?: boolean },
     workout?: Pick<TrackedWorkout, 'id' | 'workout_date'>,
@@ -2281,9 +2336,18 @@ function OverlayScreenHeader({
   titleActionLabel?: string;
   backLabel?: string;
 }) {
+  const tips = useTips();
   return (
     <header className="overlay-screen-header">
-      <button className="overlay-header-back" type="button" onClick={onBack} aria-label={backLabel}>
+      <button
+        className="overlay-header-back"
+        type="button"
+        onClick={() => {
+          if (runningAsInstalledApp()) tips.event('back-button', 'back', 10);
+          onBack();
+        }}
+        aria-label={backLabel}
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M14.5 5.5 8 12l6.5 6.5" />
         </svg>
@@ -2806,6 +2870,8 @@ function WorkoutLogger({
   );
   const [endTime, setEndTime] = useState(workoutTimeInputValue(initialWorkout?.end_time ?? null));
   const sourceWorkout = initialWorkout ?? (restoredDraft ? null : resumingWorkout);
+  const tips = useTips();
+  const recentRemoval = useRef<{ kind: 'set' | 'exercise'; key: string; at: number } | null>(null);
   const [movements, setMovements] = useState<DraftMovement[]>(() =>
     sourceWorkout
       ? sourceWorkout.movements.map((movement) => ({
@@ -3310,6 +3376,14 @@ function WorkoutLogger({
           )
         : nextMovements;
     });
+    if (
+      recentRemoval.current?.kind === 'exercise' &&
+      Date.now() - recentRemoval.current.at < 120000 &&
+      selected.length &&
+      historicalWorkouts.filter((workout) => !workout.is_sample).length >= 5
+    )
+      tips.event('replace-exercise', 'swap');
+    recentRemoval.current = null;
     setPickerOpen(false);
   }
 
@@ -3333,6 +3407,7 @@ function WorkoutLogger({
       machine,
     );
     if (next === movements) return;
+    tips.learn('swap');
     setSwapUndo({ movements, exerciseName: replacement.name });
     setMovements(next);
   }
@@ -3355,6 +3430,7 @@ function WorkoutLogger({
   }
 
   function moveSet(movementKey: string, fromIndex: number, toIndex: number) {
+    tips.learn('reorder');
     setMovements((current) =>
       current.map((movement) =>
         movement.key === movementKey
@@ -3369,6 +3445,7 @@ function WorkoutLogger({
       setError('An exercise needs at least one set. Remove the exercise instead.');
       return;
     }
+    recentRemoval.current = { kind: 'set', key: movement.key, at: Date.now() };
     const deleted = movement.sets[index];
     setMovements((current) =>
       current.map((item) =>
@@ -3387,6 +3464,7 @@ function WorkoutLogger({
 
   function undoLastDeletion() {
     if (!undoDeletion) return;
+    recentRemoval.current = null;
     setMovements((current) =>
       current.map((movement) => {
         if (movement.key !== undoDeletion.movementKey) return movement;
@@ -3613,6 +3691,9 @@ function WorkoutLogger({
         ? restTimerSecondsAfterSetUpdate(movement.exercise.kind, currentSet, update)
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
+    if (loggingSet && !initialWorkout) tips.event('set-completed');
+    if (loggingSet && movement?.exercise.kind === 'cardio')
+      tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
     if (loggingSet && movement && currentSet && !initialWorkout) {
       const gains = isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update))
@@ -3665,6 +3746,13 @@ function WorkoutLogger({
   }
 
   function addSet(movement: DraftMovement) {
+    if (
+      recentRemoval.current?.kind === 'set' &&
+      recentRemoval.current.key === movement.key &&
+      Date.now() - recentRemoval.current.at < 120000
+    )
+      tips.event('re-add-set', 'reorder');
+    recentRemoval.current = null;
     setMovements((current) =>
       current.map((item) =>
         item.key === movement.key
@@ -3679,6 +3767,7 @@ function WorkoutLogger({
   }
 
   function removeMovement(key: string) {
+    recentRemoval.current = { kind: 'exercise', key, at: Date.now() };
     setMovements((current) => current.filter((item) => item.key !== key));
   }
 
@@ -4267,6 +4356,20 @@ function WorkoutLogger({
               onToggleSet={(item) => toggleSet(movement, item)}
               onAddSet={() => addSet(movement)}
               onSwitch={() => setSwapSheetMovementKey(movement.key)}
+              machineTipEligible={
+                /machine|cable/i.test(movement.exercise.equipment ?? '') &&
+                historicalWorkouts.filter(
+                  (workout) =>
+                    !workout.is_sample &&
+                    workout.movements.some((item) => item.exercise.id === movement.exercise.id),
+                ).length >= 3 &&
+                !historicalWorkouts.some((workout) =>
+                  workout.movements.some(
+                    (item) =>
+                      item.exercise.id === movement.exercise.id && item.machine_photos.length > 0,
+                  ),
+                )
+              }
               onRemove={() => removeMovement(movement.key)}
               onMoveUp={() => moveMovement(movementIndex, -1)}
               onMoveDown={() => moveMovement(movementIndex, 1)}
@@ -4932,6 +5035,7 @@ function MovementCard({
   onToggleSet,
   onAddSet,
   onSwitch,
+  machineTipEligible,
   onRemove,
   onMachinePhotos,
   onMachineSettings,
@@ -4959,6 +5063,7 @@ function MovementCard({
   onToggleSet: (item: DraftSet) => void;
   onAddSet: () => void;
   onSwitch: () => void;
+  machineTipEligible: boolean;
   onRemove: () => void;
   onMachinePhotos: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
   onMachineSettings: (settings: MachineSetting[]) => void;
@@ -4975,6 +5080,7 @@ function MovementCard({
   onRemoveRestTime: (item: DraftSet) => void;
   onSuperset: (button: HTMLButtonElement) => void;
 }) {
+  const tips = useTips();
   const cardio = movement.exercise.kind === 'cardio';
   const treadmill =
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
@@ -5326,6 +5432,7 @@ function MovementCard({
               type="button"
               className="danger"
               onClick={() => {
+                if (movement.sets.length > 1) tips.event('menu-delete', 'swipe', 3);
                 onDeleteSet(index);
                 setOpenSetActionsKey(null);
               }}
@@ -5707,26 +5814,32 @@ function MovementCard({
             </svg>
           </button>
           {barType && (
-            <button
-              type="button"
-              className="plate-calculator-button"
-              aria-label={`Plate calculator for ${movement.exercise.name}`}
-              disabled={movement.sets.length === 0}
-              onClick={() => {
-                closeMovementMenu();
-                // The next set to lift, or the last one once every set is ticked.
-                const next = movement.sets.find((item) => !item.completed) ?? movement.sets.at(-1);
-                if (next) setPlateSetKey(next.key);
-              }}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M1.5 12h2M20.5 12h2M8.5 12h7" />
-                <rect x="3.5" y="8" width="2.5" height="8" rx="1" />
-                <rect x="6" y="5" width="2.5" height="14" rx="1" />
-                <rect x="15.5" y="5" width="2.5" height="14" rx="1" />
-                <rect x="18" y="8" width="2.5" height="8" rx="1" />
-              </svg>
-            </button>
+            <TipSlot id="plates" eligible={movement.sets.some((set) => (set.weight_kg ?? 0) >= 60)}>
+              <button
+                type="button"
+                className="plate-calculator-button"
+                aria-label={`Plate calculator for ${movement.exercise.name}`}
+                disabled={movement.sets.length === 0}
+                onClick={() => {
+                  closeMovementMenu();
+                  // The next set to lift, or the last one once every set is ticked.
+                  const next =
+                    movement.sets.find((item) => !item.completed) ?? movement.sets.at(-1);
+                  if (next) {
+                    tips.learn('plates');
+                    setPlateSetKey(next.key);
+                  }
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M1.5 12h2M20.5 12h2M8.5 12h7" />
+                  <rect x="3.5" y="8" width="2.5" height="8" rx="1" />
+                  <rect x="6" y="5" width="2.5" height="14" rx="1" />
+                  <rect x="15.5" y="5" width="2.5" height="14" rx="1" />
+                  <rect x="18" y="8" width="2.5" height="8" rx="1" />
+                </svg>
+              </button>
+            </TipSlot>
           )}
           <button
             type="button"
@@ -5858,35 +5971,41 @@ function MovementCard({
       )}
 
       {!cardio && (
-        <MachinePhotoChooser
-          key={movement.exercise.id}
-          id={photoPanelId}
-          exercise={movement.exercise}
-          selectedIds={movement.machinePhotoIds}
-          settings={movement.machineSettings}
-          autoPinLastUsed={!movement.machinePhotosInitialized}
-          onChange={(photoIds, settings, chosen) => {
-            onMachinePhotos(photoIds, settings, chosen);
-            const pinned = photoIds.at(-1);
-            const canonical = (id: string | undefined) => (id && savedMachineAliases.get(id)) ?? id;
-            if (chosen && canonical(pinned) !== canonical(pinnedMachinePhotoId)) {
-              onSuggestedSets(
-                machineSuggestionSource(exerciseHistory, pinned, savedMachineAliases),
-              );
-            }
-          }}
-          onPhotosLoaded={(photos) => {
-            setSavedMachinePhotos(photos);
-            const aliases = machineAliases(photos);
-            setSavedMachineAliases(aliases);
-            for (const set of movement.sets) {
-              const canonical = set.machine_photo_id && aliases.get(set.machine_photo_id);
-              if (canonical && canonical !== set.machine_photo_id) {
-                onUpdateSet(set.key, { machine_photo_id: canonical });
+        <TipSlot
+          id="machine"
+          eligible={machineTipEligible && movement.machinePhotoIds.length === 0}
+        >
+          <MachinePhotoChooser
+            key={movement.exercise.id}
+            id={photoPanelId}
+            exercise={movement.exercise}
+            selectedIds={movement.machinePhotoIds}
+            settings={movement.machineSettings}
+            autoPinLastUsed={!movement.machinePhotosInitialized}
+            onChange={(photoIds, settings, chosen) => {
+              onMachinePhotos(photoIds, settings, chosen);
+              const pinned = photoIds.at(-1);
+              const canonical = (id: string | undefined) =>
+                (id && savedMachineAliases.get(id)) ?? id;
+              if (chosen && canonical(pinned) !== canonical(pinnedMachinePhotoId)) {
+                onSuggestedSets(
+                  machineSuggestionSource(exerciseHistory, pinned, savedMachineAliases),
+                );
               }
-            }
-          }}
-        />
+            }}
+            onPhotosLoaded={(photos) => {
+              setSavedMachinePhotos(photos);
+              const aliases = machineAliases(photos);
+              setSavedMachineAliases(aliases);
+              for (const set of movement.sets) {
+                const canonical = set.machine_photo_id && aliases.get(set.machine_photo_id);
+                if (canonical && canonical !== set.machine_photo_id) {
+                  onUpdateSet(set.key, { machine_photo_id: canonical });
+                }
+              }
+            }}
+          />
+        </TipSlot>
       )}
 
       <div className={`set-grid set-grid-${cardio ? 'cardio' : 'strength'}`} ref={setGridRef}>
@@ -5920,7 +6039,10 @@ function MovementCard({
                 label={`set ${index + 1}`}
                 disabled={movement.sets.length < 2}
                 overlayOpen={openSetActionsKey === item.key || typeMenuSetKey === item.key}
-                onDelete={() => onDeleteSet(index)}
+                onDelete={() => {
+                  tips.learn('swipe');
+                  onDeleteSet(index);
+                }}
               >
                 <div
                   className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
@@ -6129,6 +6251,7 @@ function MachinePhotoChooser({
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [caption, setCaption] = useState('');
   const [expanded, setExpanded] = useState<MachinePhoto | null>(null);
+  const tips = useTips();
   const [photoPanelOpen, setPhotoPanelOpen] = useState(false);
   const [choosingReplacement, setChoosingReplacement] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -6314,6 +6437,7 @@ function MachinePhotoChooser({
         className="machine-photo-summary"
         onClick={(event) => {
           event.preventDefault();
+          if (!photoPanelOpen) tips.learn('machine');
           setPhotoPanelOpen(!photoPanelOpen);
         }}
       >
@@ -6346,6 +6470,7 @@ function MachinePhotoChooser({
             photos={photos}
             onCancel={() => setSelectingForMerge(false)}
             onMerged={(merged, sourceIds) => {
+              tips.learn('mergeMachines');
               const sourceSet = new Set(sourceIds);
               const nextIds = [
                 ...new Set(
@@ -6410,18 +6535,23 @@ function MachinePhotoChooser({
                 {photos.length >= 2 && (
                   <div className="machine-photo-library-actions">
                     <span>Saved · {photos.length}</span>
-                    <button
-                      type="button"
-                      disabled={uploading || !!pending}
-                      onClick={() => {
-                        setExpanded(null);
-                        setChoosingReplacement(false);
-                        setSelectingForMerge(true);
-                        setError(null);
-                      }}
+                    <TipSlot
+                      id="mergeMachines"
+                      eligible={photoPanelOpen && !selectingForMerge && !pending && !uploading}
                     >
-                      Select
-                    </button>
+                      <button
+                        type="button"
+                        disabled={uploading || !!pending}
+                        onClick={() => {
+                          setExpanded(null);
+                          setChoosingReplacement(false);
+                          setSelectingForMerge(true);
+                          setError(null);
+                        }}
+                      >
+                        Select
+                      </button>
+                    </TipSlot>
                   </div>
                 )}
                 <div
@@ -7881,14 +8011,16 @@ export function ProgressScreen({
                   </div>
                 )}
                 {(mapping?.machines.length ?? 0) > 1 && (
-                  <button
-                    type="button"
-                    className="progress-machine-settings"
-                    aria-label="Machine weights"
-                    onClick={() => setMappingOpen(true)}
-                  >
-                    <Icon name="settings" />
-                  </button>
+                  <MachineWeightTip mapping={mapping}>
+                    <button
+                      type="button"
+                      className="progress-machine-settings"
+                      aria-label="Machine weights"
+                      onClick={() => setMappingOpen(true)}
+                    >
+                      <Icon name="settings" />
+                    </button>
+                  </MachineWeightTip>
                 )}
               </div>
             )}
@@ -8772,6 +8904,7 @@ function SettingsScreen({
             description: 'App guides, installation, updates and feedback.',
             content: (
               <>
+                <TipsSettings />
                 <section
                   className="settings-panel panel"
                   aria-labelledby="home-screen-settings-title"
@@ -8913,6 +9046,7 @@ export function BodyCompositionScreen({
   accountActions?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
+  const [goalsReady, setGoalsReady] = useState(false);
   const [measurementDate, setMeasurementDate] = useState(localDate());
   const [entryOpen, setEntryOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
@@ -9003,11 +9137,15 @@ export function BodyCompositionScreen({
   }, [trendPreference]);
   useEffect(() => {
     let cancelled = false;
+    setGoalsReady(false);
     void api
       .listBodyWeightGoals()
       .then((next) => {
         // A goal waiting out its Undo window stays hidden when the list reloads.
-        if (!cancelled) setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
+        if (!cancelled) {
+          setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
+          setGoalsReady(true);
+        }
       })
       .catch((reason) => {
         if (!cancelled)
@@ -9181,6 +9319,7 @@ export function BodyCompositionScreen({
         onOpenSettings={onOpenSettings}
         accountActions={accountActions}
       />
+      <BodyWeightTip measurementCount={measurements.length} goals={goals} ready={goalsReady} />
       <div className="body-reference-stats" aria-label="Bodyweight summary">
         <div>
           <span>Bodyweight</span>
@@ -9895,6 +10034,7 @@ export function CardioScreen({
   onDataChange: () => Promise<void>;
   onOpenWorkout: (workoutId: string) => void;
 }) {
+  const tips = useTips();
   const cardioExercises = exercises.filter((exercise) => exercise.kind === 'cardio');
   const defaultExercise =
     cardioExercises.find(
@@ -9987,6 +10127,7 @@ export function CardioScreen({
     setScanning(true);
     try {
       const scan = await api.scanCardioScreenshot(file);
+      tips.learn('cardio');
       const scannedExercise = scan.activity_type
         ? cardioExercises.find(
             (exercise) =>
@@ -10040,6 +10181,7 @@ export function CardioScreen({
       if (editingId) await api.updateCardio(editingId, payload);
       else {
         const saved = await api.createCardio(payload);
+        if (!scanStatus) tips.event('manual-cardio', 'cardio', 2);
         setCardioSharing({ session: saved, prompt: true });
       }
       setDraft(empty);
