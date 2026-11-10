@@ -187,25 +187,6 @@ export async function showRestTimerNotification(): Promise<void> {
   await registration.showNotification('Rest complete', options);
 }
 
-export async function showWorkoutAutoSavedNotification(): Promise<void> {
-  if (
-    !pushNotificationsSupported() ||
-    !phonePushPreferenceEnabled() ||
-    Notification.permission !== 'granted'
-  )
-    return;
-  const registration = await navigator.serviceWorker.ready;
-  const options: NotificationOptions & { renotify: boolean } = {
-    body: 'Your inactive workout passed its time limit and was saved.',
-    icon: '/icon-192.png',
-    badge: '/badge.png',
-    tag: 'workout-auto-saved',
-    renotify: true,
-    data: { url: '/#dashboard' },
-  };
-  await registration.showNotification('Workout auto-saved', options);
-}
-
 export async function dismissRestTimerNotifications(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   const registration = await navigator.serviceWorker.getRegistration();

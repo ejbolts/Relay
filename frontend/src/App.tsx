@@ -222,7 +222,6 @@ import {
   PHONE_PUSH_PREFERENCE_EVENT,
   pushNotificationsSupported,
   showRestTimerNotification,
-  showWorkoutAutoSavedNotification,
 } from './push';
 import {
   useCollapseAnimation,
@@ -328,6 +327,7 @@ import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
 import { usePendingWorkoutSave } from './usePendingWorkoutSave';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
+import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { weeklySetGains } from './weeklySetsUpdate';
@@ -356,7 +356,11 @@ import {
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
 } from './workoutSets';
-import { finalizeWorkoutIdentity, workoutNameForCategory } from './workoutCategory';
+import {
+  finalizeWorkoutIdentity,
+  isCardioTypeWithoutCardio,
+  workoutNameForCategory,
+} from './workoutCategory';
 import {
   machineSelection,
   restoreWorkoutDraftMovements,
@@ -1769,6 +1773,9 @@ function AppContent() {
               saving={pendingWorkout.saving}
               error={pendingWorkout.error}
               onRetry={pendingWorkout.retry}
+              onDiscard={() => {
+                if (pendingWorkout.discard()) setMessage('Workout discarded.');
+              }}
               onReview={
                 pendingWorkout.needsReview
                   ? () => {
@@ -1961,11 +1968,7 @@ function AppContent() {
                       onExerciseFavorite={updateExerciseFavorite}
                       onCreateExercise={createExercise}
                       onSave={saveWorkout}
-                      onAutoSaved={() =>
-                        setMessage(
-                          'Your inactive workout passed its time limit and was auto-saved.',
-                        )
-                      }
+                      onShow={() => setTab('log')}
                       activeStartedAt={activeWorkoutStartedAt}
                       onRestTimerChange={
                         editingWorkout || viewedWorkout ? undefined : setRestEndsAt
@@ -2655,7 +2658,7 @@ function WorkoutLogger({
   onExerciseFavorite,
   onCreateExercise,
   onSave,
-  onAutoSaved,
+  onShow,
   activeStartedAt,
   onClose,
   onDelete,
@@ -2687,7 +2690,8 @@ function WorkoutLogger({
   onExerciseFavorite: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   onSave: (payload: WorkoutInput) => Promise<void>;
-  onAutoSaved: () => void;
+  /** Opens the workout screen from wherever the app is. */
+  onShow: () => void;
   activeStartedAt: number | null;
   onClose: () => void;
   onDelete: () => void;
@@ -2920,7 +2924,10 @@ function WorkoutLogger({
   const lastActiveAtRef = useRef(initialActivity.lastActiveAt);
   const inactiveFinishAtRef = useRef(initialActivity.finishAt);
   const savingRef = useRef(false);
-  const finishWorkoutRef = useRef<(automaticEndAt?: number) => Promise<void>>(async () => {});
+  // An inactive workout is never saved unasked: it waits for Save, Resume or Discard.
+  const [inactivePromptOpen, setInactivePromptOpen] = useState(false);
+  const hasLoggedSetRef = useRef(false);
+  const persistDraftRef = useRef<() => boolean>(() => false);
   const [elapsed, setElapsed] = useState(
     initialWorkout
       ? (initialWorkout.duration_minutes ?? 0) * 60
@@ -3001,11 +3008,19 @@ function WorkoutLogger({
       if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();
       if (now >= inactiveFinishAtRef.current) {
-        void finishWorkoutRef.current(inactiveFinishAtRef.current);
-        return;
+        if (hasLoggedSetRef.current) {
+          setInactivePromptOpen(true);
+          return;
+        }
+        // Nothing is logged yet, so returning to the workout simply continues it.
+        inactiveFinishAtRef.current = inactiveWorkoutFinishAt(startedAt, now);
+      } else {
+        inactiveFinishAtRef.current = extendInactiveWorkoutFinishAt(
+          inactiveFinishAtRef.current,
+          now,
+        );
       }
       lastActiveAtRef.current = now;
-      inactiveFinishAtRef.current = extendInactiveWorkoutFinishAt(inactiveFinishAtRef.current, now);
       if (now - lastActivityWriteAt >= 15_000) {
         lastActivityWriteAt = now;
         persistDraft();
@@ -3017,6 +3032,7 @@ function WorkoutLogger({
       }
     };
     persistDraft();
+    persistDraftRef.current = persistDraft;
     const persistBeforeRefresh = (event: Event) => {
       if (savingRef.current || !persistDraft()) event.preventDefault();
     };
@@ -3636,28 +3652,41 @@ function WorkoutLogger({
     setPickerOpen(true);
   }
 
-  async function finishWorkout(automaticEndAt?: number) {
-    if (savingRef.current) return;
-    if (!initialWorkout && !isCurrentDraft()) return;
+  // An explicit type keeps its identity in the live heading and the saved workout, except
+  // Cardio on a workout with no cardio, which would file a strength session as cardio.
+  const inferTypeFromExercises =
+    !initialWorkout &&
+    !resumedWorkoutId &&
+    !customTypeId &&
+    (!workoutTypeExplicit ||
+      isCardioTypeWithoutCardio(
+        category,
+        movements.map((movement) => movement.exercise),
+      ));
+
+  /** Resolves true once the workout is handed over for saving. */
+  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
+    if (savingRef.current) return false;
+    if (!initialWorkout && !isCurrentDraft()) return false;
     if (workoutTypes.loading) {
       setError('Workout types are still loading. Please try saving again in a moment.');
-      return;
+      return false;
     }
     if (customTypeId && selectedType.id !== customTypeId) {
       setError('Your workout type could not load. Reload workout types or choose another type.');
-      return;
+      return false;
     }
     if (!typeOptions.some((type) => type.id === selectedType.id)) {
       setError('Choose an available workout type. Add or restore types in Settings if needed.');
-      return;
+      return false;
     }
     if (selectedType.archived && !initialWorkout && !resumedWorkoutId) {
       setError('This workout type was removed. Choose another type before saving.');
-      return;
+      return false;
     }
-    const finishedAt = automaticEndAt ?? Date.now();
+    const finishedAt = inactiveEndAt ?? Date.now();
     const movementsToSave =
-      automaticEndAt === undefined
+      inactiveEndAt === undefined
         ? movements
         : movements.map((movement) => ({
             ...movement,
@@ -3683,15 +3712,15 @@ function WorkoutLogger({
           ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
           : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
       );
-      return;
+      return false;
     }
     if (initialWorkout && Boolean(startTime) !== Boolean(endTime)) {
       setError('Enter both a workout start time and end time, or leave both blank.');
-      return;
+      return false;
     }
     if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
       setError('Clear the start and end times to save a 24-hour workout.');
-      return;
+      return false;
     }
     if (durationMinutes > 1440) {
       setError(
@@ -3699,7 +3728,7 @@ function WorkoutLogger({
           ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
           : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
       );
-      return;
+      return false;
     }
     savingRef.current = true;
     setSaving(true);
@@ -3708,7 +3737,7 @@ function WorkoutLogger({
       movements.map((movement) => movement.exercise),
       category,
       name,
-      !initialWorkout && !resumedWorkoutId && !workoutTypeExplicit && !customTypeId,
+      inferTypeFromExercises,
       customTypeId ? selectedType : null,
     );
     if (
@@ -3765,29 +3794,39 @@ function WorkoutLogger({
           superset_key: movement.supersetKey,
         })),
       });
-      if (automaticEndAt !== undefined) {
-        onAutoSaved();
-        void showWorkoutAutoSavedNotification().catch(() => undefined);
-      }
+      return true;
     } catch (saveError) {
       savingRef.current = false;
       setError(saveError instanceof Error ? saveError.message : 'Could not save the workout.');
       setSaving(false);
+      return false;
     }
   }
 
-  finishWorkoutRef.current = finishWorkout;
+  const loggedSetCount = initialWorkout
+    ? 0
+    : movements.reduce(
+        (total, movement) =>
+          total +
+          movement.sets.filter((item) => isWorkoutSetAutoSavable(movement.exercise.kind, item))
+            .length,
+        0,
+      );
+  hasLoggedSetRef.current = loggedSetCount > 0;
+
+  function continueInactiveWorkout() {
+    const now = Date.now();
+    lastActiveAtRef.current = now;
+    inactiveFinishAtRef.current = inactiveWorkoutFinishAt(startedAt, now);
+    persistDraftRef.current();
+    setInactivePromptOpen(false);
+  }
 
   useEffect(() => {
     if (initialWorkout) return;
-    const hasSavableSet = movements.some((movement) =>
-      movement.sets.some((item) => isWorkoutSetAutoSavable(movement.exercise.kind, item)),
-    );
     const checkForInactiveWorkout = () => {
-      if (!hasSavableSet || savingRef.current) return;
-      const now = Date.now();
-      if (now < inactiveFinishAtRef.current) return;
-      void finishWorkoutRef.current(inactiveFinishAtRef.current);
+      if (!hasLoggedSetRef.current || savingRef.current) return;
+      if (Date.now() >= inactiveFinishAtRef.current) setInactivePromptOpen(true);
     };
     checkForInactiveWorkout();
     const interval = window.setInterval(checkForInactiveWorkout, 30_000);
@@ -3838,12 +3877,11 @@ function WorkoutLogger({
     setNameEditorOpen(true);
   };
 
-  // Explicit choices retain their identity in both the live heading and the saved workout.
   let liveIdentity = finalizeWorkoutIdentity(
     movements.map((movement) => movement.exercise),
     category,
     name,
-    !initialWorkout && !resumedWorkoutId && !workoutTypeExplicit && !customTypeId,
+    inferTypeFromExercises,
     customTypeId ? selectedType : null,
   );
   if (
@@ -4307,6 +4345,30 @@ function WorkoutLogger({
             {saving ? 'Saving…' : initialWorkout ? 'Save workout' : 'Finish workout'}
           </button>
         </>
+      )}
+
+      {inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
+        <InactiveWorkoutDialog
+          name={liveIdentity.name}
+          startedAt={startedAt}
+          loggedSets={loggedSetCount}
+          resuming={Boolean(resumedWorkoutId)}
+          saving={saving}
+          onSave={() => {
+            void finishWorkout(inactiveFinishAtRef.current).then((saved) => {
+              if (saved) return;
+              // Whatever blocked the save is explained on the workout screen.
+              continueInactiveWorkout();
+              onShow();
+            });
+          }}
+          onResume={() => {
+            continueInactiveWorkout();
+            onShow();
+          }}
+          onDiscard={() => setDeleteConfirmationOpen(true)}
+          onClose={continueInactiveWorkout}
+        />
       )}
 
       {deleteConfirmationOpen && (
