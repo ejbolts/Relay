@@ -6102,7 +6102,10 @@ function MachinePhotoChooser({
   }
 
   const today = localDate();
-  const pinnedPhotos = photos.filter((photo) => selectedIds.includes(photo.id));
+  // Latest pin first: it supplies the suggested sets, so it sits in front of the stack.
+  const pinnedPhotos = [...selectedIds]
+    .reverse()
+    .flatMap((photoId) => photos.find((photo) => photo.id === photoId) ?? []);
   const primaryPinnedPhoto = pinnedPhotos[0] ?? null;
   const photoSummary = primaryPinnedPhoto
     ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
@@ -6127,7 +6130,13 @@ function MachinePhotoChooser({
           setPhotoPanelOpen(!photoPanelOpen);
         }}
       >
-        {primaryPinnedPhoto ? (
+        {pinnedPhotos.length > 1 ? (
+          <span className="machine-photo-stack" aria-hidden="true">
+            {pinnedPhotos.slice(0, 3).map((photo) => (
+              <img key={photo.id} src={photo.thumbnail_url} alt="" loading="lazy" />
+            ))}
+          </span>
+        ) : primaryPinnedPhoto ? (
           <img src={primaryPinnedPhoto.thumbnail_url} alt="" loading="lazy" />
         ) : (
           <span className="machine-photo-placeholder" aria-hidden="true">

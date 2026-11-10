@@ -3970,15 +3970,19 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .machine-photo-summary {
+  --machine-thumb: 2rem;
   min-height: 2.75rem;
   padding: 0.375rem 0.625rem;
 }
 
 .logger-screen .machine-photo-summary > img,
-.logger-screen .machine-photo-placeholder {
-  width: 2rem;
-  height: 2rem;
+.logger-screen .machine-photo-placeholder,
+.logger-screen .machine-photo-stack > img {
   border-radius: 8px;
+}
+
+.logger-screen .machine-photo-stack > img {
+  box-shadow: 0 0 0 2px var(--p-surface-2);
 }
 
 .logger-screen .machine-photo-summary-copy strong {

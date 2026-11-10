@@ -609,6 +609,26 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(picker.textContent).toContain('Choose photo');
   });
 
+  it('stacks every pinned machine in the collapsed summary, latest pin in front', async () => {
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, '2025-10-12'),
+      usage(travelGym, 1, '2025-10-01'),
+    ]);
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].machinePhotoIds = [travelGym.id, homeGym.id];
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    const summary = container.querySelector<HTMLElement>('.machine-photo-summary')!;
+    expect(
+      [...summary.querySelectorAll('.machine-photo-stack img')].map((img) =>
+        img.getAttribute('src'),
+      ),
+    ).toEqual([homeGym.thumbnail_url, travelGym.thumbnail_url]);
+    expect(summary.querySelector(':scope > img')).toBeNull();
+    expect(summary.querySelector('small')?.textContent).toBe('Home gym Hammer press +1 more');
+    expect(summary.textContent).toContain('2 pinned');
+  });
+
   it('records a pinned machine settings without showing an editor in the photo section', async () => {
     pinHomeMachine();
     const saved = [{ name: 'Seat', value: '5' }];
