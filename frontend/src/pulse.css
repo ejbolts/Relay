@@ -2736,9 +2736,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .body-screen .body-trend-stat-controls select {
   min-height: 1.75rem;
+  border-color: var(--p-line-strong);
   border-radius: 8px;
   padding: 0 1.5rem 0 0.5rem;
+  background-color: var(--p-surface-2);
+  color: var(--p-ink);
   font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .body-screen .body-trend-panel {
@@ -2988,6 +2992,11 @@ html.edge-swipe-ready .edge-swipe-indicator {
   margin: 0;
   color: var(--p-ink);
   font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.history-screen .history-card-summary .history-card-metric {
+  font-weight: 650;
 }
 
 .history-screen .history-card-summary .history-card-copy strong {
@@ -5466,4 +5475,21 @@ html[data-reduce-motion] ::backdrop {
   font-size: 0.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Equipment photo disclosure: a drawn chevron, centred on the row, instead of a text glyph. */
+.machine-photo-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--p-ink-2);
+}
+
+.machine-photo-chevron .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.logger-screen .exercise-complete-button .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
 }

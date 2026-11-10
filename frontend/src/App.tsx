@@ -5561,7 +5561,7 @@ function MovementCard({
               closeMovementMenu();
             }}
           >
-            ✓
+            <Icon name="check" />
           </button>
           <details className="movement-overflow" ref={movementMenuRef}>
             <summary aria-label={`Actions for ${movement.exercise.name}`}>⋮</summary>
@@ -6067,7 +6067,7 @@ function MachinePhotoChooser({
         </span>
         {selectedIds.length > 0 && <b>{selectedIds.length} pinned</b>}
         <span className="machine-photo-chevron" aria-hidden="true">
-          ⌄
+          <Icon name="chevron-down" />
         </span>
       </summary>
       <div className="machine-photo-content">
@@ -6821,7 +6821,7 @@ export function ExercisePicker({
         <header>
           <div className="exercise-picker-heading">
             <h2 id="exercise-picker-title">
-              {singleSelect ? 'Switch Exercise' : 'Select Exercise'}
+              {singleSelect ? 'Switch exercise' : 'Select exercise'}
             </h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
@@ -6844,7 +6844,7 @@ export function ExercisePicker({
             value={bodyPart}
             onChange={(event) => setBodyPart(event.target.value as WorkoutCategory | 'all')}
           >
-            <option value="all">Any Body Part</option>
+            <option value="all">Any body part</option>
             {(
               [
                 'push',
@@ -6866,7 +6866,7 @@ export function ExercisePicker({
             value={filter}
             onChange={(event) => setFilter(event.target.value as 'all' | 'favorites' | 'recent')}
           >
-            <option value="all">Any Category</option>
+            <option value="all">Any category</option>
             <option value="favorites">Favorites</option>
             <option value="recent">Recently Used</option>
           </select>
@@ -8920,8 +8920,8 @@ export function BodyCompositionScreen({
         <div>
           <span>
             {activeGoal
-              ? `${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} Goal`
-              : 'Weight Goal'}
+              ? `${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} goal`
+              : 'Weight goal'}
           </span>
           <strong>{activeGoal ? bodyGoalTarget(activeGoal, weightUnit) : '–'}</strong>
           {activeGoal && latest && maintenanceRange(activeGoal) && (
@@ -8929,7 +8929,7 @@ export function BodyCompositionScreen({
           )}
         </div>
         <div>
-          <span>Body Fat</span>
+          <span>Body fat</span>
           <strong>
             {latest && latest.body_fat_pct !== null ? `${latest.body_fat_pct}%` : '–'}
           </strong>
@@ -9228,7 +9228,7 @@ export function BodyCompositionScreen({
               {historyView === 'daily' ? 'Date' : historyView === 'week' ? 'Week' : 'Month'}
             </span>
             <span>Bodyweight</span>
-            <span>Body Fat</span>
+            <span>Body fat</span>
             {historyView === 'daily' && <span />}
           </div>
         )}
