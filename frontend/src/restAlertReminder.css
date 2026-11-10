@@ -1,0 +1,31 @@
+.rest-alert-reminder-body {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0 1rem 1rem;
+}
+
+.rest-alert-reminder-body p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rest-alert-reminder-dismiss {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  color: var(--muted-ink);
+}
+
+.rest-alert-reminder-dismiss input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.rest-alert-reminder-body .popup-dialog-actions {
+  margin-top: 0;
+}

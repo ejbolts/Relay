@@ -59,6 +59,8 @@ import {
 } from './weightUnits';
 import type { WeightUnit } from './weightUnits';
 import { PrToast, type PrToastEntry } from './PrToast';
+import { RestAlertReminder } from './RestAlertReminder';
+import { shouldShowRestAlertReminder } from './restAlertReminderState';
 import type {
   BodyMeasurement,
   BodyWeightGoal,
@@ -695,6 +697,8 @@ function AppContent() {
   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
   const [completionRecords, setCompletionRecords] = useState<PersonalRecord[]>([]);
   const [restTimerEnabled, setRestTimerEnabled] = useState(restTimerPreferenceEnabled);
+  const [restAlertReminderOpen, setRestAlertReminderOpen] = useState(false);
+  const closeRestAlertReminder = useCallback(() => setRestAlertReminderOpen(false), []);
   const [showRestTimes, setShowRestTimes] = useState(restTimesPreferenceEnabled);
   // The live workout's rest end, so the tab bar can count it down away from the workout.
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
@@ -1385,6 +1389,13 @@ function AppContent() {
     setWorkoutStartDate(storedDraft?.workoutDate ?? workoutDate);
     setTab('log');
     if (navigator.storage?.persist) void navigator.storage.persist().catch(() => false);
+    if (freshStart) remindAboutRestAlerts();
+  }
+
+  function remindAboutRestAlerts() {
+    void shouldShowRestAlertReminder().then((show) => {
+      if (show) setRestAlertReminderOpen(true);
+    });
   }
 
   function editWorkout(workout: TrackedWorkout) {
@@ -1403,6 +1414,7 @@ function AppContent() {
     setWorkoutStartDate(workout.workout_date);
     setTab('log');
     if (navigator.storage?.persist) void navigator.storage.persist().catch(() => false);
+    remindAboutRestAlerts();
   }
 
   async function saveMeasurement(payload: {
@@ -1728,6 +1740,7 @@ function AppContent() {
             onClose={() => setCompletionRecords([])}
           />
         )}
+        {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
         {completedForSharing && (
           <WorkoutSharePrompt
             workout={completedForSharing}
