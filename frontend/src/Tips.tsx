@@ -12,6 +12,8 @@ import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import {
+  HOME_TIP_REVISIT_MS,
+  rotatingHomeTip,
   canShowTip,
   countTipEvent,
   freshTips,
@@ -25,12 +27,13 @@ import {
 import './tips.css';
 
 type Environment = { page: string; ready: boolean; resting: boolean; workoutCount: number };
-type Candidate = { id: TipId; element: HTMLElement; until: number };
+type Candidate = { id: TipId; element: HTMLElement; until: number; homeTips?: TipId[] };
 const noop = () => {};
 interface TipsApi {
   state: TipState;
   active: TipId | null;
   slot: string | null;
+  homeCard: boolean;
   environment: Environment;
   configure: (environment: Environment) => void;
   register: (key: string, candidate: Candidate) => () => void;
@@ -45,6 +48,7 @@ const TipsContext = createContext<TipsApi>({
   state: freshTips(),
   active: null as TipId | null,
   slot: null,
+  homeCard: false,
   environment: { page: '', ready: false, resting: false, workoutCount: 0 } as Environment,
   configure: noop,
   register: () => noop,
@@ -88,6 +92,12 @@ export function TipsProvider({
   const stateRef = useRef(state);
   const [active, setActive] = useState<TipId | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
+  const [homeCard, setHomeCard] = useState(false);
+  const activeHome = useRef(false);
+  const firstHomeVisit = useRef(true);
+  const onHome = useRef(false);
+  const homeEntry = useRef(false);
+  const homeDismissed = useRef(false);
   const activeRef = useRef<TipId | null>(null);
   const [environment, setEnvironment] = useState<Environment>({
     page: '',
@@ -110,12 +120,18 @@ export function TipsProvider({
       if (account) saveTips(account, next);
     }
     function close() {
+      activeHome.current = false;
+      setHomeCard(false);
       activeRef.current = null;
       setSlot(null);
       setActive(null);
     }
     return {
       configure(next: Environment) {
+        if (env.current.page !== next.page) {
+          if (next.page !== 'dashboard') onHome.current = false;
+          close();
+        }
         env.current = next;
         setEnvironment(next);
       },
@@ -142,6 +158,7 @@ export function TipsProvider({
         if (activeRef.current === id) close();
       },
       dismiss() {
+        if (activeHome.current) homeDismissed.current = true;
         const id = activeRef.current;
         if (id)
           write({ ...stateRef.current, seen: { ...stateRef.current.seen, [id]: 'dismissed' } });
@@ -156,15 +173,19 @@ export function TipsProvider({
           !stateRef.current.enabled ||
           !env.current.ready ||
           !quiet() ||
-          TIP_DEFINITIONS[id].surface !== 'home'
+          (TIP_DEFINITIONS[id].surface !== 'home' && !activeHome.current)
         )
           return;
         const now = Date.now();
-        write({
-          ...stateRef.current,
-          lastShown: now,
-          seen: { ...stateRef.current.seen, [id]: 'seen' },
-        });
+        write(
+          activeHome.current
+            ? { ...stateRef.current, homeRotation: { id, shownAt: now } }
+            : {
+                ...stateRef.current,
+                lastShown: now,
+                seen: { ...stateRef.current.seen, [id]: 'seen' },
+              },
+        );
         activeRef.current = id;
         activeSince.current = now;
         activePage.current = env.current.page;
@@ -187,6 +208,12 @@ export function TipsProvider({
     const tick = () => {
       const now = Date.now(),
         current = env.current;
+      const visitingHome = current.page === 'dashboard' && document.visibilityState !== 'hidden';
+      if (visitingHome && !onHome.current) {
+        homeEntry.current = true;
+        homeDismissed.current = false;
+      }
+      onHome.current = visitingHome;
       const available =
         !!account &&
         current.ready &&
@@ -203,7 +230,8 @@ export function TipsProvider({
         const id = activeRef.current;
         if (
           activePage.current !== current.page ||
-          (TIP_DEFINITIONS[id].surface === 'nudge' &&
+          (!activeHome.current &&
+            TIP_DEFINITIONS[id].surface === 'nudge' &&
             (now - activeSince.current >= 12000 ||
               (current.page === 'log' &&
                 !current.resting &&
@@ -221,8 +249,39 @@ export function TipsProvider({
           (current.page !== 'log' || current.resting || now - completedSetAt.current < 20000),
       );
       const candidate = [...candidates.current.entries()].find(
-        ([, { id, element }]) => canShowTip(stateRef.current, id, now) && visible(element),
+        ([, { id, element, homeTips }]) =>
+          (homeTips?.length
+            ? current.page === 'dashboard' && !homeDismissed.current
+            : canShowTip(stateRef.current, id, now)) && visible(element),
       );
+      if (candidate?.[1].homeTips?.length && current.page === 'dashboard') {
+        const pool = candidate[1].homeTips.filter(
+          (id) => !['learned', 'dismissed'].includes(stateRef.current.seen[id] ?? ''),
+        );
+        const previous = stateRef.current.homeRotation;
+        const advance =
+          homeEntry.current &&
+          (firstHomeVisit.current || !previous || now - previous.shownAt >= HOME_TIP_REVISIT_MS);
+        const id = rotatingHomeTip(pool, previous, advance);
+        if (!id) return;
+        const next = {
+          ...stateRef.current,
+          homeRotation: { id, shownAt: advance || !previous ? now : previous.shownAt },
+        };
+        stateRef.current = next;
+        setState(next);
+        saveTips(account!, next);
+        firstHomeVisit.current = false;
+        homeEntry.current = false;
+        activeHome.current = true;
+        setHomeCard(true);
+        setSlot(candidate[0]);
+        activeRef.current = id;
+        activePage.current = current.page;
+        activeSince.current = now;
+        setActive(id);
+        return;
+      }
       const id = nudge?.[0] ?? candidate?.[1].id;
       if (!id) return;
       // Read again before claiming: another tab may have spent today's shared allowance.
@@ -247,10 +306,19 @@ export function TipsProvider({
       setActive(id);
       pending.current.delete(id);
     };
+    const visibility = () => {
+      if (document.visibilityState === 'hidden') {
+        onHome.current = false;
+        quietSince.current = 0;
+        api.close();
+      }
+    };
     const timer = window.setInterval(tick, 500);
+    document.addEventListener('visibilitychange', visibility);
     window.addEventListener('storage', sync);
     return () => {
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('storage', sync);
     };
   }, [account, api]);
@@ -263,9 +331,11 @@ export function TipsProvider({
     return () => window.removeEventListener('keydown', escape);
   }, [active, api]);
   const nudge =
-    active && TIP_DEFINITIONS[active].surface === 'nudge' ? TIP_DEFINITIONS[active] : null;
+    active && !homeCard && TIP_DEFINITIONS[active].surface === 'nudge'
+      ? TIP_DEFINITIONS[active]
+      : null;
   return (
-    <TipsContext.Provider value={{ state, active, slot, environment, ...api }}>
+    <TipsContext.Provider value={{ state, active, slot, homeCard, environment, ...api }}>
       {children}
       {nudge &&
         createPortal(
@@ -306,14 +376,16 @@ export function TipsProvider({
 }
 
 export function TipSlot({
-  id,
+  id: requestedId,
   eligible,
   children,
-  nextId,
+  nextId: requestedNext,
+  homeTips,
 }: {
   id: TipId;
   eligible: boolean;
   nextId?: TipId;
+  homeTips?: TipId[];
   children?: ReactNode;
 }) {
   const tips = useTips();
@@ -325,11 +397,16 @@ export function TipSlot({
   const popover = useRef<HTMLElement>(null);
   const [position, setPosition] = useState({ left: 12, top: 0 });
   const swipeStart = useRef<number | null>(null);
-  const home = TIP_DEFINITIONS[id].surface === 'home';
+  const id = homeTips && tips.slot === key && tips.active ? tips.active : requestedId;
+  const nextId =
+    homeTips && homeTips.length > 1
+      ? homeTips[(homeTips.indexOf(id) + 1) % homeTips.length]
+      : requestedNext;
+  const home = !!homeTips || TIP_DEFINITIONS[id].surface === 'home';
   useEffect(() => {
     if (!eligible || !ref.current) return;
-    return register(key, { id, element: ref.current, until: Infinity });
-  }, [eligible, id, key, register]);
+    return register(key, { id: requestedId, element: ref.current, until: Infinity, homeTips });
+  }, [eligible, requestedId, key, register, homeTips]);
   const active = eligible && tips.active === id && tips.slot === key && tips.environment.ready;
   const tip = TIP_DEFINITIONS[id];
   useLayoutEffect(() => {

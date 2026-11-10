@@ -680,6 +680,7 @@ export function TodayScreen({
         workouts={workouts}
         createdAt={profile?.created_at}
         hasSplit={!!data?.recommendation?.split_name}
+        measurementCount={measurements.length}
       />
       {home.loadError && (
         <p className="inline-error" role="alert">
