@@ -178,9 +178,9 @@ button.relay-tip-dot {
   gap: 4px;
   margin-bottom: 10px;
   padding: 8px 6px 8px 10px;
-  border-color: var(--p-accent);
+  border-color: var(--p-line);
   border-radius: 10px;
-  background: transparent;
+  background: var(--p-surface);
 }
 .relay-tip-home.is-compact > svg {
   width: 15px;
