@@ -192,6 +192,28 @@ describe('machine history', () => {
     expect(weights('new-machine')).toEqual([100]);
     expect(weights(null)).toEqual([100]);
   });
+
+  it('uses only the assigned sets from a mixed session, including merged aliases', () => {
+    const mixed = {
+      ...history[1],
+      sets: [
+        { ...trackedSet('a', 0), weight_kg: 50, machine_photo_id: 'cybex' },
+        { ...trackedSet('b', 1), weight_kg: 90, machine_photo_id: 'hammer-old' },
+        { ...trackedSet('unknown', 2), weight_kg: 200, machine_photo_id: null },
+      ],
+    };
+    expect(machineSuggestionSource([mixed], 'hammer', aliases).map((s) => s.weight_kg)).toEqual([
+      90,
+    ]);
+    expect(historyOnMachine([mixed], 'cybex', aliases)[0].sets.map((s) => s.id)).toEqual(['a']);
+    expect(
+      historyOnMachine(
+        [{ ...mixed, machinePhotoIds: ['cybex'], sets: [mixed.sets[2]] }],
+        'cybex',
+        aliases,
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe('replacing suggested sets', () => {
@@ -206,6 +228,13 @@ describe('replacing suggested sets', () => {
     weight_kg: weight,
     reps: 6,
   }));
+
+  it('keeps a set explicitly assigned to a machine when another pin changes suggestions', () => {
+    const assigned = { ...draftSet('assigned', 75), machine_photo_id: 'hammer' };
+    expect(withSuggestedSets([assigned, draftSet('free', 80)], previous, 'strength')[0]).toEqual(
+      assigned,
+    );
+  });
 
   it('keeps logged and edited sets and swaps untouched suggestions row by row', () => {
     const sets = withSuggestedSets(

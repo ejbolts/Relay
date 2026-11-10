@@ -875,6 +875,9 @@ class WorkoutSet(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     movement_id: Mapped[str] = mapped_column(ForeignKey("workout_movements.id", ondelete="CASCADE"))
+    machine_photo_id: Mapped[str | None] = mapped_column(
+        ForeignKey("machine_photos.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     order_index: Mapped[int] = mapped_column(Integer)
     reps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)

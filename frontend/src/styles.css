@@ -29,6 +29,37 @@
   --overlay-header-content-offset: calc(var(--overlay-header-height) + 0.55rem);
 }
 
+.set-machine-assignment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 8px;
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+
+.set-machine-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+}
+
+.set-machine-select[data-unassigned='true'] {
+  border-color: var(--accent);
+}
+
+.history-set-machine {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -4304,6 +4335,17 @@ body:has(.popup-dialog[open]) {
   border-color: transparent;
   background: var(--accent);
   color: white;
+}
+
+.machine-assignment-dialog > p {
+  margin: 0;
+  padding: 1rem;
+  line-height: 1.5;
+}
+
+.machine-assignment-dialog > .popup-dialog-actions {
+  margin: 0;
+  padding: 1rem;
 }
 
 .workout-import-review {

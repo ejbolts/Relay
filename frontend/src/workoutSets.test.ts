@@ -315,6 +315,14 @@ describe('next set suggestion after logging a set', () => {
     expect(next.fromPrevious).toBe(true);
   });
 
+  it('keeps another machine’s suggested weight, and repeats sets on the same machine', () => {
+    const first = { ...logged, machine_photo_id: 'a' };
+    const other = { ...suggested, machine_photo_id: 'b' };
+    expect(suggestNextSetFromLoggedSet('strength', [first, other], 0)[1]).toBe(other);
+    const same = { ...suggested, machine_photo_id: 'a' };
+    expect(suggestNextSetFromLoggedSet('strength', [first, same], 0)[1].weight_kg).toBe(87.5);
+  });
+
   it('only changes the set immediately after the logged one', () => {
     const third = { ...suggested, reps: 8 };
     const sets = suggestNextSetFromLoggedSet('strength', [logged, suggested, third], 0);

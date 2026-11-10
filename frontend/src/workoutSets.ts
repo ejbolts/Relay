@@ -59,6 +59,7 @@ export function suggestNextSetFromLoggedSet<T extends WorkoutSetInput & { fromPr
     return sets;
   }
   if (!isWorkingKind(logged) || !isWorkingKind(next)) return sets;
+  if (next.machine_photo_id !== logged.machine_photo_id) return sets;
   if (next.weight_kg === logged.weight_kg && next.reps === logged.reps) return sets;
 
   return sets.map((item, index) =>

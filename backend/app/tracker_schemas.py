@@ -175,6 +175,7 @@ class MachinePhotoUsageRead(MachinePhotoRead):
 
 
 class WorkoutSetCreate(BaseModel):
+    machine_photo_id: str | None = Field(default=None, max_length=36)
     reps: int | None = Field(default=None, ge=0, le=10_000)
     weight_kg: float | None = Field(default=None, ge=0, le=10_000)
     rpe: float | None = Field(default=None, ge=1, le=10)
@@ -302,6 +303,7 @@ class TrainingWorkoutCreate(BaseModel):
 class WorkoutSetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    machine_photo_id: str | None = None
     id: str
     order_index: int
     reps: int | None

@@ -95,7 +95,17 @@ export function historyOnMachine(
 ): ExerciseHistoryEntry[] {
   if (!machineId) return history;
   const machine = aliases.get(machineId) ?? machineId;
-  return history.filter((entry) => entryMachineId(entry, aliases) === machine);
+  return history.flatMap((entry) => {
+    const fallback = entryMachineId(entry, aliases);
+    const sets = entry.sets.filter((item) => {
+      const id = item.machine_photo_id;
+      return (
+        (id ? (aliases.get(id) ?? id) : item.machine_photo_id === undefined ? fallback : null) ===
+        machine
+      );
+    });
+    return sets.length ? [{ ...entry, sets }] : [];
+  });
 }
 
 /**
@@ -126,7 +136,7 @@ export function withSuggestedSets(
   const sets: WorkoutDraftSet[] = [];
   for (let index = 0; index < length; index += 1) {
     const item = current[index];
-    if (item && (item.completed || !item.fromPrevious)) {
+    if (item && (item.completed || !item.fromPrevious || item.machine_photo_id)) {
       sets.push(item);
     } else if (previous[index]) {
       sets.push({

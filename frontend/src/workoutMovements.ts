@@ -1,6 +1,7 @@
 import type { Exercise, MachineSetting, WorkoutSetInput } from './types';
 import type { ExerciseMachineChoices } from './exerciseMachineChoices';
 import type { StoredDraftMovement } from './workoutDraft';
+import { hasUnassignedMachineSets } from './setMachines';
 
 export type WorkoutDraftSet = WorkoutSetInput & {
   key: string;
@@ -41,7 +42,10 @@ export function restoreWorkoutDraftMovements(
     machinePhotosInitialized: true,
     machineSettings: movement.machineSettings,
     supersetKey: movement.supersetKey,
-    isComplete: Boolean(movement.isComplete) && movement.sets.every((set) => set.completed),
+    isComplete:
+      Boolean(movement.isComplete) &&
+      movement.sets.every((set) => set.completed) &&
+      !hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
     ...(typeof movement.swappedFrom === 'string' && { swappedFrom: movement.swappedFrom }),
     sets: movement.sets,
   }));
@@ -60,6 +64,7 @@ export function replaceMovementExercise(
           machinePhotoIds: [],
           machinePhotosInitialized: false,
           machineSettings: undefined,
+          sets: movement.sets.map((set) => ({ ...set, machine_photo_id: null })),
           isComplete: false,
         }
       : movement,

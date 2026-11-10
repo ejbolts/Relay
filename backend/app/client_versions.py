@@ -38,7 +38,7 @@ MIN_WRITE_CLIENT_VERSION: str | None = None
 FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
     "workout": {},
     "movement": {},
-    "set": {},
+    "set": {"machine_photo_id": "1.3.0"},
     "body_weight_goal": {
         "maintenance_min_kg": "1.2.1",
         "maintenance_max_kg": "1.2.1",
@@ -140,7 +140,9 @@ def preserve_unknown_workout_fields(payload, workout, client: str | None):
     unknown = {level: fields_unknown_to(client, level) for level in ("workout", "movement", "set")}
     if not any(unknown.values()):
         return payload
-    data = preserve_fields(payload.model_dump(), workout, unknown["workout"])
+    # Defaults must stay omitted so downstream compatibility rules can distinguish
+    # an absent field from an explicit null, including on newly added sets.
+    data = preserve_fields(payload.model_dump(exclude_unset=True), workout, unknown["workout"])
     stored_movements = list(workout.movements)
     movements = []
     for index, movement in enumerate(data["movements"]):
@@ -156,6 +158,27 @@ def preserve_unknown_workout_fields(payload, workout, client: str | None):
             else item
             for position, item in enumerate(movement["sets"])
         ]
+        # Feature previews can run before the coordinator assigns their release
+        # version. An explicit machine field proves this client supports it;
+        # deployed older clients omit it and keep the stored assignment.
+        for position, item in enumerate(kept["sets"]):
+            if "machine_photo_id" in payload.movements[index].sets[position].model_fields_set:
+                item["machine_photo_id"] = movement["sets"][position]["machine_photo_id"]
+        # An older app cannot see per-set machines. Keep their pins too, so a
+        # full-replace edit cannot silently erase or invalidate the assignments.
+        if "machine_photo_id" in unknown["set"]:
+            kept["machine_photo_ids"] = list(
+                dict.fromkeys(
+                    [
+                        *kept.get("machine_photo_ids", []),
+                        *(
+                            item["machine_photo_id"]
+                            for item in kept["sets"]
+                            if item.get("machine_photo_id")
+                        ),
+                    ]
+                )
+            )
         movements.append(kept)
     data["movements"] = movements
     return TrainingWorkoutCreate.model_validate(data)

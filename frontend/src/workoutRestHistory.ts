@@ -9,7 +9,12 @@ export function previousSetRests(
   history: ExerciseHistoryEntry[],
 ) {
   const kind = setKindOf(sets[index]);
-  const ordinal = sets.slice(0, index).filter((set) => setKindOf(set) === kind).length;
+  const machine = sets[index].machine_photo_id;
+  const ordinal = sets
+    .slice(0, index)
+    .filter(
+      (set) => setKindOf(set) === kind && (!machine || set.machine_photo_id === machine),
+    ).length;
   return history.flatMap((entry) => {
     const previous = entry.sets.filter((set) => setKindOf(set) === kind)[ordinal];
     return previous
