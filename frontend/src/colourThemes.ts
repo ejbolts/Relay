@@ -10,9 +10,9 @@ export const COLOUR_THEMES = [
     id: 'blue',
     name: 'Blue',
     detail: 'Original',
-    accent: '#3987e5',
-    hover: '#4b94ea',
-    text: '#6da7ec',
+    accent: '#2c74d0',
+    hover: '#357bd6',
+    text: '#7fb4f1',
     lightText: '#1f62b4',
   },
   {
@@ -70,11 +70,13 @@ export function applyColourTheme(id: ColourThemeId) {
   root.style.setProperty('--p-accent', theme.accent);
   root.style.setProperty('--p-accent-hover', theme.hover);
   // Light mode needs a darker accent tint so accent-coloured text stays readable on white.
+  const light = root.dataset.colourMode === 'light';
+  root.style.setProperty('--p-accent-text', light ? theme.lightText : theme.text);
+  // Dark cards are lighter than before, so the soft tint needs a little more colour to stand out.
   root.style.setProperty(
-    '--p-accent-text',
-    root.dataset.colourMode === 'light' ? theme.lightText : theme.text,
+    '--p-accent-soft',
+    `color-mix(in srgb, ${theme.accent} ${light ? 15 : 20}%, transparent)`,
   );
-  root.style.setProperty('--p-accent-soft', `color-mix(in srgb, ${theme.accent} 15%, transparent)`);
 }
 
 export function saveColourTheme(id: ColourThemeId): boolean {
@@ -100,7 +102,7 @@ export function applyColourMode(id: ColourModeId) {
   root.dataset.colourMode = id;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', id === 'light' ? '#f3f5f7' : '#0b0d0f');
+    ?.setAttribute('content', id === 'light' ? '#f3f5f7' : '#060708');
   const theme = root.dataset.colourTheme;
   applyColourTheme(COLOUR_THEMES.find((entry) => entry.id === theme)?.id ?? 'blue');
 }

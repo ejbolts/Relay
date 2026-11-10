@@ -16,19 +16,22 @@
 }
 
 :root {
-  --p-page: #0b0d0f;
-  --p-surface: #15181b;
-  --p-surface-2: #1d2125;
-  --p-surface-3: #272c31;
-  --p-line: rgb(255 255 255 / 7%);
-  --p-line-strong: rgb(255 255 255 / 12%);
-  --p-ink: #f3f5f6;
-  --p-ink-2: #b4bcc2;
-  --p-muted: #828b92;
-  --p-accent: #3987e5;
-  --p-accent-hover: #4b94ea;
-  --p-accent-text: #6da7ec;
-  --p-accent-soft: rgb(57 135 229 / 15%);
+  /* Dark surfaces step up in lightness (page -> card -> tile -> raised) so layers read apart. */
+  --p-page: #060708;
+  --p-surface: #1b1f23;
+  --p-surface-2: #262c31;
+  --p-surface-3: #323940;
+  --p-surface-raised: #22272c;
+  --p-line: rgb(255 255 255 / 9%);
+  --p-line-strong: rgb(255 255 255 / 15%);
+  --p-card-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 6px 18px rgb(0 0 0 / 40%);
+  --p-ink: #f7f9fa;
+  --p-ink-2: #c6cdd2;
+  --p-muted: #9aa3aa;
+  --p-accent: #2c74d0;
+  --p-accent-hover: #357bd6;
+  --p-accent-text: #7fb4f1;
+  --p-accent-soft: rgb(44 116 208 / 20%);
   --accent: var(--p-accent);
   --accent-dark: var(--p-accent-hover);
   --green: var(--p-accent);
@@ -36,10 +39,10 @@
   --p-gold: #e9b44a;
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
-  --p-danger: #e66767;
-  --p-grid: #22272b;
-  --p-axis: #3a4046;
-  --p-deemph: #353b41;
+  --p-danger: #ee7070;
+  --p-grid: #2a3035;
+  --p-axis: #454c53;
+  --p-deemph: #3d444b;
   --p-radius: 20px;
   --p-tab-bar-height: calc(4.25rem + env(safe-area-inset-bottom));
   font-feature-settings: 'cv11', 'ss03';
@@ -268,6 +271,7 @@ body {
   border-radius: var(--p-radius);
   padding: 1rem;
   background: var(--p-surface);
+  box-shadow: var(--p-card-shadow);
   color: var(--p-ink);
   text-align: left;
 }
@@ -1300,7 +1304,7 @@ button.pulse-card:hover {
   border-top: 1px solid var(--p-line);
   padding: 0.4375rem max(0.5rem, env(safe-area-inset-right)) env(safe-area-inset-bottom)
     max(0.5rem, env(safe-area-inset-left));
-  background: rgb(11 13 15 / 86%);
+  background: rgb(16 18 21 / 90%);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
@@ -1437,12 +1441,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 /* ───────── Overlay header (live workout, settings, videos) ───────── */
 
 .overlay-screen-header::before {
-  background: linear-gradient(
-    180deg,
-    rgb(11 13 15 / 97%) 0%,
-    rgb(11 13 15 / 90%) 62%,
-    transparent 100%
-  );
+  background: linear-gradient(180deg, rgb(6 7 8 / 97%) 0%, rgb(6 7 8 / 90%) 62%, transparent 100%);
 }
 
 .overlay-header-back,
@@ -2905,7 +2904,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   height: 2.75rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 50%;
-  background: rgb(21 24 27 / 94%);
+  background: rgb(27 31 35 / 94%);
   box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
   color: var(--p-ink-2);
   opacity: 0;
@@ -3778,7 +3777,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   border: 1px solid var(--p-line);
   border-radius: 10px;
   padding: 0 0.625rem;
-  background: rgb(11 13 15 / 45%);
+  background: rgb(6 7 8 / 45%);
   color: var(--p-ink);
   font: inherit;
   font-size: 0.8125rem;
@@ -4433,9 +4432,33 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-ink);
 }
 
+/* Dark mode: dialogs sit one step above cards, and the tiles inside them step up too. */
+:root:not([data-colour-mode='light'])
+  :is(
+    .popup-dialog,
+    .notification-dialog,
+    .exercise-picker,
+    .pr-summary,
+    .calendar-create-dialog,
+    .calendar-day-detail,
+    .superset-picker,
+    .workout-close-dialog,
+    .set-entry-confirmation
+  ) {
+  --p-surface: var(--p-surface-raised);
+  --p-surface-2: #2d343a;
+  --p-surface-3: #394047;
+  --p-line: rgb(255 255 255 / 10%);
+  --p-line-strong: rgb(255 255 255 / 18%);
+}
+
 .popup-dialog > header,
 .notification-dialog > header {
   border-bottom: 1px solid var(--p-line);
+}
+
+.popup-dialog > header {
+  background: color-mix(in srgb, var(--p-surface) 97%, transparent);
 }
 
 .popup-dialog h2,

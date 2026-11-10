@@ -9,6 +9,8 @@
   --p-surface: #ffffff;
   --p-surface-2: #eef1f3;
   --p-surface-3: #e2e6ea;
+  --p-surface-raised: #ffffff;
+  --p-card-shadow: none;
   --p-line: rgb(16 24 32 / 9%);
   --p-line-strong: rgb(16 24 32 / 16%);
   --p-ink: #14181c;

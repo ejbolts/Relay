@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   applyColourMode,
   applyColourTheme,
+  COLOUR_THEMES,
   colourModePreference,
   colourThemePreference,
   saveColourMode,
@@ -31,7 +32,7 @@ it('uses Blue for invalid storage and keeps the theme usable when storage is una
   expect(saveColourTheme('plum')).toBe(false);
   expect(document.documentElement.dataset.colourTheme).toBe('plum');
   applyColourTheme('blue');
-  expect(document.documentElement.style.getPropertyValue('--p-accent')).toBe('#3987e5');
+  expect(document.documentElement.style.getPropertyValue('--p-accent')).toBe('#2c74d0');
 });
 it('defaults to dark mode and keeps the saved accent when switching to light', () => {
   expect(colourModePreference()).toBe('dark');
@@ -42,8 +43,26 @@ it('defaults to dark mode and keeps the saved accent when switching to light', (
   expect(document.documentElement.dataset.colourTheme).toBe('emerald');
   expect(document.documentElement.style.getPropertyValue('--p-accent')).toBe('#237844');
   expect(document.documentElement.style.getPropertyValue('--p-accent-text')).toBe('#1b6638');
+  expect(document.documentElement.style.getPropertyValue('--p-accent-soft')).toBe(
+    'color-mix(in srgb, #237844 15%, transparent)',
+  );
   applyColourMode('dark');
   expect(document.documentElement.style.getPropertyValue('--p-accent-text')).toBe('#78d49c');
+  expect(document.documentElement.style.getPropertyValue('--p-accent-soft')).toBe(
+    'color-mix(in srgb, #237844 20%, transparent)',
+  );
+});
+it('keeps white text on every accent button at WCAG AA contrast', () => {
+  const luminance = (hex: string) => {
+    const channels = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const [r, g, b] = channels.map((c) =>
+      c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+    );
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  for (const theme of COLOUR_THEMES) {
+    expect(1.05 / (luminance(theme.accent) + 0.05)).toBeGreaterThanOrEqual(4.5);
+  }
 });
 it('ignores invalid modes and applies light mode when storage is unavailable', () => {
   localStorage.setItem('gym-logger-colour-mode', 'sepia');
