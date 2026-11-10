@@ -72,6 +72,31 @@ describe('empty workout expiration', () => {
     expect(isExpiredEmptyWorkoutDraft(empty, draft.startedAt + 72 * 60 * 60 * 1000)).toBe(true);
   });
 
+  it('expires exercises that only hold untouched suggestions or blank sets', () => {
+    const suggestion = { ...draft.movements[0].sets[0], completed: false, fromPrevious: true };
+    const blank = { ...suggestion, reps: null, weight_kg: null, fromPrevious: false };
+    const planned = {
+      ...empty,
+      movements: [{ ...draft.movements[0], notes: ' ', sets: [suggestion, blank] }],
+    };
+    expect(isExpiredEmptyWorkoutDraft(planned, finishAt - 1)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(planned, finishAt)).toBe(true);
+    for (const logged of [
+      { ...suggestion, completed: true },
+      { ...suggestion, fromPrevious: false },
+      { ...blank, duration_seconds: 600 },
+    ]) {
+      const movements = [{ ...planned.movements[0], sets: [suggestion, logged] }];
+      expect(isExpiredEmptyWorkoutDraft({ ...planned, movements }, finishAt)).toBe(false);
+    }
+    const noted = [{ ...planned.movements[0], notes: 'Seat at 4' }];
+    expect(isExpiredEmptyWorkoutDraft({ ...planned, movements: noted }, finishAt)).toBe(false);
+    const setNoted = [
+      { ...planned.movements[0], sets: [{ ...suggestion, notes: 'Try pause reps' }] },
+    ];
+    expect(isExpiredEmptyWorkoutDraft({ ...planned, movements: setNoted }, finishAt)).toBe(false);
+  });
+
   it('respects an extended activity deadline', () => {
     const extended = { ...empty, inactiveFinishAt: finishAt + 10 * 60 * 1000 };
     expect(isExpiredEmptyWorkoutDraft(extended, finishAt)).toBe(false);

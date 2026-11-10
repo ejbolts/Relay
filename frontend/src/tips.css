@@ -1,0 +1,208 @@
+﻿.relay-tip-home-slot {
+  display: block;
+  min-height: 1px;
+  width: 100%;
+}
+.relay-tip-home {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 16px;
+  background: var(--p-surface);
+  color: var(--p-ink);
+}
+.relay-tip-home > svg,
+.relay-tip-nudge > svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: var(--p-accent-text);
+}
+.relay-tip-home > div,
+.relay-tip-nudge > div {
+  min-width: 0;
+  flex: 1;
+}
+.relay-tip-home strong,
+.relay-tip-nudge strong,
+.relay-tip-popover strong {
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.relay-tip-home p,
+.relay-tip-nudge p,
+.relay-tip-popover p {
+  margin: 4px 0 0;
+  color: var(--p-ink-2);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+button.relay-tip-close {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--p-muted);
+  border-radius: 8px;
+}
+.relay-tip-close svg {
+  width: 16px;
+  height: 16px;
+}
+button.relay-tip-link {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 0.78rem;
+}
+.relay-tip-link svg {
+  width: 13px;
+  height: 13px;
+}
+.relay-tip-anchor {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+}
+.relay-tip-anchor:has(.machine-photo-picker) {
+  display: flex;
+  width: 100%;
+}
+.relay-tip-anchor > .machine-photo-picker {
+  flex: 1;
+  min-width: 0;
+}
+button.relay-tip-dot {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  z-index: 2;
+}
+.relay-tip-dot span {
+  width: 7px;
+  height: 7px;
+  background: var(--p-accent-text);
+  border: 2px solid var(--p-surface);
+  box-sizing: content-box;
+  border-radius: 50%;
+}
+.relay-tip-popover {
+  position: fixed;
+  width: min(260px, calc(100vw - 24px));
+  padding: 14px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px #0003;
+  z-index: 20;
+}
+.relay-tip-nudge {
+  position: fixed;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(390px, calc(100vw - 32px));
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  box-shadow: 0 8px 28px #0004;
+  z-index: 130;
+}
+.relay-tip-library article {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--p-line);
+}
+.relay-tip-library h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+.relay-tip-library h3 svg {
+  width: 16px;
+  height: 16px;
+  color: var(--p-accent-text);
+}
+.relay-tip-library p {
+  margin: 6px 0 0;
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.relay-tip-anchor button:focus-visible,
+.relay-tip-close:focus-visible,
+.relay-tip-link:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+
+.relay-tip-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.relay-tip-home {
+  touch-action: pan-y;
+}
+
+/* Home keeps one short instruction and its controls in a single quiet row. */
+.relay-tip-home.is-compact {
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 8px 6px 8px 10px;
+  border-color: var(--p-line);
+  border-radius: 10px;
+  background: var(--p-surface);
+}
+.relay-tip-home.is-compact > svg {
+  width: 15px;
+  height: 15px;
+  flex-basis: 15px;
+  margin-right: 4px;
+  color: var(--p-accent);
+}
+button.relay-tip-summary {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--p-ink-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+}
+.relay-tip-summary:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}

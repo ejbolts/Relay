@@ -11,6 +11,7 @@ import { queueAppGuide } from './appGuideState';
 import { pendingFriendInvite } from './friendInvite';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
+import { requestPhonePushPermissionFromTap } from './push';
 import { SampleProfileDialog } from './SampleProfileDialog';
 import type { AuthConfig, User } from './types';
 
@@ -209,6 +210,8 @@ export function AuthScreen({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
+    // Phone alerts start on for each account; this tap is the only chance to ask permission.
+    requestPhonePushPermissionFromTap();
     setSubmitting(true);
     setError(null);
     setNotice(null);

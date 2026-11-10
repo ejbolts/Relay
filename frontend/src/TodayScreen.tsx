@@ -1,3 +1,4 @@
+import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -675,6 +676,12 @@ export function TodayScreen({
         }
       />
 
+      <HomeTips
+        workouts={workouts}
+        createdAt={profile?.created_at}
+        hasSplit={!!data?.recommendation?.split_name}
+        measurementCount={measurements.length}
+      />
       {home.loadError && (
         <p className="inline-error" role="alert">
           Could not load your saved layout.{' '}

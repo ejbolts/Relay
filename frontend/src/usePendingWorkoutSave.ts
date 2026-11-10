@@ -180,6 +180,23 @@ export function usePendingWorkoutSave(
     return restored;
   }
 
+  /** Drops a finished workout that has not synced, such as one saved by mistake. */
+  function discard() {
+    const stored = readActiveWorkoutDraft()?.pendingSave;
+    if (
+      !pending ||
+      saving ||
+      stored?.userId !== userId ||
+      JSON.stringify(stored) !== JSON.stringify(pending)
+    )
+      return false;
+    clearActiveWorkoutDraft();
+    setPending(null);
+    setError(null);
+    setNeedsReview(false);
+    return true;
+  }
+
   return {
     pending,
     saving,
@@ -187,6 +204,7 @@ export function usePendingWorkoutSave(
     needsReview,
     queue,
     review,
+    discard,
     retry: () => setAttempt((value) => value + 1),
   };
 }

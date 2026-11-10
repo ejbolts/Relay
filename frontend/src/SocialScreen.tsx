@@ -1,3 +1,4 @@
+import { TipSlot } from './Tips';
 import { useState } from 'react';
 import { CachedTabPanel } from './CachedTabPanel';
 import { AccountHeaderActions } from './AccountHeaderActions';
@@ -83,6 +84,10 @@ export function SocialScreen({
           )}
         </button>
       </div>
+      <TipSlot
+        id="friends"
+        eligible={active && state === 'ready' && connections?.friends.length === 0}
+      />
       <CachedTabPanel active={section === 'friends'}>
         <FriendsList
           connections={connections}

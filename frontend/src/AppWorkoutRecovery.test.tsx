@@ -297,6 +297,23 @@ function expectPreserved(draft: ActiveWorkoutDraft) {
   });
 }
 
+function pendingButton(label: string) {
+  return [...container.querySelectorAll<HTMLButtonElement>('.pending-workout-actions button')].find(
+    (button) => button.textContent === label,
+  )!;
+}
+
+function inactivePrompt() {
+  return document.querySelector<HTMLDialogElement>('.inactive-workout-dialog');
+}
+
+async function chooseInactive(label: string) {
+  const button = [...inactivePrompt()!.querySelectorAll('button')].find(
+    (item) => item.textContent === label,
+  )!;
+  await act(async () => button.click());
+}
+
 async function confirmFinish() {
   const finish = [...container.querySelectorAll('button')].find(
     (button) => button.textContent === 'Finish workout',
@@ -1654,11 +1671,57 @@ describe('finishing workouts in the background', () => {
     expectPreserved(draft);
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise(() => {}));
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('.pending-workout-actions button')!.click(),
-    );
+    await act(async () => pendingButton('Retry sync').click());
     expect(api.createWorkout).toHaveBeenCalledTimes(2);
     expect(window.location.hash).toBe('#dashboard');
+  });
+
+  it('discards a finished workout that has not synced, after confirming', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(new Error('Server unavailable.'));
+    await mount();
+    await confirmFinish();
+    expect(container.textContent).toContain('Saved on this device. Waiting to sync.');
+    await act(async () => pendingButton('Discard').click());
+    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
+      'This workout has not synced and will be lost.',
+    );
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
+    await act(async () => pendingButton('Cancel').click());
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
+    await act(async () => pendingButton('Discard').click());
+    await act(async () => pendingButton('Discard workout').click());
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(document.body.textContent).toContain('Workout discarded.');
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    // Nothing is left to replay when the connection returns.
+    await act(async () => window.dispatchEvent(new Event('online')));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+  });
+
+  it('cannot discard a finished workout while its save is in flight', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    await confirmFinish();
+    expect(pendingButton('Discard').disabled).toBe(true);
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
+  });
+
+  it('files a workout started as Cardio by its exercises when it has no cardio', async () => {
+    writeActiveWorkoutDraft(
+      storedDraft({ name: '', category: 'cardio', workoutTypeExplicit: true }),
+    );
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    expect(container.querySelector('.logger-screen')?.textContent).toContain('Upper body workout');
+    await confirmFinish();
+    expect(vi.mocked(api.createWorkout).mock.calls[0][0]).toMatchObject({
+      category: 'upper',
+      name: 'Upper body workout',
+    });
   });
 
   it('keeps later navigation after a failed new-workout save and preserves recovery', async () => {
@@ -2271,7 +2334,7 @@ describe('cardio set editing defaults', () => {
     },
   );
 
-  it('includes entered cardio promoted to completed by an automatic save', async () => {
+  it('includes entered cardio promoted to completed when an inactive workout is saved', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const draft = cardioDraft({
       startedAt: Date.now() - 181 * 60_000,
@@ -2283,6 +2346,8 @@ describe('cardio set editing defaults', () => {
     vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
     await mount();
     await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await chooseInactive('Save workout');
     expect(vi.mocked(api.createWorkout).mock.lastCall![0]).toMatchObject({ duration_minutes: 240 });
   });
 
@@ -2640,13 +2705,114 @@ describe('inactive workout suggestions', () => {
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
+  it('asks before saving a workout found past its time limit, on any screen', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#dashboard');
+    expect(inactivePrompt()?.textContent).toContain('Unfinished workout');
+    expect(inactivePrompt()?.textContent).toContain('Recovery workout');
+    expect(inactivePrompt()?.textContent).toContain('1 set logged');
+    expectPreserved(draft);
+  });
+
+  it('resumes an inactive workout without saving it or asking again', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await chooseInactive('Resume');
+    expect(inactivePrompt()).toBeNull();
+    expect(window.location.hash).toBe('#log');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expectPreserved(draft);
+    expect(readActiveWorkoutDraft()!.inactiveFinishAt).toBeGreaterThan(Date.now());
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(inactivePrompt()).toBeNull();
+    // The extended deadline is stored, so reopening the app does not ask again either.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(inactivePrompt()).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('keeps an inactive workout running when the prompt is closed', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () =>
+      inactivePrompt()!.querySelector<HTMLButtonElement>('.popup-dialog-close')!.click(),
+    );
+    expect(inactivePrompt()).toBeNull();
+    expect(window.location.hash).toBe('#dashboard');
+    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expectPreserved(draft);
+  });
+
+  it('discards an inactive workout only after confirming', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await chooseInactive('Discard');
+    expect(inactivePrompt()).toBeNull();
+    const keep = [...document.querySelectorAll<HTMLButtonElement>('.workout-close-actions button')];
+    await act(async () => keep.find((button) => button.textContent === 'Keep workout')!.click());
+    expectPreserved(draft);
+    expect(inactivePrompt()).not.toBeNull();
+    await chooseInactive('Discard');
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('.discard-workout-button')!.click(),
+    );
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(inactivePrompt()).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('discards untouched suggestions past the time limit instead of asking or saving', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(false);
+    draft.notes = '';
+    draft.movements[0].notes = '';
+    draft.movements[0].sets.forEach((set) => (set.notes = null));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(inactivePrompt()).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('continues an overdue workout with nothing logged when it is used again', async () => {
+    const draft = expiredSuggestions(false);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('pointerdown')));
+    expect(inactivePrompt()).toBeNull();
+    expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+    expect(readActiveWorkoutDraft()!.inactiveFinishAt).toBeGreaterThan(Date.now());
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
   it('saves exactly one completed set alongside untouched suggestions at timeout', async () => {
     const draft = expiredSuggestions(true);
     writeActiveWorkoutDraft(draft);
-    // Keep the response pending so the assertion observes the actual autosave payload.
+    // Keep the response pending so the assertion observes the actual save payload.
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     await mount();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await chooseInactive('Save workout');
+    expect(inactivePrompt()).toBeNull();
     expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain('auto-saved');
     expect(window.location.hash).toBe('#dashboard');
     // An update cannot reload while the server save is still awaiting its response.
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
@@ -2676,6 +2842,7 @@ describe('inactive workout suggestions', () => {
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     vi.spyOn(Date, 'now').mockReturnValue(draft.inactiveFinishAt! + 1000);
     await act(async () => window.dispatchEvent(new Event('focus')));
+    await chooseInactive('Save workout');
     const payload = vi.mocked(api.createWorkout).mock.calls[0][0] as WorkoutInput;
     expect(payload.movements[0].sets.map((set) => set.completed)).toEqual([true, false]);
   });
@@ -2741,6 +2908,9 @@ describe('inactive workout suggestions', () => {
     expect(resumed.movements[0].sets.map((set) => set.fromPrevious)).toEqual([false, true, true]);
     vi.spyOn(Date, 'now').mockReturnValue(resumed.inactiveFinishAt! + 1000);
     await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(api.updateWorkout).not.toHaveBeenCalled();
+    expect(inactivePrompt()?.textContent).toContain('Discard session');
+    await chooseInactive('Save workout');
     expect(api.updateWorkout).toHaveBeenCalledOnce();
     expect(window.location.hash).toBe('#dashboard');
     expect(api.createWorkout).not.toHaveBeenCalled();
