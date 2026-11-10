@@ -1,3 +1,4 @@
+import { useTips } from './Tips';
 import { useEffect, useRef } from 'react';
 import {
   completesEdgeSwipe,
@@ -24,6 +25,7 @@ function gestureBlocked(): boolean {
  * mouse and pen input use pointer events.
  */
 export function EdgeSwipeBack({ onBack, enabled }: { onBack: () => void; enabled: boolean }) {
+  const { learn } = useTips();
   const onBackRef = useRef(onBack);
 
   useEffect(() => {
@@ -84,7 +86,10 @@ export function EdgeSwipeBack({ onBack, enabled }: { onBack: () => void; enabled
     const finish = (x: number, y: number) => {
       const completed = horizontal && completesEdgeSwipe(x - startX, y - startY);
       reset();
-      if (completed) onBackRef.current();
+      if (completed) {
+        learn('back');
+        onBackRef.current();
+      }
     };
 
     const trackedTouch = (list: TouchList) => {
@@ -159,7 +164,7 @@ export function EdgeSwipeBack({ onBack, enabled }: { onBack: () => void; enabled
       window.removeEventListener('pointerup', onPointerUp, capture);
       window.removeEventListener('pointercancel', onPointerCancel, capture);
     };
-  }, [enabled]);
+  }, [enabled, learn]);
 
   return (
     <div className="edge-swipe-indicator" aria-hidden="true">
