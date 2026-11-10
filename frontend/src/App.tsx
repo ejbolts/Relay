@@ -3323,7 +3323,7 @@ function WorkoutLogger({
       recentRemoval.current?.kind === 'exercise' &&
       Date.now() - recentRemoval.current.at < 120000 &&
       selected.length &&
-      historicalWorkouts.length >= 5
+      historicalWorkouts.filter((workout) => !workout.is_sample).length >= 5
     )
       tips.event('replace-exercise', 'swap');
     recentRemoval.current = null;
@@ -4261,8 +4261,10 @@ function WorkoutLogger({
               onSwitch={() => setSwapSheetMovementKey(movement.key)}
               machineTipEligible={
                 /machine|cable/i.test(movement.exercise.equipment ?? '') &&
-                historicalWorkouts.filter((workout) =>
-                  workout.movements.some((item) => item.exercise.id === movement.exercise.id),
+                historicalWorkouts.filter(
+                  (workout) =>
+                    !workout.is_sample &&
+                    workout.movements.some((item) => item.exercise.id === movement.exercise.id),
                 ).length >= 3 &&
                 !historicalWorkouts.some((workout) =>
                   workout.movements.some(
