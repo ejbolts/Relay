@@ -10622,6 +10622,33 @@ body.chart-fullscreen-open {
   border-radius: 10px;
   color: var(--ink);
   background: var(--card);
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.pending-workout-buttons,
+.pending-workout-buttons .inline-confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pending-workout-buttons {
+  margin-left: auto;
+}
+
+.pending-workout-buttons .inline-confirmation-message {
+  flex-basis: 100%;
+  color: var(--muted-ink);
+  font-size: inherit;
+  text-align: right;
+}
+
+.pending-workout-buttons .inline-confirmation-message + button {
+  border-color: var(--p-danger);
+  color: var(--p-danger);
 }
 
 .background-activity-bar {

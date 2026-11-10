@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from .cardio_zones import CardioGoalWeek, CardioPreferences
 from .machine_settings import MachineSetting, NumericMachineSetting
@@ -824,10 +832,19 @@ class TrainingPreferencesUpdate(BaseModel):
     week_start: Literal["monday", "sunday", "saturday"]
     zone2_goal_minutes: int = Field(ge=1, le=10_080)
     weekly_muscle_set_goal: int | None = Field(default=None, ge=1, le=1000)
+    # Omission preserves overrides when an older app saves its preferences; {} clears them.
+    weekly_muscle_set_goals: (
+        dict[
+            Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)],
+            Annotated[int, Field(ge=1, le=1000)],
+        ]
+        | None
+    ) = Field(default=None, max_length=200)
 
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):
     weekly_muscle_set_goal: int = 10
+    weekly_muscle_set_goals: dict[str, int] = Field(default_factory=dict)
 
 
 class WorkoutTypeColors(BaseModel):

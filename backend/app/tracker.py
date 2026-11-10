@@ -1414,11 +1414,26 @@ def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
             muscle_set_goal = 10
     except ValueError:
         muscle_set_goal = 10
+    try:
+        muscle_set_goals = (
+            TrainingPreferencesUpdate(
+                preferred_weight_unit=unit,
+                week_start=week_start_value,
+                zone2_goal_minutes=zone2_goal,
+                weekly_muscle_set_goals=json.loads(
+                    get_setting(db, user_id, "weekly_muscle_set_goals", "{}")
+                ),
+            ).weekly_muscle_set_goals
+            or {}
+        )
+    except (ValueError, TypeError):
+        muscle_set_goals = {}
     return TrainingPreferencesRead(
         preferred_weight_unit=unit,
         week_start=week_start_value,
         zone2_goal_minutes=zone2_goal,
         weekly_muscle_set_goal=muscle_set_goal,
+        weekly_muscle_set_goals=muscle_set_goals,
     )
 
 
@@ -1611,6 +1626,10 @@ def update_training_preferences(
     set_setting(db, user.id, "zone2_goal_minutes", str(payload.zone2_goal_minutes))
     if payload.weekly_muscle_set_goal is not None:
         set_setting(db, user.id, "weekly_muscle_set_goal", str(payload.weekly_muscle_set_goal))
+    if payload.weekly_muscle_set_goals is not None:
+        set_setting(
+            db, user.id, "weekly_muscle_set_goals", json.dumps(payload.weekly_muscle_set_goals)
+        )
     db.flush()
     rebuild_personal_records(db, user.id)
     db.commit()

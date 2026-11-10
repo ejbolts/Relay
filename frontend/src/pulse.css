@@ -4718,6 +4718,29 @@ small.custom-exercise-label,
   padding-top: 0.875rem;
 }
 
+.inactive-workout-dialog > p {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 1rem 1rem 0;
+  line-height: 1.5;
+}
+
+.inactive-workout-dialog > p > span {
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+
+.inactive-workout-actions {
+  margin-top: 1rem;
+  padding: 0.875rem 1rem 1rem;
+}
+
+.inactive-workout-actions button.inactive-workout-discard {
+  margin-right: auto;
+  color: var(--p-danger);
+}
+
 .exercise-picker .exercise-picker-actions:not(.single-action) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

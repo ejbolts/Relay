@@ -1,0 +1,54 @@
+.muscle-goal-editor {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+.muscle-goal-editor summary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  align-content: center;
+  font-weight: 700;
+}
+.muscle-goal-editor summary span {
+  margin-left: 0.5rem;
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.muscle-goal-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  column-gap: 1.5rem;
+}
+.muscle-goal-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.muscle-goal-row label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+.muscle-goal-row input {
+  width: 5rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: var(--p-surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+}
+.muscle-goal-row button {
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+}

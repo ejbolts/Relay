@@ -25,6 +25,28 @@ const week = (muscle_groups: Array<[string, number]>, week_start = '2026-11-02')
 });
 
 describe('weeklyReview', () => {
+  it('counts muscles against their individual goals in both compared weeks', () => {
+    const review = weeklyReview({
+      ...base,
+      muscleGoals: { Chest: 18, Quads: 6 },
+      muscleWeeks: [
+        week([
+          ['Chest', 12],
+          ['Quads', 6],
+          ['Calves', 10],
+        ]),
+        week(
+          [
+            ['Chest', 18],
+            ['Quads', 5],
+            ['Calves', 8],
+          ],
+          '2026-10-26',
+        ),
+      ],
+    });
+    expect(review.muscles).toMatchObject({ atGoal: 2, previousAtGoal: 1 });
+  });
   it('totals performed sets for the week against the week before', () => {
     const review = weeklyReview({
       ...base,

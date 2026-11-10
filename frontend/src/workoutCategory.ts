@@ -12,12 +12,24 @@ function strengthWorkoutName(name: string): string {
   return (names.every((part) => part === names[0]) ? names[0] : undecorated) + suffix;
 }
 
+function isCardioExercise(exercise: CategorizedExercise): boolean {
+  return exercise.kind ? exercise.kind === 'cardio' : exercise.category === 'cardio';
+}
+
+/** A chosen Cardio type only describes a workout that contains cardio. */
+export function isCardioTypeWithoutCardio(
+  category: WorkoutCategory,
+  exercises: CategorizedExercise[],
+): boolean {
+  return category === 'cardio' && exercises.length > 0 && !exercises.some(isCardioExercise);
+}
+
 /** Keep each contiguous cardio/strength segment in the exercise order. */
 export function mixedWorkoutName(name: string, exercises: CategorizedExercise[]): string {
   if (!exercises.length) return name;
   const segments: boolean[] = [];
   for (const exercise of exercises) {
-    const cardio = exercise.kind ? exercise.kind === 'cardio' : exercise.category === 'cardio';
+    const cardio = isCardioExercise(exercise);
     if (segments.at(-1) !== cardio) segments.push(cardio);
   }
   if (!segments.includes(true) || !segments.includes(false)) return strengthWorkoutName(name);

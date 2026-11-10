@@ -113,6 +113,20 @@ const workouts = [
   workout('w1', '2026-09-26', 'pull', [{ exercise: deadlift, sets: [trackedSet(155, 5)] }]),
 ];
 
+it('does not template a Cardio session from a strength workout filed as Cardio', () => {
+  const run = exercise('run', 'Treadmill Run', 'cardio');
+  const cardio = workout('cardio', '2026-10-01', 'cardio', [
+    { exercise: run, sets: [trackedSet(0, 0)] },
+  ]);
+  const mislabelled = workout('legs', '2026-10-03', 'cardio', [
+    { exercise: squat, sets: [trackedSet(125, 7)] },
+  ]);
+  expect(sessionTemplateFor([mislabelled, cardio], 'cardio', '2026-10-04')?.sourceWorkout.id).toBe(
+    'cardio',
+  );
+  expect(sessionTemplateFor([mislabelled], 'cardio', '2026-10-04')).toBeNull();
+});
+
 it('keeps custom-type templates separate from other custom and built-in Other sessions', () => {
   const a = {
     ...workout('a', '2026-10-01', 'other', [{ exercise: row, sets: [trackedSet(40, 8)] }]),

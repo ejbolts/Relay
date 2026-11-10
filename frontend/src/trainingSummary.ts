@@ -308,7 +308,11 @@ export function sessionTemplateFor(
         workout.category === category &&
         (workout.workout_type_id ?? null) === workoutTypeId &&
         workout.workout_date <= today &&
-        workout.movements.length > 0,
+        workout.movements.length > 0 &&
+        // A strength session filed as Cardio is not a cardio session to repeat.
+        (category !== 'cardio' ||
+          workoutTypeId !== null ||
+          workout.movements.some((movement) => movement.exercise.kind === 'cardio')),
     )
     .sort(
       (left, right) =>

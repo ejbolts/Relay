@@ -205,7 +205,9 @@ export function TodayScreen({
   today = localDate(),
 }: TodayScreenProps) {
   const weightUnit = useWeightUnit();
-  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
@@ -504,6 +506,7 @@ export function TodayScreen({
         measurements={measurements}
         muscleWeeks={reviewMuscleWeeks}
         muscleGoal={muscleSetGoal}
+        muscleGoals={muscleGoals}
         cardioWeeks={data.cardio_weeks ?? NO_CARDIO_WEEKS}
         weightUnit={weightUnit}
         today={today}
@@ -523,6 +526,7 @@ export function TodayScreen({
         weeklySets={muscleSets?.weeklySets ?? data?.weekly_sets}
         history={muscleSets?.history ?? data?.weekly_sets_history}
         goal={muscleSetGoal}
+        goals={muscleGoals}
         onOpenWorkout={onOpenWorkout}
       />
     ),

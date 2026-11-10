@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import type { WeeklySetGain } from './weeklySetsUpdate';
@@ -29,11 +30,13 @@ export type WeeklySetsShelfPlacement = 'pill' | 'notch' | 'alone';
 export function WeeklySetsShelf({
   update,
   goal,
+  goals,
   placement,
   onDismiss,
 }: {
   update: WeeklySetsUpdate;
   goal: number;
+  goals?: MuscleSetGoals;
   placement: WeeklySetsShelfPlacement;
   onDismiss: () => void;
 }) {
@@ -63,7 +66,7 @@ export function WeeklySetsShelf({
   const summary = update.gains
     .map(
       (item) =>
-        `${item.muscle} ${credits(item.after)} of ${credits(goal)} weekly sets, up ${credits(item.gain)}`,
+        `${item.muscle} ${credits(item.after)} of ${credits(muscleSetGoal(item.muscle, goal, goals))} weekly sets, up ${credits(item.gain)}`,
     )
     .join('. ');
 
@@ -85,7 +88,7 @@ export function WeeklySetsShelf({
             <WeeklySetsCell
               key={item.muscle}
               item={item}
-              goal={goal}
+              goal={muscleSetGoal(item.muscle, goal, goals)}
               index={index}
               updateId={update.id}
             />

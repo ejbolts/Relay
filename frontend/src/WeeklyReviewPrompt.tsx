@@ -42,7 +42,9 @@ export function WeeklyReviewPrompt({
   onOpenBody: () => void;
 }) {
   const weightUnit = useWeightUnit();
-  const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const dashboardWeekStart = dashboard?.weekly_sets?.week_start ?? null;
   const weekStartDay = weekStartDayFrom(dashboardWeekStart);
   const currentStart = weekStartFor(today, weekStartDay);
@@ -60,6 +62,7 @@ export function WeeklyReviewPrompt({
             measurements,
             muscleWeeks,
             muscleGoal,
+            muscleGoals,
             cardioWeeks: dashboard.cardio_weeks ?? NO_CARDIO_WEEKS,
             today,
             weekStartDay,
@@ -74,6 +77,7 @@ export function WeeklyReviewPrompt({
       measurements,
       muscleWeeks,
       muscleGoal,
+      muscleGoals,
       today,
       weekStartDay,
     ],

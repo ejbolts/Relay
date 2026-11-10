@@ -32,6 +32,36 @@ afterEach(async () => {
 const shelf = () => host.querySelector<HTMLButtonElement>('.weekly-sets-shelf');
 
 describe('weekly sets shelf', () => {
+  it('uses independent targets for partial credits, completed goals and default muscles', async () => {
+    await act(async () =>
+      root.render(
+        <WeeklySetsShelf
+          update={update}
+          goal={10}
+          goals={{ Glutes: 20, Hamstrings: 6 }}
+          placement="pill"
+          onDismiss={vi.fn()}
+        />,
+      ),
+    );
+    const cells = [...host.querySelectorAll('.weekly-shelf-cell')];
+    expect(cells.map((cell) => cell.querySelector('small')?.textContent)).toEqual([
+      '/10',
+      '/20',
+      '/6',
+    ]);
+    expect(cells.map((cell) => cell.classList.contains('is-met'))).toEqual([false, false, true]);
+    expect(cells[1].querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe(
+      '47.5%',
+    );
+    expect(cells[1].querySelector<HTMLElement>('.weekly-shelf-bar-gain')?.style.width).toBe('2.5%');
+    expect(cells[2].querySelector<HTMLElement>('.weekly-shelf-bar-before')?.style.width).toBe(
+      '100%',
+    );
+    expect(host.querySelector('[role="status"]')?.textContent).toContain(
+      'Glutes 10 of 20 weekly sets',
+    );
+  });
   it('shows each muscle total, its gain and the goal tick, marking a newly met goal', async () => {
     await act(async () =>
       root.render(
