@@ -884,10 +884,23 @@ export function DashboardQuickBodyweight({
         <section className="quick-check-in-row" aria-label="Body weight check-in">
           <header className="quick-check-in-heading">
             {mode === 'combined' && <h3>Body weight</h3>}
-            <span className={todayBodyweight === null ? '' : 'logged'} role="status">
-              {todayBodyweight === null
-                ? 'Not logged today'
-                : `Saved today · ${weightFromKg(todayBodyweight, weightUnit).toFixed(1)} ${weightUnit}`}
+            <span
+              className="quick-check-in-status"
+              role="status"
+              aria-label={
+                todayBodyweight === null
+                  ? undefined
+                  : `Saved today: ${weightFromKg(todayBodyweight, weightUnit).toFixed(1)} ${weightUnit}`
+              }
+            >
+              {todayBodyweight === null ? (
+                'Not logged today'
+              ) : (
+                <>
+                  <Icon name="check" />
+                  <span>{`${weightFromKg(todayBodyweight, weightUnit).toFixed(1)} ${weightUnit}`}</span>
+                </>
+              )}
             </span>
           </header>
           <form
@@ -943,10 +956,21 @@ export function DashboardQuickBodyweight({
         <section className="quick-check-in-row body-fat-check-in" aria-label="Body fat check-in">
           <header className="quick-check-in-heading">
             {mode === 'combined' && <h3>Body fat</h3>}
-            <span className={todayBodyFat === null ? '' : 'logged'} role="status">
-              {todayBodyFat === null
-                ? 'Not logged today'
-                : `Saved today · ${todayBodyFat.toFixed(1)}%`}
+            <span
+              className="quick-check-in-status"
+              role="status"
+              aria-label={
+                todayBodyFat === null ? undefined : `Saved today: ${todayBodyFat.toFixed(1)}%`
+              }
+            >
+              {todayBodyFat === null ? (
+                'Not logged today'
+              ) : (
+                <>
+                  <Icon name="check" />
+                  <span>{`${todayBodyFat.toFixed(1)}%`}</span>
+                </>
+              )}
             </span>
           </header>
           <form

@@ -1077,9 +1077,16 @@ button.pulse-card:hover {
   font-size: 0.6875rem;
 }
 
-.quick-check-in-heading > span.logged {
+.quick-check-in-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.quick-check-in-status .pulse-icon {
+  width: 1rem;
+  height: 1rem;
   color: var(--p-good);
-  font-weight: 600;
 }
 
 .quick-check-in-row + .quick-check-in-row {

@@ -378,7 +378,7 @@ describe('App startup', () => {
     const markup = renderToday({ workoutStartedAt: Date.now() - 65_000, todayBodyweight: 84.1 });
 
     expect(markup).not.toContain('live-workout-card');
-    expect(markup).toContain('Saved today · 84.1 kg');
+    expect(markup).toContain('aria-label="Saved today: 84.1 kg"');
     expect(markup).not.toContain('next-session-title');
   });
 

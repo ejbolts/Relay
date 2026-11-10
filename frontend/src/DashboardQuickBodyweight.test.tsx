@@ -145,14 +145,21 @@ describe('daily bodyweight check-in', () => {
     );
     expect(saveFat).not.toHaveBeenCalled();
   });
-  it('shows one saved-today summary and a temporary five-second undo popup after save', async () => {
+  it('keeps the saved value beside a tick while editing and shows a five-second undo popup', async () => {
     await render();
     expect(toast()).toBeNull();
     await submit();
     expect(save).toHaveBeenCalledExactlyOnceWith(84.2);
     await render(84.2);
-    expect(container.textContent).toContain('Saved today · 84.2 kg');
-    expect(container.textContent!.match(/saved today/gi)).toHaveLength(1);
+    const status = container.querySelector('.quick-check-in-status')!;
+    expect(status.getAttribute('aria-label')).toBe('Saved today: 84.2 kg');
+    expect(status.querySelector('svg')).not.toBeNull();
+    expect(status.textContent).toBe('84.2 kg');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Increase by 0.1 kg"]')!.click(),
+    );
+    expect(container.querySelector('input')!.value).toBe('84.3');
+    expect(status.textContent).toBe('84.2 kg');
     expect(container.querySelector('.quick-bodyweight-message')).toBeNull();
     expect(toast()!.getAttribute('style')).toContain('5000ms');
     await act(async () => vi.advanceTimersByTime(4999));

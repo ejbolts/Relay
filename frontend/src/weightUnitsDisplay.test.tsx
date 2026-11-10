@@ -31,7 +31,8 @@ describe('weight display preference across personal screens', () => {
     const markup = renderPounds(
       <DashboardQuickBodyweight latestBodyweight={84.2} todayBodyweight={84.2} onSave={vi.fn()} />,
     );
-    expect(markup).toContain('Saved today · 185.6 lb');
+    expect(markup).toContain('aria-label="Saved today: 185.6 lb"');
+    expect(markup).toContain('<span>185.6 lb</span>');
     expect(markup).toContain('value="185.63"');
     expect(markup).toContain('Bodyweight in pounds');
     expect(markup).toContain('Increase by 0.1 lb');
