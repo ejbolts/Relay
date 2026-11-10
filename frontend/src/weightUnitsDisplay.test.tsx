@@ -38,7 +38,7 @@ describe('weight display preference across personal screens', () => {
     );
     expect(markup).toContain('aria-label="Prior: 185.2 lb; Saved today: 185.6 lb"');
     expect(markup).toContain('<span>Prior 185.2 lb</span>');
-    expect(markup).toContain('<span>185.6 lb</span>');
+    expect(markup).toContain('<span class="quick-check-in-today">185.6 lb</span>');
     expect(markup).toContain('value="185.63"');
     expect(markup).toContain('Bodyweight in pounds');
     expect(markup).toContain('Increase by 0.1 lb');

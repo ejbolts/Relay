@@ -764,7 +764,7 @@ function CheckInStatus({ prior, today }: { prior: string | null; today: string |
             Today
           </span>
           <span aria-hidden="true">·</span>
-          <span>{today}</span>
+          <span className="quick-check-in-today">{today}</span>
         </>
       )}
     </span>
