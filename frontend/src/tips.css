@@ -171,3 +171,38 @@ button.relay-tip-dot {
 .relay-tip-home {
   touch-action: pan-y;
 }
+
+/* Home keeps one short instruction and its controls in a single quiet row. */
+.relay-tip-home.is-compact {
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 8px 6px 8px 10px;
+  border-color: var(--p-line);
+  border-radius: 10px;
+  background: transparent;
+}
+.relay-tip-home.is-compact > svg {
+  width: 15px;
+  height: 15px;
+  flex-basis: 15px;
+  margin-right: 4px;
+  color: var(--p-muted);
+}
+button.relay-tip-summary {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--p-ink-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+}
+.relay-tip-summary:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}

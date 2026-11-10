@@ -1,16 +1,19 @@
 ﻿export const TIP_DEFINITIONS = {
   normalise: {
     title: 'Different machines, one progress chart',
+    homeBody: 'Compare different machines on one chart with Machine weights.',
     body: 'Open Machine weights to normalise different stacks against a reference machine. Your logged weights stay unchanged.',
     surface: 'hint',
   },
   mergeMachines: {
     title: 'Saved the same machine twice?',
+    homeBody: 'Choose Select to merge duplicate machines and keep their history.',
     body: 'Choose Select to merge duplicate machines, keeping their photos and workout links together.',
     surface: 'hint',
   },
   maintenance: {
     title: 'Maintain a range, not a single number',
+    homeBody: 'Choose Maintain in your weight goal to set a lower and upper range.',
     body: 'Choose Maintain in your weight goal to set lower and upper limits. Your trend chart shows the band.',
     surface: 'home',
   },
@@ -31,11 +34,13 @@
   },
   swap: {
     title: 'Machine taken?',
+    homeBody: 'Swap exercise in the menu keeps your planned sets when a machine is taken.',
     body: 'Choose Swap exercise in the exercise menu to keep your planned sets.',
     surface: 'nudge',
   },
   machine: {
     title: 'Remember your machine',
+    homeBody: 'Save an equipment photo with your seat and pin settings for next time.',
     body: 'Save an equipment photo with its seat and pin settings for next time.',
     surface: 'hint',
   },

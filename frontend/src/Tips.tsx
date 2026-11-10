@@ -397,6 +397,7 @@ export function TipSlot({
   const popover = useRef<HTMLElement>(null);
   const [position, setPosition] = useState({ left: 12, top: 0 });
   const swipeStart = useRef<number | null>(null);
+  const swiped = useRef(false);
   const id = homeTips && tips.slot === key && tips.active ? tips.active : requestedId;
   const nextId =
     homeTips && homeTips.length > 1
@@ -449,9 +450,10 @@ export function TipSlot({
       {active &&
         (home ? (
           <aside
-            className="relay-tip-home"
+            className={`relay-tip-home${homeTips ? ' is-compact' : ''}`}
             aria-label="Quick tip"
             onPointerDown={(event) => {
+              swiped.current = false;
               swipeStart.current = event.clientX;
             }}
             onPointerUp={(event) => {
@@ -459,21 +461,34 @@ export function TipSlot({
                 nextId &&
                 swipeStart.current !== null &&
                 Math.abs(event.clientX - swipeStart.current) > 45
-              )
+              ) {
+                swiped.current = true;
                 tips.browseHome(nextId);
+              }
               swipeStart.current = null;
+            }}
+            onClickCapture={(event) => {
+              if (swiped.current && event.detail > 0) {
+                event.preventDefault();
+                event.stopPropagation();
+                swiped.current = false;
+              }
             }}
             onPointerCancel={() => {
               swipeStart.current = null;
             }}
           >
             <Icon name="sparkle" />
-            <div>
-              <strong>{tip.title}</strong>
-              <p>{tip.body}</p>
-              <div className="relay-tip-actions">
-                <button className="relay-tip-link" type="button" onClick={tips.library}>
-                  All tips <Icon name="chevron-right" />
+            {homeTips ? (
+              <>
+                <button
+                  type="button"
+                  className="relay-tip-summary"
+                  onClick={tips.library}
+                  title="Browse all tips"
+                >
+                  <strong className="sr-only">{tip.title}</strong>
+                  {'homeBody' in tip ? tip.homeBody : tip.body}
                 </button>
                 {nextId && (
                   <button
@@ -485,8 +500,28 @@ export function TipSlot({
                     <Icon name="chevron-right" />
                   </button>
                 )}
+              </>
+            ) : (
+              <div>
+                <strong>{tip.title}</strong>
+                <p>{tip.body}</p>
+                <div className="relay-tip-actions">
+                  <button className="relay-tip-link" type="button" onClick={tips.library}>
+                    All tips <Icon name="chevron-right" />
+                  </button>
+                  {nextId && (
+                    <button
+                      type="button"
+                      className="relay-tip-close"
+                      aria-label="Next tip"
+                      onClick={() => tips.browseHome(nextId)}
+                    >
+                      <Icon name="chevron-right" />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             <button
               type="button"
               className="relay-tip-close"
