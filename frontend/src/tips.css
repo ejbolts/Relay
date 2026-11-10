@@ -134,6 +134,9 @@ button.relay-tip-dot {
   box-shadow: 0 8px 28px #0004;
   z-index: 130;
 }
+.relay-tip-library {
+  padding: 0 1rem;
+}
 .relay-tip-library article {
   padding: 16px 0;
   border-bottom: 1px solid var(--p-line);
