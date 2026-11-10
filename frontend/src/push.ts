@@ -1,4 +1,5 @@
 import { api } from './api';
+import { runningAsInstalledApp } from './homeScreenGuideState';
 
 export const PHONE_PUSH_PREFERENCE_EVENT = 'phone-push-preference-change';
 const PHONE_PUSH_PREFERENCE_KEY = 'gym-logger-phone-notifications';
@@ -35,13 +36,78 @@ async function saveSubscription(subscription: PushSubscription): Promise<void> {
   });
 }
 
+// Signing out detaches this device; nothing may subscribe it again before the app restarts.
+let automaticSubscribeBlocked = false;
+let automaticSubscription: Promise<PushSubscription> | null = null;
+
+async function subscribeAndSave(
+  registration: ServiceWorkerRegistration,
+): Promise<PushSubscription> {
+  const config = await api.pushConfig();
+  if (!config.enabled || !config.public_key) {
+    throw new Error('Phone notifications are not ready on the server. Restart it after updating.');
+  }
+  const subscription =
+    (await registration.pushManager.getSubscription()) ??
+    (await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64UrlToUint8Array(config.public_key),
+    }));
+  await saveSubscription(subscription);
+  return subscription;
+}
+
+/**
+ * This device's subscription, saved to the signed-in account. Phone alerts are on by default:
+ * once notification permission is granted, a device without a subscription is subscribed here
+ * unless its user turned alerts off.
+ */
 export async function existingPhonePushSubscription(): Promise<PushSubscription | null> {
   if (!pushNotificationsSupported() || !phonePushPreferenceEnabled()) return null;
   const registration = await navigator.serviceWorker.getRegistration();
   if (!registration) return null;
   const subscription = await registration.pushManager.getSubscription();
-  if (subscription) await saveSubscription(subscription);
-  return subscription;
+  if (subscription) {
+    await saveSubscription(subscription);
+    return subscription;
+  }
+  if (automaticSubscribeBlocked || Notification.permission !== 'granted') return null;
+  // The workout screen, settings and reminders all ask at once; subscribe a single time.
+  automaticSubscription ??= subscribeAndSave(registration).finally(() => {
+    automaticSubscription = null;
+  });
+  return automaticSubscription;
+}
+
+/**
+ * Asks for notification permission from a sign-in or sign-up tap, since browsers only show the
+ * prompt in response to one. Granting it turns phone alerts on for the account. Runs only in the
+ * installed app, only while the choice is undecided, and must be called before any `await`.
+ */
+export function requestPhonePushPermissionFromTap(): void {
+  if (
+    !pushNotificationsSupported() ||
+    !runningAsInstalledApp() ||
+    !phonePushPreferenceEnabled() ||
+    Notification.permission !== 'default'
+  )
+    return;
+  let request: Promise<NotificationPermission>;
+  try {
+    request = Promise.resolve(Notification.requestPermission());
+  } catch {
+    return;
+  }
+  void request
+    .then((permission) => {
+      // Screens already showing re-check, which subscribes this device.
+      if (permission === 'granted') {
+        window.dispatchEvent(
+          new CustomEvent(PHONE_PUSH_PREFERENCE_EVENT, { detail: { enabled: true } }),
+        );
+      }
+    })
+    .catch(() => undefined);
 }
 
 export async function enablePhonePushNotifications(): Promise<PushSubscription> {
@@ -59,19 +125,7 @@ export async function enablePhonePushNotifications(): Promise<PushSubscription> 
     );
   }
 
-  const config = await api.pushConfig();
-  if (!config.enabled || !config.public_key) {
-    throw new Error('Phone notifications are not ready on the server. Restart it after updating.');
-  }
-
-  const registration = await navigator.serviceWorker.ready;
-  const subscription =
-    (await registration.pushManager.getSubscription()) ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: base64UrlToUint8Array(config.public_key),
-    }));
-  await saveSubscription(subscription);
+  const subscription = await subscribeAndSave(await navigator.serviceWorker.ready);
   setPhonePushPreference(true);
   return subscription;
 }
@@ -79,6 +133,7 @@ export async function enablePhonePushNotifications(): Promise<PushSubscription> 
 export async function disablePhonePushNotifications(): Promise<void> {
   setPhonePushPreference(false);
   if (!pushNotificationsSupported()) return;
+  await automaticSubscription?.catch(() => undefined);
   const registration = await navigator.serviceWorker.getRegistration();
   const subscription = await registration?.pushManager.getSubscription();
   if (!subscription) return;
@@ -94,7 +149,9 @@ export async function disablePhonePushNotifications(): Promise<void> {
  * browser drops the subscription. Must run while the session is still valid.
  */
 export async function releasePhonePushSubscription(): Promise<void> {
+  automaticSubscribeBlocked = true;
   try {
+    await automaticSubscription?.catch(() => undefined);
     if (pushNotificationsSupported()) {
       const registration = await navigator.serviceWorker.getRegistration();
       const subscription = await registration?.pushManager.getSubscription();

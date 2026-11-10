@@ -189,6 +189,9 @@ export interface FactorSuggestion {
   factor: number;
   /** Sessions on this machine compared with the reference machine's trend. */
   sessions: number;
+  /** The middle half of those sessions' conversions, so the slider can show a likely range. */
+  low: number;
+  high: number;
 }
 
 /** Interpolate the reference trend between sessions up to this far apart. */
@@ -198,11 +201,16 @@ const NEAREST_DAYS = 14;
 const MIN_SESSIONS = 2;
 const DAY_MS = 86_400_000;
 
-function median(values: number[]): number {
+/** The value a fraction of the way through the sorted values, interpolating between them. */
+function quantile(values: number[], fraction: number): number {
   const sorted = values.slice().sort((first, second) => first - second);
-  const middle = sorted.length / 2;
-  return sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
+  const position = (sorted.length - 1) * fraction;
+  const below = Math.floor(position);
+  const above = Math.ceil(position);
+  return sorted[below] + (sorted[above] - sorted[below]) * (position - below);
 }
+
+const hundredths = (value: number) => Math.round(value * 100) / 100;
 
 /**
  * Suggest each machine's conversion from its logged weights and reps: compare every session's
@@ -257,8 +265,10 @@ export function suggestFactors(
   for (const [machine, values] of ratios) {
     if (values.length < MIN_SESSIONS) continue;
     suggestions.set(machine, {
-      factor: Math.round(median(values) * 100) / 100,
+      factor: hundredths(quantile(values, 0.5)),
       sessions: values.length,
+      low: hundredths(quantile(values, 0.25)),
+      high: hundredths(quantile(values, 0.75)),
     });
   }
   return suggestions;
