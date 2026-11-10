@@ -4441,7 +4441,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-ink);
 }
 
-/* Dark mode: dialogs sit one step above cards, and the tiles inside them step up too. */
+/* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
 :root:not([data-colour-mode='light'])
   :is(
     .popup-dialog,
@@ -4452,7 +4452,9 @@ html.edge-swipe-ready .edge-swipe-indicator {
     .calendar-day-detail,
     .superset-picker,
     .workout-close-dialog,
-    .set-entry-confirmation
+    .set-entry-confirmation,
+    .relay-tip-popover,
+    .relay-tip-nudge
   ) {
   --p-surface: var(--p-surface-raised);
   --p-surface-2: #2d343a;

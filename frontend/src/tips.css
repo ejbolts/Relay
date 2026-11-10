@@ -110,7 +110,7 @@ button.relay-tip-dot {
   position: fixed;
   width: min(260px, calc(100vw - 24px));
   padding: 14px;
-  background: var(--p-surface-2);
+  background: var(--p-surface);
   color: var(--p-ink);
   border: 1px solid var(--p-line-strong);
   border-radius: 14px;
@@ -129,7 +129,7 @@ button.relay-tip-dot {
   padding: 14px;
   border-radius: 16px;
   border: 1px solid var(--p-line-strong);
-  background: var(--p-surface-2);
+  background: var(--p-surface);
   color: var(--p-ink);
   box-shadow: 0 8px 28px #0004;
   z-index: 130;
