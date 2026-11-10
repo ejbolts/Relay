@@ -391,6 +391,7 @@ def test_workout_sets_notes_rest_and_rpe_are_saved(client):
     workout = response.json()
     assert workout["category"] == "push"
     assert workout["movements"][0]["sets"][0] == {
+        "machine_photo_id": None,
         "id": workout["movements"][0]["sets"][0]["id"],
         "order_index": 0,
         "reps": 5,

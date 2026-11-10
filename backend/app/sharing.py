@@ -583,6 +583,8 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
             movement.notes = None
             movement.machine_settings = []
         for item in movement.sets:
+            if not sharing.share_machine_photos:
+                item.machine_photo_id = None
             if not sharing.share_notes:
                 item.notes = None
             if not sharing.share_body_weight:

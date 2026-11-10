@@ -629,6 +629,95 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(summary.textContent).toContain('2 pinned');
   });
 
+  it('blocks finishing until each contributing set has a machine, and recovers assignments', async () => {
+    const save = vi.spyOn(api, 'createWorkout').mockResolvedValue(recentTravel);
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, null),
+      usage(travelGym, 1, null),
+    ]);
+    const draft = readActiveWorkoutDraft()!;
+    const movement = draft.movements[0];
+    movement.machinePhotoIds = [homeGym.id, travelGym.id];
+    movement.sets = [
+      { ...movement.sets[0], completed: true },
+      { ...movement.sets[0], key: 'set-2', completed: false, weight_kg: 100 },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    const finish = () => button('Finish Leg Press');
+    await click(finish());
+    expect(document.querySelector('dialog[open]')?.textContent).toContain(
+      'multiple machines pinned',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(false);
+    expect(readActiveWorkoutDraft()?.movements[0].sets[1].completed).toBe(false);
+    await click(button('Choose machines'));
+    await click(button('Finish workout'));
+    await click(button('Finish workout', document.querySelector('dialog[open]')!));
+    expect(save).not.toHaveBeenCalled();
+    expect(document.querySelector('dialog[open]')?.textContent).toContain(
+      'multiple machines pinned',
+    );
+    await click(button('Choose machines'));
+    const selects = container.querySelectorAll<HTMLSelectElement>('.set-machine-select');
+    for (const [index, id] of [homeGym.id, travelGym.id].entries()) {
+      await act(async () => {
+        selects[index].value = id;
+        selects[index].dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<App />));
+    expect(
+      [...container.querySelectorAll<HTMLSelectElement>('.set-machine-select')].map((s) => s.value),
+    ).toEqual([homeGym.id, travelGym.id]);
+    await click(finish());
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
+    expect(readActiveWorkoutDraft()?.movements[0].sets.every((set) => set.completed)).toBe(true);
+    expect(readActiveWorkoutDraft()?.movements[0].sets.map((set) => set.machine_photo_id)).toEqual([
+      homeGym.id,
+      travelGym.id,
+    ]);
+    await click(button('Finish workout'));
+    await click(button('Finish workout', document.querySelector('dialog[open]')!));
+    expect(save).toHaveBeenCalled();
+    expect(save.mock.calls[0][0].movements[0].sets.map((set) => set.machine_photo_id)).toEqual([
+      homeGym.id,
+      travelGym.id,
+    ]);
+  });
+
+  it('reopens a finished exercise when adding a second pin and clears assignments on unpin', async () => {
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, null),
+      usage(travelGym, 1, null),
+    ]);
+    pinHomeMachine();
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].sets[0].completed = true;
+    draft.movements[0].isComplete = true;
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLElement>('.movement-card > header')!);
+    const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
+    await click(button('Pin to sets', picker.querySelectorAll('article')[1]));
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(false);
+    await click(button('Finish Leg Press'));
+    expect(document.querySelector('dialog[open]')?.textContent).toContain(
+      'multiple machines pinned',
+    );
+    await click(button('Choose machines'));
+    const select = container.querySelector<HTMLSelectElement>('.set-machine-select')!;
+    await act(async () => {
+      select.value = travelGym.id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await click(button('✓ Pinned', picker.querySelectorAll('article')[1]));
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].machine_photo_id).toBeNull();
+    expect(container.querySelector('.set-machine-select')).toBeNull();
+  });
+
   it('records a pinned machine settings without showing an editor in the photo section', async () => {
     pinHomeMachine();
     const saved = [{ name: 'Seat', value: '5' }];

@@ -28,6 +28,15 @@ const entry: ExerciseHistoryEntry = {
 };
 
 describe('previous rest matching', () => {
+  it('counts the set position separately for each machine', () => {
+    const sets = [
+      { ...working, machine_photo_id: 'a' },
+      { ...working, machine_photo_id: 'b' },
+      { ...working, machine_photo_id: 'a' },
+    ];
+    expect(previousSetRests(sets, 1, [entry])[0].seconds).toBe(150);
+    expect(previousSetRests(sets, 2, [entry])[0].seconds).toBe(210);
+  });
   it('matches working sets by their position within the set kind', () => {
     expect(previousSetRests([warmup, working, working], 1, [entry])).toEqual([
       { workoutId: 'previous', date: '2026-11-01', seconds: 150 },
