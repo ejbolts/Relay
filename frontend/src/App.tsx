@@ -1,3 +1,4 @@
+import { MachineWeightTip, BodyWeightTip } from './FeatureDiscoveryTips';
 import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
 import { BodySizesCard } from './BodySizesCard';
 import { captureAccountCacheScope } from './accountCacheScope';
@@ -6274,6 +6275,7 @@ function MachinePhotoChooser({
             photos={photos}
             onCancel={() => setSelectingForMerge(false)}
             onMerged={(merged, sourceIds) => {
+              tips.learn('mergeMachines');
               const sourceSet = new Set(sourceIds);
               const nextIds = [
                 ...new Set(
@@ -6338,18 +6340,23 @@ function MachinePhotoChooser({
                 {photos.length >= 2 && (
                   <div className="machine-photo-library-actions">
                     <span>Saved · {photos.length}</span>
-                    <button
-                      type="button"
-                      disabled={uploading || !!pending}
-                      onClick={() => {
-                        setExpanded(null);
-                        setChoosingReplacement(false);
-                        setSelectingForMerge(true);
-                        setError(null);
-                      }}
+                    <TipSlot
+                      id="mergeMachines"
+                      eligible={photoPanelOpen && !selectingForMerge && !pending && !uploading}
                     >
-                      Select
-                    </button>
+                      <button
+                        type="button"
+                        disabled={uploading || !!pending}
+                        onClick={() => {
+                          setExpanded(null);
+                          setChoosingReplacement(false);
+                          setSelectingForMerge(true);
+                          setError(null);
+                        }}
+                      >
+                        Select
+                      </button>
+                    </TipSlot>
                   </div>
                 )}
                 <div
@@ -7809,14 +7816,16 @@ export function ProgressScreen({
                   </div>
                 )}
                 {(mapping?.machines.length ?? 0) > 1 && (
-                  <button
-                    type="button"
-                    className="progress-machine-settings"
-                    aria-label="Machine weights"
-                    onClick={() => setMappingOpen(true)}
-                  >
-                    <Icon name="settings" />
-                  </button>
+                  <MachineWeightTip mapping={mapping}>
+                    <button
+                      type="button"
+                      className="progress-machine-settings"
+                      aria-label="Machine weights"
+                      onClick={() => setMappingOpen(true)}
+                    >
+                      <Icon name="settings" />
+                    </button>
+                  </MachineWeightTip>
                 )}
               </div>
             )}
@@ -8842,6 +8851,7 @@ export function BodyCompositionScreen({
   accountActions?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
+  const [goalsReady, setGoalsReady] = useState(false);
   const [measurementDate, setMeasurementDate] = useState(localDate());
   const [entryOpen, setEntryOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
@@ -8932,11 +8942,15 @@ export function BodyCompositionScreen({
   }, [trendPreference]);
   useEffect(() => {
     let cancelled = false;
+    setGoalsReady(false);
     void api
       .listBodyWeightGoals()
       .then((next) => {
         // A goal waiting out its Undo window stays hidden when the list reloads.
-        if (!cancelled) setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
+        if (!cancelled) {
+          setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
+          setGoalsReady(true);
+        }
       })
       .catch((reason) => {
         if (!cancelled)
@@ -9110,6 +9124,7 @@ export function BodyCompositionScreen({
         onOpenSettings={onOpenSettings}
         accountActions={accountActions}
       />
+      <BodyWeightTip measurementCount={measurements.length} goals={goals} ready={goalsReady} />
       <div className="body-reference-stats" aria-label="Bodyweight summary">
         <div>
           <span>Bodyweight</span>

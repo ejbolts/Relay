@@ -1,4 +1,19 @@
 ﻿export const TIP_DEFINITIONS = {
+  normalise: {
+    title: 'Different machines, one progress chart',
+    body: 'Open Machine weights to normalise different stacks against a reference machine. Your logged weights stay unchanged.',
+    surface: 'hint',
+  },
+  mergeMachines: {
+    title: 'Saved the same machine twice?',
+    body: 'Choose Select to merge duplicate machines, keeping their photos and workout links together.',
+    surface: 'hint',
+  },
+  maintenance: {
+    title: 'Maintain a range, not a single number',
+    body: 'Choose Maintain in your weight goal to set lower and upper limits. Your trend chart shows the band.',
+    surface: 'home',
+  },
   reorder: {
     title: 'Put sets in order',
     body: 'Hold a set’s dotted handle, then drag it into place.',
