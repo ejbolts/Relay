@@ -1,4 +1,5 @@
 import { MAX_INACTIVE_WORKOUT_MS } from './activeWorkoutTimeout';
+import { isStoredSetLogged } from './workoutAutoSave';
 import { validStoredPause } from './workoutPause';
 import type {
   MachineSetting,
@@ -265,14 +266,21 @@ function announceDraftChange(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACTIVE_WORKOUT_CHANGE_EVENT));
 }
 
-/** Expire abandoned placeholders without removing entered workouts or recovery data. */
+/**
+ * Expire abandoned workouts with nothing logged, including untouched suggested sets, without
+ * removing entered sets, notes or recovery data.
+ */
 export function isExpiredEmptyWorkoutDraft(draft: ActiveWorkoutDraft, now = Date.now()): boolean {
   return (
     !draft.pendingSave &&
     !draft.resumingWorkoutId &&
     draft.pausedAt == null &&
-    draft.movements.length === 0 &&
     draft.notes.trim() === '' &&
+    !draft.movements.some(
+      (movement) =>
+        movement.notes.trim() !== '' ||
+        movement.sets.some((set) => Boolean(set.notes?.trim()) || isStoredSetLogged(set)),
+    ) &&
     now >= (draft.inactiveFinishAt ?? draft.startedAt + MAX_INACTIVE_WORKOUT_MS)
   );
 }

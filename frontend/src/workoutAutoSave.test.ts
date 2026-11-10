@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createWorkoutSet } from './workoutSets';
 import {
+  isStoredSetLogged,
   isWorkoutSetAutoSavable,
   workoutSetAfterEdit,
   workoutSetForAutoSave,
@@ -10,6 +11,26 @@ describe('automatic workout saving', () => {
   it('does not save an untouched empty set', () => {
     expect(isWorkoutSetAutoSavable('strength', createWorkoutSet('strength'))).toBe(false);
     expect(isWorkoutSetAutoSavable('cardio', createWorkoutSet('cardio'))).toBe(false);
+  });
+
+  it('recognises a logged set without knowing its exercise kind', () => {
+    const strength = { ...createWorkoutSet('strength'), reps: 8, weight_kg: 80 };
+    const cardio = { ...createWorkoutSet('cardio'), duration_seconds: 600 };
+    expect(isStoredSetLogged(createWorkoutSet('strength'))).toBe(false);
+    expect(isStoredSetLogged(createWorkoutSet('cardio'))).toBe(false);
+    expect(isStoredSetLogged(strength)).toBe(true);
+    expect(isStoredSetLogged(cardio)).toBe(true);
+    expect(isStoredSetLogged({ ...strength, fromPrevious: true })).toBe(false);
+    expect(isStoredSetLogged({ ...strength, fromPrevious: true, completed: true })).toBe(true);
+  });
+
+  it('does not count missing performance fields in older stored sets as logged', () => {
+    const legacy = { ...createWorkoutSet('strength') };
+    Reflect.deleteProperty(legacy, 'duration_seconds');
+    Reflect.deleteProperty(legacy, 'distance_km');
+    Reflect.deleteProperty(legacy, 'reps');
+    Reflect.deleteProperty(legacy, 'weight_kg');
+    expect(isStoredSetLogged(legacy)).toBe(false);
   });
 
   it('completes entered cardio data before automatically saving', () => {
