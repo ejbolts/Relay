@@ -29,9 +29,15 @@ function renderPounds(children: ReactNode) {
 describe('weight display preference across personal screens', () => {
   it('shows pound check-in controls with converted values and accessible labels', () => {
     const markup = renderPounds(
-      <DashboardQuickBodyweight latestBodyweight={84.2} todayBodyweight={84.2} onSave={vi.fn()} />,
+      <DashboardQuickBodyweight
+        latestBodyweight={84.2}
+        priorBodyweight={84}
+        todayBodyweight={84.2}
+        onSave={vi.fn()}
+      />,
     );
-    expect(markup).toContain('aria-label="Saved today: 185.6 lb"');
+    expect(markup).toContain('aria-label="Prior: 185.2 lb; Saved today: 185.6 lb"');
+    expect(markup).toContain('<span>Prior 185.2 lb</span>');
     expect(markup).toContain('<span>185.6 lb</span>');
     expect(markup).toContain('value="185.63"');
     expect(markup).toContain('Bodyweight in pounds');
