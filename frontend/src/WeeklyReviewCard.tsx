@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react';
+import type { MuscleSetGoals } from './muscleSetGoals';
 import { Icon } from './Icon';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import type { BodyMeasurement, CardioWeek, PersonalRecord, TrackedWorkout } from './types';
@@ -18,6 +19,7 @@ export function WeeklyReviewCard({
   measurements,
   muscleWeeks,
   muscleGoal,
+  muscleGoals,
   cardioWeeks,
   weightUnit,
   today,
@@ -32,6 +34,7 @@ export function WeeklyReviewCard({
   /** Per-muscle sets for the current week followed by earlier weeks, newest first. */
   muscleWeeks: MuscleSetsWeek[];
   muscleGoal: number;
+  muscleGoals?: MuscleSetGoals;
   /** Cardio for the current week then earlier weeks, newest first. */
   cardioWeeks: CardioWeek[];
   weightUnit: WeightUnit;
@@ -53,6 +56,7 @@ export function WeeklyReviewCard({
         measurements,
         muscleWeeks,
         muscleGoal,
+        muscleGoals,
         cardioWeeks,
         today,
         weekStartDay,
@@ -64,6 +68,7 @@ export function WeeklyReviewCard({
       measurements,
       muscleWeeks,
       muscleGoal,
+      muscleGoals,
       cardioWeeks,
       today,
       weekStartDay,

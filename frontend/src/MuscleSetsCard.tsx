@@ -1,5 +1,6 @@
 import { useId, useState, type CSSProperties } from 'react';
 import { Icon } from './Icon';
+import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { PopupDialog } from './PopupDialog';
 import { dayMonth, shortDate } from './trainingSummary';
 import type { WeeklyMuscleContribution } from './types';
@@ -22,12 +23,14 @@ export function MuscleSetsCard({
   weeklySets,
   history = [],
   goal,
+  goals,
   onOpenWorkout,
 }: {
   weeklySets: MuscleSetsWeek | null | undefined;
   /** The weeks before `weeklySets`, newest first. Older cached dashboards have none. */
   history?: MuscleSetsWeek[];
   goal: number;
+  goals?: MuscleSetGoals;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -65,9 +68,11 @@ export function MuscleSetsCard({
   );
   const visibleMuscles = expanded ? allMuscles : muscles.slice(0, 8);
   const untrained = allMuscles.filter((item) => item.raw_sets <= 0).length;
-  // One scale for every week, so bar lengths stay comparable while stepping through them.
-  const maximum = Math.max(
+  // A shared set scale keeps volumes comparable; each muscle's target gets its own tick.
+  // Include all weeks so neither bars nor target ticks jump while stepping through history.
+  const scale = Math.max(
     goal * 1.15,
+    ...allMuscles.map((item) => muscleSetGoal(item.muscle_group, goal, goals) * 1.15),
     ...weeks.flatMap((item) => item.muscle_groups.map((group) => group.raw_sets)),
   );
   const muscle = allMuscles.find((item) => item.muscle_group === selected);
@@ -113,19 +118,19 @@ export function MuscleSetsCard({
         )}
         <span className="muscle-key-item">
           <i className="muscle-key-goal" aria-hidden="true" />
-          Goal {goal}
+          {Object.keys(goals ?? {}).length ? 'Weekly target' : `Goal ${goal}`}
         </span>
       </p>
       <ul
         id={listId}
         hidden={visibleMuscles.length === 0}
         className="muscle-bars"
-        aria-label={`Working sets per muscle, ${name.toLowerCase()}; weekly goal: ${goal} sets`}
-        style={{ '--muscle-goal-ratio': goal / maximum } as CSSProperties}
+        aria-label={`Working sets per muscle, ${name.toLowerCase()}; individual weekly targets`}
       >
         {visibleMuscles.map((item, index) => {
           const last = before(item.muscle_group);
           const change = last === null ? null : item.raw_sets - last;
+          const target = muscleSetGoal(item.muscle_group, goal, goals);
           return (
             <li key={item.muscle_group}>
               <button
@@ -137,17 +142,26 @@ export function MuscleSetsCard({
               >
                 {item.muscle_group}
               </button>
-              <span className="muscle-bar-track">
+              <span
+                className="muscle-bar-track"
+                role="progressbar"
+                aria-label={`${item.muscle_group} weekly target`}
+                aria-valuemin={0}
+                aria-valuemax={target}
+                aria-valuenow={Math.min(item.raw_sets, target)}
+                aria-valuetext={`${credits(item.raw_sets)} of ${target} sets`}
+                style={{ '--muscle-goal-ratio': target / scale } as CSSProperties}
+              >
                 {last !== null && last > 0 && (
                   <i
                     className="muscle-bar-previous"
-                    style={{ width: `${(last / maximum) * 100}%` }}
+                    style={{ width: `${(last / scale) * 100}%` }}
                   />
                 )}
                 <i
                   style={
                     {
-                      width: `${(item.raw_sets / maximum) * 100}%`,
+                      width: `${(item.raw_sets / scale) * 100}%`,
                       '--d': `${index * 45}ms`,
                     } as CSSProperties
                   }
@@ -155,6 +169,7 @@ export function MuscleSetsCard({
               </span>
               <b className="num">
                 {credits(item.raw_sets)}
+                <small className="muscle-row-target">/ {target}</small>
                 {change !== null && (
                   <small
                     className={`muscle-set-change ${change > 0 ? 'is-up' : change < 0 ? 'is-down' : 'is-same'}`}
@@ -200,7 +215,7 @@ export function MuscleSetsCard({
           muscle={muscle}
           current={current}
           weekLabel={name}
-          goal={goal}
+          goal={muscleSetGoal(muscle.muscle_group, goal, goals)}
           onClose={() => setSelected(null)}
           onOpenWorkout={onOpenWorkout}
         />

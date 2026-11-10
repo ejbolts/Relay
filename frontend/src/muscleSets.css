@@ -45,7 +45,7 @@
   text-align: center;
 }
 
-/* Key: this week's bar, the outline of the week before and the dotted goal. */
+/* Key: this week's bar, the outline of the week before and each muscle's target tick. */
 .muscle-key-item {
   display: inline-flex;
   align-items: center;
@@ -56,6 +56,12 @@
   height: 0.5rem;
   border-radius: 0 3px 3px 0;
   background: var(--p-accent);
+}
+.muscle-sets-card .muscle-key-goal {
+  width: 2px;
+  height: 0.75rem;
+  border-radius: 2px;
+  background: var(--p-ink);
 }
 .muscle-key-swatch.is-previous,
 .muscle-bar-track .muscle-bar-previous {
@@ -71,7 +77,28 @@
   transition: width 260ms var(--ease-out);
 }
 .muscle-sets-card .muscle-bars {
-  --muscle-value-width: 2.75rem;
+  --muscle-value-width: 4rem;
+}
+.muscle-sets-card .muscle-bars::after {
+  content: none;
+}
+.muscle-sets-card .muscle-bar-track::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  left: calc(100% * var(--muscle-goal-ratio));
+  width: 2px;
+  border-radius: 2px;
+  background: var(--p-ink);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+.muscle-row-target {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 .muscle-sets-card .muscle-bars b {
   display: grid;

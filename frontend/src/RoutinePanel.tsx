@@ -794,7 +794,9 @@ function RoutineEditor({
   const [cardioGoal, setCardioGoal] = useState<number | null>(null);
   const alertRef = useRef<HTMLParagraphElement>(null);
   const types = useWorkoutTypes();
-  const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   // The library's copies reflect partial-set changes made from the credits popup.
   const libraryExercises = useContext(ExerciseCreditsContext)?.exercises;
   const latest = (exercise: Exercise) =>
@@ -985,6 +987,7 @@ function RoutineEditor({
           <SplitVolumeChart
             days={creditDays}
             muscleGoal={muscleGoal}
+            muscleGoals={muscleGoals}
             cardioGoal={cardioGoal}
             selected={selected}
             onSelect={setSelected}

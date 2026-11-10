@@ -550,6 +550,8 @@ export interface TrainingPreferences {
   week_start: 'monday' | 'sunday' | 'saturday';
   zone2_goal_minutes: number;
   weekly_muscle_set_goal: number;
+  /** Absent on older servers and cached preferences. */
+  weekly_muscle_set_goals?: Record<string, number>;
 }
 
 export interface HeartRateZone {

@@ -2844,7 +2844,7 @@ describe('live muscle totals while logging', () => {
   const chestTotals = () =>
     [...container.querySelectorAll('.muscle-bars li')]
       .filter((item) => item.textContent?.includes('Chest'))
-      .map((item) => item.querySelector('b')?.textContent);
+      .map((item) => item.querySelector('b')?.firstChild?.textContent);
 
   it('shows combined gains for exercise completion without recounting logged sets or warmups', async () => {
     const draft = readActiveWorkoutDraft()!;

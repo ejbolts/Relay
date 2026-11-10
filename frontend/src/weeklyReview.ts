@@ -1,3 +1,4 @@
+import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import type { BodyMeasurement, CardioWeek, PersonalRecord, TrackedWorkout } from './types';
 import {
@@ -25,7 +26,7 @@ export interface WeeklyMuscleMover {
 
 export interface WeeklyMuscleReview {
   goal: number;
-  /** Muscles with at least `goal` sets. */
+  /** Muscles meeting their own target, or the default `goal`. */
   atGoal: number;
   previousAtGoal: number | null;
   totalSets: number;
@@ -77,6 +78,7 @@ export interface WeeklyReviewInput {
   /** Weeks of per-muscle sets from the dashboard, matched to the review by their start date. */
   muscleWeeks: MuscleSetsWeek[];
   muscleGoal: number;
+  muscleGoals?: MuscleSetGoals;
   /** Weeks of cardio from the dashboard, matched to the review by their start date. */
   cardioWeeks: CardioWeek[];
   today: string;
@@ -126,6 +128,7 @@ function muscleReview(
   start: string,
   previousStart: string,
   goal: number,
+  goals?: MuscleSetGoals,
 ): WeeklyMuscleReview | null {
   const week = weeks.find((item) => item.week_start === start);
   if (!week) return null;
@@ -149,12 +152,12 @@ function muscleReview(
     .slice(0, 3);
   const total = (items: Iterable<number>) =>
     [...items].reduce((sum, value) => sum + Math.max(value, 0), 0);
-  const reachedGoal = (items: Iterable<number>) =>
-    [...items].filter((value) => value >= goal).length;
+  const reachedGoal = (items: Map<string, number>) =>
+    [...items].filter(([muscle, value]) => value >= muscleSetGoal(muscle, goal, goals)).length;
   return {
     goal,
-    atGoal: reachedGoal(sets.values()),
-    previousAtGoal: previous ? reachedGoal(previousSets.values()) : null,
+    atGoal: reachedGoal(sets),
+    previousAtGoal: previous ? reachedGoal(previousSets) : null,
     totalSets: total(sets.values()),
     previousTotalSets: previous ? total(previousSets.values()) : null,
     movers,
@@ -197,7 +200,13 @@ export function weeklyReview(input: WeeklyReviewInput): WeeklyReview {
     records: recentStrengthRecords(recordsIn(start), Number.POSITIVE_INFINITY),
     previousRecordCount: recentStrengthRecords(recordsIn(previousStart), Number.POSITIVE_INFINITY)
       .length,
-    muscles: muscleReview(input.muscleWeeks, start, previousStart, input.muscleGoal),
+    muscles: muscleReview(
+      input.muscleWeeks,
+      start,
+      previousStart,
+      input.muscleGoal,
+      input.muscleGoals,
+    ),
     cardio: cardioReview(input.cardioWeeks, start, previousStart),
     body: {
       averageKg: averageOf(bodyWeights),

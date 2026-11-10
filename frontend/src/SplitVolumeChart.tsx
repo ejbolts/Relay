@@ -1,4 +1,5 @@
 import { useId, type CSSProperties } from 'react';
+import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { HelpPopup } from './HelpPopup';
 import { formatVolume, plannedWeeklyVolume, targetStatus, type TargetStatus } from './splitTargets';
 import type { RoutineDay } from './types';
@@ -94,12 +95,14 @@ function VolumeRow({
 export function SplitVolumeChart({
   days,
   muscleGoal,
+  muscleGoals,
   cardioGoal,
   selected,
   onSelect,
 }: {
   days: RoutineDay[];
   muscleGoal: number;
+  muscleGoals?: MuscleSetGoals;
   /** Combined weekly cardio-zone goal in minutes; null when no goal is set. */
   cardioGoal: number | null;
   selected: string | null;
@@ -111,9 +114,9 @@ export function SplitVolumeChart({
     key: muscle,
     name: muscle,
     value: sets,
-    goal: muscleGoal,
+    goal: muscleSetGoal(muscle, muscleGoal, muscleGoals),
     unit: 'sets',
-    status: targetStatus(sets, muscleGoal),
+    status: targetStatus(sets, muscleSetGoal(muscle, muscleGoal, muscleGoals)),
   }));
   const cardio: Row | null =
     cardioGoal || volume.cardioMinutes > 0
