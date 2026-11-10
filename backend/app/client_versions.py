@@ -140,7 +140,9 @@ def preserve_unknown_workout_fields(payload, workout, client: str | None):
     unknown = {level: fields_unknown_to(client, level) for level in ("workout", "movement", "set")}
     if not any(unknown.values()):
         return payload
-    data = preserve_fields(payload.model_dump(), workout, unknown["workout"])
+    # Defaults must stay omitted so downstream compatibility rules can distinguish
+    # an absent field from an explicit null, including on newly added sets.
+    data = preserve_fields(payload.model_dump(exclude_unset=True), workout, unknown["workout"])
     stored_movements = list(workout.movements)
     movements = []
     for index, movement in enumerate(data["movements"]):
@@ -168,11 +170,11 @@ def preserve_unknown_workout_fields(payload, workout, client: str | None):
             kept["machine_photo_ids"] = list(
                 dict.fromkeys(
                     [
-                        *kept["machine_photo_ids"],
+                        *kept.get("machine_photo_ids", []),
                         *(
                             item["machine_photo_id"]
                             for item in kept["sets"]
-                            if item["machine_photo_id"]
+                            if item.get("machine_photo_id")
                         ),
                     ]
                 )

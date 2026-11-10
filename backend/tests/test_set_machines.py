@@ -68,6 +68,29 @@ def test_old_client_edit_keeps_assignments_and_their_pins(client, version):
     assert {p["id"] for p in saved["machine_photos"]} == {first["id"], second["id"]}
 
 
+@pytest.mark.parametrize("version", [None, "1.2.0", "1.3.0"])
+@pytest.mark.parametrize("explicit_null", [False, True])
+def test_edit_new_set_infers_single_machine_only_when_omitted(client, version, explicit_null):
+    exercise, first, _ = machines(client)
+    payload = workout_payload(exercise)
+    payload["movements"][0]["machine_photo_ids"] = [first["id"]]
+    created = client.post("/api/workouts", json=payload)
+    assert created.status_code == 201, created.text
+    new_set = {"weight_kg": 70, "reps": 8}
+    if explicit_null:
+        new_set["machine_photo_id"] = None
+    payload["movements"][0]["sets"].append(new_set)
+    updated = client.put(
+        f"/api/workouts/{created.json()['id']}",
+        json=payload,
+        headers={"X-Relay-Version": version} if version else {},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["movements"][0]["sets"][-1]["machine_photo_id"] == (
+        None if explicit_null else first["id"]
+    )
+
+
 def test_rejects_unpinned_wrong_exercise_and_foreign_machines(client, other_client):
     exercise, first, second = machines(client)
     other_exercise = client.get("/api/exercises").json()[1]["id"]
