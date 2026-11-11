@@ -4,6 +4,7 @@ import { App } from './App';
 import { AuthGate } from './AuthGate';
 import { registerAppUpdates } from './appUpdates';
 import { captureFriendInvite } from './friendInvite';
+import { captureInstallPrompt } from './installPrompt';
 import { preventIosInputZoom } from './iosInputZoom';
 import { applyReduceMotion, reduceMotionPreference } from './motion';
 import {
@@ -29,6 +30,7 @@ import './exerciseList.css';
 // Before the app reads its screen from the address, keep any friend invite through sign-in.
 captureFriendInvite();
 registerAppUpdates();
+captureInstallPrompt();
 preventIosInputZoom();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());

@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { Icon } from './Icon';
+import { openInstallOption, useInstallMethod } from './installPrompt';
 import { PopupDialog } from './PopupDialog';
 
 /** Outline glyphs drawn after Safari's own controls, used only inside the illustrations. */
@@ -180,6 +182,29 @@ const STEPS: { text: ReactNode; shot: ReactNode }[] = [
   },
 ];
 
+/**
+ * Opens the browser's own install prompt, or the share sheet that holds Add to Home Screen,
+ * so nobody has to hunt for a menu that moves between browsers. Hidden when neither exists.
+ */
+export function HomeScreenShortcut({ onUnavailable }: { onUnavailable?: () => void }) {
+  const method = useInstallMethod();
+  if (method !== 'install' && method !== 'share') return null;
+  return (
+    <button
+      type="button"
+      className="profile-primary home-guide-shortcut"
+      onClick={() => {
+        void openInstallOption().then((opened) => {
+          if (!opened) onUnavailable?.();
+        });
+      }}
+    >
+      <Icon name={method === 'install' ? 'plus' : 'share'} />
+      {method === 'install' ? 'Install Relay' : 'Open Share menu'}
+    </button>
+  );
+}
+
 export function HomeScreenGuideContent() {
   return (
     <div className="home-guide-body">
@@ -187,6 +212,7 @@ export function HomeScreenGuideContent() {
         Open Relay like an app: full screen and one tap away. On iPhone, workout notifications also
         need the Home Screen app.
       </p>
+      <HomeScreenShortcut />
       <p className="home-guide-site">
         Start at{' '}
         <a href={APPLICATION_URL} target="_blank" rel="noopener noreferrer">
