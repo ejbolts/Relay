@@ -1,10 +1,17 @@
 const THEME_KEY = 'gym-logger-colour-theme';
 const MODE_KEY = 'gym-logger-colour-mode';
+const DARK_STYLE_KEY = 'gym-logger-dark-style';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
 ] as const;
 export type ColourModeId = (typeof COLOUR_MODES)[number]['id'];
+export const DARK_STYLES = [
+  { id: 'default', name: 'Default' },
+  { id: 'stained', name: 'Stained' },
+  { id: 'oled', name: 'OLED' },
+] as const;
+export type DarkStyleId = (typeof DARK_STYLES)[number]['id'];
 export const COLOUR_THEMES = [
   {
     id: 'blue',
@@ -77,6 +84,68 @@ export function applyColourTheme(id: ColourThemeId) {
     '--p-accent-soft',
     `color-mix(in srgb, ${theme.accent} ${light ? 15 : 20}%, transparent)`,
   );
+  updateBrowserThemeColour();
+}
+
+/** Mix two #rrggbb colours, matching CSS `color-mix(in srgb, a pct%, b)`. */
+function mixHex(a: string, b: string, pct: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(channel(a, i) * (pct / 100) + channel(b, i) * (1 - pct / 100))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+/** Page colour for the phone's browser bar; kept in step with the `--p-page` token in pulse.css. */
+export function browserThemeColour(
+  mode: ColourModeId,
+  style: DarkStyleId,
+  themeId: ColourThemeId,
+): string {
+  if (mode === 'light') return '#f3f5f7';
+  if (style === 'oled') return '#000000';
+  if (style === 'stained') {
+    const theme = COLOUR_THEMES.find((entry) => entry.id === themeId) ?? COLOUR_THEMES[0];
+    return mixHex(theme.accent, '#0a0d12', 7);
+  }
+  return '#0b0d0f';
+}
+
+function updateBrowserThemeColour() {
+  const root = document.documentElement;
+  const mode: ColourModeId = root.dataset.colourMode === 'light' ? 'light' : 'dark';
+  const style = DARK_STYLES.find((entry) => entry.id === root.dataset.darkStyle)?.id ?? 'default';
+  const theme = COLOUR_THEMES.find((entry) => entry.id === root.dataset.colourTheme)?.id ?? 'blue';
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', browserThemeColour(mode, style, theme));
+}
+
+export function darkStylePreference(): DarkStyleId {
+  try {
+    const saved = localStorage.getItem(DARK_STYLE_KEY);
+    return DARK_STYLES.find((style) => style.id === saved)?.id ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export function applyDarkStyle(id: DarkStyleId) {
+  document.documentElement.dataset.darkStyle = id;
+  updateBrowserThemeColour();
+}
+
+export function saveDarkStyle(id: DarkStyleId): boolean {
+  applyDarkStyle(id);
+  try {
+    localStorage.setItem(DARK_STYLE_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function saveColourTheme(id: ColourThemeId): boolean {
@@ -100,9 +169,6 @@ export function colourModePreference(): ColourModeId {
 export function applyColourMode(id: ColourModeId) {
   const root = document.documentElement;
   root.dataset.colourMode = id;
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', id === 'light' ? '#f3f5f7' : '#111417');
   const theme = root.dataset.colourTheme;
   applyColourTheme(COLOUR_THEMES.find((entry) => entry.id === theme)?.id ?? 'blue');
 }

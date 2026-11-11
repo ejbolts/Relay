@@ -3,7 +3,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   applyColourMode,
   applyColourTheme,
+  browserThemeColour,
   COLOUR_THEMES,
+  darkStylePreference,
+  saveDarkStyle,
   colourModePreference,
   colourThemePreference,
   saveColourMode,
@@ -14,6 +17,8 @@ afterEach(() => {
   document.documentElement.removeAttribute('style');
   delete document.documentElement.dataset.colourTheme;
   delete document.documentElement.dataset.colourMode;
+  delete document.documentElement.dataset.darkStyle;
+  document.head.querySelector('meta[name="theme-color"]')?.remove();
   vi.restoreAllMocks();
 });
 it('persists a selected theme and applies its accent without affecting status colours', () => {
@@ -72,4 +77,37 @@ it('ignores invalid modes and applies light mode when storage is unavailable', (
   });
   expect(saveColourMode('light')).toBe(false);
   expect(document.documentElement.dataset.colourMode).toBe('light');
+});
+
+it('defaults to the Default dark style and ignores unknown saved styles', () => {
+  expect(darkStylePreference()).toBe('default');
+  localStorage.setItem('gym-logger-dark-style', 'neon');
+  expect(darkStylePreference()).toBe('default');
+});
+it('saves a dark style, marks the page and updates the browser bar colour', () => {
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  document.head.append(meta);
+  applyColourMode('dark');
+  expect(saveDarkStyle('oled')).toBe(true);
+  expect(darkStylePreference()).toBe('oled');
+  expect(document.documentElement.dataset.darkStyle).toBe('oled');
+  expect(meta.content).toBe('#000000');
+  saveColourTheme('emerald');
+  saveDarkStyle('stained');
+  expect(meta.content).toBe(browserThemeColour('dark', 'stained', 'emerald'));
+  applyColourMode('light');
+  expect(meta.content).toBe('#f3f5f7');
+});
+it('keeps the dark style usable when storage is unavailable', () => {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('unavailable');
+  });
+  expect(saveDarkStyle('stained')).toBe(false);
+  expect(document.documentElement.dataset.darkStyle).toBe('stained');
+});
+it('tints the Stained browser bar colour with the accent theme', () => {
+  expect(browserThemeColour('dark', 'default', 'blue')).toBe('#0b0d0f');
+  expect(browserThemeColour('dark', 'stained', 'blue')).toBe('#0c141f');
+  expect(browserThemeColour('dark', 'stained', 'coral')).toBe('#151116');
 });

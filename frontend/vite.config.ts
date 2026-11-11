@@ -112,8 +112,8 @@ export default defineConfig({
         name: 'Relay',
         short_name: 'Relay',
         description: 'Private workout tracking, progress, and video logging',
-        theme_color: '#111417',
-        background_color: '#111417',
+        theme_color: '#0b0d0f',
+        background_color: '#0b0d0f',
         display: 'standalone',
         start_url: '/',
         icons: [
