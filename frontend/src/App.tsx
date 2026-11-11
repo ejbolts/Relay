@@ -298,7 +298,8 @@ import {
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
-import { fuzzyHighlightIndices, rankExerciseSearchMatches } from './exerciseSearch';
+import { rankExerciseSearchMatches } from './exerciseSearch';
+import { FuzzyHighlightedText } from './FuzzyHighlightedText';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
 import { ExerciseCustomFilter } from './ExerciseCustomFilter';
 import { exerciseEquipment } from './exerciseEquipment';
@@ -6815,25 +6816,6 @@ function MachinePhotoDetail({
         </div>
       </div>
     </section>
-  );
-}
-
-function FuzzyHighlightedText({ value, query }: { value: string; query: string }) {
-  const highlighted = new Set(fuzzyHighlightIndices(value, query));
-  if (!highlighted.size) return value;
-
-  return (
-    <>
-      {[...value].map((character, index) =>
-        highlighted.has(index) ? (
-          <b className="exercise-search-match" key={`${character}-${index}`}>
-            {character}
-          </b>
-        ) : (
-          <Fragment key={`${character}-${index}`}>{character}</Fragment>
-        ),
-      )}
-    </>
   );
 }
 
