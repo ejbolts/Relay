@@ -14,6 +14,7 @@ import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
+import { RoutineExerciseSearch } from './RoutineExerciseSearch';
 import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
 import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
@@ -1212,13 +1213,11 @@ function RoutineEditor({
                           );
                         })}
                         {item.workout_type_id && (
-                          <select
-                            className="routine-add-exercise"
-                            aria-label={`Add exercise to day ${di + 1}`}
-                            value=""
+                          <RoutineExerciseSearch
+                            day={di + 1}
+                            exercises={exercises}
                             disabled={item.movements.length >= 20 || exercises.length === 0}
-                            onChange={(event) => {
-                              const exercise = exercises.find((e) => e.id === event.target.value)!;
+                            onAdd={(exercise) =>
                               day(di, {
                                 ...item,
                                 movements: [
@@ -1232,16 +1231,9 @@ function RoutineEditor({
                                         : [emptySet(), emptySet(), emptySet()],
                                   },
                                 ],
-                              });
-                            }}
-                          >
-                            <option value="">+ Exercise</option>
-                            {exercises.map((e) => (
-                              <option key={e.id} value={e.id}>
-                                {e.name}
-                              </option>
-                            ))}
-                          </select>
+                              })
+                            }
+                          />
                         )}
                       </section>
                     </div>

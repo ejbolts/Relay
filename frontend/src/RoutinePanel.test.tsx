@@ -73,6 +73,15 @@ async function input(selector: string, value: string) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
+async function addExercise(day: number, query: string, name: string) {
+  await click(`Add exercise to day ${day}`);
+  await input(`[aria-label="Search exercises to add to day ${day}"]`, query);
+  const option = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+    (x) => x.querySelector('strong')?.textContent === name,
+  );
+  expect(option).toBeDefined();
+  await act(async () => option!.click());
+}
 async function openDay(day: number) {
   await act(async () =>
     document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[day - 1].click(),
@@ -220,7 +229,7 @@ it('requires an explicit date confirmation before replacing the active split', a
 it('creates private splits without a publishing switch and shares from split options', async () => {
   await mount(true);
   await click('New split');
-  await input('[aria-label="Add exercise to day 1"]', 'bench');
+  await addExercise(1, 'bnch', 'Bench press');
   await click('Add rest day');
   expect(document.querySelector('.routine-editor [role="switch"]')).toBeNull();
   await save();
@@ -281,7 +290,7 @@ it('explains how to complete an empty workout day before sharing and allows retr
   await click('Close Split options');
   await click('Edit split');
   await openDay(2);
-  await input('[aria-label="Add exercise to day 2"]', 'row');
+  await addExercise(2, 'row', 'Cable row');
   await save();
   await click('Close notification');
   await click('Options for Upper / Rest');
