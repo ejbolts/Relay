@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from './api';
+import { api, isConnectionFailure } from './api';
 import { authErrorMessage } from './authForm';
 import { nextReaction, reactionSummary, REACTIONS } from './friendFeedData';
 import { Icon } from './Icon';
+import { queueReaction, usePendingReaction } from './pendingReactions';
 import type { WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionPeople } from './WorkoutReactionPeople';
@@ -45,6 +46,9 @@ export function WorkoutReactionControl({
   closeRef.current = onOpenChange;
   const shown = open ? panel : null;
   const yours = reactions.yours;
+  const pending = usePendingReaction(workoutId, onChange);
+  const waiting = !ownWorkout && pending !== undefined;
+  const pendingChoice = waiting ? REACTIONS.find((entry) => entry.kind === pending) : undefined;
   const summary = reactionSummary(reactions.counts);
   const selected = !ownWorkout && REACTIONS.find((entry) => entry.kind === yours);
   const comments = reactions.comment_count ?? 0;
@@ -96,8 +100,13 @@ export function WorkoutReactionControl({
     if (busy) return;
     setBusy(true);
     setError(null);
+    const next = nextReaction(yours, chosen);
+    const wait = () => {
+      queueReaction(workoutId, next);
+      show(null);
+    };
     try {
-      const next = nextReaction(yours, chosen);
+      if (navigator.onLine === false) return wait();
       const updated = next
         ? await api.sharing.react(workoutId, next)
         : await api.sharing.removeReaction(workoutId);
@@ -105,7 +114,8 @@ export function WorkoutReactionControl({
       onChange(updated);
       show(null);
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      if (isConnectionFailure(reason)) wait();
+      else setError(authErrorMessage(reason));
     } finally {
       setBusy(false);
     }
@@ -115,18 +125,32 @@ export function WorkoutReactionControl({
     <button
       ref={reactTrigger}
       type="button"
-      className="discussion-button friend-react-button"
+      className={`discussion-button friend-react-button${waiting ? ' is-pending' : ''}`}
       aria-label={
-        selected
-          ? `Your reaction to ${subject}: ${selected.label}. Change reaction`
-          : `React to ${subject}`
+        waiting
+          ? `${pendingChoice ? `${pendingChoice.label} reaction` : 'Reaction removal'} to ${subject} sends when you're back online`
+          : selected
+            ? `Your reaction to ${subject}: ${selected.label}. Change reaction`
+            : `React to ${subject}`
       }
+      title={waiting ? "Sends when you're back online" : undefined}
       aria-description={reactionCount}
       aria-expanded={shown === 'reactions'}
       aria-controls={`reactions-${workoutId}`}
+      disabled={waiting}
       onClick={() => show(shown === 'reactions' ? null : 'reactions')}
     >
-      {selected ? <span aria-hidden="true">{selected.emoji}</span> : <Icon name="react" />}
+      {waiting ? (
+        pendingChoice ? (
+          <span aria-hidden="true">{pendingChoice.emoji}</span>
+        ) : (
+          <Icon name="react" />
+        )
+      ) : selected ? (
+        <span aria-hidden="true">{selected.emoji}</span>
+      ) : (
+        <Icon name="react" />
+      )}
     </button>
   );
 
