@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
-import { api, ApiError } from './api';
+import { api, ApiError, revisionAfterSave } from './api';
 import { reportSavedDataUsed, reportServerReached } from './connectionStatus';
 import { WORKOUT_SAVE_TIMEOUT_MS } from './usePendingWorkoutSave';
 import * as push from './push';
@@ -44,6 +44,7 @@ vi.mock('./api', async (importOriginal) => {
       createWorkout: vi.fn(),
       updateWorkout: vi.fn(),
     },
+    revisionAfterSave: vi.fn(() => null),
   };
 });
 vi.mock('./workoutCache', () => ({
@@ -1436,6 +1437,22 @@ describe('phantom workout prevention', () => {
     await act(async () => window.dispatchEvent(new Event('pagehide')));
     expectNoActiveWorkout();
     expect(api.createWorkout).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes from the revision the save reported instead of asking for it again', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    vi.mocked(revisionAfterSave).mockReturnValueOnce('after-save');
+    await mount();
+    const revisionChecks = vi.mocked(api.workoutRevision).mock.calls.length;
+
+    await confirmFinish();
+
+    await vi.waitFor(() =>
+      expect(api.listWorkouts).toHaveBeenLastCalledWith(expect.any(String), 'after-save'),
+    );
+    expect(api.dashboard).toHaveBeenCalledTimes(2);
+    expect(api.workoutRevision).toHaveBeenCalledTimes(revisionChecks);
   });
 
   it('closes the original logger without replacing it when a save succeeds after returning to the logger', async () => {

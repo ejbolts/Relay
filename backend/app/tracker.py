@@ -204,6 +204,8 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 WORKOUT_CACHE_REVISION_KEY = "workout_cache_revision"
+# Saves report the revision their data reached, so the app can refresh without asking for it.
+WORKOUT_REVISION_HEADER = "X-Workout-Revision"
 WORKOUT_TYPE_COLORS_KEY = "workout_type_colors"
 DEFAULT_WORKOUT_TYPE_COLORS = WorkoutTypeColors(
     upper="#8b5cf6",
@@ -222,6 +224,11 @@ def workout_cache_revision(db: Session, user_id: str) -> str:
 
 def bump_workout_cache_revision(db: Session, user_id: str) -> None:
     set_setting(db, user_id, WORKOUT_CACHE_REVISION_KEY, str(uuid.uuid4()))
+
+
+def report_workout_revision(response: Response, db: Session, user_id: str) -> None:
+    # Read after the save commits: later reads can only be newer than this revision.
+    response.headers[WORKOUT_REVISION_HEADER] = workout_cache_revision(db, user_id)
 
 
 def get_owned(db: Session, model, item_id: str, user_id: str):
@@ -2354,7 +2361,11 @@ def exercise_history_baselines(
 
 @router.post("/workouts", response_model=TrainingWorkoutRead, status_code=201)
 def create_workout(
-    payload: TrainingWorkoutCreate, db: DbSession, user: CurrentUser, settings: SettingsDependency
+    payload: TrainingWorkoutCreate,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    response: Response,
 ) -> TrainingWorkout:
     user_id = user.id
     client_session_id = str(payload.client_session_id) if payload.client_session_id else None
@@ -2373,6 +2384,7 @@ def create_workout(
 
     existing = saved_session()
     if existing is not None:
+        report_workout_revision(response, db, user_id)
         return existing
     limits = load_account_limits(db, settings)
     check_workout_size(payload, limits, user)
@@ -2404,6 +2416,7 @@ def create_workout(
         db.rollback()
         existing = saved_session()
         if existing is not None:
+            report_workout_revision(response, db, user_id)
             return existing
         raise
     replace_workout_contents(db, user.id, workout, payload, is_new=True)
@@ -2413,7 +2426,9 @@ def create_workout(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
-    return load_workout(db, user.id, workout.id)
+    saved = load_workout(db, user.id, workout.id)
+    report_workout_revision(response, db, user_id)
+    return saved
 
 
 @router.get("/workouts/export.csv")
@@ -2712,6 +2727,7 @@ def update_workout(
     db: DbSession,
     user: CurrentUser,
     settings: SettingsDependency,
+    response: Response,
     client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
@@ -2724,7 +2740,9 @@ def update_workout(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
-    return load_workout(db, user.id, workout.id)
+    saved = load_workout(db, user.id, workout.id)
+    report_workout_revision(response, db, user.id)
+    return saved
 
 
 @router.delete("/workouts/{workout_id}", status_code=204)

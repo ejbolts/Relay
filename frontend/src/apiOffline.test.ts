@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, SAVED_COPY_AFTER_MS } from './api';
+import { api, ApiError, revisionAfterSave, SAVED_COPY_AFTER_MS } from './api';
 import { isUsingSavedData, reportServerReached } from './connectionStatus';
 import { LAST_USER_KEY } from './deviceAccount';
 import { clearOffline, replaceOfflineBackend, type OfflineBackend } from './offlineStore';
@@ -231,5 +231,35 @@ describe('workout history without a connection', () => {
       since: '2026-08-01',
       workouts: [recent],
     });
+  });
+});
+
+describe('refreshing straight after a workout save', () => {
+  const saved = { id: 'saved-workout', workout_date: '2026-08-02' } as TrackedWorkout;
+
+  it('remembers the revision a save reports and reads the new snapshot without asking again', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(saved), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json', 'X-Workout-Revision': 'after-save' },
+      }),
+    );
+    const workout = await api.createWorkout({} as Parameters<typeof api.createWorkout>[0]);
+    expect(revisionAfterSave(workout)).toBe('after-save');
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(json({ revision: 'after-save', workouts: [saved] }));
+    expect(await api.listWorkouts('2026-08-01', 'after-save')).toEqual([saved]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/workouts/snapshot');
+  });
+
+  it('reports no revision when the server does not send one', async () => {
+    fetchMock.mockResolvedValueOnce(json(saved));
+    const workout = await api.updateWorkout(
+      saved.id,
+      {} as Parameters<typeof api.updateWorkout>[1],
+    );
+    expect(revisionAfterSave(workout)).toBeNull();
   });
 });

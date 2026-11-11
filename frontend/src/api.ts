@@ -121,6 +121,32 @@ export class ApiError extends Error {
 interface RequestOptions {
   /** Public auth endpoints handle their own 401s (for example a wrong password). */
   signalExpiredSession?: boolean;
+  /** Reads headers from a successful answer before its body is returned. */
+  onHeaders?: (headers: Headers) => void;
+}
+
+/** The data revision each saved workout's save reported, for refreshing straight after it. */
+const revisionsAfterSave = new WeakMap<TrackedWorkout, string>();
+
+/**
+ * The data revision the server reached when it saved this workout, or null when the server did
+ * not report one (an older server). Data read after the save is at least this new.
+ */
+export function revisionAfterSave(workout: TrackedWorkout): string | null {
+  return revisionsAfterSave.get(workout) ?? null;
+}
+
+function saveWorkoutRequest(path: string, init: RequestInit): Promise<TrackedWorkout> {
+  let revision: string | null = null;
+  return request<TrackedWorkout>(path, init, {
+    onHeaders: (headers) => {
+      revision = headers.get('X-Workout-Revision');
+    },
+  }).then((workout) => {
+    if (revision && workout && typeof workout === 'object')
+      revisionsAfterSave.set(workout, revision);
+    return workout;
+  });
 }
 
 /** Proxy answers meaning the Relay server itself could not be reached. */
@@ -138,7 +164,7 @@ export function isConnectionFailure(reason: unknown): boolean {
 async function request<T>(
   path: string,
   init?: RequestInit,
-  { signalExpiredSession = true }: RequestOptions = {},
+  { signalExpiredSession = true, onHeaders }: RequestOptions = {},
 ): Promise<T> {
   const scope = captureAccountCacheScope();
   const checkAccount = () => {
@@ -174,6 +200,7 @@ async function request<T>(
   }
   const value = response.status === 204 ? (undefined as T) : ((await response.json()) as T);
   checkAccount();
+  onHeaders?.(response.headers);
   return value;
 }
 
@@ -270,7 +297,11 @@ async function requestBlob(path: string): Promise<Blob> {
  * Workouts dated `since` or later, from the device cache while the server revision matches. Offline,
  * the saved snapshot answers whatever its revision, provided it reaches back that far.
  */
-async function listCachedWorkouts(since: string): Promise<TrackedWorkout[]> {
+async function listCachedWorkouts(
+  since: string,
+  /** A revision already confirmed for this read, such as the one a save just reported. */
+  knownRevision?: string,
+): Promise<TrackedWorkout[]> {
   const scope = captureAccountCacheScope();
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
@@ -278,7 +309,9 @@ async function listCachedWorkouts(since: string): Promise<TrackedWorkout[]> {
   const cached = readWorkoutCache();
   return preferServer(
     async () => {
-      const current = await request<WorkoutCacheRevision>('/api/workouts/revision');
+      const current = knownRevision
+        ? { revision: knownRevision }
+        : await request<WorkoutCacheRevision>('/api/workouts/revision');
       const reusable = cachedWorkoutsForRevision(await cached, current.revision, since);
       checkAccount();
       if (reusable) return reusable;
@@ -946,14 +979,14 @@ export const api = {
   undoImportBatch: (id: string) =>
     request<ImportUndoResult>(`/api/workouts/import/batches/${id}`, { method: 'DELETE' }),
   createWorkout: (payload: WorkoutInput, signal?: AbortSignal) =>
-    request<TrackedWorkout>('/api/workouts', {
+    saveWorkoutRequest('/api/workouts', {
       signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
   updateWorkout: (id: string, payload: WorkoutInput, signal?: AbortSignal) =>
-    request<TrackedWorkout>(`/api/workouts/${id}`, {
+    saveWorkoutRequest(`/api/workouts/${id}`, {
       signal,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

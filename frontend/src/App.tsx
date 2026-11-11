@@ -27,7 +27,7 @@ import type {
   RefObject,
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { api } from './api';
+import { api, revisionAfterSave } from './api';
 import { SetDragHandle } from './SetDragHandle';
 import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
@@ -971,14 +971,25 @@ function AppContent() {
   async function refreshData({
     silent = false,
     activityLabel = trainingDataActivityLabel('startup'),
-  }: { silent?: boolean; activityLabel?: string | null } = {}) {
+    knownRevision = null,
+  }: {
+    silent?: boolean;
+    activityLabel?: string | null;
+    /** A revision the server already reported, such as a save's, so the reads start at once. */
+    knownRevision?: string | null;
+  } = {}) {
     const generation = ++refreshGenerationRef.current;
     const cacheScope = captureAccountCacheScope();
     const current = () => generation === refreshGenerationRef.current && cacheScope.isCurrent();
     const refresh = async () => {
-      // Read before the data: a change during this refresh must trigger another pass. Offline,
+      // Read before the data: a change during this refresh must trigger another pass. A save's
+      // revision already precedes these reads, so they start without asking again. Offline,
       // there is no revision to confirm and saved copies answer the reads straight away.
-      const revision = isUsingSavedData() ? null : await api.workoutRevision().catch(() => null);
+      const revision = isUsingSavedData()
+        ? null
+        : knownRevision
+          ? { revision: knownRevision }
+          : await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
@@ -1032,7 +1043,10 @@ function AppContent() {
             }));
             throw reason;
           }),
-        api.listWorkouts(windowStart).then((nextWorkouts) => {
+        (revision && knownRevision
+          ? api.listWorkouts(windowStart, revision.revision)
+          : api.listWorkouts(windowStart)
+        ).then((nextWorkouts) => {
           if (!current()) return;
           startTransition(() =>
             setWorkouts((current) => [
@@ -1315,7 +1329,11 @@ function AppContent() {
         )
         .catch(() => undefined);
     }
-    void refreshData({ silent: true, activityLabel: 'Updating workout data…' });
+    void refreshData({
+      silent: true,
+      activityLabel: 'Updating workout data…',
+      knownRevision: revisionAfterSave(saved),
+    });
   }
 
   async function deleteWorkout(workout: TrackedWorkout) {
