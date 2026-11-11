@@ -102,7 +102,7 @@ export function applyColourMode(id: ColourModeId) {
   root.dataset.colourMode = id;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', id === 'light' ? '#f3f5f7' : '#060708');
+    ?.setAttribute('content', id === 'light' ? '#f3f5f7' : '#111417');
   const theme = root.dataset.colourTheme;
   applyColourTheme(COLOUR_THEMES.find((entry) => entry.id === theme)?.id ?? 'blue');
 }
