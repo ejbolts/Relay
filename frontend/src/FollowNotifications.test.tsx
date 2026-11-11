@@ -446,3 +446,69 @@ it('orders all notification types newest first before paginating', async () => {
     'Sample comment',
   );
 });
+
+it('replies to a comment notice from a thread opened at that comment', async () => {
+  const comment = (id: string, parent: string | null, name: string) => ({
+    id,
+    author: { id, display_name: name, profile_photo_url: null },
+    body: `${name} said hi`,
+    parent_id: parent,
+    reply_to: null,
+    created_at: person.since,
+    edited_at: null,
+    can_edit: false,
+    can_delete: false,
+    reactions: { counts: [], yours: null },
+  });
+  const notice = {
+    ...person,
+    notice_id: 'notice-reply',
+    comment_id: 'c-sam',
+    workout_id: 'w9',
+    workout_name: 'Upper body workout',
+    kind: 'comment' as const,
+    body: 'Sam Preview said hi',
+    reaction: null,
+  };
+  snapshot = {
+    requests: [],
+    accepted: [],
+    comments: [
+      notice,
+      { ...notice, notice_id: 'notice-react', kind: 'comment_reaction', reaction: 'love' },
+    ],
+  };
+  // The notified comment is on the second page, so the thread loads until it appears.
+  const comments = vi
+    .spyOn(api.sharing, 'comments')
+    .mockResolvedValueOnce({ items: [comment('c-other', null, 'Alex')], total: 2, next_offset: 1 })
+    .mockResolvedValueOnce({
+      items: [comment('c-sam', null, 'Sam Preview')],
+      total: 2,
+      next_offset: null,
+    });
+  const add = vi
+    .spyOn(api.sharing, 'addComment')
+    .mockResolvedValue(comment('c-new', 'c-sam', 'Me'));
+  await render();
+  await click('Notifications, 2 unread');
+  expect(document.querySelectorAll('button[aria-label="Reply to Sam Preview"]')).toHaveLength(1);
+  await click('Reply to Sam Preview');
+  const thread = document.querySelector('dialog.follow-notification-thread');
+  expect(thread?.textContent).toContain('Upper body workout');
+  expect(document.querySelector('dialog.follow-notifications')).toBeNull();
+  expect(comments).toHaveBeenCalledWith('w9', 1);
+  expect(thread?.querySelector('.comment-replying')?.textContent).toContain('@Sam Preview');
+  const textarea = thread!.querySelector('textarea')!;
+  expect(document.activeElement).toBe(textarea);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    setter.call(textarea, 'Thanks!');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click('Send');
+  expect(add).toHaveBeenCalledWith('w9', 'Thanks!', 'c-sam', null);
+  await click('Close Upper body workout');
+  expect(document.querySelector('dialog.follow-notification-thread')).toBeNull();
+  expect(document.activeElement).toBe(host.querySelector('.follow-notification-button'));
+});

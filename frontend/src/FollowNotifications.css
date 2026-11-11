@@ -71,6 +71,37 @@
   height: 1.125rem;
   color: var(--p-muted);
 }
+.follow-notification-reply {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  margin-right: -0.375rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--p-muted);
+  cursor: pointer;
+}
+.follow-notification-reply:hover,
+.follow-notification-reply:focus-visible {
+  background: var(--p-accent-soft);
+  color: var(--p-accent);
+}
+.follow-notification-reply .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.popup-dialog.follow-notification-thread {
+  width: min(28rem, calc(100vw - 1.5rem));
+}
+.follow-notification-thread .workout-comments {
+  margin: 0;
+  padding: 0.875rem;
+  border-top: 0;
+}
 .follow-notification-actions {
   display: flex;
   flex-wrap: wrap;
