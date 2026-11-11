@@ -797,13 +797,14 @@ function AppContent() {
   );
   const workoutSaving = editingWorkoutSaving || pendingWorkout.saving;
   const workoutSaveBlocked = workoutSaving || pendingWorkout.pending !== null;
-  // The finished workout shows straight away from this device's copy while it syncs.
+  // The finished workout shows straight away from this device's copy while it syncs. One the
+  // server refused waits for review instead, so it is not presented as saved.
   const pendingPreview = useMemo(
     () =>
-      pendingWorkout.pending
+      pendingWorkout.pending && !pendingWorkout.needsReview
         ? pendingWorkoutPreview(pendingWorkout.pending, exercises, workoutTypes.types)
         : null,
-    [exercises, pendingWorkout.pending, workoutTypes.types],
+    [exercises, pendingWorkout.needsReview, pendingWorkout.pending, workoutTypes.types],
   );
   // After the save, its on-device figures stay until the refreshed dashboard replaces them.
   const [savedPreview, setSavedPreview] = useState<{

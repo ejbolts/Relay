@@ -2017,6 +2017,31 @@ describe('durable workout completion', () => {
     expectPreserved(draft);
   });
 
+  it('stops listing a finished workout the server refused, leaving it for review', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    let reject!: (reason: unknown) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    await navigateTo('Training');
+    const listed = () =>
+      [...container.querySelectorAll('.history-card')].some((item) =>
+        item.textContent?.includes('Recovery workout'),
+      );
+    expect(listed()).toBe(true);
+
+    await act(async () =>
+      reject(new ApiError('Choose an available workout type.', 'invalid_type', 422)),
+    );
+    expect(listed()).toBe(false);
+    expect(container.textContent).toContain('Choose an available workout type.');
+    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
+  });
+
   it('keeps a completion on the device without a review while this release is too old to save', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
