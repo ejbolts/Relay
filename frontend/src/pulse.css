@@ -75,7 +75,7 @@ body {
 
 .content-page {
   width: min(100%, 720px);
-  padding: calc(env(safe-area-inset-top) + 0.6rem) 0.875rem 2.5rem;
+  padding: calc(env(safe-area-inset-top) + 1.1rem) 0.875rem 2.5rem;
 }
 
 .tracker-app.has-tab-bar .content-page {
