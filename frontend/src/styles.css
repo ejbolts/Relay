@@ -10,11 +10,11 @@
   background: var(--paper);
   font-synthesis: none;
   --ink: #eef1f3;
-  --muted-ink: #a1aab1;
-  --paper: #111417;
-  --page: #111417;
-  --card: #1f2429;
-  --line: #383f46;
+  --muted-ink: #a8b0b6;
+  --paper: #000000;
+  --page: #000000;
+  --card: #000000;
+  --line: #3d3d3d;
   --accent: #2c74d0;
   --accent-dark: #357bd6;
   --green: #2c74d0;
