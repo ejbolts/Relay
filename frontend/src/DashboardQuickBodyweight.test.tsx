@@ -31,7 +31,12 @@ afterEach(async () => {
 async function render(today: number | null = null) {
   await act(async () =>
     root.render(
-      <DashboardQuickBodyweight latestBodyweight={84.2} todayBodyweight={today} onSave={save} />,
+      <DashboardQuickBodyweight
+        latestBodyweight={84.2}
+        priorBodyweight={83.9}
+        todayBodyweight={today}
+        onSave={save}
+      />,
     ),
   );
 }
@@ -145,14 +150,25 @@ describe('daily bodyweight check-in', () => {
     );
     expect(saveFat).not.toHaveBeenCalled();
   });
-  it('shows one saved-today summary and a temporary five-second undo popup after save', async () => {
+  it('keeps the saved value beside a tick while editing and shows a five-second undo popup', async () => {
     await render();
     expect(toast()).toBeNull();
+    expect(container.querySelector('[role="status"]')!.textContent).toBe('Last 83.9 kg');
     await submit();
     expect(save).toHaveBeenCalledExactlyOnceWith(84.2);
     await render(84.2);
-    expect(container.textContent).toContain('Saved today · 84.2 kg');
-    expect(container.textContent!.match(/saved today/gi)).toHaveLength(1);
+    const status = container.querySelector('.quick-check-in-status')!;
+    expect(status.getAttribute('aria-label')).toBe('Prior: 83.9 kg; Saved today: 84.2 kg');
+    const change = status.querySelector('.quick-check-in-change')!;
+    expect(change.textContent).toBe('0.3');
+    expect(change.querySelector('svg')).not.toBeNull();
+    expect(status.querySelector('.quick-check-in-today svg')).not.toBeNull();
+    expect(status.textContent).toBe('0.384.2 kg');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Increase by 0.1 kg"]')!.click(),
+    );
+    expect(container.querySelector('input')!.value).toBe('84.3');
+    expect(status.textContent).toBe('0.384.2 kg');
     expect(container.querySelector('.quick-bodyweight-message')).toBeNull();
     expect(toast()!.getAttribute('style')).toContain('5000ms');
     await act(async () => vi.advanceTimersByTime(4999));

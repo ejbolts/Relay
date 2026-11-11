@@ -378,8 +378,40 @@ describe('App startup', () => {
     const markup = renderToday({ workoutStartedAt: Date.now() - 65_000, todayBodyweight: 84.1 });
 
     expect(markup).not.toContain('live-workout-card');
-    expect(markup).toContain('Saved today · 84.1 kg');
+    expect(markup).toContain('aria-label="Saved today: 84.1 kg"');
     expect(markup).not.toContain('next-session-title');
+  });
+
+  it('shows the last check-in before today, independently finding the prior body-fat value', () => {
+    const measurements = [
+      { measurement_date: '2026-10-08', weight_kg: 90, body_fat_pct: 20 },
+      { measurement_date: '2026-10-07', weight_kg: 84.1, body_fat_pct: 14 },
+      { measurement_date: '2026-10-06', weight_kg: 84.2, body_fat_pct: null },
+      { measurement_date: '2026-10-05', weight_kg: 84.5, body_fat_pct: 14.2 },
+    ].map((item, index) => ({
+      ...item,
+      id: String(index),
+      notes: null,
+      is_sample: true,
+      created_at: `${item.measurement_date}T00:00:00Z`,
+    }));
+    const markup = renderToday({
+      today: '2026-10-07',
+      measurements,
+      todayBodyweight: 84.1,
+      todayBodyFat: 14,
+      onSaveBodyFat: vi.fn(),
+    });
+    expect(markup).toContain('aria-label="Prior: 84.2 kg; Saved today: 84.1 kg"');
+    expect(markup).toContain('aria-label="Prior: 14.2%; Saved today: 14.0%"');
+    expect(markup).not.toContain('Prior: 90.0 kg');
+    const firstCheckIn = renderToday({
+      today: '2026-10-07',
+      measurements: measurements.filter((item) => item.measurement_date >= '2026-10-07'),
+      todayBodyweight: 84.1,
+    });
+    expect(firstCheckIn).toContain('aria-label="Saved today: 84.1 kg"');
+    expect(firstCheckIn).not.toContain('Prior:');
   });
 
   it('marks the active tab and shows live time on the Start button', () => {

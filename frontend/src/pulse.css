@@ -1077,9 +1077,38 @@ button.pulse-card:hover {
   font-size: 0.6875rem;
 }
 
-.quick-check-in-heading > span.logged {
+.quick-check-in-status {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.quick-check-in-status > span {
+  white-space: nowrap;
+}
+
+.quick-check-in-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem 0.2rem 0.4rem;
+  background: color-mix(in srgb, var(--p-good) 14%, transparent);
   color: var(--p-good);
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.quick-check-in-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.quick-check-in-status .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .quick-check-in-row + .quick-check-in-row {
