@@ -739,32 +739,49 @@ export function TodayScreen({
 
 const BODYWEIGHT_UNDO_MS = 5000;
 
-function CheckInStatus({ prior, today }: { prior: string | null; today: string | null }) {
+function CheckInStatus({
+  prior,
+  today,
+  unit,
+}: {
+  prior: number | null;
+  today: number | null;
+  unit: string;
+}) {
+  const format = (value: number) => `${value.toFixed(1)}${unit === '%' ? '%' : ` ${unit}`}`;
+  const change =
+    prior === null || today === null
+      ? null
+      : Number((Number(today.toFixed(1)) - Number(prior.toFixed(1))).toFixed(1));
   return (
     <span
       className="quick-check-in-status"
       role="status"
       aria-label={[
-        ...(prior === null ? [] : [`Prior: ${prior}`]),
-        today === null ? 'Not logged today' : `Saved today: ${today}`,
+        ...(prior === null ? [] : [`Prior: ${format(prior)}`]),
+        today === null ? 'Not logged today' : `Saved today: ${format(today)}`,
       ].join('; ')}
     >
-      {prior !== null && (
-        <>
-          <span>ytd {prior}</span>
-          <span aria-hidden="true">·</span>
-        </>
-      )}
       {today === null ? (
-        'Not logged today'
+        <span>{prior === null ? 'Not logged today' : `Last ${format(prior)}`}</span>
       ) : (
         <>
+          {change !== null && (
+            <span className="quick-check-in-change" aria-hidden="true">
+              {change === 0 ? (
+                '±0.0'
+              ) : (
+                <>
+                  <Icon name={change < 0 ? 'down' : 'up'} />
+                  {Math.abs(change).toFixed(1)}
+                </>
+              )}
+            </span>
+          )}
           <span className="quick-check-in-today">
             <Icon name="check" />
-            Today
+            {format(today)}
           </span>
-          <span aria-hidden="true">·</span>
-          <span className="quick-check-in-today">{today}</span>
         </>
       )}
     </span>
@@ -928,16 +945,9 @@ export function DashboardQuickBodyweight({
           <header className="quick-check-in-heading">
             {mode === 'combined' && <h3>Body weight</h3>}
             <CheckInStatus
-              prior={
-                priorBodyweight === null
-                  ? null
-                  : `${weightFromKg(priorBodyweight, weightUnit).toFixed(1)} ${weightUnit}`
-              }
-              today={
-                todayBodyweight === null
-                  ? null
-                  : `${weightFromKg(todayBodyweight, weightUnit).toFixed(1)} ${weightUnit}`
-              }
+              prior={priorBodyweight === null ? null : weightFromKg(priorBodyweight, weightUnit)}
+              today={todayBodyweight === null ? null : weightFromKg(todayBodyweight, weightUnit)}
+              unit={weightUnit}
             />
           </header>
           <form
@@ -993,10 +1003,7 @@ export function DashboardQuickBodyweight({
         <section className="quick-check-in-row body-fat-check-in" aria-label="Body fat check-in">
           <header className="quick-check-in-heading">
             {mode === 'combined' && <h3>Body fat</h3>}
-            <CheckInStatus
-              prior={priorBodyFat === null ? null : `${priorBodyFat.toFixed(1)}%`}
-              today={todayBodyFat === null ? null : `${todayBodyFat.toFixed(1)}%`}
-            />
+            <CheckInStatus prior={priorBodyFat} today={todayBodyFat} unit="%" />
           </header>
           <form
             className="quick-bodyweight-form"
