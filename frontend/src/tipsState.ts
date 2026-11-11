@@ -82,6 +82,7 @@ export type TipState = {
   seen: Partial<Record<TipId, 'seen' | 'dismissed' | 'learned'>>;
   counts: Record<string, number>;
   homeRotation?: { id: TipId; shownAt: number };
+  homeDismissedAt?: number;
 };
 export const TIP_COOLDOWN = 24 * 60 * 60 * 1000;
 export const freshTips = (): TipState => ({ enabled: true, lastShown: 0, seen: {}, counts: {} });
@@ -95,6 +96,9 @@ export function loadTips(account: string): TipState {
       Object.hasOwn(TIP_DEFINITIONS, value.homeRotation.id) &&
       Number.isFinite(value.homeRotation.shownAt)
         ? { homeRotation: { id: value.homeRotation.id, shownAt: value.homeRotation.shownAt } }
+        : {}),
+      ...(typeof value.homeDismissedAt === 'number' && Number.isFinite(value.homeDismissedAt)
+        ? { homeDismissedAt: value.homeDismissedAt }
         : {}),
       enabled: value.enabled !== false,
       lastShown:
@@ -140,6 +144,10 @@ export function countTipEvent(state: TipState, event: string): TipState {
 }
 
 export const HOME_TIP_REVISIT_MS = 5 * 60 * 1000;
+export const HOME_TIP_SNOOZE_MS = 10 * 60 * 1000;
+export function homeTipSnoozed(state: TipState, now: number) {
+  return !!state.homeDismissedAt && now - state.homeDismissedAt < HOME_TIP_SNOOZE_MS;
+}
 export function rotatingHomeTip(
   ids: TipId[],
   previous: TipState['homeRotation'],

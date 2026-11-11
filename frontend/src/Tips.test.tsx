@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
-import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
+import { loadTips, saveTips, freshTips, HOME_TIP_SNOOZE_MS, TIP_COOLDOWN } from './tipsState';
 
 let root: Root, container: HTMLDivElement;
 let controller: ReturnType<typeof useTips>;
@@ -289,9 +289,34 @@ describe('shared tip presentation', () => {
     await act(async () => controller.dismiss());
     await advance();
     expect(document.querySelector('.relay-tip-home')).toBeNull();
+    vi.setSystemTime(Date.now() + HOME_TIP_SNOOZE_MS);
     await navigate('body');
     await navigate('dashboard');
     expect(document.querySelector('.relay-tip-home')?.textContent).toContain('Put sets in order');
+  });
+  it('keeps a closed Home tip hidden for ten minutes across visits and reloads', async () => {
+    await rotatingHome();
+    await act(async () => button('Dismiss tip').click());
+    const dismissedAt = Date.now();
+    expect(loadTips('alice').homeDismissedAt).toBe(dismissedAt);
+    expect(document.querySelector('.relay-tip-home')).toBeNull();
+    await navigate('body');
+    await navigate('dashboard');
+    expect(document.querySelector('.relay-tip-home')).toBeNull();
+    await render('other');
+    await render(
+      'alice',
+      <>
+        <Harness />
+        <HomeTips workouts={[]} hasSplit />
+      </>,
+    );
+    vi.setSystemTime(dismissedAt + HOME_TIP_SNOOZE_MS - 3000);
+    await advance();
+    expect(document.querySelector('.relay-tip-home')).toBeNull();
+    await advance(1000);
+    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('One less tap');
+    expect(loadTips('alice').seen.reorder).toBe('dismissed');
   });
   it('includes relevant machine and maintenance tips in the Home carousel', async () => {
     page = 'dashboard';
