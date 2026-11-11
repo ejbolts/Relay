@@ -1648,7 +1648,7 @@
   gap: 0.4rem;
   font-size: 0.8125rem;
 }
-.comment-replying > button {
+.comment-replying > button:last-child {
   margin-left: auto;
   border: 0;
   background: none;

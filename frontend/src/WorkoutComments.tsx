@@ -11,8 +11,11 @@ export function WorkoutComments({
   onOpenMember,
   onCountChange,
   active = true,
+  replyTo,
 }: {
   workoutId: string;
+  /** A comment to reply to once it loads, such as one opened from a notification. */
+  replyTo?: string;
   onOpenMember?: (person: WorkoutComment['author']) => void;
   onCountChange: (count: number, summary?: WorkoutReactions) => void;
   active?: boolean;
@@ -34,13 +37,23 @@ export function WorkoutComments({
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    api.sharing
-      .comments(workoutId)
-      .then((page) => {
+    (async () => {
+      let page = await api.sharing.comments(workoutId);
+      const rows = [...page.items];
+      // Load further pages only until the comment being replied to appears.
+      while (replyTo && page.next_offset !== null && !rows.some((row) => row.id === replyTo)) {
+        page = await api.sharing.comments(workoutId, page.next_offset);
+        rows.push(...page.items);
+      }
+      return { page, rows };
+    })()
+      .then(({ page, rows }) => {
         if (cancelled) return;
-        setItems(page.items);
+        setItems(rows);
         setNext(page.next_offset);
         countRef.current(page.total, page.reactions);
+        const target = replyTo ? rows.find((row) => row.id === replyTo) : undefined;
+        if (target) setReply(target);
       })
       .catch((reason) => {
         if (!cancelled) setError(authErrorMessage(reason));
@@ -51,7 +64,11 @@ export function WorkoutComments({
     return () => {
       cancelled = true;
     };
-  }, [workoutId, active]);
+  }, [workoutId, active, replyTo]);
+
+  useEffect(() => {
+    if (!loading && reply && reply.id === replyTo) input.current?.focus();
+  }, [loading, reply, replyTo]);
 
   async function refresh() {
     // Retain all loaded roots after mutations.

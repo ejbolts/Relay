@@ -49,6 +49,8 @@ const PATHS = {
   // A question mark in a circle, for help.
   help: 'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 16.6h.01',
   heart: 'M20.5 5.5a5 5 0 0 0-7 0L12 7l-1.5-1.5a5 5 0 0 0-7 7L12 21l8.5-8.5a5 5 0 0 0 0-7z',
+  // A curved arrow pointing back, for replying.
+  reply: 'M9 17l-5-5 5-5M4 12h11a5 5 0 0 1 5 5v1.5',
   // A speech bubble, for comments.
   comment:
     'M6 5h12a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 17h-7l-4.5 3.5V17H6a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 6 5z',

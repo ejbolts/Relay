@@ -13,6 +13,7 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { onNotificationsChanged } from './notificationEvents';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
+import { WorkoutComments } from './WorkoutComments';
 import { formatReleaseDate, type Release } from './releaseMetadata';
 import type {
   SharingConnection,
@@ -96,6 +97,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
   const [items, setItems] = useState<SharingNotifications | null>(null);
   const [open, setOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
+  const [replying, setReplying] = useState<CommentNotice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -106,10 +108,10 @@ export function FollowNotifications({ active }: { active: boolean }) {
 
   useEffect(() => {
     // Runs after the notes dialog has closed, so its own focus restoration cannot override this.
-    if (releaseOpen || !restoreBellFocus.current) return;
+    if (releaseOpen || replying || !restoreBellFocus.current) return;
     restoreBellFocus.current = false;
     bell.current?.focus();
-  }, [releaseOpen]);
+  }, [releaseOpen, replying]);
 
   useEffect(() => {
     if (!active) return;
@@ -297,6 +299,20 @@ export function FollowNotifications({ active }: { active: boolean }) {
                       {reactionEmoji(row.item.reaction)}
                     </span>
                   )}
+                  {row.item.kind !== 'comment_reaction' && (
+                    <button
+                      type="button"
+                      className="follow-notification-reply"
+                      aria-label={`Reply to ${row.item.display_name}`}
+                      title="Reply"
+                      onClick={() => {
+                        setOpen(false);
+                        setReplying(row.item);
+                      }}
+                    >
+                      <Icon name="reply" />
+                    </button>
+                  )}
                 </li>
               ) : row.kind === 'request' ? (
                 <li key={`request-${row.item.id}`}>
@@ -368,6 +384,22 @@ export function FollowNotifications({ active }: { active: boolean }) {
               if (dialog) dialog.scrollTop = 0;
             }}
             label="notifications"
+          />
+        </PopupDialog>
+      )}
+      {replying && (
+        <PopupDialog
+          title={replying.workout_name}
+          className="follow-notification-thread"
+          onClose={() => {
+            restoreBellFocus.current = true;
+            setReplying(null);
+          }}
+        >
+          <WorkoutComments
+            workoutId={replying.workout_id}
+            replyTo={replying.comment_id}
+            onCountChange={() => {}}
           />
         </PopupDialog>
       )}
