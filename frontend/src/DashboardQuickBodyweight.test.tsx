@@ -154,7 +154,7 @@ describe('daily bodyweight check-in', () => {
     await render();
     expect(toast()).toBeNull();
     expect(container.querySelector('[role="status"]')!.textContent).toBe(
-      'Prior 83.9 kg·Not logged today',
+      'ytd 83.9 kg·Not logged today',
     );
     await submit();
     expect(save).toHaveBeenCalledExactlyOnceWith(84.2);
@@ -162,12 +162,12 @@ describe('daily bodyweight check-in', () => {
     const status = container.querySelector('.quick-check-in-status')!;
     expect(status.getAttribute('aria-label')).toBe('Prior: 83.9 kg; Saved today: 84.2 kg');
     expect(status.querySelector('svg')).not.toBeNull();
-    expect(status.textContent).toBe('Prior 83.9 kg·Today·84.2 kg');
+    expect(status.textContent).toBe('ytd 83.9 kg·Today·84.2 kg');
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Increase by 0.1 kg"]')!.click(),
     );
     expect(container.querySelector('input')!.value).toBe('84.3');
-    expect(status.textContent).toBe('Prior 83.9 kg·Today·84.2 kg');
+    expect(status.textContent).toBe('ytd 83.9 kg·Today·84.2 kg');
     expect(container.querySelector('.quick-bodyweight-message')).toBeNull();
     expect(toast()!.getAttribute('style')).toContain('5000ms');
     await act(async () => vi.advanceTimersByTime(4999));

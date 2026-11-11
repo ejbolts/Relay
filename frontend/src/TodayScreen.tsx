@@ -751,7 +751,7 @@ function CheckInStatus({ prior, today }: { prior: string | null; today: string |
     >
       {prior !== null && (
         <>
-          <span>Prior {prior}</span>
+          <span>ytd {prior}</span>
           <span aria-hidden="true">·</span>
         </>
       )}
