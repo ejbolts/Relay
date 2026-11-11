@@ -157,6 +157,7 @@ export interface MachinePhotoUsage extends MachinePhoto {
 }
 
 export interface TrackedSet {
+  machine_photo_id?: string | null;
   id: string;
   order_index: number;
   reps: number | null;
@@ -223,6 +224,7 @@ export interface WorkoutSnapshot extends WorkoutCacheRevision {
 }
 
 export interface WorkoutSetInput {
+  machine_photo_id?: string | null;
   reps: number | null;
   weight_kg: number | null;
   rpe: number | null;

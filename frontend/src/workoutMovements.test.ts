@@ -58,6 +58,7 @@ describe('switching an exercise', () => {
         failed: false,
         warmup: false,
         completed: true,
+        machine_photo_id: 'seated-photo',
       },
     ];
     const movement: WorkoutDraftMovement = {
@@ -79,7 +80,7 @@ describe('switching an exercise', () => {
     );
 
     expect(switched.exercise.name).toBe('Lying Leg Curl');
-    expect(switched.sets).toBe(sets);
+    expect(switched.sets).toEqual([{ ...sets[0], machine_photo_id: null }]);
     expect(switched.notes).toBe('Seat position 4');
     expect(switched.supersetKey).toBe('superset-1');
     expect(switched.machinePhotoIds).toEqual([]);

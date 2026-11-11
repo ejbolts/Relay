@@ -29,6 +29,37 @@
   --overlay-header-content-offset: calc(var(--overlay-header-height) + 0.55rem);
 }
 
+.set-machine-assignment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 8px;
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+
+.set-machine-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+}
+
+.set-machine-select[data-unassigned='true'] {
+  border-color: var(--accent);
+}
+
+.history-set-machine {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -2267,7 +2298,8 @@ button.metric-card:focus-visible {
 .machine-photo-summary {
   min-height: 3.4rem;
   display: grid;
-  grid-template-columns: 2.35rem minmax(0, 1fr) auto 1.1rem;
+  --machine-thumb: 2.35rem;
+  grid-template-columns: auto minmax(0, 1fr) auto 1.1rem;
   align-items: center;
   gap: 0.6rem;
   padding: 0.55rem 0.65rem;
@@ -2280,15 +2312,38 @@ button.metric-card:focus-visible {
 }
 
 .machine-photo-summary > img,
-.machine-photo-placeholder {
-  width: 2.35rem;
-  height: 2.35rem;
+.machine-photo-placeholder,
+.machine-photo-stack > img {
+  width: var(--machine-thumb);
+  height: var(--machine-thumb);
   border-radius: 9px;
 }
 
-.machine-photo-summary > img {
+.machine-photo-summary > img,
+.machine-photo-stack > img {
   display: block;
   object-fit: cover;
+}
+
+.machine-photo-stack {
+  display: flex;
+}
+
+.machine-photo-stack > img {
+  position: relative;
+  box-shadow: 0 0 0 2px var(--page);
+}
+
+.machine-photo-stack > img + img {
+  margin-left: calc(var(--machine-thumb) * -0.45);
+}
+
+.machine-photo-stack > img:nth-child(1) {
+  z-index: 3;
+}
+
+.machine-photo-stack > img:nth-child(2) {
+  z-index: 2;
 }
 
 .machine-photo-placeholder {
@@ -4280,6 +4335,17 @@ body:has(.popup-dialog[open]) {
   border-color: transparent;
   background: var(--accent);
   color: white;
+}
+
+.machine-assignment-dialog > p {
+  margin: 0;
+  padding: 1rem;
+  line-height: 1.5;
+}
+
+.machine-assignment-dialog > .popup-dialog-actions {
+  margin: 0;
+  padding: 1rem;
 }
 
 .workout-import-review {

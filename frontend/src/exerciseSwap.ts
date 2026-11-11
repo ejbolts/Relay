@@ -109,6 +109,7 @@ function carrySet(
     ...set,
     key: crypto.randomUUID(),
     completed: false,
+    machine_photo_id: null,
     failed: false,
     weight_kg: suggestion?.weight_kg ?? null,
   };

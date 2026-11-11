@@ -29,6 +29,7 @@ import type {
 import { createPortal, flushSync } from 'react-dom';
 import { api } from './api';
 import { SetDragHandle } from './SetDragHandle';
+import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { MachineWeightsDialog } from './MachineWeightsDialog';
@@ -286,7 +287,14 @@ import {
   workoutVolumeKg,
   type SessionTemplate,
 } from './trainingSummary';
-import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHistory';
+import {
+  historyOnMachine,
+  machineAliases,
+  machineSuggestionSource,
+  recentExerciseHistory,
+  withSuggestedSets,
+  type ExerciseHistoryEntry,
+} from './exerciseHistory';
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { exerciseIconFor } from './exerciseIcons';
@@ -2878,6 +2886,7 @@ function WorkoutLogger({
           sets: movement.sets.map((item) => ({
             key: crypto.randomUUID(),
             reps: item.reps,
+            machine_photo_id: item.machine_photo_id,
             weight_kg: item.weight_kg,
             rpe: item.rpe,
             rest_seconds: item.rest_seconds,
@@ -2950,6 +2959,7 @@ function WorkoutLogger({
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
@@ -3310,7 +3320,21 @@ function WorkoutLogger({
     [historicalWorkouts, historyBaselines, initialWorkout?.id, resumedWorkoutId],
   );
 
-  function suggestedSetsForExercise(exercise: Exercise): DraftSet[] {
+  /** Suggestions from the chosen machine's last session, else the exercise's last session. */
+  function suggestedSetsForExercise(exercise: Exercise, machineId?: string): DraftSet[] {
+    const onMachine =
+      machineId &&
+      historyOnMachine(
+        recentExerciseHistory(
+          historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
+          exercise.id,
+          initialWorkout?.id,
+          Number.POSITIVE_INFINITY,
+        ),
+        machineId,
+        new Map(),
+      ).find((entry) => entry.sets.length)?.sets;
+    if (onMachine) return withSuggestedSets([], onMachine, exercise.kind);
     return suggestedSetsFromHistory(
       historicalWorkouts,
       exercise,
@@ -3330,15 +3354,18 @@ function WorkoutLogger({
         current.map((item) => item.exercise),
         selected,
       );
-      const additions = merged.slice(current.length).map((exercise) => ({
-        key: crypto.randomUUID(),
-        exercise,
-        notes: '',
-        ...machineSelection(exercise.id, machineChoices),
-        supersetKey: null,
-        isComplete: false,
-        sets: suggestedSetsForExercise(exercise),
-      }));
+      const additions = merged.slice(current.length).map((exercise) => {
+        const machine = machineSelection(exercise.id, machineChoices);
+        return {
+          key: crypto.randomUUID(),
+          exercise,
+          notes: '',
+          ...machine,
+          supersetKey: null,
+          isComplete: false,
+          sets: suggestedSetsForExercise(exercise, machine.machinePhotoIds[0]),
+        };
+      });
       const nextMovements = [...current, ...additions];
       return createSuperset && additions.length >= 2
         ? applySupersetSelection(
@@ -3371,12 +3398,13 @@ function WorkoutLogger({
     replacement: Exercise,
     machineChoices: ExerciseMachineChoices = {},
   ) {
+    const machine = machineSelection(replacement.id, machineChoices);
     const next = swapMovementExercise(
       movements,
       movementKey,
       replacement,
-      suggestedSetsForExercise(replacement),
-      machineSelection(replacement.id, machineChoices),
+      suggestedSetsForExercise(replacement, machine.machinePhotoIds[0]),
+      machine,
     );
     if (next === movements) return;
     tips.learn('swap');
@@ -3621,6 +3649,10 @@ function WorkoutLogger({
     const sets = isComplete
       ? completeRemainingSets(movement.exercise.kind, movement.sets)
       : movement.sets;
+    if (isComplete && hasUnassignedMachineSets(movement.machinePhotoIds, sets)) {
+      setMachineAssignmentError(movement.exercise.name);
+      return;
+    }
     const newlyCompletedWorkingSets = sets.filter(
       (set, index) => !movement.sets[index].completed && isCompletedWorkingSet(set),
     ).length;
@@ -3691,7 +3723,10 @@ function WorkoutLogger({
         );
         return {
           ...movement,
-          isComplete: movement.isComplete && sets.every((set) => set.completed),
+          isComplete:
+            movement.isComplete &&
+            sets.every((set) => set.completed) &&
+            !hasUnassignedMachineSets(movement.machinePhotoIds, sets),
           sets:
             loggingSet || correctingLoggedSet
               ? suggestNextSetFromLoggedSet(
@@ -3782,6 +3817,13 @@ function WorkoutLogger({
             sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
           }));
     const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
+    const unassigned = movementsToSave.find((movement) =>
+      hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
+    );
+    if (unassigned) {
+      setMachineAssignmentError(unassigned.exercise.name);
+      return false;
+    }
     const durationMinutes = initialWorkout
       ? Math.max(editedDurationMinutes, Math.ceil(cardioDurationSeconds / 60))
       : completedWorkoutDurationMinutes(
@@ -3862,6 +3904,9 @@ function WorkoutLogger({
           machine_settings: movement.machineSettings ?? [],
           sets: movement.sets.map((item) => ({
             reps: item.reps,
+            machine_photo_id:
+              item.machine_photo_id ??
+              (movement.machinePhotoIds.length === 1 ? movement.machinePhotoIds[0] : null),
             weight_kg: item.weight_kg,
             rpe: item.rpe,
             rest_seconds: item.rest_seconds,
@@ -4302,7 +4347,7 @@ function WorkoutLogger({
                 historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
                 initialWorkout?.id ?? resumedWorkoutId ?? undefined,
-                undefined,
+                Number.POSITIVE_INFINITY,
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
@@ -4334,7 +4379,7 @@ function WorkoutLogger({
               onDeleteSet={(index) => deleteSet(movement, index)}
               onRemoveRestTime={(item) => removeRestTime(movement, item)}
               onSuperset={(button) => openSupersetPicker(movement.key, button)}
-              onMachinePhotos={(machinePhotoIds, machineSettings) =>
+              onMachinePhotos={(machinePhotoIds, machineSettings, chosen) =>
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key
@@ -4342,6 +4387,13 @@ function WorkoutLogger({
                           ...item,
                           machinePhotoIds,
                           machinePhotosInitialized: true,
+                          isComplete:
+                            item.isComplete &&
+                            !hasUnassignedMachineSets(
+                              machinePhotoIds,
+                              withMachinePins(item.sets, machinePhotoIds),
+                            ),
+                          sets: chosen ? withMachinePins(item.sets, machinePhotoIds) : item.sets,
                           machineSettings:
                             machineSettings ??
                             (item.machinePhotoIds.join(',') === machinePhotoIds.join(',')
@@ -4356,6 +4408,18 @@ function WorkoutLogger({
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key ? { ...item, machineSettings } : item,
+                  ),
+                )
+              }
+              onSuggestedSets={(previous) =>
+                setMovements((current) =>
+                  current.map((item) =>
+                    item.key === movement.key
+                      ? {
+                          ...item,
+                          sets: withSuggestedSets(item.sets, previous, item.exercise.kind),
+                        }
+                      : item,
                   ),
                 )
               }
@@ -4487,6 +4551,37 @@ function WorkoutLogger({
             onDelete();
           }}
         />
+      )}
+
+      {machineAssignmentError && (
+        <PopupDialog
+          title="Assign sets to machines"
+          className="machine-assignment-dialog"
+          onClose={() => setMachineAssignmentError(null)}
+        >
+          <p>
+            {machineAssignmentError} has multiple machines pinned. Choose a machine beneath each
+            completed set before finishing the exercise or saving the workout, so its weights and
+            progress are recorded against the right machine.
+          </p>
+          <div className="popup-dialog-actions">
+            <button
+              type="button"
+              className="popup-primary-action"
+              autoFocus
+              onClick={() => {
+                setMachineAssignmentError(null);
+                window.requestAnimationFrame(() =>
+                  document
+                    .querySelector<HTMLSelectElement>('.set-machine-select[data-unassigned="true"]')
+                    ?.focus(),
+                );
+              }}
+            >
+              Choose machines
+            </button>
+          </div>
+        </PopupDialog>
       )}
 
       {finishConfirmationOpen && (
@@ -4933,7 +5028,7 @@ function MovementCard({
   movement,
   showRestTimes,
   number,
-  history,
+  history: exerciseHistory,
   onExerciseHistory,
   onExerciseComplete,
   onUpdateSet,
@@ -4944,6 +5039,7 @@ function MovementCard({
   onRemove,
   onMachinePhotos,
   onMachineSettings,
+  onSuggestedSets,
   prBadges,
   supersetLabel,
   onMoveUp,
@@ -4969,8 +5065,10 @@ function MovementCard({
   onSwitch: () => void;
   machineTipEligible: boolean;
   onRemove: () => void;
-  onMachinePhotos: (photoIds: string[], settings?: MachineSetting[]) => void;
+  onMachinePhotos: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
   onMachineSettings: (settings: MachineSetting[]) => void;
+  /** Replace untouched suggested sets with these sets from an earlier session. */
+  onSuggestedSets: (previous: TrackedSet[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
   onMoveUp: () => void;
@@ -4992,6 +5090,15 @@ function MovementCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
   const pinnedMachinePhotoId = movement.machinePhotoIds.at(-1);
+  const [savedMachinePhotos, setSavedMachinePhotos] = useState<MachinePhoto[]>([]);
+  const [savedMachineAliases, setSavedMachineAliases] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  // With a machine pinned, its own sessions supply the last date, history and rests.
+  const history = useMemo(() => {
+    const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
+    return (onMachine.length ? onMachine : exerciseHistory).slice(0, 5);
+  }, [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases]);
   const machineSettingsUnloaded = movement.machineSettings === undefined;
   const onMachineSettingsRef = useRef(onMachineSettings);
 
@@ -5875,7 +5982,28 @@ function MovementCard({
             selectedIds={movement.machinePhotoIds}
             settings={movement.machineSettings}
             autoPinLastUsed={!movement.machinePhotosInitialized}
-            onChange={onMachinePhotos}
+            onChange={(photoIds, settings, chosen) => {
+              onMachinePhotos(photoIds, settings, chosen);
+              const pinned = photoIds.at(-1);
+              const canonical = (id: string | undefined) =>
+                (id && savedMachineAliases.get(id)) ?? id;
+              if (chosen && canonical(pinned) !== canonical(pinnedMachinePhotoId)) {
+                onSuggestedSets(
+                  machineSuggestionSource(exerciseHistory, pinned, savedMachineAliases),
+                );
+              }
+            }}
+            onPhotosLoaded={(photos) => {
+              setSavedMachinePhotos(photos);
+              const aliases = machineAliases(photos);
+              setSavedMachineAliases(aliases);
+              for (const set of movement.sets) {
+                const canonical = set.machine_photo_id && aliases.get(set.machine_photo_id);
+                if (canonical && canonical !== set.machine_photo_id) {
+                  onUpdateSet(set.key, { machine_photo_id: canonical });
+                }
+              }
+            }}
           />
         </TipSlot>
       )}
@@ -5924,6 +6052,36 @@ function MovementCard({
                   data-expanded={open}
                 >
                   {open ? renderSetEditor(item, index) : renderSetSummary(item, index)}
+                  {movement.machinePhotoIds.length > 1 && (
+                    <label className="set-machine-assignment">
+                      <span>Machine</span>
+                      <select
+                        className="set-machine-select"
+                        aria-label={`Machine for set ${index + 1}`}
+                        data-unassigned={
+                          !movement.machinePhotoIds.includes(item.machine_photo_id ?? '')
+                        }
+                        value={
+                          movement.machinePhotoIds.includes(item.machine_photo_id ?? '')
+                            ? (item.machine_photo_id ?? '')
+                            : ''
+                        }
+                        onChange={(event) =>
+                          onUpdateSet(item.key, {
+                            machine_photo_id: event.target.value || null,
+                          })
+                        }
+                      >
+                        <option value="">Choose machine</option>
+                        {movement.machinePhotoIds.map((id, photoIndex) => (
+                          <option key={id} value={id}>
+                            {savedMachinePhotos.find((photo) => photo.id === id)?.caption ||
+                              `Machine ${photoIndex + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
               </SwipeToDeleteSetRow>
               {!cardio &&
@@ -5939,7 +6097,15 @@ function MovementCard({
                       seconds={item.rest_seconds!}
                       setIndex={index}
                       sets={movement.sets}
-                      history={history}
+                      history={
+                        item.machine_photo_id
+                          ? historyOnMachine(
+                              exerciseHistory,
+                              item.machine_photo_id,
+                              savedMachineAliases,
+                            )
+                          : history
+                      }
                       suggested={!item.completed && !item.restConfirmed}
                       onChange={(seconds) => {
                         clearRestEdit(item.key);
@@ -6069,13 +6235,16 @@ function MachinePhotoChooser({
   settings,
   autoPinLastUsed,
   onChange,
+  onPhotosLoaded,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
   settings?: MachineSetting[];
   autoPinLastUsed: boolean;
-  onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
+  /** `chosen` marks a pin the user picked, rather than a restored or automatic one. */
+  onChange: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
+  onPhotosLoaded?: (photos: MachinePhoto[]) => void;
 }) {
   const [selectingForMerge, setSelectingForMerge] = useState(false);
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
@@ -6138,6 +6307,16 @@ function MachinePhotoChooser({
     };
   }, [exercise.id]);
 
+  const onPhotosLoadedRef = useRef(onPhotosLoaded);
+
+  useEffect(() => {
+    onPhotosLoadedRef.current = onPhotosLoaded;
+  }, [onPhotosLoaded]);
+
+  useEffect(() => {
+    onPhotosLoadedRef.current?.(photos);
+  }, [photos]);
+
   useEffect(
     () => () => {
       if (pending) URL.revokeObjectURL(pending.previewUrl);
@@ -6175,6 +6354,7 @@ function MachinePhotoChooser({
       onChange(
         choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])],
         machineSettings,
+        true,
       );
       setChoosingReplacement(false);
       setPending(null);
@@ -6190,7 +6370,7 @@ function MachinePhotoChooser({
     setPending(null);
     setExpanded(null);
     if (choosingReplacement) {
-      onChange([photoId]);
+      onChange([photoId], undefined, true);
       setChoosingReplacement(false);
       return;
     }
@@ -6198,6 +6378,8 @@ function MachinePhotoChooser({
       selectedIds.includes(photoId)
         ? selectedIds.filter((current) => current !== photoId)
         : [...selectedIds, photoId],
+      undefined,
+      true,
     );
   }
 
@@ -6212,7 +6394,11 @@ function MachinePhotoChooser({
   async function deletePhoto(photo: MachinePhoto) {
     await api.deleteMachinePhoto(photo.id, true);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
-    onChange(selectedIds.filter((id) => id !== photo.id));
+    onChange(
+      selectedIds.filter((id) => id !== photo.id),
+      undefined,
+      true,
+    );
     setExpanded(null);
   }
 
@@ -6226,7 +6412,10 @@ function MachinePhotoChooser({
   }
 
   const today = localDate();
-  const pinnedPhotos = photos.filter((photo) => selectedIds.includes(photo.id));
+  // Latest pin first: it supplies the suggested sets, so it sits in front of the stack.
+  const pinnedPhotos = [...selectedIds]
+    .reverse()
+    .flatMap((photoId) => photos.find((photo) => photo.id === photoId) ?? []);
   const primaryPinnedPhoto = pinnedPhotos[0] ?? null;
   const photoSummary = primaryPinnedPhoto
     ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
@@ -6252,7 +6441,13 @@ function MachinePhotoChooser({
           setPhotoPanelOpen(!photoPanelOpen);
         }}
       >
-        {primaryPinnedPhoto ? (
+        {pinnedPhotos.length > 1 ? (
+          <span className="machine-photo-stack" aria-hidden="true">
+            {pinnedPhotos.slice(0, 3).map((photo) => (
+              <img key={photo.id} src={photo.thumbnail_url} alt="" loading="lazy" />
+            ))}
+          </span>
+        ) : primaryPinnedPhoto ? (
           <img src={primaryPinnedPhoto.thumbnail_url} alt="" loading="lazy" />
         ) : (
           <span className="machine-photo-placeholder" aria-hidden="true">
@@ -11314,6 +11509,7 @@ function HistoryWorkoutCard({
                 <HistorySetFlow
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}
+                  machinePhotos={movement.machine_photos}
                 />
                 {movement.sets
                   .filter((item) => item.notes)
@@ -11366,9 +11562,11 @@ function HistoryWorkoutCard({
 function HistorySetFlow({
   sets,
   personalRecords,
+  machinePhotos = [],
 }: {
   sets: TrackedSet[];
   personalRecords: PersonalRecord[];
+  machinePhotos?: MachinePhoto[];
 }) {
   const weightUnit = useWeightUnit();
   return (
@@ -11378,6 +11576,12 @@ function HistorySetFlow({
           <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
+            {machinePhotos.length > 1 && (
+              <small className="history-set-machine">
+                {machinePhotos.find((photo) => photo.id === item.machine_photo_id)?.caption ??
+                  'Machine not assigned'}
+              </small>
+            )}
             {item.rpe !== null && <small>RPE {item.rpe}</small>}
             <em>
               {item.set_type === 'warmup' || item.warmup

@@ -714,7 +714,21 @@ def replace_workout_contents(
                 }.values()
             )
         for set_index, set_payload in enumerate(movement_payload.sets):
-            movement.sets.append(WorkoutSet(order_index=set_index, **set_payload.model_dump()))
+            values = set_payload.model_dump()
+            if set_payload.machine_photo_id is not None:
+                photo = get_owned(db, MachinePhoto, set_payload.machine_photo_id, user_id)
+                canonical = canonical_photo(db, photo) if photo else None
+                if canonical is None or canonical.id not in {
+                    item.id for item in movement.machine_photos
+                }:
+                    raise HTTPException(422, "A set's machine must be pinned to its exercise.")
+                values["machine_photo_id"] = canonical.id
+            elif (
+                len(movement.machine_photos) == 1
+                and "machine_photo_id" not in set_payload.model_fields_set
+            ):
+                values["machine_photo_id"] = movement.machine_photos[0].id
+            movement.sets.append(WorkoutSet(order_index=set_index, **values))
         workout.movements.append(movement)
 
 
@@ -3235,8 +3249,11 @@ def exercise_progress(
     for movement in movements:
         working = [item for item in movement.sets if is_working_set(item)]
         grouped[(movement.workout.workout_date, movement.workout_id)].extend(working)
-        machine_id = movement_machine_id(movement)
-        by_machine[(movement.workout.workout_date, movement.workout_id, machine_id)].extend(working)
+        for item in working:
+            machine_id = item.machine_photo_id
+            by_machine[(movement.workout.workout_date, movement.workout_id, machine_id)].append(
+                item
+            )
     points = [
         progress_point(workout_date, workout_id, sets)
         for (workout_date, workout_id), sets in sorted(grouped.items())

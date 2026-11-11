@@ -140,6 +140,7 @@ function isStoredSet(value: unknown): value is StoredDraftSet {
     isRecord(value) &&
     typeof value.key === 'string' &&
     typeof value.completed === 'boolean' &&
+    (value.machine_photo_id == null || typeof value.machine_photo_id === 'string') &&
     (value.fromPrevious === undefined || typeof value.fromPrevious === 'boolean') &&
     (value.restRevealed === undefined || typeof value.restRevealed === 'boolean') &&
     (value.restConfirmed === undefined || typeof value.restConfirmed === 'boolean') &&
