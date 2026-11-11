@@ -20,6 +20,10 @@
   line-height: 1.55;
 }
 
+.home-guide-shortcut {
+  margin-top: 1rem;
+}
+
 .home-guide-site {
   margin-top: 0.75rem;
   overflow-wrap: anywhere;

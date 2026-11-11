@@ -5,6 +5,9 @@ const PATHS = {
   calendar:
     'M6.5 4.5h11a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-11a3 3 0 0 1-3-3v-10a3 3 0 0 1 3-3zM3.5 9.5h17M8 2.8v3.4M16 2.8v3.4',
   plus: 'M12 5v14M5 12h14',
+  // The iOS share glyph: an arrow leaving a tray.
+  share:
+    'M12 3.5v11M8 7.5l4-4 4 4M8.5 10H7a2 2 0 0 0-2 2v6.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V12a2 2 0 0 0-2-2h-1.5',
   minus: 'M5 12h14',
   edit: 'm15 4 5 5M4 20l5-1L20 8a2.1 2.1 0 0 0-5-5L4 14z',
   history: 'M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4.5H8M12 7.5V12l3 2',

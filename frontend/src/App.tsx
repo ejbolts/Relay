@@ -165,7 +165,7 @@ import { useOfflineNotice } from './useOfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
-import { HomeScreenGuide } from './HomeScreenGuide';
+import { HomeScreenGuide, HomeScreenShortcut } from './HomeScreenGuide';
 import { WeeklyReviewPrompt } from './WeeklyReviewPrompt';
 import { useHomeScreenGuide } from './useHomeScreenGuide';
 import { runningAsInstalledApp } from './homeScreenGuideState';
@@ -8928,6 +8928,7 @@ function SettingsScreen({
                       ? 'You are already using the installed app. View the steps to set up another browser or device.'
                       : 'Open Relay full screen from an icon on your phone, like an app.'}
                   </p>
+                  <HomeScreenShortcut onUnavailable={onOpenHomeScreenGuide} />
                 </section>
                 <section
                   className="settings-panel panel"
