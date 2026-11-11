@@ -337,6 +337,12 @@ import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
 import { usePendingWorkoutSave } from './usePendingWorkoutSave';
+import {
+  dashboardWithPreview,
+  pendingWorkoutPreview,
+  previewIdForSaved,
+  workoutsWithPreview,
+} from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
@@ -791,6 +797,48 @@ function AppContent() {
   );
   const workoutSaving = editingWorkoutSaving || pendingWorkout.saving;
   const workoutSaveBlocked = workoutSaving || pendingWorkout.pending !== null;
+  // The finished workout shows straight away from this device's copy while it syncs.
+  const pendingPreview = useMemo(
+    () =>
+      pendingWorkout.pending
+        ? pendingWorkoutPreview(pendingWorkout.pending, exercises, workoutTypes.types)
+        : null,
+    [exercises, pendingWorkout.pending, workoutTypes.types],
+  );
+  // After the save, its on-device figures stay until the refreshed dashboard replaces them.
+  const [savedPreview, setSavedPreview] = useState<{
+    workout: TrackedWorkout;
+    dashboard: DashboardData | null;
+    isNew: boolean;
+  } | null>(null);
+  const sharedPreviewIdRef = useRef<string | null>(null);
+  const shownWorkouts = useMemo(
+    () => (pendingPreview ? workoutsWithPreview(workouts, pendingPreview) : workouts),
+    [pendingPreview, workouts],
+  );
+  const shownDashboard = useMemo(() => {
+    if (!dashboard) return dashboard;
+    const preview = pendingPreview
+      ? { workout: pendingPreview, isNew: !pendingWorkout.pending?.workoutId }
+      : savedPreview?.dashboard === dashboard
+        ? savedPreview
+        : null;
+    return preview
+      ? dashboardWithPreview(
+          dashboard,
+          preview.workout,
+          workoutTypes.types,
+          localDate(),
+          preview.isNew,
+        )
+      : dashboard;
+  }, [
+    dashboard,
+    pendingPreview,
+    pendingWorkout.pending?.workoutId,
+    savedPreview,
+    workoutTypes.types,
+  ]);
   useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
   useEffect(() => {
     // A URL (including an old phone notification) is navigation, never a Start action.
@@ -1270,7 +1318,11 @@ function AppContent() {
     const wasEditing = editingWorkout !== null;
     const resumedId = resumingWorkoutId;
     if (!wasEditing) {
-      pendingWorkout.queue(payload);
+      const completion = pendingWorkout.queue(payload);
+      // Share straight away from this device's copy; the saved workout replaces it when it syncs.
+      const preview = pendingWorkoutPreview(completion, exercises, workoutTypes.types);
+      sharedPreviewIdRef.current = preview?.id ?? null;
+      if (preview) setCompletedForSharing(preview);
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
       setTab('dashboard', { replace: true });
@@ -1316,7 +1368,13 @@ function AppContent() {
     setEditingWorkout(null);
 
     if (!wasEditing) {
-      setCompletedForSharing(saved);
+      setSavedPreview({ workout: saved, dashboard, isNew: resumedId === null });
+      const sharedPreviewId = sharedPreviewIdRef.current;
+      sharedPreviewIdRef.current = null;
+      if (sharedPreviewId !== null && sharedPreviewId === previewIdForSaved(saved, resumedId))
+        // Already offered: update an open share prompt, and leave a dismissed one closed.
+        setCompletedForSharing((current) => (current?.id === sharedPreviewId ? saved : current));
+      else setCompletedForSharing(saved);
       const signature = (record: PersonalRecord) =>
         `${record.scope ?? 'all_time'}:${record.block_id ?? ''}:${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
       const existing = new Set(
@@ -1908,9 +1966,9 @@ function AppContent() {
               ) : (
                 <TodayScreen
                   home={home}
-                  data={dashboard}
+                  data={shownDashboard}
                   muscleSets={muscleSets}
-                  workouts={workouts}
+                  workouts={shownWorkouts}
                   measurements={measurements}
                   personalRecords={personalRecords}
                   categoryColors={workoutTypeColors}
@@ -1989,8 +2047,8 @@ function AppContent() {
                   }
                   calendar={
                     <InteractiveWorkoutCalendar
-                      entries={dashboard?.heatmap ?? []}
-                      workouts={workouts}
+                      entries={shownDashboard?.heatmap ?? []}
+                      workouts={shownWorkouts}
                       olderHistory={olderHistoryProps}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
@@ -2124,7 +2182,8 @@ function AppContent() {
                 exerciseLibrary={exerciseLibrary}
                 dataRevision={dataRevision}
                 key={`${historyOpenId ?? 'history'}-${historyExerciseId ?? 'all'}-${historyMovementId ?? 'any'}-${historyOpenCount}`}
-                workouts={workouts}
+                workouts={shownWorkouts}
+                syncingWorkoutId={pendingPreview?.id ?? null}
                 categoryColors={workoutTypeColors}
                 measurements={measurements}
                 exercises={exercises}
@@ -2144,11 +2203,11 @@ function AppContent() {
                 initialExerciseId={historyExerciseId}
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
-                heatmap={dashboard?.heatmap ?? []}
+                heatmap={shownDashboard?.heatmap ?? []}
                 weeklySets={muscleSets.weeklySets}
                 weeklySetsHistory={muscleSets.history}
                 onOpenMuscleWorkout={openMuscleWorkout}
-                historySummary={historySummary}
+                historySummary={shownDashboard?.history ?? null}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
                 activeWorkoutDate={activeWorkoutDate}
@@ -10732,6 +10791,7 @@ function HistoryScreen({
   exerciseLibrary,
   dataRevision,
   workouts,
+  syncingWorkoutId = null,
   categoryColors,
   measurements,
   exercises,
@@ -10766,6 +10826,8 @@ function HistoryScreen({
   exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
   workouts: TrackedWorkout[];
+  /** The finished workout still syncing, shown from this device's copy without its actions. */
+  syncingWorkoutId?: string | null;
   categoryColors: WorkoutTypeColors;
   measurements: BodyMeasurement[];
   exercises: Exercise[];
@@ -10943,9 +11005,12 @@ function HistoryScreen({
           setOpenId((current) => (current === workout.id ? null : workout.id));
         }}
         onOpenExercise={onOpenExercise}
-        onResume={() => onResume(workout)}
-        onEdit={() => onEdit(workout)}
-        onDelete={() => onDelete(workout)}
+        syncing={workout.id === syncingWorkoutId}
+        {...(workout.id !== syncingWorkoutId && {
+          onResume: () => onResume(workout),
+          onEdit: () => onEdit(workout),
+          onDelete: () => onDelete(workout),
+        })}
       />
     );
   }
@@ -11328,6 +11393,7 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   reactionAction,
+  syncing = false,
 }: {
   detailsOnly?: boolean;
   workout: TrackedWorkout;
@@ -11354,6 +11420,8 @@ function HistoryWorkoutCard({
   onEdit?: () => void;
   onDelete?: () => void;
   reactionAction?: ReactNode;
+  /** Saved on this device and still being sent to the server. */
+  syncing?: boolean;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -11389,6 +11457,7 @@ function HistoryWorkoutCard({
             <strong>
               {workoutDisplayName(workout)}
               {workout.is_sample && <em className="sample-tag">Sample</em>}
+              {syncing && <em className="sample-tag syncing-tag">Syncing</em>}
             </strong>
             <small>{meta.join(' · ')}</small>
           </span>

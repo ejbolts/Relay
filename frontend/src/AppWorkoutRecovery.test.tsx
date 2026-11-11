@@ -1670,6 +1670,80 @@ describe('finishing workouts in the background', () => {
     expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
 
+  it('lists the finished workout from this device while it syncs, then swaps in the saved one', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    let finishSave!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    await navigateTo('Training');
+    const card = () =>
+      [...container.querySelectorAll('.history-card')].find((item) =>
+        item.textContent?.includes('Recovery workout'),
+      );
+    expect(card()?.querySelector('.syncing-tag')?.textContent).toBe('Syncing');
+    await act(async () =>
+      card()!.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
+    );
+    const buttonLabels = () =>
+      [...card()!.querySelectorAll('button')].map((button) => button.textContent?.trim());
+    expect(buttonLabels()).not.toContain('Edit');
+    expect(buttonLabels()).not.toContain('Delete');
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0];
+    const saved = {
+      ...remoteWorkout('Recovery workout'),
+      id: 'finished-workout',
+      client_session_id: payload.client_session_id,
+      workout_date: payload.workout_date,
+      is_sample: false,
+    };
+    vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+    await act(async () => finishSave(saved));
+    expect(card()).toBeDefined();
+    expect(card()!.querySelector('.syncing-tag')).toBeNull();
+    expect(
+      [...container.querySelectorAll('.history-card')].filter((item) =>
+        item.textContent?.includes('Recovery workout'),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('offers sharing as soon as the workout finishes, and does not reopen it after syncing', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    let finishSave!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    const toast = () => document.querySelector('.app-notification-toast');
+    expect(toast()?.textContent).toContain('Workout saved');
+    await act(async () =>
+      toast()!.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
+    );
+    expect(toast()).toBeNull();
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0];
+    await act(async () =>
+      finishSave({
+        ...remoteWorkout('Recovery workout'),
+        id: 'finished-workout',
+        client_session_id: payload.client_session_id,
+      }),
+    );
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(toast()).toBeNull();
+  });
+
   it('keeps a finished snapshot after a failed background save, allowing a retry', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
@@ -3130,7 +3204,8 @@ describe('live muscle totals while logging', () => {
     );
     await confirmFinish();
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.notification-toast-action')).toBeNull();
+    // The share prompt opens from this device's copy without waiting for the server.
+    expect(document.querySelector('.notification-toast-action')?.textContent).toBe('Share card');
     let refresh!: (data: DashboardData) => void;
     vi.mocked(api.dashboard).mockReturnValueOnce(
       new Promise((resolve) => {

@@ -30,7 +30,7 @@ export function usePendingWorkoutSave(
   const savedCallback = useRef(onSaved);
   savedCallback.current = onSaved;
 
-  function queue(payload: WorkoutInput) {
+  function queue(payload: WorkoutInput): PendingWorkoutSave {
     const draft = readActiveWorkoutDraft();
     if (
       !draft ||
@@ -54,6 +54,7 @@ export function usePendingWorkoutSave(
     setError(null);
     setNeedsReview(false);
     setPending(completion);
+    return completion;
   }
 
   useEffect(() => {
