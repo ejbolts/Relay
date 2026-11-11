@@ -107,7 +107,7 @@ it('keeps the dark style usable when storage is unavailable', () => {
   expect(document.documentElement.dataset.darkStyle).toBe('stained');
 });
 it('tints the Stained browser bar colour with the accent theme', () => {
-  expect(browserThemeColour('dark', 'default', 'blue')).toBe('#111417');
+  expect(browserThemeColour('dark', 'default', 'blue')).toBe('#0b0d0f');
   expect(browserThemeColour('dark', 'stained', 'blue')).toBe('#0c141f');
   expect(browserThemeColour('dark', 'stained', 'coral')).toBe('#151116');
 });

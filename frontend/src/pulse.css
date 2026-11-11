@@ -16,23 +16,23 @@
 }
 
 :root {
-  /* Default dark: surfaces step up in lightness (page -> card -> tile -> raised). */
-  --p-page: #111417;
-  --p-surface: #1f2429;
-  --p-surface-2: #2b3137;
-  --p-surface-3: #373e45;
-  --p-surface-raised: #272d33;
-  --p-raised-2: #333a41;
-  --p-raised-3: #3f474e;
-  --p-raised-line: rgb(255 255 255 / 10%);
-  --p-raised-line-strong: rgb(255 255 255 / 18%);
-  --p-line: rgb(255 255 255 / 9%);
-  --p-line-strong: rgb(255 255 255 / 15%);
-  --p-card-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 6px 18px rgb(0 0 0 / 40%);
-  --p-tab-bar-bg: rgb(22 26 30 / 92%);
-  --p-ink: #f7f9fa;
-  --p-ink-2: #c6cdd2;
-  --p-muted: #a1aab1;
+  /* Default dark: the original Relay palette. Popups share the card surface. */
+  --p-page: #0b0d0f;
+  --p-surface: #15181b;
+  --p-surface-2: #1d2125;
+  --p-surface-3: #272c31;
+  --p-surface-raised: #15181b;
+  --p-raised-2: #1d2125;
+  --p-raised-3: #272c31;
+  --p-raised-line: rgb(255 255 255 / 7%);
+  --p-raised-line-strong: rgb(255 255 255 / 12%);
+  --p-line: rgb(255 255 255 / 7%);
+  --p-line-strong: rgb(255 255 255 / 12%);
+  --p-card-shadow: none;
+  --p-tab-bar-bg: rgb(11 13 15 / 86%);
+  --p-ink: #f3f5f6;
+  --p-ink-2: #b4bcc2;
+  --p-muted: #828b92;
   --p-accent: #2c74d0;
   --p-accent-hover: #357bd6;
   --p-accent-text: #7fb4f1;
@@ -44,10 +44,10 @@
   --p-gold: #e9b44a;
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
-  --p-danger: #f47a7a;
-  --p-grid: #30373d;
-  --p-axis: #4b535a;
-  --p-deemph: #434b52;
+  --p-danger: #e66767;
+  --p-grid: #22272b;
+  --p-axis: #3a4046;
+  --p-deemph: #353b41;
   --p-radius: 20px;
   --p-tab-bar-height: calc(4.25rem + env(safe-area-inset-bottom));
   font-feature-settings: 'cv11', 'ss03';
@@ -76,6 +76,7 @@
   --p-grid: #1f2327;
   --p-axis: #3d434a;
   --p-deemph: #33393f;
+  --p-danger: #f47a7a;
 }
 
 :root[data-dark-style='stained']:not([data-colour-mode='light']) {
@@ -100,6 +101,7 @@
   --p-grid: color-mix(in srgb, var(--p-accent) 18%, #262d35);
   --p-axis: color-mix(in srgb, var(--p-accent) 20%, #3e4750);
   --p-deemph: color-mix(in srgb, var(--p-accent) 20%, #37404a);
+  --p-danger: #f47a7a;
 }
 
 html,

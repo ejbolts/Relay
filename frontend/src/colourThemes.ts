@@ -111,7 +111,7 @@ export function browserThemeColour(
     const theme = COLOUR_THEMES.find((entry) => entry.id === themeId) ?? COLOUR_THEMES[0];
     return mixHex(theme.accent, '#0a0d12', 7);
   }
-  return '#111417';
+  return '#0b0d0f';
 }
 
 function updateBrowserThemeColour() {

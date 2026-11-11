@@ -128,7 +128,7 @@
   padding: 0.375rem 0.375rem 0;
   border: 1px solid rgb(255 255 255 / 18%);
   border-radius: 9px;
-  background: #111417;
+  background: #0b0d0f;
   overflow: hidden;
 }
 .dark-style-swatch > span {
@@ -137,7 +137,7 @@
   border: 1px solid rgb(255 255 255 / 10%);
   border-bottom: 0;
   border-radius: 5px 5px 0 0;
-  background: #1f2429;
+  background: #15181b;
 }
 .dark-style-swatch[data-style='stained'] {
   background: color-mix(in srgb, var(--p-accent) 7%, #0a0d12);
