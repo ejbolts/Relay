@@ -2,10 +2,13 @@ import { useState, type CSSProperties } from 'react';
 import {
   COLOUR_MODES,
   COLOUR_THEMES,
+  DARK_STYLES,
   colourModePreference,
   colourThemePreference,
+  darkStylePreference,
   saveColourMode,
   saveColourTheme,
+  saveDarkStyle,
 } from './colourThemes';
 import { Icon } from './Icon';
 import './colourThemes.css';
@@ -13,6 +16,7 @@ import './colourThemes.css';
 export function ColourThemePanel() {
   const [selected, setSelected] = useState(colourThemePreference);
   const [mode, setMode] = useState(colourModePreference);
+  const [darkStyle, setDarkStyle] = useState(darkStylePreference);
   const [status, setStatus] = useState('');
   return (
     <section
@@ -49,6 +53,33 @@ export function ColourThemePanel() {
           </label>
         ))}
       </fieldset>
+      {mode === 'dark' && (
+        <fieldset className="dark-style-options">
+          <legend className="sr-only">Dark style</legend>
+          {DARK_STYLES.map((option) => (
+            <label key={option.id} className={darkStyle === option.id ? 'is-selected' : ''}>
+              <input
+                type="radio"
+                name="dark-style"
+                value={option.id}
+                checked={darkStyle === option.id}
+                onChange={() => {
+                  setDarkStyle(option.id);
+                  setStatus(
+                    saveDarkStyle(option.id)
+                      ? `${option.name} dark style saved on this device.`
+                      : `${option.name} dark style applied for this visit.`,
+                  );
+                }}
+              />
+              <span className="dark-style-swatch" data-style={option.id} aria-hidden="true">
+                <span />
+              </span>
+              <strong>{option.name}</strong>
+            </label>
+          ))}
+        </fieldset>
+      )}
       <fieldset className="colour-theme-options">
         <legend className="sr-only">Accent colour</legend>
         {COLOUR_THEMES.map((theme) => (
