@@ -13,6 +13,7 @@ import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import {
   HOME_TIP_REVISIT_MS,
+  homeTipSnoozed,
   rotatingHomeTip,
   canShowTip,
   countTipEvent,
@@ -97,7 +98,6 @@ export function TipsProvider({
   const firstHomeVisit = useRef(true);
   const onHome = useRef(false);
   const homeEntry = useRef(false);
-  const homeDismissed = useRef(false);
   const activeRef = useRef<TipId | null>(null);
   const [environment, setEnvironment] = useState<Environment>({
     page: '',
@@ -158,10 +158,14 @@ export function TipsProvider({
         if (activeRef.current === id) close();
       },
       dismiss() {
-        if (activeHome.current) homeDismissed.current = true;
         const id = activeRef.current;
         if (id)
-          write({ ...stateRef.current, seen: { ...stateRef.current.seen, [id]: 'dismissed' } });
+          write({
+            ...stateRef.current,
+            seen: { ...stateRef.current.seen, [id]: 'dismissed' },
+            // Closing the Home card snoozes the whole slot, across visits and reloads.
+            ...(activeHome.current ? { homeDismissedAt: Date.now() } : {}),
+          });
         close();
       },
       enable(enabled: boolean) {
@@ -209,10 +213,7 @@ export function TipsProvider({
       const now = Date.now(),
         current = env.current;
       const visitingHome = current.page === 'dashboard' && document.visibilityState !== 'hidden';
-      if (visitingHome && !onHome.current) {
-        homeEntry.current = true;
-        homeDismissed.current = false;
-      }
+      if (visitingHome && !onHome.current) homeEntry.current = true;
       onHome.current = visitingHome;
       const available =
         !!account &&
@@ -251,7 +252,7 @@ export function TipsProvider({
       const candidate = [...candidates.current.entries()].find(
         ([, { id, element, homeTips }]) =>
           (homeTips?.length
-            ? current.page === 'dashboard' && !homeDismissed.current
+            ? current.page === 'dashboard' && !homeTipSnoozed(stateRef.current, now)
             : canShowTip(stateRef.current, id, now)) && visible(element),
       );
       if (candidate?.[1].homeTips?.length && current.page === 'dashboard') {
