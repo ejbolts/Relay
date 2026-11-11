@@ -10,8 +10,10 @@ import { applyReduceMotion, reduceMotionPreference } from './motion';
 import {
   applyColourMode,
   applyColourTheme,
+  applyDarkStyle,
   colourModePreference,
   colourThemePreference,
+  darkStylePreference,
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
@@ -34,6 +36,7 @@ captureInstallPrompt();
 preventIosInputZoom();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());
+applyDarkStyle(darkStylePreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
 

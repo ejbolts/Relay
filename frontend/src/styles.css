@@ -11,13 +11,13 @@
   font-synthesis: none;
   --ink: #eef1f3;
   --muted-ink: #8b949b;
-  --paper: #0b0d0f;
-  --page: #0b0d0f;
-  --card: #15181b;
+  --paper: var(--p-page);
+  --page: var(--p-page);
+  --card: var(--p-surface);
   --line: #2a2f34;
-  --accent: #3987e5;
-  --accent-dark: #5598e7;
-  --green: #3987e5;
+  --accent: #2c74d0;
+  --accent-dark: #357bd6;
+  --green: #2c74d0;
   color-scheme: dark;
   --gold: #ffe018;
   --gold-row: #5d5300;
@@ -10276,7 +10276,7 @@ body.chart-fullscreen-open {
 }
 
 .set-details.set-dragging {
-  outline: 2px solid var(--p-accent, #3987e5);
+  outline: 2px solid var(--p-accent, #2c74d0);
   outline-offset: -2px;
   opacity: 0.85;
   transform: scale(0.992);

@@ -16,19 +16,27 @@
 }
 
 :root {
+  /* Default dark: the original Relay palette. Popups share the card surface. */
   --p-page: #0b0d0f;
   --p-surface: #15181b;
   --p-surface-2: #1d2125;
   --p-surface-3: #272c31;
+  --p-surface-raised: #15181b;
+  --p-raised-2: #1d2125;
+  --p-raised-3: #272c31;
+  --p-raised-line: rgb(255 255 255 / 7%);
+  --p-raised-line-strong: rgb(255 255 255 / 12%);
   --p-line: rgb(255 255 255 / 7%);
   --p-line-strong: rgb(255 255 255 / 12%);
+  --p-card-shadow: none;
+  --p-tab-bar-bg: rgb(11 13 15 / 86%);
   --p-ink: #f3f5f6;
   --p-ink-2: #b4bcc2;
   --p-muted: #828b92;
-  --p-accent: #3987e5;
-  --p-accent-hover: #4b94ea;
-  --p-accent-text: #6da7ec;
-  --p-accent-soft: rgb(57 135 229 / 15%);
+  --p-accent: #2c74d0;
+  --p-accent-hover: #357bd6;
+  --p-accent-text: #7fb4f1;
+  --p-accent-soft: rgb(44 116 208 / 20%);
   --accent: var(--p-accent);
   --accent-dark: var(--p-accent-hover);
   --green: var(--p-accent);
@@ -43,6 +51,57 @@
   --p-radius: 20px;
   --p-tab-bar-height: calc(4.25rem + env(safe-area-inset-bottom));
   font-feature-settings: 'cv11', 'ss03';
+}
+
+/* Dark styles, chosen in Appearance. Light mode ignores them. */
+:root[data-dark-style='oled']:not([data-colour-mode='light']) {
+  /* True black page and cards; bright outlines carry the structure instead of fills. */
+  --p-page: #000000;
+  --p-surface: #000000;
+  --p-surface-2: #121417;
+  --p-surface-3: #1f2226;
+  --p-surface-raised: #000000;
+  --p-raised-2: #15181b;
+  --p-raised-3: #23272b;
+  --p-raised-line: rgb(255 255 255 / 16%);
+  --p-raised-line-strong: rgb(255 255 255 / 42%);
+  --p-line: rgb(255 255 255 / 14%);
+  --p-line-strong: rgb(255 255 255 / 24%);
+  --p-card-border: rgb(255 255 255 / 22%);
+  --p-card-shadow: none;
+  --p-tab-bar-bg: rgb(0 0 0 / 92%);
+  --p-ink: #ffffff;
+  --p-ink-2: #d4d9dd;
+  --p-muted: #a8b0b6;
+  --p-grid: #1f2327;
+  --p-axis: #3d434a;
+  --p-deemph: #33393f;
+  --p-danger: #f47a7a;
+}
+
+:root[data-dark-style='stained']:not([data-colour-mode='light']) {
+  /* Surfaces take a faint tint of the accent theme, so layers differ by hue as well as lightness. */
+  --p-page: color-mix(in srgb, var(--p-accent) 7%, #0a0d12);
+  --p-surface: color-mix(in srgb, var(--p-accent) 13%, #151a21);
+  --p-surface-2: color-mix(in srgb, var(--p-accent) 17%, #1d242d);
+  --p-surface-3: color-mix(in srgb, var(--p-accent) 23%, #262e38);
+  --p-surface-raised: color-mix(in srgb, var(--p-accent) 17%, #1a2129);
+  --p-raised-2: color-mix(in srgb, var(--p-accent) 23%, #232b35);
+  --p-raised-3: color-mix(in srgb, var(--p-accent) 28%, #2c3541);
+  --p-raised-line: color-mix(in srgb, var(--p-accent-text) 18%, transparent);
+  --p-raised-line-strong: color-mix(in srgb, var(--p-accent-text) 40%, transparent);
+  --p-line: color-mix(in srgb, var(--p-accent-text) 14%, transparent);
+  --p-line-strong: color-mix(in srgb, var(--p-accent-text) 26%, transparent);
+  --p-card-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--p-accent-text) 12%, transparent),
+    0 6px 18px rgb(0 0 0 / 40%);
+  --p-tab-bar-bg: color-mix(in srgb, var(--p-surface) 92%, transparent);
+  --p-ink-2: color-mix(in srgb, var(--p-accent-text) 18%, #ccd3d9);
+  --p-muted: color-mix(in srgb, var(--p-accent-text) 18%, #a1abb3);
+  --p-grid: color-mix(in srgb, var(--p-accent) 18%, #262d35);
+  --p-axis: color-mix(in srgb, var(--p-accent) 20%, #3e4750);
+  --p-deemph: color-mix(in srgb, var(--p-accent) 20%, #37404a);
+  --p-danger: #f47a7a;
 }
 
 html,
@@ -264,10 +323,11 @@ body {
   display: block;
   width: 100%;
   margin: 0.75rem 0 0;
-  border: 1px solid var(--p-line);
+  border: 1px solid var(--p-card-border, var(--p-line));
   border-radius: var(--p-radius);
   padding: 1rem;
   background: var(--p-surface);
+  box-shadow: var(--p-card-shadow);
   color: var(--p-ink);
   text-align: left;
 }
@@ -1329,7 +1389,7 @@ button.pulse-card:hover {
   border-top: 1px solid var(--p-line);
   padding: 0.4375rem max(0.5rem, env(safe-area-inset-right)) env(safe-area-inset-bottom)
     max(0.5rem, env(safe-area-inset-left));
-  background: rgb(11 13 15 / 86%);
+  background: var(--p-tab-bar-bg);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
@@ -1468,8 +1528,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .overlay-screen-header::before {
   background: linear-gradient(
     180deg,
-    rgb(11 13 15 / 97%) 0%,
-    rgb(11 13 15 / 90%) 62%,
+    color-mix(in srgb, var(--p-page) 97%, transparent) 0%,
+    color-mix(in srgb, var(--p-page) 90%, transparent) 62%,
     transparent 100%
   );
 }
@@ -2766,9 +2826,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .body-screen .body-trend-stat-controls select {
   min-height: 1.75rem;
+  border-color: var(--p-line-strong);
   border-radius: 8px;
   padding: 0 1.5rem 0 0.5rem;
+  background-color: var(--p-surface-2);
+  color: var(--p-ink);
   font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .body-screen .body-trend-panel {
@@ -2934,7 +2998,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   height: 2.75rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 50%;
-  background: rgb(21 24 27 / 94%);
+  background: color-mix(in srgb, var(--p-surface) 94%, transparent);
   box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
   color: var(--p-ink-2);
   opacity: 0;
@@ -3018,6 +3082,11 @@ html.edge-swipe-ready .edge-swipe-indicator {
   margin: 0;
   color: var(--p-ink);
   font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.history-screen .history-card-summary .history-card-metric {
+  font-weight: 650;
 }
 
 .history-screen .history-card-summary .history-card-copy strong {
@@ -3807,7 +3876,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   border: 1px solid var(--p-line);
   border-radius: 10px;
   padding: 0 0.625rem;
-  background: rgb(11 13 15 / 45%);
+  background: color-mix(in srgb, var(--p-page) 55%, transparent);
   color: var(--p-ink);
   font: inherit;
   font-size: 0.8125rem;
@@ -4466,9 +4535,35 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-ink);
 }
 
+/* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
+:root:not([data-colour-mode='light'])
+  :is(
+    .popup-dialog,
+    .notification-dialog,
+    .exercise-picker,
+    .pr-summary,
+    .calendar-create-dialog,
+    .calendar-day-detail,
+    .superset-picker,
+    .workout-close-dialog,
+    .set-entry-confirmation,
+    .relay-tip-popover,
+    .relay-tip-nudge
+  ) {
+  --p-surface: var(--p-surface-raised);
+  --p-surface-2: var(--p-raised-2);
+  --p-surface-3: var(--p-raised-3);
+  --p-line: var(--p-raised-line);
+  --p-line-strong: var(--p-raised-line-strong);
+}
+
 .popup-dialog > header,
 .notification-dialog > header {
   border-bottom: 1px solid var(--p-line);
+}
+
+.popup-dialog > header {
+  background: color-mix(in srgb, var(--p-surface) 97%, transparent);
 }
 
 .popup-dialog h2,
@@ -5499,4 +5594,21 @@ html[data-reduce-motion] ::backdrop {
   font-size: 0.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Equipment photo disclosure: a drawn chevron, centred on the row, instead of a text glyph. */
+.machine-photo-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--p-ink-2);
+}
+
+.machine-photo-chevron .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.logger-screen .exercise-complete-button .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
 }
