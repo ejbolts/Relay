@@ -272,6 +272,7 @@ import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
   formatVolume,
+  groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
   recordCountsByWorkout,
@@ -7757,6 +7758,12 @@ export function ProgressScreen({
   );
   const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
   const sessionsNewestFirst = viewPoints.slice().reverse();
+  const sessionCountByYear = new Map(
+    groupByYear(sessionsNewestFirst, (point) => point.workout_date).map((group) => [
+      group.year,
+      group.items.length,
+    ]),
+  );
   const formatMetric = (value: number) =>
     metric === 'volume_kg'
       ? Math.round(value).toLocaleString('en-GB')
@@ -8165,49 +8172,69 @@ export function ProgressScreen({
                       <h2>Sessions</h2>
                       <span>Best set · {metricInfo.label}</span>
                     </header>
-                    <ul>
-                      {sessionsNewestFirst.slice(0, visibleSessions).map((point) => (
-                        <li key={point.workout_id}>
-                          <button
-                            type="button"
-                            aria-label={`View ${progress.exercise.name} in workout from ${prettyDate(point.workout_date)}`}
-                            onClick={() =>
-                              browseFirst
-                                ? setSessionId(point.workout_id)
-                                : onOpenWorkout(point.workout_id, progress.exercise.id)
-                            }
-                          >
-                            <span className="session-date">
-                              {shortDate(point.workout_date)}
-                              {recordIds.has(point.workout_id) && (
-                                <em className="pr-chip">
-                                  {defaultView
-                                    ? personalRecords.some(
-                                        (record) =>
-                                          record.workout_id === point.workout_id &&
-                                          record.exercise_id === exerciseId &&
-                                          record.scope !== 'block',
-                                      )
-                                      ? 'All-time PR'
-                                      : 'Block PR'
-                                    : 'PR'}
-                                </em>
-                              )}
-                            </span>
-                            <span className="session-set num">
-                              {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
-                              {point.best_reps}
-                              {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
-                            </span>
-                            <b className="num">
-                              {approx}
-                              {formatMetricKg(point[metric])}
-                            </b>
-                            <Icon name="chevron-right" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    {groupByYear(
+                      sessionsNewestFirst.slice(0, visibleSessions),
+                      (point) => point.workout_date,
+                    ).map((group) => (
+                      <section
+                        key={group.year}
+                        className="session-year"
+                        aria-labelledby={`session-year-${group.year}`}
+                      >
+                        <h3 className="session-year-header">
+                          <span id={`session-year-${group.year}`} className="num">
+                            {group.year}
+                          </span>
+                          <small>
+                            {sessionCountByYear.get(group.year)}{' '}
+                            {sessionCountByYear.get(group.year) === 1 ? 'session' : 'sessions'}
+                          </small>
+                        </h3>
+                        <ul>
+                          {group.items.map((point) => (
+                            <li key={point.workout_id}>
+                              <button
+                                type="button"
+                                aria-label={`View ${progress.exercise.name} in workout from ${prettyDate(point.workout_date)}`}
+                                onClick={() =>
+                                  browseFirst
+                                    ? setSessionId(point.workout_id)
+                                    : onOpenWorkout(point.workout_id, progress.exercise.id)
+                                }
+                              >
+                                <span className="session-date">
+                                  {shortDate(point.workout_date)}
+                                  {recordIds.has(point.workout_id) && (
+                                    <em className="pr-chip">
+                                      {defaultView
+                                        ? personalRecords.some(
+                                            (record) =>
+                                              record.workout_id === point.workout_id &&
+                                              record.exercise_id === exerciseId &&
+                                              record.scope !== 'block',
+                                          )
+                                          ? 'All-time PR'
+                                          : 'Block PR'
+                                        : 'PR'}
+                                    </em>
+                                  )}
+                                </span>
+                                <span className="session-set num">
+                                  {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
+                                  {point.best_reps}
+                                  {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
+                                </span>
+                                <b className="num">
+                                  {approx}
+                                  {formatMetricKg(point[metric])}
+                                </b>
+                                <Icon name="chevron-right" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
                     {visibleSessions < sessionsNewestFirst.length && (
                       <button
                         type="button"

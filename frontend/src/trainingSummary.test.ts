@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   compactSetSummary,
+  groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
   niceTicks,
@@ -348,5 +349,21 @@ describe('training summary helpers', () => {
       record('d', '2026-10-05', 'estimated_1rm'),
     ];
     expect(recentStrengthRecords(records, 2).map((item) => item.id)).toEqual(['c', 'b']);
+  });
+});
+
+describe('groupByYear', () => {
+  it('splits newest-first sessions into year runs', () => {
+    const dates = ['2026-03-12', '2025-09-14', '2024-02-14', '2024-02-11', '2023-12-28'];
+    expect(groupByYear(dates, (date) => date)).toEqual([
+      { year: '2026', items: ['2026-03-12'] },
+      { year: '2025', items: ['2025-09-14'] },
+      { year: '2024', items: ['2024-02-14', '2024-02-11'] },
+      { year: '2023', items: ['2023-12-28'] },
+    ]);
+  });
+
+  it('returns no groups for an empty list', () => {
+    expect(groupByYear([], (date: string) => date)).toEqual([]);
   });
 });

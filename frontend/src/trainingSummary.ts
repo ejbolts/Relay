@@ -242,6 +242,20 @@ export function shortDate(value: string): string {
   return `${SHORT_DAYS[date.getDay()]} ${date.getDate()} ${SHORT_MONTHS[date.getMonth()]}`;
 }
 
+export type YearGroup<T> = { year: string; items: T[] };
+
+/** Groups date-ordered items into consecutive runs that share a calendar year. */
+export function groupByYear<T>(items: T[], dateOf: (item: T) => string): YearGroup<T>[] {
+  const groups: YearGroup<T>[] = [];
+  for (const item of items) {
+    const year = dateOf(item).slice(0, 4);
+    const last = groups[groups.length - 1];
+    if (last?.year === year) last.items.push(item);
+    else groups.push({ year, items: [item] });
+  }
+  return groups;
+}
+
 /** “5 Oct” */
 export function dayMonth(value: string): string {
   const date = parseLocalDate(value);
