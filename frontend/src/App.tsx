@@ -120,7 +120,12 @@ import {
   saveBodyTrendPreference,
   type BodyTrendPreference,
 } from './bodyTrendPreference';
-import { WorkoutCalendar, WorkoutCalendarLegend, type OlderHistoryProps } from './WorkoutCalendar';
+import {
+  WeekStrip,
+  WorkoutCalendar,
+  WorkoutCalendarLegend,
+  type OlderHistoryProps,
+} from './WorkoutCalendar';
 import {
   appendOlderWorkouts,
   hasOlderHistory,
@@ -1974,6 +1979,9 @@ function AppContent() {
                   calendar={
                     <InteractiveWorkoutCalendar
                       entries={dashboard?.heatmap ?? []}
+                      weekStartDay={weekStartDayFrom(
+                        dashboard?.weekly_sets?.week_start ?? dashboard?.zone2?.week_start,
+                      )}
                       workouts={workouts}
                       olderHistory={olderHistoryProps}
                       categoryColors={workoutTypeColors}
@@ -2474,8 +2482,11 @@ function InteractiveWorkoutCalendar({
   onEditWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  weekStartDay,
 }: {
   entries: DashboardData['heatmap'];
+  /** Home passes its week start to lead the calendar with this week's days. */
+  weekStartDay?: number;
   workouts: TrackedWorkout[];
   olderHistory?: OlderHistoryProps;
   categoryColors: WorkoutTypeColors;
@@ -2499,8 +2510,24 @@ function InteractiveWorkoutCalendar({
       return next;
     });
 
+  const openDay = (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => {
+    if (entry) setSelectedDay(entry);
+    else setPendingWorkoutDate(workoutDate);
+  };
+
   return (
     <>
+      {weekStartDay !== undefined && (
+        <WeekStrip
+          entries={entries}
+          categoryColors={categoryColors}
+          hiddenCategories={hiddenCategories}
+          weekStartDay={weekStartDay}
+          activeWorkoutDate={activeWorkoutDate}
+          onActiveWorkoutClick={onResumeWorkout}
+          onDayClick={openDay}
+        />
+      )}
       <WorkoutCalendar
         entries={entries}
         olderHistory={olderHistory}
@@ -2508,10 +2535,7 @@ function InteractiveWorkoutCalendar({
         hiddenCategories={hiddenCategories}
         activeWorkoutDate={activeWorkoutDate}
         onActiveWorkoutClick={onResumeWorkout}
-        onDayClick={(workoutDate, entry) => {
-          if (entry) setSelectedDay(entry);
-          else setPendingWorkoutDate(workoutDate);
-        }}
+        onDayClick={openDay}
       />
       <WorkoutCalendarLegend
         presentTypes={presentTypes}
