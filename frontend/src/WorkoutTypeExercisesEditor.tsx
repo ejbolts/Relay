@@ -28,6 +28,17 @@ export function WorkoutTypeExercisesEditor({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const strengthSets = movements
+    .filter((m) => m.exercise.kind !== 'cardio')
+    .reduce((sum, m) => sum + m.sets.length, 0);
+  const cardioMinutes = Math.round(
+    movements
+      .filter((m) => m.exercise.kind === 'cardio')
+      .reduce(
+        (sum, m) => sum + m.sets.reduce((seconds, set) => seconds + (set.duration_seconds ?? 0), 0),
+        0,
+      ) / 60,
+  );
   const libraryExercises = useContext(ExerciseCreditsContext)?.exercises;
   const latest = (exercise: Exercise) =>
     libraryExercises?.find((item) => item.id === exercise.id) ?? exercise;
@@ -103,7 +114,19 @@ export function WorkoutTypeExercisesEditor({
             </p>
           )}
           <section className="routine-day-body type-exercises-body" aria-label={type.name}>
+            <div className="type-exercises-summary">
+              <span className="type-exercises-name">
+                <i aria-hidden="true" />
+                {type.name}
+              </span>
+              <span>
+                {movements.length} {movements.length === 1 ? 'exercise' : 'exercises'}
+                {strengthSets > 0 && ` · ${strengthSets} ${strengthSets === 1 ? 'set' : 'sets'}`}
+                {cardioMinutes > 0 && ` · ${cardioMinutes} min`}
+              </span>
+            </div>
             <RoutineMovementList
+              layout="cards"
               movements={movements}
               exercises={exercises}
               target={type.name}

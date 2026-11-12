@@ -1099,15 +1099,143 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
     transition: none;
   }
 }
-/* A workout type's saved exercises: one always-open day card in the type's colour. */
+/* Workout type exercises use individual neutral cards; colour stays in the type marker. */
 .routine-day-body.type-exercises-body {
-  border: 1px solid var(--day-colour, var(--p-accent));
-  border-radius: 14px;
-  padding: 4px 12px 12px;
-  background: var(--p-surface);
+  gap: 8px;
+  padding: 0;
   opacity: 1;
   transform: none;
 }
-.type-exercises-body > .routine-exercise-row:first-child {
-  border-top: 0;
+.type-exercises-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 6px;
+  color: var(--p-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.type-exercises-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.type-exercises-name i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--day-colour, var(--p-accent));
+}
+.routine-exercise-row.routine-exercise-card {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 24px auto;
+  gap: 8px;
+  padding: 13px 12px;
+  border: 1px solid var(--p-line);
+  border-radius: 13px;
+  background: var(--p-surface);
+}
+.routine-exercise-number {
+  color: var(--p-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.routine-exercise-card .routine-exercise-main {
+  position: relative;
+  gap: 3px;
+}
+.routine-exercise-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.routine-editor .routine-exercise-card .routine-exercise-name {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+.routine-exercise-card .routine-exercise-main:focus-within {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.routine-editor .routine-exercise-card .exercise-muscle-help-button {
+  width: 24px;
+  height: 32px;
+}
+.routine-editor .routine-exercise-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.routine-exercise-count .pulse-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--p-muted);
+}
+.routine-exercise-count[aria-expanded='true'] .pulse-icon {
+  transform: rotate(180deg);
+}
+.routine-exercise-card-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid var(--p-line);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+.routine-exercise-inline-controls {
+  display: contents;
+}
+.routine-exercise-presets {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.routine-editor .routine-exercise-presets button {
+  flex: 1;
+  min-height: 38px;
+  border: 1px solid var(--p-line);
+  border-radius: 8px;
+  padding: 6px;
+  background: var(--p-surface-2);
+  font-size: 12px;
+}
+.routine-editor .routine-exercise-presets button[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  color: var(--p-accent-text);
+  background: var(--p-accent-soft);
+}
+.routine-editor .routine-exercise-card-remove {
+  min-height: 38px;
+  border: 0;
+  padding: 6px 8px;
+  background: none;
+  color: var(--p-muted);
+  font-size: 12px;
+}
+.routine-editor .type-exercises-body .routine-add-exercise {
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 2px;
+  border-radius: 12px;
 }

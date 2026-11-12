@@ -9,6 +9,7 @@ import './routineExerciseSearch.css';
 export function RoutineExerciseSearch({
   day,
   target = `day ${day}`,
+  label = 'Exercise',
   exercises,
   disabled,
   onAdd,
@@ -16,6 +17,7 @@ export function RoutineExerciseSearch({
   day?: number;
   /** What the exercise is added to in labels, such as "day 2" or "Push". */
   target?: string;
+  label?: string;
   exercises: Exercise[];
   disabled: boolean;
   onAdd: (exercise: Exercise) => void;
@@ -84,7 +86,7 @@ export function RoutineExerciseSearch({
         onClick={() => setOpen(true)}
       >
         <Icon name="plus" />
-        Exercise
+        {label}
       </button>
     );
   }
