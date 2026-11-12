@@ -2597,24 +2597,21 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  margin: 0.75rem 0 0.125rem;
-  border-radius: 8px;
-  padding: 0.375rem 0.625rem;
-  background: var(--p-accent-soft);
-  color: var(--p-accent-text);
+  margin: 0;
+  border-bottom: 1px solid var(--p-accent);
+  padding: 0.75rem 0 0.375rem;
   font-size: 0.8125rem;
   font-weight: 650;
 }
 
 .session-year:first-of-type .session-year-header {
-  margin-top: 0;
+  padding-top: 0.25rem;
 }
 
 .session-year-header small {
-  color: inherit;
+  color: var(--p-muted);
   font-size: 0.71875rem;
-  font-weight: 500;
-  opacity: 0.85;
+  font-weight: 400;
 }
 
 .progress-sessions li + li {
