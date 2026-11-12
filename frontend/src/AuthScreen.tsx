@@ -8,7 +8,7 @@ import {
 } from './authForm';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
-import { pendingFriendInvite } from './friendInvite';
+import { pendingFriendInvite, pendingRegistrationInvite } from './friendInvite';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { requestPhonePushPermissionFromTap } from './push';
@@ -144,7 +144,7 @@ export function AuthScreen({
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCode, setInviteCode] = useState(() => pendingRegistrationInvite() ?? '');
   const [showPassword, setShowPassword] = useState(false);
   const [inviteRevealed, setInviteRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);

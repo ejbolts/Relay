@@ -230,17 +230,20 @@ it('sends the inviter a friend request once signed in, with Undo', async () => {
   expect(api.sharing.addFriend).toHaveBeenCalledOnce();
 });
 
-it('sends the request from a link scanned while the app is already open', async () => {
-  await openLink('/#dashboard');
-  await act(async () => {
-    window.history.replaceState(window.history.state, '', `/#friend=${inviterId}`);
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-  });
+it.each(['', '&invite=sample-code'])(
+  'sends the request from a link scanned while the app is already open (%s)',
+  async (registration) => {
+    await openLink('/#dashboard');
+    await act(async () => {
+      window.history.replaceState(window.history.state, '', `/#friend=${inviterId}${registration}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
 
-  expect(window.location.hash).toBe('#shared-profile');
-  expect(api.sharing.addFriend).toHaveBeenCalledWith(inviterId);
-  expect(toast()?.textContent).toContain('Friend request sent to Sam Rivera');
-});
+    expect(window.location.hash).toBe('#shared-profile');
+    expect(api.sharing.addFriend).toHaveBeenCalledWith(inviterId);
+    expect(toast()?.textContent).toContain('Friend request sent to Sam Rivera');
+  },
+);
 
 it('sends the request for a code scanned inside the app', async () => {
   await openLink('/#social');

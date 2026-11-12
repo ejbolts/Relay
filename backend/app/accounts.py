@@ -186,6 +186,10 @@ class AuthConfigRead(BaseModel):
     invite_code_required: bool
 
 
+class FriendInviteRead(BaseModel):
+    invite_code: str | None
+
+
 class UserRead(BaseModel):
     id: str
     username: str
@@ -402,6 +406,18 @@ def auth_config(db: DbDependency, settings: AppSettings) -> AuthConfigRead:
             else browser_bootstrap_allowed(settings)
         ),
         invite_code_required=settings.registration_invite_code is not None,
+    )
+
+
+@auth_router.get("/friend-invite", response_model=FriendInviteRead)
+def friend_invite(user: CurrentUser, db: DbDependency, settings: AppSettings) -> FriendInviteRead:
+    """Let signed-in members include the registration code in their friend QR links."""
+    return FriendInviteRead(
+        invite_code=(
+            settings.registration_invite_code
+            if load_runtime_settings(db, settings).allow_registration
+            else None
+        )
     )
 
 

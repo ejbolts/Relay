@@ -46,7 +46,8 @@ export function FriendInviteDialog({
   onClose: () => void;
   onChooseSharing: () => void;
 }) {
-  const url = friendInviteUrl(user.id);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const url = friendInviteUrl(user.id, window.location.origin, inviteCode);
   const [mode, setMode] = useState<SheetMode>('code');
   const [shareable, setShareable] = useState<Shareable>('checking');
   const [copied, setCopied] = useState(false);
@@ -55,15 +56,17 @@ export function FriendInviteDialog({
 
   useEffect(() => {
     let cancelled = false;
-    api.sharing
-      .choices()
-      .then((choices) => {
-        if (!cancelled) setShareable(choices.visibility === 'private' ? 'private' : 'shared');
-      })
-      // Offline, the code still works once the other person is connected.
-      .catch(() => {
-        if (!cancelled) setShareable('shared');
-      });
+    void Promise.all([
+      // Offline, the friend link still works once the other person is connected.
+      api.sharing.choices().catch(() => ({ visibility: 'public' })),
+      // Older servers may not provide a registration code yet.
+      api.auth.friendInvite().catch(() => ({ invite_code: null })),
+    ]).then(([choices, invite]) => {
+      if (!cancelled) {
+        setInviteCode(invite.invite_code);
+        setShareable(choices.visibility === 'private' ? 'private' : 'shared');
+      }
+    });
     return () => {
       cancelled = true;
     };

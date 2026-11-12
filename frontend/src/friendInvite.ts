@@ -4,11 +4,13 @@
  * through signing in or creating an account, then sends the inviter a friend request.
  */
 
-const INVITE_HASH = /^#friend=([A-Za-z0-9-]{1,64})$/;
+const INVITE_HASH = /^#friend=([A-Za-z0-9-]{1,64})(?:&invite=([^&]*))?$/;
 const STORAGE_KEY = 'relay.pendingFriendInvite';
+const REGISTRATION_KEY = 'relay.pendingRegistrationInvite';
 
 // Used when session storage is unavailable, as in some private browsing modes.
 let memoryInvite: string | null = null;
+let memoryRegistrationInvite: string | null = null;
 
 interface InviteLocation {
   hash: string;
@@ -22,12 +24,29 @@ interface InviteHistory {
 }
 
 /** The link a member's QR code opens. The account id never changes, unlike the username. */
-export function friendInviteUrl(userId: string, origin = window.location.origin): string {
-  return `${origin}/#friend=${encodeURIComponent(userId)}`;
+export function friendInviteUrl(
+  userId: string,
+  origin = window.location.origin,
+  inviteCode?: string | null,
+): string {
+  // Keep the code in the fragment: browsers do not send it in requests or referrers.
+  const registration = inviteCode ? `&invite=${encodeURIComponent(inviteCode)}` : '';
+  return `${origin}/#friend=${encodeURIComponent(userId)}${registration}`;
 }
 
 export function friendInviteIdFromHash(hash: string): string | null {
   return INVITE_HASH.exec(hash)?.[1] ?? null;
+}
+
+function registrationInviteFromHash(hash: string): string | null {
+  const encoded = INVITE_HASH.exec(hash)?.[2];
+  if (!encoded) return null;
+  try {
+    const code = decodeURIComponent(encoded);
+    return code.length <= 200 ? code : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -41,6 +60,13 @@ export function captureFriendInvite(
 ): string | null {
   const id = friendInviteIdFromHash(location.hash);
   if (!id) return null;
+  memoryRegistrationInvite = registrationInviteFromHash(location.hash);
+  try {
+    // An empty value replaces any registration code from an earlier friend's link.
+    (storage ?? window.sessionStorage).setItem(REGISTRATION_KEY, memoryRegistrationInvite ?? '');
+  } catch {
+    // The current page can still pre-fill the code when session storage is blocked.
+  }
   try {
     (storage ?? window.sessionStorage).setItem(STORAGE_KEY, id);
   } catch {
@@ -60,10 +86,21 @@ export function pendingFriendInvite(storage?: Pick<Storage, 'getItem'>): string 
   return memoryInvite;
 }
 
+export function pendingRegistrationInvite(storage?: Pick<Storage, 'getItem'>): string | null {
+  try {
+    const code = (storage ?? window.sessionStorage).getItem(REGISTRATION_KEY);
+    return code && code.length <= 200 ? code : null;
+  } catch {
+    return memoryRegistrationInvite;
+  }
+}
+
 export function clearFriendInvite(storage?: Pick<Storage, 'removeItem'>) {
   memoryInvite = null;
+  memoryRegistrationInvite = null;
   try {
     (storage ?? window.sessionStorage).removeItem(STORAGE_KEY);
+    (storage ?? window.sessionStorage).removeItem(REGISTRATION_KEY);
   } catch {
     // Nothing stored.
   }
