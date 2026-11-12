@@ -2656,6 +2656,7 @@ function InteractiveWorkoutCalendar({
           hiddenCategories={hiddenCategories}
           weekStartDay={weekStartDay}
           activeWorkoutDate={activeWorkoutDate}
+          selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
           onActiveWorkoutClick={onResumeWorkout}
           onDayClick={openDay}
         />
@@ -2666,6 +2667,7 @@ function InteractiveWorkoutCalendar({
         categoryColors={categoryColors}
         hiddenCategories={hiddenCategories}
         activeWorkoutDate={activeWorkoutDate}
+        selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
         onActiveWorkoutClick={onResumeWorkout}
         onDayClick={openDay}
       />

@@ -1858,6 +1858,12 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   outline-offset: 2px;
 }
 
+/* Past days recede slightly; the day being viewed, today and a live workout stay clear. */
+.calendar-panel .calendar-day.past:not(.selected):not(.in-progress):not(:hover):not(:focus-visible),
+.week-strip-day.past:not(.selected):not(.in-progress):not(:hover):not(:focus-visible) {
+  opacity: 0.8;
+}
+
 .category-legend {
   display: flex;
   flex-wrap: wrap;

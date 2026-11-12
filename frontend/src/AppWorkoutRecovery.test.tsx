@@ -1780,6 +1780,13 @@ describe('finishing workouts in the background', () => {
     expect(document.querySelector('.calendar-day-detail')?.textContent).toContain(
       'Recovery workout',
     );
+    expect(
+      container.querySelectorAll('.home-sections [data-date="2026-10-23"].selected'),
+    ).toHaveLength(2);
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Close workout details"]')!.click(),
+    );
+    expect(container.querySelector('.home-sections .selected')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });

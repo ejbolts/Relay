@@ -48,6 +48,7 @@ type WorkoutCalendarProps = {
   /** Workout types switched off in the legend; their dots and day borders are greyed out. */
   hiddenCategories?: ReadonlySet<string>;
   activeWorkoutDate?: string | null;
+  selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   olderHistory?: OlderHistoryProps;
   types?: WorkoutType[];
@@ -75,6 +76,7 @@ export function WorkoutCalendar({
   categoryColors,
   hiddenCategories,
   activeWorkoutDate = null,
+  selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
   olderHistory,
@@ -228,7 +230,7 @@ export function WorkoutCalendar({
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
                           style={
@@ -296,6 +298,7 @@ export function WorkoutCalendar({
       )),
     [
       activeWorkoutDate,
+      selectedDate,
       categoryColors,
       hiddenCategories,
       map,
@@ -352,6 +355,7 @@ export function WeekStrip({
   hiddenCategories,
   weekStartDay,
   activeWorkoutDate = null,
+  selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
   types: suppliedTypes,
@@ -362,6 +366,7 @@ export function WeekStrip({
   /** 0 (Sunday) to 6, matching the week the rest of Home counts. */
   weekStartDay: number;
   activeWorkoutDate?: string | null;
+  selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   onDayClick: (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => void;
   types?: WorkoutType[];
@@ -388,7 +393,7 @@ export function WeekStrip({
         return (
           <button
             type="button"
-            className={`week-strip-day ${entry ? 'trained' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+            className={`week-strip-day ${entry ? 'trained' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
             key={key}
             data-date={key}
             style={

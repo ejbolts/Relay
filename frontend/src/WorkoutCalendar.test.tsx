@@ -134,6 +134,36 @@ const day = (workout_date: string, categories: HeatmapDay['categories']): Heatma
 const cell = (date: string) => host.querySelector<HTMLButtonElement>(`[data-date="${date}"]`)!;
 const ring = (date: string) => cell(date).style.getPropertyValue('--day-ring');
 
+it.each(['month', 'week'] as const)(
+  'distinguishes past days from today, future days and the viewed date in the %s calendar',
+  async (view) => {
+    const entries = [day('2026-10-25', ['upper']), day('2026-10-26', ['lower'])];
+    const render = (selectedDate: string | null) =>
+      act(async () => {
+        const props = { entries, categoryColors: colors, selectedDate, onDayClick: vi.fn() };
+        root.render(
+          view === 'week' ? (
+            <WeekStrip {...props} weekStartDay={0} />
+          ) : (
+            <WorkoutCalendar {...props} />
+          ),
+        );
+      });
+    await render(null);
+    expect(cell('2026-10-25').classList.contains('past')).toBe(true);
+    expect(cell('2026-10-25').classList.contains('selected')).toBe(false);
+    expect(cell('2026-10-26').classList.contains('past')).toBe(false);
+    expect(cell('2026-10-26').getAttribute('aria-current')).toBe('date');
+    expect(cell('2026-10-27').classList.contains('future')).toBe(true);
+    expect(cell('2026-10-27').classList.contains('past')).toBe(false);
+    await render('2026-10-25');
+    expect(cell('2026-10-25').classList.contains('selected')).toBe(true);
+    expect(cell('2026-10-26').classList.contains('selected')).toBe(false);
+    await render(null);
+    expect(cell('2026-10-25').classList.contains('selected')).toBe(false);
+  },
+);
+
 it('outlines each trained day in its workout colours', async () => {
   const entries = [
     day('2026-10-19', ['upper']),
