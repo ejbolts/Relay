@@ -372,6 +372,14 @@ export interface RoutineDay {
   movements: { exercise_id: string; exercise: Exercise; sets: RoutineSet[] }[];
 }
 
+export type RoutineMovement = RoutineDay['movements'][number];
+
+/** Exercises saved to one workout type, filled in when a workout of that type starts. */
+export interface WorkoutTypeExercises {
+  workout_type_id: string;
+  movements: RoutineMovement[];
+}
+
 export interface Routine {
   id: string;
   name: string;

@@ -251,7 +251,7 @@ it('combines the Custom pill with equipment and muscle filters and preserves it 
   await click(named('All'));
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(2);
 });
-it('searches, filters, clears and cycles through recent, alphabetical and improvement ordering', async () => {
+it('searches, filters, clears and sorts by recent, alphabetical and improvement order from list options', async () => {
   await render();
   const input = await search('Press');
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
@@ -260,12 +260,25 @@ it('searches, filters, clears and cycles through recent, alphabetical and improv
   await click(named('Back'));
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
   await click(named('All'));
-  await click(host.querySelector('[aria-label="Sort exercises: Recent first"]')!);
-  expect(host.querySelector('.exercise-list-rows button')?.textContent).toContain('Cable Row');
-  await click(host.querySelector('[aria-label="Sort exercises: A–Z"]')!);
-  expect(host.querySelector('.exercise-list-rows button')?.textContent).toContain('Cable Row');
-  await click(host.querySelector('[aria-label="Sort exercises: Most improved"]')!);
-  expect(host.querySelector('.exercise-list-rows button')?.textContent).toContain('Pec Deck');
+  expect(host.querySelector('[aria-label^="Sort exercises"]')).toBeNull();
+  await click(host.querySelector('[aria-label="Exercise list options"]')!);
+  const sort = document.querySelector<HTMLSelectElement>('[aria-label="Sort exercises"]')!;
+  expect([...sort.options].map((option) => option.textContent)).toEqual([
+    'Recent first',
+    'A–Z',
+    'Most improved',
+  ]);
+  const sortBy = async (name: string) => {
+    await act(async () => {
+      sort.value = [...sort.options].find((option) => option.textContent === name)!.value;
+      sort.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    return host.querySelector('.exercise-list-rows button')?.textContent;
+  };
+  expect(await sortBy('A–Z')).toContain('Cable Row');
+  expect(await sortBy('Most improved')).toContain('Cable Row');
+  expect(await sortBy('Recent first')).toContain('Pec Deck');
+  await click(document.querySelector('[aria-label="Close Exercise list"]')!);
   await search('<nothing>');
   expect(host.querySelector('[role="status"]')?.textContent).toContain('No exercises match');
 });

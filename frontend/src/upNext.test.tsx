@@ -1,15 +1,35 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { useUpNextSession } from './upNext';
-import type { TrackedWorkout, WorkoutRecommendation } from './types';
+import type { RoutineMovement, TrackedWorkout, WorkoutRecommendation } from './types';
+import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
+import { WorkoutTypesContext } from './workoutTypesContext';
 
-function read(recommendation: WorkoutRecommendation, workouts: TrackedWorkout[] = []) {
+function read(
+  recommendation: WorkoutRecommendation,
+  workouts: TrackedWorkout[] = [],
+  savedExercises: Record<string, RoutineMovement[]> = {},
+) {
   let result!: ReturnType<typeof useUpNextSession>;
   function Harness() {
     result = useUpNextSession(recommendation, workouts, '2026-10-26');
     return null;
   }
-  renderToStaticMarkup(<Harness />);
+  renderToStaticMarkup(
+    <WorkoutTypesContext.Provider
+      value={{
+        types: DEFAULT_WORKOUT_TYPES,
+        loading: false,
+        error: null,
+        reload: async () => undefined,
+        applySaved: () => undefined,
+        savedExercises,
+        applySavedExercises: () => undefined,
+      }}
+    >
+      <Harness />
+    </WorkoutTypesContext.Provider>,
+  );
   return result;
 }
 const custom = {
@@ -100,4 +120,30 @@ it('keeps the routine exercises when the routine day has them', () => {
   const result = read({ ...pushDay, routine_day: day }, [lastPush]);
   expect(result.template?.sourceWorkout.id).toBe('routine-template');
   expect(result.template?.exercises).toHaveLength(1);
+});
+it("uses the type's saved exercises before the last session when a routine day is empty", () => {
+  const emptyDay = { workout_type_id: 'push', workout_type: pushDay.workout_type!, movements: [] };
+  const saved = [
+    {
+      exercise_id: 'row',
+      exercise: row,
+      sets: [
+        {
+          reps: 10,
+          weight_kg: 40,
+          duration_seconds: null,
+          distance_km: null,
+          rest_seconds: 90,
+          set_type: 'normal' as const,
+        },
+      ],
+    },
+  ];
+  const result = read({ ...pushDay, routine_day: emptyDay }, [lastPush], { push: saved });
+  expect(result.template?.planned).toBe('type');
+  expect(result.template?.exercises.map((item) => item.exercise.name)).toEqual(['Cable Row']);
+  expect(result.template?.exercises[0].plannedSets?.[0].weight_kg).toBe(40);
+  // Without a split, a recommended type uses its saved exercises too.
+  const unscheduled = read({ ...pushDay, split_name: null }, [lastPush], { push: saved });
+  expect(unscheduled.template?.planned).toBe('type');
 });

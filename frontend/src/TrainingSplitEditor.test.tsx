@@ -41,6 +41,8 @@ function Harness({ initial = DEFAULT_WORKOUT_TYPES }: { initial?: WorkoutType[] 
         error: null,
         reload: async () => undefined,
         applySaved: setTypes,
+        savedExercises: {},
+        applySavedExercises: () => undefined,
       }}
     >
       <TrainingSplitEditor onSaved={saved} />

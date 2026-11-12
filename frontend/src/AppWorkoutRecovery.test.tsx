@@ -610,6 +610,23 @@ it('keeps settings search navigation working after the header resets a previous 
   await searchRest();
 });
 
+function savedMovement(exercise: Exercise) {
+  return {
+    exercise_id: exercise.id,
+    exercise,
+    sets: [
+      {
+        reps: 12,
+        weight_kg: 40,
+        rest_seconds: 90,
+        duration_seconds: null,
+        distance_km: null,
+        set_type: 'normal' as const,
+      },
+    ],
+  };
+}
+
 describe('saved training splits on Home', () => {
   const custom = {
     id: 'custom-a',
@@ -756,6 +773,62 @@ describe('saved training splits on Home', () => {
       { reps: 8, weight_kg: 37.5, rest_seconds: 90, completed: false, set_type: 'drop' },
     ]);
     expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('fills a workout from the exercises saved to its type when the split day has none', async () => {
+    vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
+      { workout_type_id: custom.id, movements: [savedMovement(row)] },
+    ]);
+    await mount();
+    expect(container.querySelector('.next-session-exercises')?.textContent).toContain('Cable row');
+    expect(container.querySelector('.next-session-head small')?.textContent).toBe('Saved');
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    const draft = readActiveWorkoutDraft()!;
+    expect(draft.workoutTypeId).toBe(custom.id);
+    expect(draft.movements.map((movement) => movement.exerciseId)).toEqual([row.id]);
+    expect(draft.movements[0].sets).toMatchObject([
+      { reps: 12, weight_kg: 40, completed: false, fromPrevious: true },
+    ]);
+  });
+
+  it('fills an empty workout when its type changes, but never replaces exercises', async () => {
+    const upper = { ...custom, id: 'upper', name: 'Upper body', is_custom: false };
+    vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom, upper]);
+    vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
+      { workout_type_id: 'upper', movements: [savedMovement(bench)] },
+      { workout_type_id: custom.id, movements: [savedMovement(row)] },
+    ]);
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+    } as unknown as DashboardData);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!.click(),
+    );
+    const empty = [...document.querySelectorAll<HTMLButtonElement>('.start-menu button')].find(
+      (item) => item.textContent?.includes('Empty'),
+    )!;
+    await act(async () => empty.click());
+    expect(readActiveWorkoutDraft()?.movements ?? []).toEqual([]);
+    const select = () =>
+      [...container.querySelectorAll('label')]
+        .find((label) => label.textContent?.startsWith('Workout type'))!
+        .querySelector('select')!;
+    async function choose(id: string) {
+      await act(async () => {
+        select().value = id;
+        select().dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    await choose('upper');
+    expect(readActiveWorkoutDraft()!.movements.map((movement) => movement.exerciseId)).toEqual([
+      bench.id,
+    ]);
+    await choose(custom.id);
+    const draft = readActiveWorkoutDraft()!;
+    expect(draft.workoutTypeId).toBe(custom.id);
+    expect(draft.movements.map((movement) => movement.exerciseId)).toEqual([bench.id]);
   });
 
   it('shows a rest day without offering it as a workout in the Start menu', async () => {
@@ -1682,6 +1755,33 @@ describe('finishing workouts in the background', () => {
     expect(window.location.hash).toBe('#training');
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
+  });
+
+  it('keeps the configured calendar week and workout colour while showing an offline finish', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 23, 12));
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      heatmap: [],
+      weekly_sets: { week_start: '2026-10-18', week_end: '2026-10-24', muscle_groups: [] },
+    } as unknown as DashboardData);
+    writeActiveWorkoutDraft(storedDraft({ workoutDate: '2026-10-23' }));
+    await mount();
+    await confirmFinish();
+    const days = container.querySelectorAll<HTMLButtonElement>('.week-strip .week-strip-day');
+    expect(days[0].dataset.date).toBe('2026-10-18');
+    const finishedDay = container.querySelector<HTMLButtonElement>(
+      '.week-strip [data-date="2026-10-23"]',
+    )!;
+    expect(finishedDay.getAttribute('aria-label')).toContain('View 1 workout');
+    expect(finishedDay.style.getPropertyValue('--day-ring')).toBe('#8b5cf6');
+    await act(async () => finishedDay.click());
+    expect(document.querySelector('.calendar-day-detail')?.textContent).toContain(
+      'Recovery workout',
+    );
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
   it('lists the finished workout from this device while it syncs, then swaps in the saved one', async () => {

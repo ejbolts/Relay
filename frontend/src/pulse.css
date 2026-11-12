@@ -1708,14 +1708,24 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 600;
 }
 
-.calendar-panel .calendar-day.trained:not(.in-progress) {
-  border: 1px solid var(--p-good);
-  transition: border-color 200ms ease;
-}
-
-/* Every workout type on this day is switched off in the legend; the date itself stays legible. */
-.calendar-panel .calendar-day.trained.filtered-out:not(.in-progress) {
-  border-color: var(--p-axis);
+/* A trained day is outlined in its workout colour; a day that mixes types splits the outline
+   between them. With every type on the day switched off in the legend, it turns neutral grey. */
+.calendar-panel .calendar-day.trained:not(.in-progress)::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--day-ring, var(--p-axis));
+  content: '';
+  pointer-events: none;
+  /* Keep only the padding ring, so the outline can be a gradient on any card background. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
 }
 
 .calendar-panel .calendar-day.today {
@@ -1765,6 +1775,122 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .calendar-day-dots .calendar-live-dot {
   background: var(--p-accent);
+}
+
+/* ───────── This week ───────── */
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+  margin-bottom: 0.875rem;
+}
+
+/* Every tile is laid out from the top with room for two workout names, so the weekday letters
+   and dates stay level whether a day has none, one or two. */
+.week-strip-day {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.5rem 0.125rem 0.4375rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.week-strip-weekday {
+  color: var(--p-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 0.875rem;
+}
+
+.week-strip-date {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+}
+
+.week-strip-types {
+  width: 100%;
+  height: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.125rem;
+}
+
+.week-strip-type {
+  max-width: 100%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--type-color, var(--p-muted)) 65%, var(--p-ink));
+  font-size: 0.5625rem;
+  font-weight: 600;
+  line-height: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-strip-type.is-off {
+  color: var(--p-muted);
+}
+
+.week-strip-types .calendar-live-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  margin-top: 0.1875rem;
+  border-radius: 50%;
+  background: var(--p-accent);
+}
+
+/* The same outline as a trained day in the calendar below. */
+.week-strip-day.trained:not(.in-progress)::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--day-ring, var(--p-axis));
+  content: '';
+  pointer-events: none;
+  /* Keep only the padding ring, so the outline can be a gradient on any card background. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+.week-strip-day.future {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--p-line-strong);
+}
+
+.week-strip-day.future .week-strip-date {
+  color: var(--p-muted);
+  font-weight: 500;
+}
+
+.week-strip-day.in-progress {
+  background: rgb(57 135 229 / 14%);
+  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 45%);
+}
+
+.week-strip-day.today {
+  outline: 2px solid var(--p-ink);
+  outline-offset: 2px;
+}
+
+.week-strip-day:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
 }
 
 .category-legend {
@@ -1849,8 +1975,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   .category-legend i,
   .category-legend-label,
   .category-legend-state .pulse-icon,
-  .calendar-day-dots i,
-  .calendar-panel .calendar-day.trained:not(.in-progress) {
+  .calendar-day-dots i {
     transition: none;
   }
 }
@@ -2590,6 +2715,28 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.session-year-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  border-bottom: 1px solid var(--p-accent);
+  padding: 0.75rem 0 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.session-year:first-of-type .session-year-header {
+  padding-top: 0.25rem;
+}
+
+.session-year-header small {
+  color: var(--p-muted);
+  font-size: 0.71875rem;
+  font-weight: 400;
 }
 
 .progress-sessions li + li {

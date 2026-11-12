@@ -370,7 +370,9 @@ export function TodayScreen({
                 <small>
                   {recommendation?.routine_day?.movements.length
                     ? 'Routine'
-                    : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
+                    : template.planned === 'type'
+                      ? 'Saved'
+                      : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
                 </small>
               )
             )}
@@ -391,7 +393,8 @@ export function TodayScreen({
               </ul>
               {template.exercises.length > 6 && (
                 <p className="next-session-more">
-                  +{template.exercises.length - 6} more from last time
+                  +{template.exercises.length - 6} more
+                  {template.planned ? '' : ' from last time'}
                 </p>
               )}
             </>

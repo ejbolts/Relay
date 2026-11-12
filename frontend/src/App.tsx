@@ -120,7 +120,12 @@ import {
   saveBodyTrendPreference,
   type BodyTrendPreference,
 } from './bodyTrendPreference';
-import { WorkoutCalendar, WorkoutCalendarLegend, type OlderHistoryProps } from './WorkoutCalendar';
+import {
+  WeekStrip,
+  WorkoutCalendar,
+  WorkoutCalendarLegend,
+  type OlderHistoryProps,
+} from './WorkoutCalendar';
 import {
   appendOlderWorkouts,
   hasOlderHistory,
@@ -272,6 +277,7 @@ import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
   formatVolume,
+  groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
   recordCountsByWorkout,
@@ -297,6 +303,7 @@ import {
 } from './exerciseHistory';
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
+import { typeSessionTemplate } from './routines';
 import { exerciseIconFor } from './exerciseIcons';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
@@ -2102,6 +2109,10 @@ function AppContent() {
                   calendar={
                     <InteractiveWorkoutCalendar
                       entries={shownDashboard?.heatmap ?? []}
+                      weekStartDay={weekStartDayFrom(
+                        shownDashboard?.weekly_sets?.week_start ??
+                          shownDashboard?.zone2?.week_start,
+                      )}
                       workouts={shownWorkouts}
                       olderHistory={olderHistoryProps}
                       categoryColors={workoutTypeColors}
@@ -2418,13 +2429,18 @@ function AppContent() {
                 upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
                   ? `${upNext.label} day`
                   : null,
-              onCardio: () =>
+              onCardio: () => {
+                const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
+                const saved = workoutTypes.savedExercises.cardio;
                 startWorkout(
                   localDate(),
                   false,
-                  sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
+                  cardio && saved?.length
+                    ? typeSessionTemplate(cardio, saved, 'Cardio workout', localDate(), weightUnit)
+                    : sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
                   'cardio',
-                ),
+                );
+              },
               onUpNext: () =>
                 startWorkout(
                   localDate(),
@@ -2598,8 +2614,11 @@ function InteractiveWorkoutCalendar({
   onEditWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  weekStartDay,
 }: {
   entries: DashboardData['heatmap'];
+  /** Home passes its week start to lead the calendar with this week's days. */
+  weekStartDay?: number;
   workouts: TrackedWorkout[];
   olderHistory?: OlderHistoryProps;
   categoryColors: WorkoutTypeColors;
@@ -2623,8 +2642,24 @@ function InteractiveWorkoutCalendar({
       return next;
     });
 
+  const openDay = (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => {
+    if (entry) setSelectedDay(entry);
+    else setPendingWorkoutDate(workoutDate);
+  };
+
   return (
     <>
+      {weekStartDay !== undefined && (
+        <WeekStrip
+          entries={entries}
+          categoryColors={categoryColors}
+          hiddenCategories={hiddenCategories}
+          weekStartDay={weekStartDay}
+          activeWorkoutDate={activeWorkoutDate}
+          onActiveWorkoutClick={onResumeWorkout}
+          onDayClick={openDay}
+        />
+      )}
       <WorkoutCalendar
         entries={entries}
         olderHistory={olderHistory}
@@ -2632,10 +2667,7 @@ function InteractiveWorkoutCalendar({
         hiddenCategories={hiddenCategories}
         activeWorkoutDate={activeWorkoutDate}
         onActiveWorkoutClick={onResumeWorkout}
-        onDayClick={(workoutDate, entry) => {
-          if (entry) setSelectedDay(entry);
-          else setPendingWorkoutDate(workoutDate);
-        }}
+        onDayClick={openDay}
       />
       <WorkoutCalendarLegend
         presentTypes={presentTypes}
@@ -2961,6 +2993,14 @@ function WorkoutLogger({
     setCustomTypeId(type.is_custom ? type.id : null);
     setCategory(type.is_custom ? 'other' : (type.id as WorkoutCategory));
     setWorkoutTypeExplicit(true);
+    // An empty workout takes on the exercises saved to its new type; logged work is never replaced.
+    const saved = workoutTypes.savedExercises[type.id];
+    if (!readOnly && saved?.length && movements.length === 0)
+      setMovements(
+        templateMovements(
+          typeSessionTemplate(type, saved, type.name, workoutDate, weightUnit).exercises,
+        ),
+      );
   }
   useEffect(() => {
     if (
@@ -3043,35 +3083,39 @@ function WorkoutLogger({
         }))
       : restoredDraft
         ? restoredDraftMovements
-        : (template?.exercises ?? []).map(({ exercise, plannedSets }) => ({
-            key: crypto.randomUUID(),
-            exercise,
-            notes: '',
-            machinePhotoIds: [],
-            machinePhotosInitialized: false,
-            supersetKey: null,
-            isComplete: false,
-            sets: plannedSets
-              ? plannedSets.map((set) => ({
-                  ...createWorkoutSet(exercise.kind),
-                  ...set,
-                  key: crypto.randomUUID(),
-                  warmup: set.set_type === 'warmup',
-                  completed: false,
-                  fromPrevious: true,
-                  restRevealed: false,
-                }))
-              : suggestedSetsFromHistory(
-                  historicalWorkouts,
-                  exercise,
-                  initialDate,
-                  undefined,
-                  historyBaselines && initialDate >= historyBaselines.before
-                    ? historyBaselines.byExercise
-                    : null,
-                ),
-          })),
+        : templateMovements(template?.exercises ?? []),
   );
+  /** Draft rows for planned or last-session exercises, with sets suggested from history. */
+  function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
+    return items.map(({ exercise, plannedSets }) => ({
+      key: crypto.randomUUID(),
+      exercise,
+      notes: '',
+      machinePhotoIds: [],
+      machinePhotosInitialized: false,
+      supersetKey: null,
+      isComplete: false,
+      sets: plannedSets
+        ? plannedSets.map((set) => ({
+            ...createWorkoutSet(exercise.kind),
+            ...set,
+            key: crypto.randomUUID(),
+            warmup: set.set_type === 'warmup',
+            completed: false,
+            fromPrevious: true,
+            restRevealed: false,
+          }))
+        : suggestedSetsFromHistory(
+            historicalWorkouts,
+            exercise,
+            initialDate,
+            undefined,
+            historyBaselines && initialDate >= historyBaselines.before
+              ? historyBaselines.byExercise
+              : null,
+          ),
+    }));
+  }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
   useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));
@@ -7888,6 +7932,12 @@ export function ProgressScreen({
   );
   const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
   const sessionsNewestFirst = viewPoints.slice().reverse();
+  const sessionCountByYear = new Map(
+    groupByYear(sessionsNewestFirst, (point) => point.workout_date).map((group) => [
+      group.year,
+      group.items.length,
+    ]),
+  );
   const formatMetric = (value: number) =>
     metric === 'volume_kg'
       ? Math.round(value).toLocaleString('en-GB')
@@ -8296,49 +8346,69 @@ export function ProgressScreen({
                       <h2>Sessions</h2>
                       <span>Best set · {metricInfo.label}</span>
                     </header>
-                    <ul>
-                      {sessionsNewestFirst.slice(0, visibleSessions).map((point) => (
-                        <li key={point.workout_id}>
-                          <button
-                            type="button"
-                            aria-label={`View ${progress.exercise.name} in workout from ${prettyDate(point.workout_date)}`}
-                            onClick={() =>
-                              browseFirst
-                                ? setSessionId(point.workout_id)
-                                : onOpenWorkout(point.workout_id, progress.exercise.id)
-                            }
-                          >
-                            <span className="session-date">
-                              {shortDate(point.workout_date)}
-                              {recordIds.has(point.workout_id) && (
-                                <em className="pr-chip">
-                                  {defaultView
-                                    ? personalRecords.some(
-                                        (record) =>
-                                          record.workout_id === point.workout_id &&
-                                          record.exercise_id === exerciseId &&
-                                          record.scope !== 'block',
-                                      )
-                                      ? 'All-time PR'
-                                      : 'Block PR'
-                                    : 'PR'}
-                                </em>
-                              )}
-                            </span>
-                            <span className="session-set num">
-                              {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
-                              {point.best_reps}
-                              {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
-                            </span>
-                            <b className="num">
-                              {approx}
-                              {formatMetricKg(point[metric])}
-                            </b>
-                            <Icon name="chevron-right" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    {groupByYear(
+                      sessionsNewestFirst.slice(0, visibleSessions),
+                      (point) => point.workout_date,
+                    ).map((group) => (
+                      <section
+                        key={group.year}
+                        className="session-year"
+                        aria-labelledby={`session-year-${group.year}`}
+                      >
+                        <h3 className="session-year-header">
+                          <span id={`session-year-${group.year}`} className="num">
+                            {group.year}
+                          </span>
+                          <small>
+                            {sessionCountByYear.get(group.year)}{' '}
+                            {sessionCountByYear.get(group.year) === 1 ? 'session' : 'sessions'}
+                          </small>
+                        </h3>
+                        <ul>
+                          {group.items.map((point) => (
+                            <li key={point.workout_id}>
+                              <button
+                                type="button"
+                                aria-label={`View ${progress.exercise.name} in workout from ${prettyDate(point.workout_date)}`}
+                                onClick={() =>
+                                  browseFirst
+                                    ? setSessionId(point.workout_id)
+                                    : onOpenWorkout(point.workout_id, progress.exercise.id)
+                                }
+                              >
+                                <span className="session-date">
+                                  {shortDate(point.workout_date)}
+                                  {recordIds.has(point.workout_id) && (
+                                    <em className="pr-chip">
+                                      {defaultView
+                                        ? personalRecords.some(
+                                            (record) =>
+                                              record.workout_id === point.workout_id &&
+                                              record.exercise_id === exerciseId &&
+                                              record.scope !== 'block',
+                                          )
+                                          ? 'All-time PR'
+                                          : 'Block PR'
+                                        : 'PR'}
+                                    </em>
+                                  )}
+                                </span>
+                                <span className="session-set num">
+                                  {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
+                                  {point.best_reps}
+                                  {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
+                                </span>
+                                <b className="num">
+                                  {approx}
+                                  {formatMetricKg(point[metric])}
+                                </b>
+                                <Icon name="chevron-right" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
                     {visibleSessions < sessionsNewestFirst.length && (
                       <button
                         type="button"

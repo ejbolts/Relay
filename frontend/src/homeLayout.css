@@ -378,6 +378,19 @@
   .home-section-content .calendar-day {
     font-size: 0.6875rem;
   }
+  .home-section-content .week-strip {
+    gap: 0.125rem;
+  }
+  .home-section-content .week-strip-day {
+    border-radius: 8px;
+    padding-block: 0.375rem;
+  }
+  .home-section-content .week-strip-date {
+    font-size: 0.75rem;
+  }
+  .home-section-content .week-strip-types {
+    display: none;
+  }
   .home-section-content .muscle-bars li {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.25rem;

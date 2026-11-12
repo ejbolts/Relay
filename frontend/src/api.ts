@@ -75,6 +75,8 @@ import type {
   TrainingTime,
   WorkoutTypeColors,
   WorkoutType,
+  WorkoutTypeExercises,
+  RoutineMovement,
   YouTubeConnection,
 } from './types';
 import { captureAccountCacheScope } from './accountCacheScope';
@@ -939,6 +941,15 @@ export const api = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    }),
+  getWorkoutTypeExercises: () => accountRead<WorkoutTypeExercises[]>('/api/workout-type-exercises'),
+  saveWorkoutTypeExercises: (typeId: string, movements: RoutineMovement[]) =>
+    request<WorkoutTypeExercises>(`/api/workout-type-exercises/${encodeURIComponent(typeId)}`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        movements: movements.map(({ exercise_id, sets }) => ({ exercise_id, sets })),
+      }),
     }),
   deleteWorkoutType: (id: string) =>
     request<void>(`/api/workout-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),
