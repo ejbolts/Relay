@@ -172,9 +172,6 @@ export function useFinishedWorkoutQueue(
       failures = 0;
       wake();
     };
-    const reconnect = () => {
-      if (document.visibilityState !== 'hidden') wake();
-    };
     const storageChanged = (event: StorageEvent) => {
       if (
         event.key !== FINISHED_WORKOUTS_KEY &&
@@ -193,9 +190,13 @@ export function useFinishedWorkoutQueue(
     keepFinishedWorkoutsFor(userId);
     reload();
     wake();
-    window.addEventListener('online', reconnect);
-    window.addEventListener('focus', reconnect);
-    document.addEventListener('visibilitychange', reconnect);
+    window.addEventListener('online', wake);
+    window.addEventListener('focus', wake);
+    // Try before the page freezes as well as when it returns. An in-flight save is left alone;
+    // eligible requests use keepalive, and every unconfirmed save remains in durable storage.
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('pagehide', wake);
+    window.addEventListener('pageshow', wake);
     window.addEventListener('storage', storageChanged);
     window.addEventListener(FINISHED_WORKOUTS_CHANGE_EVENT, reload);
     return () => {
@@ -203,9 +204,11 @@ export function useFinishedWorkoutQueue(
       controller?.abort();
       window.clearTimeout(retryTimer);
       wakeRef.current = () => undefined;
-      window.removeEventListener('online', reconnect);
-      window.removeEventListener('focus', reconnect);
-      document.removeEventListener('visibilitychange', reconnect);
+      window.removeEventListener('online', wake);
+      window.removeEventListener('focus', wake);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('pagehide', wake);
+      window.removeEventListener('pageshow', wake);
       window.removeEventListener('storage', storageChanged);
       window.removeEventListener(FINISHED_WORKOUTS_CHANGE_EVENT, reload);
     };

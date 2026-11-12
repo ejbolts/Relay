@@ -138,15 +138,27 @@ export function revisionAfterSave(workout: TrackedWorkout): string | null {
 
 function saveWorkoutRequest(path: string, init: RequestInit): Promise<TrackedWorkout> {
   let revision: string | null = null;
-  return request<TrackedWorkout>(path, init, {
+  const options: RequestOptions = {
     onHeaders: (headers) => {
       revision = headers.get('X-Workout-Revision');
     },
-  }).then((workout) => {
-    if (revision && workout && typeof workout === 'object')
-      revisionsAfterSave.set(workout, revision);
-    return workout;
-  });
+  };
+  // Keep small saves alive across page unload. The browser caps all outstanding keepalive
+  // bodies at 64 KiB; larger workouts still use the normal request and durable recovery queue.
+  const keepalive = typeof init.body === 'string' && new Blob([init.body]).size <= 64 * 1024;
+  return request<TrackedWorkout>(path, { ...init, keepalive }, options)
+    .catch((reason: unknown) => {
+      // A shared keepalive quota rejection is exposed only as a network TypeError. Fall back
+      // to a normal send without changing the payload/session ID; never retry an explicit abort.
+      if (keepalive && reason instanceof TypeError && !init.signal?.aborted)
+        return request<TrackedWorkout>(path, { ...init, keepalive: false }, options);
+      throw reason;
+    })
+    .then((workout) => {
+      if (revision && workout && typeof workout === 'object')
+        revisionsAfterSave.set(workout, revision);
+      return workout;
+    });
 }
 
 /** Proxy answers meaning the Relay server itself could not be reached. */

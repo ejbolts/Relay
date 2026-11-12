@@ -970,9 +970,7 @@ function AppContent() {
   const backgroundActivityLabel =
     backgroundActivities.length > 0
       ? backgroundActivities[backgroundActivities.length - 1].label
-      : finishedQueue.saving
-        ? 'Saving workout…'
-        : null;
+      : null;
   const canNavigateBack =
     tab !== 'dashboard' ||
     (isAppHistoryState(window.history.state) && window.history.state.index > 0);
@@ -1405,7 +1403,8 @@ function AppContent() {
   ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
-    setEditingWorkout(null);
+    // A queued save may finish after the user has opened another workout for editing.
+    if (wasEditing) setEditingWorkout(null);
 
     if (!wasEditing) {
       if (queued)
