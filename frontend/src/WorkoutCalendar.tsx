@@ -1,10 +1,24 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import type { DashboardData, WorkoutCategory, WorkoutType, WorkoutTypeColors } from './types';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+} from 'react';
+import type { DashboardData, WorkoutType, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { calendarDayTypes } from './workoutTypes';
 import { calendarMonths, monthCountFromOldestWorkout } from './calendarRange';
 import { Icon } from './Icon';
-import { isoLocalDate as localCalendarDate } from './trainingSummary';
+import {
+  addDays,
+  isoLocalDate as localCalendarDate,
+  parseLocalDate,
+  weekStartFor,
+} from './trainingSummary';
+import { dayFill, readableInk, workoutTypeColor } from './dayColors';
 const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
@@ -31,7 +45,7 @@ type CalendarPreview = {
 const EMPTY_ENTRIES: DashboardData['heatmap'] = [];
 
 type WorkoutCalendarProps = {
-  /** Workout types switched off in the legend; their dots and day borders are greyed out. */
+  /** Workout types switched off in the legend; their colour is left out of the day's fill. */
   hiddenCategories?: ReadonlySet<string>;
   activeWorkoutDate?: string | null;
   onActiveWorkoutClick?: () => void;
@@ -206,15 +220,30 @@ export function WorkoutCalendar({
                       const planned = previewMap.get(key);
                       const inProgress = key === activeWorkoutDate;
                       const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-                      const filteredOut =
-                        dayTypes.length > 0 &&
-                        dayTypes.every((type) => hiddenCategories?.has(type.id));
+                      const fills = dayTypes
+                        .filter((type) => !hiddenCategories?.has(type.id))
+                        .map((type) => workoutTypeColor(type, categoryColors));
+                      const filteredOut = dayTypes.length > 0 && fills.length === 0;
+                      // Back-to-back training days share a band, so a streak reads as one run.
+                      const filled = !!entry && !inProgress;
+                      const chained = (offset: number) => {
+                        const neighbour = addDays(key, offset);
+                        return filled && map.has(neighbour) && neighbour !== activeWorkoutDate;
+                      };
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${chained(-1) ? 'chain-prev' : ''} ${chained(1) ? 'chain-next' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
+                          style={
+                            filled && fills.length
+                              ? ({
+                                  '--day-fill': dayFill(fills),
+                                  '--day-ink': readableInk(fills),
+                                } as CSSProperties)
+                              : undefined
+                          }
                           disabled={previewMode || (readOnly && !entry)}
                           onClick={() => {
                             const handlers = handlersRef.current;
@@ -243,28 +272,15 @@ export function WorkoutCalendar({
                           }
                         >
                           <span className="calendar-day-number">{day.getDate()}</span>
-                          <span className="calendar-day-dots" aria-hidden="true">
-                            {planned ? (
-                              planned.color && <i style={{ backgroundColor: planned.color }} />
-                            ) : inProgress ? (
-                              <i className="calendar-live-dot" />
-                            ) : (
-                              dayTypes.map((type, dotIndex) =>
-                                hiddenCategories?.has(type.id) ? (
-                                  <i key={dotIndex} className="is-off" />
-                                ) : (
-                                  <i
-                                    key={dotIndex}
-                                    style={{
-                                      backgroundColor: type.is_custom
-                                        ? type.color
-                                        : categoryColors?.[type.id as WorkoutCategory],
-                                    }}
-                                  />
-                                ),
-                              )
-                            )}
-                          </span>
+                          {/* A completed day is filled with its workout colour, so only planned
+                              and in-progress days still carry a dot. */}
+                          {(previewMode || inProgress) && (
+                            <span className="calendar-day-dots" aria-hidden="true">
+                              {planned
+                                ? planned.color && <i style={{ backgroundColor: planned.color }} />
+                                : inProgress && <i className="calendar-live-dot" />}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -321,6 +337,95 @@ export function WorkoutCalendar({
   );
 }
 
+const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** This week's seven days as large tiles, each naming the workout type trained that day. */
+export function WeekStrip({
+  entries,
+  categoryColors,
+  hiddenCategories,
+  weekStartDay,
+  activeWorkoutDate = null,
+  onActiveWorkoutClick,
+  onDayClick,
+  types: suppliedTypes,
+}: {
+  entries: DashboardData['heatmap'];
+  categoryColors: WorkoutTypeColors;
+  hiddenCategories?: ReadonlySet<string>;
+  /** 0 (Sunday) to 6, matching the week the rest of Home counts. */
+  weekStartDay: number;
+  activeWorkoutDate?: string | null;
+  onActiveWorkoutClick?: () => void;
+  onDayClick: (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => void;
+  types?: WorkoutType[];
+}) {
+  const { types: ownTypes } = useWorkoutTypes();
+  const types = suppliedTypes ?? ownTypes;
+  const todayKey = localCalendarDate(new Date());
+  const weekStart = weekStartFor(todayKey, weekStartDay);
+  const map = useMemo(
+    () => new Map(entries.map((entry) => [entry.workout_date, entry])),
+    [entries],
+  );
+  return (
+    <div className="week-strip" role="group" aria-label="This week">
+      {Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)).map((key) => {
+        const date = parseLocalDate(key);
+        const entry = map.get(key);
+        const inProgress = key === activeWorkoutDate;
+        const dayTypes = entry ? calendarDayTypes(entry, types) : [];
+        const shown = dayTypes.filter((type) => !hiddenCategories?.has(type.id));
+        const fills = shown.map((type) => workoutTypeColor(type, categoryColors));
+        // A day whose types are all switched off keeps its name, greyed out with the tile.
+        const named = shown.length ? shown : dayTypes;
+        return (
+          <button
+            type="button"
+            className={`week-strip-day ${entry ? 'trained' : ''} ${fills.length > 1 ? 'mixed' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+            key={key}
+            data-date={key}
+            style={
+              fills.length
+                ? ({
+                    '--day-color': fills[0],
+                    '--day-color-2': fills[1] ?? fills[0],
+                  } as CSSProperties)
+                : undefined
+            }
+            onClick={() => {
+              if (inProgress && onActiveWorkoutClick) onActiveWorkoutClick();
+              else onDayClick(key, entry);
+            }}
+            aria-current={key === todayKey ? 'date' : undefined}
+            aria-label={
+              inProgress
+                ? `Resume workout in progress for ${prettyDate(key)}`
+                : entry
+                  ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
+                  : `Create workout for ${prettyDate(key)}`
+            }
+          >
+            <span className="week-strip-weekday" aria-hidden="true">
+              {WEEKDAY_LETTERS[date.getDay()]}
+            </span>
+            <span className="week-strip-date">{date.getDate()}</span>
+            <span className="week-strip-type" aria-hidden="true">
+              {inProgress ? (
+                <i className="calendar-live-dot" />
+              ) : (
+                named.length > 0 &&
+                // "Upper body" and friends lose the repeated word so the name fits the tile.
+                `${named[0].name.replace(/ body$/i, '')}${named.length > 1 ? ` +${named.length - 1}` : ''}`
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function WorkoutCalendarLegend({
   presentTypes,
   hiddenCategories,
@@ -347,11 +452,7 @@ export function WorkoutCalendarLegend({
                   onClick={() => onToggle(type.id)}
                 >
                   <i
-                    style={{
-                      background: type.is_custom
-                        ? type.color
-                        : categoryColors[type.id as WorkoutCategory],
-                    }}
+                    style={{ background: workoutTypeColor(type, categoryColors) }}
                     aria-hidden="true"
                   />
                   <span className="category-legend-label">{type.name}</span>
