@@ -45,6 +45,15 @@ import {
   sinceMonthLabel,
 } from './sharedProfileDisplay';
 import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
+import {
+  cachedSharedProfile,
+  forgetSharedProfile,
+  pendingSharedProfile,
+  storeSharedProfile,
+  updateCachedReactions,
+  workoutsFromCache,
+  type SharedProfileData,
+} from './sharedProfileCache';
 import type {
   FriendConnections,
   FriendStatus,
@@ -58,6 +67,7 @@ import type {
   SharedConsistency,
   SharedWorkoutFilters as WorkoutFilters,
   SharedWorkoutFilterOptions,
+  SharedWorkoutPage,
   SharingConnection,
   TrackedWorkout,
   WorkoutReactions,
@@ -1183,6 +1193,31 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
   );
 }
 
+/** The outline of a profile while it loads: its header, stats and first cards. */
+function ProfileSkeleton() {
+  return (
+    <div className="friends-loading-skeleton profile-loading-skeleton" role="status">
+      <span className="sr-only">Loading profile…</span>
+      <section className="settings-panel panel" aria-hidden="true">
+        <div className="profile-skeleton-head">
+          <span className="skeleton-block profile-skeleton-avatar" />
+          <span className="profile-skeleton-copy">
+            <span className="skeleton-block profile-skeleton-name" />
+            <span className="skeleton-block profile-skeleton-line" />
+          </span>
+        </div>
+        <div className="profile-skeleton-stats">
+          <span className="skeleton-block" />
+          <span className="skeleton-block" />
+          <span className="skeleton-block" />
+        </div>
+      </section>
+      <span className="skeleton-block profile-skeleton-card" aria-hidden="true" />
+      <span className="skeleton-block profile-skeleton-card short" aria-hidden="true" />
+    </div>
+  );
+}
+
 export function SharedProfileScreen({
   onOpenMember,
   onOpenSplits,
@@ -1210,13 +1245,27 @@ export function SharedProfileScreen({
   renderWorkouts: (props: SharedWorkoutListProps) => ReactNode;
   onChooseSharing: () => void;
 }) {
-  const [profile, setProfile] = useState<SharedProfile | null>(null);
-  const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
-  const [records, setRecords] = useState<PersonalRecord[]>([]);
-  const [reactions, setReactions] = useState<Record<string, WorkoutReactions>>({});
+  const viewerId = useUserSession().user?.id ?? null;
+  // Another member's profile opens from the copy loaded in the background, when there is one,
+  // and is still read again from the server so the copy never stands in for the latest.
+  const cacheable = !ownProfile && !invite;
+  const [seed] = useState(() => {
+    const cached = cacheable ? cachedSharedProfile(viewerId, profileId) : null;
+    if (!cached) return null;
+    const page = cached.profile.can_view
+      ? workoutsFromCache(cached.page, targetWorkout)
+      : cached.page;
+    return { profile: cached.profile, options: cached.options, page };
+  });
+  const [profile, setProfile] = useState<SharedProfile | null>(seed?.profile ?? null);
+  const [workouts, setWorkouts] = useState<TrackedWorkout[]>(seed?.page?.workouts ?? []);
+  const [records, setRecords] = useState<PersonalRecord[]>(seed?.page?.personal_records ?? []);
+  const [reactions, setReactions] = useState<Record<string, WorkoutReactions>>(
+    seed?.page?.reactions ?? {},
+  );
   const [picking, setPicking] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
-  const [state, setState] = useState<LoadState>('loading');
+  const [total, setTotal] = useState(seed?.page?.total ?? 0);
+  const [state, setState] = useState<LoadState>(seed ? 'ready' : 'loading');
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1228,12 +1277,11 @@ export function SharedProfileScreen({
     start_date: targetWorkout?.workout_date ?? '',
     end_date: targetWorkout?.workout_date ?? '',
   });
-  const [filterOptions, setFilterOptions] = useState<SharedWorkoutFilterOptions>({
-    exercises: [],
-    machines: [],
-  });
+  const [filterOptions, setFilterOptions] = useState<SharedWorkoutFilterOptions>(
+    seed?.options ?? { exercises: [], machines: [] },
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [loadingWorkouts, setLoadingWorkouts] = useState(false);
+  const [loadingWorkouts, setLoadingWorkouts] = useState(seed !== null && active);
   const linkedWorkoutId =
     targetWorkout &&
     filters.start_date === targetWorkout.workout_date &&
@@ -1244,6 +1292,8 @@ export function SharedProfileScreen({
     !filters.machine_photo_id
       ? targetWorkout.id
       : undefined;
+  const linkedTarget = useRef(targetWorkout);
+  linkedTarget.current = targetWorkout;
   const invalidDates = Boolean(
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
@@ -1269,8 +1319,8 @@ export function SharedProfileScreen({
     }
   }
 
-  const loadedFilters = useRef<string | null>(null);
   const filterKey = JSON.stringify(filters);
+  const loadedFilters = useRef<string | null>(seed?.page ? filterKey : null);
   const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
   const currentQuery = useRef(queryKey);
   currentQuery.current = queryKey;
@@ -1285,6 +1335,12 @@ export function SharedProfileScreen({
     setLoadingWorkouts(true);
     setLoadingMore(false);
     setMoreError(null);
+    const unfiltered = !Object.values(filters).some(Boolean);
+    /** The workouts a background copy holds for the current filters, when it can answer them. */
+    function warmPage(data: SharedProfileData): SharedWorkoutPage | null {
+      if (!data.profile.can_view || unfiltered) return data.page;
+      return linkedWorkoutId ? workoutsFromCache(data.page, linkedTarget.current) : null;
+    }
     async function load() {
       const initial = preload
         ? await Promise.all([
@@ -1293,7 +1349,12 @@ export function SharedProfileScreen({
             api.sharing.workoutFilters(profileId),
           ])
         : null;
-      let nextProfile = initial?.[0] ?? (await api.sharing.profile(profileId));
+      // A background load of this profile still under way answers the opening, without asking twice.
+      const pending = cacheable ? pendingSharedProfile(viewerId, profileId) : null;
+      const warmed = pending ? await pending : null;
+      const warmedPage = warmed ? warmPage(warmed) : null;
+      let nextProfile =
+        (warmedPage && warmed?.profile) || initial?.[0] || (await api.sharing.profile(profileId));
       const status = nextProfile.friend_status;
       if (
         invite &&
@@ -1307,18 +1368,24 @@ export function SharedProfileScreen({
         nextProfile = await inviteRequest.current.done;
       }
       // A friends-only profile of a non-friend shares only its name and photo.
-      const [firstPage, options] = initial
-        ? [initial[1], initial[2]]
-        : nextProfile.can_view
-          ? await Promise.all([
-              api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
-              api.sharing.workoutFilters(profileId),
-            ])
-          : [
-              { workouts: [], personal_records: [], total: 0 },
-              { exercises: [], machines: [] },
-            ];
+      const [firstPage, options] =
+        warmed && warmedPage
+          ? [warmedPage, warmed.options]
+          : initial
+            ? [initial[1], initial[2]]
+            : nextProfile.can_view
+              ? await Promise.all([
+                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+                  api.sharing.workoutFilters(profileId),
+                ])
+              : [
+                  { workouts: [], personal_records: [], total: 0 },
+                  { exercises: [], machines: [] },
+                ];
       if (cancelled) return;
+      if (cacheable && unfiltered && !warmedPage) {
+        storeSharedProfile(viewerId, profileId, { profile: nextProfile, page: firstPage, options });
+      }
       let page = firstPage;
       // A session link can refer to an older workout, including beyond the first page that day.
       if (linkedWorkoutId) {
@@ -1349,7 +1416,10 @@ export function SharedProfileScreen({
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
       setReactions('reactions' in page ? (page.reactions ?? {}) : {});
-      setPicking(null);
+      // An open comment thread or picker stays open while its workout is still listed.
+      setPicking((current) =>
+        current && page.workouts.some((workout) => workout.id === current) ? current : null,
+      );
       setTotal(page.total);
       setFilterOptions(options);
       setState('ready');
@@ -1357,7 +1427,9 @@ export function SharedProfileScreen({
     load()
       .catch((reason: unknown) => {
         if (cancelled) return;
-        setState(loadStateFor(reason));
+        const next = loadStateFor(reason);
+        if (next !== 'error') forgetSharedProfile(viewerId, profileId);
+        setState(next);
         setError(authErrorMessage(reason));
       })
       .finally(() => {
@@ -1377,6 +1449,8 @@ export function SharedProfileScreen({
     dataRevision,
     invite,
     linkedWorkoutId,
+    cacheable,
+    viewerId,
   ]);
 
   async function loadMore() {
@@ -1409,6 +1483,7 @@ export function SharedProfileScreen({
   function friendChanged(status: FriendStatus) {
     if (!profile) return;
     // Gaining or losing access to a friends-only profile changes what it shows.
+    forgetSharedProfile(viewerId, profileId);
     setProfile({ ...profile, friend_status: status, friends_since: null });
     setAttempt((count) => count + 1);
   }
@@ -1539,9 +1614,7 @@ export function SharedProfileScreen({
             }}
           />
         ) : (
-          <p className="sharing-loading" role="status">
-            Loading profile…
-          </p>
+          <ProfileSkeleton />
         )}
       </section>
     );
@@ -1570,7 +1643,10 @@ export function SharedProfileScreen({
               <ProfileFriendControl
                 profile={profile}
                 onChange={friendChanged}
-                onBlocked={() => setState('blocked')}
+                onBlocked={() => {
+                  forgetSharedProfile(viewerId, profileId);
+                  setState('blocked');
+                }}
               />
             </div>
           </div>
@@ -1706,9 +1782,10 @@ export function SharedProfileScreen({
                         value ? workout.id : current === workout.id ? null : current,
                       )
                     }
-                    onChange={(value) =>
-                      setReactions((current) => ({ ...current, [workout.id]: value }))
-                    }
+                    onChange={(value) => {
+                      if (cacheable) updateCachedReactions(viewerId, profileId, workout.id, value);
+                      setReactions((current) => ({ ...current, [workout.id]: value }));
+                    }}
                   />
                 ),
                 onFilterMachine: (photo) => {

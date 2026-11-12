@@ -88,7 +88,9 @@ export function WorkoutReactionControl({
       closeRef.current(false);
       trigger.current?.focus();
     }
-    document.addEventListener('pointerdown', outside);
+    // Only the reaction picker closes on a tap elsewhere. A comment thread stays open while you
+    // scroll, tap away or dismiss the keyboard, until its button or Escape closes it.
+    if (shown === 'reactions') document.addEventListener('pointerdown', outside);
     document.addEventListener('keydown', escape);
     return () => {
       document.removeEventListener('pointerdown', outside);

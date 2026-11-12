@@ -1,4 +1,5 @@
-import type { ProfileVisibility, SharedProfileSummary } from './types';
+import { setKindOf } from './setFieldValues';
+import type { ProfileVisibility, SharedProfileSummary, TrackedSet } from './types';
 
 export const SHARED_WORKOUT_PAGE_SIZE = 10;
 
@@ -45,4 +46,13 @@ export function friendStatusLabel(profile: SharedProfileSummary): string {
     default:
       return VISIBILITY_LABELS[profile.visibility];
   }
+}
+
+/** “4 sets”, “2 warm-up sets”, or both counts when an exercise had each. */
+export function sharedSetCount(sets: TrackedSet[]): string {
+  const completed = sets.filter((item) => item.completed);
+  const warmups = completed.filter((item) => setKindOf(item) === 'warmup').length;
+  const working = completed.length - warmups;
+  if (!working) return `${warmups} warm-up ${warmups === 1 ? 'set' : 'sets'}`;
+  return `${working} ${working === 1 ? 'set' : 'sets'}`;
 }

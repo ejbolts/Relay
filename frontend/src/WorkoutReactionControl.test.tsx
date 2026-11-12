@@ -188,6 +188,48 @@ it('queues a reaction when the server cannot be reached, then retries', async ()
   }
 });
 
+it('keeps comments open while tapping or scrolling elsewhere, until the button or Escape closes them', async () => {
+  vi.spyOn(api.sharing, 'comments').mockResolvedValue({ items: [], total: 0, next_offset: null });
+  await act(async () => root.render(<Harness />));
+  const comments = button('0 comments on Upper body');
+  const thread = () => host.querySelector('.workout-discussion-thread');
+
+  await act(async () => comments.click());
+  const draft = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Comment"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      draft,
+      'Strong session',
+    );
+    draft.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  await act(async () => window.dispatchEvent(new Event('scroll')));
+  expect(comments.getAttribute('aria-expanded')).toBe('true');
+  expect(thread()?.hasAttribute('hidden')).toBe(false);
+  expect(draft.value).toBe('Strong session');
+
+  await act(async () =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+  );
+  expect(thread()?.hasAttribute('hidden')).toBe(true);
+  expect(document.activeElement).toBe(comments);
+
+  await act(async () => comments.click());
+  expect(thread()?.hasAttribute('hidden')).toBe(false);
+  expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('Strong session');
+  await act(async () => comments.click());
+  expect(thread()?.hasAttribute('hidden')).toBe(true);
+});
+
+it('still closes the reaction picker on a tap elsewhere', async () => {
+  await act(async () => root.render(<Harness />));
+  await act(async () => button('React to Upper body').click());
+  expect(host.querySelector('.friend-react-picker')).not.toBeNull();
+  await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  expect(host.querySelector('.friend-react-picker')).toBeNull();
+});
+
 it('shows counts without an add button or personal highlight on your own workout', async () => {
   await act(async () => root.render(<Harness ownWorkout />));
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);

@@ -5,8 +5,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { lastWeek } from './friendFeedData';
 import { publishFriendPresence } from './presence';
+import { cachedSharedProfile, clearSharedProfileCache } from './sharedProfileCache';
 import { SocialScreen } from './SocialScreen';
-import type { FriendActivity, FriendConnections, TrackedWorkout } from './types';
+import type { FriendActivity, FriendConnections, SharedProfile, TrackedWorkout } from './types';
 import { localDate } from './utils';
 
 let root: Root;
@@ -67,6 +68,16 @@ beforeEach(() => {
     reactions: [],
   });
   vi.spyOn(api.sharing, 'profiles').mockResolvedValue([]);
+  clearSharedProfileCache();
+  vi.spyOn(api.sharing, 'profile').mockImplementation(
+    async (id) => ({ id, display_name: id, can_view: true }) as SharedProfile,
+  );
+  vi.spyOn(api.sharing, 'workouts').mockResolvedValue({
+    total: 1,
+    workouts: [workout],
+    personal_records: [],
+  });
+  vi.spyOn(api.sharing, 'workoutFilters').mockResolvedValue({ exercises: [], machines: [] });
   vi.spyOn(api.sharing, 'suggestions').mockResolvedValue({
     profiles: [],
     total: 0,
@@ -187,6 +198,48 @@ it('lists each friend once with their week and latest session, and opens their p
   expect(cards[1].textContent).toContain('No sessions logged yet.');
   await click(labelled("Open Alex Sample's profile"));
   expect(openProfile).toHaveBeenCalledWith(alex);
+});
+
+it('loads the first five profiles in the background, only while Friends is on screen', async () => {
+  vi.useFakeTimers();
+  const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => ({
+    ...alex,
+    id,
+    display_name: `Friend ${id}`,
+  }));
+  connections = { friends: many, requests: [], sent: [], blocked: [] };
+  await render();
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  const loaded = () => vi.mocked(api.sharing.profile).mock.calls.map(([id]) => id);
+  expect(loaded()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  expect(cachedSharedProfile(null, 'a')?.page.workouts).toEqual([workout]);
+
+  // The 30-second friends refresh does not load them again.
+  await act(async () => vi.advanceTimersByTimeAsync(60_000));
+  expect(loaded()).toHaveLength(5);
+
+  // Pointing at a friend further down the list loads theirs.
+  await act(async () => {
+    labelled("Open Friend f's profile").dispatchEvent(
+      new MouseEvent('mouseover', { bubbles: true }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(loaded()).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  vi.useRealTimers();
+});
+
+it('does not load profiles in the background from Find or a hidden Social tab', async () => {
+  vi.useFakeTimers();
+  await render(false);
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(api.sharing.profile).not.toHaveBeenCalled();
+  await render();
+  await click(tab('Find'));
+  vi.mocked(api.sharing.profile).mockClear();
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(api.sharing.profile).not.toHaveBeenCalled();
+  vi.useRealTimers();
 });
 
 it('shows friend requests on Find with a count, and keeps the search between tabs', async () => {
