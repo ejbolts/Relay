@@ -5,14 +5,17 @@ import { Icon } from './Icon';
 import type { Exercise } from './types';
 import './routineExerciseSearch.css';
 
-/** Adds an exercise to a split day through a fuzzy search instead of a long native list. */
+/** Adds an exercise to a split day or workout type through a fuzzy search, not a long list. */
 export function RoutineExerciseSearch({
   day,
+  target = `day ${day}`,
   exercises,
   disabled,
   onAdd,
 }: {
-  day: number;
+  day?: number;
+  /** What the exercise is added to in labels, such as "day 2" or "Push". */
+  target?: string;
   exercises: Exercise[];
   disabled: boolean;
   onAdd: (exercise: Exercise) => void;
@@ -76,7 +79,7 @@ export function RoutineExerciseSearch({
         ref={openerRef}
         type="button"
         className="routine-add-exercise"
-        aria-label={`Add exercise to day ${day}`}
+        aria-label={`Add exercise to ${target}`}
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
@@ -114,7 +117,7 @@ export function RoutineExerciseSearch({
           role="combobox"
           enterKeyHint="go"
           autoComplete="off"
-          aria-label={`Search exercises to add to day ${day}`}
+          aria-label={`Search exercises to add to ${target}`}
           aria-autocomplete="list"
           aria-controls={listId}
           aria-expanded="true"
@@ -156,7 +159,7 @@ export function RoutineExerciseSearch({
         ref={listRef}
         id={listId}
         role="listbox"
-        aria-label={`Exercises to add to day ${day}`}
+        aria-label={`Exercises to add to ${target}`}
         className="routine-exercise-search-results"
       >
         {matches.map((exercise, index) => (

@@ -297,6 +297,7 @@ import {
 } from './exerciseHistory';
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
+import { typeSessionTemplate } from './routines';
 import { exerciseIconFor } from './exerciseIcons';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
@@ -2287,13 +2288,18 @@ function AppContent() {
                 upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
                   ? `${upNext.label} day`
                   : null,
-              onCardio: () =>
+              onCardio: () => {
+                const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
+                const saved = workoutTypes.savedExercises.cardio;
                 startWorkout(
                   localDate(),
                   false,
-                  sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
+                  cardio && saved?.length
+                    ? typeSessionTemplate(cardio, saved, 'Cardio workout', localDate(), weightUnit)
+                    : sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
                   'cardio',
-                ),
+                );
+              },
               onUpNext: () =>
                 startWorkout(
                   localDate(),
@@ -2830,6 +2836,14 @@ function WorkoutLogger({
     setCustomTypeId(type.is_custom ? type.id : null);
     setCategory(type.is_custom ? 'other' : (type.id as WorkoutCategory));
     setWorkoutTypeExplicit(true);
+    // An empty workout takes on the exercises saved to its new type; logged work is never replaced.
+    const saved = workoutTypes.savedExercises[type.id];
+    if (!readOnly && saved?.length && movements.length === 0)
+      setMovements(
+        templateMovements(
+          typeSessionTemplate(type, saved, type.name, workoutDate, weightUnit).exercises,
+        ),
+      );
   }
   useEffect(() => {
     if (
@@ -2912,35 +2926,39 @@ function WorkoutLogger({
         }))
       : restoredDraft
         ? restoredDraftMovements
-        : (template?.exercises ?? []).map(({ exercise, plannedSets }) => ({
-            key: crypto.randomUUID(),
-            exercise,
-            notes: '',
-            machinePhotoIds: [],
-            machinePhotosInitialized: false,
-            supersetKey: null,
-            isComplete: false,
-            sets: plannedSets
-              ? plannedSets.map((set) => ({
-                  ...createWorkoutSet(exercise.kind),
-                  ...set,
-                  key: crypto.randomUUID(),
-                  warmup: set.set_type === 'warmup',
-                  completed: false,
-                  fromPrevious: true,
-                  restRevealed: false,
-                }))
-              : suggestedSetsFromHistory(
-                  historicalWorkouts,
-                  exercise,
-                  initialDate,
-                  undefined,
-                  historyBaselines && initialDate >= historyBaselines.before
-                    ? historyBaselines.byExercise
-                    : null,
-                ),
-          })),
+        : templateMovements(template?.exercises ?? []),
   );
+  /** Draft rows for planned or last-session exercises, with sets suggested from history. */
+  function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
+    return items.map(({ exercise, plannedSets }) => ({
+      key: crypto.randomUUID(),
+      exercise,
+      notes: '',
+      machinePhotoIds: [],
+      machinePhotosInitialized: false,
+      supersetKey: null,
+      isComplete: false,
+      sets: plannedSets
+        ? plannedSets.map((set) => ({
+            ...createWorkoutSet(exercise.kind),
+            ...set,
+            key: crypto.randomUUID(),
+            warmup: set.set_type === 'warmup',
+            completed: false,
+            fromPrevious: true,
+            restRevealed: false,
+          }))
+        : suggestedSetsFromHistory(
+            historicalWorkouts,
+            exercise,
+            initialDate,
+            undefined,
+            historyBaselines && initialDate >= historyBaselines.before
+              ? historyBaselines.byExercise
+              : null,
+          ),
+    }));
+  }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
   useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));

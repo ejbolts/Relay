@@ -10,36 +10,20 @@ import {
 } from 'react';
 import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
-import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
-import { RoutineExerciseSearch } from './RoutineExerciseSearch';
+import { RoutineMovementList } from './RoutineMovementList';
 import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
-import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } from './splitTargets';
+import { dayCardioMinutes, daySetCredits, exerciseMuscles, formatVolume } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { localDate } from './utils';
 import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type {
-  Exercise,
-  Routine,
-  RoutineDay,
-  RoutineSet,
-  SplitProgression,
-  TrainingSplit,
-} from './types';
+import type { Exercise, Routine, RoutineDay, SplitProgression, TrainingSplit } from './types';
 import './routines.css';
 
-const emptySet = (): RoutineSet => ({
-  reps: null,
-  weight_kg: null,
-  duration_seconds: null,
-  distance_km: null,
-  rest_seconds: 180,
-  set_type: 'normal',
-});
 const failure = (reason: unknown) =>
   reason instanceof Error ? reason.message : 'Could not save the split. Try again.';
 const dayCount = (days: RoutineDay[]) => `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
@@ -752,13 +736,6 @@ function dayContribution(day: RoutineDay, selected: string | null) {
   return sets ? `+${formatVolume(sets)} ${sets === 1 ? 'set' : 'sets'}` : null;
 }
 
-function exerciseMuscles(exercise: Exercise) {
-  if (exercise.kind === 'cardio') return 'Cardio';
-  return exerciseSetCredits(exercise)
-    .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
-    .join(' · ');
-}
-
 function RoutineEditor({
   routine,
   schedule,
@@ -846,21 +823,6 @@ function RoutineEditor({
       ...current,
       days: current.days.map((item, i) => (i === index ? next : item)),
     }));
-  }
-  function movement(
-    dayIndex: number,
-    movementIndex: number,
-    change: (item: RoutineDay['movements'][number]) => RoutineDay['movements'][number] | null,
-  ) {
-    const item = value.days[dayIndex];
-    day(dayIndex, {
-      ...item,
-      movements: item.movements.flatMap((m, i) => {
-        if (i !== movementIndex) return [m];
-        const next = change(m);
-        return next ? [next] : [];
-      }),
-    });
   }
   function move(index: number, direction: number) {
     setValue((current) => {
@@ -1100,141 +1062,15 @@ function RoutineEditor({
                             <Icon name="close" />
                           </button>
                         </div>
-                        {item.movements.map((m, mi) => {
-                          const cardio = m.exercise.kind === 'cardio';
-                          const minutes = Math.round(
-                            m.sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) /
-                              60,
-                          );
-                          const atMinimum = cardio ? minutes <= 5 : m.sets.length <= 1;
-                          const name = m.exercise.name;
-                          return (
-                            <div
-                              className="routine-exercise-row"
-                              key={`${di}-${mi}-${m.exercise_id}`}
-                            >
-                              <div className="routine-exercise-main">
-                                <select
-                                  className="routine-exercise-name"
-                                  aria-label={`Day ${di + 1} exercise ${mi + 1}`}
-                                  value={m.exercise_id}
-                                  onChange={(event) => {
-                                    const exercise = exercises.find(
-                                      (e) => e.id === event.target.value,
-                                    )!;
-                                    movement(di, mi, (current) => ({
-                                      ...current,
-                                      exercise_id: exercise.id,
-                                      exercise,
-                                      sets:
-                                        exercise.kind === current.exercise.kind
-                                          ? current.sets
-                                          : [emptySet()],
-                                    }));
-                                  }}
-                                >
-                                  {[
-                                    m.exercise,
-                                    ...exercises.filter((e) => e.id !== m.exercise_id),
-                                  ].map((e) => (
-                                    <option value={e.id} key={e.id}>
-                                      {e.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <small>{exerciseMuscles(latest(m.exercise))}</small>
-                              </div>
-                              <ExerciseMuscleHelp exercise={m.exercise} />
-                              <div className="routine-stepper">
-                                <button
-                                  type="button"
-                                  aria-label={
-                                    atMinimum
-                                      ? `Remove ${name} from day ${di + 1}`
-                                      : cardio
-                                        ? `5 fewer minutes of ${name} on day ${di + 1}`
-                                        : `One fewer set of ${name} on day ${di + 1}`
-                                  }
-                                  onClick={() =>
-                                    movement(di, mi, (current) => {
-                                      if (atMinimum) return null;
-                                      if (!cardio)
-                                        return { ...current, sets: current.sets.slice(0, -1) };
-                                      return {
-                                        ...current,
-                                        // One planned duration; earlier interval sets fold into it.
-                                        sets: [
-                                          {
-                                            ...current.sets[0],
-                                            duration_seconds: (minutes - 5) * 60,
-                                          },
-                                        ],
-                                      };
-                                    })
-                                  }
-                                >
-                                  <Icon name={atMinimum ? 'close' : 'minus'} />
-                                </button>
-                                <output>{cardio ? `${minutes} min` : m.sets.length}</output>
-                                <button
-                                  type="button"
-                                  aria-label={
-                                    cardio
-                                      ? `5 more minutes of ${name} on day ${di + 1}`
-                                      : `One more set of ${name} on day ${di + 1}`
-                                  }
-                                  disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
-                                  onClick={() =>
-                                    movement(di, mi, (current) =>
-                                      cardio
-                                        ? {
-                                            ...current,
-                                            sets: [
-                                              {
-                                                ...current.sets[0],
-                                                duration_seconds: (minutes + 5) * 60,
-                                              },
-                                            ],
-                                          }
-                                        : {
-                                            ...current,
-                                            sets: [
-                                              ...current.sets,
-                                              { ...current.sets.at(-1)!, set_type: 'normal' },
-                                            ],
-                                          },
-                                    )
-                                  }
-                                >
-                                  <Icon name="plus" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {item.workout_type_id && (
-                          <RoutineExerciseSearch
-                            day={di + 1}
-                            exercises={exercises}
-                            disabled={item.movements.length >= 20 || exercises.length === 0}
-                            onAdd={(exercise) =>
-                              day(di, {
-                                ...item,
-                                movements: [
-                                  ...item.movements,
-                                  {
-                                    exercise_id: exercise.id,
-                                    exercise,
-                                    sets:
-                                      exercise.kind === 'cardio'
-                                        ? [{ ...emptySet(), duration_seconds: 1800 }]
-                                        : [emptySet(), emptySet(), emptySet()],
-                                  },
-                                ],
-                              })
-                            }
-                          />
-                        )}
+                        <RoutineMovementList
+                          movements={item.movements}
+                          exercises={exercises}
+                          target={`day ${di + 1}`}
+                          fieldLabel={(mi) => `Day ${di + 1} exercise ${mi + 1}`}
+                          latest={latest}
+                          canAdd={!!item.workout_type_id}
+                          onChange={(movements) => day(di, { ...item, movements })}
+                        />
                       </section>
                     </div>
                   </div>

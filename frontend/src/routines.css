@@ -1099,3 +1099,16 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
     transition: none;
   }
 }
+/* A workout type's saved exercises: one always-open day card in the type's colour. */
+.routine-day-body.type-exercises-body {
+  border: 1px solid var(--p-line);
+  border-left: 4px solid var(--day-colour, var(--p-accent));
+  border-radius: 14px;
+  padding: 4px 12px 12px;
+  background: var(--p-surface);
+  opacity: 1;
+  transform: none;
+}
+.type-exercises-body > .routine-exercise-row:first-child {
+  border-top: 0;
+}

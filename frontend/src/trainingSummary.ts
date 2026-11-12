@@ -292,6 +292,8 @@ export interface SessionTemplate {
   category: WorkoutCategory;
   sourceWorkout: TrackedWorkout;
   exercises: SessionTemplateExercise[];
+  /** Planned exercises from a split day or a workout type, rather than the last session. */
+  planned?: 'routine' | 'type';
 }
 
 /** The newest saved workout of a type, used to pre-fill the recommended next session. */
