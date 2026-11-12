@@ -119,3 +119,11 @@ export function targetStatus(value: number, goal: number): TargetStatus {
 export function formatVolume(value: number): string {
   return (Math.round(value * 10) / 10).toLocaleString();
 }
+
+/** An exercise's credited muscles as a short line, such as "Chest · Triceps ½". */
+export function exerciseMuscles(exercise: Exercise) {
+  if (exercise.kind === 'cardio') return 'Cardio';
+  return exerciseSetCredits(exercise)
+    .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
+    .join(' · ');
+}

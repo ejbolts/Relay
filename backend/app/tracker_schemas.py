@@ -495,6 +495,15 @@ class RoutineMovementRead(RoutineMovement):
     exercise: ExerciseRead
 
 
+class WorkoutTypeExercises(BaseModel):
+    movements: list[RoutineMovement] = Field(default_factory=list, max_length=20)
+
+
+class WorkoutTypeExercisesRead(BaseModel):
+    workout_type_id: str
+    movements: list[RoutineMovementRead] = []
+
+
 class RoutineDay(BaseModel):
     workout_type_id: str | None = None
     movements: list[RoutineMovement] = Field(default_factory=list, max_length=20)

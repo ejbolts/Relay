@@ -1,7 +1,11 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from './api';
 import { CollapsibleSection } from './CollapsibleSection';
+import { Icon } from './Icon';
 import type { WorkoutType } from './types';
+import { WorkoutTypeExercisesEditor } from './WorkoutTypeExercisesEditor';
+import { useWorkoutTypes } from './workoutTypesContext';
 import './WorkoutTypesSettings.css';
 
 export type WorkoutTypesSettingsProps = {
@@ -28,7 +32,16 @@ export function WorkoutTypesSettings({
   const [pending, setPending] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const { savedExercises, applySavedExercises } = useWorkoutTypes();
+  const editing = types.find((type) => type.id === editingId) ?? null;
   const busy = useRef(false);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   const latestTypes = useRef(types);
   latestTypes.current = types;
   const disabled = loading || !!error || pending !== null;
@@ -159,6 +172,18 @@ export function WorkoutTypesSettings({
                 </span>
               </label>
               <div className="workout-types-row-actions">
+                <button
+                  type="button"
+                  className="workout-types-exercises"
+                  aria-label={`${type.name} exercises`}
+                  disabled={disabled}
+                  onClick={() => setEditingId(type.id)}
+                >
+                  Exercises
+                  {!!savedExercises[type.id]?.length && (
+                    <span className="workout-types-count">{savedExercises[type.id].length}</span>
+                  )}
+                </button>
                 {changed && (
                   <button
                     type="button"
@@ -262,6 +287,37 @@ export function WorkoutTypesSettings({
       )}
     </>
   );
+  const overlays = (
+    <>
+      {editing && (
+        <WorkoutTypeExercisesEditor
+          type={editing}
+          movements={savedExercises[editing.id] ?? []}
+          onClose={() => setEditingId(null)}
+          onSaved={(movements) => {
+            applySavedExercises(editing.id, movements);
+            setEditingId(null);
+            setToast(`${editing.name} exercises saved`);
+          }}
+        />
+      )}
+      {toast &&
+        createPortal(
+          <div className="undo-toast top-toast" role="status" aria-atomic="true">
+            <span>{toast}</span>
+            <button
+              type="button"
+              className="undo-toast-close"
+              aria-label="Dismiss workout type notification"
+              onClick={() => setToast(null)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
   if (collapsible) {
     return (
       <CollapsibleSection
@@ -270,6 +326,7 @@ export function WorkoutTypesSettings({
         headingId="workout-types-title"
       >
         {content}
+        {overlays}
       </CollapsibleSection>
     );
   }
@@ -285,6 +342,7 @@ export function WorkoutTypesSettings({
         </div>
       </header>
       {content}
+      {overlays}
     </section>
   );
 }

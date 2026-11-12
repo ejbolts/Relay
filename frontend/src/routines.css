@@ -1099,3 +1099,88 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
     transition: none;
   }
 }
+/* Workout type exercises use individual neutral cards; colour stays in the type marker. */
+.routine-day-body.type-exercises-body {
+  gap: 8px;
+  padding: 0;
+  opacity: 1;
+  transform: none;
+}
+.type-exercises-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 6px;
+  color: var(--p-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.type-exercises-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.type-exercises-name i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--day-colour, var(--p-accent));
+}
+.routine-exercise-row.routine-exercise-card {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 24px auto;
+  gap: 8px;
+  padding: 13px 12px;
+  border: 1px solid var(--p-line);
+  border-radius: 13px;
+  background: var(--p-surface);
+}
+.routine-exercise-number {
+  color: var(--p-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.routine-exercise-card .routine-exercise-main {
+  position: relative;
+  gap: 3px;
+}
+.routine-exercise-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.routine-editor .routine-exercise-card .routine-exercise-name {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+.routine-exercise-card .routine-exercise-main:focus-within {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.routine-editor .routine-exercise-card .exercise-muscle-help-button {
+  width: 24px;
+  height: 32px;
+}
+.routine-exercise-card .routine-stepper {
+  border: 0;
+  border-radius: 10px;
+}
+.routine-editor .routine-exercise-card .routine-stepper button {
+  min-height: 38px;
+}
+.routine-exercise-card .routine-stepper output {
+  min-width: 24px;
+}
+.routine-editor .type-exercises-body .routine-add-exercise {
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 2px;
+  border-radius: 12px;
+}

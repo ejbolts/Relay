@@ -4,7 +4,7 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import type { TrackedWorkout, WorkoutRecommendation } from './types';
 import { localDate } from './utils';
 import { useWorkoutTypes } from './workoutTypesContext';
-import { routineSessionTemplate } from './routines';
+import { routineSessionTemplate, typeSessionTemplate } from './routines';
 
 /**
  * The recommended next session shared by Home's Up next card and the Start menu: the
@@ -16,7 +16,7 @@ export function useUpNextSession(
   today = localDate(),
 ) {
   const weightUnit = useWeightUnit();
-  const { types } = useWorkoutTypes();
+  const { types, savedExercises } = useWorkoutTypes();
   const typeId = recommendation?.workout_type?.id ?? recommendation?.category;
   const type = recommendation?.workout_type ?? types.find((item) => item.id === typeId);
   const archived = type?.archived || types.find((item) => item.id === typeId)?.archived;
@@ -26,9 +26,14 @@ export function useUpNextSession(
     active?.needs_split_update === true || !!(active?.split_name && archived);
   const template = useMemo(() => {
     if (!active || isRestDay || needsSplitUpdate) return null;
-    // A routine day with exercises wins; an empty one falls back to the last session of its type.
+    // A routine day with exercises wins; an empty one falls back to the type's saved exercises,
+    // then to the last session of its type.
     if (active.routine_day?.movements.length)
       return routineSessionTemplate(active.routine_day, active.session_name, today, weightUnit);
+    // Next, the exercises saved to the workout type itself.
+    const saved = type ? savedExercises[type.id] : undefined;
+    if (type && saved?.length)
+      return typeSessionTemplate(type, saved, active.session_name, today, weightUnit);
     return sessionTemplateFor(
       workouts,
       active.category,
@@ -36,7 +41,7 @@ export function useUpNextSession(
       weightUnit,
       type?.is_custom ? type.id : null,
     );
-  }, [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type]);
+  }, [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type, savedExercises]);
   const label = active
     ? isRestDay
       ? 'Rest'
