@@ -193,18 +193,6 @@ export function ExerciseLibraryList({
           {list.length} {list.length === 1 ? 'lift' : 'lifts'} · Est. 1RM, 8 wk
         </span>
         <button
-          type="button"
-          className="text-link"
-          aria-label={`Sort exercises: ${sorts[sort]}`}
-          onClick={() => {
-            setSort((value) => (value + 1) % sorts.length);
-            setPage(1);
-          }}
-        >
-          {sorts[sort]}
-          <Icon name="chevron-down" />
-        </button>
-        <button
           ref={optionsButton}
           type="button"
           className="exercise-list-options"
@@ -224,6 +212,23 @@ export function ExerciseLibraryList({
             requestAnimationFrame(() => optionsButton.current?.focus());
           }}
         >
+          <label className="exercise-page-size">
+            Sort by
+            <select
+              aria-label="Sort exercises"
+              value={sort}
+              onChange={(event) => {
+                setSort(Number(event.target.value));
+                setPage(1);
+              }}
+            >
+              {sorts.map((name, index) => (
+                <option key={name} value={index}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="exercise-page-size">
             Exercises per page
             <select
