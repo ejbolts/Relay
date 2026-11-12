@@ -210,10 +210,18 @@ describe('Home figures counted on this device', () => {
     expect(next.recent_workouts.map((item) => item.name)).toEqual(['Push day']);
   });
 
+  const day = (workout_date: string) => ({
+    workout_date,
+    categories: ['pull' as const],
+    workout_count: 1,
+    set_count: 3,
+    workouts: [],
+  });
+
   it('leaves this week alone for a workout dated before it, and tolerates older dashboards', () => {
     const lastWeek = { ...preview, workout_date: '2026-10-12' };
     const next = dashboardWithPreview(
-      dashboard(),
+      dashboard({ heatmap: [day('2026-10-18'), day('2026-10-19')] }),
       lastWeek,
       DEFAULT_WORKOUT_TYPES,
       '2026-10-20',
@@ -230,5 +238,33 @@ describe('Home figures counted on this device', () => {
         true,
       ).heatmap,
     ).toHaveLength(1);
+  });
+
+  it('joins workouts finished offline on consecutive days into one streak', () => {
+    // The server last saw Friday 16th; Saturday and Sunday were logged without a connection.
+    const synced = dashboard({ current_streak: 0, heatmap: [day('2026-10-16')] });
+    const saturday = {
+      ...preview,
+      id: 'pending:saturday',
+      client_session_id: 'saturday',
+      workout_date: '2026-10-17',
+    };
+    const sunday = {
+      ...preview,
+      id: 'pending:sunday',
+      client_session_id: 'sunday',
+      workout_date: '2026-10-18',
+    };
+    const next = [saturday, sunday].reduce(
+      (current, workout) =>
+        dashboardWithPreview(current, workout, DEFAULT_WORKOUT_TYPES, '2026-10-18', true),
+      synced,
+    );
+    expect(next.current_streak).toBe(3);
+    expect(next.history?.total_workouts).toBe(12);
+    expect(next.recent_workouts.map((workout) => workout.id)).toEqual([
+      'pending:sunday',
+      'pending:saturday',
+    ]);
   });
 });

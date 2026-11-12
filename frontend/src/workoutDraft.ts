@@ -172,7 +172,7 @@ function isStoredMovement(value: unknown): value is StoredDraftMovement {
   );
 }
 
-function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
+export function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
   return (
     isRecord(value) &&
     value.version === 1 &&

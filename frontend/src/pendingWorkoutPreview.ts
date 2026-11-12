@@ -1,4 +1,4 @@
-import { workingSets, workoutVolumeKg } from './trainingSummary';
+import { addDays, workingSets, workoutVolumeKg } from './trainingSummary';
 import type {
   DashboardData,
   Exercise,
@@ -19,6 +19,14 @@ const PENDING_WORKOUT_ID_PREFIX = 'pending:';
 
 export function isPendingWorkoutId(id: string): boolean {
   return id.startsWith(PENDING_WORKOUT_ID_PREFIX);
+}
+
+/** The id a finished workout has before the server confirms it: its own when resumed. */
+export function previewIdFor(completion: PendingWorkoutSave): string {
+  return (
+    completion.workoutId ??
+    `${PENDING_WORKOUT_ID_PREFIX}${completion.payload.client_session_id ?? completion.finishedAt}`
+  );
 }
 
 /** The id the preview of `saved` had: the resumed workout's own id, or its session's pending id. */
@@ -44,9 +52,7 @@ export function pendingWorkoutPreview(
     for (const merged of exercise.merged_from_ids ?? [])
       if (!byId.has(merged)) byId.set(merged, exercise);
   }
-  const id =
-    completion.workoutId ??
-    `${PENDING_WORKOUT_ID_PREFIX}${payload.client_session_id ?? completion.finishedAt}`;
+  const id = previewIdFor(completion);
   const movements: TrackedMovement[] = [];
   for (const [index, movement] of payload.movements.entries()) {
     const exercise = byId.get(movement.exercise_id);
@@ -291,6 +297,33 @@ function placeDay<T extends { workout_date: string }>(days: T[], day: T): T[] {
 }
 
 /**
+ * Consecutive training days ending today or yesterday, counted from the loaded calendar. A run
+ * that reaches the oldest loaded day may continue further back, so the larger of it and
+ * `fallback` (the server's streak, adjusted for today) is used.
+ */
+function streakFromCalendar(
+  heatmap: HeatmapDay[],
+  today: string,
+  firstWorkoutDate: string | null | undefined,
+  fallback: number,
+): number {
+  const days = new Set(
+    heatmap.filter((day) => day.workout_count > 0).map((day) => day.workout_date),
+  );
+  if (!days.size) return fallback;
+  let cursor = days.has(today) ? today : addDays(today, -1);
+  if (!days.has(cursor)) return fallback;
+  let run = 0;
+  while (days.has(cursor)) {
+    run += 1;
+    cursor = addDays(cursor, -1);
+  }
+  const oldestLoaded = [...days].sort()[0];
+  const beyondLoaded = cursor < oldestLoaded && (!firstWorkoutDate || cursor >= firstWorkoutDate);
+  return beyondLoaded ? Math.max(run, fallback) : run;
+}
+
+/**
  * Home's figures with a newly finished workout counted on this device, until the server's
  * dashboard replaces them: this week's workouts, sets and volume, the week's days, the streak,
  * the calendar day, recent workouts and history totals. Cardio, recommendations and records stay
@@ -323,6 +356,14 @@ export function dashboardWithPreview(
     (day) => day.workout_date === date && day.workout_count > 0,
   );
   const history = dashboard.history;
+  const nextHeatmap = placeDay(
+    heatmap,
+    calendarDay(
+      heatmap.find((day) => day.workout_date === date),
+      preview,
+      workoutTypes,
+    ),
+  );
   return {
     ...dashboard,
     ...(thisWeek && {
@@ -337,19 +378,17 @@ export function dashboardWithPreview(
         ),
       ),
     }),
-    // A first workout today extends a streak that reached yesterday, or starts one.
-    current_streak:
+    // Workouts finished offline on several days can join up a streak. Past the loaded calendar,
+    // a first workout today extends a streak that reached yesterday, or starts one.
+    current_streak: streakFromCalendar(
+      nextHeatmap,
+      today,
+      history?.first_workout_date,
       date === today && !hadWorkoutThatDay
         ? (dashboard.current_streak ?? 0) + 1
         : dashboard.current_streak,
-    heatmap: placeDay(
-      heatmap,
-      calendarDay(
-        heatmap.find((day) => day.workout_date === date),
-        preview,
-        workoutTypes,
-      ),
     ),
+    heatmap: nextHeatmap,
     recent_workouts: recentWorkouts,
     history: history && {
       ...history,

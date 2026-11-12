@@ -336,11 +336,17 @@ import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
 import { canUploadVideos, useUserSession } from './userContext';
-import { usePendingWorkoutSave } from './usePendingWorkoutSave';
+import {
+  OUTDATED_CLIENT_MESSAGE,
+  useFinishedWorkoutQueue,
+  type SavedFromQueue,
+} from './useFinishedWorkoutQueue';
+import { finishedWorkoutKey, type FinishedWorkout } from './finishedWorkoutQueue';
 import {
   dashboardWithPreview,
+  isPendingWorkoutId,
   pendingWorkoutPreview,
-  previewIdForSaved,
+  previewIdFor,
   workoutsWithPreview,
 } from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
@@ -701,13 +707,6 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
-  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts);
-  const reviewMuscleWeeks = useMemo(() => {
-    const current = muscleSets.weeklySets ?? dashboard?.weekly_sets;
-    return current
-      ? [current, ...(muscleSets.history ?? dashboard?.weekly_sets_history ?? [])]
-      : [];
-  }, [dashboard?.weekly_sets, dashboard?.weekly_sets_history, muscleSets]);
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -785,62 +784,103 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
-  const [completedForSharing, setCompletedForSharing] = useState<TrackedWorkout | null>(null);
   const notifyRestComplete = useCallback(
     () => setMessage('Rest complete. Time for your next set.'),
     [],
   );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
-  const pendingWorkout = usePendingWorkoutSave(user?.id ?? null, (saved, resumedId) =>
-    completeWorkoutSave(saved, false, resumedId),
+  const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
+    completeWorkoutSave(saved, false, resumedId, queued),
   );
-  const workoutSaving = editingWorkoutSaving || pendingWorkout.saving;
-  const workoutSaveBlocked = workoutSaving || pendingWorkout.pending !== null;
-  // The finished workout shows straight away from this device's copy while it syncs. One the
-  // server refused waits for review instead, so it is not presented as saved.
-  const pendingPreview = useMemo(
+  const workoutSaving = editingWorkoutSaving || finishedQueue.saving;
+  // Finished workouts wait in their own queue, so only saving an edit stops a new workout.
+  const workoutSaveBlocked = editingWorkoutSaving;
+  // Finished workouts show straight away from this device's copy while they sync. One the server
+  // refused waits for review instead, so it is not presented as saved.
+  const waitingWorkouts = useMemo(
     () =>
-      pendingWorkout.pending && !pendingWorkout.needsReview
-        ? pendingWorkoutPreview(pendingWorkout.pending, exercises, workoutTypes.types)
-        : null,
-    [exercises, pendingWorkout.needsReview, pendingWorkout.pending, workoutTypes.types],
+      finishedQueue.items.filter(
+        (finished) => !(finishedWorkoutKey(finished) in finishedQueue.refusals),
+      ),
+    [finishedQueue.items, finishedQueue.refusals],
   );
-  // After the save, its on-device figures stay until the refreshed dashboard replaces them.
-  const [savedPreview, setSavedPreview] = useState<{
-    workout: TrackedWorkout;
-    dashboard: DashboardData | null;
-    isNew: boolean;
-  } | null>(null);
-  const sharedPreviewIdRef = useRef<string | null>(null);
+  const finishedPreviews = useMemo(
+    () =>
+      waitingWorkouts.flatMap((finished) => {
+        const workout = pendingWorkoutPreview(finished.pendingSave, exercises, workoutTypes.types);
+        return workout ? [{ workout, isNew: finished.pendingSave.workoutId === null }] : [];
+      }),
+    [exercises, waitingWorkouts, workoutTypes.types],
+  );
+  const syncingWorkoutIds = useMemo(
+    () => finishedPreviews.map((preview) => preview.workout.id),
+    [finishedPreviews],
+  );
+  // A workout still syncing, or with changes waiting to sync, cannot be edited or deleted yet.
+  const queuedWorkoutIds = useMemo(
+    () =>
+      new Set(
+        finishedQueue.items.flatMap((finished) =>
+          finished.pendingSave.workoutId ? [finished.pendingSave.workoutId] : [],
+        ),
+      ),
+    [finishedQueue.items],
+  );
+  /** Reports and refuses changes to a workout whose save has not reached the server yet. */
+  const blockedWhileSyncing = (id: string) => {
+    if (!isPendingWorkoutId(id) && !queuedWorkoutIds.has(id)) return false;
+    setMessage('You can change this workout once it has synced.');
+    return true;
+  };
+  // After each save, its on-device figures stay until the refreshed dashboard replaces them.
+  const [savedPreviews, setSavedPreviews] = useState<
+    Array<{
+      finished: FinishedWorkout;
+      workout: TrackedWorkout;
+      dashboard: DashboardData | null;
+      isNew: boolean;
+    }>
+  >([]);
+  const awaitingDashboard = useMemo(
+    () => savedPreviews.filter((preview) => preview.dashboard === dashboard),
+    [dashboard, savedPreviews],
+  );
   const shownWorkouts = useMemo(
-    () => (pendingPreview ? workoutsWithPreview(workouts, pendingPreview) : workouts),
-    [pendingPreview, workouts],
+    () =>
+      finishedPreviews.reduce(
+        (current, preview) => workoutsWithPreview(current, preview.workout),
+        workouts,
+      ),
+    [finishedPreviews, workouts],
   );
   const shownDashboard = useMemo(() => {
     if (!dashboard) return dashboard;
-    const preview = pendingPreview
-      ? { workout: pendingPreview, isNew: !pendingWorkout.pending?.workoutId }
-      : savedPreview?.dashboard === dashboard
-        ? savedPreview
-        : null;
-    return preview
-      ? dashboardWithPreview(
-          dashboard,
-          preview.workout,
-          workoutTypes.types,
-          localDate(),
-          preview.isNew,
-        )
-      : dashboard;
-  }, [
-    dashboard,
-    pendingPreview,
-    pendingWorkout.pending?.workoutId,
-    savedPreview,
-    workoutTypes.types,
-  ]);
-  useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
+    const today = localDate();
+    return [...awaitingDashboard, ...finishedPreviews].reduce(
+      (current, preview) =>
+        dashboardWithPreview(current, preview.workout, workoutTypes.types, today, preview.isNew),
+      dashboard,
+    );
+  }, [awaitingDashboard, dashboard, finishedPreviews, workoutTypes.types]);
+  const finishedMuscleSources = useMemo(
+    () => [
+      ...awaitingDashboard.map((preview) => ({ id: preview.workout.id, draft: preview.finished })),
+      ...waitingWorkouts.map((finished) => ({
+        id: previewIdFor(finished.pendingSave),
+        draft: finished,
+      })),
+    ],
+    [awaitingDashboard, waitingWorkouts],
+  );
+  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts, finishedMuscleSources);
+  const reviewMuscleWeeks = useMemo(() => {
+    const current = muscleSets.weeklySets ?? dashboard?.weekly_sets;
+    return current
+      ? [current, ...(muscleSets.history ?? dashboard?.weekly_sets_history ?? [])]
+      : [];
+  }, [dashboard?.weekly_sets, dashboard?.weekly_sets_history, muscleSets]);
+  useActiveWorkoutReminder(editingWorkoutSaving ? null : activeWorkoutStartedAt);
   useEffect(() => {
     // A URL (including an old phone notification) is navigation, never a Start action.
     if (tab !== 'log' || editingWorkout || activeWorkoutStartedAt !== null) return;
@@ -982,7 +1022,7 @@ function AppContent() {
     }
     const currentState = window.history.state;
     if (tab === 'log') {
-      if (!workoutSaving) setEditingWorkout(null);
+      if (!editingWorkoutSaving) setEditingWorkout(null);
       if (isAppHistoryState(currentState) && currentState.index > 0) {
         window.history.back();
         return;
@@ -1319,11 +1359,7 @@ function AppContent() {
     const wasEditing = editingWorkout !== null;
     const resumedId = resumingWorkoutId;
     if (!wasEditing) {
-      const completion = pendingWorkout.queue(payload);
-      // Share straight away from this device's copy; the saved workout replaces it when it syncs.
-      const preview = pendingWorkoutPreview(completion, exercises, workoutTypes.types);
-      sharedPreviewIdRef.current = preview?.id ?? null;
-      if (preview) setCompletedForSharing(preview);
+      finishedQueue.queue(payload);
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
       setTab('dashboard', { replace: true });
@@ -1363,19 +1399,19 @@ function AppContent() {
     saved: TrackedWorkout,
     wasEditing: boolean,
     resumedId: string | null,
+    queued?: SavedFromQueue,
   ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
-    setEditingWorkout(null);
+    // A queued save may finish after the user has opened another workout for editing.
+    if (wasEditing) setEditingWorkout(null);
 
     if (!wasEditing) {
-      setSavedPreview({ workout: saved, dashboard, isNew: resumedId === null });
-      const sharedPreviewId = sharedPreviewIdRef.current;
-      sharedPreviewIdRef.current = null;
-      if (sharedPreviewId !== null && sharedPreviewId === previewIdForSaved(saved, resumedId))
-        // Already offered: update an open share prompt, and leave a dismissed one closed.
-        setCompletedForSharing((current) => (current?.id === sharedPreviewId ? saved : current));
-      else setCompletedForSharing(saved);
+      if (queued)
+        setSavedPreviews((current) => [
+          ...current.filter((preview) => preview.dashboard === dashboard),
+          { finished: queued.finished, workout: saved, dashboard, isNew: resumedId === null },
+        ]);
       const signature = (record: PersonalRecord) =>
         `${record.scope ?? 'all_time'}:${record.block_id ?? ''}:${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
       const existing = new Set(
@@ -1383,20 +1419,28 @@ function AppContent() {
       );
       void api
         .listPersonalRecords({ workoutId: saved.id })
-        .then((records) =>
-          setCompletionRecords(records.filter((record) => !existing.has(signature(record)))),
-        )
+        .then((records) => {
+          const fresh = records.filter((record) => !existing.has(signature(record)));
+          // Several workouts can sync together after a reconnection; celebrate all their records.
+          if (fresh.length)
+            setCompletionRecords((current) => [
+              ...current,
+              ...fresh.filter((record) => !current.some((item) => item.id === record.id)),
+            ]);
+        })
         .catch(() => undefined);
     }
-    void refreshData({
-      silent: true,
-      activityLabel: 'Updating workout data…',
-      knownRevision: revisionAfterSave(saved),
-    });
+    // Refresh once the last waiting workout lands rather than after each one.
+    if (!queued || queued.remaining === 0)
+      void refreshData({
+        silent: true,
+        activityLabel: queued ? undefined : 'Updating workout data…',
+        knownRevision: revisionAfterSave(saved),
+      });
   }
 
   async function deleteWorkout(workout: TrackedWorkout) {
-    if (workoutSaveBlocked) return;
+    if (workoutSaveBlocked || blockedWhileSyncing(workout.id)) return;
     try {
       await withBackgroundActivity('Deleting workout…', async () => {
         await api.deleteWorkout(workout.id);
@@ -1495,14 +1539,15 @@ function AppContent() {
   }
 
   function editWorkout(workout: TrackedWorkout) {
-    if (workoutSaveBlocked) return;
+    if (workoutSaveBlocked || blockedWhileSyncing(workout.id)) return;
     setEditingWorkout(workout);
     setWorkoutStartDate(workout.workout_date);
     setTab('log');
   }
 
   function resumeWorkout(workout: TrackedWorkout) {
-    if (workoutSaveBlocked || activeWorkoutStartedAt !== null) return;
+    if (workoutSaveBlocked || blockedWhileSyncing(workout.id) || activeWorkoutStartedAt !== null)
+      return;
     clearActiveWorkoutDraft();
     setEditingWorkout(null);
     setResumingWorkoutId(workout.id);
@@ -1630,7 +1675,6 @@ function AppContent() {
     // Onboarding waits until a new member has seen the profile their invite opened.
     hasOtherDialog:
       message !== null ||
-      completedForSharing !== null ||
       completionRecords.length > 0 ||
       (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
@@ -1660,9 +1704,9 @@ function AppContent() {
         !homeScreenGuide.open &&
         !home.editing &&
         !message &&
-        !completedForSharing &&
         completionRecords.length === 0 &&
-        !workoutSaveBlocked,
+        !workoutSaveBlocked &&
+        finishedQueue.items.length === 0,
       resting: restEndsAt !== null && restEndsAt > Date.now(),
       workoutCount: Math.max(
         (dashboard?.history?.total_workouts ?? workouts.length) -
@@ -1685,9 +1729,9 @@ function AppContent() {
     homeScreenGuide.open,
     home.editing,
     message,
-    completedForSharing,
     completionRecords.length,
     workoutSaveBlocked,
+    finishedQueue.items.length,
     restEndsAt,
     dashboard?.history?.total_workouts,
     workouts,
@@ -1737,6 +1781,12 @@ function AppContent() {
   async function openMuscleWorkout(contribution: WeeklyMuscleContribution) {
     if (contribution.workout_id === muscleSets.workoutId) {
       if (activeWorkoutStartedAt !== null) setTab('log');
+      else setMessage('This workout is waiting to sync.');
+      return;
+    }
+    if (isPendingWorkoutId(contribution.workout_id)) {
+      if (shownWorkouts.some((workout) => workout.id === contribution.workout_id))
+        openSavedWorkout(contribution.workout_id, contribution.exercise_id);
       else setMessage('This workout is waiting to sync.');
       return;
     }
@@ -1886,13 +1936,6 @@ function AppContent() {
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
-        {completedForSharing && (
-          <WorkoutSharePrompt
-            workout={completedForSharing}
-            records={recordCountsByWorkout(personalRecords).get(completedForSharing.id) ?? 0}
-            onClose={() => setCompletedForSharing(null)}
-          />
-        )}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -1908,29 +1951,39 @@ function AppContent() {
           className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || tab === 'log' ? 'with-overlay-header' : ''}`}
           data-nav-direction={navDirection}
         >
-          {pendingWorkout.pending && (
-            <PendingWorkoutSaveCard
-              completion={pendingWorkout.pending}
-              saving={pendingWorkout.saving}
-              error={pendingWorkout.error}
-              onRetry={pendingWorkout.retry}
-              onDiscard={() => {
-                if (pendingWorkout.discard()) setMessage('Workout discarded.');
-              }}
-              onReview={
-                pendingWorkout.needsReview
-                  ? () => {
-                      const draft = pendingWorkout.review();
-                      if (!draft) return;
-                      setActiveWorkoutStartedAt(draft.startedAt);
-                      setResumingWorkoutId(draft.resumingWorkoutId ?? null);
-                      setWorkoutStartDate(draft.workoutDate);
-                      setTab('log');
-                    }
-                  : undefined
-              }
-            />
-          )}
+          {tab !== 'log' &&
+            finishedQueue.items.map((finished) => {
+              const key = finishedWorkoutKey(finished);
+              const refusal = finishedQueue.refusals[key];
+              // Routine sends and offline retries stay quiet; only actionable failures need a card.
+              if (refusal === undefined && !finishedQueue.outdated) return null;
+              return (
+                <PendingWorkoutSaveCard
+                  key={key}
+                  completion={finished.pendingSave}
+                  saving={finishedQueue.sendingKey === key}
+                  error={refusal ?? (finishedQueue.outdated ? OUTDATED_CLIENT_MESSAGE : null)}
+                  onRetry={finishedQueue.retry}
+                  onDiscard={() => {
+                    if (finishedQueue.discard(key)) setMessage('Workout discarded.');
+                  }}
+                  reviewBlocked={activeWorkoutStartedAt !== null}
+                  onReview={
+                    refusal === undefined
+                      ? undefined
+                      : () => {
+                          if (activeWorkoutStartedAt !== null) return;
+                          const draft = finishedQueue.review(key);
+                          if (!draft) return;
+                          setActiveWorkoutStartedAt(draft.startedAt);
+                          setResumingWorkoutId(draft.resumingWorkoutId ?? null);
+                          setWorkoutStartDate(draft.workoutDate);
+                          setTab('log');
+                        }
+                  }
+                />
+              );
+            })}
           {bodyMeasurementSync.pending > 0 && (
             <section
               className="pulse-card pending-workout-save body-check-in-sync"
@@ -2184,7 +2237,7 @@ function AppContent() {
                 dataRevision={dataRevision}
                 key={`${historyOpenId ?? 'history'}-${historyExerciseId ?? 'all'}-${historyMovementId ?? 'any'}-${historyOpenCount}`}
                 workouts={shownWorkouts}
-                syncingWorkoutId={pendingPreview?.id ?? null}
+                syncingWorkoutIds={syncingWorkoutIds}
                 categoryColors={workoutTypeColors}
                 measurements={measurements}
                 exercises={exercises}
@@ -10792,7 +10845,7 @@ function HistoryScreen({
   exerciseLibrary,
   dataRevision,
   workouts,
-  syncingWorkoutId = null,
+  syncingWorkoutIds = [],
   categoryColors,
   measurements,
   exercises,
@@ -10827,8 +10880,8 @@ function HistoryScreen({
   exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
   workouts: TrackedWorkout[];
-  /** The finished workout still syncing, shown from this device's copy without its actions. */
-  syncingWorkoutId?: string | null;
+  /** Finished workouts still syncing, shown from this device's copy without their actions. */
+  syncingWorkoutIds?: string[];
   categoryColors: WorkoutTypeColors;
   measurements: BodyMeasurement[];
   exercises: Exercise[];
@@ -11006,8 +11059,7 @@ function HistoryScreen({
           setOpenId((current) => (current === workout.id ? null : workout.id));
         }}
         onOpenExercise={onOpenExercise}
-        syncing={workout.id === syncingWorkoutId}
-        {...(workout.id !== syncingWorkoutId && {
+        {...(!syncingWorkoutIds.includes(workout.id) && {
           onResume: () => onResume(workout),
           onEdit: () => onEdit(workout),
           onDelete: () => onDelete(workout),
@@ -11394,7 +11446,6 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   reactionAction,
-  syncing = false,
 }: {
   detailsOnly?: boolean;
   workout: TrackedWorkout;
@@ -11421,8 +11472,6 @@ function HistoryWorkoutCard({
   onEdit?: () => void;
   onDelete?: () => void;
   reactionAction?: ReactNode;
-  /** Saved on this device and still being sent to the server. */
-  syncing?: boolean;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -11458,7 +11507,6 @@ function HistoryWorkoutCard({
             <strong>
               {workoutDisplayName(workout)}
               {workout.is_sample && <em className="sample-tag">Sample</em>}
-              {syncing && <em className="sample-tag syncing-tag">Syncing</em>}
             </strong>
             <small>{meta.join(' · ')}</small>
           </span>

@@ -16,6 +16,8 @@ export function liveMuscleSets(
   exercises: Exercise[],
   workouts: TrackedWorkout[],
   today: string,
+  /** Identifies an unsaved workout; each finished workout waiting to sync needs its own. */
+  liveId: string = LIVE_WORKOUT_ID,
 ): MuscleSetsWeek {
   if (!draft) return week;
   const saved = workouts.find((workout) =>
@@ -23,7 +25,7 @@ export function liveMuscleSets(
       ? workout.id === draft.resumingWorkoutId
       : !!draft.clientSessionId && workout.client_session_id === draft.clientSessionId,
   );
-  const workoutId = draft.resumingWorkoutId ?? saved?.id ?? LIVE_WORKOUT_ID;
+  const workoutId = draft.resumingWorkoutId ?? saved?.id ?? liveId;
   const inWeek =
     draft.workoutDate >= week.week_start &&
     draft.workoutDate <= week.week_end &&
