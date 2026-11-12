@@ -9,6 +9,7 @@ import {
   type CleanupStorage,
 } from './sessionCleanup';
 import { ACTIVE_WORKOUT_DRAFT_KEY } from './workoutDraft';
+import { FINISHED_WORKOUTS_KEY } from './finishedWorkoutQueue';
 import type { User } from './types';
 
 class MemoryStorage implements CleanupStorage {
@@ -67,6 +68,34 @@ describe('clearUserDeviceData', () => {
 
     expect(storage.getItem('gym-logger-reduce-motion')).toBe('reduced');
     expect(storage.getItem('gym-logger-rest-timer')).toBe('disabled');
+  });
+});
+
+describe('finished workouts waiting to sync', () => {
+  const queued = '{"version":1,"items":[]}';
+
+  it('are removed on sign-out but kept when a session merely expires', async () => {
+    const clearCache = vi.fn().mockResolvedValue(undefined);
+    const signedOut = populated();
+    signedOut.setItem(FINISHED_WORKOUTS_KEY, queued);
+    await clearUserDeviceData({ storage: signedOut, clearCache });
+    expect(signedOut.getItem(FINISHED_WORKOUTS_KEY)).toBeNull();
+
+    const expired = populated();
+    expired.setItem(FINISHED_WORKOUTS_KEY, queued);
+    await clearUserDeviceData({ storage: expired, clearCache }, { keepUnsyncedWorkout: true });
+    expect(expired.getItem(FINISHED_WORKOUTS_KEY)).toBe(queued);
+  });
+
+  it('never pass to a different account signing in on this device', async () => {
+    const storage = populated();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user('a')));
+    storage.setItem(FINISHED_WORKOUTS_KEY, queued);
+    await reconcileSignedInUser(user('b'), {
+      storage,
+      clearCache: vi.fn().mockResolvedValue(undefined),
+    });
+    expect(storage.getItem(FINISHED_WORKOUTS_KEY)).toBeNull();
   });
 });
 

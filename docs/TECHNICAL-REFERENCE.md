@@ -478,13 +478,13 @@ Relay keeps working without a connection once an account has signed in on the de
 - Startup opens the remembered account offline when the session check fails or takes longer than 4 seconds. A first visit on a device still needs the server.
 - Saved copies live in IndexedDB. Each record is gzip-compressed, then AES-GCM encrypted with a non-extractable Web Crypto key stored beside it and bound to the owning account and record name. Sign-out, account changes and confirmed revocation delete the records and the key. Encryption protects copied storage files; the device lock protects an unlocked browser. Origins without Web Crypto (plain HTTP other than localhost) store compressed records without encryption. Passwords are never stored on the device.
 - Stored workouts take about 0.9 KB each, and the default exercise library about 3 KB. A year at three workouts a week, with its dashboard and personal records, is roughly 0.2 MB. History beyond the startup window is saved only after it has been opened.
-- Finishing a workout offline stores it on the device; it syncs when the server is reachable. When a session expires, an unsynced finished workout is kept for the same account and discarded if a different account signs in.
+- Finishing a workout stores it on the device before it is sent, in a queue of finished workouts (`gym-video-logger.finished-workouts.v1` in local storage) kept apart from the in-progress workout, so another workout can start straight away, including offline. Each entry keeps its whole draft. The queue sends oldest first, one at a time, retrying with backoff; a workout the server refuses waits for **Review workout** without holding back the others. Each new workout is sent with its client session ID, so a retry cannot create a duplicate. Waiting workouts show in History and Home with a **Syncing** tag and cannot be edited or deleted until they reach the server. A finished workout an earlier release stored inside the in-progress draft moves into the queue when the app opens. When a session expires, unsynced finished workouts are kept for the same account; sign-out and a different account signing in discard them.
 - Sign-in, Social, notifications, sharing, settings changes, imports, exports, video uploads, machine-photo images and older history need a connection.
 
 ## Limitations and sensible next steps
 
 - Uploads are not resumable and mobile browsers can suspend a backgrounded PWA.
-- Offline, one finished workout can wait to sync at a time; starting another workout waits until it reaches the server. Settings and custom exercises cannot be changed offline.
+- Settings and custom exercises cannot be changed offline. A refused finished workout reopens for review only when no other workout is in progress.
 - A processing job cannot be cancelled once ffmpeg work begins; cancellation is supported during upload.
 - Video processing handles one session at a time.
 - Real YouTube uploads need credentials and internet access; mock mode remains ideal for local verification.
