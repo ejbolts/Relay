@@ -347,7 +347,6 @@ import {
   isPendingWorkoutId,
   pendingWorkoutPreview,
   previewIdFor,
-  previewIdForSaved,
   workoutsWithPreview,
 } from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
@@ -785,7 +784,6 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
-  const [completedForSharing, setCompletedForSharing] = useState<TrackedWorkout | null>(null);
   const notifyRestComplete = useCallback(
     () => setMessage('Rest complete. Time for your next set.'),
     [],
@@ -848,8 +846,6 @@ function AppContent() {
     () => savedPreviews.filter((preview) => preview.dashboard === dashboard),
     [dashboard, savedPreviews],
   );
-  // Finish previews already offered for sharing, so syncing later never reopens a closed prompt.
-  const sharedPreviewIdsRef = useRef(new Set<string>());
   const shownWorkouts = useMemo(
     () =>
       finishedPreviews.reduce(
@@ -974,7 +970,9 @@ function AppContent() {
   const backgroundActivityLabel =
     backgroundActivities.length > 0
       ? backgroundActivities[backgroundActivities.length - 1].label
-      : null;
+      : finishedQueue.saving
+        ? 'Saving workout…'
+        : null;
   const canNavigateBack =
     tab !== 'dashboard' ||
     (isAppHistoryState(window.history.state) && window.history.state.index > 0);
@@ -1363,13 +1361,7 @@ function AppContent() {
     const wasEditing = editingWorkout !== null;
     const resumedId = resumingWorkoutId;
     if (!wasEditing) {
-      const completion = finishedQueue.queue(payload);
-      // Share straight away from this device's copy; the saved workout replaces it when it syncs.
-      const preview = pendingWorkoutPreview(completion, exercises, workoutTypes.types);
-      if (preview) {
-        sharedPreviewIdsRef.current.add(preview.id);
-        setCompletedForSharing(preview);
-      }
+      finishedQueue.queue(payload);
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
       setTab('dashboard', { replace: true });
@@ -1421,11 +1413,6 @@ function AppContent() {
           ...current.filter((preview) => preview.dashboard === dashboard),
           { finished: queued.finished, workout: saved, dashboard, isNew: resumedId === null },
         ]);
-      const sharedPreviewId = previewIdForSaved(saved, resumedId);
-      if (sharedPreviewId !== null && sharedPreviewIdsRef.current.delete(sharedPreviewId))
-        // Already offered: update an open share prompt, and leave a dismissed one closed.
-        setCompletedForSharing((current) => (current?.id === sharedPreviewId ? saved : current));
-      else setCompletedForSharing(saved);
       const signature = (record: PersonalRecord) =>
         `${record.scope ?? 'all_time'}:${record.block_id ?? ''}:${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
       const existing = new Set(
@@ -1448,7 +1435,7 @@ function AppContent() {
     if (!queued || queued.remaining === 0)
       void refreshData({
         silent: true,
-        activityLabel: 'Updating workout data…',
+        activityLabel: queued ? undefined : 'Updating workout data…',
         knownRevision: revisionAfterSave(saved),
       });
   }
@@ -1689,7 +1676,6 @@ function AppContent() {
     // Onboarding waits until a new member has seen the profile their invite opened.
     hasOtherDialog:
       message !== null ||
-      completedForSharing !== null ||
       completionRecords.length > 0 ||
       (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
@@ -1719,7 +1705,6 @@ function AppContent() {
         !homeScreenGuide.open &&
         !home.editing &&
         !message &&
-        !completedForSharing &&
         completionRecords.length === 0 &&
         !workoutSaveBlocked &&
         finishedQueue.items.length === 0,
@@ -1745,7 +1730,6 @@ function AppContent() {
     homeScreenGuide.open,
     home.editing,
     message,
-    completedForSharing,
     completionRecords.length,
     workoutSaveBlocked,
     finishedQueue.items.length,
@@ -1953,13 +1937,6 @@ function AppContent() {
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
-        {completedForSharing && (
-          <WorkoutSharePrompt
-            workout={completedForSharing}
-            records={recordCountsByWorkout(personalRecords).get(completedForSharing.id) ?? 0}
-            onClose={() => setCompletedForSharing(null)}
-          />
-        )}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -1979,6 +1956,8 @@ function AppContent() {
             finishedQueue.items.map((finished) => {
               const key = finishedWorkoutKey(finished);
               const refusal = finishedQueue.refusals[key];
+              // Routine sends and offline retries stay quiet; only actionable failures need a card.
+              if (refusal === undefined && !finishedQueue.outdated) return null;
               return (
                 <PendingWorkoutSaveCard
                   key={key}
@@ -11081,7 +11060,6 @@ function HistoryScreen({
           setOpenId((current) => (current === workout.id ? null : workout.id));
         }}
         onOpenExercise={onOpenExercise}
-        syncing={syncingWorkoutIds.includes(workout.id)}
         {...(!syncingWorkoutIds.includes(workout.id) && {
           onResume: () => onResume(workout),
           onEdit: () => onEdit(workout),
@@ -11469,7 +11447,6 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   reactionAction,
-  syncing = false,
 }: {
   detailsOnly?: boolean;
   workout: TrackedWorkout;
@@ -11496,8 +11473,6 @@ function HistoryWorkoutCard({
   onEdit?: () => void;
   onDelete?: () => void;
   reactionAction?: ReactNode;
-  /** Saved on this device and still being sent to the server. */
-  syncing?: boolean;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -11533,7 +11508,6 @@ function HistoryWorkoutCard({
             <strong>
               {workoutDisplayName(workout)}
               {workout.is_sample && <em className="sample-tag">Sample</em>}
-              {syncing && <em className="sample-tag syncing-tag">Syncing</em>}
             </strong>
             <small>{meta.join(' · ')}</small>
           </span>

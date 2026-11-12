@@ -1654,12 +1654,11 @@ describe('finishing workouts in the background', () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')?.disabled,
     ).toBe(false);
     expect(container.querySelector('.app-tab-start.live')).toBeNull();
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Workout finished',
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')?.textContent).toBe(
+      'Saving workout\u2026',
     );
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Syncing workout',
-    );
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
     expectPreserved(draft);
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
       true,
@@ -1703,7 +1702,8 @@ describe('finishing workouts in the background', () => {
       [...container.querySelectorAll('.history-card')].find((item) =>
         item.textContent?.includes('Recovery workout'),
       );
-    expect(card()?.querySelector('.syncing-tag')?.textContent).toBe('Syncing');
+    expect(card()).toBeDefined();
+    expect(card()?.querySelector('.syncing-tag')).toBeNull();
     await act(async () =>
       card()!.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
     );
@@ -1731,7 +1731,7 @@ describe('finishing workouts in the background', () => {
     ).toHaveLength(1);
   });
 
-  it('offers sharing as soon as the workout finishes, and does not reopen it after syncing', async () => {
+  it('finishes quietly and does not show a saved popup after the upload completes', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
     let finishSave!: (workout: TrackedWorkout) => void;
@@ -1743,11 +1743,10 @@ describe('finishing workouts in the background', () => {
     await mount();
     await confirmFinish();
     const toast = () => document.querySelector('.app-notification-toast');
-    expect(toast()?.textContent).toContain('Workout saved');
-    await act(async () =>
-      toast()!.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
-    );
     expect(toast()).toBeNull();
+    expect(container.querySelector('.background-activity-bar')?.textContent).toBe(
+      'Saving workout\u2026',
+    );
 
     const payload = vi.mocked(api.createWorkout).mock.calls[0][0];
     await act(async () =>
@@ -1759,6 +1758,7 @@ describe('finishing workouts in the background', () => {
     );
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(toast()).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
 
   function queuedWorkout(name: string, minutesAgo: number): FinishedWorkout {
@@ -1818,9 +1818,8 @@ describe('finishing workouts in the background', () => {
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(readFinishedWorkouts().map((item) => item.name)).toEqual(['Earlier release workout']);
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Earlier release workout',
-    );
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="Start empty workout"]')?.disabled,
     ).toBe(false);
@@ -1865,7 +1864,7 @@ describe('finishing workouts in the background', () => {
     expect(readActiveWorkoutDraft()?.name).toBe('Workout in progress');
   });
 
-  it('keeps a finished snapshot after a failed background save, allowing a retry', async () => {
+  it('keeps a finished snapshot after a failed background save and quietly retries on reconnect', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
     let failSave!: (error: Error) => void;
@@ -1879,11 +1878,11 @@ describe('finishing workouts in the background', () => {
     expect(window.location.hash).toBe('#dashboard');
     await act(async () => failSave(new Error('Server unavailable; try again.')));
     expect(window.location.hash).toBe('#dashboard');
-    expect(container.textContent).toContain('Saved on this device. Waiting to sync.');
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
     expectPreserved(draft);
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise(() => {}));
-    await act(async () => pendingButton('Retry sync').click());
+    await act(async () => window.dispatchEvent(new Event('online')));
     expect(api.createWorkout).toHaveBeenCalledTimes(2);
     expect(window.location.hash).toBe('#dashboard');
   });
@@ -1891,10 +1890,12 @@ describe('finishing workouts in the background', () => {
   it('discards a finished workout that has not synced, after confirming', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
-    vi.mocked(api.createWorkout).mockRejectedValueOnce(new Error('Server unavailable.'));
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(
+      new ApiError('Review this workout before saving.', 'invalid_workout', 422),
+    );
     await mount();
     await confirmFinish();
-    expect(container.textContent).toContain('Saved on this device. Waiting to sync.');
+    expect(container.textContent).toContain('Review this workout before saving.');
     await act(async () => pendingButton('Discard').click());
     expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
       'This workout has not synced and will be lost.',
@@ -1918,7 +1919,7 @@ describe('finishing workouts in the background', () => {
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     await mount();
     await confirmFinish();
-    expect(pendingButton('Discard').disabled).toBe(true);
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(finishedSave()).toBeDefined();
   });
 
@@ -1951,9 +1952,7 @@ describe('finishing workouts in the background', () => {
     await act(async () => fail(new Error('Connection lost.')));
     expect(window.location.hash).toBe('#training');
     expectPreserved(draft);
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Saved on this device',
-    );
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
   });
 
@@ -2022,6 +2021,11 @@ describe('durable workout completion', () => {
     expect(vi.mocked(api.createWorkout).mock.calls[1][0]).toEqual(first);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(container.querySelector('.logger-screen')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')?.textContent).not.toContain(
+      'Workout saved',
+    );
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
 
   it('blocks Finish when local storage fails and preserves the editable workout', async () => {
@@ -2045,7 +2049,9 @@ describe('durable workout completion', () => {
     await confirmFinish();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expect(container.querySelector('.logger-screen')).toBeNull();
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain('45 min');
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
     expect(finishedSave()?.payload.duration_minutes).toBe(45);
     expect(readActiveWorkoutDraft()).toBeNull();
 
@@ -2072,7 +2078,8 @@ describe('durable workout completion', () => {
       'Recovery workout',
       'Second workout',
     ]);
-    expect(container.querySelectorAll('.pending-workout-save')).toHaveLength(2);
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
 
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
     vi.mocked(api.createWorkout).mockImplementation(async (payload) => ({
@@ -2114,7 +2121,8 @@ describe('durable workout completion', () => {
       await vi.advanceTimersByTimeAsync(WORKOUT_SAVE_TIMEOUT_MS);
     });
     expect(finishedSave()).toBeDefined();
-    expect(container.textContent).toContain('Waiting to sync');
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
@@ -2498,10 +2506,8 @@ describe('cardio set editing defaults', () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     await confirmFinish();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Workout saved',
-    );
-    expect(document.querySelector('.app-notification-toast')?.textContent).not.toContain('Zone');
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.body.textContent).not.toContain('Workout saved');
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     expect(api.cardioOverview).not.toHaveBeenCalled();
   });
@@ -3396,8 +3402,10 @@ describe('live muscle totals while logging', () => {
     );
     await confirmFinish();
     expect(chestTotals()).toEqual(['1']);
-    // The share prompt opens from this device's copy without waiting for the server.
-    expect(document.querySelector('.notification-toast-action')?.textContent).toBe('Share card');
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')?.textContent).toBe(
+      'Saving workout\u2026',
+    );
     let refresh!: (data: DashboardData) => void;
     vi.mocked(api.dashboard).mockReturnValueOnce(
       new Promise((resolve) => {
@@ -3412,17 +3420,8 @@ describe('live muscle totals while logging', () => {
     expect(readFinishedWorkouts()).toEqual([]);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Workout saved',
-    );
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
-    await act(async () =>
-      document
-        .querySelector<HTMLButtonElement>(
-          '.app-notification-toast [aria-label="Close notification"]',
-        )!
-        .click(),
-    );
     await act(async () =>
       refresh({
         recommendation: null,
