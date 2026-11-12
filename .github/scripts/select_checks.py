@@ -32,6 +32,7 @@ CONTRACT_MODULES = {
     "tracker.py",
     "training_blocks.py",
     "weight_mapping.py",
+    "workout_type_exercises.py",
     "youtube_connections.py",
 }
 

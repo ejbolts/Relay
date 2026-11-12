@@ -1,4 +1,10 @@
-import type { RoutineDay, TrackedWorkout, WorkoutCategory } from './types';
+import type {
+  RoutineDay,
+  RoutineMovement,
+  TrackedWorkout,
+  WorkoutCategory,
+  WorkoutType,
+} from './types';
 import type { SessionTemplate } from './trainingSummary';
 import { createWorkoutSet } from './workoutSets';
 import { formatWeight, type WeightUnit } from './weightUnits';
@@ -9,7 +15,28 @@ export function routineSessionTemplate(
   date: string,
   unit: WeightUnit,
 ): SessionTemplate {
-  const type = day.workout_type!;
+  return plannedSessionTemplate(day.workout_type!, day.movements, name, date, unit, 'routine');
+}
+
+/** Pre-fills a workout from the exercises saved to its workout type. */
+export function typeSessionTemplate(
+  type: WorkoutType,
+  movements: RoutineMovement[],
+  name: string,
+  date: string,
+  unit: WeightUnit,
+): SessionTemplate {
+  return plannedSessionTemplate(type, movements, name, date, unit, 'type');
+}
+
+function plannedSessionTemplate(
+  type: WorkoutType,
+  movements: RoutineMovement[],
+  name: string,
+  date: string,
+  unit: WeightUnit,
+  planned: NonNullable<SessionTemplate['planned']>,
+): SessionTemplate {
   const category = (type.is_custom ? 'other' : type.id) as WorkoutCategory;
   const sourceWorkout: TrackedWorkout = {
     id: 'routine-template',
@@ -30,7 +57,8 @@ export function routineSessionTemplate(
   return {
     category,
     sourceWorkout,
-    exercises: day.movements.map(({ exercise, sets }) => ({
+    planned,
+    exercises: movements.map(({ exercise, sets }) => ({
       exercise,
       plannedSets: sets,
       topSet: sets[0]
