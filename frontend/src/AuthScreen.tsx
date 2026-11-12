@@ -8,8 +8,7 @@ import {
 } from './authForm';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
-import { pendingFriendInvite } from './friendInvite';
-import { Icon } from './Icon';
+import { pendingRegistrationInvite } from './friendInvite';
 import { motionReduced } from './motion';
 import { requestPhonePushPermissionFromTap } from './push';
 import { SampleProfileDialog } from './SampleProfileDialog';
@@ -144,7 +143,7 @@ export function AuthScreen({
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCode, setInviteCode] = useState(() => pendingRegistrationInvite() ?? '');
   const [showPassword, setShowPassword] = useState(false);
   const [inviteRevealed, setInviteRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -152,7 +151,6 @@ export function AuthScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
-  const [invited] = useState(() => pendingFriendInvite() !== null);
 
   const screenRef = useRef<HTMLElement>(null);
   const shellTopRef = useRef<number | null>(null);
@@ -305,17 +303,6 @@ export function AuthScreen({
             <p className="auth-note">
               New accounts are closed on this server. Ask whoever runs it for access, then sign in
               here.
-            </p>
-          )}
-
-          {invited && !notice && (
-            <p className="auth-note auth-invite-note">
-              <Icon name="people" />
-              <span>
-                {registrationOpen
-                  ? 'Sign in or create an account to send your friend request.'
-                  : 'Sign in to send your friend request.'}
-              </span>
             </p>
           )}
 

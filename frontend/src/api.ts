@@ -336,6 +336,7 @@ export const api = {
     disconnect: () => request<YouTubeConnection>('/api/youtube/connection', { method: 'DELETE' }),
   },
   auth: {
+    friendInvite: () => request<{ invite_code: string | null }>('/api/auth/friend-invite'),
     config: () =>
       request<AuthConfig>('/api/auth/config', undefined, { signalExpiredSession: false }),
     me: () => request<User>('/api/auth/me', undefined, { signalExpiredSession: false }),
