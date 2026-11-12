@@ -1467,6 +1467,12 @@
 .workout-discussion .discussion-reaction-summary {
   cursor: pointer;
 }
+/* Chosen offline: grayed out and locked until it reaches the server. */
+.workout-discussion .friend-react-button.is-pending {
+  opacity: 0.45;
+  filter: grayscale(1);
+  cursor: default;
+}
 .workout-discussion .discussion-reaction-summary.is-yours {
   gap: 0;
   padding: 0;
