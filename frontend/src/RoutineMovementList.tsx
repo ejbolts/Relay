@@ -1,4 +1,3 @@
-import { useId, useRef, useState } from 'react';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { Icon } from './Icon';
 import { RoutineExerciseSearch } from './RoutineExerciseSearch';
@@ -52,9 +51,6 @@ export function RoutineMovementList({
   layout?: 'rows' | 'cards';
   onChange: (movements: RoutineMovement[]) => void;
 }) {
-  const controlsId = useId();
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const countButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const cards = layout === 'cards';
   function movement(index: number, change: (item: RoutineMovement) => RoutineMovement | null) {
     onChange(
@@ -78,18 +74,6 @@ export function RoutineMovementList({
           <div
             className={`routine-exercise-row${cards ? ' routine-exercise-card' : ''}`}
             key={`${mi}-${m.exercise_id}`}
-            onKeyDown={
-              cards && expanded === mi
-                ? (event) => {
-                    if (event.key === 'Escape') {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setExpanded(null);
-                      countButtons.current[mi]?.focus();
-                    }
-                  }
-                : undefined
-            }
           >
             {cards && (
               <span className="routine-exercise-number">{String(mi + 1).padStart(2, '0')}</span>
@@ -124,135 +108,56 @@ export function RoutineMovementList({
               <small>{exerciseMuscles(latest(m.exercise))}</small>
             </div>
             <ExerciseMuscleHelp exercise={m.exercise} />
-            {cards && (
+            <div className="routine-stepper">
               <button
                 type="button"
-                className="routine-exercise-count"
-                ref={(element) => {
-                  countButtons.current[mi] = element;
-                }}
-                aria-label={`Edit ${cardio ? 'minutes' : 'sets'} for ${name} on ${target}`}
-                aria-expanded={expanded === mi}
-                aria-controls={expanded === mi ? `${controlsId}-${mi}` : undefined}
-                onClick={() => setExpanded(expanded === mi ? null : mi)}
-              >
-                {cardio
-                  ? `${minutes} min`
-                  : `${m.sets.length} ${m.sets.length === 1 ? 'set' : 'sets'}`}
-                <Icon name="chevron-down" />
-              </button>
-            )}
-            {(!cards || expanded === mi) && (
-              <div
-                className={
-                  cards ? 'routine-exercise-card-controls' : 'routine-exercise-inline-controls'
+                aria-label={
+                  atMinimum
+                    ? `Remove ${name} from ${target}`
+                    : cardio
+                      ? `5 fewer minutes of ${name} on ${target}`
+                      : `One fewer set of ${name} on ${target}`
                 }
-                id={cards ? `${controlsId}-${mi}` : undefined}
+                onClick={() =>
+                  movement(mi, (current) => {
+                    if (atMinimum) return null;
+                    if (!cardio) return { ...current, sets: current.sets.slice(0, -1) };
+                    return {
+                      ...current,
+                      // One planned duration; earlier interval sets fold into it.
+                      sets: [{ ...current.sets[0], duration_seconds: (minutes - 5) * 60 }],
+                    };
+                  })
+                }
               >
-                {cards && !cardio && (
-                  <div
-                    className="routine-exercise-presets"
-                    role="group"
-                    aria-label={`Set count for ${name}`}
-                  >
-                    {[2, 3, 4, 5].map((count) => (
-                      <button
-                        type="button"
-                        key={count}
-                        aria-pressed={m.sets.length === count}
-                        onClick={() => {
-                          movement(mi, (current) => ({
-                            ...current,
-                            sets: Array.from(
-                              { length: count },
-                              (_, index) =>
-                                current.sets[index] ?? {
-                                  ...current.sets.at(-1)!,
-                                  set_type: 'normal',
-                                },
-                            ),
-                          }));
-                          setExpanded(null);
-                          countButtons.current[mi]?.focus();
-                        }}
-                      >
-                        {count} sets
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="routine-stepper">
-                  <button
-                    type="button"
-                    aria-label={
-                      atMinimum && !cards
-                        ? `Remove ${name} from ${target}`
-                        : cardio
-                          ? `5 fewer minutes of ${name} on ${target}`
-                          : `One fewer set of ${name} on ${target}`
-                    }
-                    disabled={cards && atMinimum}
-                    onClick={() =>
-                      movement(mi, (current) => {
-                        if (atMinimum) {
-                          setExpanded(null);
-                          return null;
-                        }
-                        if (!cardio) return { ...current, sets: current.sets.slice(0, -1) };
-                        return {
+                <Icon name={atMinimum && !cards ? 'close' : 'minus'} />
+              </button>
+              <output>{cardio ? `${minutes} min` : m.sets.length}</output>
+              <button
+                type="button"
+                aria-label={
+                  cardio
+                    ? `5 more minutes of ${name} on ${target}`
+                    : `One more set of ${name} on ${target}`
+                }
+                disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
+                onClick={() =>
+                  movement(mi, (current) =>
+                    cardio
+                      ? {
                           ...current,
-                          // One planned duration; earlier interval sets fold into it.
-                          sets: [{ ...current.sets[0], duration_seconds: (minutes - 5) * 60 }],
-                        };
-                      })
-                    }
-                  >
-                    <Icon name={atMinimum && !cards ? 'close' : 'minus'} />
-                  </button>
-                  <output>{cardio ? `${minutes} min` : m.sets.length}</output>
-                  <button
-                    type="button"
-                    aria-label={
-                      cardio
-                        ? `5 more minutes of ${name} on ${target}`
-                        : `One more set of ${name} on ${target}`
-                    }
-                    disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
-                    onClick={() =>
-                      movement(mi, (current) =>
-                        cardio
-                          ? {
-                              ...current,
-                              sets: [{ ...current.sets[0], duration_seconds: (minutes + 5) * 60 }],
-                            }
-                          : {
-                              ...current,
-                              sets: [
-                                ...current.sets,
-                                { ...current.sets.at(-1)!, set_type: 'normal' },
-                              ],
-                            },
-                      )
-                    }
-                  >
-                    <Icon name="plus" />
-                  </button>
-                </div>
-                {cards && (
-                  <button
-                    type="button"
-                    className="routine-exercise-card-remove"
-                    aria-label={`Remove ${name} from ${target}`}
-                    onClick={() => {
-                      movement(mi, () => null);
-                      setExpanded(null);
-                    }}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            )}
+                          sets: [{ ...current.sets[0], duration_seconds: (minutes + 5) * 60 }],
+                        }
+                      : {
+                          ...current,
+                          sets: [...current.sets, { ...current.sets.at(-1)!, set_type: 'normal' }],
+                        },
+                  )
+                }
+              >
+                <Icon name="plus" />
+              </button>
+            </div>
           </div>
         );
       })}

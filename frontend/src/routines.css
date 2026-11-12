@@ -1168,70 +1168,15 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   width: 24px;
   height: 32px;
 }
-.routine-editor .routine-exercise-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 40px;
+.routine-exercise-card .routine-stepper {
   border: 0;
-  border-radius: 9px;
-  padding: 8px 10px;
-  background: var(--p-accent-soft);
-  color: var(--p-accent-text);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  border-radius: 10px;
 }
-.routine-exercise-count .pulse-icon {
-  width: 12px;
-  height: 12px;
-  color: var(--p-muted);
-}
-.routine-exercise-count[aria-expanded='true'] .pulse-icon {
-  transform: rotate(180deg);
-}
-.routine-exercise-card-controls {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  border-top: 1px solid var(--p-line);
-  margin-top: 4px;
-  padding-top: 12px;
-}
-.routine-exercise-inline-controls {
-  display: contents;
-}
-.routine-exercise-presets {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-}
-.routine-editor .routine-exercise-presets button {
-  flex: 1;
+.routine-editor .routine-exercise-card .routine-stepper button {
   min-height: 38px;
-  border: 1px solid var(--p-line);
-  border-radius: 8px;
-  padding: 6px;
-  background: var(--p-surface-2);
-  font-size: 12px;
 }
-.routine-editor .routine-exercise-presets button[aria-pressed='true'] {
-  border-color: var(--p-accent);
-  color: var(--p-accent-text);
-  background: var(--p-accent-soft);
-}
-.routine-editor .routine-exercise-card-remove {
-  min-height: 38px;
-  border: 0;
-  padding: 6px 8px;
-  background: none;
-  color: var(--p-muted);
-  font-size: 12px;
+.routine-exercise-card .routine-stepper output {
+  min-width: 24px;
 }
 .routine-editor .type-exercises-body .routine-add-exercise {
   justify-content: center;

@@ -117,9 +117,6 @@ it('saves exercises to a workout type without a split', async () => {
     option.click();
   });
   await act(async () =>
-    byLabel<HTMLButtonElement>('Edit sets for Band Biceps Curl on Arms')!.click(),
-  );
-  await act(async () =>
     byLabel<HTMLButtonElement>('One more set of Band Biceps Curl on Arms')!.click(),
   );
   expect(byLabel('Arms exercise 1')).not.toBeNull();
@@ -142,9 +139,6 @@ it('keeps the edits open when saving fails', async () => {
   vi.mocked(api.saveWorkoutTypeExercises).mockRejectedValueOnce(new Error('Server unavailable.'));
   await act(async () => byLabel<HTMLButtonElement>('Upper body exercises')!.click());
   await act(async () =>
-    byLabel<HTMLButtonElement>('Edit sets for Barbell Bench Press on Upper body')!.click(),
-  );
-  await act(async () =>
     byLabel<HTMLButtonElement>('Remove Barbell Bench Press from Upper body')!.click(),
   );
   await act(async () =>
@@ -157,27 +151,21 @@ it('keeps the edits open when saving fails', async () => {
   expect(count('Upper body')).toBe('1');
 });
 
-it('applies a card preset, preserves set details and returns focus to the count', async () => {
+it('edits sets directly on a card and preserves saved set details', async () => {
   await act(async () => byLabel<HTMLButtonElement>('Upper body exercises')!.click());
-  const toggle = byLabel<HTMLButtonElement>('Edit sets for Barbell Bench Press on Upper body')!;
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  expect(byLabel('One more set of Barbell Bench Press on Upper body')).toBeNull();
-  await act(async () => toggle.click());
-  const presets = byLabel('Set count for Barbell Bench Press')!;
+  expect(document.querySelector('.routine-exercise-count')).toBeNull();
+  const plus = byLabel<HTMLButtonElement>('One more set of Barbell Bench Press on Upper body')!;
+  const output = () => document.querySelector('.routine-exercise-card output')!.textContent;
+  expect(output()).toBe('1');
+  await act(async () => plus.click());
+  await act(async () => plus.click());
+  expect(output()).toBe('3');
   await act(async () =>
-    [...presets.querySelectorAll('button')].find((b) => b.textContent === '5 sets')!.click(),
+    byLabel<HTMLButtonElement>('One fewer set of Barbell Bench Press on Upper body')!.click(),
   );
-  expect(toggle.textContent).toContain('5 sets');
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  expect(document.activeElement).toBe(toggle);
-  await act(async () => toggle.click());
-  await act(async () =>
-    toggle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-  );
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  expect(document.querySelector('dialog')).not.toBeNull();
+  expect(output()).toBe('2');
   expect(document.querySelector('.type-exercises-summary')!.textContent).toContain(
-    '1 exercise · 5 sets',
+    '1 exercise · 2 sets',
   );
   await act(async () =>
     document
@@ -185,10 +173,10 @@ it('applies a card preset, preserves set details and returns focus to the count'
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
   const saved = vi.mocked(api.saveWorkoutTypeExercises).mock.calls[0][1];
-  expect(saved[0].sets).toEqual(Array.from({ length: 5 }, () => set));
+  expect(saved[0].sets).toEqual([set, set]);
 });
 
-it('keeps cardio minute controls and closes the card with Escape', async () => {
+it('adjusts cardio minutes directly without a dropdown', async () => {
   const bike: Exercise = {
     ...bench,
     id: 'bike',
@@ -209,28 +197,25 @@ it('keeps cardio minute controls and closes the card with Escape', async () => {
       />,
     ),
   );
-  const toggle = byLabel<HTMLButtonElement>('Edit minutes for Stationary Bike on Arms')!;
-  expect(toggle.textContent).toContain('30 min');
-  await act(async () => toggle.click());
-  expect(byLabel('Set count for Stationary Bike')).toBeNull();
-  const plus = byLabel<HTMLButtonElement>('5 more minutes of Stationary Bike on Arms')!;
-  await act(async () => plus.click());
-  expect(toggle.textContent).toContain('35 min');
+  const output = () => document.querySelector('.routine-exercise-card output')!.textContent;
+  expect(output()).toBe('30 min');
   await act(async () =>
-    plus.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    byLabel<HTMLButtonElement>('5 more minutes of Stationary Bike on Arms')!.click(),
   );
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  expect(document.activeElement).toBe(toggle);
+  expect(output()).toBe('35 min');
+  await act(async () =>
+    byLabel<HTMLButtonElement>('5 fewer minutes of Stationary Bike on Arms')!.click(),
+  );
+  expect(output()).toBe('30 min');
   await act(async () =>
     document
       .querySelector('dialog form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
-  expect(saved.mock.calls[0][0][0].sets[0].duration_seconds).toBe(2100);
+  expect(saved.mock.calls[0][0][0].sets[0].duration_seconds).toBe(1800);
 });
 
-it('limits strength counts to 1–50 and removes a card explicitly', async () => {
-  const saved = vi.fn();
+it('caps strength counts at 50 sets and enables plus after decrementing', async () => {
   await act(async () =>
     root.render(
       <WorkoutTypeExercisesEditor
@@ -238,33 +223,16 @@ it('limits strength counts to 1–50 and removes a card explicitly', async () =>
         movements={[
           { exercise_id: bench.id, exercise: bench, sets: Array.from({ length: 50 }, () => set) },
         ]}
-        onSaved={saved}
+        onSaved={vi.fn()}
         onClose={vi.fn()}
       />,
     ),
   );
-  const toggle = byLabel<HTMLButtonElement>('Edit sets for Barbell Bench Press on Arms')!;
-  await act(async () => toggle.click());
-  expect(byLabel<HTMLButtonElement>('One more set of Barbell Bench Press on Arms')!.disabled).toBe(
-    true,
-  );
-  await act(async () =>
-    [...byLabel('Set count for Barbell Bench Press')!.querySelectorAll('button')]
-      .find((b) => b.textContent === '2 sets')!
-      .click(),
-  );
-  await act(async () => toggle.click());
+  const plus = byLabel<HTMLButtonElement>('One more set of Barbell Bench Press on Arms')!;
+  expect(plus.disabled).toBe(true);
   await act(async () =>
     byLabel<HTMLButtonElement>('One fewer set of Barbell Bench Press on Arms')!.click(),
   );
-  expect(toggle.textContent).toContain('1 set');
-  expect(byLabel<HTMLButtonElement>('One fewer set of Barbell Bench Press on Arms')!.disabled).toBe(
-    true,
-  );
-  await act(async () =>
-    byLabel<HTMLButtonElement>('Remove Barbell Bench Press from Arms')!.click(),
-  );
-  expect(document.querySelector('.routine-exercise-card')).toBeNull();
-  expect(document.querySelector('.type-exercises-summary')!.textContent).toContain('0 exercises');
-  expect(byLabel<HTMLButtonElement>('Add exercise to Arms')!.disabled).toBe(false);
+  expect(document.querySelector('.routine-exercise-card output')!.textContent).toBe('49');
+  expect(plus.disabled).toBe(false);
 });
