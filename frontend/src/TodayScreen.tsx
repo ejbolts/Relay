@@ -53,8 +53,6 @@ import {
   weightInputValue,
   weightUnitName,
 } from './weightUnits';
-import { useOffline } from './connectionStatus';
-import { OfflineBadge } from './OfflineBadge';
 import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
 import { TrainingBlockHome } from './TrainingBlockSummary';
 import { blockOn } from './trainingBlocks';
@@ -78,16 +76,14 @@ export function PageHeader({
   headingLevel?: 1 | 2;
 }) {
   const Heading = headingLevel === 1 ? 'h1' : 'h2';
-  const offline = useOffline();
   return (
     <header className="page-header">
       <div>
         {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
-        {titleAction || offline ? (
+        {titleAction ? (
           <div className="page-header-title-row">
             <Heading>{title}</Heading>
             {titleAction}
-            {offline && <OfflineBadge />}
           </div>
         ) : (
           <Heading>{title}</Heading>

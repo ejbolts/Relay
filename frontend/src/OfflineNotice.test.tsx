@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { reportSavedDataUsed, reportServerReached } from './connectionStatus';
 import { OfflineNotice } from './OfflineNotice';
+import { PageHeader } from './TodayScreen';
 import {
   OFFLINE_NOTICE_DELAY_MS,
   OFFLINE_NOTICE_RESET_MS,
@@ -15,7 +16,12 @@ let root: Root;
 
 function Harness() {
   const notice = useOfflineNotice();
-  return notice.visible ? <OfflineNotice onDismiss={notice.dismiss} /> : null;
+  return (
+    <>
+      {notice.visible && <OfflineNotice onDismiss={notice.dismiss} />}
+      <PageHeader title="Home" />
+    </>
+  );
 }
 
 beforeEach(async () => {
@@ -48,6 +54,8 @@ it('appears once the app has stayed offline briefly, and leaves as soon as it re
   await advance(OFFLINE_NOTICE_DELAY_MS);
   expect(notice()?.getAttribute('role')).toBe('status');
   expect(notice()?.textContent).toContain("You're offline");
+  expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+  expect(container.querySelector('.page-header')?.textContent).toBe('Home');
 
   await goOnline();
   expect(notice()).toBeNull();
