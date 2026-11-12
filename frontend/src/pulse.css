@@ -1670,7 +1670,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .calendar-panel .calendar-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--calendar-gap, 0.125rem);
+  gap: 0.125rem;
 }
 
 .calendar-panel .calendar-weekdays span {
@@ -1708,62 +1708,24 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 600;
 }
 
-/* A trained day is a solid tile in its workout colour, with a number picked to contrast with it.
-   With every type on the day switched off in the legend, the tile falls back to neutral grey. */
-.calendar-panel .calendar-day.trained:not(.in-progress) {
-  isolation: isolate;
-  background: transparent;
-  color: var(--day-ink, var(--p-ink));
-  font-weight: 700;
-  outline: none;
-}
-
+/* A trained day is outlined in its workout colour; a day that mixes types splits the outline
+   between them. With every type on the day switched off in the legend, it turns neutral grey. */
 .calendar-panel .calendar-day.trained:not(.in-progress)::before {
   position: absolute;
-  inset: 0 0.1875rem;
-  z-index: -1;
-  border-radius: 10px;
-  background: var(--day-fill, var(--p-axis));
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--day-ring, var(--p-axis));
   content: '';
-}
-
-.calendar-panel .calendar-day.trained.today:not(.in-progress)::before,
-.calendar-panel .calendar-day.trained:not(.in-progress):focus-visible::before {
-  outline: 2px solid var(--p-accent);
-  outline-offset: 1px;
-}
-
-.calendar-panel .calendar-day.trained:not(.in-progress):hover::before {
-  filter: brightness(1.08);
-}
-
-/* Back-to-back training days sit on one band, so a streak reads as a single run. At the end of
-   a row the band runs off the edge to show that the streak carries on. */
-.calendar-panel .calendar-day.trained:is(.chain-prev, .chain-next):not(.in-progress)::after {
-  position: absolute;
-  top: 0;
-  right: 50%;
-  bottom: 0;
-  left: 50%;
-  z-index: -2;
-  background: var(--p-surface-3);
-  content: '';
-}
-
-.calendar-panel .calendar-day.trained.chain-prev:not(.in-progress)::after {
-  left: calc(-1 * var(--calendar-gap, 0.125rem));
-}
-
-.calendar-panel .calendar-day.trained.chain-next:not(.in-progress)::after {
-  right: calc(-1 * var(--calendar-gap, 0.125rem));
-}
-
-.calendar-panel .calendar-day.trained.chain-prev:not(.in-progress):nth-child(7n + 1)::after {
-  left: -0.25rem;
-}
-
-.calendar-panel .calendar-day.trained.chain-next:not(.in-progress):nth-child(7n)::after {
-  right: -0.25rem;
+  pointer-events: none;
+  /* Keep only the padding ring, so the outline can be a gradient on any card background. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
 }
 
 .calendar-panel .calendar-day.today {
@@ -1807,14 +1769,12 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   transition: background-color 200ms ease;
 }
 
-.calendar-day-dots .calendar-live-dot {
-  background: var(--p-accent);
+.calendar-day-dots i.is-off {
+  background-color: var(--p-axis);
 }
 
-/* Only the in-progress day has a dot, so it sits under the number without nudging it upwards. */
-.calendar-panel .calendar-scroll:not(.calendar-preview) .calendar-day-dots {
-  position: absolute;
-  bottom: 0.25rem;
+.calendar-day-dots .calendar-live-dot {
+  background: var(--p-accent);
 }
 
 /* ───────── This week ───────── */
@@ -1826,17 +1786,17 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   margin-bottom: 0.875rem;
 }
 
+/* Every tile is laid out from the top with room for two workout names, so the weekday letters
+   and dates stay level whether a day has none, one or two. */
 .week-strip-day {
+  position: relative;
   min-width: 0;
-  height: 4.125rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.0625rem;
   border: 0;
   border-radius: 12px;
-  padding: 0 0.125rem;
+  padding: 0.5rem 0.125rem 0.4375rem;
   background: var(--p-surface-2);
   color: var(--p-ink);
   font: inherit;
@@ -1848,51 +1808,64 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   color: var(--p-muted);
   font-size: 0.625rem;
   font-weight: 600;
+  line-height: 0.875rem;
 }
 
 .week-strip-date {
   font-size: 0.9375rem;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.25rem;
+}
+
+.week-strip-types {
+  width: 100%;
+  height: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.125rem;
 }
 
 .week-strip-type {
   max-width: 100%;
-  height: 0.75rem;
-  display: flex;
-  align-items: center;
   overflow: hidden;
-  color: var(--p-muted);
+  color: color-mix(in srgb, var(--type-color, var(--p-muted)) 65%, var(--p-ink));
   font-size: 0.5625rem;
   font-weight: 600;
   line-height: 0.75rem;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.week-strip-type .calendar-live-dot {
+.week-strip-type.is-off {
+  color: var(--p-muted);
+}
+
+.week-strip-types .calendar-live-dot {
   width: 0.375rem;
   height: 0.375rem;
+  margin-top: 0.1875rem;
   border-radius: 50%;
   background: var(--p-accent);
 }
 
-/* A trained day is tinted in its workout colour; a mixed day splits the tint between two. With
-   every type on the day switched off in the legend, the tint falls back to neutral grey. */
-.week-strip-day.trained:not(.in-progress) {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--day-color, var(--p-axis)) 24%, transparent) 50%,
-    color-mix(in srgb, var(--day-color-2, var(--p-axis)) 24%, transparent) 50%
-  );
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--day-color, var(--p-axis)) 70%, transparent);
-}
-
-.week-strip-day.trained.mixed:not(.in-progress) {
-  box-shadow: inset 0 0 0 1.5px var(--p-line-strong);
-}
-
-.week-strip-day.trained:not(.in-progress) .week-strip-type {
-  color: color-mix(in srgb, var(--day-color, var(--p-muted)) 65%, var(--p-ink));
+/* The same outline as a trained day in the calendar below. */
+.week-strip-day.trained:not(.in-progress)::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--day-ring, var(--p-axis));
+  content: '';
+  pointer-events: none;
+  /* Keep only the padding ring, so the outline can be a gradient on any card background. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
 }
 
 .week-strip-day.future {

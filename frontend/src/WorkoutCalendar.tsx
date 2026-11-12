@@ -18,7 +18,7 @@ import {
   parseLocalDate,
   weekStartFor,
 } from './trainingSummary';
-import { dayFill, readableInk, workoutTypeColor } from './dayColors';
+import { dayRing, workoutTypeColor } from './dayColors';
 const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
@@ -45,7 +45,7 @@ type CalendarPreview = {
 const EMPTY_ENTRIES: DashboardData['heatmap'] = [];
 
 type WorkoutCalendarProps = {
-  /** Workout types switched off in the legend; their colour is left out of the day's fill. */
+  /** Workout types switched off in the legend; their dots and day borders are greyed out. */
   hiddenCategories?: ReadonlySet<string>;
   activeWorkoutDate?: string | null;
   onActiveWorkoutClick?: () => void;
@@ -220,28 +220,20 @@ export function WorkoutCalendar({
                       const planned = previewMap.get(key);
                       const inProgress = key === activeWorkoutDate;
                       const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-                      const fills = dayTypes
+                      // The border takes the colours of the types still switched on in the legend.
+                      const ring = dayTypes
                         .filter((type) => !hiddenCategories?.has(type.id))
                         .map((type) => workoutTypeColor(type, categoryColors));
-                      const filteredOut = dayTypes.length > 0 && fills.length === 0;
-                      // Back-to-back training days share a band, so a streak reads as one run.
-                      const filled = !!entry && !inProgress;
-                      const chained = (offset: number) => {
-                        const neighbour = addDays(key, offset);
-                        return filled && map.has(neighbour) && neighbour !== activeWorkoutDate;
-                      };
+                      const filteredOut = dayTypes.length > 0 && ring.length === 0;
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${chained(-1) ? 'chain-prev' : ''} ${chained(1) ? 'chain-next' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
                           style={
-                            filled && fills.length
-                              ? ({
-                                  '--day-fill': dayFill(fills),
-                                  '--day-ink': readableInk(fills),
-                                } as CSSProperties)
+                            ring.length && !inProgress
+                              ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
                               : undefined
                           }
                           disabled={previewMode || (readOnly && !entry)}
@@ -272,15 +264,26 @@ export function WorkoutCalendar({
                           }
                         >
                           <span className="calendar-day-number">{day.getDate()}</span>
-                          {/* A completed day is filled with its workout colour, so only planned
-                              and in-progress days still carry a dot. */}
-                          {(previewMode || inProgress) && (
-                            <span className="calendar-day-dots" aria-hidden="true">
-                              {planned
-                                ? planned.color && <i style={{ backgroundColor: planned.color }} />
-                                : inProgress && <i className="calendar-live-dot" />}
-                            </span>
-                          )}
+                          <span className="calendar-day-dots" aria-hidden="true">
+                            {planned ? (
+                              planned.color && <i style={{ backgroundColor: planned.color }} />
+                            ) : inProgress ? (
+                              <i className="calendar-live-dot" />
+                            ) : (
+                              dayTypes.map((type, dotIndex) =>
+                                hiddenCategories?.has(type.id) ? (
+                                  <i key={dotIndex} className="is-off" />
+                                ) : (
+                                  <i
+                                    key={dotIndex}
+                                    style={{
+                                      backgroundColor: workoutTypeColor(type, categoryColors),
+                                    }}
+                                  />
+                                ),
+                              )
+                            )}
+                          </span>
                         </button>
                       );
                     })}
@@ -339,7 +342,10 @@ export function WorkoutCalendar({
 
 const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-/** This week's seven days as large tiles, each naming the workout type trained that day. */
+/**
+ * This week's seven days as large tiles, each naming the workout types trained that day. Every
+ * tile keeps room for two names, so the weekday letters and dates line up across the row.
+ */
 export function WeekStrip({
   entries,
   categoryColors,
@@ -375,22 +381,19 @@ export function WeekStrip({
         const entry = map.get(key);
         const inProgress = key === activeWorkoutDate;
         const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-        const shown = dayTypes.filter((type) => !hiddenCategories?.has(type.id));
-        const fills = shown.map((type) => workoutTypeColor(type, categoryColors));
-        // A day whose types are all switched off keeps its name, greyed out with the tile.
-        const named = shown.length ? shown : dayTypes;
+        // A type switched off in the legend keeps its name but loses its colour.
+        const colorOf = (type: WorkoutType) =>
+          hiddenCategories?.has(type.id) ? null : workoutTypeColor(type, categoryColors);
+        const ring = dayTypes.map(colorOf).filter((color) => color !== null);
         return (
           <button
             type="button"
-            className={`week-strip-day ${entry ? 'trained' : ''} ${fills.length > 1 ? 'mixed' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+            className={`week-strip-day ${entry ? 'trained' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
             key={key}
             data-date={key}
             style={
-              fills.length
-                ? ({
-                    '--day-color': fills[0],
-                    '--day-color-2': fills[1] ?? fills[0],
-                  } as CSSProperties)
+              ring.length && !inProgress
+                ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
                 : undefined
             }
             onClick={() => {
@@ -410,13 +413,25 @@ export function WeekStrip({
               {WEEKDAY_LETTERS[date.getDay()]}
             </span>
             <span className="week-strip-date">{date.getDate()}</span>
-            <span className="week-strip-type" aria-hidden="true">
+            <span className="week-strip-types" aria-hidden="true">
               {inProgress ? (
                 <i className="calendar-live-dot" />
               ) : (
-                named.length > 0 &&
-                // "Upper body" and friends lose the repeated word so the name fits the tile.
-                `${named[0].name.replace(/ body$/i, '')}${named.length > 1 ? ` +${named.length - 1}` : ''}`
+                // Two names fit; a third or later type is counted on the second line instead.
+                dayTypes.slice(0, 2).map((type, index) => {
+                  const counted = index === 1 && dayTypes.length > 2;
+                  const color = counted ? null : colorOf(type);
+                  return (
+                    <span
+                      className={`week-strip-type${color ? '' : ' is-off'}`}
+                      key={type.id}
+                      style={color ? ({ '--type-color': color } as CSSProperties) : undefined}
+                    >
+                      {/* "Upper body" and friends lose the repeated word to fit the tile. */}
+                      {counted ? `+${dayTypes.length - 1}` : type.name.replace(/ body$/i, '')}
+                    </span>
+                  );
+                })
               )}
             </span>
           </button>
