@@ -458,6 +458,8 @@ type HistoryBaselines = {
 
 const CARDIO_HISTORY_PAGE_SIZE = 5;
 const UNDO_TOAST_MS = 4000;
+/** How long a logger notice, such as why a set can't be deleted, stays up. */
+const LOGGER_NOTICE_MS = 5000;
 const IMPORTED_BODYWEIGHT_NOTE = 'Imported from workout CSV.';
 
 function emptySet(
@@ -3418,6 +3420,17 @@ function WorkoutLogger({
     return () => window.clearTimeout(timer);
   }, [swapUndo]);
 
+  /** A brief popup explaining why an action didn't happen; each one restarts the countdown. */
+  const [loggerNotice, setLoggerNotice] = useState<{ id: number; message: string } | null>(null);
+  const showLoggerNotice = (message: string) =>
+    setLoggerNotice((current) => ({ id: (current?.id ?? 0) + 1, message }));
+
+  useEffect(() => {
+    if (!loggerNotice) return;
+    const timer = window.setTimeout(() => setLoggerNotice(null), LOGGER_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [loggerNotice]);
+
   // Older history only precedes workouts inside the window it was condensed for. An earlier
   // date (editing an older loaded workout) compares with the loaded workouts alone.
   const olderHistory =
@@ -3645,7 +3658,7 @@ function WorkoutLogger({
 
   function deleteSet(movement: DraftMovement, index: number) {
     if (movement.sets.length === 1) {
-      setError('An exercise needs at least one set. Remove the exercise instead.');
+      showLoggerNotice('An exercise needs at least one set. Remove the exercise instead.');
       return;
     }
     recentRemoval.current = { kind: 'set', key: movement.key, at: Date.now() };
@@ -4661,9 +4674,27 @@ function WorkoutLogger({
         </div>
       )}
 
-      {(undoDeletion || swapUndo) && (
+      {(undoDeletion || swapUndo || loggerNotice) && (
         // Popups that stay up while you train sit at the bottom, above the timer dock.
         <div className={`logger-bottom-toasts ${dockSpacing}`}>
+          {loggerNotice && (
+            <div
+              key={loggerNotice.id}
+              className="undo-toast logger-notice-toast"
+              role="alert"
+              style={{ '--undo-toast-duration': `${LOGGER_NOTICE_MS}ms` } as CSSProperties}
+            >
+              <span>{loggerNotice.message}</span>
+              <button
+                className="undo-toast-close"
+                type="button"
+                onClick={() => setLoggerNotice(null)}
+                aria-label="Dismiss notice"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
           {swapUndo && (
             <div
               className="undo-toast"

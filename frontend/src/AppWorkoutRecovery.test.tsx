@@ -1196,6 +1196,30 @@ describe('rest time controls', () => {
     );
   });
 
+  it("explains in a timed popup that an exercise's only set can't be deleted", async () => {
+    vi.useFakeTimers();
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Options for set 1"]')!.click(),
+    );
+    const remove = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Delete set'),
+    )!;
+    await act(async () => remove.click());
+    const notice = container.querySelector('.logger-notice-toast');
+    expect(notice?.getAttribute('role')).toBe('alert');
+    expect(notice?.textContent).toContain(
+      'An exercise needs at least one set. Remove the exercise instead.',
+    );
+    expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].sets).toHaveLength(1);
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(container.querySelector('.logger-notice-toast')).toBeNull();
+  });
+
   it('removes only a rest, offers Undo, persists removal and restores it only on a saved edit', async () => {
     vi.useFakeTimers();
     writeActiveWorkoutDraft(storedDraft());
