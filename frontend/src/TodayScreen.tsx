@@ -15,6 +15,7 @@ import type { useHomeLayout } from './useHomeLayout';
 import { homeSectionSettings, updateHomeSectionSettings, type HomeSectionId } from './homeLayout';
 import { CardioGoalCard } from './CardioGoalCard';
 import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
+import { ActivityCardSettingsForm } from './ActivityCardSettings';
 import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
@@ -211,8 +212,11 @@ export function TodayScreen({
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
+  const layout = home.editing ? home.draft : home.layout;
+  const workoutWeeks = homeSectionSettings(layout, 'workouts').weeks;
+  const cardioWeeks = homeSectionSettings(layout, 'cardio_sessions').weeks;
   const weeks = useMemo(
-    () => weeklyTrainingTotals(workouts, today, weekStartDay, 8),
+    () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
   );
   const grid = useMemo(
@@ -236,8 +240,10 @@ export function TodayScreen({
     : data
       ? 0
       : null;
-  const averageWorkouts = averageOf(weeks.map((week) => week.workouts));
-  const averageCardioSessions = averageOf(weeks.map((week) => week.cardioSessions));
+  const workoutHistory = weeks.slice(-workoutWeeks);
+  const cardioHistory = weeks.slice(-cardioWeeks);
+  const averageWorkouts = averageOf(workoutHistory.map((week) => week.workouts));
+  const averageCardioSessions = averageOf(cardioHistory.map((week) => week.cardioSessions));
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
   const zone2 = data?.zone2 ?? null;
   const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
@@ -462,10 +468,14 @@ export function TodayScreen({
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
         <strong>{workoutsThisWeek ?? '–'}</strong>
-        <em>{averageWorkouts === null ? 'This week' : `8-wk avg ${averageWorkouts.toFixed(1)}`}</em>
+        <em>
+          {averageWorkouts === null
+            ? 'This week'
+            : `${workoutWeeks}-wk avg ${averageWorkouts.toFixed(1)}`}
+        </em>
         <SparkBars
-          values={weeks.map((week) => week.workouts)}
-          label="Workouts per week, last 8 weeks"
+          values={workoutHistory.map((week) => week.workouts)}
+          label={`Workouts per week, last ${workoutWeeks} weeks`}
         />
       </button>
     ),
@@ -476,11 +486,11 @@ export function TodayScreen({
         <em>
           {averageCardioSessions === null
             ? 'This week'
-            : `8-wk avg ${averageCardioSessions.toFixed(1)}`}
+            : `${cardioWeeks}-wk avg ${averageCardioSessions.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.cardioSessions)}
-          label="Cardio sessions per week, last 8 weeks"
+          values={cardioHistory.map((week) => week.cardioSessions)}
+          label={`Cardio sessions per week, last ${cardioWeeks} weeks`}
         />
       </button>
     ),
@@ -705,6 +715,24 @@ export function TodayScreen({
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          workouts: (
+            <ActivityCardSettingsForm
+              values={weeks.map((week) => week.workouts)}
+              value={homeSectionSettings(home.draft, 'workouts')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'workouts', change))
+              }
+            />
+          ),
+          'cardio-sessions': (
+            <ActivityCardSettingsForm
+              values={weeks.map((week) => week.cardioSessions)}
+              value={homeSectionSettings(home.draft, 'cardio_sessions')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'cardio_sessions', change))
+              }
+            />
+          ),
           'training-block': (
             <TrainingBlockCardSettingsForm
               value={homeSectionSettings(home.draft, 'training_block')}

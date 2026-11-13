@@ -141,10 +141,15 @@ export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
 export interface TrainingBlockCardSettings {
   style: TrainingBlockCardStyle;
 }
+export interface ActivityCardSettings {
+  weeks: 4 | 8 | 12;
+}
 /** Display options for configurable sections, keyed by section. */
 export interface HomeSectionSettings {
   zone2: CardioGoalCardSettings;
   training_block: TrainingBlockCardSettings;
+  workouts: ActivityCardSettings;
+  cardio_sessions: ActivityCardSettings;
 }
 export interface HomeLayout {
   order: HomeSectionId[];
@@ -157,6 +162,8 @@ export interface HomeLayout {
 export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
   zone2: { zone: null, style: 'progress' },
   training_block: { style: 'both' },
+  workouts: { weeks: 8 },
+  cardio_sessions: { weeks: 8 },
 };
 
 export function homeSectionSettings<Id extends keyof HomeSectionSettings>(
