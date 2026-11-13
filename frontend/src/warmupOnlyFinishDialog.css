@@ -15,6 +15,11 @@
   padding: 1rem 1rem 0;
 }
 
+.warmup-only-movements section + section {
+  border-top: 1px solid var(--p-line);
+  padding-top: 1rem;
+}
+
 .warmup-only-movements h3 {
   display: flex;
   align-items: center;
