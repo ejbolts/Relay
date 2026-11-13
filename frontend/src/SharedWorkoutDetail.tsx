@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { Icon } from './Icon';
 import { setKindOf, setNumberLabels, type SetKind } from './setFieldValues';
 import { workingSets, workoutVolumeKg } from './trainingSummary';
@@ -109,19 +108,7 @@ export function SharedWorkoutSummary({
   );
 }
 
-/** What one set is measured by, so its bar compares like with like within the exercise. */
-function loadOf(sets: TrackedSet[]): ((item: TrackedSet) => number) | null {
-  if (sets.some((item) => (item.weight_kg ?? 0) > 0)) return (item) => item.weight_kg ?? 0;
-  if (sets.some((item) => (item.reps ?? 0) > 0)) return (item) => item.reps ?? 0;
-  if (sets.some((item) => (item.duration_seconds ?? 0) > 0))
-    return (item) => item.duration_seconds ?? 0;
-  return null;
-}
-
-/**
- * One exercise's sets in a shared workout: warm-ups on a single quiet line, then each working set
- * on its own row with a bar for its load against the exercise's heaviest set.
- */
+/** One exercise's sets: warm-ups on one line, then numbered working sets with effort and records. */
 export function SharedSetList({
   sets,
   personalRecords,
@@ -145,8 +132,6 @@ export function SharedSetList({
   }));
   const warmups = rows.filter((row) => row.kind === 'warmup');
   const working = rows.filter((row) => row.kind !== 'warmup');
-  const load = loadOf(completed);
-  const heaviest = load ? Math.max(...completed.map(load)) : 0;
   const machineOf = (item: TrackedSet) =>
     machinePhotos.length > 1
       ? (machinePhotos.find((photo) => photo.id === item.machine_photo_id)?.caption ??
@@ -178,19 +163,6 @@ export function SharedSetList({
                   {label}
                 </span>
                 <span className="shared-set-result num">{formatSet(item)}</span>
-                {load && heaviest > 0 ? (
-                  <span
-                    className="shared-set-bar"
-                    aria-hidden="true"
-                    style={
-                      {
-                        '--shared-set-load': `${Math.max(Math.round((load(item) / heaviest) * 100), 6)}%`,
-                      } as CSSProperties
-                    }
-                  />
-                ) : (
-                  <span />
-                )}
                 <span className="shared-set-notes">
                   {item.rpe !== null && (
                     <span className="num" style={{ color: rpeColour(item.rpe) }}>

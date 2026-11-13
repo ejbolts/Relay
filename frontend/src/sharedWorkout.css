@@ -173,19 +173,19 @@
 
 .shared-set-list ol {
   display: grid;
-  grid-template-columns: 1.5rem minmax(5.75rem, max-content) minmax(1.5rem, 1fr) auto;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
   gap: 0.125rem 0.625rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Rows share the list's columns, so every bar starts and ends at the same place. */
+/* Rows share the list's columns to align results and effort badges. */
 .shared-set-list li {
   --shared-set-rgb: 35 166 62;
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1.5rem minmax(5.75rem, max-content) minmax(1.5rem, 1fr) auto;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.25rem 0.625rem;
   min-height: 2rem;
@@ -229,23 +229,6 @@
   font-size: 0.875rem;
   font-weight: 650;
   white-space: nowrap;
-}
-
-/* The set's load against the heaviest set of the exercise. */
-.shared-set-bar {
-  height: 0.3125rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--p-surface-3);
-}
-
-.shared-set-bar::after {
-  content: '';
-  display: block;
-  width: var(--shared-set-load, 0%);
-  height: 100%;
-  border-radius: inherit;
-  background: rgb(var(--shared-set-rgb) / 85%);
 }
 
 .shared-set-notes {

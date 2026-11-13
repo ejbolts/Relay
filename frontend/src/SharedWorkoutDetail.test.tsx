@@ -62,7 +62,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it('puts warm-ups on one line and gives each working set a numbered row with its load', async () => {
+it('puts warm-ups on one line and gives each working set a numbered row with its result', async () => {
   await act(async () =>
     root.render(
       <SharedSetList
@@ -88,13 +88,11 @@ it('puts warm-ups on one line and gives each working set a numbered row with its
     'normal',
     'drop',
   ]);
-  expect(
-    rows.map((row) =>
-      row
-        .querySelector<HTMLElement>('.shared-set-bar')
-        ?.style.getPropertyValue('--shared-set-load'),
-    ),
-  ).toEqual(['81%', '100%', '50%']);
+  expect(rows.map((row) => row.querySelector('.shared-set-result')?.textContent)).toEqual([
+    '170 kg × 12',
+    '210 kg × 12',
+    '105 kg × 12',
+  ]);
   expect(rows[0].textContent).toContain('RPE 6.5');
   expect(rows[1].classList).toContain('is-record');
   expect(rows[1].querySelector('.pr-badge')?.textContent).toBe('PR');
