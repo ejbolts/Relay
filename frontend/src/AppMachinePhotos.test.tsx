@@ -654,8 +654,9 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(false);
     expect(readActiveWorkoutDraft()?.movements[0].sets[1].completed).toBe(false);
     await click(button('Choose machines'));
+    // Finishing the workout explains the missing machines straight away, without a confirmation.
     await click(button('Finish workout'));
-    await click(button('Finish workout', document.querySelector('dialog[open]')!));
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
     expect(save).not.toHaveBeenCalled();
     expect(document.querySelector('dialog[open]')?.textContent).toContain(
       'multiple machines pinned',
