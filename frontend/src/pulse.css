@@ -1767,7 +1767,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .week-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.25rem;
+  /* Today's ring sits 4px outside its tile; keep clear space beyond it. */
+  gap: 0.5rem;
 }
 
 /* Every tile is laid out from the top with room for two workout names, so the weekday letters
