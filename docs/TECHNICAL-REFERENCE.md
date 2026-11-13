@@ -337,6 +337,10 @@ python -m pytest backend/tests/test_workout_types.py -x
 ruff check backend/tests/test_workout_types.py
 ```
 
+pytest imports `app` from the checkout it runs in (`pythonpath` in `pyproject.toml`), so a
+virtual environment shared between Git worktrees needs no `PYTHONPATH`. `conftest.py` stops
+the run if another checkout's `app` would be imported instead.
+
 From `frontend/`, use a focused watch or a one-off selection:
 
 ```sh

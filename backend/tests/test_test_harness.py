@@ -87,6 +87,10 @@ def test_auth_fixture_uses_real_registration_and_login(request, monkeypatch):
             "GYM_YOUTUBE_TOKEN_PATH": str(sentinel),
             "GYM_COOKIE_SECURE": "true",
             "GYM_SESSION_COOKIE": "inherited_deployment_cookie",
+            # The probe runs outside the checkout, so name this checkout's application.
+            "PYTHONPATH": os.pathsep.join(
+                filter(None, [str(Path(__file__).parents[1]), os.environ.get("PYTHONPATH")])
+            ),
             "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
             "PYTEST_ADDOPTS": "",
         },
