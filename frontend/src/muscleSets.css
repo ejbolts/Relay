@@ -135,8 +135,20 @@
   overflow-wrap: anywhere;
 }
 .muscle-name-button:hover,
-.muscle-name-button:focus-visible {
+.muscle-name-button:focus-visible,
+.muscle-bars li:hover .muscle-name-button {
   color: var(--p-accent);
+}
+/* The name button stretches over its whole row, so tapping the bar or the value opens it too. */
+.muscle-sets-card .muscle-bars li {
+  position: relative;
+}
+.muscle-bars .muscle-name-button::after {
+  content: '';
+  position: absolute;
+  inset: -0.1875rem 0;
+  z-index: 2;
+  cursor: pointer;
 }
 .popup-dialog.muscle-contribution-sheet[open] {
   width: min(30rem, calc(100% - 1.5rem));
