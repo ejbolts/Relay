@@ -1,5 +1,9 @@
 /* Profile sharing choices and the shared profile screens. Uses the Pulse tokens from pulse.css. */
 
+.shared-profile-screen > .calendar-panel {
+  margin-bottom: 0.75rem;
+}
+
 .sharing-state {
   flex-shrink: 0;
   border: 1px solid var(--p-line-strong);
