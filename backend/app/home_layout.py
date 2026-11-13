@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .account_limits import limit_save_rate
 from .auth import CurrentUser
+from .client_versions import ClientVersion, fields_unknown_to, preserve_fields
 from .database import get_db
 from .training_metrics import get_setting, set_setting
 
@@ -132,7 +133,20 @@ def get_home_layout(db: DbSession, user: CurrentUser) -> HomeLayout:
 
 
 @router.put("", response_model=HomeLayout, dependencies=[Depends(limit_save_rate)])
-def save_home_layout(payload: HomeLayout, db: DbSession, user: CurrentUser) -> HomeLayout:
+def save_home_layout(
+    payload: HomeLayout, db: DbSession, user: CurrentUser, client_version: ClientVersion = None
+) -> HomeLayout:
+    # An explicit setting also supports feature previews before their release version is assigned.
+    unknown = [
+        field
+        for field in fields_unknown_to(client_version, "home_section_settings")
+        if field not in payload.settings.model_fields_set
+    ]
+    if unknown:
+        stored = get_home_layout(db, user)
+        payload.settings = HomeSectionSettings.model_validate(
+            preserve_fields(payload.settings.model_dump(), stored.settings, unknown)
+        )
     set_setting(db, user.id, LAYOUT_KEY, payload.model_dump_json())
     db.commit()
     return payload

@@ -244,3 +244,38 @@ def test_activity_windows_save_independently_for_each_account(client, other_clie
     assert client.put("/api/home-layout", json=layout).json() == layout
     assert client.get("/api/home-layout").json() == layout
     assert other_client.get("/api/home-layout").json()["settings"] == DEFAULT_SETTINGS
+
+
+@pytest.mark.parametrize("version", [None, "1.2.0", "invalid"])
+def test_older_layout_saves_preserve_activity_settings_the_client_omits(client, version):
+    layout = client.get("/api/home-layout").json()
+    layout["settings"]["workouts"] = {"weeks": 4}
+    layout["settings"]["cardio_sessions"] = {"weeks": 12}
+    assert client.put("/api/home-layout", json=layout).status_code == 200
+    layout["hidden"] = ["records"]
+    layout["settings"] = {"zone2": {"zone": 2, "style": "ring"}}
+    headers = {} if version is None else {"X-Relay-Version": version}
+    response = client.put("/api/home-layout", json=layout, headers=headers)
+    assert response.status_code == 200
+    saved = response.json()
+    assert saved["settings"]["workouts"] == {"weeks": 4}
+    assert saved["settings"]["cardio_sessions"] == {"weeks": 12}
+    assert saved["settings"]["zone2"] == {"zone": 2, "style": "ring"}
+    assert saved["hidden"] == ["records"]
+    assert client.get("/api/home-layout").json() == saved
+
+    # A client that explicitly sends a new choice can edit one card without resetting the other.
+    layout["settings"]["workouts"] = {"weeks": 8}
+    explicit = client.put("/api/home-layout", json=layout, headers=headers).json()
+    assert explicit["settings"]["workouts"] == {"weeks": 8}
+    assert explicit["settings"]["cardio_sessions"] == {"weeks": 12}
+
+
+def test_newer_layout_clients_can_reset_activity_settings_to_defaults(client):
+    layout = client.get("/api/home-layout").json()
+    layout["settings"]["workouts"] = {"weeks": 4}
+    layout["settings"]["cardio_sessions"] = {"weeks": 12}
+    client.put("/api/home-layout", json=layout)
+    reset = client.put("/api/home-layout", json={}, headers={"X-Relay-Version": "1.3.0"})
+    assert reset.status_code == 200
+    assert reset.json()["settings"] == DEFAULT_SETTINGS

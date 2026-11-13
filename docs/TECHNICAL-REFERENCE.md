@@ -440,6 +440,8 @@ releases that are already deployed. The rules for changing it are in `AGENTS.md`
   them. When an older release replaces that record, the stored value is kept rather than reset.
   Workout updates (`PUT /api/workouts/{id}`) apply it to workout, exercise and set fields,
   matching exercises by position and exercise and sets by position.
+  Home layout saves preserve registered section settings omitted by older apps. Explicit settings
+  are accepted for feature previews before the release coordinator assigns their version.
 - An update downloaded within a minute of opening the app applies by itself when nothing is
   in progress (see [Detailed app behavior](#detailed-app-behavior)), so most devices move to
   a new release the next time they are opened.

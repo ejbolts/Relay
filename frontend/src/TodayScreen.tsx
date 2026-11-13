@@ -12,7 +12,12 @@ import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
-import { homeSectionSettings, updateHomeSectionSettings, type HomeSectionId } from './homeLayout';
+import {
+  activityCardSettings,
+  homeSectionSettings,
+  updateHomeSectionSettings,
+  type HomeSectionId,
+} from './homeLayout';
 import { CardioGoalCard } from './CardioGoalCard';
 import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
 import { ActivityCardSettingsForm } from './ActivityCardSettings';
@@ -213,8 +218,8 @@ export function TodayScreen({
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
   const layout = home.editing ? home.draft : home.layout;
-  const workoutWeeks = homeSectionSettings(layout, 'workouts').weeks;
-  const cardioWeeks = homeSectionSettings(layout, 'cardio_sessions').weeks;
+  const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
+  const cardioWeeks = activityCardSettings(layout, 'cardio_sessions').weeks;
   const weeks = useMemo(
     () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
@@ -718,7 +723,7 @@ export function TodayScreen({
           workouts: (
             <ActivityCardSettingsForm
               values={weeks.map((week) => week.workouts)}
-              value={homeSectionSettings(home.draft, 'workouts')}
+              value={activityCardSettings(home.draft, 'workouts')}
               onChange={(change) =>
                 home.change(updateHomeSectionSettings(home.draft, 'workouts', change))
               }
@@ -727,7 +732,7 @@ export function TodayScreen({
           'cardio-sessions': (
             <ActivityCardSettingsForm
               values={weeks.map((week) => week.cardioSessions)}
-              value={homeSectionSettings(home.draft, 'cardio_sessions')}
+              value={activityCardSettings(home.draft, 'cardio_sessions')}
               onChange={(change) =>
                 home.change(updateHomeSectionSettings(home.draft, 'cardio_sessions', change))
               }

@@ -173,6 +173,14 @@ export function homeSectionSettings<Id extends keyof HomeSectionSettings>(
   return { ...DEFAULT_HOME_SECTION_SETTINGS[id], ...layout.settings?.[id] };
 }
 
+export function activityCardSettings(
+  layout: HomeLayout,
+  id: 'workouts' | 'cardio_sessions',
+): ActivityCardSettings {
+  const settings = homeSectionSettings(layout, id);
+  return { weeks: [4, 8, 12].includes(settings.weeks) ? settings.weeks : 8 };
+}
+
 export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
   layout: HomeLayout,
   id: Id,
