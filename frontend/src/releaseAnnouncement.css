@@ -356,10 +356,9 @@ html[data-reduce-motion] .release-confetti {
   flex-shrink: 0;
 }
 
-/* Top strips (the update banner, then the offline notice) push the app down by their total height. */
+/* Only the update banner reserves space above the app. */
 .tracker-app {
   --app-update-height: calc(4.5rem + env(safe-area-inset-top));
-  --offline-notice-height: calc(3.5rem + env(safe-area-inset-top));
   --app-banner-height: 0px;
 }
 
@@ -367,17 +366,7 @@ html[data-reduce-motion] .release-confetti {
   --app-banner-height: var(--app-update-height);
 }
 
-.tracker-app.has-offline-notice {
-  --app-banner-height: var(--offline-notice-height);
-}
-
-.tracker-app.has-app-update.has-offline-notice {
-  --offline-notice-height: 3.5rem;
-  --app-banner-height: calc(var(--app-update-height) + 3.5rem);
-}
-
-.tracker-app.has-app-update,
-.tracker-app.has-offline-notice {
+.tracker-app.has-app-update {
   padding-top: var(--app-banner-height);
 }
 
@@ -429,18 +418,15 @@ html[data-reduce-motion] .release-confetti {
   height: 1.4rem;
 }
 
-.has-app-update .overlay-screen-header,
-.has-offline-notice .overlay-screen-header {
+.has-app-update .overlay-screen-header {
   top: var(--app-banner-height);
 }
 
-.has-app-update .background-activity-bar,
-.has-offline-notice .background-activity-bar {
+.has-app-update .background-activity-bar {
   top: calc(var(--app-banner-height) + 0.4rem);
 }
 
-.has-app-update .live-workout-bar,
-.has-offline-notice .live-workout-bar {
+.has-app-update .live-workout-bar {
   top: var(--app-banner-height);
 }
 

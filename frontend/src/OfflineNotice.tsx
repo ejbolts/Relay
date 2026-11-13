@@ -1,15 +1,12 @@
 import { Icon } from './Icon';
 import './offlineNotice.css';
 
-/** Pinned to the top of every screen while offline, including the workout logger. */
+/** Floats over every screen while offline without changing the page layout. */
 export function OfflineNotice({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <aside className="offline-notice" aria-label="Connection" role="status">
+    <aside className="offline-notice" aria-label="Connection" role="status" aria-atomic="true">
       <Icon name="cloud-off" />
-      <div>
-        <strong>You're offline</strong>
-        <span>Workouts still save and sync later.</span>
-      </div>
+      <strong>You're offline</strong>
       <button
         type="button"
         className="offline-notice-close"
