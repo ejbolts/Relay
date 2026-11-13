@@ -3892,3 +3892,66 @@ describe('navigation while saving an old workout', () => {
     expect(container.querySelector('.logger-screen')).not.toBeNull();
   });
 });
+
+describe('no working sets warnings', () => {
+  function warmupDraft() {
+    const draft = storedDraft();
+    const [first] = draft.movements[0].sets;
+    const warmup = { ...first, set_type: 'warmup' as const, warmup: true };
+    draft.movements[0].sets = [
+      { ...warmup, key: 'warmup-1', weight_kg: 40 },
+      { ...warmup, key: 'warmup-2', weight_kg: 80 },
+    ];
+    return draft;
+  }
+
+  it('lets a warm-up-only exercise be finished, flagging its icon and counting its warm-ups', async () => {
+    writeActiveWorkoutDraft(warmupDraft());
+    await mount();
+    const card = () => container.querySelector('.movement-card')!;
+    expect(card().querySelector('.exercise-icon-warning')).toBeNull();
+    await act(async () =>
+      card().querySelector<HTMLButtonElement>('[aria-label="Finish Bench press"]')!.click(),
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
+    expect(card().querySelector('.exercise-icon-warning')).not.toBeNull();
+    expect(card().querySelector('.movement-completed-summary')?.textContent).toBe('2 warm-up sets');
+    // The working-set exercise keeps its usual count and no flag.
+    const other = container.querySelectorAll('.movement-card')[1];
+    expect(other.querySelector('.exercise-icon-warning')).toBeNull();
+  });
+
+  it('reminds about warm-up-only exercises when finishing, then can go back or finish anyway', async () => {
+    writeActiveWorkoutDraft(warmupDraft());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    const finish = () =>
+      [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Finish workout',
+      )!;
+    const dialog = () => document.querySelector('.warmup-only-finish-dialog');
+    const action = (label: string) =>
+      [...dialog()!.querySelectorAll('button')].find((button) => button.textContent === label)!;
+    await act(async () => finish().click());
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('No working sets');
+    // Only the warm-up-only exercise is listed, with its icon, name and logged warm-ups.
+    const sections = [...dialog()!.querySelectorAll('section')];
+    expect(sections.map((section) => section.querySelector('h3')?.textContent)).toEqual([
+      'Bench press',
+    ]);
+    expect(sections[0].querySelector('h3 img')).not.toBeNull();
+    expect(
+      [...sections[0].querySelectorAll('.warmup-only-set')].map((chip) => chip.textContent),
+    ).toEqual(['WWarm-up: 40 kg × 8', 'WWarm-up: 80 kg × 8']);
+    expect(dialog()!.querySelector('[aria-pressed]')).toBeNull();
+    await act(async () => action('Keep working out').click());
+    expect(dialog()).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => finish().click());
+    await act(async () => action('Finish anyway').click());
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    const saved = vi.mocked(api.createWorkout).mock.calls[0][0];
+    expect(saved.movements[0].sets.map((item) => item.set_type)).toEqual(['warmup', 'warmup']);
+  });
+});

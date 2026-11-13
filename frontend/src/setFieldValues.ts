@@ -4,7 +4,7 @@ export const RPE_OPTIONS = [5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10] as const;
 
 export type SetKind = 'normal' | 'warmup' | 'drop' | 'failure';
 
-type SetKindFields = Pick<WorkoutSetInput, 'set_type' | 'warmup' | 'failed'>;
+export type SetKindFields = Pick<WorkoutSetInput, 'set_type' | 'warmup' | 'failed'>;
 
 /** The set types offered in the set-number menu, with the letter shown in place of a number. */
 export const SET_KINDS: Array<{ kind: SetKind; label: string; letter: string | null }> = [

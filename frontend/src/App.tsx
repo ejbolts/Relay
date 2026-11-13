@@ -138,6 +138,8 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
+import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
+import { loggedOnlyWarmups } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -3158,6 +3160,7 @@ function WorkoutLogger({
   const [supersetPickerKey, setSupersetPickerKey] = useState<string | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [finishConfirmationOpen, setFinishConfirmationOpen] = useState(false);
+  const [warmupReviewOpen, setWarmupReviewOpen] = useState(false);
   /** Why the open finish confirmation cannot save yet. */
   const [finishBlocker, setFinishBlocker] = useState<string | null>(null);
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
@@ -3908,6 +3911,20 @@ function WorkoutLogger({
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
     if (loggingSet && !initialWorkout) tips.event('set-completed');
+    if (
+      loggingSet &&
+      !initialWorkout &&
+      movement?.exercise.kind !== 'cardio' &&
+      setKindOf({ ...currentSet, ...update }) === 'warmup'
+    )
+      tips.event('warmup-logged', 'setType');
+    if (
+      currentSet &&
+      setKindOf(currentSet) === 'warmup' &&
+      ('set_type' in update || 'warmup' in update) &&
+      setKindOf({ ...currentSet, ...update }) !== 'warmup'
+    )
+      tips.learn('setType');
     if (loggingSet && movement?.exercise.kind === 'cardio')
       tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
@@ -3956,6 +3973,15 @@ function WorkoutLogger({
     );
     if (restSeconds !== null) startRestTimer(restSeconds);
   }
+
+  const warmupOnlyMovements: WarmupOnlyMovement[] = movements
+    .filter((movement) => movement.exercise.kind !== 'cardio' && loggedOnlyWarmups(movement.sets))
+    .map((movement) => ({
+      key: movement.key,
+      name: movement.exercise.name,
+      iconUrl: exerciseIconFor(movement.exercise),
+      sets: movement.sets,
+    }));
 
   function toggleSet(movement: DraftMovement, item: DraftSet) {
     updateSet(movement.key, item.key, { completed: !item.completed });
@@ -4077,6 +4103,11 @@ function WorkoutLogger({
     const check = checkFinish();
     if (check.kind === 'machines') {
       setMachineAssignmentError(check.exercise);
+      return;
+    }
+    if (check.kind === 'ready' && warmupOnlyMovements.length) {
+      // The warm-up reminder doubles as the finish confirmation.
+      setWarmupReviewOpen(true);
       return;
     }
     setFinishBlocker(check.kind === 'blocked' ? check.message : null);
@@ -4848,6 +4879,19 @@ function WorkoutLogger({
         </PopupDialog>
       )}
 
+      {warmupReviewOpen && warmupOnlyMovements.length > 0 && (
+        <WarmupOnlyFinishDialog
+          movements={warmupOnlyMovements}
+          weightUnit={weightUnit}
+          saving={saving}
+          onKeepWorkingOut={() => setWarmupReviewOpen(false)}
+          onFinishAnyway={() => {
+            setWarmupReviewOpen(false);
+            void finishWorkout();
+          }}
+        />
+      )}
+
       {finishConfirmationOpen && (
         <PopupDialog
           title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
@@ -5287,11 +5331,21 @@ function WorkoutCloseDialog({
   );
 }
 
-function ExerciseIcon({ exercise, number }: { exercise: Exercise; number?: number }) {
+function ExerciseIcon({
+  exercise,
+  number,
+  warning = false,
+}: {
+  exercise: Exercise;
+  number?: number;
+  /** Flags a finished exercise that only has warm-up sets. */
+  warning?: boolean;
+}) {
   return (
     <span className="exercise-icon" aria-hidden="true">
       <img src={exerciseIconFor(exercise)} alt="" />
       {number !== undefined && <b>{number}</b>}
+      {warning && <span className="exercise-icon-warning">!</span>}
     </span>
   );
 }
@@ -5360,6 +5414,10 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
+  const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
+  const loggedWarmupCount = onlyWarmupsLogged
+    ? movement.sets.filter((item) => item.completed).length
+    : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
@@ -6039,7 +6097,11 @@ function MovementCard({
     >
       {supersetLabel && <div className="superset-ribbon">{supersetLabel}</div>}
       <header onClick={() => setExpanded((current) => !current)}>
-        <ExerciseIcon exercise={movement.exercise} number={number} />
+        <ExerciseIcon
+          exercise={movement.exercise}
+          number={number}
+          warning={onlyWarmupsLogged && movement.isComplete}
+        />
         <div>
           <h2>
             <button
@@ -6070,7 +6132,9 @@ function MovementCard({
           )}
           {!expanded && (
             <span className="movement-completed-summary">
-              {completedWorkingSetCount} completed {completedWorkingSetCount === 1 ? 'set' : 'sets'}
+              {onlyWarmupsLogged
+                ? `${loggedWarmupCount} warm-up ${loggedWarmupCount === 1 ? 'set' : 'sets'}`
+                : `${completedWorkingSetCount} completed ${completedWorkingSetCount === 1 ? 'set' : 'sets'}`}
             </span>
           )}
         </div>
