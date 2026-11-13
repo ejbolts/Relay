@@ -1,5 +1,9 @@
 /* Profile sharing choices and the shared profile screens. Uses the Pulse tokens from pulse.css. */
 
+.shared-profile-screen > .calendar-panel {
+  margin-bottom: 0.75rem;
+}
+
 .sharing-state {
   flex-shrink: 0;
   border: 1px solid var(--p-line-strong);
@@ -813,8 +817,8 @@
   border-top: 1px solid var(--p-line);
 }
 
-/* While choosing a reaction, the other friends fade back. */
-.friend-activity-list.is-picking li:not(.is-picking) {
+/* While choosing a reaction, the other friends fade back. An open comment thread does not dim. */
+.friend-activity-list.is-picking:has(.friend-react-picker) li:not(.is-picking) {
   opacity: 0.35;
 }
 
@@ -1176,6 +1180,62 @@
   height: 2rem;
 }
 
+/* A profile's outline while it loads. */
+.profile-loading-skeleton {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-skeleton-head {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.profile-loading-skeleton .profile-skeleton-avatar {
+  flex-shrink: 0;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+}
+
+.profile-skeleton-copy {
+  flex: 1;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.profile-skeleton-name {
+  width: min(10rem, 100%);
+  height: 1.1rem;
+}
+
+.profile-skeleton-line {
+  width: min(7rem, 100%);
+  height: 0.75rem;
+}
+
+.profile-skeleton-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.profile-skeleton-stats .skeleton-block {
+  height: 3.25rem;
+  border-radius: 12px;
+}
+
+.profile-loading-skeleton .profile-skeleton-card {
+  height: 11rem;
+  border-radius: var(--p-radius);
+}
+
+.profile-loading-skeleton .profile-skeleton-card.short {
+  height: 6rem;
+}
+
 .friends-list-count {
   border-radius: 999px;
   padding: 0.05rem 0.45rem;
@@ -1229,8 +1289,8 @@
   border-top: 1px solid var(--p-line);
 }
 
-/* While choosing a reaction, the other friends fade back. */
-.friend-cards.is-picking > li:not(.is-picking) {
+/* While choosing a reaction, the other friends fade back. An open comment thread does not dim. */
+.friend-cards.is-picking:has(.friend-react-picker) > li:not(.is-picking) {
   opacity: 0.35;
 }
 
@@ -1463,6 +1523,12 @@
 .workout-discussion .discussion-button.is-yours {
   border-color: var(--p-accent);
   background: var(--p-accent-soft);
+}
+/* The comments button stays lit while its thread is open: it is what closes the thread. */
+.workout-discussion .discussion-comments-button[aria-expanded='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  color: var(--p-ink);
 }
 .workout-discussion .discussion-reaction-summary {
   cursor: pointer;

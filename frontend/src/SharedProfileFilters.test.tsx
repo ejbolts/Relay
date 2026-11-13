@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { SharedProfileScreen } from './SharedProfiles';
+import { clearSharedProfileCache, prefetchSharedProfile } from './sharedProfileCache';
 import type { SharedProfile, SharedWorkoutPage, TrackedWorkout, User } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
@@ -104,6 +105,7 @@ function renderProfile(
   );
 }
 beforeEach(async () => {
+  clearSharedProfileCache();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
@@ -328,6 +330,100 @@ describe('own profile', () => {
       0,
       10,
       expect.objectContaining({ category: 'lower' }),
+    );
+  });
+});
+
+describe('opening a profile loaded in the background', () => {
+  async function reopen(targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>) {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderProfile('friend', undefined, true, null, undefined, targetWorkout);
+  }
+
+  it('shows an outline of the profile, not bare text, while a first visit loads', async () => {
+    clearSharedProfileCache();
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await reopen();
+    const status = container.querySelector('.profile-loading-skeleton[role="status"]')!;
+    expect(status.textContent).toBe('Loading profile…');
+    expect(status.querySelectorAll('.skeleton-block').length).toBeGreaterThan(3);
+  });
+
+  it('shows the loaded copy at once, then replaces it with the latest from the server', async () => {
+    let answer!: (value: SharedProfile) => void;
+    vi.mocked(api.sharing.profile).mockImplementation(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    await reopen();
+    expect(container.querySelector('.profile-loading-skeleton')).toBeNull();
+    expect(container.textContent).toContain('Sample Friend');
+    expect(container.textContent).toContain('First workout');
+    expect(container.textContent).not.toContain('Loading workouts');
+    await act(async () => answer({ ...profile, display_name: 'Renamed Friend' }));
+    expect(container.textContent).toContain('Renamed Friend');
+    expect(container.textContent).toContain('First workout');
+  });
+
+  it('opens a linked workout from the cached first page, and waits when it is not there', async () => {
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await reopen(workout);
+    expect(container.textContent).toContain('First workout');
+    expect(container.textContent).not.toContain('no longer available');
+
+    await reopen({ id: 'older', workout_date: '2026-09-01' });
+    expect(container.textContent).toContain('Sample Friend');
+    expect(container.textContent).not.toContain('First workout');
+    expect(container.textContent).toContain('Loading workouts');
+  });
+
+  it('joins a background load still under way instead of loading the profile twice', async () => {
+    clearSharedProfileCache();
+    vi.mocked(api.sharing.profile).mockClear();
+    vi.mocked(api.sharing.workouts).mockClear();
+    let answer!: (value: SharedProfile) => void;
+    vi.mocked(api.sharing.profile).mockImplementation(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    void prefetchSharedProfile(null, 'friend');
+    await reopen();
+    expect(container.querySelector('.profile-loading-skeleton')).not.toBeNull();
+    await act(async () => answer(profile));
+    expect(api.sharing.profile).toHaveBeenCalledTimes(1);
+    expect(api.sharing.workouts).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('First workout');
+  });
+
+  it('forgets the copy when the friendship changes, so access is read again', async () => {
+    vi.spyOn(api.sharing, 'removeFriend').mockResolvedValue();
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      can_view: false,
+      friend_status: 'none',
+    });
+    await act(async () => button('Friends').click());
+    await act(async () => button('Remove friend').click());
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await reopen();
+    expect(container.textContent).toContain('as a friend to see their training');
+    expect(container.textContent).not.toContain('First workout');
+  });
+
+  it('keeps an open comment thread open when the workouts refresh', async () => {
+    vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+      items: [],
+      total: 0,
+      next_offset: null,
+    });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.discussion-comments-button')!.click(),
+    );
+    await renderProfile('friend', undefined, true, 'next-revision');
+    expect(
+      container.querySelector('.discussion-comments-button')?.getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(container.querySelector('.workout-discussion-thread')?.hasAttribute('hidden')).toBe(
+      false,
     );
   });
 });

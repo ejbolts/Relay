@@ -90,6 +90,7 @@ export function SocialScreen({
       />
       <CachedTabPanel active={section === 'friends'}>
         <FriendsList
+          active={active && section === 'friends'}
           connections={connections}
           state={state}
           error={error}

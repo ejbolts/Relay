@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { friendSession, lastWeek, reactionSummary, relativeDay } from './friendFeedData';
 import type { FriendConnectionsState } from './friendConnections';
 import { Icon } from './Icon';
@@ -6,10 +6,25 @@ import { PresenceAvatar } from './PresenceAvatar';
 import { byLiveActivity, presenceStatus, presenceText, useNow, workoutElapsed } from './presence';
 import { plural } from './sharedProfileDisplay';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
+import {
+  prefetchSharedProfile,
+  prefetchSharedProfiles,
+  PREFETCH_LIMIT,
+  updateCachedReactions,
+} from './sharedProfileCache';
 import { parseLocalDate } from './trainingSummary';
 import type { FriendActivity, FriendConnections, WorkoutReactions } from './types';
+import { useUserSession } from './userContext';
 import { localDate } from './utils';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
+
+/** How often the profiles at the top of the list are refreshed while the tab stays open. */
+const PREFETCH_REFRESH_MS = 5 * 60_000;
+
+/** Changes when a friend logs a session, so their background copy is loaded again. */
+function profileSignature(friend: FriendActivity): string {
+  return `${friend.latest?.workout.id ?? ''}:${friend.recent_workout_count}`;
+}
 
 function dayTitle(value: string): string {
   return parseLocalDate(value).toLocaleDateString('en-GB', {
@@ -33,7 +48,10 @@ function FriendCard({
   onOpenWorkout,
   onOpenMember,
   onReactionsChange,
+  onIntent,
 }: {
+  /** Pointing at or focusing the friend: their profile is about to be opened. */
+  onIntent: () => void;
   friend: FriendActivity;
   today: string;
   now: number;
@@ -65,6 +83,8 @@ function FriendCard({
           type="button"
           className="friend-card-person"
           aria-label={`Open ${friend.display_name}'s profile${statusText ? `, ${statusText}` : ''}`}
+          onMouseEnter={onIntent}
+          onFocus={onIntent}
           onClick={onOpen}
         >
           <PresenceAvatar user={{ ...friend, username: '' }} status={status} />
@@ -120,6 +140,8 @@ function FriendCard({
               className="friend-card-title friend-workout-link"
               aria-label={`Open ${friend.display_name}’s ${latest.workout.name} workout`}
               title={session.title}
+              onMouseEnter={onIntent}
+              onFocus={onIntent}
               onClick={onOpenWorkout}
             >
               {session.title}
@@ -200,6 +222,7 @@ export function FriendsList({
   connections,
   state,
   error,
+  active = true,
   today = localDate(),
   onRetry,
   onOpenFriend,
@@ -210,6 +233,8 @@ export function FriendsList({
   connections: FriendConnections | null;
   state: FriendConnectionsState;
   error: string | null;
+  /** Whether the list is on screen; the first few profiles load in the background while it is. */
+  active?: boolean;
   today?: string;
   onRetry: () => void;
   onOpenFriend: (
@@ -223,6 +248,31 @@ export function FriendsList({
   const titleId = useId();
   const [picking, setPicking] = useState<string | null>(null);
   const now = useNow(connections?.friends.some((friend) => friend.presence) ?? false);
+  const viewerId = useUserSession().user?.id ?? null;
+  const friends = byLiveActivity(connections?.friends ?? [], (friend) => friend.presence);
+  // Opening one of the first few friends is instant: their profiles load while the list is idle.
+  const prefetchKey =
+    state === 'locked'
+      ? ''
+      : JSON.stringify(
+          friends
+            .slice(0, PREFETCH_LIMIT)
+            .map((friend) => ({ id: friend.id, signature: profileSignature(friend) })),
+        );
+  useEffect(() => {
+    if (!active || !prefetchKey) return;
+    const targets = JSON.parse(prefetchKey) as { id: string; signature: string }[];
+    if (!targets.length) return;
+    let stop = prefetchSharedProfiles(viewerId, targets);
+    const timer = window.setInterval(() => {
+      stop();
+      stop = prefetchSharedProfiles(viewerId, targets);
+    }, PREFETCH_REFRESH_MS);
+    return () => {
+      stop();
+      window.clearInterval(timer);
+    };
+  }, [active, prefetchKey, viewerId]);
 
   if (state === 'locked') return <SharingLocked onChooseSharing={onChooseSharing} />;
   if (!connections) {
@@ -232,7 +282,6 @@ export function FriendsList({
       <FriendsSkeleton />
     );
   }
-  const friends = byLiveActivity(connections.friends, (friend) => friend.presence);
   return (
     <section className="pulse-card friends-list" aria-labelledby={titleId}>
       <header className="pulse-card-header">
@@ -266,7 +315,13 @@ export function FriendsList({
                 onOpenMember={onOpenFriend}
                 onOpen={() => onOpenFriend(friend)}
                 onOpenWorkout={() => onOpenFriend(friend, friend.latest?.workout)}
-                onReactionsChange={onReactionsChange}
+                onIntent={() =>
+                  void prefetchSharedProfile(viewerId, friend.id, profileSignature(friend))
+                }
+                onReactionsChange={(workoutId, reactions) => {
+                  updateCachedReactions(viewerId, friend.id, workoutId, reactions);
+                  onReactionsChange(workoutId, reactions);
+                }}
               />
             );
           })}
