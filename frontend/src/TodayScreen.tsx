@@ -467,8 +467,8 @@ export function TodayScreen({
           {averageWorkouts === null ? 'This week' : `12-wk avg ${averageWorkouts.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.workouts)}
-          label="Workouts per week, last 12 weeks"
+          values={weeks.slice(-8).map((week) => week.workouts)}
+          label="Workouts per week, last 8 weeks"
         />
       </button>
     ),
@@ -482,8 +482,8 @@ export function TodayScreen({
             : `12-wk avg ${averageCardioSessions.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.cardioSessions)}
-          label="Cardio sessions per week, last 12 weeks"
+          values={weeks.slice(-8).map((week) => week.cardioSessions)}
+          label="Cardio sessions per week, last 8 weeks"
         />
       </button>
     ),

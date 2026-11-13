@@ -322,6 +322,38 @@ describe('App startup', () => {
     expect(markup).not.toContain('live-workout-card');
   });
 
+  it('shows only the latest eight weekly bars while retaining the longer-term averages', () => {
+    const workouts: TrackedWorkout[] = ['2026-08-03', '2026-09-21', '2026-10-05'].map((date) => ({
+      id: date,
+      name: 'Sample workout',
+      workout_date: date,
+      category: 'upper',
+      notes: null,
+      duration_minutes: 30,
+      start_time: null,
+      end_time: null,
+      is_sample: true,
+      created_at: `${date}T10:00:00Z`,
+      updated_at: `${date}T10:00:00Z`,
+      movements: [],
+    }));
+    const markup = renderToday({ workouts });
+    const charts = [...markup.matchAll(/class="pulse-sparkbars"[^>]*>(.*?)<\/div>/g)];
+
+    expect(charts).toHaveLength(2);
+    expect(charts[0][0]).toContain('aria-label="Workouts per week, last 8 weeks"');
+    expect(charts[1][0]).toContain('aria-label="Cardio sessions per week, last 8 weeks"');
+    expect([...charts[0][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual([
+      8, 8, 8, 8, 8, 100, 8, 100,
+    ]);
+    expect([...charts[1][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual(
+      Array(8).fill(8),
+    );
+    expect(markup).toContain('Workouts</span><strong>1</strong><em>12-wk avg 0.2</em>');
+    expect(markup).toContain('Cardio sessions</span><strong>0</strong><em>12-wk avg 0.0</em>');
+    expect(markup).toContain('Last 12 weeks');
+  });
+
   it('shows each personal zone goal using only its qualifying minutes', () => {
     const markup = renderToday({
       data: {
