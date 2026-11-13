@@ -1767,8 +1767,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .week-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.25rem;
-  margin-bottom: 0.875rem;
+  /* Today's ring sits 4px outside its tile; keep clear space beyond it. */
+  gap: 0.5rem;
 }
 
 /* Every tile is laid out from the top with room for two workout names, so the weekday letters
@@ -1857,12 +1857,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .week-strip-day:focus-visible {
   outline: 2px solid var(--p-accent);
   outline-offset: 2px;
-}
-
-/* Past days recede; the day being viewed, today and a live workout stay clear. */
-.calendar-panel .calendar-day.past:not(.selected):not(.in-progress):not(:hover):not(:focus-visible),
-.week-strip-day.past:not(.selected):not(.in-progress):not(:hover):not(:focus-visible) {
-  opacity: 0.6;
 }
 
 .category-legend {

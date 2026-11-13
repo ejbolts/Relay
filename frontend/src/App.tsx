@@ -2109,12 +2109,25 @@ function AppContent() {
                   calendar={
                     <InteractiveWorkoutCalendar
                       entries={shownDashboard?.heatmap ?? []}
+                      workouts={shownWorkouts}
+                      olderHistory={olderHistoryProps}
+                      categoryColors={workoutTypeColors}
+                      activeWorkout={activeWorkoutStartedAt !== null}
+                      activeWorkoutDate={activeWorkoutDate}
+                      onResumeWorkout={() => setTab('log')}
+                      onEditWorkout={editWorkout}
+                      onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                      onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                    />
+                  }
+                  thisWeek={
+                    <InteractiveWorkoutCalendar
+                      entries={shownDashboard?.heatmap ?? []}
                       weekStartDay={weekStartDayFrom(
                         shownDashboard?.weekly_sets?.week_start ??
                           shownDashboard?.zone2?.week_start,
                       )}
                       workouts={shownWorkouts}
-                      olderHistory={olderHistoryProps}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
                       activeWorkoutDate={activeWorkoutDate}
@@ -2617,7 +2630,7 @@ function InteractiveWorkoutCalendar({
   weekStartDay,
 }: {
   entries: DashboardData['heatmap'];
-  /** Home passes its week start to lead the calendar with this week's days. */
+  /** Given, shows only this week's days (Home's own section) instead of the calendar. */
   weekStartDay?: number;
   workouts: TrackedWorkout[];
   olderHistory?: OlderHistoryProps;
@@ -2649,34 +2662,36 @@ function InteractiveWorkoutCalendar({
 
   return (
     <>
-      {weekStartDay !== undefined && (
+      {weekStartDay !== undefined ? (
         <WeekStrip
           entries={entries}
           categoryColors={categoryColors}
-          hiddenCategories={hiddenCategories}
           weekStartDay={weekStartDay}
           activeWorkoutDate={activeWorkoutDate}
           selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
           onActiveWorkoutClick={onResumeWorkout}
           onDayClick={openDay}
         />
+      ) : (
+        <>
+          <WorkoutCalendar
+            entries={entries}
+            olderHistory={olderHistory}
+            categoryColors={categoryColors}
+            hiddenCategories={hiddenCategories}
+            activeWorkoutDate={activeWorkoutDate}
+            selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+            onActiveWorkoutClick={onResumeWorkout}
+            onDayClick={openDay}
+          />
+          <WorkoutCalendarLegend
+            presentTypes={presentTypes}
+            hiddenCategories={hiddenCategories}
+            categoryColors={categoryColors}
+            onToggle={toggleCategory}
+          />
+        </>
       )}
-      <WorkoutCalendar
-        entries={entries}
-        olderHistory={olderHistory}
-        categoryColors={categoryColors}
-        hiddenCategories={hiddenCategories}
-        activeWorkoutDate={activeWorkoutDate}
-        selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
-        onActiveWorkoutClick={onResumeWorkout}
-        onDayClick={openDay}
-      />
-      <WorkoutCalendarLegend
-        presentTypes={presentTypes}
-        hiddenCategories={hiddenCategories}
-        categoryColors={categoryColors}
-        onToggle={toggleCategory}
-      />
       {selectedDay && (
         <CalendarDayDetail
           day={selectedDay}
