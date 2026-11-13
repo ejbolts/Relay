@@ -452,11 +452,28 @@ button.pulse-card:hover {
   font-weight: 600;
 }
 
-.history-show-more-error {
-  margin: 0.4rem 0 0;
+.history-page-status {
+  margin-top: 1.125rem;
+  border: 1px solid var(--p-line);
+  border-radius: 18px;
+  padding: 1.25rem 1rem;
+  background: var(--p-surface);
   color: var(--p-muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
+}
+
+.history-page-status p {
+  margin: 0;
+}
+
+.history-page-status .show-more-button {
+  margin-top: 0.75rem;
+}
+
+.history-session-pages > .pagination-controls {
+  border-top: 0;
+  margin-top: 0.5rem;
 }
 
 /* The leading calendar column while older months load; it keeps the month width so a fast
@@ -5117,16 +5134,13 @@ html {
 .history-screen > .cached-tab-panel > .progress-screen,
 .history-screen > .cached-tab-panel > .cardio-screen,
 .history-screen > .cached-tab-panel > .history-calendar-panel,
-.history-screen > .cached-tab-panel > .history-week {
+.history-session-pages > .history-week,
+.history-session-pages > .history-page-status {
   animation: rise-in 320ms var(--ease-out) backwards;
 }
 
-.history-screen > .cached-tab-panel > .history-week:nth-of-type(2) {
+.history-session-pages > .history-week:nth-of-type(2) {
   animation-delay: 40ms;
-}
-
-.history-screen > .cached-tab-panel > .history-week:nth-of-type(n + 3) {
-  animation-delay: 80ms;
 }
 
 .history-screen .history-detail {

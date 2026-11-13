@@ -1021,9 +1021,7 @@ describe('filtering History by machine', () => {
 
   it('finds the last session on one machine among later sessions at other gyms', async () => {
     await act(async () => root.render(<App />));
-    expect(historyCardTitles()).toHaveLength(1);
-    await click(container.querySelector<HTMLButtonElement>('.show-more-button')!);
-    expect(historyCardTitles()).toHaveLength(4);
+    expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
 
     await click(button('Filter by machine'));
     const dialog = document.querySelector<HTMLElement>('.machine-filter-dialog')!;
@@ -1053,7 +1051,74 @@ describe('filtering History by machine', () => {
 
     await click(button('Close', banner));
     expect(container.querySelector('.machine-filter-banner')).toBeNull();
-    expect(historyCardTitles()).toHaveLength(4);
+    expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+  });
+
+  it('pages through Sessions two calendar weeks at a time and jumps to a chosen page', async () => {
+    await act(async () => root.render(<App />));
+    const pages = () => container.querySelector<HTMLElement>('.history-session-pages')!;
+    const status = () => pages().querySelector('.pagination-status')?.textContent;
+    expect(
+      [...pages().querySelectorAll('.history-week-header h2')].map((h) => h.textContent),
+    ).toEqual(['12–18 Oct']);
+    expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+    // Back to the week of 1 September 2025.
+    expect(status()).toBe('Page 1 of 30');
+    expect(button('Previous workout history page', pages()).disabled).toBe(true);
+
+    await click(button('Next workout history page', pages()));
+    expect(status()).toBe('Page 2 of 30');
+    expect(historyCardTitles()).toEqual([]);
+    expect(pages().querySelector('.history-page-status')?.textContent).toBe(
+      'No workouts from 21 Sep to 4 Oct 2026',
+    );
+
+    await click(button('Choose a workout history page', pages()));
+    const menu = pages().querySelector<HTMLElement>('.pagination-page-menu')!;
+    expect(menu.querySelectorAll('button')).toHaveLength(30);
+    await click(button('Go to page 27', menu));
+    expect(pages().querySelector('.pagination-page-menu')).toBeNull();
+    expect(status()).toBe('Page 27 of 30');
+    expect(historyCardTitles()).toEqual(['Legs 2025-10-12']);
+    // Cards from an earlier year show it.
+    expect(container.querySelector('.history-card-copy small')?.textContent).toMatch(/12 Oct 2025/);
+
+    await click(button('Previous workout history page', pages()));
+    expect(status()).toBe('Page 26 of 30');
+  });
+
+  it('loads older months when jumping to a page before the loaded history', async () => {
+    // Startup loads whole months back from today, so fix today for the older windows.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-16T12:00:00'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      heatmap: [],
+      history: {
+        total_workouts: 4,
+        first_workout_date: '2025-09-01',
+        last_workout_date: '2026-10-14',
+        has_sample_workouts: false,
+      },
+    } as unknown as DashboardData);
+    vi.mocked(api.listWorkouts).mockResolvedValue([recentTravel]);
+    const load = vi.spyOn(api, 'listOlderHistory').mockImplementation(async (start, end) => ({
+      workouts: workouts.filter((item) => item.workout_date >= start && item.workout_date <= end),
+      heatmap: [],
+    }));
+    await act(async () => root.render(<App />));
+    const pages = () => container.querySelector<HTMLElement>('.history-session-pages')!;
+    // The summary's first workout sets the page count before older months load.
+    expect(pages().querySelector('.pagination-status')?.textContent).toBe('Page 1 of 30');
+
+    await click(button('Choose a workout history page', pages()));
+    await click(button('Go to page 27', pages()));
+    // Each six-month read finishes before the next starts, until page 27's weeks are loaded.
+    await act(() => vi.waitFor(() => expect(historyCardTitles()).toEqual(['Legs 2025-10-12'])));
+    expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-02-01', '2025-08-01']);
   });
 
   it('filters from a pinned photo in a workout and explains an unused machine', async () => {

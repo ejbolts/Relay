@@ -1,4 +1,4 @@
-import { addDays, weekStartFor } from './trainingSummary';
+import { addDays, daysBetween, weekStartFor } from './trainingSummary';
 
 export function workoutPageForId(
   workouts: ReadonlyArray<{ id: string }>,
@@ -19,12 +19,44 @@ export function upsertWorkoutByRecency<
       right.created_at.localeCompare(left.created_at),
   );
 }
-/** Show the latest workout's calendar week and the two preceding weeks, in full. */
-export function initialHistoryVisibleCount(
-  workouts: ReadonlyArray<{ workout_date: string }>,
+/** Sessions shows two calendar weeks per page. */
+export const HISTORY_WEEKS_PER_PAGE = 2;
+
+/**
+ * The day Sessions pages count back from: today, or the latest workout when training has paused,
+ * so page 1 is normally this week and last week but never opens empty after a break.
+ */
+export function historyPageAnchor(today: string, latestWorkoutDate: string | null | undefined) {
+  return latestWorkoutDate && latestWorkoutDate < today ? latestWorkoutDate : today;
+}
+
+/**
+ * The dates a Sessions page covers. Page 1 has no upper bound, so a workout dated after the
+ * anchor still appears with the latest weeks.
+ */
+export function historyPageWindow(
+  anchor: string,
+  weekStartDay: number,
+  page: number,
+): { start: string; end: string | null } {
+  const span = HISTORY_WEEKS_PER_PAGE * 7;
+  const start = addDays(weekStartFor(anchor, weekStartDay), -7 - span * (Math.max(1, page) - 1));
+  return { start, end: page <= 1 ? null : addDays(start, span - 1) };
+}
+
+/** The page whose window holds `date`; dates after the anchor are on page 1. */
+export function historyPageForDate(date: string, anchor: string, weekStartDay: number): number {
+  const weeksBack = Math.round(
+    daysBetween(weekStartFor(date, weekStartDay), weekStartFor(anchor, weekStartDay)) / 7,
+  );
+  return Math.max(1, Math.floor(weeksBack / HISTORY_WEEKS_PER_PAGE) + 1);
+}
+
+/** Pages needed to reach the oldest workout, including older history that has not loaded yet. */
+export function historyPageCount(
+  oldestDate: string | null | undefined,
+  anchor: string,
   weekStartDay: number,
 ): number {
-  if (!workouts.length) return 0;
-  const start = addDays(weekStartFor(workouts[0].workout_date, weekStartDay), -14);
-  return workouts.filter((workout) => workout.workout_date >= start).length;
+  return oldestDate ? historyPageForDate(oldestDate, anchor, weekStartDay) : 1;
 }

@@ -386,7 +386,13 @@ import {
   type WorkoutDraftSet as DraftSet,
 } from './workoutMovements';
 import { applySupersetSelection, clearSuperset } from './workoutSupersets';
-import { initialHistoryVisibleCount, upsertWorkoutByRecency } from './workoutHistory';
+import {
+  historyPageAnchor,
+  historyPageCount,
+  historyPageForDate,
+  historyPageWindow,
+  upsertWorkoutByRecency,
+} from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { TrainingBlockControls } from './TrainingBlockControls';
@@ -10861,11 +10867,7 @@ function HistoryScreen({
   const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
-  const [extraVisibleCount, setExtraVisibleCount] = useState(0);
-  const targetIndex = initialOpenId ? workouts.findIndex((item) => item.id === initialOpenId) : -1;
-  const visibleCount =
-    Math.max(initialHistoryVisibleCount(workouts, weekStartDay), targetIndex + 1) +
-    extraVisibleCount;
+  const [chosenHistoryPage, setChosenHistoryPage] = useState<number | null>(null);
   const [targetExerciseId, setTargetExerciseId] = useState<string | null>(
     initialOpenId ? initialExerciseId : null,
   );
@@ -10885,13 +10887,45 @@ function HistoryScreen({
   const openWorkoutSummaryRef = useRef<HTMLButtonElement>(null);
   const targetExerciseRef = useRef<HTMLDivElement>(null);
   const revealWorkoutRef = useRef(initialOpenId !== null);
+  const sessionListRef = useRef<HTMLDivElement>(null);
   const today = localDate();
   const machineFilterId = machineFilter?.photo.id ?? null;
   const machineWorkouts =
     machineHistory && machineHistory.photoId === machineFilterId ? machineHistory.workouts : null;
+  const { hasOlder, loadingOlder, olderError, onLoadOlder, historyStart } = olderHistory;
+  const oldestWorkoutDate = [historySummary?.first_workout_date, workouts.at(-1)?.workout_date]
+    .filter((date): date is string => Boolean(date))
+    .sort()[0];
+  const pageAnchor = historyPageAnchor(
+    today,
+    [historySummary?.last_workout_date, workouts[0]?.workout_date]
+      .filter((date): date is string => Boolean(date))
+      .sort()
+      .at(-1),
+  );
+  const historyPages = historyPageCount(oldestWorkoutDate, pageAnchor, weekStartDay);
+  // A workout opened from elsewhere starts on its page until another page is chosen.
+  const targetWorkoutDate = initialOpenId
+    ? workouts.find((item) => item.id === initialOpenId)?.workout_date
+    : undefined;
+  const historyPage = Math.min(
+    historyPages,
+    chosenHistoryPage ??
+      (targetWorkoutDate ? historyPageForDate(targetWorkoutDate, pageAnchor, weekStartDay) : 1),
+  );
+  const pageWindow = historyPageWindow(pageAnchor, weekStartDay, historyPage);
+  const pageNeedsOlder = hasOlder && pageWindow.start < historyStart;
   const weekGroups = useMemo(
-    () => groupWorkoutsByWeek(workouts.slice(0, visibleCount), weekStartDay),
-    [visibleCount, weekStartDay, workouts],
+    () =>
+      groupWorkoutsByWeek(
+        workouts.filter(
+          (workout) =>
+            workout.workout_date >= pageWindow.start &&
+            (pageWindow.end === null || workout.workout_date <= pageWindow.end),
+        ),
+        weekStartDay,
+      ),
+    [pageWindow.end, pageWindow.start, weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
   const sectionIndicatorRef = useSlidingIndicator<HTMLDivElement>(section);
@@ -10904,8 +10938,23 @@ function HistoryScreen({
     [today, workouts],
   );
   const totalWorkouts = Math.max(historySummary?.total_workouts ?? 0, workouts.length);
-  const { hasOlder, loadingOlder, olderError, onLoadOlder } = olderHistory;
-  const moreWorkouts = visibleCount < workouts.length || hasOlder;
+
+  // Jumping to an older page reads earlier months, one chunk per loaded start, until that page's
+  // weeks are loaded.
+  useEffect(() => {
+    if (section === 'history' && pageNeedsOlder && !loadingOlder && !olderError) onLoadOlder();
+  }, [historyStart, loadingOlder, olderError, onLoadOlder, pageNeedsOlder, section]);
+
+  function changeHistoryPage(page: number) {
+    setChosenHistoryPage(page);
+    setOpenId(null);
+    window.requestAnimationFrame(() =>
+      sessionListRef.current?.scrollIntoView({
+        behavior: motionReduced() ? 'instant' : 'smooth',
+        block: 'start',
+      }),
+    );
+  }
 
   // Loaded from the server, so a machine last used long ago is found even when older history is
   // not loaded here. Reloads after edits, which replace the workouts list.
@@ -10987,7 +11036,7 @@ function HistoryScreen({
         onExpandPhoto={setExpandedPhoto}
         onFilterMachine={(photo, exerciseName) => filterByMachine({ photo, exerciseName })}
         machineFilterId={machineFilterId}
-        showYear={machineFilter !== null}
+        showYear={machineFilter !== null || workout.workout_date.slice(0, 4) !== today.slice(0, 4)}
         onToggle={() => {
           setTargetMovementId(null);
           setTargetExerciseId(machineFilter ? machineFilter.photo.exercise_id : null);
@@ -11020,7 +11069,7 @@ function HistoryScreen({
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [section, openId, visibleCount, targetExerciseId]);
+  }, [section, openId, historyPage, targetExerciseId]);
 
   return (
     <section
@@ -11216,45 +11265,59 @@ function HistoryScreen({
                   onAction={() => onStartWorkout()}
                 />
               )}
-              {weekGroups.map((group) => {
-                const label = weekGroupLabel(group.weekStart, today, weekStartDay);
-                return (
-                  <section className="history-week" key={group.weekStart} aria-label={label}>
-                    <header className="history-week-header">
-                      <h2>{label}</h2>
-                      <span className="num">
-                        {group.workouts.length}{' '}
-                        {group.workouts.length === 1 ? 'workout' : 'workouts'} · {group.sets} sets
-                        {group.volumeKg > 0 ? ` · ${formatVolume(group.volumeKg, weightUnit)}` : ''}
-                      </span>
-                    </header>
-                    <div className="history-week-list">{group.workouts.map(renderWorkoutCard)}</div>
-                  </section>
-                );
-              })}
-              {moreWorkouts && (
-                <div className="history-show-more">
-                  <button
-                    type="button"
-                    className="show-more-button"
-                    disabled={loadingOlder}
-                    onClick={() => {
-                      if (visibleCount < workouts.length) {
-                        setExtraVisibleCount((count) => count + HISTORY_PAGE_SIZE * 2);
-                      } else onLoadOlder();
-                    }}
-                  >
-                    {loadingOlder
-                      ? 'Loading older workouts…'
-                      : olderError && visibleCount >= workouts.length
-                        ? 'Retry loading older workouts'
-                        : `Show more · ${Math.max(totalWorkouts - Math.min(visibleCount, workouts.length), 0)} older`}
-                  </button>
-                  {olderError && visibleCount >= workouts.length && (
-                    <p className="history-show-more-error" role="alert">
-                      {olderError}
-                    </p>
+              {(workouts.length > 0 || hasOlder) && (
+                <div className="history-session-pages" ref={sessionListRef}>
+                  {pageNeedsOlder ? (
+                    <div className="history-page-status" role={olderError ? 'alert' : 'status'}>
+                      {olderError ? (
+                        <>
+                          <p>{olderError}</p>
+                          <button type="button" className="show-more-button" onClick={onLoadOlder}>
+                            Retry loading older workouts
+                          </button>
+                        </>
+                      ) : (
+                        <p>Loading older workouts…</p>
+                      )}
+                    </div>
+                  ) : weekGroups.length ? (
+                    weekGroups.map((group) => {
+                      const label = weekGroupLabel(group.weekStart, today, weekStartDay);
+                      return (
+                        <section className="history-week" key={group.weekStart} aria-label={label}>
+                          <header className="history-week-header">
+                            <h2>{label}</h2>
+                            <span className="num">
+                              {group.workouts.length}{' '}
+                              {group.workouts.length === 1 ? 'workout' : 'workouts'} · {group.sets}{' '}
+                              sets
+                              {group.volumeKg > 0
+                                ? ` · ${formatVolume(group.volumeKg, weightUnit)}`
+                                : ''}
+                            </span>
+                          </header>
+                          <div className="history-week-list">
+                            {group.workouts.map(renderWorkoutCard)}
+                          </div>
+                        </section>
+                      );
+                    })
+                  ) : (
+                    <div className="history-page-status">
+                      <p>
+                        No workouts{' '}
+                        {historyPage === 1
+                          ? 'this week or last week'
+                          : `from ${dayMonth(pageWindow.start)} to ${dayMonth(pageWindow.end ?? today)} ${(pageWindow.end ?? today).slice(0, 4)}`}
+                      </p>
+                    </div>
                   )}
+                  <PaginationControls
+                    currentPage={historyPage}
+                    totalPages={historyPages}
+                    onPageChange={changeHistoryPage}
+                    label="workout history"
+                  />
                 </div>
               )}
             </>
