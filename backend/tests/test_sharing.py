@@ -154,6 +154,55 @@ def test_shared_consistency_uses_owner_history_and_respects_access(client, other
     assert profile(client, other_client).status_code == 404
 
 
+def test_shared_calendar_orders_mixed_day_colours_like_home(client, other_client):
+    share(other_client)
+    exercise = named(other_client, "Barbell Bench Press")["id"]
+    for category in ["push", "pull", "lower"]:
+        response = other_client.post(
+            "/api/workouts",
+            json={
+                "name": f"{category} training",
+                "workout_date": date.today().isoformat(),
+                "category": category,
+                "movements": [{"exercise_id": exercise, "sets": [{"reps": 8, "weight_kg": 40}]}],
+            },
+        )
+        assert response.status_code == 201, response.text
+    # Several days so the sort must keep dates ascending, as before.
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    other_client.post(
+        "/api/workouts",
+        json={
+            "name": "Earlier",
+            "workout_date": yesterday,
+            "category": "push",
+            "movements": [{"exercise_id": exercise, "sets": [{"reps": 8, "weight_kg": 40}]}],
+        },
+    )
+    with SessionLocal() as db:
+        # Logged in order, so Home lists the newest first: the reverse of insertion order.
+        rows = db.scalars(
+            select(TrainingWorkout)
+            .where(TrainingWorkout.user_id == other_client.user["id"])
+            .order_by(TrainingWorkout.id)
+        ).all()
+        rows = sorted(rows, key=lambda row: row.created_at)
+        for index, row in enumerate(rows):
+            row.created_at = datetime(2026, 1, 1, 9, 0) + timedelta(minutes=10 * index)
+        db.commit()
+
+    shared = profile(client, other_client).json()["consistency"]["heatmap"]
+    home = {
+        day["workout_date"]: day for day in other_client.get("/api/dashboard").json()["heatmap"]
+    }
+    assert [day["workout_date"] for day in shared] == [yesterday, date.today().isoformat()]
+    for day in shared:
+        assert [item["id"] for item in day["workout_types"]] == [
+            item["id"] for item in home[day["workout_date"]]["workout_types"]
+        ]
+    assert [item["id"] for item in shared[-1]["workout_types"]] == ["lower", "pull", "push"]
+
+
 def detailed_workout(exercise_id: str, photo_id: str, name: str = "Push day") -> dict:
     return {
         "name": name,
