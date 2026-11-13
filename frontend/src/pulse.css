@@ -2530,6 +2530,19 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   .social-screen .shared-connection-actions {
     margin-left: auto;
   }
+
+  /* One button, such as Cancel on a sent request, stays beside the name. */
+  .social-screen .friend-group li:has(.shared-connection-actions > :only-child) {
+    flex-wrap: nowrap;
+  }
+
+  .social-screen .friend-group li:has(.shared-connection-actions > :only-child) .friend-open {
+    flex-basis: 0;
+  }
+
+  .social-screen .friend-group .shared-connection-actions:has(> :only-child) {
+    flex-shrink: 0;
+  }
 }
 
 .progress-screen .progress-exercise-field > label {
@@ -2907,6 +2920,51 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   pointer-events: none;
 }
 
+.pulse-chart-tooltip > span:first-of-type {
+  padding-right: 1.25rem;
+}
+
+/* Closes the popup so the chart underneath can be read again; 44px touch area. */
+.pulse-chart-tooltip-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: #b9bfc4;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pulse-chart-tooltip-close::before {
+  position: absolute;
+  inset: -0.625rem;
+  content: '';
+}
+
+.pulse-chart-tooltip-close:hover,
+.pulse-chart-tooltip-close:focus-visible {
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}
+
+.pulse-chart-tooltip-close:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
+.pulse-chart-tooltip-close .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .pulse-chart-tooltip span,
 .pulse-chart-tooltip small {
   color: #b9bfc4;
@@ -2918,7 +2976,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 650;
 }
 
-.pulse-chart-tooltip button {
+.pulse-chart-tooltip-open {
   margin-top: 0.25rem;
   border: 0;
   border-radius: 7px;

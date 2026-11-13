@@ -222,8 +222,9 @@ it('keeps the release unread on opening, opens its notes with View, closes back 
 
 it('counts the release in the 10-row page but only acknowledges displayed social events', async () => {
   snapshot = {
-    requests: Array.from({ length: 15 }, (_, index) => ({ ...person, id: `request-${index}` })),
+    requests: [],
     accepted: [],
+    reactions: Array.from({ length: 15 }, (_, index) => ({ ...reaction, id: `reaction-${index}` })),
   };
   await releaseInbox('inbox-pagination-sample');
   await click('Notifications, 16 unread');
@@ -261,7 +262,8 @@ it('reads requests, accepted requests and reactions on open without removing the
     { kind: 'accepted', id: 'riley', since: person.since },
     { kind: 'reaction', id: 'alex', since: person.since, workout_id: 'w1' },
   ]);
-  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+  // The request keeps its badge until it is answered.
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
   expect(document.querySelector('dialog')?.textContent).toContain('Leg day');
   expect(document.querySelector('dialog')?.textContent).not.toContain('Dismiss');
   snapshot = { ...snapshot, requests: [] };
@@ -304,8 +306,30 @@ it('shows 10 notifications per page with pagination instead of a Manage friends 
   expect(dialog()).toContain('Page 1 of 2');
   await click('Next notifications page');
   await click('Close Notifications');
-  await click('Notifications');
+  await click('Notifications, 1 unread');
   expect(dialog()).toContain('Page 1 of 2');
+});
+
+it('keeps counting friend requests until they are accepted or declined', async () => {
+  snapshot = {
+    requests: [person, { ...person, id: 'riley', display_name: 'Riley Preview' }],
+    accepted: [],
+    reactions: [],
+  };
+  vi.spyOn(api.sharing, 'removeFriend').mockResolvedValue(undefined);
+  await render();
+  await click('Notifications, 2 unread');
+  await click('Close Notifications');
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 2 unread');
+  expect(host.querySelector('.profile-request-badge')?.textContent).toBe('2');
+
+  // Read requests stay actionable, and answering one takes it off the badge.
+  await click('Notifications, 2 unread');
+  snapshot = { ...snapshot, requests: [snapshot.requests[1]] };
+  await click('Decline Sam Preview');
+  await click('Close Notifications');
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
 });
 it('hides pagination when every notification fits on one page', async () => {
   snapshot = { requests: [person], accepted: [], reactions: [reaction] };

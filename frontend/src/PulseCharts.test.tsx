@@ -1,6 +1,9 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
-import { TrendChart } from './PulseCharts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TrendChart, type TrendPoint } from './PulseCharts';
 
 describe('TrendChart goal path', () => {
   it('shows both maintenance boundaries and a shaded band within the dated goal', () => {
@@ -55,5 +58,75 @@ describe('TrendChart goal path', () => {
       /<g class="pulse-chart-goal pulse-chart-goal-path"><line x1="[\d.]+" y1="[\d.]+" x2="328"/,
     );
     expect(markup).toContain('Goal 85 kg');
+  });
+});
+
+describe('TrendChart day popup', () => {
+  let root: Root;
+  let host: HTMLDivElement;
+  const points: TrendPoint[] = [
+    { date: '2026-10-15', value: 84.9 },
+    { date: '2026-10-16', value: 84.7 },
+    { date: '2026-10-17', value: 84.5, detail: 'weighed 84.5 kg' },
+  ];
+
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
+  const render = (onSelect?: (point: TrendPoint) => void) =>
+    act(async () =>
+      root.render(
+        <TrendChart
+          points={points}
+          unit="kg"
+          label="Bodyweight"
+          seriesLabel="7-day average"
+          onSelect={onSelect}
+        />,
+      ),
+    );
+  const chart = () => host.querySelector<SVGSVGElement>('svg')!;
+  const tooltip = () => host.querySelector<HTMLElement>('.pulse-chart-tooltip');
+  const press = (key: string) =>
+    act(async () => {
+      chart().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+
+  it('closes with its X, returns focus to the chart and reopens on the next day read', async () => {
+    await render();
+    await press('ArrowLeft');
+    expect(tooltip()?.textContent).toContain('84.7 kg');
+    const close = tooltip()!.querySelector<HTMLButtonElement>('.pulse-chart-tooltip-close')!;
+    expect(close.getAttribute('aria-label')).toMatch(/^Close .*16.* details$/);
+
+    await act(async () => close.click());
+    expect(tooltip()).toBeNull();
+    expect(host.querySelector('.pulse-chart-cursor')).toBeNull();
+    expect(document.activeElement).toBe(chart());
+
+    await press('ArrowRight');
+    expect(tooltip()?.textContent).toContain('weighed 84.5 kg');
+  });
+
+  it('keeps Open workout alongside the close button', async () => {
+    const onSelect = vi.fn();
+    await render(onSelect);
+    await press('ArrowLeft');
+    const buttons = [...tooltip()!.querySelectorAll('button')].map((button) => button.className);
+    expect(buttons).toEqual(['pulse-chart-tooltip-close', 'pulse-chart-tooltip-open']);
+    await act(async () =>
+      tooltip()!.querySelector<HTMLButtonElement>('.pulse-chart-tooltip-open')!.click(),
+    );
+    expect(onSelect).toHaveBeenCalledWith(points[1]);
   });
 });

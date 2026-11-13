@@ -186,9 +186,12 @@ export function FollowNotifications({ active }: { active: boolean }) {
     }
   }
 
+  // Waiting friend requests always count; everything else counts until it has been read.
   const count =
-    (items ? unreadNotificationReferences(items).length : 0) +
-    Number(announcement?.noticeUnread ?? false);
+    (items
+      ? items.requests.length +
+        unreadNotificationReferences(items).filter((item) => item.kind !== 'request').length
+      : 0) + Number(announcement?.noticeUnread ?? false);
   const currentItems = items ?? { requests: [], accepted: [] };
   const rows = notificationRows(currentItems, release);
   const total = rows.length;
