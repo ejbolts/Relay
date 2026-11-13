@@ -2519,29 +2519,30 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 @media (max-width: 480px) {
-  .social-screen .friend-group li {
-    flex-wrap: wrap;
-  }
-
-  .social-screen .friend-group li:has(.shared-connection-actions) .friend-open {
-    flex-basis: 100%;
-  }
-
-  .social-screen .shared-connection-actions {
-    margin-left: auto;
-  }
-
-  /* One button, such as Cancel on a sent request, stays beside the name. */
-  .social-screen .friend-group li:has(.shared-connection-actions > :only-child) {
+  .social-screen .friend-group li:has(> .shared-connection-actions) {
     flex-wrap: nowrap;
   }
 
-  .social-screen .friend-group li:has(.shared-connection-actions > :only-child) .friend-open {
+  .social-screen .friend-group li:has(> .shared-connection-actions) > .friend-open {
     flex-basis: 0;
+    gap: 0.5rem;
   }
 
-  .social-screen .friend-group .shared-connection-actions:has(> :only-child) {
-    flex-shrink: 0;
+  .social-screen .friend-group .shared-connection-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .social-screen .friend-group .shared-connection-actions {
+    flex: 0 0 auto;
+    gap: 0.375rem;
+    margin-left: auto;
+  }
+
+  .social-screen .friend-group .shared-connection-actions > button {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.6rem;
   }
 }
 
