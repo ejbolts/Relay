@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarMonths, monthCountFromOldestWorkout } from './calendarRange';
+import { calendarMonths, calendarWeekdays, monthCountFromOldestWorkout } from './calendarRange';
 
 describe('calendar workout range', () => {
   it('builds complete six-row months across years without skipping a month from a late date', () => {
@@ -33,4 +33,24 @@ describe('calendar workout range', () => {
   it('shows the current month when the history is empty', () => {
     expect(monthCountFromOldestWorkout([], new Date(2026, 7, 12))).toBe(1);
   });
+});
+
+describe('calendar week start', () => {
+  it.each([
+    { start: 1, labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'], leading: 6 },
+    { start: 0, labels: ['S', 'M', 'T', 'W', 'T', 'F', 'S'], leading: 0 },
+    { start: 6, labels: ['S', 'S', 'M', 'T', 'W', 'T', 'F'], leading: 1 },
+  ])(
+    'aligns November 2026 under the weekday headings for start $start',
+    ({ start, labels, leading }) => {
+      // 1 November 2026 is Sunday, and the month has 30 days.
+      const month = calendarMonths('2026-11-01', 1, 0, start)[0];
+      expect(calendarWeekdays(start)).toEqual(labels);
+      expect(month.cells.findIndex(Boolean)).toBe(leading);
+      expect(month.cells[leading]?.getDate()).toBe(1);
+      expect(month.cells[leading + 29]?.getDate()).toBe(30);
+      expect(month.cells.filter(Boolean)).toHaveLength(30);
+      expect(month.cells).toHaveLength(42);
+    },
+  );
 });

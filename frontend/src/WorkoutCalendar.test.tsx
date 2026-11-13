@@ -5,7 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { WeekStrip, WorkoutCalendar } from './WorkoutCalendar';
 import { builtinTypeColors, DEFAULT_WORKOUT_TYPES } from './workoutTypes';
-import type { HeatmapDay } from './types';
+import { TrainingPreferencesContext } from './trainingPreferencesContext';
+import type { HeatmapDay, TrainingPreferences } from './types';
 
 let root: Root;
 let host: HTMLDivElement;
@@ -34,6 +35,80 @@ afterEach(async () => {
   host.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+it('updates month headings and date positions when the week-start setting changes', async () => {
+  const select = vi.fn();
+  const trained = { ...entry, workout_date: '2026-10-01' };
+  const cases = [
+    { preference: null, labels: 'MTWTFSS', leading: 3 },
+    { preference: 'sunday', labels: 'SMTWTFS', leading: 4 },
+    { preference: 'saturday', labels: 'SSMTWTF', leading: 5 },
+    { preference: 'monday', labels: 'MTWTFSS', leading: 3 },
+  ] as const;
+
+  for (const { preference, labels, leading } of cases) {
+    const preferences: TrainingPreferences | null = preference
+      ? {
+          preferred_weight_unit: 'kg',
+          week_start: preference,
+          zone2_goal_minutes: 150,
+          weekly_muscle_set_goal: 10,
+        }
+      : null;
+    await act(async () =>
+      root.render(
+        <TrainingPreferencesContext.Provider
+          value={{ preferences, error: null, applySaved: vi.fn() }}
+        >
+          <WorkoutCalendar entries={[trained]} categoryColors={colors} onDayClick={select} />
+        </TrainingPreferencesContext.Provider>,
+      ),
+    );
+    expect(
+      [...host.querySelectorAll('.calendar-weekdays span')].map((el) => el.textContent).join(''),
+    ).toBe(labels);
+    const cells = [...host.querySelectorAll<HTMLButtonElement>('.calendar-days .calendar-day')];
+    expect(cells.findIndex((el) => el.dataset.date === '2026-10-01')).toBe(leading);
+    const first = cells[leading];
+    expect(first.style.getPropertyValue('--day-ring')).toBe('#8b5cf6');
+    await act(async () => first.click());
+    expect(select).toHaveBeenLastCalledWith('2026-10-01', trained);
+  }
+});
+
+it('uses the chosen week start for split preview months across a year boundary', async () => {
+  await act(async () =>
+    root.render(
+      <TrainingPreferencesContext.Provider
+        value={{
+          preferences: {
+            preferred_weight_unit: 'kg',
+            week_start: 'sunday',
+            zone2_goal_minutes: 150,
+            weekly_muscle_set_goal: 10,
+          },
+          error: null,
+          applySaved: vi.fn(),
+        }}
+      >
+        <WorkoutCalendar preview={{ from: '2026-12-01', days: [] }} />
+      </TrainingPreferencesContext.Provider>,
+    ),
+  );
+  const months = [...host.querySelectorAll('.calendar-month')];
+  expect(months).toHaveLength(2);
+  for (const month of months) {
+    expect(
+      [...month.querySelectorAll('.calendar-weekdays span')].map((el) => el.textContent).join(''),
+    ).toBe('SMTWTFS');
+  }
+  const firstDateIndex = (month: Element) =>
+    [...month.querySelectorAll('.calendar-days .calendar-day')].findIndex((el) =>
+      el.hasAttribute('data-date'),
+    );
+  expect(firstDateIndex(months[0])).toBe(2); // 1 December 2026 is Tuesday.
+  expect(firstDateIndex(months[1])).toBe(5); // 1 January 2027 is Friday.
 });
 
 it('preserves history month order, workout colours and date selection without preview data', async () => {
