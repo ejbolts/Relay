@@ -1666,7 +1666,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .calendar-panel .calendar-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.125rem;
+  /* Room between days so neighbouring coloured outlines never touch. */
+  gap: 0.375rem;
 }
 
 .calendar-panel .calendar-weekdays span {
@@ -1706,21 +1707,26 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 /* A trained day is outlined in its workout colour; a day that mixes types splits the outline
    between them. With every type on the day switched off in the legend, it turns neutral grey. */
-.calendar-panel .calendar-day.trained:not(.in-progress)::before {
+.calendar-panel .calendar-day.trained:not(.in-progress)::before,
+.week-strip-day.trained:not(.in-progress)::before {
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
+  border: 2px solid transparent;
   border-radius: inherit;
-  padding: 1.5px;
   background: var(--day-ring, var(--p-axis));
+  background-origin: border-box;
+  background-repeat: no-repeat;
   content: '';
   pointer-events: none;
-  /* Keep only the padding ring, so the outline can be a gradient on any card background. */
+  /* Native border geometry keeps the inner curve concentric and snaps its width consistently.
+     Mask out the padding box so mixed-colour outlines preserve the background underneath. */
   -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0) padding-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask:
-    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0) padding-box exclude,
     linear-gradient(#000 0 0);
 }
 
@@ -1778,8 +1784,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .week-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.25rem;
-  margin-bottom: 0.875rem;
+  /* Today's ring sits 4px outside its tile; keep clear space beyond it. */
+  gap: 0.5rem;
 }
 
 /* Every tile is laid out from the top with room for two workout names, so the weekday letters
@@ -1843,25 +1849,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   margin-top: 0.1875rem;
   border-radius: 50%;
   background: var(--p-accent);
-}
-
-/* The same outline as a trained day in the calendar below. */
-.week-strip-day.trained:not(.in-progress)::before {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: var(--day-ring, var(--p-axis));
-  content: '';
-  pointer-events: none;
-  /* Keep only the padding ring, so the outline can be a gradient on any card background. */
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box exclude,
-    linear-gradient(#000 0 0);
 }
 
 .week-strip-day.future {

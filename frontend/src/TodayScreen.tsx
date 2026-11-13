@@ -159,6 +159,8 @@ export interface TodayScreenProps {
   /** Unresolved app feedback, shown to administrators beside friend requests. */
   openFeedback?: number;
   calendar?: ReactNode;
+  /** This week's days, as their own section. */
+  thisWeek?: ReactNode;
   /** The Friends card with friends' latest sessions; omitted outside the signed-in app. */
   friendsActivity?: ReactNode;
   today?: string;
@@ -198,6 +200,7 @@ export function TodayScreen({
   accountActions,
   openFeedback = 0,
   calendar,
+  thisWeek,
   friendsActivity,
   today = localDate(),
 }: TodayScreenProps) {
@@ -521,6 +524,7 @@ export function TodayScreen({
         onOpenBody={onOpenBody}
       />
     ) : null,
+    'this-week': thisWeek ? <ThisWeekCard>{thisWeek}</ThisWeekCard> : null,
     consistency: (
       <ConsistencyCard streak={data?.current_streak ?? 0} trainingDays={trainingDays}>
         {calendar}
@@ -1137,6 +1141,18 @@ export function TodaySkeleton() {
         ))}
       </div>
       <div className="pulse-card skeleton-card" aria-hidden="true" />
+    </section>
+  );
+}
+
+function ThisWeekCard({ children }: { children: ReactNode }) {
+  const titleId = useId();
+  return (
+    <section className="pulse-card this-week-card" aria-labelledby={titleId}>
+      <header className="pulse-card-header">
+        <h2 id={titleId}>This week</h2>
+      </header>
+      {children}
     </section>
   );
 }

@@ -1132,10 +1132,12 @@ export interface SharedWorkoutListProps {
 
 function SharedConsistencyCalendar({
   data,
+  selectedDate,
   onDayClick,
   onOpenSplits,
 }: {
   data: SharedConsistency;
+  selectedDate?: string | null;
   onDayClick: (date: string) => void;
   onOpenSplits?: () => void;
 }) {
@@ -1152,6 +1154,7 @@ function SharedConsistencyCalendar({
         types={data.workout_types}
         categoryColors={colors}
         hiddenCategories={hidden}
+        selectedDate={selectedDate}
         readOnly
         onDayClick={onDayClick}
       />
@@ -1692,6 +1695,11 @@ export function SharedProfileScreen({
             <SharedConsistencyCalendar
               key={profile.id}
               data={profile.consistency}
+              selectedDate={
+                filters.start_date && filters.start_date === filters.end_date
+                  ? filters.start_date
+                  : null
+              }
               onOpenSplits={profile.is_you ? onOpenSplits : undefined}
               onDayClick={(date) => {
                 setFilters({

@@ -78,7 +78,7 @@ def test_older_layout_appends_new_sections_without_unhiding_old_sections(client)
         db.commit()
     result = client.get("/api/home-layout").json()
     assert result["order"][0] == "profile"
-    assert result["order"][1:3] == old["order"]
+    assert result["order"][1:4] == ["this-week", *old["order"]]
     assert set(result["order"]) == set(SECTION_IDS)
     assert result["hidden"] == old["hidden"] + OPTIONAL_CHECK_INS
     assert result["widths"] == {}
@@ -96,7 +96,7 @@ def test_saved_layout_gains_the_weekly_review_visible_at_the_end(client):
         db.commit()
     result = client.get("/api/home-layout").json()
     assert "weekly-review" in SECTION_IDS
-    assert result["order"][:3] == saved
+    assert result["order"][:4] == ["profile", "records", "this-week", "consistency"]
     assert result["order"].count("weekly-review") == 1
     assert "weekly-review" not in result["hidden"]
     assert client.put("/api/home-layout", json=result).json() == result
@@ -112,7 +112,39 @@ def test_saved_layout_gains_the_block_card_after_the_next_workout(client):
         )
         db.commit()
     order = client.get("/api/home-layout").json()["order"]
-    assert order[:5] == ["profile", "consistency", "next-workout", "training-block", "workouts"]
+    assert order[:6] == [
+        "profile",
+        "this-week",
+        "consistency",
+        "next-workout",
+        "training-block",
+        "workouts",
+    ]
+
+
+def test_saved_layout_gains_this_week_where_the_calendar_showed_it(client):
+    for hidden in ([], ["consistency"]):
+        with SessionLocal() as db:
+            set_setting(
+                db,
+                client.user["id"],
+                "home_layout",
+                json.dumps(
+                    {"order": ["profile", "workouts", "consistency", "records"], "hidden": hidden}
+                ),
+            )
+            db.commit()
+        result = client.get("/api/home-layout").json()
+        assert result["order"][:5] == ["profile", "workouts", "this-week", "consistency", "records"]
+        # The strip was part of the calendar, so it stays hidden with a hidden calendar.
+        assert ("this-week" in result["hidden"]) == ("consistency" in hidden)
+        assert client.put("/api/home-layout", json=result).json() == result
+
+    moved = client.put(
+        "/api/home-layout",
+        json={**result, "order": ["this-week", *[s for s in result["order"] if s != "this-week"]]},
+    ).json()
+    assert moved["order"][0] == "this-week"
 
 
 def test_corrupt_saved_layout_recovers_to_default(client):
@@ -138,7 +170,12 @@ def test_legacy_check_in_retains_position_width_and_hidden_state(client):
             set_setting(db, client.user["id"], "home_layout", json.dumps(old))
             db.commit()
         result = client.get("/api/home-layout").json()
-        assert result["order"][1:4] == ["records", "combined-check-in", "consistency"]
+        assert result["order"][1:5] == [
+            "records",
+            "combined-check-in",
+            "this-week",
+            "consistency",
+        ]
         assert ("combined-check-in" in result["hidden"]) == bool(hidden)
         assert all(section in result["hidden"] for section in OPTIONAL_CHECK_INS)
         assert result["widths"] == {"combined-check-in": "compact", "records": "full"}
