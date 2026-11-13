@@ -4419,6 +4419,13 @@ body:has(.popup-dialog[open]) {
   padding: 0 1rem 1rem;
 }
 
+.workout-finish-dialog > p.workout-finish-blocker {
+  margin: 1rem 1rem 0;
+  padding: 0.7rem 0.8rem;
+  color: #ffaaa1;
+  font-size: 0.85rem;
+}
+
 .body-reference-stats .body-trend-stat {
   grid-column: 1 / -1;
   display: grid;
