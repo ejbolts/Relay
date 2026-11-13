@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, SAVED_COPY_AFTER_MS } from './api';
+import { api, ApiError, revisionAfterSave, SAVED_COPY_AFTER_MS } from './api';
 import { isUsingSavedData, reportServerReached } from './connectionStatus';
 import { LAST_USER_KEY } from './deviceAccount';
 import { clearOffline, replaceOfflineBackend, type OfflineBackend } from './offlineStore';
 import { readWorkoutCache, writeWorkoutCache } from './workoutCache';
+import { CLIENT_VERSION_HEADER } from './clientVersion';
 import type { Exercise, TrackedWorkout } from './types';
 
 class MemoryBackend implements OfflineBackend {
@@ -231,5 +232,108 @@ describe('workout history without a connection', () => {
       since: '2026-08-01',
       workouts: [recent],
     });
+  });
+});
+
+describe('refreshing straight after a workout save', () => {
+  const saved = { id: 'saved-workout', workout_date: '2026-08-02' } as TrackedWorkout;
+
+  it('remembers the revision a save reports and reads the new snapshot without asking again', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(saved), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json', 'X-Workout-Revision': 'after-save' },
+      }),
+    );
+    const workout = await api.createWorkout({} as Parameters<typeof api.createWorkout>[0]);
+    expect(revisionAfterSave(workout)).toBe('after-save');
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(json({ revision: 'after-save', workouts: [saved] }));
+    expect(await api.listWorkouts('2026-08-01', 'after-save')).toEqual([saved]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/workouts/snapshot');
+  });
+
+  it('reports no revision when the server does not send one', async () => {
+    fetchMock.mockResolvedValueOnce(json(saved));
+    const workout = await api.updateWorkout(
+      saved.id,
+      {} as Parameters<typeof api.updateWorkout>[1],
+    );
+    expect(revisionAfterSave(workout)).toBeNull();
+  });
+});
+
+describe('workout saves across page closure', () => {
+  const saved = { id: 'saved-workout' } as TrackedWorkout;
+  const payload = {
+    client_session_id: 'a30dfe69-5985-4e0d-8856-01235ebcf670',
+    name: 'Upper body',
+    notes: '',
+  } as Parameters<typeof api.createWorkout>[0];
+
+  it.each(['create', 'update'] as const)(
+    'keeps a small %s alive with its body, auth and signal',
+    async (method) => {
+      fetchMock.mockResolvedValueOnce(json(saved));
+      const controller = new AbortController();
+      if (method === 'create') await api.createWorkout(payload, controller.signal);
+      else await api.updateWorkout(saved.id, payload, controller.signal);
+
+      const [path, init] = fetchMock.mock.calls[0];
+      expect(path).toBe(method === 'create' ? '/api/workouts' : `/api/workouts/${saved.id}`);
+      expect(init).toMatchObject({
+        method: method === 'create' ? 'POST' : 'PUT',
+        keepalive: true,
+        credentials: 'same-origin',
+        signal: controller.signal,
+        body: JSON.stringify(payload),
+      });
+      expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json');
+      expect(new Headers(init?.headers).get(CLIENT_VERSION_HEADER)).toBeTruthy();
+    },
+  );
+
+  it('sends a large Unicode workout normally instead of exceeding the keepalive byte limit', async () => {
+    const large = { ...payload, notes: '\u{1f4aa}'.repeat(20_000) };
+    expect(JSON.stringify(large).length).toBeLessThan(64 * 1024);
+    expect(new Blob([JSON.stringify(large)]).size).toBeGreaterThan(64 * 1024);
+    fetchMock.mockResolvedValueOnce(json(saved));
+    await api.createWorkout(large);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      keepalive: false,
+      body: JSON.stringify(large),
+    });
+  });
+
+  it('falls back when the shared keepalive budget is unavailable, keeping the same session ID', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(json(saved));
+    await api.createWorkout(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([, init]) => init?.keepalive)).toEqual([true, false]);
+    expect(fetchMock.mock.calls.map(([, init]) => init?.body)).toEqual([
+      JSON.stringify(payload),
+      JSON.stringify(payload),
+    ]);
+  });
+
+  it('does not turn a server refusal into a second send', async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: { message: 'Review workout' } }, 422));
+    await expect(api.createWorkout(payload)).rejects.toMatchObject({ status: 422 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry a request explicitly cancelled by the account lifecycle', async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementationOnce(async () => {
+      controller.abort();
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(api.createWorkout(payload, controller.signal)).rejects.toThrow('Failed to fetch');
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

@@ -51,6 +51,13 @@ export const HOME_SECTIONS = [
     size: 'full',
   },
   {
+    id: 'this-week',
+    title: 'This week',
+    description: 'Each day of the current week',
+    icon: 'calendar',
+    size: 'full',
+  },
+  {
     id: 'consistency',
     title: 'Consistency',
     description: 'Streak and training calendar',

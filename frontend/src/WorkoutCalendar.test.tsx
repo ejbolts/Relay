@@ -1,4 +1,5 @@
 ﻿// @vitest-environment jsdom
+import { dayRing } from './dayColors';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -134,6 +135,36 @@ const day = (workout_date: string, categories: HeatmapDay['categories']): Heatma
 const cell = (date: string) => host.querySelector<HTMLButtonElement>(`[data-date="${date}"]`)!;
 const ring = (date: string) => cell(date).style.getPropertyValue('--day-ring');
 
+it.each(['month', 'week'] as const)(
+  'distinguishes past days from today, future days and the viewed date in the %s calendar',
+  async (view) => {
+    const entries = [day('2026-10-25', ['upper']), day('2026-10-26', ['lower'])];
+    const render = (selectedDate: string | null) =>
+      act(async () => {
+        const props = { entries, categoryColors: colors, selectedDate, onDayClick: vi.fn() };
+        root.render(
+          view === 'week' ? (
+            <WeekStrip {...props} weekStartDay={0} />
+          ) : (
+            <WorkoutCalendar {...props} />
+          ),
+        );
+      });
+    await render(null);
+    expect(cell('2026-10-25').classList.contains('past')).toBe(true);
+    expect(cell('2026-10-25').classList.contains('selected')).toBe(false);
+    expect(cell('2026-10-26').classList.contains('past')).toBe(false);
+    expect(cell('2026-10-26').getAttribute('aria-current')).toBe('date');
+    expect(cell('2026-10-27').classList.contains('future')).toBe(true);
+    expect(cell('2026-10-27').classList.contains('past')).toBe(false);
+    await render('2026-10-25');
+    expect(cell('2026-10-25').classList.contains('selected')).toBe(true);
+    expect(cell('2026-10-26').classList.contains('selected')).toBe(false);
+    await render(null);
+    expect(cell('2026-10-25').classList.contains('selected')).toBe(false);
+  },
+);
+
 it('outlines each trained day in its workout colours', async () => {
   const entries = [
     day('2026-10-19', ['upper']),
@@ -154,9 +185,7 @@ it('outlines each trained day in its workout colours', async () => {
   await render([]);
   expect(ring('2026-10-19')).toBe('#8b5cf6');
   expect(ring('2026-10-20')).toBe('#f59e0b');
-  expect(ring('2026-10-21')).toBe(
-    'conic-gradient(from -45deg, #8b5cf6 0deg 180deg, #22c55e 180deg 360deg)',
-  );
+  expect(ring('2026-10-21')).toBe(dayRing(['#8b5cf6', '#22c55e']));
   expect(ring('2026-10-22')).toBe('');
   expect(cell('2026-10-21').querySelectorAll('.calendar-day-dots i')).toHaveLength(2);
 
@@ -231,9 +260,7 @@ it('leads Home with this week, naming each day’s workout types', async () => {
   // A second workout type is named on its own line, each in its colour.
   expect(names('2026-10-26')).toEqual(['Upper', 'Cardio']);
   expect(nameColors('2026-10-26')).toEqual(['#8b5cf6', '#22c55e']);
-  expect(ring('2026-10-26')).toBe(
-    'conic-gradient(from -45deg, #8b5cf6 0deg 180deg, #22c55e 180deg 360deg)',
-  );
+  expect(ring('2026-10-26')).toBe(dayRing(['#8b5cf6', '#22c55e']));
   expect(names('2026-10-27')).toEqual(['Lower']);
   expect(ring('2026-10-27')).toBe('#f59e0b');
   // Only two lines fit, so further types are counted.

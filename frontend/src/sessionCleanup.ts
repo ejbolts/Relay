@@ -13,6 +13,7 @@ import { clearActiveWorkoutDraft, readActiveWorkoutDraft } from './workoutDraft'
 import { clearWorkoutCache } from './workoutCache';
 import { clearBodyMeasurementQueue, reconcileBodyMeasurementQueue } from './bodyMeasurementStore';
 import { clearPendingReactions, reconcilePendingReactions } from './pendingReactions';
+import { clearFinishedWorkouts, keepFinishedWorkoutsFor } from './finishedWorkoutQueue';
 
 export { LAST_USER_KEY, readLastUser, rememberUser } from './deviceAccount';
 
@@ -45,6 +46,7 @@ export async function clearUserDeviceData(
     if (!keepUnsyncedWorkout) {
       clearBodyMeasurementQueue(storage);
       clearPendingReactions(storage);
+      clearFinishedWorkouts(storage);
     }
     if (!keepUnsyncedWorkout || !readActiveWorkoutDraft(storage)?.pendingSave)
       clearActiveWorkoutDraft(storage);
@@ -79,6 +81,7 @@ export async function reconcileSignedInUser(
   rememberUser(user, deps.storage);
   reconcileBodyMeasurementQueue(user.id, deps.storage);
   reconcilePendingReactions(user.id, deps.storage);
+  keepFinishedWorkoutsFor(user.id, deps.storage);
   return wiped;
 }
 

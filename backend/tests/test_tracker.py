@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import uuid
 from datetime import date, timedelta
 from io import BytesIO, StringIO
 
@@ -679,6 +680,26 @@ def test_workout_snapshot_revision_changes_after_mutations(client):
         "revision": deleted_revision,
         "workouts": [],
     }
+
+
+def test_workout_saves_report_the_revision_they_reached(client):
+    exercise = client.get("/api/exercises").json()[0]
+    payload = {**workout_payload(exercise["id"]), "client_session_id": str(uuid.uuid4())}
+
+    created = client.post("/api/workouts", json=payload)
+    after_create = client.get("/api/workouts/revision").json()["revision"]
+    replayed = client.post("/api/workouts", json=payload)
+    updated = client.put(
+        f"/api/workouts/{created.json()['id']}", json=workout_payload(exercise["id"])
+    )
+    after_update = client.get("/api/workouts/revision").json()["revision"]
+
+    assert created.status_code == 201
+    assert created.headers["X-Workout-Revision"] == after_create
+    assert replayed.json()["id"] == created.json()["id"]
+    assert replayed.headers["X-Workout-Revision"] == after_create
+    assert updated.status_code == 200
+    assert updated.headers["X-Workout-Revision"] == after_update != after_create
 
 
 def test_workout_requires_a_completed_set(client):

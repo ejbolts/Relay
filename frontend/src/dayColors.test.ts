@@ -8,11 +8,13 @@ describe('dayRing', () => {
     expect(dayRing([])).toBe('');
   });
 
-  it('splits a mixed day into equal arcs', () => {
+  it('splits a mixed day into equal arcs with clear gaps between them', () => {
     expect(dayRing(['#8b5cf6', '#22c55e'])).toBe(
-      'conic-gradient(from -45deg, #8b5cf6 0deg 180deg, #22c55e 180deg 360deg)',
+      'conic-gradient(from -45deg, transparent 0deg 5deg, #8b5cf6 5deg 175deg, ' +
+        'transparent 175deg 180deg, transparent 180deg 185deg, #22c55e 185deg 355deg, ' +
+        'transparent 355deg 360deg)',
     );
-    expect(dayRing(['#111111', '#222222', '#333333'])).toContain('#333333 240deg 360deg');
+    expect(dayRing(['#111111', '#222222', '#333333'])).toContain('#333333 245deg 355deg');
   });
 });
 
