@@ -638,9 +638,11 @@ describe('saving and pinning a machine photo while logging', () => {
     const draft = readActiveWorkoutDraft()!;
     const movement = draft.movements[0];
     movement.machinePhotoIds = [homeGym.id, travelGym.id];
+    // Working sets, so finishing goes straight to the confirmation rather than the warm-up review.
+    const working = { ...movement.sets[0], set_type: 'normal' as const, warmup: false };
     movement.sets = [
-      { ...movement.sets[0], completed: true },
-      { ...movement.sets[0], key: 'set-2', completed: false, weight_kg: 100 },
+      { ...working, completed: true },
+      { ...working, key: 'set-2', completed: false, weight_kg: 100 },
     ];
     writeActiveWorkoutDraft(draft);
     await act(async () => root.render(<App />));
