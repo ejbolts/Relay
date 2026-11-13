@@ -212,7 +212,7 @@ export function TodayScreen({
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
   const weeks = useMemo(
-    () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
+    () => weeklyTrainingTotals(workouts, today, weekStartDay, 8),
     [today, weekStartDay, workouts],
   );
   const grid = useMemo(
@@ -228,7 +228,6 @@ export function TodayScreen({
     needsSplitUpdate,
   } = useUpNextSession(data?.recommendation, workouts, today);
   const currentWeek = weeks.at(-1);
-  const history = weeks.slice(0, -1);
   const haveWorkouts = workouts.length > 0;
   const workoutsThisWeek = haveWorkouts ? (currentWeek?.workouts ?? 0) : data?.workouts_this_week;
   // Cardio sessions are mirrored from workouts' cardio movements, so no workouts means none.
@@ -237,8 +236,8 @@ export function TodayScreen({
     : data
       ? 0
       : null;
-  const averageWorkouts = averageOf(history.map((week) => week.workouts));
-  const averageCardioSessions = averageOf(history.map((week) => week.cardioSessions));
+  const averageWorkouts = averageOf(weeks.map((week) => week.workouts));
+  const averageCardioSessions = averageOf(weeks.map((week) => week.cardioSessions));
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
   const zone2 = data?.zone2 ?? null;
   const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
@@ -463,11 +462,9 @@ export function TodayScreen({
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
         <strong>{workoutsThisWeek ?? '–'}</strong>
-        <em>
-          {averageWorkouts === null ? 'This week' : `12-wk avg ${averageWorkouts.toFixed(1)}`}
-        </em>
+        <em>{averageWorkouts === null ? 'This week' : `8-wk avg ${averageWorkouts.toFixed(1)}`}</em>
         <SparkBars
-          values={weeks.slice(-8).map((week) => week.workouts)}
+          values={weeks.map((week) => week.workouts)}
           label="Workouts per week, last 8 weeks"
         />
       </button>
@@ -479,10 +476,10 @@ export function TodayScreen({
         <em>
           {averageCardioSessions === null
             ? 'This week'
-            : `12-wk avg ${averageCardioSessions.toFixed(1)}`}
+            : `8-wk avg ${averageCardioSessions.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.slice(-8).map((week) => week.cardioSessions)}
+          values={weeks.map((week) => week.cardioSessions)}
           label="Cardio sessions per week, last 8 weeks"
         />
       </button>

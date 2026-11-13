@@ -322,7 +322,7 @@ describe('App startup', () => {
     expect(markup).not.toContain('live-workout-card');
   });
 
-  it('shows only the latest eight weekly bars while retaining the longer-term averages', () => {
+  it('uses the same eight weeks for the activity bars and averages, including the current week', () => {
     const workouts: TrackedWorkout[] = ['2026-08-03', '2026-09-21', '2026-10-05'].map((date) => ({
       id: date,
       name: 'Sample workout',
@@ -349,8 +349,8 @@ describe('App startup', () => {
     expect([...charts[1][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual(
       Array(8).fill(8),
     );
-    expect(markup).toContain('Workouts</span><strong>1</strong><em>12-wk avg 0.2</em>');
-    expect(markup).toContain('Cardio sessions</span><strong>0</strong><em>12-wk avg 0.0</em>');
+    expect(markup).toContain('Workouts</span><strong>1</strong><em>8-wk avg 0.3</em>');
+    expect(markup).toContain('Cardio sessions</span><strong>0</strong><em>8-wk avg 0.0</em>');
     expect(markup).toContain('Last 12 weeks');
   });
 
