@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from app.database import SessionLocal
 from app.home_layout import OPTIONAL_CHECK_INS, SECTION_IDS
 from app.training_metrics import set_setting
@@ -7,6 +9,8 @@ from app.training_metrics import set_setting
 DEFAULT_SETTINGS = {
     "zone2": {"zone": None, "style": "progress"},
     "training_block": {"style": "both"},
+    "workouts": {"weeks": 8},
+    "cardio_sessions": {"weeks": 8},
 }
 
 
@@ -25,6 +29,8 @@ def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client)
         "settings": {
             "zone2": {"zone": 4, "style": "ring"},
             "training_block": {"style": "timeline"},
+            "workouts": {"weeks": 4},
+            "cardio_sessions": {"weeks": 12},
         },
     }
     response = client.put("/api/home-layout", json=layout)
@@ -61,6 +67,10 @@ def test_invalid_layout_does_not_overwrite_saved_layout(client):
         {"settings": {"zone2": {"style": "chart"}}},
         {"settings": {"zone2": {"zone": 6}}},
         {"settings": {"zone2": {"zone": 0}}},
+        {"settings": {"workouts": {"weeks": 6}}},
+        {"settings": {"cardio_sessions": {"weeks": 16}}},
+        {"settings": {"workouts": {"weeks": "8"}}},
+        {"settings": {"cardio_sessions": {"weeks": None}}},
     ):
         assert client.put("/api/home-layout", json=invalid).status_code == 422
         assert client.get("/api/home-layout").json() == saved
@@ -82,6 +92,8 @@ def test_older_layout_appends_new_sections_without_unhiding_old_sections(client)
     assert set(result["order"]) == set(SECTION_IDS)
     assert result["hidden"] == old["hidden"] + OPTIONAL_CHECK_INS
     assert result["widths"] == {}
+    assert result["settings"]["workouts"] == {"weeks": 8}
+    assert result["settings"]["cardio_sessions"] == {"weeks": 8}
 
 
 def test_saved_layout_gains_the_weekly_review_visible_at_the_end(client):
@@ -220,3 +232,50 @@ def test_section_settings_default_for_older_layouts_and_update_independently(cli
     assert client.put("/api/home-layout", json=layout).json() == layout
     partial = client.put("/api/home-layout", json={"settings": {"zone2": {"style": "ring"}}})
     assert partial.json()["settings"]["zone2"] == {"zone": None, "style": "ring"}
+
+
+@pytest.mark.parametrize("weeks", [4, 8, 12])
+def test_activity_windows_save_independently_for_each_account(client, other_client, weeks):
+    layout = client.get("/api/home-layout").json()
+    layout["settings"]["workouts"] = {"weeks": weeks}
+    assert client.put("/api/home-layout", json=layout).json() == layout
+    assert client.get("/api/home-layout").json()["settings"]["cardio_sessions"] == {"weeks": 8}
+    layout["settings"]["cardio_sessions"] = {"weeks": 12}
+    assert client.put("/api/home-layout", json=layout).json() == layout
+    assert client.get("/api/home-layout").json() == layout
+    assert other_client.get("/api/home-layout").json()["settings"] == DEFAULT_SETTINGS
+
+
+@pytest.mark.parametrize("version", [None, "1.2.0", "invalid"])
+def test_older_layout_saves_preserve_activity_settings_the_client_omits(client, version):
+    layout = client.get("/api/home-layout").json()
+    layout["settings"]["workouts"] = {"weeks": 4}
+    layout["settings"]["cardio_sessions"] = {"weeks": 12}
+    assert client.put("/api/home-layout", json=layout).status_code == 200
+    layout["hidden"] = ["records"]
+    layout["settings"] = {"zone2": {"zone": 2, "style": "ring"}}
+    headers = {} if version is None else {"X-Relay-Version": version}
+    response = client.put("/api/home-layout", json=layout, headers=headers)
+    assert response.status_code == 200
+    saved = response.json()
+    assert saved["settings"]["workouts"] == {"weeks": 4}
+    assert saved["settings"]["cardio_sessions"] == {"weeks": 12}
+    assert saved["settings"]["zone2"] == {"zone": 2, "style": "ring"}
+    assert saved["hidden"] == ["records"]
+    assert client.get("/api/home-layout").json() == saved
+
+    # A client that explicitly sends a new choice can edit one card without resetting the other.
+    layout["settings"]["workouts"] = {"weeks": 8}
+    explicit = client.put("/api/home-layout", json=layout, headers=headers).json()
+    assert explicit["settings"]["workouts"] == {"weeks": 8}
+    assert explicit["settings"]["cardio_sessions"] == {"weeks": 12}
+
+
+def test_newer_layout_clients_can_reset_activity_settings_to_defaults(client):
+    layout = client.get("/api/home-layout").json()
+    layout["settings"]["workouts"] = {"weeks": 4}
+    layout["settings"]["cardio_sessions"] = {"weeks": 12}
+    client.put("/api/home-layout", json=layout)
+    reset = client.put("/api/home-layout", json={}, headers={"X-Relay-Version": "1.3.0"})
+    assert reset.status_code == 200
+    assert reset.json()["settings"] == DEFAULT_SETTINGS

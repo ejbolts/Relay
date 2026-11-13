@@ -43,6 +43,7 @@ FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
         "maintenance_min_kg": "1.2.1",
         "maintenance_max_kg": "1.2.1",
     },
+    "home_section_settings": {"workouts": "1.3.0", "cardio_sessions": "1.3.0"},
 }
 
 # Sign-in and sign-out keep working so an old app can always reach the update.

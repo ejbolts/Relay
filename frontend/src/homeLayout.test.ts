@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activityCardSettings,
   defaultHomeLayout,
   HOME_SECTIONS,
   fillHomeSectionGap,
@@ -10,6 +11,7 @@ import {
   toggleHomeSectionWidth,
   homeSectionSettings,
   updateHomeSectionSettings,
+  type HomeLayout,
 } from './homeLayout';
 
 describe('Home layout edits', () => {
@@ -150,13 +152,40 @@ describe('Home layout edits', () => {
 });
 
 describe('Home section settings', () => {
+  it.each([16, 0, null, 'future'])(
+    'tolerates an unknown activity window (%j) without altering saved data',
+    (weeks) => {
+      const layout = {
+        ...defaultHomeLayout(),
+        settings: {
+          ...defaultHomeLayout().settings,
+          workouts: { weeks },
+          cardio_sessions: { weeks: 4 },
+        },
+      } as unknown as HomeLayout;
+      expect(activityCardSettings(layout, 'workouts')).toEqual({ weeks: 8 });
+      expect(activityCardSettings(layout, 'cardio_sessions')).toEqual({ weeks: 4 });
+      expect(layout.settings?.workouts.weeks).toBe(weeks);
+    },
+  );
+
   it('defaults older layouts and updates one option without losing the others', () => {
     const older = { order: defaultHomeLayout().order, hidden: [] };
     expect(homeSectionSettings(older, 'zone2')).toEqual({ zone: null, style: 'progress' });
+    expect(homeSectionSettings(older, 'workouts')).toEqual({ weeks: 8 });
+    expect(homeSectionSettings(older, 'cardio_sessions')).toEqual({ weeks: 8 });
     const ring = updateHomeSectionSettings(older, 'zone2', { style: 'ring' });
     const zone4 = updateHomeSectionSettings(ring, 'zone2', { zone: 4 });
     expect(zone4.settings?.zone2).toEqual({ zone: 4, style: 'ring' });
     expect(zone4.order).toBe(older.order);
     expect(older).not.toHaveProperty('settings');
+    const activity = updateHomeSectionSettings(
+      updateHomeSectionSettings(zone4, 'workouts', { weeks: 4 }),
+      'cardio_sessions',
+      { weeks: 12 },
+    );
+    expect(activity.settings?.workouts).toEqual({ weeks: 4 });
+    expect(activity.settings?.cardio_sessions).toEqual({ weeks: 12 });
+    expect(activity.settings?.zone2).toEqual(zone4.settings?.zone2);
   });
 });

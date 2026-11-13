@@ -2,7 +2,8 @@ import type { HeatmapDay, TrackedWorkout, WorkoutHistorySummary } from './types'
 
 /**
  * Long training logs load recent months first. Startup reads this many calendar months, including
- * the current one; scrolling back through the calendar or paging back through Sessions reads older chunks.
+ * the current one, extending to cover twelve activity weeks when needed. Scrolling back through the
+ * calendar or paging back through Sessions reads older chunks.
  */
 export const INITIAL_HISTORY_MONTHS = 3;
 export const OLDER_HISTORY_MONTHS = 6;
@@ -11,9 +12,18 @@ function isoDate(year: number, monthIndex: number, day: number): string {
   return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
 }
 
-/** The first day of the month `months - 1` months before `today`'s month. */
+/** Whole months covering at least the recent three months and twelve activity weeks. */
 export function initialHistoryStart(today: Date = new Date()): string {
-  return isoDate(today.getFullYear(), today.getMonth() - (INITIAL_HISTORY_MONTHS - 1), 1);
+  const recentMonths = isoDate(
+    today.getFullYear(),
+    today.getMonth() - (INITIAL_HISTORY_MONTHS - 1),
+    1,
+  );
+  // Include the oldest possible first day for any week-start preference. Keep the boundary on
+  // the first of its month so loading an older chunk cannot skip the rest of that month.
+  const oldestDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (12 * 7 - 1));
+  const activityMonths = isoDate(oldestDay.getFullYear(), oldestDay.getMonth(), 1);
+  return recentMonths < activityMonths ? recentMonths : activityMonths;
 }
 
 export function hasOlderHistory(

@@ -12,9 +12,15 @@ import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
-import { homeSectionSettings, updateHomeSectionSettings, type HomeSectionId } from './homeLayout';
+import {
+  activityCardSettings,
+  homeSectionSettings,
+  updateHomeSectionSettings,
+  type HomeSectionId,
+} from './homeLayout';
 import { CardioGoalCard } from './CardioGoalCard';
 import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
+import { ActivityCardSettingsForm } from './ActivityCardSettings';
 import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
@@ -211,6 +217,9 @@ export function TodayScreen({
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
+  const layout = home.editing ? home.draft : home.layout;
+  const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
+  const cardioWeeks = activityCardSettings(layout, 'cardio_sessions').weeks;
   const weeks = useMemo(
     () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
@@ -228,7 +237,6 @@ export function TodayScreen({
     needsSplitUpdate,
   } = useUpNextSession(data?.recommendation, workouts, today);
   const currentWeek = weeks.at(-1);
-  const history = weeks.slice(0, -1);
   const haveWorkouts = workouts.length > 0;
   const workoutsThisWeek = haveWorkouts ? (currentWeek?.workouts ?? 0) : data?.workouts_this_week;
   // Cardio sessions are mirrored from workouts' cardio movements, so no workouts means none.
@@ -237,8 +245,10 @@ export function TodayScreen({
     : data
       ? 0
       : null;
-  const averageWorkouts = averageOf(history.map((week) => week.workouts));
-  const averageCardioSessions = averageOf(history.map((week) => week.cardioSessions));
+  const workoutHistory = weeks.slice(-workoutWeeks);
+  const cardioHistory = weeks.slice(-cardioWeeks);
+  const averageWorkouts = averageOf(workoutHistory.map((week) => week.workouts));
+  const averageCardioSessions = averageOf(cardioHistory.map((week) => week.cardioSessions));
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
   const zone2 = data?.zone2 ?? null;
   const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
@@ -464,11 +474,13 @@ export function TodayScreen({
         <span>Workouts</span>
         <strong>{workoutsThisWeek ?? '–'}</strong>
         <em>
-          {averageWorkouts === null ? 'This week' : `12-wk avg ${averageWorkouts.toFixed(1)}`}
+          {averageWorkouts === null
+            ? 'This week'
+            : `${workoutWeeks}-wk avg ${averageWorkouts.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.workouts)}
-          label="Workouts per week, last 12 weeks"
+          values={workoutHistory.map((week) => week.workouts)}
+          label={`Workouts per week, last ${workoutWeeks} weeks`}
         />
       </button>
     ),
@@ -479,11 +491,11 @@ export function TodayScreen({
         <em>
           {averageCardioSessions === null
             ? 'This week'
-            : `12-wk avg ${averageCardioSessions.toFixed(1)}`}
+            : `${cardioWeeks}-wk avg ${averageCardioSessions.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.cardioSessions)}
-          label="Cardio sessions per week, last 12 weeks"
+          values={cardioHistory.map((week) => week.cardioSessions)}
+          label={`Cardio sessions per week, last ${cardioWeeks} weeks`}
         />
       </button>
     ),
@@ -708,6 +720,24 @@ export function TodayScreen({
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          workouts: (
+            <ActivityCardSettingsForm
+              values={weeks.map((week) => week.workouts)}
+              value={activityCardSettings(home.draft, 'workouts')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'workouts', change))
+              }
+            />
+          ),
+          'cardio-sessions': (
+            <ActivityCardSettingsForm
+              values={weeks.map((week) => week.cardioSessions)}
+              value={activityCardSettings(home.draft, 'cardio_sessions')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'cardio_sessions', change))
+              }
+            />
+          ),
           'training-block': (
             <TrainingBlockCardSettingsForm
               value={homeSectionSettings(home.draft, 'training_block')}

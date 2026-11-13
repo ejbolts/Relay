@@ -1119,7 +1119,7 @@ describe('filtering History by machine', () => {
     await click(button('Go to page 27', pages()));
     // Each six-month read finishes before the next starts, until page 27's weeks are loaded.
     await act(() => vi.waitFor(() => expect(historyCardTitles()).toEqual(['Legs 2025-10-12'])));
-    expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-02-01', '2025-08-01']);
+    expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-01-01', '2025-07-01']);
   });
 
   it('filters from a pinned photo in a workout and explains an unused machine', async () => {

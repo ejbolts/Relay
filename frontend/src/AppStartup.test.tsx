@@ -4,6 +4,7 @@ import { App } from './App';
 import { AppTabBar } from './AppTabBar';
 import { TodayScreen, type TodayScreenProps } from './TodayScreen';
 import { useHomeLayout } from './useHomeLayout';
+import { defaultHomeLayout, updateHomeSectionSettings, type HomeLayout } from './homeLayout';
 import type {
   DashboardData,
   PersonalRecord,
@@ -62,14 +63,28 @@ function renderSignedIn(hash: string, user: User) {
   );
 }
 
-function TodayPreview(props: Omit<TodayScreenProps, 'home'>) {
+function TodayPreview({
+  layout,
+  editing = false,
+  ...props
+}: Omit<TodayScreenProps, 'home'> & {
+  layout?: HomeLayout;
+  editing?: boolean;
+}) {
   const home = useHomeLayout();
-  return <TodayScreen home={home} {...props} />;
+  return (
+    <TodayScreen
+      home={{ ...home, layout: layout ?? home.layout, draft: layout ?? home.draft, editing }}
+      {...props}
+    />
+  );
 }
 
 function renderToday(
   overrides: Partial<Parameters<typeof TodayScreen>[0]> = {},
   weightUnit: WeightUnit = 'kg',
+  layout?: HomeLayout,
+  editing = false,
 ) {
   return renderToStaticMarkup(
     <TrainingPreferencesContext.Provider
@@ -85,6 +100,8 @@ function renderToday(
       }}
     >
       <TodayPreview
+        layout={layout}
+        editing={editing}
         data={
           {
             workouts_this_week: 4,
@@ -320,6 +337,67 @@ describe('App startup', () => {
     expect(markup).toContain('aria-label="Video logger"');
     expect(markup).toContain('aria-label="Settings"');
     expect(markup).not.toContain('live-workout-card');
+  });
+
+  it('uses the same eight weeks for the activity bars and averages, including the current week', () => {
+    const workouts: TrackedWorkout[] = ['2026-08-03', '2026-09-21', '2026-10-05'].map((date) => ({
+      id: date,
+      name: 'Sample workout',
+      workout_date: date,
+      category: 'upper',
+      notes: null,
+      duration_minutes: 30,
+      start_time: null,
+      end_time: null,
+      is_sample: true,
+      created_at: `${date}T10:00:00Z`,
+      updated_at: `${date}T10:00:00Z`,
+      movements: [],
+    }));
+    const markup = renderToday({ workouts });
+    const charts = [...markup.matchAll(/class="pulse-sparkbars"[^>]*>(.*?)<\/div>/g)];
+
+    expect(charts).toHaveLength(2);
+    expect(charts[0][0]).toContain('aria-label="Workouts per week, last 8 weeks"');
+    expect(charts[1][0]).toContain('aria-label="Cardio sessions per week, last 8 weeks"');
+    expect([...charts[0][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual([
+      8, 8, 8, 8, 8, 100, 8, 100,
+    ]);
+    expect([...charts[1][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual(
+      Array(8).fill(8),
+    );
+    expect(markup).toContain('Workouts</span><strong>1</strong><em>8-wk avg 0.3</em>');
+    expect(markup).toContain('Cardio sessions</span><strong>0</strong><em>8-wk avg 0.0</em>');
+    expect(markup).toContain('Last 12 weeks');
+  });
+
+  it.each([4, 8, 12] as const)(
+    'uses the saved %i-week workout window independently of cardio',
+    (weeks) => {
+      const layout = updateHomeSectionSettings(
+        updateHomeSectionSettings(defaultHomeLayout(), 'workouts', { weeks }),
+        'cardio_sessions',
+        { weeks: 12 },
+      );
+      const markup = renderToday({}, 'kg', layout);
+      const charts = [...markup.matchAll(/class="pulse-sparkbars"[^>]*>(.*?)<\/div>/g)];
+      expect(charts[0][0]).toContain(`Workouts per week, last ${weeks} weeks`);
+      expect([...charts[0][1].matchAll(/height:/g)]).toHaveLength(weeks);
+      expect(markup).toContain(`${weeks}-wk avg 0.0`);
+      expect(charts[1][0]).toContain('Cardio sessions per week, last 12 weeks');
+      expect([...charts[1][1].matchAll(/height:/g)]).toHaveLength(12);
+      expect(markup).toContain('12-wk avg 0.0');
+    },
+  );
+
+  it('offers a dedicated activity customiser only while editing Home', () => {
+    const normal = renderToday();
+    expect(normal).not.toContain('aria-label="Customise Workouts"');
+    expect(normal).not.toContain('aria-label="Customise Cardio sessions"');
+    const editing = renderToday({}, 'kg', defaultHomeLayout(), true);
+    expect(editing).toContain('aria-label="Customise Workouts"');
+    expect(editing).toContain('aria-label="Customise Cardio sessions"');
+    expect(editing).toContain('aria-label="Customise Cardio zone goals"');
   });
 
   it('shows each personal zone goal using only its qualifying minutes', () => {
