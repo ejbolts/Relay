@@ -1862,7 +1862,7 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}${offlineNotice.visible ? ' has-offline-notice' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner

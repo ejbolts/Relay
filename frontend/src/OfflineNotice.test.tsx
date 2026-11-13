@@ -53,6 +53,7 @@ it('appears once the app has stayed offline briefly, and leaves as soon as it re
 
   await advance(OFFLINE_NOTICE_DELAY_MS);
   expect(notice()?.getAttribute('role')).toBe('status');
+  expect(notice()?.getAttribute('aria-atomic')).toBe('true');
   expect(notice()?.textContent).toContain("You're offline");
   expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   expect(container.querySelector('.page-header')?.textContent).toBe('Home');
