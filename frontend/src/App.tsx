@@ -138,11 +138,7 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
-import {
-  WarmupOnlyFinishDialog,
-  type WarmupOnlyMovement,
-  type WorkingSetChanges,
-} from './WarmupOnlyFinishDialog';
+import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
 import { loggedOnlyWarmups } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
@@ -3965,24 +3961,12 @@ function WorkoutLogger({
 
   const warmupOnlyMovements: WarmupOnlyMovement[] = movements
     .filter((movement) => movement.exercise.kind !== 'cardio' && loggedOnlyWarmups(movement.sets))
-    .map((movement) => ({ key: movement.key, name: movement.exercise.name, sets: movement.sets }));
-
-  /** Applies the finish review's working-set choices and returns the movements to save. */
-  function makeWorkingSets(changes: WorkingSetChanges): DraftMovement[] {
-    const next = movements.map((movement) => {
-      const keys = changes.get(movement.key);
-      if (!keys) return movement;
-      return {
-        ...movement,
-        sets: movement.sets.map((item) =>
-          keys.has(item.key) ? workoutSetAfterEdit(item, setKindUpdate('normal')) : item,
-        ),
-      };
-    });
-    if (changes.size) tips.learn('setType');
-    setMovements(next);
-    return next;
-  }
+    .map((movement) => ({
+      key: movement.key,
+      name: movement.exercise.name,
+      iconUrl: exerciseIconFor(movement.exercise),
+      sets: movement.sets,
+    }));
 
   function toggleSet(movement: DraftMovement, item: DraftSet) {
     updateSet(movement.key, item.key, { completed: !item.completed });
@@ -4032,12 +4016,7 @@ function WorkoutLogger({
       ));
 
   /** Resolves true once the workout is handed over for saving. */
-  async function finishWorkout(
-    inactiveEndAt?: number,
-    /** Movements just edited in the finish review, ahead of the state update. */
-    reviewedMovements?: DraftMovement[],
-  ): Promise<boolean> {
-    const sourceMovements = reviewedMovements ?? movements;
+  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
     if (savingRef.current) return false;
     if (!initialWorkout && !isCurrentDraft()) return false;
     if (workoutTypes.loading) {
@@ -4059,8 +4038,8 @@ function WorkoutLogger({
     const finishedAt = inactiveEndAt ?? Date.now();
     const movementsToSave =
       inactiveEndAt === undefined
-        ? sourceMovements
-        : sourceMovements.map((movement) => ({
+        ? movements
+        : movements.map((movement) => ({
             ...movement,
             sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
           }));
@@ -4085,9 +4064,9 @@ function WorkoutLogger({
     const completed = movementsToSave
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
-    if (!sourceMovements.length || !completed.length) {
+    if (!movements.length || !completed.length) {
       setError(
-        !sourceMovements.length
+        !movements.length
           ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
           : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
       );
@@ -4113,7 +4092,7 @@ function WorkoutLogger({
     setSaving(true);
     setError(null);
     let completedIdentity = finalizeWorkoutIdentity(
-      sourceMovements.map((movement) => movement.exercise),
+      movements.map((movement) => movement.exercise),
       category,
       name,
       inferTypeFromExercises,
@@ -4124,7 +4103,7 @@ function WorkoutLogger({
       workoutTypes.types.find((type) => type.id === completedIdentity.category)?.archived
     ) {
       completedIdentity = finalizeWorkoutIdentity(
-        sourceMovements.map((movement) => movement.exercise),
+        movements.map((movement) => movement.exercise),
         category,
         name,
         false,
@@ -4842,10 +4821,6 @@ function WorkoutLogger({
           onFinishAnyway={() => {
             setWarmupReviewOpen(false);
             void finishWorkout();
-          }}
-          onUpdateAndFinish={(changes) => {
-            setWarmupReviewOpen(false);
-            void finishWorkout(undefined, makeWorkingSets(changes));
           }}
         />
       )}

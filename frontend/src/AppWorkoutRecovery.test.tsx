@@ -3866,28 +3866,37 @@ describe('no working sets warnings', () => {
     expect(other.querySelector('.exercise-icon-warning')).toBeNull();
   });
 
-  it('reviews warm-up-only exercises when finishing and saves the chosen working sets', async () => {
+  it('reminds about warm-up-only exercises when finishing, then can go back or finish anyway', async () => {
     writeActiveWorkoutDraft(warmupDraft());
     vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
     await mount();
-    const finish = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Finish workout',
-    )!;
-    await act(async () => finish.click());
-    const dialog = document.querySelector('.warmup-only-finish-dialog');
+    const finish = () =>
+      [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Finish workout',
+      )!;
+    const dialog = () => document.querySelector('.warmup-only-finish-dialog');
+    const action = (label: string) =>
+      [...dialog()!.querySelectorAll('button')].find((button) => button.textContent === label)!;
+    await act(async () => finish().click());
     expect(document.querySelector('.workout-finish-dialog')).toBeNull();
-    expect(dialog?.querySelector('h2')?.textContent).toBe('No working sets in Bench press');
-    const chips = [...dialog!.querySelectorAll<HTMLButtonElement>('.warmup-only-set')];
-    expect(chips.map((chip) => chip.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
-    const primary = dialog!.querySelector<HTMLButtonElement>('.popup-primary-action')!;
-    expect(primary.textContent).toBe('Make 1 set working & finish');
-    await act(async () => chips[0].click());
-    expect(primary.textContent).toBe('Make 2 sets working & finish');
-    await act(async () => chips[0].click());
-    await act(async () => primary.click());
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('No working sets');
+    // Only the warm-up-only exercise is listed, with its icon, name and logged warm-ups.
+    const sections = [...dialog()!.querySelectorAll('section')];
+    expect(sections.map((section) => section.querySelector('h3')?.textContent)).toEqual([
+      'Bench press',
+    ]);
+    expect(sections[0].querySelector('h3 img')).not.toBeNull();
+    expect(
+      [...sections[0].querySelectorAll('.warmup-only-set')].map((chip) => chip.textContent),
+    ).toEqual(['WWarm-up: 40 kg × 8', 'WWarm-up: 80 kg × 8']);
+    expect(dialog()!.querySelector('[aria-pressed]')).toBeNull();
+    await act(async () => action('Keep working out').click());
+    expect(dialog()).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => finish().click());
+    await act(async () => action('Finish anyway').click());
     expect(api.createWorkout).toHaveBeenCalledOnce();
     const saved = vi.mocked(api.createWorkout).mock.calls[0][0];
-    expect(saved.movements[0].sets.map((item) => item.set_type)).toEqual(['warmup', 'normal']);
-    expect(saved.movements[1].sets.map((item) => item.set_type)).toEqual(['normal']);
+    expect(saved.movements[0].sets.map((item) => item.set_type)).toEqual(['warmup', 'warmup']);
   });
 });
