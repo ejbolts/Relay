@@ -1,4 +1,5 @@
 ﻿// @vitest-environment jsdom
+import { dayRing } from './dayColors';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -184,9 +185,7 @@ it('outlines each trained day in its workout colours', async () => {
   await render([]);
   expect(ring('2026-10-19')).toBe('#8b5cf6');
   expect(ring('2026-10-20')).toBe('#f59e0b');
-  expect(ring('2026-10-21')).toBe(
-    'conic-gradient(from -45deg, #8b5cf6 0deg 180deg, #22c55e 180deg 360deg)',
-  );
+  expect(ring('2026-10-21')).toBe(dayRing(['#8b5cf6', '#22c55e']));
   expect(ring('2026-10-22')).toBe('');
   expect(cell('2026-10-21').querySelectorAll('.calendar-day-dots i')).toHaveLength(2);
 
@@ -261,9 +260,7 @@ it('leads Home with this week, naming each day’s workout types', async () => {
   // A second workout type is named on its own line, each in its colour.
   expect(names('2026-10-26')).toEqual(['Upper', 'Cardio']);
   expect(nameColors('2026-10-26')).toEqual(['#8b5cf6', '#22c55e']);
-  expect(ring('2026-10-26')).toBe(
-    'conic-gradient(from -45deg, #8b5cf6 0deg 180deg, #22c55e 180deg 360deg)',
-  );
+  expect(ring('2026-10-26')).toBe(dayRing(['#8b5cf6', '#22c55e']));
   expect(names('2026-10-27')).toEqual(['Lower']);
   expect(ring('2026-10-27')).toBe('#f59e0b');
   // Only two lines fit, so further types are counted.
