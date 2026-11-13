@@ -25,13 +25,11 @@ HomeSection = Literal[
     "zone2",
     "bodyweight-trend",
     "combined-check-in",
-    "bodyweight-check-in",
-    "body-fat-check-in",
     "records",
     "friends",
 ]
 SECTION_IDS = list(get_args(HomeSection))
-OPTIONAL_CHECK_INS = ["bodyweight-check-in", "body-fat-check-in"]
+OPTIONAL_CHECK_INS: list[str] = []
 LAYOUT_KEY = "home_layout"
 
 
@@ -45,9 +43,14 @@ class TrainingBlockCardSettings(BaseModel):
     style: Literal["progress", "timeline", "both"] = "both"
 
 
+class BodyCheckInSettings(BaseModel):
+    mode: Literal["weight", "fat", "combined", "combined-single"] = "combined"
+
+
 class HomeSectionSettings(BaseModel):
     """Per-section display options. Add a field here when a section becomes configurable."""
 
+    check_in: BodyCheckInSettings = Field(default_factory=BodyCheckInSettings)
     zone2: CardioGoalCardSettings = Field(default_factory=CardioGoalCardSettings)
     training_block: TrainingBlockCardSettings = Field(default_factory=TrainingBlockCardSettings)
 
@@ -70,24 +73,47 @@ class HomeLayout(BaseModel):
         if not isinstance(value, dict):
             return value
         result = dict(value)
-        # Keep the old card's exact position, visibility and width. New alternatives
-        # start in Add sections rather than appearing alongside the migrated card.
-        for key in ("order", "hidden"):
-            if isinstance(result.get(key), list):
-                result[key] = [
-                    "combined-check-in" if item == "daily-check-in" else item
-                    for item in result[key]
-                ]
-        if isinstance(result.get("widths"), dict):
-            result["widths"] = {
-                "combined-check-in" if key == "daily-check-in" else key: width
-                for key, width in result["widths"].items()
-            }
-        if isinstance(result.get("order"), list) and isinstance(result.get("hidden", []), list):
-            missing = [section for section in OPTIONAL_CHECK_INS if section not in result["order"]]
-            result["hidden"] = list(result.get("hidden", [])) + [
-                section for section in missing if section not in result.get("hidden", [])
+        legacy_modes = {
+            "daily-check-in": "combined",
+            "combined-check-in": "combined",
+            "bodyweight-check-in": "weight",
+            "body-fat-check-in": "fat",
+        }
+        order = result.get("order", [])
+        hidden = result.get("hidden", [])
+        if not isinstance(order, list) or not isinstance(hidden, list):
+            return result
+        if any(not isinstance(item, str) for item in [*order, *hidden]):
+            return result
+        if len(order) != len(set(order)) or len(hidden) != len(set(hidden)):
+            raise ValueError("Sections must not be repeated.")
+        candidates = [item for item in order if item in legacy_modes]
+        chosen = next((item for item in candidates if item not in hidden), None)
+        chosen = chosen or next(iter(candidates), None)
+        if chosen:
+            # Keep the first visible check-in's position and width; all-hidden stays hidden.
+            result["order"] = [
+                "combined-check-in" if item == chosen else item
+                for item in order
+                if item not in legacy_modes or item == chosen
             ]
+            result["hidden"] = [item for item in hidden if item not in legacy_modes]
+            if all(item in hidden for item in candidates):
+                result["hidden"].append("combined-check-in")
+            settings = result.get("settings", {})
+            if isinstance(settings, dict):
+                result["settings"] = {"check_in": {"mode": legacy_modes[chosen]}, **settings}
+        elif any(item in legacy_modes for item in hidden):
+            result["hidden"] = [item for item in hidden if item not in legacy_modes]
+            result["hidden"].append("combined-check-in")
+        if isinstance(result.get("widths"), dict):
+            widths = result["widths"]
+            result["widths"] = {
+                key: width for key, width in widths.items() if key not in legacy_modes
+            }
+            width_source = chosen or "combined-check-in"
+            if width_source in widths:
+                result["widths"]["combined-check-in"] = widths[width_source]
         return result
 
     @model_validator(mode="after")
