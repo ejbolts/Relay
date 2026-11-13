@@ -10,7 +10,8 @@ import {
 import type { DashboardData, WorkoutType, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { calendarDayTypes } from './workoutTypes';
-import { calendarMonths, monthCountFromOldestWorkout } from './calendarRange';
+import { calendarMonths, calendarWeekdays, monthCountFromOldestWorkout } from './calendarRange';
+import { useWeekStartDay } from './trainingPreferencesContext';
 import { Icon } from './Icon';
 import {
   addDays,
@@ -85,6 +86,7 @@ export function WorkoutCalendar({
   preview,
 }: WorkoutCalendarProps) {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const weekStartDay = useWeekStartDay();
   const { types: ownTypes } = useWorkoutTypes();
   const types = suppliedTypes ?? ownTypes;
   const historyStart = olderHistory?.historyStart ?? null;
@@ -100,7 +102,7 @@ export function WorkoutCalendar({
     [entries],
   );
   const months = useMemo(() => {
-    if (previewFrom) return calendarMonths(previewFrom, 2);
+    if (previewFrom) return calendarMonths(previewFrom, 2, 0, weekStartDay);
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     // Days before the loaded window (from a dashboard cached by an earlier release) are left out,
@@ -116,8 +118,8 @@ export function WorkoutCalendar({
     ];
     const allMonthCount = monthCountFromOldestWorkout(datedEntries, today);
     const oldest = new Date(today.getFullYear(), today.getMonth() - allMonthCount + 1, 1, 12);
-    return calendarMonths(localCalendarDate(oldest), allMonthCount);
-  }, [activeWorkoutDate, entries, hasOlder, historyStart, previewFrom]);
+    return calendarMonths(localCalendarDate(oldest), allMonthCount, 0, weekStartDay);
+  }, [activeWorkoutDate, entries, hasOlder, historyStart, previewFrom, weekStartDay]);
   const todayKey = localCalendarDate(new Date());
   // Taps read the latest handlers from a ref, so the memoised grid below never calls a stale one.
   const handlersRef = useRef({ onDayClick, onActiveWorkoutClick, olderHistory });
@@ -200,7 +202,7 @@ export function WorkoutCalendar({
         <article className="calendar-month" key={month.key} data-month={month.key}>
           <h3>{month.title}</h3>
           <div className="calendar-weekdays" aria-hidden="true">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
+            {calendarWeekdays(weekStartDay).map((day, index) => (
               <span key={`${day}-${index}`}>{day}</span>
             ))}
           </div>
@@ -308,6 +310,7 @@ export function WorkoutCalendar({
       readOnly,
       previewMap,
       previewMode,
+      weekStartDay,
     ],
   );
 

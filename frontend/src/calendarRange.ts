@@ -18,13 +18,19 @@ export function monthCountFromOldestWorkout(
   return Math.max(count, 1);
 }
 
-/** Shared month geometry: Monday first, with six week rows for a stable scroll height. */
-export function calendarMonths(from: string, count: number, offset = 0) {
+const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+export function calendarWeekdays(weekStartDay = 1): string[] {
+  return Array.from({ length: 7 }, (_, index) => WEEKDAY_INITIALS[(weekStartDay + index) % 7]);
+}
+
+/** Shared month geometry with six week rows and Monday first until preferences load. */
+export function calendarMonths(from: string, count: number, offset = 0, weekStartDay = 1) {
   const anchor = parseLocalDate(from);
   return Array.from({ length: count }, (_, index) => {
     const first = new Date(anchor.getFullYear(), anchor.getMonth() + offset + index, 1, 12);
     const dayCount = new Date(first.getFullYear(), first.getMonth() + 1, 0, 12).getDate();
-    const leading = (first.getDay() + 6) % 7;
+    const leading = (first.getDay() - weekStartDay + 7) % 7;
     const cells: Array<Date | null> = [
       ...Array.from({ length: leading }, () => null),
       ...Array.from(
