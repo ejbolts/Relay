@@ -1768,7 +1768,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.25rem;
-  margin-bottom: 0.875rem;
 }
 
 /* Every tile is laid out from the top with room for two workout names, so the weekday letters

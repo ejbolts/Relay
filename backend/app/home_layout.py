@@ -19,6 +19,7 @@ HomeSection = Literal[
     "cardio-sessions",
     "weekly-bodyweight",
     "weekly-review",
+    "this-week",
     "consistency",
     "muscle-sets",
     "zone2",
@@ -101,6 +102,12 @@ class HomeLayout(BaseModel):
         # renders while a training block exists.
         if "training-block" not in self.order and "next-workout" in self.order:
             self.order.insert(self.order.index("next-workout") + 1, "training-block")
+        # This week's strip used to lead the consistency calendar. Layouts saved before it became
+        # its own section keep it in that place, hidden whenever the calendar was hidden.
+        if "this-week" not in self.order and "consistency" in self.order:
+            self.order.insert(self.order.index("consistency"), "this-week")
+            if "consistency" in self.hidden and "this-week" not in self.hidden:
+                self.hidden.append("this-week")
         # Append newly introduced sections without changing existing saved positions.
         self.order.extend(section for section in SECTION_IDS if section not in self.order)
         return self

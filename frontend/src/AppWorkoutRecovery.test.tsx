@@ -1771,6 +1771,9 @@ describe('finishing workouts in the background', () => {
     await confirmFinish();
     const days = container.querySelectorAll<HTMLButtonElement>('.week-strip .week-strip-day');
     expect(days[0].dataset.date).toBe('2026-10-18');
+    // This week is its own Home section rather than part of the consistency calendar.
+    expect(container.querySelector('.this-week-card .week-strip')).not.toBeNull();
+    expect(container.querySelector('.calendar-panel .week-strip')).toBeNull();
     const finishedDay = container.querySelector<HTMLButtonElement>(
       '.week-strip [data-date="2026-10-23"]',
     )!;
@@ -1780,9 +1783,12 @@ describe('finishing workouts in the background', () => {
     expect(document.querySelector('.calendar-day-detail')?.textContent).toContain(
       'Recovery workout',
     );
+    // This week is its own section, so only the tapped day is marked, not the calendar's too.
     expect(
-      container.querySelectorAll('.home-sections [data-date="2026-10-23"].selected'),
-    ).toHaveLength(2);
+      [...container.querySelectorAll('.home-sections [data-date="2026-10-23"].selected')].map(
+        (day) => day.closest('.this-week-card') !== null,
+      ),
+    ).toEqual([true]);
     await act(async () =>
       document.querySelector<HTMLButtonElement>('[aria-label="Close workout details"]')!.click(),
     );
