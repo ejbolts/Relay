@@ -806,6 +806,8 @@ def shared_consistency(db: Session, user_id: str) -> SharedConsistencyRead:
         db.scalars(
             select(TrainingWorkout)
             .where(TrainingWorkout.user_id == user_id, TrainingWorkout.is_sample.is_(False))
+            # Within a day, match Home's order so a mixed day's colours sit in the same places.
+            .order_by(TrainingWorkout.workout_date, TrainingWorkout.created_at.desc())
             .options(*workout_options())
         )
     )
