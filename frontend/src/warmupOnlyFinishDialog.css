@@ -156,6 +156,29 @@
   height: 1rem;
 }
 
+.logger-screen .exercise-icon-warning {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--p-surface);
+  border-radius: 50%;
+  box-sizing: content-box;
+  background: #f59a3c;
+  color: #1d1206;
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+:root[data-colour-mode='light'] .logger-screen .exercise-icon-warning {
+  background: #c46a12;
+  color: #fff;
+}
+
 .logger-screen .set-details.working-set-suggested {
   box-shadow: inset 3px 0 0 var(--warmup-ink);
 }

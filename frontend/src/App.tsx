@@ -5284,11 +5284,21 @@ function WorkoutCloseDialog({
   );
 }
 
-function ExerciseIcon({ exercise, number }: { exercise: Exercise; number?: number }) {
+function ExerciseIcon({
+  exercise,
+  number,
+  warning = false,
+}: {
+  exercise: Exercise;
+  number?: number;
+  /** Flags a finished exercise that only has warm-up sets. */
+  warning?: boolean;
+}) {
   return (
     <span className="exercise-icon" aria-hidden="true">
       <img src={exerciseIconFor(exercise)} alt="" />
       {number !== undefined && <b>{number}</b>}
+      {warning && <span className="exercise-icon-warning">!</span>}
     </span>
   );
 }
@@ -5357,6 +5367,10 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
+  const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
+  const loggedWarmupCount = onlyWarmupsLogged
+    ? movement.sets.filter((item) => item.completed).length
+    : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
@@ -6040,7 +6054,11 @@ function MovementCard({
     >
       {supersetLabel && <div className="superset-ribbon">{supersetLabel}</div>}
       <header onClick={() => setExpanded((current) => !current)}>
-        <ExerciseIcon exercise={movement.exercise} number={number} />
+        <ExerciseIcon
+          exercise={movement.exercise}
+          number={number}
+          warning={onlyWarmupsLogged && movement.isComplete}
+        />
         <div>
           <h2>
             <button
@@ -6071,7 +6089,9 @@ function MovementCard({
           )}
           {!expanded && (
             <span className="movement-completed-summary">
-              {completedWorkingSetCount} completed {completedWorkingSetCount === 1 ? 'set' : 'sets'}
+              {onlyWarmupsLogged
+                ? `${loggedWarmupCount} warm-up ${loggedWarmupCount === 1 ? 'set' : 'sets'}`
+                : `${completedWorkingSetCount} completed ${completedWorkingSetCount === 1 ? 'set' : 'sets'}`}
             </span>
           )}
         </div>

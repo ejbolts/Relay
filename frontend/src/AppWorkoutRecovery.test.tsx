@@ -3869,6 +3869,22 @@ describe('no working sets warnings', () => {
     expect(setTypes()).toEqual(['warmup', 'normal', 'normal']);
   });
 
+  it('lets a warm-up-only exercise be finished, flagging its icon and counting its warm-ups', async () => {
+    writeActiveWorkoutDraft(warmupDraft(false));
+    await mount();
+    const card = () => container.querySelector('.movement-card')!;
+    expect(card().querySelector('.exercise-icon-warning')).toBeNull();
+    await act(async () =>
+      card().querySelector<HTMLButtonElement>('[aria-label="Finish Bench press"]')!.click(),
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
+    expect(card().querySelector('.exercise-icon-warning')).not.toBeNull();
+    expect(card().querySelector('.movement-completed-summary')?.textContent).toBe('2 warm-up sets');
+    // The working-set exercise keeps its usual count and no flag.
+    const other = container.querySelectorAll('.movement-card')[1];
+    expect(other.querySelector('.exercise-icon-warning')).toBeNull();
+  });
+
   it('reviews warm-up-only exercises when finishing and saves the chosen working sets', async () => {
     writeActiveWorkoutDraft(warmupDraft(false));
     vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
