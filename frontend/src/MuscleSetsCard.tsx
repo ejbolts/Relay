@@ -2,7 +2,7 @@ import { useId, useState, type CSSProperties } from 'react';
 import { Icon } from './Icon';
 import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { PopupDialog } from './PopupDialog';
-import { dayMonth, shortDate } from './trainingSummary';
+import { shortDate } from './trainingSummary';
 import type { WeeklyMuscleContribution } from './types';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import './muscleSets.css';
@@ -107,13 +107,13 @@ export function MuscleSetsCard({
         {week && (
           <span className="muscle-key-item">
             <i className="muscle-key-swatch" aria-hidden="true" />
-            Week of {dayMonth(week.week_start)}
+            {current ? 'Current week' : name}
           </span>
         )}
         {previous && (
           <span className="muscle-key-item">
             <i className="muscle-key-swatch is-previous" aria-hidden="true" />
-            Week of {dayMonth(previous.week_start)}
+            {weekName(weeksAgo + 1)}
           </span>
         )}
         <span className="muscle-key-item">
@@ -341,10 +341,6 @@ function MuscleContributionSheet({
             {error}
           </p>
         )}
-        <p className="muscle-sheet-note">
-          Only completed working sets count. Assistance contributes partial credit. Tap an exercise
-          to view its workout.
-        </p>
       </div>
     </PopupDialog>
   );
