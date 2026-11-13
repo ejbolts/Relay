@@ -341,6 +341,35 @@ async function confirmFinish() {
   await act(async () => confirm.click());
 }
 
+/** Taps Finish workout on a workout that cannot save, checking the popup explains why. */
+async function openFinishBlocker() {
+  const finish = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Finish workout',
+  )!;
+  await act(async () => finish.click());
+  const dialog = document.querySelector('.workout-finish-dialog')!;
+  expect(dialog.querySelector('h2')?.textContent).toContain("Can't finish yet");
+  // Only a way back to the workout: there is nothing to confirm yet.
+  expect(
+    [...dialog.querySelectorAll('.popup-dialog-actions button')].map((b) => b.textContent),
+  ).toEqual(['Keep working out']);
+  // The reason sits in the popup rather than at the top of the logger.
+  expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+}
+
+function finishBlocker() {
+  return document.querySelector('.workout-finish-dialog .workout-finish-blocker')?.textContent;
+}
+
+async function keepWorkingOut() {
+  const keep = document.querySelector<HTMLButtonElement>(
+    '.workout-finish-dialog .popup-primary-action',
+  )!;
+  expect(keep.textContent).toBe('Keep working out');
+  await act(async () => keep.click());
+  expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+}
+
 function restoreOldLoggerLocation() {
   const state = createAppHistoryState('log', 0);
   window.history.replaceState(state, '', '#log');
@@ -1638,10 +1667,11 @@ describe('finishing workouts in the background', () => {
     const draft = storedDraft({ movements: [] });
     writeActiveWorkoutDraft(draft);
     await mount();
-    await confirmFinish();
-    expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+    await openFinishBlocker();
+    expect(finishBlocker()).toContain(
       'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick',
     );
+    await keepWorkingOut();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expectPreserved(draft);
   });
@@ -1665,10 +1695,11 @@ describe('finishing workouts in the background', () => {
       }));
       writeActiveWorkoutDraft(draft);
       await mount();
-      await confirmFinish();
-      expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+      await openFinishBlocker();
+      expect(finishBlocker()).toContain(
         'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise.',
       );
+      await keepWorkingOut();
       expect(api.createWorkout).not.toHaveBeenCalled();
       expectPreserved(draft);
     },

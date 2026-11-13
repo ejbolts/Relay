@@ -3156,6 +3156,8 @@ function WorkoutLogger({
   const [supersetPickerKey, setSupersetPickerKey] = useState<string | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [finishConfirmationOpen, setFinishConfirmationOpen] = useState(false);
+  /** Why the open finish confirmation cannot save yet. */
+  const [finishBlocker, setFinishBlocker] = useState<string | null>(null);
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -3989,25 +3991,24 @@ function WorkoutLogger({
         movements.map((movement) => movement.exercise),
       ));
 
-  /** Resolves true once the workout is handed over for saving. */
-  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
-    if (savingRef.current) return false;
-    if (!initialWorkout && !isCurrentDraft()) return false;
+  /** Checks whether the workout can be saved now, without saving it. */
+  function checkFinish(inactiveEndAt?: number) {
+    const blocked = (message: string) => ({ kind: 'blocked' as const, message });
     if (workoutTypes.loading) {
-      setError('Workout types are still loading. Please try saving again in a moment.');
-      return false;
+      return blocked('Workout types are still loading. Please try saving again in a moment.');
     }
     if (customTypeId && selectedType.id !== customTypeId) {
-      setError('Your workout type could not load. Reload workout types or choose another type.');
-      return false;
+      return blocked(
+        'Your workout type could not load. Reload workout types or choose another type.',
+      );
     }
     if (!typeOptions.some((type) => type.id === selectedType.id)) {
-      setError('Choose an available workout type. Add or restore types in Settings if needed.');
-      return false;
+      return blocked(
+        'Choose an available workout type. Add or restore types in Settings if needed.',
+      );
     }
     if (selectedType.archived && !initialWorkout && !resumedWorkoutId) {
-      setError('This workout type was removed. Choose another type before saving.');
-      return false;
+      return blocked('This workout type was removed. Choose another type before saving.');
     }
     const finishedAt = inactiveEndAt ?? Date.now();
     const movementsToSave =
@@ -4021,10 +4022,7 @@ function WorkoutLogger({
     const unassigned = movementsToSave.find((movement) =>
       hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
     );
-    if (unassigned) {
-      setMachineAssignmentError(unassigned.exercise.name);
-      return false;
-    }
+    if (unassigned) return { kind: 'machines' as const, exercise: unassigned.exercise.name };
     const durationMinutes = initialWorkout
       ? Math.max(editedDurationMinutes, Math.ceil(cardioDurationSeconds / 60))
       : completedWorkoutDurationMinutes(
@@ -4039,29 +4037,63 @@ function WorkoutLogger({
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
     if (!movements.length || !completed.length) {
-      setError(
+      return blocked(
         !movements.length
           ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
           : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
       );
-      return false;
     }
     if (initialWorkout && Boolean(startTime) !== Boolean(endTime)) {
-      setError('Enter both a workout start time and end time, or leave both blank.');
-      return false;
+      return blocked('Enter both a workout start time and end time, or leave both blank.');
     }
     if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
-      setError('Clear the start and end times to save a 24-hour workout.');
-      return false;
+      return blocked('Clear the start and end times to save a 24-hour workout.');
     }
     if (durationMinutes > 1440) {
-      setError(
+      return blocked(
         cardioDurationSeconds > 1440 * 60
           ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
           : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
       );
+    }
+    return { kind: 'ready' as const, movementsToSave, durationMinutes, cardioDurationSeconds };
+  }
+
+  /** Opens the finish confirmation, explaining there what must change before it can save. */
+  function openFinishConfirmation() {
+    const check = checkFinish();
+    if (check.kind === 'machines') {
+      setMachineAssignmentError(check.exercise);
+      return;
+    }
+    setFinishBlocker(check.kind === 'blocked' ? check.message : null);
+    setFinishConfirmationOpen(true);
+  }
+
+  function confirmFinish() {
+    const check = checkFinish();
+    if (check.kind === 'blocked') {
+      setFinishBlocker(check.message);
+      return;
+    }
+    setFinishConfirmationOpen(false);
+    void finishWorkout();
+  }
+
+  /** Resolves true once the workout is handed over for saving. */
+  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
+    if (savingRef.current) return false;
+    if (!initialWorkout && !isCurrentDraft()) return false;
+    const check = checkFinish(inactiveEndAt);
+    if (check.kind === 'machines') {
+      setMachineAssignmentError(check.exercise);
       return false;
     }
+    if (check.kind === 'blocked') {
+      setError(check.message);
+      return false;
+    }
+    const { movementsToSave, durationMinutes, cardioDurationSeconds } = check;
     savingRef.current = true;
     setSaving(true);
     setError(null);
@@ -4707,7 +4739,7 @@ function WorkoutLogger({
             disabled={saving}
             onClick={() => {
               if (initialWorkout) void finishWorkout();
-              else setFinishConfirmationOpen(true);
+              else openFinishConfirmation();
             }}
           >
             {saving ? 'Saving…' : initialWorkout ? 'Save workout' : 'Finish workout'}
@@ -4787,27 +4819,37 @@ function WorkoutLogger({
 
       {finishConfirmationOpen && (
         <PopupDialog
-          title="Finish workout?"
-          kicker="PLEASE CONFIRM"
+          title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
+          kicker={finishBlocker ? 'FINISH WORKOUT' : 'PLEASE CONFIRM'}
           className="workout-finish-dialog"
           onClose={() => setFinishConfirmationOpen(false)}
         >
-          <p>This saves your workout and stops the live timer. You can resume it from History.</p>
+          {finishBlocker ? (
+            <p className="inline-error workout-finish-blocker" role="alert">
+              {finishBlocker}
+            </p>
+          ) : (
+            <p>This saves your workout and stops the live timer. You can resume it from History.</p>
+          )}
           <div className="popup-dialog-actions workout-finish-actions">
-            <button type="button" autoFocus onClick={() => setFinishConfirmationOpen(false)}>
-              Keep working out
-            </button>
             <button
               type="button"
-              className="popup-primary-action"
-              disabled={saving}
-              onClick={() => {
-                setFinishConfirmationOpen(false);
-                void finishWorkout();
-              }}
+              className={finishBlocker ? 'popup-primary-action' : undefined}
+              autoFocus
+              onClick={() => setFinishConfirmationOpen(false)}
             >
-              Finish workout
+              Keep working out
             </button>
+            {!finishBlocker && (
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={saving}
+                onClick={confirmFinish}
+              >
+                Finish workout
+              </button>
+            )}
           </div>
         </PopupDialog>
       )}
