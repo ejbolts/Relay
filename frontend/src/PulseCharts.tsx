@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EDGE_SWIPE_START_PX } from './edgeSwipe';
 import { chartPointerX } from './chartLayout';
+import { Icon } from './Icon';
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -101,6 +102,7 @@ export function TrendChart({
   const { ref, width, height: measuredHeight } = useElementSize<HTMLDivElement>(340, compactHeight);
   const height = fillHeight ? measuredHeight : compactHeight;
   const [active, setActive] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const pad = { left: 40, right: 12, top: 12, bottom: 26 };
 
   const model = useMemo(() => {
@@ -269,6 +271,7 @@ export function TrendChart({
   return (
     <div className="pulse-chart" ref={ref}>
       <svg
+        ref={svgRef}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
@@ -405,6 +408,18 @@ export function TrendChart({
           className="pulse-chart-tooltip"
           style={{ left: tooltipLeft, top: Math.max(activeCoord.y - 66, 0) }}
         >
+          <button
+            type="button"
+            className="pulse-chart-tooltip-close"
+            aria-label={`Close ${shortDate(activePoint.date)} details`}
+            onClick={() => {
+              setActive(null);
+              // Keep keyboard focus on the chart rather than losing it with the popup.
+              svgRef.current?.focus({ preventScroll: true });
+            }}
+          >
+            <Icon name="close" />
+          </button>
           <span aria-hidden="true">{shortDate(activePoint.date)}</span>
           <strong aria-hidden="true">
             {formatValue(activePoint.value)} {unit}
@@ -415,7 +430,11 @@ export function TrendChart({
             {activePoint.detail ? ` · ${activePoint.detail}` : ''}
           </small>
           {onSelect && (
-            <button type="button" onClick={() => onSelect(activePoint)}>
+            <button
+              type="button"
+              className="pulse-chart-tooltip-open"
+              onClick={() => onSelect(activePoint)}
+            >
               Open workout
             </button>
           )}

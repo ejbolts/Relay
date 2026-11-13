@@ -2506,16 +2506,30 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 @media (max-width: 480px) {
-  .social-screen .friend-group li {
-    flex-wrap: wrap;
+  .social-screen .friend-group li:has(> .shared-connection-actions) {
+    flex-wrap: nowrap;
   }
 
-  .social-screen .friend-group li:has(.shared-connection-actions) .friend-open {
-    flex-basis: 100%;
+  .social-screen .friend-group li:has(> .shared-connection-actions) > .friend-open {
+    flex-basis: 0;
+    gap: 0.5rem;
   }
 
-  .social-screen .shared-connection-actions {
+  .social-screen .friend-group .shared-connection-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .social-screen .friend-group .shared-connection-actions {
+    flex: 0 0 auto;
+    gap: 0.375rem;
     margin-left: auto;
+  }
+
+  .social-screen .friend-group .shared-connection-actions > button {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.6rem;
   }
 }
 
@@ -2894,6 +2908,51 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   pointer-events: none;
 }
 
+.pulse-chart-tooltip > span:first-of-type {
+  padding-right: 1.25rem;
+}
+
+/* Closes the popup so the chart underneath can be read again; 44px touch area. */
+.pulse-chart-tooltip-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: #b9bfc4;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pulse-chart-tooltip-close::before {
+  position: absolute;
+  inset: -0.625rem;
+  content: '';
+}
+
+.pulse-chart-tooltip-close:hover,
+.pulse-chart-tooltip-close:focus-visible {
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}
+
+.pulse-chart-tooltip-close:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
+.pulse-chart-tooltip-close .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .pulse-chart-tooltip span,
 .pulse-chart-tooltip small {
   color: #b9bfc4;
@@ -2905,7 +2964,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 650;
 }
 
-.pulse-chart-tooltip button {
+.pulse-chart-tooltip-open {
   margin-top: 0.25rem;
   border: 0;
   border-radius: 7px;
