@@ -3839,38 +3839,19 @@ describe('navigation while saving an old workout', () => {
 });
 
 describe('no working sets warnings', () => {
-  function warmupDraft(planned: boolean) {
+  function warmupDraft() {
     const draft = storedDraft();
     const [first] = draft.movements[0].sets;
     const warmup = { ...first, set_type: 'warmup' as const, warmup: true };
     draft.movements[0].sets = [
       { ...warmup, key: 'warmup-1', weight_kg: 40 },
       { ...warmup, key: 'warmup-2', weight_kg: 80 },
-      ...(planned ? [{ ...warmup, key: 'warmup-3', weight_kg: 80, completed: false }] : []),
     ];
     return draft;
   }
-  const setTypes = () =>
-    Array.from(
-      container.querySelector('.movement-card')?.querySelectorAll('.set-details') ?? [],
-      (row) => row.getAttribute('data-set-type'),
-    );
-
-  it('warns in the exercise card and makes the suggested sets working sets', async () => {
-    writeActiveWorkoutDraft(warmupDraft(true));
-    await mount();
-    const nudge = () => container.querySelector('.working-set-nudge');
-    expect(container.querySelectorAll('.working-set-nudge')).toHaveLength(1);
-    expect(nudge()?.textContent).toContain('No working sets');
-    const fix = nudge()!.querySelector<HTMLButtonElement>('.working-set-nudge-fix')!;
-    expect(fix.textContent).toBe('Make sets 2–3 working');
-    await act(async () => fix.click());
-    expect(nudge()).toBeNull();
-    expect(setTypes()).toEqual(['warmup', 'normal', 'normal']);
-  });
 
   it('lets a warm-up-only exercise be finished, flagging its icon and counting its warm-ups', async () => {
-    writeActiveWorkoutDraft(warmupDraft(false));
+    writeActiveWorkoutDraft(warmupDraft());
     await mount();
     const card = () => container.querySelector('.movement-card')!;
     expect(card().querySelector('.exercise-icon-warning')).toBeNull();
@@ -3886,7 +3867,7 @@ describe('no working sets warnings', () => {
   });
 
   it('reviews warm-up-only exercises when finishing and saves the chosen working sets', async () => {
-    writeActiveWorkoutDraft(warmupDraft(false));
+    writeActiveWorkoutDraft(warmupDraft());
     vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
     await mount();
     const finish = [...container.querySelectorAll('button')].find(

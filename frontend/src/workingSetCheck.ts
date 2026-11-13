@@ -7,11 +7,6 @@ const WORKING_WEIGHT_SHARE = 0.8;
 
 const isWarmup = (item: SetKindFields) => setKindOf(item) === 'warmup';
 
-/** Every set is still a warm-up after at least two have been logged. */
-export function needsWorkingSetNudge(sets: CheckedSet[]): boolean {
-  return sets.filter((item) => item.completed).length >= 2 && sets.every(isWarmup);
-}
-
 /** At least one set was logged and every logged set is a warm-up. */
 export function loggedOnlyWarmups(sets: CheckedSet[]): boolean {
   const logged = sets.filter((item) => item.completed);
@@ -32,13 +27,4 @@ export function suggestedWorkingSetIndexes(sets: Array<Pick<CheckedSet, 'weight_
         index > 0 && (heaviest <= 0 || weight >= heaviest * WORKING_WEIGHT_SHARE),
     )
     .map(({ index }) => index);
-}
-
-/** "set 4", "sets 5–7" or "3 sets", numbered by position. */
-export function setPositionsLabel(indexes: number[]): string {
-  if (indexes.length === 1) return `set ${indexes[0] + 1}`;
-  const contiguous = indexes.every((value, i) => i === 0 || value === indexes[i - 1] + 1);
-  return contiguous
-    ? `sets ${indexes[0] + 1}–${indexes[indexes.length - 1] + 1}`
-    : `${indexes.length} sets`;
 }

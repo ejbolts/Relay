@@ -143,12 +143,7 @@ import {
   type WarmupOnlyMovement,
   type WorkingSetChanges,
 } from './WarmupOnlyFinishDialog';
-import {
-  loggedOnlyWarmups,
-  needsWorkingSetNudge,
-  setPositionsLabel,
-  suggestedWorkingSetIndexes,
-} from './workingSetCheck';
+import { loggedOnlyWarmups } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -5409,10 +5404,6 @@ function MovementCard({
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
   const [typeMenuSetKey, setTypeMenuSetKey] = useState<string | null>(null);
-  const [workingSetNudgeDismissed, setWorkingSetNudgeDismissed] = useState(false);
-  const showWorkingSetNudge =
-    !cardio && !workingSetNudgeDismissed && needsWorkingSetNudge(movement.sets);
-  const suggestedWorkingSets = showWorkingSetNudge ? suggestedWorkingSetIndexes(movement.sets) : [];
   const [draggingSetKey, setDraggingSetKey] = useState<string | null>(null);
   const [dragTargetSetKey, setDragTargetSetKey] = useState<string | null>(null);
   const [pendingSetCompletion, setPendingSetCompletion] = useState<{
@@ -6340,7 +6331,7 @@ function MovementCard({
                 }}
               >
                 <div
-                  className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${suggestedWorkingSets.includes(index) ? 'working-set-suggested' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
+                  className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
                   data-set-key={item.key}
                   data-set-type={cardio ? 'normal' : setKindOf(item)}
                   data-expand-key={item.key}
@@ -6414,36 +6405,6 @@ function MovementCard({
           );
         })}
       </div>
-      {showWorkingSetNudge && (
-        <div className="working-set-nudge" role="status">
-          <span className="working-set-nudge-mark" aria-hidden="true">
-            !
-          </span>
-          <strong>No working sets</strong>
-          <button
-            type="button"
-            className="working-set-nudge-fix"
-            onClick={() => {
-              for (const index of suggestedWorkingSets) {
-                const item = movement.sets[index];
-                // Keep folded rows folded, as the set-type menu does.
-                if (!isSetOpen(item)) setOpenOverride(item.key, false);
-                onUpdateSet(item.key, setKindUpdate('normal'));
-              }
-            }}
-          >
-            Make {setPositionsLabel(suggestedWorkingSets)} working
-          </button>
-          <button
-            type="button"
-            className="working-set-nudge-close"
-            aria-label={`Dismiss no working sets warning for ${movement.exercise.name}`}
-            onClick={() => setWorkingSetNudgeDismissed(true)}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      )}
       {pendingSetCompletion && (
         <SetEntryConfirmationDialog
           warning={pendingSetCompletion.warning}
