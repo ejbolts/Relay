@@ -1,0 +1,174 @@
+/* Finish review for exercises logged with only warm-up sets, and the matching in-card warning. */
+.warmup-only-finish-dialog,
+.logger-screen .working-set-nudge,
+.logger-screen .set-details.working-set-suggested {
+  --warmup-ink: #f59a3c;
+  --warmup-soft: rgb(240 140 40 / 16%);
+  --warmup-line: rgb(240 140 40 / 42%);
+  --working-ink: #7fdc92;
+  --working-soft: rgb(35 166 62 / 22%);
+}
+
+:root[data-colour-mode='light']
+  :is(
+    .warmup-only-finish-dialog,
+    .logger-screen .working-set-nudge,
+    .logger-screen .set-details.working-set-suggested
+  ) {
+  --warmup-ink: #9a520c;
+  --warmup-soft: rgb(240 140 40 / 14%);
+  --warmup-line: rgb(190 105 20 / 45%);
+  --working-ink: #1b7330;
+  --working-soft: rgb(35 166 62 / 16%);
+}
+
+.warmup-only-movements {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1rem 0;
+}
+
+.warmup-only-finish-dialog > .warmup-only-actions {
+  padding: 0.875rem 1rem 1rem;
+}
+
+.warmup-only-movements h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.warmup-only-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.warmup-only-set {
+  min-height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 0.3rem 0.75rem 0.3rem 0.3rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color 200ms ease,
+    transform 160ms var(--ease-out);
+}
+
+.warmup-only-set:active {
+  transform: scale(0.96);
+}
+
+.warmup-only-set[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--working-ink) 55%, transparent);
+}
+
+.warmup-only-badge {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--warmup-soft);
+  color: var(--warmup-ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.warmup-only-badge[data-kind='normal'] {
+  background: var(--working-soft);
+  color: var(--working-ink);
+}
+
+.logger-screen .working-set-nudge {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.625rem;
+  row-gap: 0.375rem;
+  margin: 0.5rem 0 0;
+  border: 1px solid var(--warmup-line);
+  border-radius: 14px;
+  padding: 0.5rem 0.375rem 0.5rem 0.75rem;
+  background: var(--warmup-soft);
+  animation: working-set-nudge-in 220ms var(--ease-out, ease) both;
+}
+
+.logger-screen .working-set-nudge-mark {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--warmup-ink);
+  color: var(--p-page);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.logger-screen .working-set-nudge strong {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.logger-screen .working-set-nudge-fix {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-height: 2.5rem;
+  margin-right: 0.375rem;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 0.75rem;
+  background: var(--warmup-ink);
+  color: var(--p-page);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.logger-screen .working-set-nudge-close {
+  width: 2.25rem;
+  height: 2.25rem;
+  min-height: 0;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  background: transparent;
+  color: var(--p-muted);
+}
+
+.logger-screen .working-set-nudge-close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.logger-screen .set-details.working-set-suggested {
+  box-shadow: inset 3px 0 0 var(--warmup-ink);
+}
+
+@keyframes working-set-nudge-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logger-screen .working-set-nudge {
+    animation: none;
+  }
+}

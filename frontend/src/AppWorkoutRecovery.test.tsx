@@ -3837,3 +3837,60 @@ describe('navigation while saving an old workout', () => {
     expect(container.querySelector('.logger-screen')).not.toBeNull();
   });
 });
+
+describe('no working sets warnings', () => {
+  function warmupDraft(planned: boolean) {
+    const draft = storedDraft();
+    const [first] = draft.movements[0].sets;
+    const warmup = { ...first, set_type: 'warmup' as const, warmup: true };
+    draft.movements[0].sets = [
+      { ...warmup, key: 'warmup-1', weight_kg: 40 },
+      { ...warmup, key: 'warmup-2', weight_kg: 80 },
+      ...(planned ? [{ ...warmup, key: 'warmup-3', weight_kg: 80, completed: false }] : []),
+    ];
+    return draft;
+  }
+  const setTypes = () =>
+    Array.from(
+      container.querySelector('.movement-card')?.querySelectorAll('.set-details') ?? [],
+      (row) => row.getAttribute('data-set-type'),
+    );
+
+  it('warns in the exercise card and makes the suggested sets working sets', async () => {
+    writeActiveWorkoutDraft(warmupDraft(true));
+    await mount();
+    const nudge = () => container.querySelector('.working-set-nudge');
+    expect(container.querySelectorAll('.working-set-nudge')).toHaveLength(1);
+    expect(nudge()?.textContent).toContain('No working sets');
+    const fix = nudge()!.querySelector<HTMLButtonElement>('.working-set-nudge-fix')!;
+    expect(fix.textContent).toBe('Make sets 2–3 working');
+    await act(async () => fix.click());
+    expect(nudge()).toBeNull();
+    expect(setTypes()).toEqual(['warmup', 'normal', 'normal']);
+  });
+
+  it('reviews warm-up-only exercises when finishing and saves the chosen working sets', async () => {
+    writeActiveWorkoutDraft(warmupDraft(false));
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    const dialog = document.querySelector('.warmup-only-finish-dialog');
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+    expect(dialog?.querySelector('h2')?.textContent).toBe('No working sets in Bench press');
+    const chips = [...dialog!.querySelectorAll<HTMLButtonElement>('.warmup-only-set')];
+    expect(chips.map((chip) => chip.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+    const primary = dialog!.querySelector<HTMLButtonElement>('.popup-primary-action')!;
+    expect(primary.textContent).toBe('Make 1 set working & finish');
+    await act(async () => chips[0].click());
+    expect(primary.textContent).toBe('Make 2 sets working & finish');
+    await act(async () => chips[0].click());
+    await act(async () => primary.click());
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    const saved = vi.mocked(api.createWorkout).mock.calls[0][0];
+    expect(saved.movements[0].sets.map((item) => item.set_type)).toEqual(['warmup', 'normal']);
+    expect(saved.movements[1].sets.map((item) => item.set_type)).toEqual(['normal']);
+  });
+});

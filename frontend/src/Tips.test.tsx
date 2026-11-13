@@ -140,6 +140,36 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
     expect(loadTips('alice').seen.swipe).toBe('seen');
   });
+  it('shows the set type nudge on a first workout and inside the daily cooldown', async () => {
+    workoutCount = 0;
+    saveTips('alice', {
+      ...freshTips(),
+      lastShown: Date.now() - 1000,
+      seen: { plates: 'learned' },
+    });
+    await render();
+    await act(async () => {
+      controller.event('menu-delete', 'swipe', 1);
+      controller.event('warmup-logged', 'setType');
+    });
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('Tap W beside a set');
+    expect(loadTips('alice').seen.setType).toBe('seen');
+    await act(async () => button('Dismiss tip').click());
+    await advance();
+    // Ordinary nudges still wait for a saved workout.
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').seen.swipe).toBeUndefined();
+  });
+  it('replaces a showing ordinary tip with the set type nudge', async () => {
+    await render();
+    await advance();
+    expect(document.querySelector('.relay-tip-dot')).not.toBeNull();
+    await act(async () => controller.event('warmup-logged', 'setType'));
+    await advance();
+    expect(document.querySelector('.relay-tip-dot')).toBeNull();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('Tap W beside a set');
+  });
   it('turns every surface off immediately, remembers the switch and keeps the library available', async () => {
     await render();
     await advance();

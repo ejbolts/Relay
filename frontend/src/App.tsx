@@ -138,6 +138,17 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
+import {
+  WarmupOnlyFinishDialog,
+  type WarmupOnlyMovement,
+  type WorkingSetChanges,
+} from './WarmupOnlyFinishDialog';
+import {
+  loggedOnlyWarmups,
+  needsWorkingSetNudge,
+  setPositionsLabel,
+  suggestedWorkingSetIndexes,
+} from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -3156,6 +3167,7 @@ function WorkoutLogger({
   const [supersetPickerKey, setSupersetPickerKey] = useState<string | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [finishConfirmationOpen, setFinishConfirmationOpen] = useState(false);
+  const [warmupReviewOpen, setWarmupReviewOpen] = useState(false);
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -3893,6 +3905,20 @@ function WorkoutLogger({
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
     if (loggingSet && !initialWorkout) tips.event('set-completed');
+    if (
+      loggingSet &&
+      !initialWorkout &&
+      movement?.exercise.kind !== 'cardio' &&
+      setKindOf({ ...currentSet, ...update }) === 'warmup'
+    )
+      tips.event('warmup-logged', 'setType');
+    if (
+      currentSet &&
+      setKindOf(currentSet) === 'warmup' &&
+      ('set_type' in update || 'warmup' in update) &&
+      setKindOf({ ...currentSet, ...update }) !== 'warmup'
+    )
+      tips.learn('setType');
     if (loggingSet && movement?.exercise.kind === 'cardio')
       tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
@@ -3940,6 +3966,27 @@ function WorkoutLogger({
       }),
     );
     if (restSeconds !== null) startRestTimer(restSeconds);
+  }
+
+  const warmupOnlyMovements: WarmupOnlyMovement[] = movements
+    .filter((movement) => movement.exercise.kind !== 'cardio' && loggedOnlyWarmups(movement.sets))
+    .map((movement) => ({ key: movement.key, name: movement.exercise.name, sets: movement.sets }));
+
+  /** Applies the finish review's working-set choices and returns the movements to save. */
+  function makeWorkingSets(changes: WorkingSetChanges): DraftMovement[] {
+    const next = movements.map((movement) => {
+      const keys = changes.get(movement.key);
+      if (!keys) return movement;
+      return {
+        ...movement,
+        sets: movement.sets.map((item) =>
+          keys.has(item.key) ? workoutSetAfterEdit(item, setKindUpdate('normal')) : item,
+        ),
+      };
+    });
+    if (changes.size) tips.learn('setType');
+    setMovements(next);
+    return next;
   }
 
   function toggleSet(movement: DraftMovement, item: DraftSet) {
@@ -3990,7 +4037,12 @@ function WorkoutLogger({
       ));
 
   /** Resolves true once the workout is handed over for saving. */
-  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
+  async function finishWorkout(
+    inactiveEndAt?: number,
+    /** Movements just edited in the finish review, ahead of the state update. */
+    reviewedMovements?: DraftMovement[],
+  ): Promise<boolean> {
+    const sourceMovements = reviewedMovements ?? movements;
     if (savingRef.current) return false;
     if (!initialWorkout && !isCurrentDraft()) return false;
     if (workoutTypes.loading) {
@@ -4012,8 +4064,8 @@ function WorkoutLogger({
     const finishedAt = inactiveEndAt ?? Date.now();
     const movementsToSave =
       inactiveEndAt === undefined
-        ? movements
-        : movements.map((movement) => ({
+        ? sourceMovements
+        : sourceMovements.map((movement) => ({
             ...movement,
             sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
           }));
@@ -4038,9 +4090,9 @@ function WorkoutLogger({
     const completed = movementsToSave
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
-    if (!movements.length || !completed.length) {
+    if (!sourceMovements.length || !completed.length) {
       setError(
-        !movements.length
+        !sourceMovements.length
           ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
           : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
       );
@@ -4066,7 +4118,7 @@ function WorkoutLogger({
     setSaving(true);
     setError(null);
     let completedIdentity = finalizeWorkoutIdentity(
-      movements.map((movement) => movement.exercise),
+      sourceMovements.map((movement) => movement.exercise),
       category,
       name,
       inferTypeFromExercises,
@@ -4077,7 +4129,7 @@ function WorkoutLogger({
       workoutTypes.types.find((type) => type.id === completedIdentity.category)?.archived
     ) {
       completedIdentity = finalizeWorkoutIdentity(
-        movements.map((movement) => movement.exercise),
+        sourceMovements.map((movement) => movement.exercise),
         category,
         name,
         false,
@@ -4707,6 +4759,7 @@ function WorkoutLogger({
             disabled={saving}
             onClick={() => {
               if (initialWorkout) void finishWorkout();
+              else if (warmupOnlyMovements.length) setWarmupReviewOpen(true);
               else setFinishConfirmationOpen(true);
             }}
           >
@@ -4783,6 +4836,23 @@ function WorkoutLogger({
             </button>
           </div>
         </PopupDialog>
+      )}
+
+      {warmupReviewOpen && warmupOnlyMovements.length > 0 && (
+        <WarmupOnlyFinishDialog
+          movements={warmupOnlyMovements}
+          weightUnit={weightUnit}
+          saving={saving}
+          onKeepWorkingOut={() => setWarmupReviewOpen(false)}
+          onFinishAnyway={() => {
+            setWarmupReviewOpen(false);
+            void finishWorkout();
+          }}
+          onUpdateAndFinish={(changes) => {
+            setWarmupReviewOpen(false);
+            void finishWorkout(undefined, makeWorkingSets(changes));
+          }}
+        />
       )}
 
       {finishConfirmationOpen && (
@@ -5325,6 +5395,10 @@ function MovementCard({
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
   const [typeMenuSetKey, setTypeMenuSetKey] = useState<string | null>(null);
+  const [workingSetNudgeDismissed, setWorkingSetNudgeDismissed] = useState(false);
+  const showWorkingSetNudge =
+    !cardio && !workingSetNudgeDismissed && needsWorkingSetNudge(movement.sets);
+  const suggestedWorkingSets = showWorkingSetNudge ? suggestedWorkingSetIndexes(movement.sets) : [];
   const [draggingSetKey, setDraggingSetKey] = useState<string | null>(null);
   const [dragTargetSetKey, setDragTargetSetKey] = useState<string | null>(null);
   const [pendingSetCompletion, setPendingSetCompletion] = useState<{
@@ -6246,7 +6320,7 @@ function MovementCard({
                 }}
               >
                 <div
-                  className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
+                  className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${suggestedWorkingSets.includes(index) ? 'working-set-suggested' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
                   data-set-key={item.key}
                   data-set-type={cardio ? 'normal' : setKindOf(item)}
                   data-expand-key={item.key}
@@ -6320,6 +6394,36 @@ function MovementCard({
           );
         })}
       </div>
+      {showWorkingSetNudge && (
+        <div className="working-set-nudge" role="status">
+          <span className="working-set-nudge-mark" aria-hidden="true">
+            !
+          </span>
+          <strong>No working sets</strong>
+          <button
+            type="button"
+            className="working-set-nudge-fix"
+            onClick={() => {
+              for (const index of suggestedWorkingSets) {
+                const item = movement.sets[index];
+                // Keep folded rows folded, as the set-type menu does.
+                if (!isSetOpen(item)) setOpenOverride(item.key, false);
+                onUpdateSet(item.key, setKindUpdate('normal'));
+              }
+            }}
+          >
+            Make {setPositionsLabel(suggestedWorkingSets)} working
+          </button>
+          <button
+            type="button"
+            className="working-set-nudge-close"
+            aria-label={`Dismiss no working sets warning for ${movement.exercise.name}`}
+            onClick={() => setWorkingSetNudgeDismissed(true)}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+      )}
       {pendingSetCompletion && (
         <SetEntryConfirmationDialog
           warning={pendingSetCompletion.warning}
