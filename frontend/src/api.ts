@@ -18,6 +18,8 @@ import type {
   CardioSessionInput,
   CardioMetricsInput,
   Clip,
+  ArchivePreview,
+  ArchiveRestored,
   CsvImportResult,
   ImportBatch,
   ImportUndoResult,
@@ -300,7 +302,14 @@ async function requestBlob(path: string): Promise<Blob> {
   checkAccount();
   if (!response.ok) {
     if (response.status === 401) emitAuthExpired();
-    throw new ApiError(`Export failed (${response.status})`, 'export_failed', response.status);
+    const body = (await response.json().catch(() => null)) as {
+      error?: { code?: string; message?: string };
+    } | null;
+    throw new ApiError(
+      body?.error?.message ?? `Export failed (${response.status})`,
+      body?.error?.code ?? 'export_failed',
+      response.status,
+    );
   }
   const blob = await response.blob();
   checkAccount();
@@ -1018,6 +1027,17 @@ export const api = {
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
+  downloadAccountArchive: () => requestBlob('/api/account-archive'),
+  previewAccountArchive: (file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<ArchivePreview>('/api/account-archive/preview', { method: 'POST', body: form });
+  },
+  restoreAccountArchive: (file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<ArchiveRestored>('/api/account-archive/restore', { method: 'POST', body: form });
+  },
   exerciseProgress: (id: string, blockId?: string) =>
     accountRead<ExerciseProgress>(
       `/api/progress/${id}${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,

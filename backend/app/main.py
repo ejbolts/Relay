@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from . import comments  # noqa: F401 -- registers discussion routes on sharing_router
+from .account_archive import router as account_archive_router
 from .account_limits import SaveRateLimiter
 from .accounts import auth_router, profile_router
 from .admin import admin_router
@@ -681,6 +682,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tracker_router)
     app.include_router(training_blocks_router)
     app.include_router(routines_router)
+    app.include_router(account_archive_router)
     app.include_router(workout_type_exercises_router)
     app.include_router(home_layout_router)
     app.include_router(machine_settings_router)
