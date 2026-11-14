@@ -5809,3 +5809,79 @@ html[data-reduce-motion] ::backdrop {
   width: 1.125rem;
   height: 1.125rem;
 }
+
+/*
+ * Larger touch areas for the workout logger's small controls. Visible sizes and layout stay as
+ * they are: each control's hit area grows into the spacing around it, up to the next control,
+ * so a slightly-off tap still lands on the nearest one.
+ */
+.logger-screen .completed-set-summary .set-number-cell,
+.logger-screen .completed-set-summary > .row-complete-button,
+.logger-screen .completed-summary-actions > .set-drag-handle,
+.logger-screen .completed-summary-actions > .completed-set-menu,
+.logger-screen .movement-header-actions > .movement-expand-toggle,
+.logger-screen .movement-header-actions .plate-calculator-button,
+.logger-screen .movement-header-actions > .exercise-complete-button,
+.logger-screen .movement-header-actions > .movement-overflow > summary,
+.logger-screen > .overlay-screen-header .overlay-header-back,
+.logger-screen > .overlay-screen-header .overlay-header-action {
+  position: relative;
+}
+
+.logger-screen .completed-set-summary .set-number-cell::before,
+.logger-screen .completed-set-summary > .row-complete-button::before,
+.logger-screen .completed-summary-actions > .set-drag-handle::before,
+.logger-screen .completed-summary-actions > .completed-set-menu::before,
+.logger-screen .movement-header-actions > .movement-expand-toggle::before,
+.logger-screen .movement-header-actions .plate-calculator-button::before,
+.logger-screen .movement-header-actions > .exercise-complete-button::before,
+.logger-screen .movement-header-actions > .movement-overflow > summary::before {
+  position: absolute;
+  top: 50%;
+  right: var(--touch-right, 0);
+  left: var(--touch-left, 0);
+  height: var(--touch-height, 44px);
+  transform: translateY(-50%);
+  content: '';
+}
+
+/* A set row is 48px tall: its controls take the whole height and share the gaps between them. */
+.logger-screen .completed-set-summary .set-number-cell,
+.logger-screen .completed-set-summary > .row-complete-button,
+.logger-screen .completed-summary-actions > .set-drag-handle,
+.logger-screen .completed-summary-actions > .completed-set-menu {
+  --touch-height: 48px;
+}
+
+.logger-screen .completed-set-summary .set-number-cell {
+  --touch-left: -10px;
+  --touch-right: -4px;
+}
+
+.logger-screen .completed-set-summary > .row-complete-button {
+  --touch-left: -3px;
+  --touch-right: -3px;
+}
+
+.logger-screen .completed-summary-actions > .set-drag-handle {
+  --touch-left: -4px;
+}
+
+.logger-screen .completed-summary-actions > .completed-set-menu {
+  --touch-right: -10px;
+}
+
+.logger-screen .movement-header-actions > .movement-expand-toggle,
+.logger-screen .movement-header-actions .plate-calculator-button,
+.logger-screen .movement-header-actions > .exercise-complete-button,
+.logger-screen .movement-header-actions > .movement-overflow > summary {
+  --touch-left: -1px;
+  --touch-right: -1px;
+}
+
+.logger-screen > .overlay-screen-header .overlay-header-back::before,
+.logger-screen > .overlay-screen-header .overlay-header-action::before {
+  position: absolute;
+  inset: -2px;
+  content: '';
+}
