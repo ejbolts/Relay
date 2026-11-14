@@ -35,18 +35,26 @@ export function BodyCheckInSettingsForm({
             {id !== 'fat' && (
               <span className="body-check-in-preview-row">
                 <span>Weight</span>
-                <b>
-                  84.3 <small>{unit}</small>
-                </b>
+                <span className="body-check-in-preview-controls">
+                  <span className="body-check-in-preview-stepper">{'\u2212'}</span>
+                  <b>
+                    84.3 <small>{unit}</small>
+                  </b>
+                  <span className="body-check-in-preview-stepper">+</span>
+                </span>
                 {id !== 'combined-single' && <i>Update</i>}
               </span>
             )}
             {id !== 'weight' && (
               <span className="body-check-in-preview-row">
                 <span>Body fat</span>
-                <b>
-                  14.0 <small>%</small>
-                </b>
+                <span className="body-check-in-preview-controls">
+                  <span className="body-check-in-preview-stepper">{'\u2212'}</span>
+                  <b>
+                    14.0 <small>%</small>
+                  </b>
+                  <span className="body-check-in-preview-stepper">+</span>
+                </span>
                 {id !== 'combined-single' && <i>Update</i>}
               </span>
             )}

@@ -41,7 +41,7 @@
   align-items: center;
   gap: 0.5rem;
 }
-.body-check-in-preview-row > span {
+.body-check-in-preview-row > span:first-child {
   flex: 1;
 }
 .body-check-in-preview small {
@@ -75,4 +75,28 @@
   margin: 0;
   padding: 0;
   accent-color: var(--p-accent);
+}
+
+.body-check-in-preview-controls {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 0 0 7rem;
+  min-width: 0;
+}
+.body-check-in-preview-controls b {
+  text-align: center;
+  white-space: nowrap;
+}
+.body-check-in-preview-stepper {
+  display: grid;
+  place-items: center;
+  height: 1.5rem;
+  border: 1px solid var(--p-line);
+  border-radius: 6px;
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  font-weight: 700;
 }
