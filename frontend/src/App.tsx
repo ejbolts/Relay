@@ -361,6 +361,7 @@ import {
   workoutsWithPreview,
 } from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
+import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
@@ -812,6 +813,7 @@ function AppContent() {
   const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
     completeWorkoutSave(saved, false, resumedId, queued),
   );
+  const conflictPrompt = useWorkoutConflictPrompt();
   const workoutSaving = editingWorkoutSaving || finishedQueue.saving;
   // Finished workouts wait in their own queue, so only saving an edit stops a new workout.
   const workoutSaveBlocked = editingWorkoutSaving;
@@ -1394,12 +1396,19 @@ function AppContent() {
         wasEditing || resumedId ? 'Saving workout changes…' : 'Saving workout…',
         () =>
           editingWorkout
-            ? api.updateWorkout(editingWorkout.id, payload)
+            ? conflictPrompt.saveEdit(editingWorkout, payload)
             : resumedId
               ? api.updateWorkout(resumedId, payload)
               : api.createWorkout(payload),
       );
     } catch (error) {
+      if (error instanceof WorkoutEditDiscarded) {
+        // The other device's version was chosen: close the editor and show what is saved.
+        setEditingWorkout(null);
+        if (currentTabRef.current === 'log') setTab('history', { replace: true });
+        void refreshData({ silent: true });
+        return;
+      }
       if (currentTabRef.current === (wasEditing ? 'history' : 'dashboard'))
         setTab('log', { replace: true });
       else if (currentTabRef.current !== 'log')
@@ -1955,6 +1964,7 @@ function AppContent() {
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
+        {conflictPrompt.dialog}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -1987,6 +1997,11 @@ function AppContent() {
                     if (finishedQueue.discard(key)) setMessage('Workout discarded.');
                   }}
                   reviewBlocked={activeWorkoutStartedAt !== null}
+                  onKeepMine={
+                    finishedQueue.conflicts.has(key)
+                      ? () => void finishedQueue.keepMine(key)
+                      : undefined
+                  }
                   onReview={
                     refusal === undefined
                       ? undefined
@@ -3188,6 +3203,14 @@ function WorkoutLogger({
   const previousDurationMinutes = useState(
     () => restoredDraft?.previousDurationMinutes ?? resumingWorkout?.duration_minutes ?? 0,
   )[0];
+  // The saved version these entries were loaded from. A save names it, so the server can refuse
+  // to replace a version another device has saved since.
+  const baseRevision = useState(
+    () =>
+      initialWorkout?.revision ??
+      restoredDraft?.resumingWorkoutRevision ??
+      resumingWorkout?.revision,
+  )[0];
   const initialActivity = useState(() => {
     const lastActiveAt = Math.max(
       startedAt,
@@ -3258,6 +3281,7 @@ function WorkoutLogger({
         startedAt,
         ...(resumedWorkoutId && {
           resumingWorkoutId: resumedWorkoutId,
+          resumingWorkoutRevision: baseRevision,
           previousDurationMinutes,
         }),
         updatedAt: Date.now(),
@@ -3345,6 +3369,7 @@ function WorkoutLogger({
     name,
     notes,
     previousDurationMinutes,
+    baseRevision,
     resumedWorkoutId,
     startedAt,
     workoutDate,
@@ -4163,6 +4188,8 @@ function WorkoutLogger({
       cancelRestTimer();
       await onSave({
         ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
+        ...((initialWorkout || resumedWorkoutId) &&
+          baseRevision !== undefined && { base_revision: baseRevision }),
         name: completedIdentity.name,
         workout_date: workoutDate,
         category: completedIdentity.category,
