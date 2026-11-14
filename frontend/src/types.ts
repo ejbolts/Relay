@@ -116,6 +116,8 @@ export interface Exercise {
   equipment: string | null;
   is_custom: boolean;
   is_favorite: boolean;
+  /** Left out of exercise pickers and lists; history and progress are kept. */
+  hidden?: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
   default_muscle_set_credits?: { muscle_name: string; sets: number }[];

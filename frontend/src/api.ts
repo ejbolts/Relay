@@ -652,6 +652,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercise: (exerciseId: string, changes: { name?: string; hidden?: boolean }) =>
+    request<Exercise>(`/api/exercises/${exerciseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    }),
   mergeExercise: (sourceId: string, targetId: string) =>
     request<Exercise>(`/api/exercises/${sourceId}/merge`, {
       method: 'POST',

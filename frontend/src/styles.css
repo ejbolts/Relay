@@ -8994,6 +8994,34 @@ body,
   color: var(--accent) !important;
 }
 
+.exercise-rename-dialog > form {
+  padding: 1rem;
+}
+
+.exercise-rename-dialog label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.exercise-rename-dialog input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 1rem;
+}
+
+.exercise-rename-dialog .inline-error {
+  margin: 0.6rem 0 0;
+}
+
 .settings-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -151,6 +151,29 @@ it('retains a chosen variant across filter changes and submits its own ID', asyn
   expect(onChoose).toHaveBeenCalledWith([exercises[1]], {});
 });
 
+it('leaves hidden exercises out of every list, including search', async () => {
+  const shown = names();
+  const hiddenName = shown[0]!;
+  await act(async () =>
+    root.render(
+      <ExercisePicker
+        exercises={exercises.map((item) =>
+          item.name === hiddenName ? { ...item, hidden: true } : item,
+        )}
+        excludedIds={['single']}
+        recentExerciseIds={['cable', 'db']}
+        onChoose={onChoose}
+        onClose={vi.fn()}
+        onFavoriteChange={vi.fn()}
+        onCreateExercise={vi.fn()}
+      />,
+    ),
+  );
+  expect(names()).not.toContain(hiddenName);
+  await setValue('.exercise-search', hiddenName);
+  expect(names()).not.toContain(hiddenName);
+});
+
 it('filters custom exercises independently of category, equipment and search', async () => {
   const custom = document.querySelector<HTMLButtonElement>('[aria-label="Custom exercises"]')!;
   await act(async () => custom.click());
