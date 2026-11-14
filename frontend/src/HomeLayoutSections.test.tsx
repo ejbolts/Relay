@@ -8,7 +8,7 @@ describe('Home layout rendering', () => {
     HOME_SECTIONS.map(({ id }) => [id, <p key={id}>{id}</p>]),
   ) as Record<HomeSectionId, React.ReactNode>;
 
-  it('keeps Combined visible and offers independent Body weight and Body fat sections to add', () => {
+  it('offers only one customisable body check-in section', () => {
     const markup = renderToStaticMarkup(
       <HomeLayoutSections
         layout={defaultHomeLayout()}
@@ -19,8 +19,8 @@ describe('Home layout rendering', () => {
     expect(markup).toContain('data-home-section="combined-check-in"');
     expect(markup).not.toContain('data-home-section="bodyweight-check-in"');
     expect(markup).not.toContain('data-home-section="body-fat-check-in"');
-    expect(markup).toContain('aria-label="Add Body weight check-in"');
-    expect(markup).toContain('aria-label="Add Body fat check-in"');
+    expect(markup).not.toContain('aria-label="Add Body weight check-in"');
+    expect(markup).not.toContain('aria-label="Add Body fat check-in"');
     expect(markup).not.toContain('Daily check-in');
   });
 
@@ -59,7 +59,7 @@ describe('Home layout rendering', () => {
     expect(markup).toContain('aria-label="Drag Next workout to reorder"');
     expect(markup).toContain('aria-label="Hide Workouts"');
     expect(markup).toContain('aria-label="Expand Workouts to full width"');
-    expect(markup).toContain('aria-label="Shrink Combined check-in to compact width"');
+    expect(markup).toContain('aria-label="Shrink Body weight check-in to compact width"');
     expect(markup).toContain('class="home-section-content" inert=""');
     expect(markup).toContain('<p>workouts</p>');
     expect(markup).not.toContain('data-home-section="consistency"');

@@ -7,6 +7,7 @@ from app.home_layout import OPTIONAL_CHECK_INS, SECTION_IDS
 from app.training_metrics import set_setting
 
 DEFAULT_SETTINGS = {
+    "check_in": {"mode": "combined"},
     "zone2": {"zone": None, "style": "progress"},
     "training_block": {"style": "both"},
     "workouts": {"weeks": 8},
@@ -27,6 +28,7 @@ def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client)
         "hidden": ["consistency", "workouts"],
         "widths": {"combined-check-in": "compact", "workouts": "full", "friends": "third"},
         "settings": {
+            "check_in": {"mode": "combined"},
             "zone2": {"zone": 4, "style": "ring"},
             "training_block": {"style": "timeline"},
             "workouts": {"weeks": 4},
@@ -195,16 +197,32 @@ def test_legacy_check_in_retains_position_width_and_hidden_state(client):
         assert client.put("/api/home-layout", json=result).json() == result
 
 
-def test_three_check_ins_can_be_added_hidden_and_resized_independently(client):
-    layout = client.get("/api/home-layout").json()
-    layout["hidden"] = ["combined-check-in"]
-    layout["widths"] = {
-        "bodyweight-check-in": "compact",
-        "body-fat-check-in": "compact",
-        "combined-check-in": "full",
+def test_legacy_check_ins_collapse_to_first_visible_with_its_preferences(client):
+    old = {
+        "order": ["records", "combined-check-in", "body-fat-check-in", "bodyweight-check-in"],
+        "hidden": ["combined-check-in"],
+        "widths": {"body-fat-check-in": "compact", "combined-check-in": "full"},
     }
-    assert client.put("/api/home-layout", json=layout).json() == layout
-    assert client.get("/api/home-layout").json() == layout
+    response = client.put("/api/home-layout", json=old)
+    assert response.status_code == 200
+    result = response.json()
+    assert result["order"][:3] == ["profile", "records", "combined-check-in"]
+    assert result["hidden"] == []
+    assert result["widths"] == {"combined-check-in": "compact"}
+    assert result["settings"]["check_in"] == {"mode": "fat"}
+    assert client.put("/api/home-layout", json=result).json() == result
+
+
+def test_check_in_modes_round_trip_without_other_setting_changes(client):
+    layout = client.get("/api/home-layout").json()
+    for mode in ("weight", "fat", "combined", "combined-single"):
+        layout["settings"]["check_in"] = {"mode": mode}
+        assert client.put("/api/home-layout", json=layout).json() == layout
+        assert client.get("/api/home-layout").json() == layout
+    assert (
+        client.put("/api/home-layout", json={"settings": {"check_in": {"mode": "bad"}}}).status_code
+        == 422
+    )
 
 
 def test_older_client_can_save_the_legacy_check_in_identifier(client):
@@ -232,6 +250,26 @@ def test_section_settings_default_for_older_layouts_and_update_independently(cli
     assert client.put("/api/home-layout", json=layout).json() == layout
     partial = client.put("/api/home-layout", json={"settings": {"zone2": {"style": "ring"}}})
     assert partial.json()["settings"]["zone2"] == {"zone": None, "style": "ring"}
+
+
+def test_all_hidden_legacy_check_ins_stay_hidden_and_preserve_first_width(client):
+    old = {
+        "order": ["bodyweight-check-in", "body-fat-check-in", "combined-check-in"],
+        "hidden": ["bodyweight-check-in", "body-fat-check-in", "combined-check-in"],
+        "widths": {"bodyweight-check-in": "third"},
+    }
+    response = client.put("/api/home-layout", json=old)
+    assert response.status_code == 200
+    layout = response.json()
+    assert layout["order"].count("combined-check-in") == 1
+    assert layout["hidden"] == ["combined-check-in"]
+    assert layout["widths"] == {"combined-check-in": "third"}
+    assert layout["settings"]["check_in"] == {"mode": "weight"}
+
+
+def test_malformed_section_values_are_validation_errors(client):
+    for body in ({"order": [[]]}, {"hidden": [{}]}):
+        assert client.put("/api/home-layout", json=body).status_code == 422
 
 
 @pytest.mark.parametrize("weeks", [4, 8, 12])

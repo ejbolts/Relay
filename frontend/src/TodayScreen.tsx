@@ -19,6 +19,8 @@ import {
   type HomeSectionId,
 } from './homeLayout';
 import { CardioGoalCard } from './CardioGoalCard';
+import { BodyCheckInSettingsForm } from './BodyCheckInSettings';
+import type { BodyCheckInMode } from './homeLayout';
 import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
 import { ActivityCardSettingsForm } from './ActivityCardSettings';
 import { SparkBars, Sparkline } from './PulseCharts';
@@ -137,7 +139,7 @@ export interface TodayScreenProps {
   workoutSaving?: boolean;
   todayBodyweight: number | null;
   todayBodyFat?: number | null;
-  onSaveBodyweight: (weight: number) => Promise<UndoBodyweightCheckIn>;
+  onSaveBodyweight: (weight: number, bodyFat?: number) => Promise<UndoBodyweightCheckIn>;
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
   onStartTemplate: (template: SessionTemplate) => void;
   onStartEmpty: () => void;
@@ -253,6 +255,7 @@ export function TodayScreen({
   const zone2 = data?.zone2 ?? null;
   const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
   const latest = measurements[0] ?? null;
+  const checkInMode = homeSectionSettings(home.editing ? home.draft : home.layout, 'check_in').mode;
   const priorBodyweight =
     measurements.find((item) => item.measurement_date < today)?.weight_kg ?? null;
   const priorBodyFat =
@@ -579,30 +582,20 @@ export function TodayScreen({
         </p>
       </button>
     ),
-    ...(Object.fromEntries(
-      (
-        [
-          ['bodyweight-check-in', 'weight'],
-          ['body-fat-check-in', 'fat'],
-          ['combined-check-in', 'combined'],
-        ] as const
-      ).map(([id, mode]) => [
-        id,
-        <DashboardQuickBodyweight
-          key={id}
-          mode={mode}
-          latestBodyweight={latest?.weight_kg ?? null}
-          priorBodyweight={priorBodyweight}
-          priorBodyFat={priorBodyFat}
-          todayBodyweight={todayBodyweight}
-          todayBodyFat={todayBodyFat}
-          latestBodyFat={
-            measurements.find((item) => item.body_fat_pct !== null)?.body_fat_pct ?? null
-          }
-          {...checkIns}
-        />,
-      ]),
-    ) as Record<'bodyweight-check-in' | 'body-fat-check-in' | 'combined-check-in', ReactNode>),
+    'combined-check-in': (
+      <DashboardQuickBodyweight
+        mode={checkInMode === 'combined' ? 'combined-single' : checkInMode}
+        latestBodyweight={latest?.weight_kg ?? null}
+        todayBodyweight={todayBodyweight}
+        todayBodyFat={todayBodyFat}
+        priorBodyweight={priorBodyweight}
+        priorBodyFat={priorBodyFat}
+        latestBodyFat={
+          measurements.find((item) => item.body_fat_pct !== null)?.body_fat_pct ?? null
+        }
+        {...checkIns}
+      />
+    ),
     records: (
       <section className="pulse-card" aria-labelledby="records-title">
         <header className="pulse-card-header">
@@ -720,6 +713,14 @@ export function TodayScreen({
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          'combined-check-in': (
+            <BodyCheckInSettingsForm
+              value={homeSectionSettings(home.draft, 'check_in')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'check_in', change))
+              }
+            />
+          ),
           workouts: (
             <ActivityCardSettingsForm
               values={weeks.map((week) => week.workouts)}
@@ -835,7 +836,7 @@ export function DashboardQuickBodyweight({
   onSave,
   onSaveBodyFat,
 }: {
-  mode?: 'weight' | 'fat' | 'combined';
+  mode?: BodyCheckInMode;
   busy?: boolean;
   undoVersion?: number;
   undoVersionRef?: { current: number };
@@ -845,23 +846,36 @@ export function DashboardQuickBodyweight({
   todayBodyweight: number | null;
   latestBodyFat?: number | null;
   todayBodyFat?: number | null;
-  onSave: (weight: number) => Promise<UndoBodyweightCheckIn>;
+  onSave: (weight: number, bodyFat?: number) => Promise<UndoBodyweightCheckIn>;
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
 }) {
   const weightUnit = useWeightUnit();
   const initialWeight = todayBodyweight ?? latestBodyweight;
   const titleId = useId();
+  const weightFormId = useId();
+  const fatFormId = useId();
   const [weight, setWeight] = useState<number | null>(initialWeight);
   const [bodyFat, setBodyFat] = useState<string>(() => String(todayBodyFat ?? latestBodyFat ?? ''));
   const [saving, setSaving] = useState(false);
   const [undo, setUndo] = useState<{
     run: UndoBodyweightCheckIn;
     attempt: number;
-    kind: 'weight' | 'fat';
+    kind: 'weight' | 'fat' | 'combined';
     version: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedWeight = weight;
+  const singleButton = mode === 'combined-single' && !!onSaveBodyFat;
+  const combined = mode === 'combined' || singleButton;
+  const headerSave = singleButton || mode !== 'combined';
+  const fatOnly = mode === 'fat' && !!onSaveBodyFat;
+  const hasToday = fatOnly
+    ? todayBodyFat !== null
+    : singleButton
+      ? todayBodyweight !== null && todayBodyFat !== null
+      : todayBodyweight !== null;
+  const saveKind = fatOnly ? 'body fat' : singleButton ? 'check-in' : 'weight';
+  const saveLabel = saving ? `Saving ${saveKind}` : `${hasToday ? 'Update' : 'Log'} ${saveKind}`;
 
   useEffect(() => {
     setBodyFat(String(todayBodyFat ?? latestBodyFat ?? ''));
@@ -889,12 +903,24 @@ export function DashboardQuickBodyweight({
       setError(`Enter a bodyweight above 0 and up to ${formatWeight(500, weightUnit)}.`);
       return;
     }
+    const fatValue = bodyFat.trim() === '' ? NaN : Number(bodyFat);
+    if (singleButton && (!Number.isFinite(fatValue) || fatValue < 1 || fatValue > 70)) {
+      setError('Enter body fat from 1% to 70%.');
+      return;
+    }
     setSaving(true);
     setError(null);
     setUndo(null);
     try {
-      const run = await onSave(selectedWeight);
-      setUndo({ run, attempt: 0, kind: 'weight', version: undoVersionRef?.current ?? 0 });
+      const run = singleButton
+        ? await onSave(selectedWeight, fatValue)
+        : await onSave(selectedWeight);
+      setUndo({
+        run,
+        attempt: 0,
+        kind: singleButton ? 'combined' : 'weight',
+        version: undoVersionRef?.current ?? 0,
+      });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save today’s weight.');
     } finally {
@@ -963,33 +989,57 @@ export function DashboardQuickBodyweight({
   }
 
   return (
-    <section className="pulse-card quick-bodyweight" aria-labelledby={titleId}>
+    <section
+      className={`pulse-card quick-bodyweight${headerSave ? ' is-paired' : ''}`}
+      aria-labelledby={titleId}
+    >
       <header className="pulse-card-header">
-        <h2 id={titleId}>
-          {mode === 'weight'
-            ? 'Body weight check-in'
-            : mode === 'fat'
-              ? 'Body fat check-in'
-              : 'Combined check-in'}
+        <h2 id={titleId} title="Body check-in">
+          Check-in
         </h2>
+        {headerSave && (
+          <button
+            form={fatOnly ? fatFormId : weightFormId}
+            className="pulse-button primary quick-check-in-save"
+            aria-label={saveLabel}
+            title={saveLabel}
+            aria-busy={saving}
+            type="submit"
+            disabled={saving || busy || (fatOnly && todayBodyweight === null)}
+          >
+            <Icon name="check" />
+          </button>
+        )}
       </header>
+      {(mode !== 'fat' || !onSaveBodyFat) && (
+        <form
+          id={weightFormId}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        />
+      )}
+      {onSaveBodyFat && mode !== 'weight' && !singleButton && (
+        <form
+          id={fatFormId}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveFat();
+          }}
+        />
+      )}
       {(mode !== 'fat' || !onSaveBodyFat) && (
         <section className="quick-check-in-row" aria-label="Body weight check-in">
           <header className="quick-check-in-heading">
-            {mode === 'combined' && <h3>Body weight</h3>}
+            {(combined || headerSave) && <h3>Weight</h3>}
             <CheckInStatus
               prior={priorBodyweight === null ? null : weightFromKg(priorBodyweight, weightUnit)}
               today={todayBodyweight === null ? null : weightFromKg(todayBodyweight, weightUnit)}
               unit={weightUnit}
             />
           </header>
-          <form
-            className="quick-bodyweight-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save();
-            }}
-          >
+          <div className={`quick-bodyweight-form${singleButton ? ' is-shared' : ''}`}>
             <button
               type="button"
               className="stepper"
@@ -1002,6 +1052,7 @@ export function DashboardQuickBodyweight({
             <label>
               <span className="sr-only">Bodyweight in {weightUnitName(weightUnit)}</span>
               <WeightInput
+                form={weightFormId}
                 weightKg={weight}
                 disabled={saving || busy}
                 aria-label={`Bodyweight in ${weightUnitName(weightUnit)}`}
@@ -1026,25 +1077,35 @@ export function DashboardQuickBodyweight({
             >
               +
             </button>
-            <button className="pulse-button primary" type="submit" disabled={saving || busy}>
-              {saving ? 'Saving…' : todayBodyweight === null ? 'Log' : 'Update'}
-            </button>
-          </form>
+            {!headerSave && (
+              <button
+                form={weightFormId}
+                aria-label={
+                  saving
+                    ? 'Saving weight'
+                    : todayBodyweight === null
+                      ? 'Log weight'
+                      : 'Update weight'
+                }
+                title={todayBodyweight === null ? 'Log weight' : 'Update weight'}
+                aria-busy={saving}
+                className="pulse-button primary"
+                type="submit"
+                disabled={saving || busy}
+              >
+                <Icon name="check" />
+              </button>
+            )}
+          </div>
         </section>
       )}
       {onSaveBodyFat && mode !== 'weight' && (
         <section className="quick-check-in-row body-fat-check-in" aria-label="Body fat check-in">
           <header className="quick-check-in-heading">
-            {mode === 'combined' && <h3>Body fat</h3>}
+            {(combined || headerSave) && <h3>Body fat</h3>}
             <CheckInStatus prior={priorBodyFat} today={todayBodyFat} unit="%" />
           </header>
-          <form
-            className="quick-bodyweight-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveFat();
-            }}
-          >
+          <div className={`quick-bodyweight-form${singleButton ? ' is-shared' : ''}`}>
             <button
               className="stepper"
               type="button"
@@ -1064,6 +1125,7 @@ export function DashboardQuickBodyweight({
                 step="0.1"
                 placeholder="—"
                 aria-label="Body fat percentage"
+                form={singleButton ? weightFormId : fatFormId}
                 disabled={saving || busy}
                 value={bodyFat}
                 style={{ '--bw-chars': `${Math.max(bodyFat.length, 1)}ch` } as CSSProperties}
@@ -1083,15 +1145,27 @@ export function DashboardQuickBodyweight({
             >
               +
             </button>
-            <button
-              className="pulse-button primary"
-              type="submit"
-              disabled={saving || busy || todayBodyweight === null}
-            >
-              {saving ? 'Saving…' : todayBodyFat === null ? 'Log' : 'Update'}
-            </button>
-          </form>
-          {todayBodyweight === null && (
+            {!headerSave && (
+              <button
+                form={fatFormId}
+                aria-label={
+                  saving
+                    ? 'Saving body fat'
+                    : todayBodyFat === null
+                      ? 'Log body fat'
+                      : 'Update body fat'
+                }
+                title={todayBodyFat === null ? 'Log body fat' : 'Update body fat'}
+                aria-busy={saving}
+                className="pulse-button primary"
+                type="submit"
+                disabled={saving || busy || todayBodyweight === null}
+              >
+                <Icon name="check" />
+              </button>
+            )}
+          </div>
+          {!singleButton && todayBodyweight === null && (
             <p className="quick-check-in-hint">Log today’s body weight first.</p>
           )}
         </section>
@@ -1109,9 +1183,11 @@ export function DashboardQuickBodyweight({
             <span>
               {saving
                 ? 'Undoing check-in…'
-                : undo.kind === 'fat'
-                  ? 'Body fat saved'
-                  : 'Body weight saved'}
+                : undo.kind === 'combined'
+                  ? 'Check-in saved'
+                  : undo.kind === 'fat'
+                    ? 'Body fat saved'
+                    : 'Body weight saved'}
             </span>
             <button
               className="undo-toast-action"

@@ -2065,12 +2065,13 @@ function AppContent() {
                       };
                     })
                   }
-                  onSaveBodyweight={(weight) =>
+                  onSaveBodyweight={(weight, bodyFat) =>
                     withBackgroundActivity('Saving measurement…', async () => {
                       const undo = await saveBodyweightCheckIn(
                         todayMeasurement ?? null,
                         localDate(),
                         weight,
+                        bodyFat,
                       );
                       setMeasurements(await api.localBodyMeasurements());
                       return async () => {

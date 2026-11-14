@@ -87,22 +87,8 @@ export const HOME_SECTIONS = [
   },
   {
     id: 'combined-check-in',
-    title: 'Combined check-in',
-    description: 'Log body weight and body fat',
-    icon: 'body',
-    size: 'full',
-  },
-  {
-    id: 'bodyweight-check-in',
     title: 'Body weight check-in',
-    description: 'Log body weight',
-    icon: 'body',
-    size: 'full',
-  },
-  {
-    id: 'body-fat-check-in',
-    title: 'Body fat check-in',
-    description: 'Log body fat',
+    description: 'Log body weight and body fat',
     icon: 'body',
     size: 'full',
   },
@@ -141,11 +127,17 @@ export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
 export interface TrainingBlockCardSettings {
   style: TrainingBlockCardStyle;
 }
+export type BodyCheckInMode = 'weight' | 'fat' | 'combined' | 'combined-single';
+export interface BodyCheckInSettings {
+  mode: BodyCheckInMode;
+}
+
 export interface ActivityCardSettings {
   weeks: 4 | 8 | 12;
 }
 /** Display options for configurable sections, keyed by section. */
 export interface HomeSectionSettings {
+  check_in: BodyCheckInSettings;
   zone2: CardioGoalCardSettings;
   training_block: TrainingBlockCardSettings;
   workouts: ActivityCardSettings;
@@ -160,6 +152,7 @@ export interface HomeLayout {
 }
 
 export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
+  check_in: { mode: 'combined-single' },
   zone2: { zone: null, style: 'progress' },
   training_block: { style: 'both' },
   workouts: { weeks: 8 },
@@ -199,7 +192,7 @@ export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
 export function defaultHomeLayout(): HomeLayout {
   return {
     order: HOME_SECTIONS.map((section) => section.id),
-    hidden: ['bodyweight-check-in', 'body-fat-check-in'],
+    hidden: [],
     widths: {},
     settings: DEFAULT_HOME_SECTION_SETTINGS,
   };

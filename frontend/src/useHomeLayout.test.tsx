@@ -24,6 +24,7 @@ const saved: HomeLayout = {
   widths: { 'combined-check-in': 'compact', workouts: 'full' },
   settings: {
     ...defaultHomeLayout().settings!,
+    check_in: { mode: 'combined' },
     zone2: { zone: 4, style: 'ring' },
     training_block: { style: 'timeline' },
   },
