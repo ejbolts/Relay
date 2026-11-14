@@ -52,6 +52,8 @@ export interface ActiveWorkoutDraft {
   pausedMs?: number;
   /** When the current pause began, or null while the live workout is running. */
   pausedAt?: number | null;
+  /** Time a manual correction added to the live clock; see workoutPause.ts. */
+  adjustedMs?: number;
   name: string;
   workoutDate: string;
   category: WorkoutCategory;
@@ -204,7 +206,7 @@ export function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraf
         Number.isInteger(value.durationOverrideMinutes) &&
         value.durationOverrideMinutes >= 1 &&
         value.durationOverrideMinutes <= 1440)) &&
-    validStoredPause(value.pausedMs, value.pausedAt) &&
+    validStoredPause(value.pausedMs, value.pausedAt, value.adjustedMs) &&
     typeof value.updatedAt === 'number' &&
     typeof value.name === 'string' &&
     typeof value.workoutDate === 'string' &&

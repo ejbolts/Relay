@@ -11,15 +11,29 @@ export function WorkoutHeaderMeta({
   durationLabel,
   paused = false,
   onTogglePause,
+  onEditTime,
 }: {
   durationLabel: string;
   paused?: boolean;
   onTogglePause?: () => void;
+  /** Opens the correction for a live clock that was started late or left running. */
+  onEditTime?: () => void;
 }) {
   const label = `${paused ? 'Resume' : 'Pause'} workout`;
   return (
     <span className={`workout-header-meta${paused ? ' is-paused' : ''}`}>
-      <span className="workout-header-duration">{durationLabel}</span>
+      {onEditTime ? (
+        <button
+          type="button"
+          className="workout-header-duration workout-header-time-button"
+          aria-label={`Correct workout time, ${durationLabel}`}
+          onClick={onEditTime}
+        >
+          {durationLabel}
+        </button>
+      ) : (
+        <span className="workout-header-duration">{durationLabel}</span>
+      )}
       {paused && (
         <>
           <span className="workout-header-separator" aria-hidden="true">
