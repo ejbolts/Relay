@@ -245,6 +245,7 @@ export function TodayScreen({
   const zone2 = data?.zone2 ?? null;
   const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
   const latest = measurements[0] ?? null;
+  const checkInMode = homeSectionSettings(home.editing ? home.draft : home.layout, 'check_in').mode;
   const priorBodyweight =
     measurements.find((item) => item.measurement_date < today)?.weight_kg ?? null;
   const priorBodyFat =
@@ -571,7 +572,7 @@ export function TodayScreen({
     ),
     'combined-check-in': (
       <DashboardQuickBodyweight
-        mode={homeSectionSettings(home.editing ? home.draft : home.layout, 'check_in').mode}
+        mode={checkInMode === 'combined' ? 'combined-single' : checkInMode}
         latestBodyweight={latest?.weight_kg ?? null}
         todayBodyweight={todayBodyweight}
         todayBodyFat={todayBodyFat}
@@ -951,12 +952,8 @@ export function DashboardQuickBodyweight({
   return (
     <section className="pulse-card quick-bodyweight" aria-labelledby={titleId}>
       <header className="pulse-card-header">
-        <h2 id={titleId}>
-          {mode === 'weight'
-            ? 'Body weight check-in'
-            : mode === 'fat'
-              ? 'Body fat check-in'
-              : 'Body weight check-in'}
+        <h2 id={titleId} title="Body check-in">
+          Body check-in
         </h2>
       </header>
       {(mode !== 'fat' || !onSaveBodyFat) && (
@@ -980,7 +977,7 @@ export function DashboardQuickBodyweight({
       {(mode !== 'fat' || !onSaveBodyFat) && (
         <section className="quick-check-in-row" aria-label="Body weight check-in">
           <header className="quick-check-in-heading">
-            {combined && <h3>Body weight</h3>}
+            {combined && <h3>Weight</h3>}
             <CheckInStatus
               prior={priorBodyweight === null ? null : weightFromKg(priorBodyweight, weightUnit)}
               today={todayBodyweight === null ? null : weightFromKg(todayBodyweight, weightUnit)}
@@ -1028,11 +1025,20 @@ export function DashboardQuickBodyweight({
             {!singleButton && (
               <button
                 form={weightFormId}
+                aria-label={
+                  saving
+                    ? 'Saving weight'
+                    : todayBodyweight === null
+                      ? 'Log weight'
+                      : 'Update weight'
+                }
+                title={todayBodyweight === null ? 'Log weight' : 'Update weight'}
+                aria-busy={saving}
                 className="pulse-button primary"
                 type="submit"
                 disabled={saving || busy}
               >
-                {saving ? 'Saving…' : todayBodyweight === null ? 'Log' : 'Update'}
+                <Icon name="check" />
               </button>
             )}
           </div>
@@ -1087,11 +1093,20 @@ export function DashboardQuickBodyweight({
             {!singleButton && (
               <button
                 form={fatFormId}
+                aria-label={
+                  saving
+                    ? 'Saving body fat'
+                    : todayBodyFat === null
+                      ? 'Log body fat'
+                      : 'Update body fat'
+                }
+                title={todayBodyFat === null ? 'Log body fat' : 'Update body fat'}
+                aria-busy={saving}
                 className="pulse-button primary"
                 type="submit"
                 disabled={saving || busy || todayBodyweight === null}
               >
-                {saving ? 'Saving…' : todayBodyFat === null ? 'Log' : 'Update'}
+                <Icon name="check" />
               </button>
             )}
           </div>
@@ -1104,14 +1119,21 @@ export function DashboardQuickBodyweight({
         <button
           form={weightFormId}
           className="pulse-button primary quick-check-in-save"
+          aria-label={
+            saving
+              ? 'Saving check-in'
+              : todayBodyweight === null || todayBodyFat === null
+                ? 'Log check-in'
+                : 'Update check-in'
+          }
+          title={
+            todayBodyweight === null || todayBodyFat === null ? 'Log check-in' : 'Update check-in'
+          }
+          aria-busy={saving}
           type="submit"
           disabled={saving || busy}
         >
-          {saving
-            ? 'Saving\u2026'
-            : todayBodyweight === null || todayBodyFat === null
-              ? 'Log check-in'
-              : 'Update'}
+          <Icon name="check" />
         </button>
       )}
       {undo &&

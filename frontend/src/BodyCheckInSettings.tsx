@@ -1,12 +1,12 @@
 import type { BodyCheckInMode, BodyCheckInSettings } from './homeLayout';
+import { Icon } from './Icon';
 import { useWeightUnit } from './trainingPreferencesContext';
 import './bodyCheckInSettings.css';
 
 const OPTIONS: { id: BodyCheckInMode; label: string }[] = [
   { id: 'weight', label: 'Weight only' },
   { id: 'fat', label: 'Body fat only' },
-  { id: 'combined', label: 'Combined \u00b7 separate buttons' },
-  { id: 'combined-single', label: 'Combined \u00b7 one button' },
+  { id: 'combined-single', label: 'Combined' },
 ];
 
 export function BodyCheckInSettingsForm({
@@ -26,7 +26,7 @@ export function BodyCheckInSettingsForm({
             <input
               type="radio"
               name="body-check-in-mode"
-              checked={value.mode === id}
+              checked={value.mode === id || (value.mode === 'combined' && id === 'combined-single')}
               onChange={() => onChange({ mode: id })}
             />
             {label}
@@ -42,7 +42,11 @@ export function BodyCheckInSettingsForm({
                   </b>
                   <span className="body-check-in-preview-stepper">+</span>
                 </span>
-                {id !== 'combined-single' && <i>Update</i>}
+                {id !== 'combined-single' && (
+                  <i>
+                    <Icon name="check" />
+                  </i>
+                )}
               </span>
             )}
             {id !== 'weight' && (
@@ -55,10 +59,18 @@ export function BodyCheckInSettingsForm({
                   </b>
                   <span className="body-check-in-preview-stepper">+</span>
                 </span>
-                {id !== 'combined-single' && <i>Update</i>}
+                {id !== 'combined-single' && (
+                  <i>
+                    <Icon name="check" />
+                  </i>
+                )}
               </span>
             )}
-            {id === 'combined-single' && <i className="body-check-in-preview-save">Update</i>}
+            {id === 'combined-single' && (
+              <i className="body-check-in-preview-save">
+                <Icon name="check" />
+              </i>
+            )}
           </span>
         </label>
       ))}

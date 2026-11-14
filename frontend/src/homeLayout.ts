@@ -147,7 +147,7 @@ export interface HomeLayout {
 }
 
 export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
-  check_in: { mode: 'combined' },
+  check_in: { mode: 'combined-single' },
   zone2: { zone: null, style: 'progress' },
   training_block: { style: 'both' },
 };
