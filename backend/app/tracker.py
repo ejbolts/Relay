@@ -122,6 +122,7 @@ from .tracker_schemas import (
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
+    ExerciseUpdate,
     HeatmapDay,
     ImportBatchRead,
     ImportUndoRead,
@@ -861,11 +862,26 @@ def sync_all_workout_cardio_sessions(db: Session, user_id: str | None = None) ->
         sync_workout_cardio_sessions(db, workout)
 
 
+HIDDEN_EXERCISES_KEY = "hidden_exercises"
+
+
+def hidden_exercise_ids(db: Session, user_id: str) -> set[str]:
+    """Exercises the account has hidden from its lists, stored with its other settings."""
+    try:
+        values = json.loads(get_setting(db, user_id, HIDDEN_EXERCISES_KEY, "[]"))
+    except ValueError:
+        return set()
+    return (
+        {value for value in values if isinstance(value, str)} if isinstance(values, list) else set()
+    )
+
+
 def exercise_read(db: Session, user_id: str, exercise: Exercise) -> ExerciseRead:
     aliases = exercise_aliases(db, user_id)
     return ExerciseRead.model_validate(exercise).model_copy(
         update={
-            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id]
+            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id],
+            "hidden": exercise.id in hidden_exercise_ids(db, user_id),
         }
     )
 
@@ -880,10 +896,12 @@ def list_exercises(
     if search:
         query = query.where(Exercise.name.ilike(f"%{search.strip()}%"))
     aliases = exercise_aliases(db, user.id)
+    hidden = hidden_exercise_ids(db, user.id)
     return [
         ExerciseRead.model_validate(item).model_copy(
             update={
-                "merged_from_ids": [old for old, target in aliases.items() if target == item.id]
+                "merged_from_ids": [old for old, target in aliases.items() if target == item.id],
+                "hidden": item.id in hidden,
             }
         )
         for item in db.scalars(query)
@@ -1054,6 +1072,44 @@ def merge_custom_exercise(
     db.commit()
     db.refresh(target)
     return exercise_read(db, user.id, target)
+
+
+@router.patch("/exercises/{exercise_id}", response_model=ExerciseRead)
+def update_exercise(
+    exercise_id: str, payload: ExerciseUpdate, db: DbSession, user: CurrentUser
+) -> ExerciseRead:
+    """Rename a custom exercise or hide one from lists, keeping all of its history."""
+    exercise = get_owned(db, Exercise, exercise_id, user.id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise was not found.")
+    if payload.name is not None and payload.name != exercise.name:
+        if not exercise.is_custom:
+            raise HTTPException(status_code=422, detail="Only your own exercises can be renamed.")
+        name = canonical_exercise_name(payload.name)
+        if any(
+            canonical_exercise_name(other).casefold() == name.casefold()
+            for other in db.scalars(
+                select(Exercise.name).where(Exercise.user_id == user.id, Exercise.id != exercise.id)
+            )
+        ):
+            raise HTTPException(
+                status_code=409, detail="An exercise with that name already exists."
+            )
+        exercise.name = name
+    if payload.hidden is not None:
+        hidden = hidden_exercise_ids(db, user.id)
+        hidden = hidden | {exercise.id} if payload.hidden else hidden - {exercise.id}
+        set_setting(db, user.id, HIDDEN_EXERCISES_KEY, json.dumps(sorted(hidden)))
+    bump_workout_cache_revision(db, user.id)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="An exercise with that name already exists."
+        ) from error
+    db.refresh(exercise)
+    return exercise_read(db, user.id, exercise)
 
 
 @router.patch("/exercises/{exercise_id}/favorite", response_model=ExerciseRead)

@@ -30,6 +30,7 @@ _Home: your next workout and training dashboard. Select the screenshot to view i
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
+- Use an exercise's **⋮ menu** in **Training > Exercises** to **Hide from exercise lists**: it leaves the workout picker, swaps and split search but keeps its history, records and progress. The **Hidden** pill lists hidden exercises so you can show them again. Custom exercises can also be **renamed**; their workouts follow the new name.
 - Open a custom exercise in **Training > Exercises**, then use its **⋮ menu > Merge with another exercise** to combine it with an official or another custom exercise of the same kind, equipment and configured muscle groups. History, records, machine photos and saved splits move to the destination; its muscle credits and existing settings are kept. Merges cannot be undone.
 - Each saved workout keeps the machine settings used for that session.
 - Resume an active workout after returning to the app, then save it to your history.

@@ -99,6 +99,14 @@ describe('muscle matching', () => {
     ).toHaveLength(1);
   });
 
+  it('leaves hidden exercises out of the alternatives', () => {
+    expect(
+      rankSwapAlternatives(chestPress, [dumbbellBench, { ...pecDeck, hidden: true }]).map(
+        (item) => item.exercise.id,
+      ),
+    ).toEqual([dumbbellBench.id]);
+  });
+
   it('offers other cardio exercises without a match percentage', () => {
     expect(rankSwapAlternatives(treadmill, [bike, chestPress])).toEqual([
       { exercise: bike, match: null, equipment: 'Machine' },

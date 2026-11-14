@@ -31,7 +31,14 @@ export function RoutineExerciseSearch({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const matches = useMemo(() => progressExerciseMatches(exercises, query), [exercises, query]);
+  const matches = useMemo(
+    () =>
+      progressExerciseMatches(
+        exercises.filter((exercise) => !exercise.hidden),
+        query,
+      ),
+    [exercises, query],
+  );
 
   useEffect(() => {
     if (!open) return;

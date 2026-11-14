@@ -88,6 +88,24 @@ it('opens a search with every exercise and narrows it with fuzzy matching', asyn
   expect(host.querySelectorAll('.exercise-search-match').length).toBeGreaterThan(0);
 });
 
+it('leaves hidden exercises out of the search', async () => {
+  await act(async () =>
+    root.render(
+      <RoutineExerciseSearch
+        day={1}
+        exercises={exercises.map((item) =>
+          item.id === 'squat' ? { ...item, hidden: true } : item,
+        )}
+        disabled={false}
+        onAdd={onAdd}
+      />,
+    ),
+  );
+  await openSearch();
+  expect(optionNames()).not.toContain('Back Squat');
+  expect(optionNames()).toHaveLength(3);
+});
+
 it('adds the highlighted match from the keyboard and collapses the search', async () => {
   await openSearch();
   await type('b');

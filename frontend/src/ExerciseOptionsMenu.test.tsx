@@ -63,3 +63,49 @@ it('dismisses on outside pointer or keyboard focus without stealing focus', asyn
   expect(document.activeElement).toBe(outside);
   expect(merge).not.toHaveBeenCalled();
 });
+
+it('offers rename and hide, moves between items with the arrow keys and shows hidden state', async () => {
+  const rename = vi.fn();
+  const toggle = vi.fn();
+  await act(async () =>
+    root.render(
+      <ExerciseOptionsMenu
+        exerciseName="My bench press"
+        hidden
+        onRename={rename}
+        onMerge={merge}
+        onToggleHidden={toggle}
+      />,
+    ),
+  );
+  await click(trigger());
+  const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  expect(items().map((entry) => entry.textContent)).toEqual([
+    'Rename',
+    'Merge with another exercise',
+    'Show in exercise lists',
+  ]);
+  expect(document.activeElement).toBe(items()[0]);
+  for (const [name, index] of [
+    ['ArrowDown', 1],
+    ['End', 2],
+    ['ArrowDown', 0],
+    ['ArrowUp', 2],
+  ] as const) {
+    await act(async () =>
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent('keydown', { key: name, bubbles: true }),
+      ),
+    );
+    expect(document.activeElement).toBe(items()[index]);
+  }
+  await click(items()[2]);
+  expect(toggle).toHaveBeenCalledOnce();
+  await click(trigger());
+  await click(items()[0]);
+  expect(rename).toHaveBeenCalledExactlyOnceWith(trigger());
+});
+it('renders nothing when no option applies', async () => {
+  await act(async () => root.render(<ExerciseOptionsMenu exerciseName="Bench press" />));
+  expect(host.querySelector('.exercise-options')).toBeNull();
+});

@@ -309,6 +309,10 @@ routine keeps the schedule and restores history-based suggestions. Mutations inv
 the account's training revision. Test with `backend/tests/test_routines.py` and the
 frontend `RoutinePanel` and workout recovery tests.
 
+## Renaming and hiding exercises
+
+`PATCH /api/exercises/{id}` accepts an optional `name` and `hidden`. Only custom exercises can be renamed (`422` otherwise); a name that matches another of the account's exercises after canonical spelling and case folding is refused with `409`. Workouts, records, photos and routines reference the exercise by ID, so they follow a rename. Any exercise can be hidden. Hidden IDs are stored as a JSON list in the account's `hidden_exercises` setting, so they are per account, included in backups and need no migration; `GET /api/exercises` reports `hidden` on each exercise. The app leaves hidden exercises out of the workout picker, swap alternatives and split exercise search, and shows them in the exercise library only under the **Hidden** pill. History, progress and personal records are unaffected. Both changes bump the training revision. Older app versions ignore the new field and keep listing hidden exercises. Test with `backend/tests/test_exercise_edit.py`.
+
 ## Exercise merges
 
 Exercise merges use `POST /api/exercises/{source_id}/merge` with `target_exercise_id`.
