@@ -4491,7 +4491,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen.has-rest-notch {
-  padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
 }
 
 .logger-bottom-toasts.has-rest-pill {
@@ -4499,7 +4499,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-bottom-toasts.has-rest-notch {
-  bottom: calc(3rem + env(safe-area-inset-bottom));
+  bottom: calc(4rem + env(safe-area-inset-bottom));
 }
 
 /* ───────── Rest timer dock: the rest pill, or a notch on the bottom edge ───────── */
@@ -4621,29 +4621,21 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-weight: 800;
 }
 
-/* Hidden rest, or no rest: a 36px tab on the bottom edge with a 44px touch area. */
+/* Hidden rest: a compact floating pill with a 44px touch area. */
 .rest-notch {
-  bottom: 0;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
   min-width: 3.25rem;
-  height: calc(2.25rem + env(safe-area-inset-bottom));
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  isolation: isolate;
   border: 1px solid var(--p-line-strong);
-  border-bottom: 0;
-  border-radius: 0.875rem 0.875rem 0 0;
-  padding: 0 0.75rem env(safe-area-inset-bottom);
+  border-radius: 999px;
+  padding: 0 0.875rem;
   background: var(--p-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
   color: var(--p-accent-text);
-}
-
-.rest-notch::before {
-  position: absolute;
-  z-index: -1;
-  inset: -0.5rem -1px 0;
-  content: '';
 }
 
 .rest-notch .pulse-icon {
