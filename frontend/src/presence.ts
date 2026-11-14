@@ -8,7 +8,7 @@ import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import { notifyNotificationsChanged } from './notificationEvents';
 import type { FriendPresence, LiveWorkout } from './types';
 import { workoutNameForCategory } from './workoutCategory';
-import { draftPause, pausedMsAt } from './workoutPause';
+import { clockOffsetMsAt, draftPause } from './workoutPause';
 import {
   ACTIVE_WORKOUT_CHANGE_EVENT,
   ACTIVE_WORKOUT_DRAFT_KEY,
@@ -65,7 +65,7 @@ export function liveWorkoutReport(now = Date.now()): (LiveWorkout & { expires_at
   return {
     name: draft.name.trim() || workoutNameForCategory(draft.category),
     kind: draft.category === 'cardio' ? 'cardio' : 'strength',
-    started_at: new Date(draft.startedAt + pausedMsAt(draftPause(draft), now)).toISOString(),
+    started_at: new Date(draft.startedAt + clockOffsetMsAt(draftPause(draft), now)).toISOString(),
     expires_at: new Date(Math.ceil(finishAt / EXPIRY_STEP_MS) * EXPIRY_STEP_MS).toISOString(),
   };
 }
