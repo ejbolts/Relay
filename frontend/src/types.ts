@@ -735,6 +735,28 @@ export interface ExerciseLibrarySummary {
   trend: { date: string; estimated_1rm: number }[];
 }
 
+export interface ArchiveCounts {
+  workouts: number;
+  cardio_sessions: number;
+  body_check_ins: number;
+  custom_exercises: number;
+  photos: number;
+}
+
+/** What restoring a full backup would bring back, next to what the account holds now. */
+export interface ArchivePreview {
+  created_at: string | null;
+  username: string | null;
+  archive: ArchiveCounts;
+  current: ArchiveCounts;
+  photos_skipped: number;
+}
+
+export interface ArchiveRestored {
+  restored: ArchiveCounts;
+  photos_skipped: number;
+}
+
 export interface CsvImportResult {
   batch_id?: string | null;
   workouts_created: number;

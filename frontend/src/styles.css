@@ -8994,6 +8994,58 @@ body,
   color: var(--accent) !important;
 }
 
+.account-archive-dialog .account-archive-counts {
+  width: calc(100% - 2rem);
+  margin: 1rem 1rem 0;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.account-archive-dialog .account-archive-counts th,
+.account-archive-dialog .account-archive-counts td {
+  border-bottom: 1px solid var(--p-line);
+  padding: 0.5rem 0.25rem;
+  text-align: right;
+}
+
+.account-archive-dialog .account-archive-counts th[scope='row'],
+.account-archive-dialog .account-archive-counts thead th:first-child {
+  text-align: left;
+  color: var(--p-ink-2);
+  font-weight: 600;
+}
+
+.account-archive-dialog .account-archive-counts thead th {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.account-archive-dialog .account-archive-counts td {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.account-archive-dialog > p,
+.account-archive-dialog > .inline-error {
+  margin: 0.75rem 1rem 0;
+}
+
+.account-archive-dialog .account-archive-note {
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+}
+
+.account-archive-dialog .account-archive-warning {
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+
+.account-archive-dialog > .popup-dialog-actions {
+  margin: 1rem 0 0;
+  padding: 0.875rem 1rem 1rem;
+}
+
 .settings-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -16,6 +16,7 @@ DOC_FILES = {"README.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md", "LICENSE"
 # Changes to route, serialization, persistence or frontend-serving boundaries can
 # affect both clients. A repository test below guards new APIRouter modules.
 CONTRACT_MODULES = {
+    "account_archive.py",
     "accounts.py",
     "admin.py",
     "client_versions.py",

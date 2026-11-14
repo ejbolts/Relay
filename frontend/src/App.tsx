@@ -273,6 +273,7 @@ import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayS
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
+import { AccountArchivePanel } from './AccountArchivePanel';
 import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
 import { cardioWorkoutForSharing } from './workoutCard';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
@@ -618,6 +619,23 @@ function WorkoutCompletionToast({
     document.body,
   );
 }
+
+/** Set just before the reload that follows a backup restore, so it can be confirmed. */
+const BACKUP_RESTORED_KEY = 'relay-backup-restored';
+const BACKUP_RESTORED_MESSAGE = 'Backup restored.';
+
+/** Read once per page load: whether this load follows a backup restore. */
+function takeBackupRestoredFlag(): boolean {
+  try {
+    if (window.sessionStorage.getItem(BACKUP_RESTORED_KEY) !== '1') return false;
+    window.sessionStorage.removeItem(BACKUP_RESTORED_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let backupRestoredNotice = typeof window !== 'undefined' && takeBackupRestoredFlag();
 
 export function App() {
   const { user } = useUserSession();
@@ -1514,6 +1532,18 @@ function AppContent() {
     );
   }
 
+  async function restoreAccountArchive(file: File) {
+    await api.restoreAccountArchive(file);
+    // A restore replaces splits, blocks, layout and preferences as well as training, so the
+    // app reloads once to read them all again, then confirms.
+    try {
+      window.sessionStorage.setItem(BACKUP_RESTORED_KEY, '1');
+    } catch {
+      // The restore succeeded either way; only the confirmation is lost.
+    }
+    window.location.reload();
+  }
+
   async function deleteSampleData() {
     try {
       await withBackgroundActivity('Removing sample workouts…', async () => {
@@ -1685,6 +1715,13 @@ function AppContent() {
               : tab === 'admin' && isAdmin
                 ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
                 : null;
+  useEffect(() => {
+    // After the first load, which replaces any message with its own outcome when it finishes.
+    if (loading || !backupRestoredNotice) return;
+    backupRestoredNotice = false;
+    setMessage(BACKUP_RESTORED_MESSAGE);
+  }, [loading]);
+
   const activeMainTab = mainTabFor(tab);
   const showTabBar = tab !== 'log' && tab !== 'split';
   // The home screen guide follows the release announcement, behind the same interruptions.
@@ -1946,7 +1983,13 @@ function AppContent() {
         <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (
-          <NotificationDialog key={message} message={message} onClose={() => setMessage(null)} />
+          <NotificationDialog
+            key={message}
+            message={message}
+            onClose={() => {
+              setMessage(null);
+            }}
+          />
         )}
         {completionRecords.length > 0 && (
           <WorkoutCompletionToast
@@ -2342,6 +2385,7 @@ function AppContent() {
                 csvGuideOpen={csvGuideOpen}
                 onCsvGuideOpenChange={setCsvGuideOpen}
                 onDeleteSamples={deleteSampleData}
+                onRestoreArchive={restoreAccountArchive}
                 onDataChange={refreshAfterMutation}
                 account={user}
                 onOpenProfile={() => setTab('profile')}
@@ -8621,6 +8665,7 @@ function SettingsScreen({
   csvGuideOpen,
   onCsvGuideOpenChange,
   onDeleteSamples,
+  onRestoreArchive,
   onDataChange,
   account,
   onOpenProfile,
@@ -8665,6 +8710,7 @@ function SettingsScreen({
   csvGuideOpen: boolean;
   onCsvGuideOpenChange: (open: boolean) => void;
   onDeleteSamples: () => Promise<void>;
+  onRestoreArchive: (file: File) => Promise<void>;
   onDataChange: () => Promise<void>;
 }) {
   useSettingsPageJump('settings', active);
@@ -9239,6 +9285,8 @@ function SettingsScreen({
                     )}
                   </div>
                 </section>
+
+                {account && <AccountArchivePanel onRestore={onRestoreArchive} />}
 
                 <YouTubeConnectionPanel canConnect={canUploadVideos(account)} />
               </>
