@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import CurrentUser, get_current_user
+from .client_versions import ClientVersion, preserve_rep_ranges
 from .database import get_db
 from .exercise_merge import exercise_aliases
 from .models import Exercise, ExerciseMuscleContribution, UserSetting, WorkoutType
@@ -216,8 +217,16 @@ def capture_split(db: Db, user: CurrentUser):
 
 
 @router.put("/{routine_id}", response_model=RoutineRead)
-def update_routine(routine_id: str, payload: RoutineSaveInput, db: Db, user: CurrentUser):
-    routine_content(db, user.id, routine_id)
+def update_routine(
+    routine_id: str,
+    payload: RoutineSaveInput,
+    db: Db,
+    user: CurrentUser,
+    client_version: ClientVersion = None,
+):
+    stored = routine_content(db, user.id, routine_id)
+    for day, saved_day in zip(payload.days, stored.days, strict=False):
+        preserve_rep_ranges(day.movements, saved_day.movements, client_version)
     content = RoutineInput.model_validate(payload.model_dump(exclude={"schedule"}))
     return save_routine(db, user.id, content, routine_id, schedule=payload.schedule)
 
