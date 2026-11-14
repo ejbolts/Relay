@@ -309,6 +309,12 @@ routine keeps the schedule and restores history-based suggestions. Mutations inv
 the account's training revision. Test with `backend/tests/test_routines.py` and the
 frontend `RoutinePanel` and workout recovery tests.
 
+## Rep ranges and progression targets
+
+A planned exercise in a split day (`/api/routines`) or a workout type (`/api/workout-type-exercises`) accepts an optional `rep_range` of `{min, max}` (1–100, `min` no more than `max`); cardio exercises ignore it. It is stored in the same `user_settings` JSON as the plan, so no migration is needed, and it is copied with shared splits and returned with the day's planned exercises on the dashboard. Saves replace the whole plan, so `rep_range` is registered under `routine_movement` in `FIELDS_ADDED_IN`: an older app that omits it keeps the stored range for an exercise in the same position, while an explicit value, including `null`, is always taken.
+
+A workout started from the plan carries each exercise's range in the active draft (`repRange`). The logger shows one target line per exercise from `frontend/src/repProgression.ts`, using double progression on the exercise's last session (the pinned machine's when it has one): warm-ups are ignored, the sets at the heaviest weight decide, and once all of them reach `max` the line suggests the next weight (2.5 kg, or 5 lb for pound users); otherwise it says to stay at the weight. When the workout starts, working sets the plan left without a weight are pre-filled with that target weight as unticked suggestions; warm-ups and weights the plan set are left alone. Test with `backend/tests/test_rep_ranges.py`, `frontend/src/repProgression.test.ts` and `frontend/src/AppRepTarget.test.tsx`.
+
 ## Exercise merges
 
 Exercise merges use `POST /api/exercises/{source_id}/merge` with `target_exercise_id`.

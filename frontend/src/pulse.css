@@ -3111,6 +3111,17 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-variant-numeric: tabular-nums;
 }
 
+/* The planned rep target and what to do next, on its own line so it is never cut short. */
+.logger-screen .movement-card > .movement-rep-target {
+  margin: 0;
+  padding: 0 1rem 0.625rem;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
 .movement-last-session {
   margin: 0.125rem 0 0 !important;
   overflow: hidden;

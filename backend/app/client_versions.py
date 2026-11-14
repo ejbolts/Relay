@@ -44,6 +44,7 @@ FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
         "maintenance_max_kg": "1.2.1",
     },
     "home_section_settings": {"workouts": "1.3.0", "cardio_sessions": "1.3.0"},
+    "routine_movement": {"rep_range": "1.3.0"},
 }
 
 # Sign-in and sign-out keep working so an old app can always reach the update.
@@ -128,6 +129,22 @@ def preserve_fields(
     for field in fields:
         kept[field] = getattr(existing, field)
     return kept
+
+
+def preserve_rep_ranges(movements, stored, client: str | None) -> None:
+    """Keep planned exercises' rep ranges when the saving app predates them.
+
+    ``movements`` are the payload's planned exercises and ``stored`` the saved ones for the same
+    day or workout type, matched by position and exercise. An explicit ``rep_range``, including
+    null, is always taken: it proves the app knows the field, whatever version it reports.
+    """
+    if "rep_range" not in fields_unknown_to(client, "routine_movement"):
+        return
+    for position, movement in enumerate(movements):
+        if "rep_range" in movement.model_fields_set or position >= len(stored):
+            continue
+        if stored[position].exercise_id == movement.exercise_id:
+            movement.rep_range = stored[position].rep_range
 
 
 def preserve_unknown_workout_fields(payload, workout, client: str | None):

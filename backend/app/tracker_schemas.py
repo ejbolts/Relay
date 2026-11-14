@@ -486,9 +486,25 @@ class RoutineSet(BaseModel):
     set_type: SetType = SetType.NORMAL
 
 
+class RepRange(BaseModel):
+    """The reps to aim for in each working set, such as 8 to 12."""
+
+    min: int = Field(ge=1, le=100)
+    max: int = Field(ge=1, le=100)
+
+    @model_validator(mode="after")
+    def ordered(self) -> RepRange:
+        if self.min > self.max:
+            raise ValueError("The lowest reps cannot be more than the highest.")
+        return self
+
+
 class RoutineMovement(BaseModel):
     exercise_id: str
     sets: list[RoutineSet] = Field(min_length=1, max_length=50)
+    # Optional target for a planned strength exercise. The logger shows it and suggests more
+    # weight once every top set reaches the highest reps.
+    rep_range: RepRange | None = None
 
 
 class RoutineMovementRead(RoutineMovement):

@@ -1041,6 +1041,39 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   min-width: 0;
   display: grid;
 }
+/* The planned rep range sits on its own line under the exercise, aligned with its name. */
+.routine-exercise-row {
+  flex-wrap: wrap;
+}
+.routine-editor .routine-exercise-row .routine-rep-range {
+  flex: 0 0 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.routine-editor .routine-exercise-card .routine-rep-range {
+  grid-column: 2 / -1;
+}
+.routine-editor .routine-exercise-row .routine-rep-range select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 5.5rem;
+  min-height: 30px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 2px 8px;
+  background-color: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .routine-editor .routine-exercise-name {
   min-height: 0;
   overflow: hidden;

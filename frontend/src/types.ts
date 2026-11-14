@@ -366,10 +366,21 @@ export interface RoutineSet {
   set_type: SetType;
 }
 
+/** The reps to aim for in each working set of a planned exercise. */
+export interface RepRange {
+  min: number;
+  max: number;
+}
+
 export interface RoutineDay {
   workout_type_id: string | null;
   workout_type: WorkoutType | null;
-  movements: { exercise_id: string; exercise: Exercise; sets: RoutineSet[] }[];
+  movements: {
+    exercise_id: string;
+    exercise: Exercise;
+    sets: RoutineSet[];
+    rep_range?: RepRange | null;
+  }[];
 }
 
 export type RoutineMovement = RoutineDay['movements'][number];

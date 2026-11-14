@@ -1,6 +1,7 @@
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { Icon } from './Icon';
 import { RoutineExerciseSearch } from './RoutineExerciseSearch';
+import { REP_RANGE_PRESETS, repRangeFromKey, repRangeKey, repRangeLabel } from './repProgression';
 import { exerciseMuscles } from './splitTargets';
 import type { Exercise, RoutineMovement, RoutineSet } from './types';
 
@@ -96,6 +97,7 @@ export function RoutineMovementList({
                     exercise,
                     sets:
                       exercise.kind === current.exercise.kind ? current.sets : [emptyRoutineSet()],
+                    rep_range: exercise.kind === 'cardio' ? null : current.rep_range,
                   }));
                 }}
               >
@@ -158,6 +160,37 @@ export function RoutineMovementList({
                 <Icon name="plus" />
               </button>
             </div>
+            {!cardio && (
+              <label className="routine-rep-range">
+                Reps
+                <select
+                  aria-label={`Rep range for ${name} on ${target}`}
+                  value={repRangeKey(m.rep_range)}
+                  onChange={(event) =>
+                    movement(mi, (current) => ({
+                      ...current,
+                      rep_range: repRangeFromKey(event.target.value),
+                    }))
+                  }
+                >
+                  <option value="">Any</option>
+                  {[
+                    ...REP_RANGE_PRESETS,
+                    // A range saved elsewhere that is not one of the usual choices.
+                    ...(m.rep_range &&
+                    !REP_RANGE_PRESETS.some(
+                      (range) => repRangeKey(range) === repRangeKey(m.rep_range),
+                    )
+                      ? [m.rep_range]
+                      : []),
+                  ].map((range) => (
+                    <option key={repRangeKey(range)} value={repRangeKey(range)}>
+                      {repRangeLabel(range)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         );
       })}

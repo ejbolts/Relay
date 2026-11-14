@@ -949,7 +949,12 @@ export const api = {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify({
-        movements: movements.map(({ exercise_id, sets }) => ({ exercise_id, sets })),
+        // Always sent, null included, so clearing a range is not read as an older app's save.
+        movements: movements.map(({ exercise_id, sets, rep_range }) => ({
+          exercise_id,
+          sets,
+          rep_range: rep_range ?? null,
+        })),
       }),
     }),
   deleteWorkoutType: (id: string) =>
