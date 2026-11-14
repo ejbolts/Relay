@@ -273,7 +273,6 @@ import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayS
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
-import { AccountArchivePanel } from './AccountArchivePanel';
 import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
 import { cardioWorkoutForSharing } from './workoutCard';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
@@ -327,6 +326,7 @@ import {
 import { VideoUpload } from './VideoUpload';
 import { YouTubeConnectionPanel } from './YouTubeConnectionPanel';
 import { ProfileScreen } from './ProfileScreen';
+import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
