@@ -18,6 +18,7 @@ import {
   canShowTip,
   countTipEvent,
   freshTips,
+  isPriorityTip,
   loadTips,
   saveTips,
   tipStorageKey,
@@ -215,12 +216,9 @@ export function TipsProvider({
       const visitingHome = current.page === 'dashboard' && document.visibilityState !== 'hidden';
       if (visitingHome && !onHome.current) homeEntry.current = true;
       onHome.current = visitingHome;
-      const available =
-        !!account &&
-        current.ready &&
-        current.workoutCount > 0 &&
-        stateRef.current.enabled &&
-        quiet();
+      const available = !!account && current.ready && stateRef.current.enabled && quiet();
+      // Before a first saved workout, only priority tips may appear.
+      const established = current.workoutCount > 0;
       if (!available) {
         quietSince.current = 0;
         if (activeRef.current) api.close();
@@ -237,23 +235,37 @@ export function TipsProvider({
               (current.page === 'log' &&
                 !current.resting &&
                 now - completedSetAt.current >= 20000)))
-        )
+        ) {
           api.close();
-        return;
+          return;
+        }
+        // A waiting priority nudge replaces an ordinary tip that is already showing.
+        const priorityWaiting = [...pending.current].some(
+          ([pendingId, request]) =>
+            isPriorityTip(pendingId) &&
+            request.until > now &&
+            request.page === current.page &&
+            canShowTip(stateRef.current, pendingId, now),
+        );
+        if (isPriorityTip(id) || !priorityWaiting) return;
+        api.close();
       }
       if (now - quietSince.current < 1500) return;
       const nudge = [...pending.current].find(
         ([id, request]) =>
           request.until > now &&
+          (established || isPriorityTip(id)) &&
           (id === 'back' || request.page === current.page) &&
           canShowTip(stateRef.current, id, now) &&
           (current.page !== 'log' || current.resting || now - completedSetAt.current < 20000),
       );
       const candidate = [...candidates.current.entries()].find(
         ([, { id, element, homeTips }]) =>
+          established &&
           (homeTips?.length
             ? current.page === 'dashboard' && !homeTipSnoozed(stateRef.current, now)
-            : canShowTip(stateRef.current, id, now)) && visible(element),
+            : canShowTip(stateRef.current, id, now)) &&
+          visible(element),
       );
       if (candidate?.[1].homeTips?.length && current.page === 'dashboard') {
         const pool = candidate[1].homeTips.filter(

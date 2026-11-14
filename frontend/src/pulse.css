@@ -4431,6 +4431,17 @@ html.edge-swipe-ready .edge-swipe-indicator {
   animation: undo-toast-timer var(--undo-toast-duration, 4s) linear forwards;
 }
 
+/* A notice explaining why an action didn't happen; its countdown is the warning colour. */
+.logger-notice-toast > span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.logger-notice-toast::after {
+  background: var(--p-danger);
+}
+
 @keyframes undo-toast-in {
   from {
     opacity: 0;

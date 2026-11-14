@@ -8,6 +8,7 @@ import { useHomeLayout } from './useHomeLayout';
 import { AppTabBar } from './AppTabBar';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import { HOME_SECTIONS, type HomeSectionId } from './homeLayout';
+import { homeSectionSettings, updateHomeSectionSettings } from './homeLayout';
 
 vi.mock('./api', () => ({ api: { getHomeLayout: vi.fn(), saveHomeLayout: vi.fn() } }));
 vi.mock('./userContext', () => {
@@ -22,6 +23,7 @@ const saved: HomeLayout = {
   ...defaultHomeLayout(),
   widths: { 'combined-check-in': 'compact', workouts: 'full' },
   settings: {
+    ...defaultHomeLayout().settings!,
     check_in: { mode: 'combined' },
     zone2: { zone: 4, style: 'ring' },
     training_block: { style: 'timeline' },
@@ -96,6 +98,31 @@ afterEach(async () => {
 });
 
 describe('account Home layout drafts', () => {
+  it('saves independent activity windows and discards cancelled changes', async () => {
+    await act(async () => root.render(<Harness active />));
+    await act(async () => home.edit());
+    await act(async () =>
+      home.change(updateHomeSectionSettings(home.draft, 'workouts', { weeks: 4 })),
+    );
+    await act(async () =>
+      home.change(updateHomeSectionSettings(home.draft, 'cardio_sessions', { weeks: 12 })),
+    );
+    expect(homeSectionSettings(home.layout, 'workouts')).toEqual({ weeks: 8 });
+    await act(async () => home.save());
+    expect(api.saveHomeLayout).toHaveBeenLastCalledWith(home.layout);
+    expect(homeSectionSettings(home.layout, 'workouts')).toEqual({ weeks: 4 });
+    expect(homeSectionSettings(home.layout, 'cardio_sessions')).toEqual({ weeks: 12 });
+    await act(async () => home.edit());
+    await act(async () =>
+      home.change(updateHomeSectionSettings(home.draft, 'workouts', { weeks: 12 })),
+    );
+    await act(async () => home.cancel());
+    await act(async () => home.edit());
+    expect(homeSectionSettings(home.draft, 'workouts')).toEqual({ weeks: 4 });
+    expect(homeSectionSettings(home.draft, 'cardio_sessions')).toEqual({ weeks: 12 });
+    expect(api.saveHomeLayout).toHaveBeenCalledTimes(1);
+  });
+
   it('discards unsaved width edits when leaving the cached Today tab', async () => {
     await act(async () => root.render(<Harness active />));
     await act(async () => home.edit());

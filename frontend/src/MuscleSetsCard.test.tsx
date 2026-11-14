@@ -219,7 +219,7 @@ it('compares each muscle with the week before and steps back through earlier wee
   expect(weekLabel()).toBe('This week');
   expect(arrow('Next week').disabled).toBe(true);
   expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe(
-    'Week of 26 OctWeek of 19 OctGoal 10',
+    'Current weekLast weekGoal 10',
   );
   // Calves were trained only the week before, so their drop still shows.
   expect(rows()).toEqual([
@@ -230,6 +230,9 @@ it('compares each muscle with the week before and steps back through earlier wee
 
   await act(async () => arrow('Previous week').click());
   expect(weekLabel()).toBe('Last week');
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe(
+    'Last week2 weeks agoGoal 10',
+  );
   expect(rows()).toEqual([
     ['Chest', '12', '+2', true],
     ['Quads', '8', '−1.5', true],
@@ -240,7 +243,7 @@ it('compares each muscle with the week before and steps back through earlier wee
   await act(async () => arrow('Previous week').click());
   expect(weekLabel()).toBe('2 weeks ago');
   expect(arrow('Previous week').disabled).toBe(true);
-  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe('Week of 12 OctGoal 10');
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe('2 weeks agoGoal 10');
   expect(rows()).toEqual([
     ['Chest', '10', null, false],
     ['Quads', '9.5', null, false],

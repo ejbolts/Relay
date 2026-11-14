@@ -24,6 +24,25 @@
   margin-top: 1rem;
 }
 
+.home-guide-shortcut-steps .home-guide-shortcut {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 3rem;
+  margin-top: 0.25rem;
+}
+
+.home-guide-manual {
+  margin: 1.25rem 0;
+}
+
+.home-guide-manual summary {
+  min-height: 2.75rem;
+  padding-block: 0.5rem;
+  color: var(--p-accent-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
 .home-guide-site {
   margin-top: 0.75rem;
   overflow-wrap: anywhere;

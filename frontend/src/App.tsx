@@ -138,6 +138,8 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
+import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
+import { loggedOnlyWarmups } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -458,6 +460,8 @@ type HistoryBaselines = {
 
 const CARDIO_HISTORY_PAGE_SIZE = 5;
 const UNDO_TOAST_MS = 4000;
+/** How long a logger notice, such as why a set can't be deleted, stays up. */
+const LOGGER_NOTICE_MS = 5000;
 const IMPORTED_BODYWEIGHT_NOTE = 'Imported from workout CSV.';
 
 function emptySet(
@@ -3157,6 +3161,9 @@ function WorkoutLogger({
   const [supersetPickerKey, setSupersetPickerKey] = useState<string | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [finishConfirmationOpen, setFinishConfirmationOpen] = useState(false);
+  const [warmupReviewOpen, setWarmupReviewOpen] = useState(false);
+  /** Why the open finish confirmation cannot save yet. */
+  const [finishBlocker, setFinishBlocker] = useState<string | null>(null);
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -3417,6 +3424,17 @@ function WorkoutLogger({
     return () => window.clearTimeout(timer);
   }, [swapUndo]);
 
+  /** A brief popup explaining why an action didn't happen; each one restarts the countdown. */
+  const [loggerNotice, setLoggerNotice] = useState<{ id: number; message: string } | null>(null);
+  const showLoggerNotice = (message: string) =>
+    setLoggerNotice((current) => ({ id: (current?.id ?? 0) + 1, message }));
+
+  useEffect(() => {
+    if (!loggerNotice) return;
+    const timer = window.setTimeout(() => setLoggerNotice(null), LOGGER_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [loggerNotice]);
+
   // Older history only precedes workouts inside the window it was condensed for. An earlier
   // date (editing an older loaded workout) compares with the loaded workouts alone.
   const olderHistory =
@@ -3644,7 +3662,7 @@ function WorkoutLogger({
 
   function deleteSet(movement: DraftMovement, index: number) {
     if (movement.sets.length === 1) {
-      setError('An exercise needs at least one set. Remove the exercise instead.');
+      showLoggerNotice('An exercise needs at least one set. Remove the exercise instead.');
       return;
     }
     recentRemoval.current = { kind: 'set', key: movement.key, at: Date.now() };
@@ -3894,6 +3912,20 @@ function WorkoutLogger({
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
     if (loggingSet && !initialWorkout) tips.event('set-completed');
+    if (
+      loggingSet &&
+      !initialWorkout &&
+      movement?.exercise.kind !== 'cardio' &&
+      setKindOf({ ...currentSet, ...update }) === 'warmup'
+    )
+      tips.event('warmup-logged', 'setType');
+    if (
+      currentSet &&
+      setKindOf(currentSet) === 'warmup' &&
+      ('set_type' in update || 'warmup' in update) &&
+      setKindOf({ ...currentSet, ...update }) !== 'warmup'
+    )
+      tips.learn('setType');
     if (loggingSet && movement?.exercise.kind === 'cardio')
       tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
@@ -3943,6 +3975,15 @@ function WorkoutLogger({
     if (restSeconds !== null) startRestTimer(restSeconds);
   }
 
+  const warmupOnlyMovements: WarmupOnlyMovement[] = movements
+    .filter((movement) => movement.exercise.kind !== 'cardio' && loggedOnlyWarmups(movement.sets))
+    .map((movement) => ({
+      key: movement.key,
+      name: movement.exercise.name,
+      iconUrl: exerciseIconFor(movement.exercise),
+      sets: movement.sets,
+    }));
+
   function toggleSet(movement: DraftMovement, item: DraftSet) {
     updateSet(movement.key, item.key, { completed: !item.completed });
   }
@@ -3990,25 +4031,24 @@ function WorkoutLogger({
         movements.map((movement) => movement.exercise),
       ));
 
-  /** Resolves true once the workout is handed over for saving. */
-  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
-    if (savingRef.current) return false;
-    if (!initialWorkout && !isCurrentDraft()) return false;
+  /** Checks whether the workout can be saved now, without saving it. */
+  function checkFinish(inactiveEndAt?: number) {
+    const blocked = (message: string) => ({ kind: 'blocked' as const, message });
     if (workoutTypes.loading) {
-      setError('Workout types are still loading. Please try saving again in a moment.');
-      return false;
+      return blocked('Workout types are still loading. Please try saving again in a moment.');
     }
     if (customTypeId && selectedType.id !== customTypeId) {
-      setError('Your workout type could not load. Reload workout types or choose another type.');
-      return false;
+      return blocked(
+        'Your workout type could not load. Reload workout types or choose another type.',
+      );
     }
     if (!typeOptions.some((type) => type.id === selectedType.id)) {
-      setError('Choose an available workout type. Add or restore types in Settings if needed.');
-      return false;
+      return blocked(
+        'Choose an available workout type. Add or restore types in Settings if needed.',
+      );
     }
     if (selectedType.archived && !initialWorkout && !resumedWorkoutId) {
-      setError('This workout type was removed. Choose another type before saving.');
-      return false;
+      return blocked('This workout type was removed. Choose another type before saving.');
     }
     const finishedAt = inactiveEndAt ?? Date.now();
     const movementsToSave =
@@ -4022,10 +4062,7 @@ function WorkoutLogger({
     const unassigned = movementsToSave.find((movement) =>
       hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
     );
-    if (unassigned) {
-      setMachineAssignmentError(unassigned.exercise.name);
-      return false;
-    }
+    if (unassigned) return { kind: 'machines' as const, exercise: unassigned.exercise.name };
     const durationMinutes = initialWorkout
       ? Math.max(editedDurationMinutes, Math.ceil(cardioDurationSeconds / 60))
       : completedWorkoutDurationMinutes(
@@ -4040,29 +4077,68 @@ function WorkoutLogger({
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
     if (!movements.length || !completed.length) {
-      setError(
+      return blocked(
         !movements.length
           ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
           : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
       );
-      return false;
     }
     if (initialWorkout && Boolean(startTime) !== Boolean(endTime)) {
-      setError('Enter both a workout start time and end time, or leave both blank.');
-      return false;
+      return blocked('Enter both a workout start time and end time, or leave both blank.');
     }
     if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
-      setError('Clear the start and end times to save a 24-hour workout.');
-      return false;
+      return blocked('Clear the start and end times to save a 24-hour workout.');
     }
     if (durationMinutes > 1440) {
-      setError(
+      return blocked(
         cardioDurationSeconds > 1440 * 60
           ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
           : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
       );
+    }
+    return { kind: 'ready' as const, movementsToSave, durationMinutes, cardioDurationSeconds };
+  }
+
+  /** Opens the finish confirmation, explaining there what must change before it can save. */
+  function openFinishConfirmation() {
+    const check = checkFinish();
+    if (check.kind === 'machines') {
+      setMachineAssignmentError(check.exercise);
+      return;
+    }
+    if (check.kind === 'ready' && warmupOnlyMovements.length) {
+      // The warm-up reminder doubles as the finish confirmation.
+      setWarmupReviewOpen(true);
+      return;
+    }
+    setFinishBlocker(check.kind === 'blocked' ? check.message : null);
+    setFinishConfirmationOpen(true);
+  }
+
+  function confirmFinish() {
+    const check = checkFinish();
+    if (check.kind === 'blocked') {
+      setFinishBlocker(check.message);
+      return;
+    }
+    setFinishConfirmationOpen(false);
+    void finishWorkout();
+  }
+
+  /** Resolves true once the workout is handed over for saving. */
+  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
+    if (savingRef.current) return false;
+    if (!initialWorkout && !isCurrentDraft()) return false;
+    const check = checkFinish(inactiveEndAt);
+    if (check.kind === 'machines') {
+      setMachineAssignmentError(check.exercise);
       return false;
     }
+    if (check.kind === 'blocked') {
+      setError(check.message);
+      return false;
+    }
+    const { movementsToSave, durationMinutes, cardioDurationSeconds } = check;
     savingRef.current = true;
     setSaving(true);
     setError(null);
@@ -4630,9 +4706,27 @@ function WorkoutLogger({
         </div>
       )}
 
-      {(undoDeletion || swapUndo) && (
+      {(undoDeletion || swapUndo || loggerNotice) && (
         // Popups that stay up while you train sit at the bottom, above the timer dock.
         <div className={`logger-bottom-toasts ${dockSpacing}`}>
+          {loggerNotice && (
+            <div
+              key={loggerNotice.id}
+              className="undo-toast logger-notice-toast"
+              role="alert"
+              style={{ '--undo-toast-duration': `${LOGGER_NOTICE_MS}ms` } as CSSProperties}
+            >
+              <span>{loggerNotice.message}</span>
+              <button
+                className="undo-toast-close"
+                type="button"
+                onClick={() => setLoggerNotice(null)}
+                aria-label="Dismiss notice"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
           {swapUndo && (
             <div
               className="undo-toast"
@@ -4708,7 +4802,7 @@ function WorkoutLogger({
             disabled={saving}
             onClick={() => {
               if (initialWorkout) void finishWorkout();
-              else setFinishConfirmationOpen(true);
+              else openFinishConfirmation();
             }}
           >
             {saving ? 'Saving…' : initialWorkout ? 'Save workout' : 'Finish workout'}
@@ -4786,29 +4880,52 @@ function WorkoutLogger({
         </PopupDialog>
       )}
 
+      {warmupReviewOpen && warmupOnlyMovements.length > 0 && (
+        <WarmupOnlyFinishDialog
+          movements={warmupOnlyMovements}
+          weightUnit={weightUnit}
+          saving={saving}
+          onKeepWorkingOut={() => setWarmupReviewOpen(false)}
+          onFinishAnyway={() => {
+            setWarmupReviewOpen(false);
+            void finishWorkout();
+          }}
+        />
+      )}
+
       {finishConfirmationOpen && (
         <PopupDialog
-          title="Finish workout?"
-          kicker="PLEASE CONFIRM"
+          title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
+          kicker={finishBlocker ? 'FINISH WORKOUT' : 'PLEASE CONFIRM'}
           className="workout-finish-dialog"
           onClose={() => setFinishConfirmationOpen(false)}
         >
-          <p>This saves your workout and stops the live timer. You can resume it from History.</p>
+          {finishBlocker ? (
+            <p className="inline-error workout-finish-blocker" role="alert">
+              {finishBlocker}
+            </p>
+          ) : (
+            <p>This saves your workout and stops the live timer. You can resume it from History.</p>
+          )}
           <div className="popup-dialog-actions workout-finish-actions">
-            <button type="button" autoFocus onClick={() => setFinishConfirmationOpen(false)}>
-              Keep working out
-            </button>
             <button
               type="button"
-              className="popup-primary-action"
-              disabled={saving}
-              onClick={() => {
-                setFinishConfirmationOpen(false);
-                void finishWorkout();
-              }}
+              className={finishBlocker ? 'popup-primary-action' : undefined}
+              autoFocus
+              onClick={() => setFinishConfirmationOpen(false)}
             >
-              Finish workout
+              Keep working out
             </button>
+            {!finishBlocker && (
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={saving}
+                onClick={confirmFinish}
+              >
+                Finish workout
+              </button>
+            )}
           </div>
         </PopupDialog>
       )}
@@ -5215,11 +5332,21 @@ function WorkoutCloseDialog({
   );
 }
 
-function ExerciseIcon({ exercise, number }: { exercise: Exercise; number?: number }) {
+function ExerciseIcon({
+  exercise,
+  number,
+  warning = false,
+}: {
+  exercise: Exercise;
+  number?: number;
+  /** Flags a finished exercise that only has warm-up sets. */
+  warning?: boolean;
+}) {
   return (
     <span className="exercise-icon" aria-hidden="true">
       <img src={exerciseIconFor(exercise)} alt="" />
       {number !== undefined && <b>{number}</b>}
+      {warning && <span className="exercise-icon-warning">!</span>}
     </span>
   );
 }
@@ -5288,6 +5415,10 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
+  const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
+  const loggedWarmupCount = onlyWarmupsLogged
+    ? movement.sets.filter((item) => item.completed).length
+    : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const photoPanelId = useId();
@@ -5967,7 +6098,11 @@ function MovementCard({
     >
       {supersetLabel && <div className="superset-ribbon">{supersetLabel}</div>}
       <header onClick={() => setExpanded((current) => !current)}>
-        <ExerciseIcon exercise={movement.exercise} number={number} />
+        <ExerciseIcon
+          exercise={movement.exercise}
+          number={number}
+          warning={onlyWarmupsLogged && movement.isComplete}
+        />
         <div>
           <h2>
             <button
@@ -5998,7 +6133,9 @@ function MovementCard({
           )}
           {!expanded && (
             <span className="movement-completed-summary">
-              {completedWorkingSetCount} completed {completedWorkingSetCount === 1 ? 'set' : 'sets'}
+              {onlyWarmupsLogged
+                ? `${loggedWarmupCount} warm-up ${loggedWarmupCount === 1 ? 'set' : 'sets'}`
+                : `${completedWorkingSetCount} completed ${completedWorkingSetCount === 1 ? 'set' : 'sets'}`}
             </span>
           )}
         </div>

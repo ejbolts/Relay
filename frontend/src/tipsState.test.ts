@@ -29,6 +29,12 @@ describe('tip persistence and allowance', () => {
     expect(canShowTip(state, 'home', 100 + TIP_COOLDOWN)).toBe(false);
     expect(canShowTip({ ...state, enabled: false }, 'plates', 100 + TIP_COOLDOWN)).toBe(false);
   });
+  it('lets the set type tip skip the daily cooldown but not the off switch or a seen status', () => {
+    const state = { ...freshTips(), lastShown: 100 };
+    expect(canShowTip(state, 'setType', 101)).toBe(true);
+    expect(canShowTip({ ...state, enabled: false }, 'setType', 101)).toBe(false);
+    expect(canShowTip({ ...state, seen: { setType: 'seen' } }, 'setType', 101)).toBe(false);
+  });
   it('snoozes the Home tip slot for ten minutes after it is closed', () => {
     const state = { ...freshTips(), homeDismissedAt: 1000 };
     saveTips('alice', state);

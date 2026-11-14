@@ -17,6 +17,13 @@
     body: 'Choose Maintain in your weight goal to set lower and upper limits. Your trend chart shows the band.',
     surface: 'home',
   },
+  setType: {
+    title: 'Warm-up or working set?',
+    body: 'Tap W beside a set to make it a working set. Warm-ups don’t count toward volume.',
+    surface: 'nudge',
+    // Shown on the first logged warm-up, even on new accounts and inside the daily cooldown.
+    priority: true,
+  },
   reorder: {
     title: 'Put sets in order',
     body: 'Hold a set’s dotted handle, then drag it into place.',
@@ -129,11 +136,15 @@ export function saveTips(account: string, state: TipState) {
     /* In-memory state still works when storage is unavailable. */
   }
 }
+/** Priority tips explain something easy to get wrong, so they skip the onboarding gates. */
+export function isPriorityTip(id: TipId) {
+  return 'priority' in TIP_DEFINITIONS[id] && TIP_DEFINITIONS[id].priority;
+}
 export function canShowTip(state: TipState, id: TipId, now: number) {
   return (
     state.enabled &&
     !state.seen[id] &&
-    (state.lastShown === 0 || now - state.lastShown >= TIP_COOLDOWN)
+    (isPriorityTip(id) || state.lastShown === 0 || now - state.lastShown >= TIP_COOLDOWN)
   );
 }
 export function countTipEvent(state: TipState, event: string): TipState {

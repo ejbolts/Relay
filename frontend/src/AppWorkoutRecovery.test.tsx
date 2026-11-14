@@ -341,6 +341,35 @@ async function confirmFinish() {
   await act(async () => confirm.click());
 }
 
+/** Taps Finish workout on a workout that cannot save, checking the popup explains why. */
+async function openFinishBlocker() {
+  const finish = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Finish workout',
+  )!;
+  await act(async () => finish.click());
+  const dialog = document.querySelector('.workout-finish-dialog')!;
+  expect(dialog.querySelector('h2')?.textContent).toContain("Can't finish yet");
+  // Only a way back to the workout: there is nothing to confirm yet.
+  expect(
+    [...dialog.querySelectorAll('.popup-dialog-actions button')].map((b) => b.textContent),
+  ).toEqual(['Keep working out']);
+  // The reason sits in the popup rather than at the top of the logger.
+  expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+}
+
+function finishBlocker() {
+  return document.querySelector('.workout-finish-dialog .workout-finish-blocker')?.textContent;
+}
+
+async function keepWorkingOut() {
+  const keep = document.querySelector<HTMLButtonElement>(
+    '.workout-finish-dialog .popup-primary-action',
+  )!;
+  expect(keep.textContent).toBe('Keep working out');
+  await act(async () => keep.click());
+  expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+}
+
 function restoreOldLoggerLocation() {
   const state = createAppHistoryState('log', 0);
   window.history.replaceState(state, '', '#log');
@@ -1167,6 +1196,30 @@ describe('rest time controls', () => {
     );
   });
 
+  it("explains in a timed popup that an exercise's only set can't be deleted", async () => {
+    vi.useFakeTimers();
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Options for set 1"]')!.click(),
+    );
+    const remove = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Delete set'),
+    )!;
+    await act(async () => remove.click());
+    const notice = container.querySelector('.logger-notice-toast');
+    expect(notice?.getAttribute('role')).toBe('alert');
+    expect(notice?.textContent).toContain(
+      'An exercise needs at least one set. Remove the exercise instead.',
+    );
+    expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].sets).toHaveLength(1);
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(container.querySelector('.logger-notice-toast')).toBeNull();
+  });
+
   it('removes only a rest, offers Undo, persists removal and restores it only on a saved edit', async () => {
     vi.useFakeTimers();
     writeActiveWorkoutDraft(storedDraft());
@@ -1638,10 +1691,11 @@ describe('finishing workouts in the background', () => {
     const draft = storedDraft({ movements: [] });
     writeActiveWorkoutDraft(draft);
     await mount();
-    await confirmFinish();
-    expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+    await openFinishBlocker();
+    expect(finishBlocker()).toContain(
       'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick',
     );
+    await keepWorkingOut();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expectPreserved(draft);
   });
@@ -1665,10 +1719,11 @@ describe('finishing workouts in the background', () => {
       }));
       writeActiveWorkoutDraft(draft);
       await mount();
-      await confirmFinish();
-      expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+      await openFinishBlocker();
+      expect(finishBlocker()).toContain(
         'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise.',
       );
+      await keepWorkingOut();
       expect(api.createWorkout).not.toHaveBeenCalled();
       expectPreserved(draft);
     },
@@ -3835,5 +3890,68 @@ describe('navigation while saving an old workout', () => {
     );
     expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
     expect(container.querySelector('.logger-screen')).not.toBeNull();
+  });
+});
+
+describe('no working sets warnings', () => {
+  function warmupDraft() {
+    const draft = storedDraft();
+    const [first] = draft.movements[0].sets;
+    const warmup = { ...first, set_type: 'warmup' as const, warmup: true };
+    draft.movements[0].sets = [
+      { ...warmup, key: 'warmup-1', weight_kg: 40 },
+      { ...warmup, key: 'warmup-2', weight_kg: 80 },
+    ];
+    return draft;
+  }
+
+  it('lets a warm-up-only exercise be finished, flagging its icon and counting its warm-ups', async () => {
+    writeActiveWorkoutDraft(warmupDraft());
+    await mount();
+    const card = () => container.querySelector('.movement-card')!;
+    expect(card().querySelector('.exercise-icon-warning')).toBeNull();
+    await act(async () =>
+      card().querySelector<HTMLButtonElement>('[aria-label="Finish Bench press"]')!.click(),
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
+    expect(card().querySelector('.exercise-icon-warning')).not.toBeNull();
+    expect(card().querySelector('.movement-completed-summary')?.textContent).toBe('2 warm-up sets');
+    // The working-set exercise keeps its usual count and no flag.
+    const other = container.querySelectorAll('.movement-card')[1];
+    expect(other.querySelector('.exercise-icon-warning')).toBeNull();
+  });
+
+  it('reminds about warm-up-only exercises when finishing, then can go back or finish anyway', async () => {
+    writeActiveWorkoutDraft(warmupDraft());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    const finish = () =>
+      [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Finish workout',
+      )!;
+    const dialog = () => document.querySelector('.warmup-only-finish-dialog');
+    const action = (label: string) =>
+      [...dialog()!.querySelectorAll('button')].find((button) => button.textContent === label)!;
+    await act(async () => finish().click());
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('No working sets');
+    // Only the warm-up-only exercise is listed, with its icon, name and logged warm-ups.
+    const sections = [...dialog()!.querySelectorAll('section')];
+    expect(sections.map((section) => section.querySelector('h3')?.textContent)).toEqual([
+      'Bench press',
+    ]);
+    expect(sections[0].querySelector('h3 img')).not.toBeNull();
+    expect(
+      [...sections[0].querySelectorAll('.warmup-only-set')].map((chip) => chip.textContent),
+    ).toEqual(['WWarm-up: 40 kg × 8', 'WWarm-up: 80 kg × 8']);
+    expect(dialog()!.querySelector('[aria-pressed]')).toBeNull();
+    await act(async () => action('Keep working out').click());
+    expect(dialog()).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => finish().click());
+    await act(async () => action('Finish anyway').click());
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    const saved = vi.mocked(api.createWorkout).mock.calls[0][0];
+    expect(saved.movements[0].sets.map((item) => item.set_type)).toEqual(['warmup', 'warmup']);
   });
 });

@@ -638,9 +638,11 @@ describe('saving and pinning a machine photo while logging', () => {
     const draft = readActiveWorkoutDraft()!;
     const movement = draft.movements[0];
     movement.machinePhotoIds = [homeGym.id, travelGym.id];
+    // Working sets, so finishing goes straight to the confirmation rather than the warm-up review.
+    const working = { ...movement.sets[0], set_type: 'normal' as const, warmup: false };
     movement.sets = [
-      { ...movement.sets[0], completed: true },
-      { ...movement.sets[0], key: 'set-2', completed: false, weight_kg: 100 },
+      { ...working, completed: true },
+      { ...working, key: 'set-2', completed: false, weight_kg: 100 },
     ];
     writeActiveWorkoutDraft(draft);
     await act(async () => root.render(<App />));
@@ -652,8 +654,9 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(false);
     expect(readActiveWorkoutDraft()?.movements[0].sets[1].completed).toBe(false);
     await click(button('Choose machines'));
+    // Finishing the workout explains the missing machines straight away, without a confirmation.
     await click(button('Finish workout'));
-    await click(button('Finish workout', document.querySelector('dialog[open]')!));
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
     expect(save).not.toHaveBeenCalled();
     expect(document.querySelector('dialog[open]')?.textContent).toContain(
       'multiple machines pinned',
@@ -1118,7 +1121,7 @@ describe('filtering History by machine', () => {
     await click(button('Go to page 27', pages()));
     // Each six-month read finishes before the next starts, until page 27's weeks are loaded.
     await act(() => vi.waitFor(() => expect(historyCardTitles()).toEqual(['Legs 2025-10-12'])));
-    expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-02-01', '2025-08-01']);
+    expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-01-01', '2025-07-01']);
   });
 
   it('filters from a pinned photo in a workout and explains an unused machine', async () => {
