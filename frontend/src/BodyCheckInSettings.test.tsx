@@ -16,7 +16,11 @@ it('previews three options and selects the shared-button variant', async () => {
     const options = host.querySelectorAll<HTMLInputElement>('input[type=radio]');
     expect(options).toHaveLength(3);
     expect(options[0].checked).toBe(true);
-    expect(host.querySelectorAll('.body-check-in-option')[2].querySelectorAll('i')).toHaveLength(1);
+    expect(
+      host
+        .querySelectorAll('.body-check-in-option')[2]
+        .querySelectorAll('.body-check-in-preview-head i'),
+    ).toHaveLength(1);
     await act(async () => options[2].click());
     expect(change).toHaveBeenCalledExactlyOnceWith({ mode: 'combined-single' });
   } finally {

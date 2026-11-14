@@ -32,6 +32,12 @@ export function BodyCheckInSettingsForm({
             {label}
           </span>
           <span className="body-check-in-preview" aria-hidden="true">
+            <span className="body-check-in-preview-head">
+              <b>Check-in</b>
+              <i>
+                <Icon name="check" />
+              </i>
+            </span>
             {id !== 'fat' && (
               <span className="body-check-in-preview-row">
                 <span>Weight</span>
@@ -42,11 +48,6 @@ export function BodyCheckInSettingsForm({
                   </b>
                   <span className="body-check-in-preview-stepper">+</span>
                 </span>
-                {id !== 'combined-single' && (
-                  <i>
-                    <Icon name="check" />
-                  </i>
-                )}
               </span>
             )}
             {id !== 'weight' && (
@@ -59,17 +60,7 @@ export function BodyCheckInSettingsForm({
                   </b>
                   <span className="body-check-in-preview-stepper">+</span>
                 </span>
-                {id !== 'combined-single' && (
-                  <i>
-                    <Icon name="check" />
-                  </i>
-                )}
               </span>
-            )}
-            {id === 'combined-single' && (
-              <i className="body-check-in-preview-save">
-                <Icon name="check" />
-              </i>
             )}
           </span>
         </label>

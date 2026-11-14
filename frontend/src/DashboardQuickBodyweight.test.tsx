@@ -337,6 +337,8 @@ describe('combined single-button check-in', () => {
   it('saves both values together without a previous weigh-in and undoes them once', async () => {
     await combined();
     expect(container.querySelectorAll('button[type=submit]')).toHaveLength(1);
+    expect(container.querySelector('.pulse-card-header button[type=submit]')).not.toBeNull();
+    expect(container.querySelector('.is-paired')).not.toBeNull();
     expect(container.textContent).not.toContain('Log today');
     await act(async () =>
       container

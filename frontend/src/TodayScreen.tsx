@@ -837,6 +837,15 @@ export function DashboardQuickBodyweight({
   const selectedWeight = weight;
   const singleButton = mode === 'combined-single' && !!onSaveBodyFat;
   const combined = mode === 'combined' || singleButton;
+  const headerSave = singleButton || mode !== 'combined';
+  const fatOnly = mode === 'fat' && !!onSaveBodyFat;
+  const hasToday = fatOnly
+    ? todayBodyFat !== null
+    : singleButton
+      ? todayBodyweight !== null && todayBodyFat !== null
+      : todayBodyweight !== null;
+  const saveKind = fatOnly ? 'body fat' : singleButton ? 'check-in' : 'weight';
+  const saveLabel = saving ? `Saving ${saveKind}` : `${hasToday ? 'Update' : 'Log'} ${saveKind}`;
 
   useEffect(() => {
     setBodyFat(String(todayBodyFat ?? latestBodyFat ?? ''));
@@ -950,11 +959,27 @@ export function DashboardQuickBodyweight({
   }
 
   return (
-    <section className="pulse-card quick-bodyweight" aria-labelledby={titleId}>
+    <section
+      className={`pulse-card quick-bodyweight${headerSave ? ' is-paired' : ''}`}
+      aria-labelledby={titleId}
+    >
       <header className="pulse-card-header">
         <h2 id={titleId} title="Body check-in">
-          Body check-in
+          Check-in
         </h2>
+        {headerSave && (
+          <button
+            form={fatOnly ? fatFormId : weightFormId}
+            className="pulse-button primary quick-check-in-save"
+            aria-label={saveLabel}
+            title={saveLabel}
+            aria-busy={saving}
+            type="submit"
+            disabled={saving || busy || (fatOnly && todayBodyweight === null)}
+          >
+            <Icon name="check" />
+          </button>
+        )}
       </header>
       {(mode !== 'fat' || !onSaveBodyFat) && (
         <form
@@ -977,7 +1002,7 @@ export function DashboardQuickBodyweight({
       {(mode !== 'fat' || !onSaveBodyFat) && (
         <section className="quick-check-in-row" aria-label="Body weight check-in">
           <header className="quick-check-in-heading">
-            {combined && <h3>Weight</h3>}
+            {(combined || headerSave) && <h3>Weight</h3>}
             <CheckInStatus
               prior={priorBodyweight === null ? null : weightFromKg(priorBodyweight, weightUnit)}
               today={todayBodyweight === null ? null : weightFromKg(todayBodyweight, weightUnit)}
@@ -1022,7 +1047,7 @@ export function DashboardQuickBodyweight({
             >
               +
             </button>
-            {!singleButton && (
+            {!headerSave && (
               <button
                 form={weightFormId}
                 aria-label={
@@ -1047,7 +1072,7 @@ export function DashboardQuickBodyweight({
       {onSaveBodyFat && mode !== 'weight' && (
         <section className="quick-check-in-row body-fat-check-in" aria-label="Body fat check-in">
           <header className="quick-check-in-heading">
-            {combined && <h3>Body fat</h3>}
+            {(combined || headerSave) && <h3>Body fat</h3>}
             <CheckInStatus prior={priorBodyFat} today={todayBodyFat} unit="%" />
           </header>
           <div className={`quick-bodyweight-form${singleButton ? ' is-shared' : ''}`}>
@@ -1090,7 +1115,7 @@ export function DashboardQuickBodyweight({
             >
               +
             </button>
-            {!singleButton && (
+            {!headerSave && (
               <button
                 form={fatFormId}
                 aria-label={
@@ -1114,27 +1139,6 @@ export function DashboardQuickBodyweight({
             <p className="quick-check-in-hint">Log today’s body weight first.</p>
           )}
         </section>
-      )}
-      {singleButton && (
-        <button
-          form={weightFormId}
-          className="pulse-button primary quick-check-in-save"
-          aria-label={
-            saving
-              ? 'Saving check-in'
-              : todayBodyweight === null || todayBodyFat === null
-                ? 'Log check-in'
-                : 'Update check-in'
-          }
-          title={
-            todayBodyweight === null || todayBodyFat === null ? 'Log check-in' : 'Update check-in'
-          }
-          aria-busy={saving}
-          type="submit"
-          disabled={saving || busy}
-        >
-          <Icon name="check" />
-        </button>
       )}
       {undo &&
         undo.version === undoVersion &&
