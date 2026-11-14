@@ -9,6 +9,7 @@ export function PendingWorkoutSaveCard({
   onRetry,
   onDiscard,
   onReview,
+  onKeepMine,
   reviewBlocked = false,
 }: {
   completion: PendingWorkoutSave;
@@ -17,6 +18,8 @@ export function PendingWorkoutSaveCard({
   onRetry: () => void;
   onDiscard: () => void;
   onReview?: () => void;
+  /** The save was refused because the workout changed elsewhere; sends this version anyway. */
+  onKeepMine?: () => void;
   /** Another workout is in progress, so this one cannot reopen in the logger yet. */
   reviewBlocked?: boolean;
 }) {
@@ -35,7 +38,7 @@ export function PendingWorkoutSaveCard({
       </div>
       <span>{completion.payload.name}</span>
       <div className="pending-workout-actions">
-        <span role={onReview ? 'alert' : 'status'}>
+        <span role={onReview || onKeepMine ? 'alert' : 'status'}>
           {saving ? 'Syncing workout…' : (error ?? 'Saved on this device. Waiting to sync.')}
           {onReview && reviewBlocked && ' Finish your current workout to review this one.'}
         </span>
@@ -52,7 +55,11 @@ export function PendingWorkoutSaveCard({
             disabled={saving}
             onConfirm={onDiscard}
           />
-          {onReview ? (
+          {onKeepMine ? (
+            <button type="button" disabled={saving} onClick={onKeepMine}>
+              Keep my version
+            </button>
+          ) : onReview ? (
             <button type="button" disabled={reviewBlocked} onClick={onReview}>
               Review workout
             </button>

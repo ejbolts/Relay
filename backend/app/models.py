@@ -795,6 +795,9 @@ class TrainingWorkout(Base):
     start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     is_sample: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Advanced by every change to the workout's content, so a save from an editor that loaded an
+    # older revision is refused rather than overwriting newer edits (see tracker.update_workout).
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )

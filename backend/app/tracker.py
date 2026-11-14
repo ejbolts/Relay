@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -637,6 +637,31 @@ def load_workout(db: Session, user_id: str, workout_id: str) -> TrainingWorkout:
     if not workout:
         raise HTTPException(status_code=404, detail="Workout was not found.")
     return workout
+
+
+WORKOUT_CHANGED_ELSEWHERE = "This workout was changed on another device after you opened it here."
+
+
+def advance_workout_revision(
+    db: Session, workout: TrainingWorkout, base_revision: int | None = None
+) -> None:
+    """Record a change to the workout's content by advancing its revision.
+
+    With ``base_revision`` the change is refused (409, nothing saved) unless the workout is still
+    at the revision the editor loaded. Checking and advancing is one statement, so two saves based
+    on the same revision cannot both pass.
+    """
+    statement = (
+        update(TrainingWorkout)
+        .where(TrainingWorkout.id == workout.id)
+        .values(revision=TrainingWorkout.revision + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if base_revision is not None:
+        statement = statement.where(TrainingWorkout.revision == base_revision)
+    if db.execute(statement).rowcount != 1:
+        raise api_error(409, "workout_conflict", WORKOUT_CHANGED_ELSEWHERE)
+    db.expire(workout, ["revision"])
 
 
 def replace_workout_contents(
@@ -1915,6 +1940,8 @@ def sync_cardio_session_metrics_to_workout_sets(
     if "incline_percent" in fields:
         for workout_set in completed_sets:
             workout_set.incline_percent = session.incline_percent
+    # The workout's sets changed, so an editor still holding the old ones must not overwrite them.
+    advance_workout_revision(db, workout)
     return True
 
 
@@ -2731,6 +2758,9 @@ def update_workout(
     client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
+    # Refuse a stale editor before changing anything. Without a base revision (an older app
+    # version) the workout is replaced unconditionally, as it was before revisions existed.
+    advance_workout_revision(db, workout, payload.base_revision)
     payload = preserve_unknown_workout_fields(payload, workout, client_version)
     check_workout_size(payload, load_account_limits(db, settings), user, existing=workout)
     replace_workout_contents(db, user.id, workout, payload)

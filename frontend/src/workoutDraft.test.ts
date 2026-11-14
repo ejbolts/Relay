@@ -378,6 +378,20 @@ describe('active workout draft persistence', () => {
     });
   });
 
+  it('keeps the revision a resumed workout was loaded from and rejects an invalid one', () => {
+    const storage = new MemoryStorage();
+    const resumed = { ...draft, resumingWorkoutId: 'saved-workout', previousDurationMinutes: 45 };
+    writeActiveWorkoutDraft({ ...resumed, resumingWorkoutRevision: 4 }, storage);
+    expect(readActiveWorkoutDraft(storage)?.resumingWorkoutRevision).toBe(4);
+    // Drafts written before revisions existed stay readable.
+    writeActiveWorkoutDraft(resumed, storage);
+    expect(readActiveWorkoutDraft(storage)?.resumingWorkoutRevision).toBeUndefined();
+    for (const resumingWorkoutRevision of [0, 1.5, Number.NaN]) {
+      writeActiveWorkoutDraft({ ...resumed, resumingWorkoutRevision }, storage);
+      expect(readActiveWorkoutDraft(storage)).toBeNull();
+    }
+  });
+
   it('persists the inactivity deadline and rejects one before the workout began', () => {
     const storage = new MemoryStorage();
     const inactiveFinishAt = draft.startedAt + 3 * 60 * 60 * 1000;
