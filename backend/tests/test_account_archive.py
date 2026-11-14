@@ -396,9 +396,22 @@ def alembic(database: Path, data: Path, *arguments: str) -> None:
     )
 
 
+def current_head() -> str:
+    """The newest migration this checkout has, whichever it is."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND / "migrations"))
+    return ScriptDirectory.from_config(config).get_current_head()
+
+
 def make_previous_release_database(database: Path, data: Path) -> None:
     """A database as release 0053 left it: workout sets had no machine column yet."""
     alembic(database, data, "upgrade", "head")
+    # Undo anything newer than 0054 with its own downgrade, then 0054 by hand: its downgrade
+    # cannot run because the column's foreign key was created without a name.
+    alembic(database, data, "downgrade", "0054_set_machine")
     with closing(sqlite3.connect(database, isolation_level=None)) as connection:
         connection.execute("PRAGMA foreign_keys = OFF")
         sql = connection.execute(
@@ -424,4 +437,4 @@ def test_an_older_archive_database_is_brought_up_to_date(tmp_path):
         columns = {row[1] for row in connection.execute("PRAGMA table_info(workout_sets)")}
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "machine_photo_id" in columns
-    assert revision == "0054_set_machine"
+    assert revision == current_head()
