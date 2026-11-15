@@ -151,6 +151,16 @@ export interface MachinePhoto extends MachinePhotoImage {
   images?: MachinePhotoImage[];
 }
 
+/** A photo of the whole session. Friends who can see the workout see it too. */
+export interface WorkoutPhoto {
+  id: string;
+  thumbnail_url: string;
+  full_url: string;
+  width: number;
+  height: number;
+  created_at: string;
+}
+
 /** A saved machine with when, and how often, saved workouts have pinned it. */
 export interface MachinePhotoUsage extends MachinePhoto {
   exercise_name: string;
@@ -220,6 +230,8 @@ export interface TrackedWorkout {
   created_at: string;
   updated_at: string;
   movements: TrackedMovement[];
+  /** Absent from data saved before workouts could carry photos. */
+  photos?: WorkoutPhoto[];
 }
 
 export interface WorkoutCacheRevision {
@@ -768,6 +780,8 @@ export interface ArchiveCounts {
   body_check_ins: number;
   custom_exercises: number;
   photos: number;
+  /** Absent from servers that predate workout photos. */
+  workout_photos?: number;
 }
 
 /** What restoring a full backup would bring back, next to what the account holds now. */
@@ -884,6 +898,7 @@ export interface AccountLimits {
   cardio_sessions_per_account: number;
   custom_exercises_per_account: number;
   photos_per_account: number;
+  workout_photos_per_account: number;
   saves_per_minute: number;
   exercises_per_workout: number;
   sets_per_workout: number;
@@ -1124,6 +1139,23 @@ export interface FriendFeedItem {
   };
   workout: TrackedWorkout;
   reactions: WorkoutReactions;
+}
+
+/** One workout in Social's feed: yours or a friend's, with only what its owner shares. */
+export interface TimelineItem {
+  member: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+    is_you: boolean;
+  };
+  workout: TrackedWorkout;
+  reactions: WorkoutReactions;
+  /** Weight and reps records set in the workout. */
+  record_count: number;
+}
+
+export interface Timeline {
+  /** Newest first. */
+  items: TimelineItem[];
+  has_more: boolean;
 }
 
 export interface FriendFeed {

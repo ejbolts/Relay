@@ -70,6 +70,7 @@ from .models import (
     UserSession,
     UserSetting,
     WorkoutMovement,
+    WorkoutPhoto,
     WorkoutSession,
     WorkoutSet,
     WorkoutType,
@@ -94,6 +95,7 @@ from .tracker import (
 )
 from .tracker_seed import seed_sample_body_measurements, seed_sample_workouts
 from .training_metrics import rebuild_personal_records
+from .workout_photos import workout_photo_files
 from .youtube_connections import YouTubeConnectionError, decrypt_credentials, revoke_credentials
 
 DbDependency = Annotated[Session, Depends(get_db)]
@@ -302,7 +304,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
                 MachinePhoto.user_id == user_id
             )
         )
-    ]
+    ] + workout_photo_files(db, WorkoutPhoto.user_id == user_id)
     session_ids = list(
         db.scalars(select(WorkoutSession.id).where(WorkoutSession.user_id == user_id))
     )
@@ -324,6 +326,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(WorkoutSet).where(WorkoutSet.movement_id.in_(movement_ids)),
         delete(WorkoutMovement).where(WorkoutMovement.workout_id.in_(workout_ids)),
         delete(SupersetGroup).where(SupersetGroup.workout_id.in_(workout_ids)),
+        delete(WorkoutPhoto).where(WorkoutPhoto.user_id == user_id),
         delete(TrainingWorkout).where(TrainingWorkout.user_id == user_id),
         delete(WorkoutType).where(WorkoutType.user_id == user_id),
         delete(MachinePhoto).where(MachinePhoto.user_id == user_id),

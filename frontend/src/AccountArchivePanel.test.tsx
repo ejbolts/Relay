@@ -99,6 +99,20 @@ describe('full backup', () => {
     );
   });
 
+  it('counts workout photos when the server reports them', async () => {
+    vi.mocked(api.previewAccountArchive).mockResolvedValueOnce({
+      ...preview,
+      archive: { ...preview.archive, workout_photos: 6 },
+      current: { ...preview.current, workout_photos: 2 },
+    });
+    await act(async () => root.render(<AccountArchivePanel onRestore={onRestore} />));
+    await choose();
+    const rows = [...dialog()!.querySelectorAll('tbody tr')].map((row) =>
+      [...row.children].map((cell) => cell.textContent),
+    );
+    expect(rows.at(-1)).toEqual(['Workout photos', '6', '2']);
+  });
+
   it('previews a backup against the account before restoring it', async () => {
     vi.mocked(api.previewAccountArchive).mockResolvedValueOnce(preview);
     await act(async () => root.render(<AccountArchivePanel onRestore={onRestore} />));

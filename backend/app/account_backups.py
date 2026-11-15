@@ -28,6 +28,8 @@ BACKUP_DATABASE = "database.db"
 MANIFEST = "manifest.json"
 PHOTOS = "machine-photos"
 PROFILE_PHOTOS = "profile-photos"
+# Tables whose rows name two files each in the machine photo folder.
+PHOTO_TABLES = ("machine_photos", "workout_photos")
 LEGACY_DATABASE = "gym-video-logger.db"
 # Data folders kept from a pre-accounts backup. Server secrets, keys and logs are left out.
 LEGACY_FOLDERS = ("machine-photos", "uploads", "outputs", "normalized")
@@ -58,6 +60,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "exercise_partial_set_weeks": f"exercise_id IN ({_EXERCISES})",
     "machine_photos": _OWNED,
     "training_workouts": _OWNED,
+    "workout_photos": _OWNED,
     "workout_types": _OWNED,
     "workout_movements": f"workout_id IN ({_WORKOUTS})",
     "workout_sets": f"movement_id IN ({_MOVEMENTS})",
@@ -117,7 +120,7 @@ def legacy_data_owner(db: Session) -> User | None:
 def create_account_snapshot(
     db: Session, settings: Settings, user: User, label: str | None = None
 ) -> AccountBackup:
-    """Back up ``user``'s rows, machine photos and profile photo, and nobody else's."""
+    """Back up ``user``'s rows, machine, workout and profile photos, and nobody else's."""
     created_at = utc_now()
     label = clean_label(label or f"Snapshot {created_at:%Y-%m-%d %H:%M} UTC")
     backup_id = new_uuid()
@@ -269,11 +272,15 @@ def copy_account_rows(source: Path, target: Path, user_id: str) -> dict[str, int
 
 
 def copy_photos(database: Path, photos_dir: Path, target_dir: Path) -> list[str]:
-    """Copy the machine photos the backup's rows refer to; return any that were missing."""
+    """Copy the machine and workout photos the backup's rows refer to; return any missing."""
     with closing(sqlite3.connect(read_only_uri(database), uri=True)) as connection:
-        rows = connection.execute(
-            "SELECT full_filename, thumbnail_filename FROM machine_photos"
-        ).fetchall()
+        rows = [
+            row
+            for table in PHOTO_TABLES
+            for row in connection.execute(
+                f"SELECT full_filename, thumbnail_filename FROM {table}"
+            ).fetchall()
+        ]
     missing = []
     for name in sorted({name for row in rows for name in row}):
         source = photos_dir / name

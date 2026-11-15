@@ -10,6 +10,7 @@ const COUNT_LABELS: Array<[keyof ArchiveCounts, string]> = [
   ['body_check_ins', 'Body check-ins'],
   ['custom_exercises', 'Custom exercises'],
   ['photos', 'Machine photos'],
+  ['workout_photos', 'Workout photos'],
 ];
 
 function saveFile(blob: Blob, name: string) {
@@ -146,7 +147,12 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
               </tr>
             </thead>
             <tbody>
-              {COUNT_LABELS.map(([key, label]) => (
+              {COUNT_LABELS.filter(
+                // A server from before workout photos does not count them.
+                ([key]) =>
+                  pending.preview.archive[key] !== undefined ||
+                  pending.preview.current[key] !== undefined,
+              ).map(([key, label]) => (
                 <tr key={key}>
                   <th scope="row">{label}</th>
                   <td className="num">{pending.preview.archive[key]}</td>

@@ -52,6 +52,7 @@ class AccountLimits(BaseModel):
     cardio_sessions_per_account: int = Field(default=5_000, ge=1, le=1_000_000)
     custom_exercises_per_account: int = Field(default=100, ge=1, le=100_000)
     photos_per_account: int = Field(default=25, ge=1, le=100_000)
+    workout_photos_per_account: int = Field(default=500, ge=1, le=100_000)
     saves_per_minute: int = Field(default=60, ge=1, le=10_000)
     exercises_per_workout: int = Field(default=20, ge=1, le=100)
     sets_per_workout: int = Field(default=100, ge=1, le=10_000)

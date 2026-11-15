@@ -249,6 +249,8 @@ import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import { WorkoutShareCard } from './WorkoutShareCard';
+import { WorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
+import { useWorkoutPhotos } from './workoutPhotoState';
 import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
@@ -9965,6 +9967,7 @@ function HistoryScreen({
           onResume: () => onResume(workout),
           onEdit: () => onEdit(workout),
           onDelete: () => onDelete(workout),
+          onPhotosChange: () => void onDataChange(),
         })}
       />
     );
@@ -10365,6 +10368,7 @@ function HistoryWorkoutCard({
   onResume,
   onEdit,
   onDelete,
+  onPhotosChange,
   reactionAction,
 }: {
   bodyweight?: number | null;
@@ -10394,10 +10398,14 @@ function HistoryWorkoutCard({
   onResume?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** Given for your own saved workout: its photos were added to or removed. */
+  onPhotosChange?: () => void;
   reactionAction?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
+  const [photos, setPhotos] = useWorkoutPhotos(workout);
+  const photoSubject = shared ? workoutDisplayName(workout) : `Your ${workoutDisplayName(workout)}`;
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
@@ -10589,6 +10597,25 @@ function HistoryWorkoutCard({
                 <strong>{totalVolume ? formatWeight(totalVolume, weightUnit, 0) : '–'}</strong>
               </span>
             </div>
+          )}
+          {onPhotosChange && !detailsOnly ? (
+            <div className="history-workout-photos">
+              <WorkoutPhotoEditor
+                workoutId={workout.id}
+                photos={photos}
+                subject={photoSubject}
+                onChange={(next) => {
+                  setPhotos(next);
+                  onPhotosChange();
+                }}
+              />
+            </div>
+          ) : (
+            photos.length > 0 && (
+              <div className="history-workout-photos">
+                <WorkoutPhotos photos={photos} subject={photoSubject} layout="strip" />
+              </div>
+            )
           )}
           {shared ? <div className="shared-session-exercises">{movements}</div> : movements}
           {!detailsOnly && workout.notes && (

@@ -1,8 +1,8 @@
 """Self-service account archives: download everything an account holds, and restore it later.
 
 An archive is a zip of one account snapshot (see ``account_backups``): a standalone SQLite database
-with only that account's rows, its machine photos and profile photo, and a manifest listing every
-file with its size and SHA-256.
+with only that account's rows, its machine, workout and profile photos, and a manifest listing
+every file with its size and SHA-256.
 
 Restoring replaces the signed-in account's training data with an archive's. The uploaded file is
 untrusted, so a restore:
@@ -49,6 +49,7 @@ from .account_backups import (
     ACCOUNT_ROWS,
     BACKUP_DATABASE,
     MANIFEST,
+    PHOTO_TABLES,
     PHOTOS,
     PROFILE_PHOTOS,
     BackupError,
@@ -121,6 +122,7 @@ class ArchiveCounts(BaseModel):
     body_check_ins: int = 0
     custom_exercises: int = 0
     photos: int = 0
+    workout_photos: int = 0
 
 
 class ArchivePreview(BaseModel):
@@ -431,6 +433,7 @@ def count_rows(connection: sqlite3.Connection, user_id: str | None = None) -> Ar
         body_check_ins=count("body_measurements"),
         custom_exercises=count("exercises", "is_custom = 1"),
         photos=count("machine_photos"),
+        workout_photos=count("workout_photos"),
     )
 
 
@@ -499,39 +502,44 @@ class RestoredPhoto:
     height: int
 
 
+# A photo row in an archive: its table and id. Ids are only unique within a table.
+PhotoKey = tuple[str, str]
+
+
 def prepare_photos(
     settings: Settings, staged: StagedArchive, connection: sqlite3.Connection
-) -> tuple[dict[str, RestoredPhoto], set[str]]:
-    """Re-encode each archived photo under a new name. Returns the kept and the skipped ids."""
-    kept: dict[str, RestoredPhoto] = {}
-    skipped: set[str] = set()
-    try:
-        rows = connection.execute("SELECT id, full_filename FROM machine_photos").fetchall()
-    except sqlite3.Error as error:
-        raise ArchiveError(DAMAGED) from error
-    for photo_id, full_name in rows:
-        source = staged.folder / PHOTOS / str(full_name)
-        if (
-            not isinstance(photo_id, str)
-            or not isinstance(full_name, str)
-            or not SAFE_FILE_NAME.fullmatch(full_name)
-            or not source.is_file()
-        ):
-            skipped.add(str(photo_id))
-            continue
-        token = uuid.uuid4().hex
-        full = settings.machine_photos_dir / f"{token}-full.webp"
-        thumbnail = settings.machine_photos_dir / f"{token}-thumbnail.webp"
+) -> tuple[dict[PhotoKey, RestoredPhoto], set[PhotoKey]]:
+    """Re-encode each archived photo under a new name. Returns the kept and the skipped rows."""
+    kept: dict[PhotoKey, RestoredPhoto] = {}
+    skipped: set[PhotoKey] = set()
+    for table in PHOTO_TABLES:
         try:
-            width, height = _write_machine_variants(source, full, thumbnail)
-        except (PhotoValidationError, OSError, ValueError):
-            full.unlink(missing_ok=True)
-            thumbnail.unlink(missing_ok=True)
-            skipped.add(photo_id)
-            continue
-        kept[photo_id] = RestoredPhoto(
-            full.name, thumbnail.name, full.stat().st_size, width, height
-        )
+            rows = connection.execute(f"SELECT id, full_filename FROM {table}").fetchall()
+        except sqlite3.Error as error:
+            raise ArchiveError(DAMAGED) from error
+        for photo_id, full_name in rows:
+            source = staged.folder / PHOTOS / str(full_name)
+            if (
+                not isinstance(photo_id, str)
+                or not isinstance(full_name, str)
+                or not SAFE_FILE_NAME.fullmatch(full_name)
+                or not source.is_file()
+            ):
+                skipped.add((table, str(photo_id)))
+                continue
+            token = uuid.uuid4().hex
+            full = settings.machine_photos_dir / f"{token}-full.webp"
+            thumbnail = settings.machine_photos_dir / f"{token}-thumbnail.webp"
+            try:
+                width, height = _write_machine_variants(source, full, thumbnail)
+            except (PhotoValidationError, OSError, ValueError):
+                full.unlink(missing_ok=True)
+                thumbnail.unlink(missing_ok=True)
+                skipped.add((table, photo_id))
+                continue
+            kept[(table, photo_id)] = RestoredPhoto(
+                full.name, thumbnail.name, full.stat().st_size, width, height
+            )
     return kept, skipped
 
 
@@ -553,8 +561,8 @@ def insert_rows(
     archive: sqlite3.Connection,
     table: str,
     user_id: str,
-    photos: dict[str, RestoredPhoto],
-    skipped_photos: set[str],
+    photos: dict[PhotoKey, RestoredPhoto],
+    skipped_photos: set[PhotoKey],
 ) -> int:
     """Copy ``table``'s archived rows into the live database; return how many were inserted."""
     columns = columns_of(live, table)
@@ -563,6 +571,10 @@ def insert_rows(
         f'INSERT INTO "{table}" ({select_columns}) VALUES ({", ".join("?" for _ in columns)})'
     )
     index = {column: position for position, column in enumerate(columns)}
+
+    def skipped_machine(photo_id) -> bool:
+        return ("machine_photos", photo_id) in skipped_photos
+
     batch: list[list] = []
     inserted = 0
     for row in archive.execute(f'SELECT {select_columns} FROM "{table}"'):
@@ -572,8 +584,8 @@ def insert_rows(
             values[index["user_id"]] = user_id
         if table == "user_settings" and values[index["key"]] in SERVER_MANAGED_SETTINGS:
             continue
-        if table == "machine_photos":
-            photo = photos.get(values[index["id"]])
+        if table in PHOTO_TABLES:
+            photo = photos.get((table, values[index["id"]]))
             if photo is None:
                 continue
             values[index["full_filename"]] = photo.full_filename
@@ -582,13 +594,13 @@ def insert_rows(
             values[index["file_size"]] = photo.file_size
             values[index["width"]] = photo.width
             values[index["height"]] = photo.height
-            if values[index["merged_into_id"]] in skipped_photos:
-                values[index["merged_into_id"]] = None
-        if table == "movement_machine_photos" and values[index["machine_photo_id"]] in (
-            skipped_photos
+        if table == "machine_photos" and skipped_machine(values[index["merged_into_id"]]):
+            values[index["merged_into_id"]] = None
+        if table == "movement_machine_photos" and skipped_machine(
+            values[index["machine_photo_id"]]
         ):
             continue
-        if table == "workout_sets" and values[index["machine_photo_id"]] in skipped_photos:
+        if table == "workout_sets" and skipped_machine(values[index["machine_photo_id"]]):
             values[index["machine_photo_id"]] = None
         batch.append(values)
         inserted += 1
@@ -676,6 +688,7 @@ def check_limits(db: Session, settings: Settings, user: User, counts: ArchiveCou
         or counts.cardio_sessions > limits.cardio_sessions_per_account
         or counts.custom_exercises > limits.custom_exercises_per_account
         or counts.photos > limits.photos_per_account
+        or counts.workout_photos > limits.workout_photos_per_account
     )
     if over:
         raise ArchiveError(
@@ -741,8 +754,9 @@ def restore_archive(
                     }
                     old_files = [
                         name
+                        for table in PHOTO_TABLES
                         for row in live.execute(
-                            "SELECT full_filename, thumbnail_filename FROM machine_photos "
+                            f"SELECT full_filename, thumbnail_filename FROM {table} "
                             "WHERE user_id = ?",
                             (user_id,),
                         )
@@ -841,7 +855,8 @@ def preview_archive(
                 with closing(open_untrusted(staged.database)) as archive:
                     photo_names = [
                         row[0]
-                        for row in archive.execute("SELECT full_filename FROM machine_photos")
+                        for table in PHOTO_TABLES
+                        for row in archive.execute(f"SELECT full_filename FROM {table}")
                     ]
                 missing = sum(
                     1

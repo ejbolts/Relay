@@ -59,6 +59,8 @@ import type {
   FriendConnections,
   SharingNotifications,
   FriendFeed,
+  Timeline,
+  WorkoutPhoto,
   WorkoutReactionKind,
   WorkoutReactionPage,
   WorkoutReactions,
@@ -571,6 +573,9 @@ export const api = {
         body: JSON.stringify({ items }),
       }),
     feed: (limit = 5) => request<FriendFeed>(`/api/sharing/feed?limit=${limit}`),
+    /** Social's feed: your workouts and your friends', newest first. */
+    timeline: (offset = 0, limit = 10) =>
+      request<Timeline>(`/api/sharing/timeline?offset=${offset}&limit=${limit}`),
     reactionPeople: (workoutId: string, offset = 0) =>
       request<WorkoutReactionPage>(
         `/api/sharing/workouts/${encodeURIComponent(workoutId)}/reactions?offset=${offset}`,
@@ -1064,6 +1069,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
+  uploadWorkoutPhoto: (workoutId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<WorkoutPhoto>(`/api/workouts/${encodeURIComponent(workoutId)}/photos`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+  deleteWorkoutPhoto: (photoId: string) =>
+    request<void>(`/api/workout-photos/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
   downloadAccountArchive: () => requestBlob('/api/account-archive'),
   previewAccountArchive: (file: File) => {
