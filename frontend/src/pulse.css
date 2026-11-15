@@ -2183,7 +2183,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   flex: 1;
   border: 1px solid var(--p-line-strong);
   border-radius: 12px;
-  padding: 0 0.875rem;
+  padding: 0 0.625rem;
   background: var(--p-surface);
   color: var(--p-ink);
   font-size: 0.8125rem;

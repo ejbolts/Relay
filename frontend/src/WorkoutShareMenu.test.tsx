@@ -62,8 +62,8 @@ describe('workout share menu', () => {
     expect(workoutExportFileName({ ...workout, name: '!!!' })).toBe('workout-2026-11-14.csv');
   });
 
-  it('offers the share card and CSV export from one button', () => {
-    expect(trigger().textContent).toBe('Share');
+  it('offers the share card and CSV export from one Export button', () => {
+    expect(trigger().textContent).toBe('Export');
     expect(menuItems()).toHaveLength(0);
 
     act(() => trigger().click());

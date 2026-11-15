@@ -8,7 +8,7 @@ import './workoutShareMenu.css';
 
 const NOTICE_MS = 4000;
 
-/** One Share button for a saved workout: its share card, or its sets as a CSV file. */
+/** One Export button for a saved workout: its share card, or its sets as a CSV file. */
 export function WorkoutShareMenu({
   workout,
   onShareCard,
@@ -111,7 +111,7 @@ export function WorkoutShareMenu({
           disabled={busy}
           onClick={() => setOpen((value) => !value)}
         >
-          {busy ? 'Exporting…' : 'Share'}
+          {busy ? 'Exporting…' : 'Export'}
           <Icon name="chevron-down" />
         </button>
         {open && (
@@ -120,7 +120,7 @@ export function WorkoutShareMenu({
             id={menuId}
             className="workout-share-options"
             role="menu"
-            aria-label="Share workout"
+            aria-label="Export workout"
           >
             <button
               type="button"
