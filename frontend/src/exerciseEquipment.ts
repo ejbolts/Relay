@@ -22,6 +22,10 @@ const equipmentAliases: Record<string, string> = {
   bands: 'Resistance band',
   'resistance band': 'Resistance band',
   'resistance bands': 'Resistance band',
+  plate: 'Weight plate',
+  plates: 'Weight plate',
+  'weight plate': 'Weight plate',
+  'weight plates': 'Weight plate',
   bodyweight: 'Bodyweight',
   'body weight': 'Bodyweight',
 };

@@ -17,6 +17,9 @@ export type TargetStatus = 'met' | 'close' | 'under';
 
 /** Head-to-toe order, so rows stay put while sets change. Unlisted muscles follow A–Z. */
 const MUSCLE_ORDER = [
+  'Neck flexors',
+  'Lateral neck flexors',
+  'Neck extensors',
   'Chest',
   'Pectorals',
   'Shoulders',

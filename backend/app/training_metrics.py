@@ -257,6 +257,20 @@ DEFAULT_MUSCLE_MAPPING["Dumbbell Pullover"] = (("Lats", MuscleRole.PRIMARY, 1.0)
 DEFAULT_MUSCLE_MAPPING["Cable Glute Kickback"] = (("Glutes", MuscleRole.PRIMARY, 1.0),)
 DEFAULT_MUSCLE_MAPPING["Hip Abduction Machine"] = (("Glutes", MuscleRole.PRIMARY, 1.0),)
 
+# Neck exercises credit the muscle group that produces each head movement.
+NECK_FLEXION = (("Neck flexors", MuscleRole.PRIMARY, 1.0),)
+LATERAL_NECK_FLEXION = (("Lateral neck flexors", MuscleRole.PRIMARY, 1.0),)
+NECK_EXTENSION = (("Neck extensors", MuscleRole.PRIMARY, 1.0),)
+DEFAULT_MUSCLE_MAPPING["Machine Neck Flexion"] = NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Plate Neck Flexion"] = NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Band Neck Flexion"] = NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Machine Lateral Neck Flexion"] = LATERAL_NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Plate Lateral Neck Flexion"] = LATERAL_NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Band Lateral Neck Flexion"] = LATERAL_NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Machine Neck Extension"] = NECK_EXTENSION
+DEFAULT_MUSCLE_MAPPING["Plate Neck Extension"] = NECK_EXTENSION
+DEFAULT_MUSCLE_MAPPING["Band Neck Extension"] = NECK_EXTENSION
+
 MUSCLE_GROUP_ALIASES = {
     "Upper back": "Mid / Upper Back",
     "Upper pectorals": "Pectorals",

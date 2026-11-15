@@ -93,6 +93,30 @@ describe('plannedWeeklyVolume', () => {
     ).toEqual([{ muscle: 'Forearms', sets: 7 }]);
   });
 
+  it('lists the neck groups above the chest, front to side to back', () => {
+    const neck = (id: string, muscle: string) =>
+      exercise({
+        id,
+        name: id,
+        category: 'upper',
+        muscle_group: muscle,
+        muscle_set_credits: [{ muscle_name: muscle, sets: 1 }],
+      });
+    const movements = [
+      bench,
+      neck('extension', 'Neck extensors'),
+      neck('lateral', 'Lateral neck flexors'),
+      neck('flexion', 'Neck flexors'),
+    ].map((item) => ({ exercise_id: item.id, exercise: item, sets: [set()] }));
+    expect(plannedWeeklyVolume([day(movements)]).muscles.map((item) => item.muscle)).toEqual([
+      'Neck flexors',
+      'Lateral neck flexors',
+      'Neck extensors',
+      'Chest',
+      'Triceps',
+    ]);
+  });
+
   it('ignores movements left on a day changed to rest', () => {
     expect(
       plannedWeeklyVolume([

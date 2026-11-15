@@ -13,4 +13,5 @@ it('groups equipment spellings without changing custom labels or the saved field
   ).toEqual(['Cable', 'Dumbbell', 'Suspension trainer', 'Unspecified']);
   expect(exerciseEquipment('Smith-machine')).toBe('Smith machine');
   expect(exerciseEquipment('EZ curl bar')).toBe('EZ bar');
+  expect(exerciseEquipment('Weight plates')).toBe('Weight plate');
 });
