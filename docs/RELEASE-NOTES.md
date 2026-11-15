@@ -2,6 +2,53 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.3.0
+
+16 November 2026
+
+### Training blocks, stronger PRs and workout photos
+
+![Training blocks timeline with a current Strength rebuild block, earlier blocks, dates and workout counts. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/978e10d8358f7b4197236692b01ce6f1f69f9db9/training-blocks/blocks-page.png)
+
+**Training blocks** — Track a fresh block while keeping your all-time records.
+
+![A completed 100 kg bench press at 75 kg bodyweight earns a 1.33 times bodyweight relative-strength PR in the updated workout screen. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/6ec8ad8721e2254c5bd9fba42feb5855b100a27b/bodyweight-adjusted-pr/relative-strength-pr.png)
+
+**PRs at your bodyweight** — Celebrate a stronger lift-to-bodyweight ratio.
+
+![Social Feed with a friend's workout photos, session totals and reaction, followed by your own workout. Isolated sample accounts and generated images.](https://raw.githubusercontent.com/ejbolts/Relay/053cce055d2d8af46d5fe1e55b0f98a17c09f9ad/social-feed-workout-photos/social-feed.png)
+
+**Your workouts, in the feed** — Share up to three photos with each workout.
+
+- **Live workouts:** Minimise to a resume bar and continue the same session on desktop or phone.
+- **Workout saves:** Finish instantly and keep logging while sessions sync, even offline.
+- **Safer edits:** Choose which version to keep when another device has changed a workout.
+- **Unfinished workouts:** Resume, save or discard; opt into timed auto-save and idle phone alerts.
+- **Workout controls:** Correct live time, use custom rests and tap larger, iPhone-friendly controls.
+- **Set groups:** Log tri-sets with clearer superset borders and completed-set counts.
+- **Set checks:** Catch warm-up-only exercises and see popups explaining blocked finishes.
+- **Rep targets:** Plan rep ranges and see when to add weight.
+- **Splits:** Follow logged workouts, search exercises and save exercises to any workout type.
+- **Exercise library:** Rename or hide exercises, see last-used dates and sort from list options.
+- **Muscle goals:** Set targets per muscle, see combined exercise gains and track neck training.
+- **Machine history:** Get machine-specific suggestions and assign sets to each machine.
+- **Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.
+- **Weekly review:** Open last week's training review from a weekly popup or Notifications.
+- **Block summaries:** Compare finished blocks and start your next block or a deload.
+- **Home layout:** Customise weekly charts, This week and one-button weight/body-fat check-ins.
+- **Body goals:** Set maintenance weight ranges; the FFMI calculator has been removed.
+- **History:** Page sessions, group cardio by day and exercises by year, or export one workout.
+- **Sharing:** Copy or download custom workout cards and view profile photos full screen.
+- **Social:** Faster profiles, persistent comments, inline friend requests and offline reactions.
+- **Notifications:** Newest first, ten per page, quick replies and badges for unanswered requests.
+- **Full backup:** Download and restore your account, with a preview before replacing data.
+- **Appearance:** Default, Stained or OLED dark styles, with cleaner spacing and calendars.
+- **Tips and setup:** Read tips from Home's Tip chip; install and join friends through QR links.
+- **Phone alerts:** Enabled by default, with reminders to allow rest notifications.
+- **Offline and updates:** A compact delayed notice and safer updates that protect unsynced work.
+- **Account recovery:** Admin-issued temporary passwords require a new password at sign-in.
+- **Sign-in:** A subtle light ray and metal texture behind account screens.
+
 ## 1.2.0
 
 7 November 2026
