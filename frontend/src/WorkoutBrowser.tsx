@@ -28,16 +28,20 @@ export function WorkoutBrowser({
   initialWorkout,
   resumedWorkoutId,
   hasOlder,
+  resumeRequest = 0,
   children,
 }: {
   workouts: TrackedWorkout[];
   initialWorkout: TrackedWorkout | null;
   resumedWorkoutId: string | null;
   hasOlder: boolean;
+  /** Return to the mounted live logger when its resume bar is used. */
+  resumeRequest?: number;
   children: (navigation: WorkoutNavigation, viewedWorkout: TrackedWorkout | null) => ReactNode;
 }) {
   const originId = initialWorkout?.id ?? null;
   const [selectedId, setSelectedId] = useState(originId);
+  useEffect(() => setSelectedId(originId), [originId, resumeRequest]);
   const [olderWorkouts, setOlderWorkouts] = useState<TrackedWorkout[]>([]);
   const [allLoaded, setAllLoaded] = useState(false);
   const [busy, setBusy] = useState(false);

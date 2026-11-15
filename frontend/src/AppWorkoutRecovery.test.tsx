@@ -1040,6 +1040,46 @@ describe('rest time controls', () => {
     return systemNotification;
   }
 
+  it('minimises into the resume bar without saving or losing sets, notes or the running rest', async () => {
+    await startRest();
+    const before = readActiveWorkoutDraft()!;
+    const minimise = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Minimise live workout"]',
+    )!;
+    minimise.focus();
+    await act(async () => minimise.click());
+    expect(window.location.hash).toBe('#dashboard');
+    const bar = () => container.querySelector<HTMLButtonElement>('.live-workout-resume')!;
+    expect(bar().textContent).toContain(before.name);
+    expect(bar().textContent).toContain('2 sets logged');
+    expect(bar().textContent).toContain('Rest 0:30');
+    expect(document.activeElement).toBe(bar());
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(bar().querySelector('.live-workout-resume-duration')?.textContent).toBe('10:05');
+    expect(bar().textContent).toContain('Rest 0:25');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => bar().click());
+    expect(window.location.hash).toBe('#log');
+    expect(container.querySelector('.live-workout-resume')).toBeNull();
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(readActiveWorkoutDraft()?.movements).toEqual(before.movements);
+    expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
+  });
+
+  it('collapses details by default and opens the notes from the workout menu', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const details = container.querySelector<HTMLDetailsElement>('.workout-details-disclosure')!;
+    expect(details.open).toBe(false);
+    await click('Workout options');
+    await click('Add note');
+    expect(details.open).toBe(true);
+    expect(details.querySelector<HTMLTextAreaElement>('.workout-notes textarea')?.value).toBe(
+      'Workout notes survive',
+    );
+  });
+
   it.each([false, true])(
     'alerts above other tabs after a dismissed countdown (server push scheduled: %s)',
     async (scheduled) => {
@@ -1140,7 +1180,7 @@ describe('rest time controls', () => {
     expect(systemNotification).not.toHaveBeenCalled();
   });
 
-  it('pauses beside the live time with no rest, and completing a set resumes the workout', async () => {
+  it('pauses from the workout menu with no rest, and completing a set resumes the workout', async () => {
     vi.useFakeTimers();
     const draft = storedDraft();
     draft.movements[0].sets[0].completed = false;
@@ -1149,11 +1189,15 @@ describe('rest time controls', () => {
     await mount();
     expect(container.querySelector('[role="timer"]')).toBeNull();
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
+    await click('Workout options');
     await click('Pause workout');
     expect(headerMeta()?.textContent).toContain('Paused');
-    expect(headerMeta()?.querySelector('.workout-header-pause')?.getAttribute('aria-label')).toBe(
-      'Resume workout',
-    );
+    expect(headerMeta()?.querySelector('.workout-header-pause')).toBeNull();
+    await click('Workout options');
+    expect(
+      container.querySelector('[role="menuitem"][aria-label="Resume workout"]'),
+    ).not.toBeNull();
+    await click('Workout options');
     await act(async () => vi.advanceTimersByTimeAsync(120_000));
     await click('Complete set 1');
     expect(headerMeta()?.textContent).toMatch(/^Live 10:0\d$/);
@@ -1169,7 +1213,11 @@ describe('rest time controls', () => {
     );
     await mount();
     expect(headerMeta()?.textContent).toBe('6:00•Paused');
-    expect(headerMeta()?.querySelector('[aria-label="Resume workout"]')).not.toBeNull();
+    await click('Workout options');
+    expect(
+      container.querySelector('[role="menuitem"][aria-label="Resume workout"]'),
+    ).not.toBeNull();
+    await click('Workout options');
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     await confirmFinish();
     const payload = vi.mocked(api.createWorkout).mock.calls.at(-1)![0];
@@ -1781,7 +1829,7 @@ describe('finishing workouts in the background', () => {
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')?.disabled,
     ).toBe(false);
-    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(container.querySelector('.live-workout-resume')).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     expect(document.querySelector('.app-notification-toast')).toBeNull();
@@ -2824,16 +2872,16 @@ describe('cardio set editing defaults', () => {
       container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
-    expect(container.querySelector('.app-tab-start.live .num')?.textContent).toBe('10:00');
+    expect(container.querySelector('.live-workout-resume-duration')?.textContent).toBe('10:00');
     await act(async () =>
-      container.querySelector<HTMLButtonElement>('.app-tab-start.live')!.click(),
+      container.querySelector<HTMLButtonElement>('.live-workout-resume')!.click(),
     );
     await act(async () => tick().click());
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
-    expect(container.querySelector('.app-tab-start.live .num')?.textContent).toBe('10:00');
+    expect(container.querySelector('.live-workout-resume-duration')?.textContent).toBe('10:00');
   });
 
   it.each([
@@ -3135,7 +3183,7 @@ describe('inactive workout suggestions', () => {
       await mount();
       expect(readActiveWorkoutDraft()).toBeNull();
       expect(window.location.hash).toBe('#dashboard');
-      expect(container.querySelector('.app-tab-start.live')).toBeNull();
+      expect(container.querySelector('.live-workout-resume')).toBeNull();
       expect(container.querySelector('.logger-screen')).toBeNull();
       expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
       expect(api.createWorkout).not.toHaveBeenCalled();
@@ -3157,7 +3205,7 @@ describe('inactive workout suggestions', () => {
       draft.inactiveFinishAt = Date.now() + 60_000;
       writeActiveWorkoutDraft(draft);
       await mount();
-      expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+      expect(container.querySelector('.live-workout-resume')).not.toBeNull();
       expect(readActiveWorkoutDraft()).not.toBeNull();
       await act(async () => {
         if (trigger === 'timer') await vi.advanceTimersByTimeAsync(60_000);
@@ -3168,7 +3216,7 @@ describe('inactive workout suggestions', () => {
         }
       });
       expect(readActiveWorkoutDraft()).toBeNull();
-      expect(container.querySelector('.app-tab-start.live')).toBeNull();
+      expect(container.querySelector('.live-workout-resume')).toBeNull();
       expect(api.createWorkout).not.toHaveBeenCalled();
     },
   );
@@ -3178,7 +3226,7 @@ describe('inactive workout suggestions', () => {
     writeActiveWorkoutDraft(emptyDraft());
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
-    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(container.querySelector('.live-workout-resume')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
@@ -3296,7 +3344,7 @@ describe('inactive workout suggestions', () => {
     );
     expect(inactivePrompt()).toBeNull();
     expect(window.location.hash).toBe('#dashboard');
-    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+    expect(container.querySelector('.live-workout-resume')).not.toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expectPreserved(draft);
   });
@@ -3318,7 +3366,7 @@ describe('inactive workout suggestions', () => {
     );
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(inactivePrompt()).toBeNull();
-    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(container.querySelector('.live-workout-resume')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
@@ -3332,7 +3380,7 @@ describe('inactive workout suggestions', () => {
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(inactivePrompt()).toBeNull();
-    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(container.querySelector('.live-workout-resume')).toBeNull();
     expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
     expect(api.createWorkout).not.toHaveBeenCalled();
   });

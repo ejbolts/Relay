@@ -363,6 +363,8 @@ import {
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import { LiveWorkoutHeader } from './LiveWorkoutHeader';
+import { LiveWorkoutResumeBar, type LiveWorkoutSummary } from './LiveWorkoutResumeBar';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { weeklySetGains } from './weeklySetsUpdate';
 import {
@@ -745,6 +747,8 @@ function AppContent() {
   const [showRestTimes, setShowRestTimes] = useState(restTimesPreferenceEnabled);
   // The live workout's rest end, so the tab bar can count it down away from the workout.
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  const [liveWorkoutSummary, setLiveWorkoutSummary] = useState<LiveWorkoutSummary | null>(null);
+  const [workoutResumeRequest, setWorkoutResumeRequest] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(reduceMotionPreference);
   const [navDirection, setNavDirection] = useState<'forward' | 'back'>('forward');
   const [bodyTrendPreference, setBodyTrendPreference] = useState(loadBodyTrendPreference);
@@ -1054,6 +1058,18 @@ function AppContent() {
       return;
     }
     if (tab !== 'dashboard') setTab('dashboard', { replace: true });
+  }
+
+  function resumeLiveWorkout() {
+    setWorkoutResumeRequest((request) => request + 1);
+    setTab('log');
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '.workout-browser [data-workout-session]:not([hidden]) .overlay-header-back',
+        )
+        ?.focus({ preventScroll: true });
+    });
   }
 
   function beginBackgroundActivity(label: string): () => void {
@@ -1687,6 +1703,11 @@ function AppContent() {
                 : null;
   const activeMainTab = mainTabFor(tab);
   const showTabBar = tab !== 'log' && tab !== 'split';
+  const showLiveWorkoutBar =
+    tab !== 'log' &&
+    activeWorkoutStartedAt !== null &&
+    liveWorkoutSummary !== null &&
+    !home.editing;
   // The home screen guide follows the release announcement, behind the same interruptions.
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
@@ -1866,7 +1887,7 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${showLiveWorkoutBar ? ' has-live-workout-bar' : ''}${tab === 'log' && !editingWorkout ? ' has-compact-logger' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner
@@ -2167,6 +2188,7 @@ function AppContent() {
                   initialWorkout={editingWorkout}
                   resumedWorkoutId={resumingWorkoutId}
                   hasOlder={olderHistoryAvailable}
+                  resumeRequest={editingWorkout ? undefined : workoutResumeRequest}
                 >
                   {(navigation, viewedWorkout) => (
                     <WorkoutLogger
@@ -2199,12 +2221,13 @@ function AppContent() {
                       onExerciseFavorite={updateExerciseFavorite}
                       onCreateExercise={createExercise}
                       onSave={saveWorkout}
-                      onShow={() => setTab('log')}
+                      onShow={resumeLiveWorkout}
                       activeStartedAt={activeWorkoutStartedAt}
                       onRestTimerChange={
                         editingWorkout || viewedWorkout ? undefined : setRestEndsAt
                       }
                       onRestTimerComplete={notifyRestComplete}
+                      onLiveSummaryChange={setLiveWorkoutSummary}
                       onClose={navigateBack}
                       onDelete={() => {
                         if (workoutSaveBlocked) return;
@@ -2437,8 +2460,19 @@ function AppContent() {
           )}
         </main>
 
+        {showLiveWorkoutBar && liveWorkoutSummary && activeWorkoutStartedAt !== null && (
+          <LiveWorkoutResumeBar
+            startedAt={activeWorkoutStartedAt}
+            summary={liveWorkoutSummary}
+            restEndsAt={restEndsAt}
+            aboveTabBar={showTabBar}
+            onResume={resumeLiveWorkout}
+          />
+        )}
+
         {showTabBar && (
           <AppTabBar
+            resumeInBar={showLiveWorkoutBar}
             homeLayout={home}
             active={activeMainTab}
             workoutStartedAt={activeWorkoutStartedAt}
@@ -2930,6 +2964,7 @@ function WorkoutLogger({
   onDelete,
   onRestTimerChange,
   onRestTimerComplete,
+  onLiveSummaryChange,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
@@ -2964,6 +2999,7 @@ function WorkoutLogger({
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
   onRestTimerComplete: () => void;
+  onLiveSummaryChange: (summary: LiveWorkoutSummary) => void;
 }) {
   const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
@@ -3170,6 +3206,8 @@ function WorkoutLogger({
   const [error, setError] = useState<string | null>(null);
   const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(initialWorkout));
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
   // Paused time is left out of the live time and the saved duration; the real start is kept.
@@ -4308,13 +4346,44 @@ function WorkoutLogger({
     );
   }
 
+  useEffect(() => {
+    if (initialWorkout) return;
+    onLiveSummaryChange({
+      name: liveIdentity.name,
+      loggedSets: completedSets.length,
+      previousDurationMinutes,
+      durationOverrideMinutes,
+      paused: workoutPaused,
+    });
+  }, [
+    initialWorkout,
+    onLiveSummaryChange,
+    liveIdentity.name,
+    completedSets.length,
+    previousDurationMinutes,
+    durationOverrideMinutes,
+    workoutPaused,
+  ]);
+
+  const revealDetails = (selector: string) => {
+    setDetailsOpen(true);
+    window.requestAnimationFrame(() => {
+      const field = detailsRef.current?.querySelector<HTMLElement>(selector);
+      field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      field?.focus({ preventScroll: true });
+    });
+  };
+
   const restActive = restTimerEnabled && restLeft > 0;
   // A live rest shows the rest pill, or the bottom-edge notch while hidden.
   const showTimerDock = !initialWorkout && restActive;
   const dockSpacing = !showTimerDock ? '' : restHidden ? 'has-rest-notch' : 'has-rest-pill';
 
   return (
-    <section className={`logger-screen content-page ${dockSpacing}`} inert={saving}>
+    <section
+      className={`logger-screen content-page${!initialWorkout ? ' is-live-workout' : ''} ${dockSpacing}`}
+      inert={saving}
+    >
       {prToastEntries.length > 0 && (
         <PrToast key={`pr-toast-${prToastId}`} entries={prToastEntries} onClose={closePrToast} />
       )}
@@ -4322,52 +4391,71 @@ function WorkoutLogger({
         (motionReduced() ? null : (
           <ConfettiBurst key={prConfettiBurst} onComplete={() => setPrConfettiBurst(0)} />
         ))}
-      <OverlayScreenHeader
-        title={liveIdentity.name}
-        subtitle={
-          <WorkoutHeaderMeta
-            durationLabel={
-              initialWorkout
-                ? `${readOnly ? 'View only \u00b7 ' : ''}${formatDuration(displayedDurationSeconds)}`
-                : workoutPaused
-                  ? formatDuration(elapsed)
-                  : `Live ${formatDuration(elapsed)}`
-            }
-            paused={workoutPaused}
-            onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
-          />
-        }
-        onBack={onClose}
-        onTitleClick={readOnly ? undefined : openNameEditor}
-        titleActionLabel="Edit workout name"
-        actions={
-          readOnly ? undefined : (
-            <>
-              <button
-                ref={deleteButtonRef}
-                className="overlay-header-action delete"
-                type="button"
-                onClick={() => setDeleteConfirmationOpen(true)}
-                aria-label={resumedWorkoutId ? 'Discard resumed session' : 'Delete workout'}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
-                </svg>
-              </button>
-              <button
-                className="overlay-header-action add"
-                type="button"
-                onClick={openExercisePicker}
-                aria-label="Add exercise"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            </>
-          )
-        }
-      />
+      {!initialWorkout ? (
+        <LiveWorkoutHeader
+          name={liveIdentity.name}
+          durationLabel={
+            workoutPaused
+              ? formatDuration(displayedDurationSeconds)
+              : `Live ${formatDuration(displayedDurationSeconds)}`
+          }
+          loggedSets={completedSets.length}
+          paused={workoutPaused}
+          menuButtonRef={deleteButtonRef}
+          onMinimise={onClose}
+          onRename={openNameEditor}
+          onAddNote={() => revealDetails('.workout-notes textarea')}
+          onTogglePause={toggleWorkoutPause}
+          onDiscard={() => setDeleteConfirmationOpen(true)}
+        />
+      ) : (
+        <OverlayScreenHeader
+          title={liveIdentity.name}
+          subtitle={
+            <WorkoutHeaderMeta
+              durationLabel={
+                initialWorkout
+                  ? `${readOnly ? 'View only \u00b7 ' : ''}${formatDuration(displayedDurationSeconds)}`
+                  : workoutPaused
+                    ? formatDuration(elapsed)
+                    : `Live ${formatDuration(elapsed)}`
+              }
+              paused={workoutPaused}
+              onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
+            />
+          }
+          onBack={onClose}
+          onTitleClick={readOnly ? undefined : openNameEditor}
+          titleActionLabel="Edit workout name"
+          actions={
+            readOnly ? undefined : (
+              <>
+                <button
+                  ref={deleteButtonRef}
+                  className="overlay-header-action delete"
+                  type="button"
+                  onClick={() => setDeleteConfirmationOpen(true)}
+                  aria-label={resumedWorkoutId ? 'Discard resumed session' : 'Delete workout'}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
+                  </svg>
+                </button>
+                <button
+                  className="overlay-header-action add"
+                  type="button"
+                  onClick={openExercisePicker}
+                  aria-label="Add exercise"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </>
+            )
+          }
+        />
+      )}
       {recommendation &&
         !recommendation.is_rest_day &&
         !recommendation.needs_split_update &&
@@ -4425,175 +4513,186 @@ function WorkoutLogger({
           </section>
         )}
 
-      <section
-        className="workout-details workout-combined-summary panel"
-        aria-label="Workout summary and notes"
+      <details
+        ref={detailsRef}
+        className="workout-details-disclosure"
+        open={detailsOpen}
+        onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
       >
-        <div className="workout-summary-fields">
-          <div className="details-row">
-            <label>
-              Date
-              <input
-                type="date"
-                value={workoutDate}
-                disabled={readOnly}
-                onChange={(event) => setWorkoutDate(event.target.value)}
+        <summary>
+          Workout details <Icon name="chevron-down" />
+        </summary>
+        <section
+          className="workout-details workout-combined-summary panel"
+          aria-label="Workout summary and notes"
+        >
+          <div className="workout-summary-fields">
+            <div className="details-row">
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={workoutDate}
+                  disabled={readOnly}
+                  onChange={(event) => setWorkoutDate(event.target.value)}
+                />
+              </label>
+              <label>
+                Workout type
+                <select
+                  value={customTypeId ?? category}
+                  onChange={(event) => chooseWorkoutType(event.target.value)}
+                  disabled={readOnly || workoutTypes.loading}
+                >
+                  {!typeOptions.some((type) => type.id === (customTypeId ?? category)) && (
+                    <option value={customTypeId ?? category} disabled>
+                      Choose a workout type
+                    </option>
+                  )}
+                  {typeOptions.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                      {type.archived ? ' (removed)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {initialWorkout && !readOnly && (
+                <fieldset
+                  className={`workout-duration-editor${initialWorkout ? '' : ' live-workout-duration-editor'}`}
+                  aria-label={initialWorkout ? undefined : 'Workout duration'}
+                >
+                  {initialWorkout && <legend>Workout timing</legend>}
+                  {initialWorkout && !readOnly && (
+                    <>
+                      <label>
+                        Start time
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
+                          aria-label="Workout start time"
+                        />
+                      </label>
+                      <label>
+                        End time
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
+                          aria-label="Workout end time"
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label>
+                    Duration hours
+                    <input
+                      type="number"
+                      min="0"
+                      max="24"
+                      inputMode="numeric"
+                      disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
+                      value={initialWorkout ? editedDurationHours || '' : overrideDurationHours}
+                      placeholder="0"
+                      onChange={(event) => {
+                        if (!initialWorkout) {
+                          updateDurationOverride(
+                            event.target.value,
+                            String(overrideDurationRemainder),
+                          );
+                          return;
+                        }
+                        const hours = Number.isNaN(event.target.valueAsNumber)
+                          ? 0
+                          : event.target.valueAsNumber;
+                        setEditedDurationMinutes(
+                          Math.min(
+                            1440,
+                            Math.max(0, Math.floor(hours)) * 60 + editedDurationRemainder,
+                          ),
+                        );
+                      }}
+                      aria-label="Workout duration hours"
+                    />
+                  </label>
+                  <label>
+                    Duration minutes
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      inputMode="numeric"
+                      disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
+                      value={
+                        initialWorkout ? editedDurationRemainder || '' : overrideDurationRemainder
+                      }
+                      placeholder="0"
+                      onChange={(event) => {
+                        if (!initialWorkout) {
+                          updateDurationOverride(String(overrideDurationHours), event.target.value);
+                          return;
+                        }
+                        const minutes = Number.isNaN(event.target.valueAsNumber)
+                          ? 0
+                          : event.target.valueAsNumber;
+                        setEditedDurationMinutes(
+                          Math.min(
+                            1440,
+                            editedDurationHours * 60 +
+                              Math.min(59, Math.max(0, Math.floor(minutes))),
+                          ),
+                        );
+                      }}
+                      aria-label="Workout duration minutes"
+                    />
+                  </label>
+                  {(!initialWorkout || hasCompleteTimeRange) && (
+                    <small className="workout-timing-help">
+                      {initialWorkout
+                        ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
+                        : resumedWorkoutId
+                          ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
+                          : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
+                    </small>
+                  )}
+                </fieldset>
+              )}
+            </div>
+            <div className="workout-summary-metrics" aria-label="Workout totals">
+              <span>
+                <small>Time</small>
+                <strong>{formatDuration(displayedDurationSeconds)}</strong>
+              </span>
+              {currentBodyweight !== null && (
+                <span>
+                  <small>BW {weightUnit}</small>
+                  <strong>{formatWeightNumber(currentBodyweight, weightUnit)}</strong>
+                </span>
+              )}
+              <span>
+                <small>Sets</small>
+                <strong>{completedSets.length}</strong>
+              </span>
+              <span>
+                <small>Reps</small>
+                <strong>{completedReps}</strong>
+              </span>
+            </div>
+            <label className="workout-notes">
+              Workout notes
+              <textarea
+                readOnly={readOnly}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Workout notes…"
+                rows={3}
               />
             </label>
-            <label>
-              Workout type
-              <select
-                value={customTypeId ?? category}
-                onChange={(event) => chooseWorkoutType(event.target.value)}
-                disabled={readOnly || workoutTypes.loading}
-              >
-                {!typeOptions.some((type) => type.id === (customTypeId ?? category)) && (
-                  <option value={customTypeId ?? category} disabled>
-                    Choose a workout type
-                  </option>
-                )}
-                {typeOptions.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                    {type.archived ? ' (removed)' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {initialWorkout && !readOnly && (
-              <fieldset
-                className={`workout-duration-editor${initialWorkout ? '' : ' live-workout-duration-editor'}`}
-                aria-label={initialWorkout ? undefined : 'Workout duration'}
-              >
-                {initialWorkout && <legend>Workout timing</legend>}
-                {initialWorkout && !readOnly && (
-                  <>
-                    <label>
-                      Start time
-                      <input
-                        type="time"
-                        value={startTime}
-                        onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
-                        aria-label="Workout start time"
-                      />
-                    </label>
-                    <label>
-                      End time
-                      <input
-                        type="time"
-                        value={endTime}
-                        onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
-                        aria-label="Workout end time"
-                      />
-                    </label>
-                  </>
-                )}
-                <label>
-                  Duration hours
-                  <input
-                    type="number"
-                    min="0"
-                    max="24"
-                    inputMode="numeric"
-                    disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
-                    value={initialWorkout ? editedDurationHours || '' : overrideDurationHours}
-                    placeholder="0"
-                    onChange={(event) => {
-                      if (!initialWorkout) {
-                        updateDurationOverride(
-                          event.target.value,
-                          String(overrideDurationRemainder),
-                        );
-                        return;
-                      }
-                      const hours = Number.isNaN(event.target.valueAsNumber)
-                        ? 0
-                        : event.target.valueAsNumber;
-                      setEditedDurationMinutes(
-                        Math.min(
-                          1440,
-                          Math.max(0, Math.floor(hours)) * 60 + editedDurationRemainder,
-                        ),
-                      );
-                    }}
-                    aria-label="Workout duration hours"
-                  />
-                </label>
-                <label>
-                  Duration minutes
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    inputMode="numeric"
-                    disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
-                    value={
-                      initialWorkout ? editedDurationRemainder || '' : overrideDurationRemainder
-                    }
-                    placeholder="0"
-                    onChange={(event) => {
-                      if (!initialWorkout) {
-                        updateDurationOverride(String(overrideDurationHours), event.target.value);
-                        return;
-                      }
-                      const minutes = Number.isNaN(event.target.valueAsNumber)
-                        ? 0
-                        : event.target.valueAsNumber;
-                      setEditedDurationMinutes(
-                        Math.min(
-                          1440,
-                          editedDurationHours * 60 + Math.min(59, Math.max(0, Math.floor(minutes))),
-                        ),
-                      );
-                    }}
-                    aria-label="Workout duration minutes"
-                  />
-                </label>
-                {(!initialWorkout || hasCompleteTimeRange) && (
-                  <small className="workout-timing-help">
-                    {initialWorkout
-                      ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
-                      : resumedWorkoutId
-                        ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
-                        : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
-                  </small>
-                )}
-              </fieldset>
-            )}
           </div>
-          <div className="workout-summary-metrics" aria-label="Workout totals">
-            <span>
-              <small>Time</small>
-              <strong>{formatDuration(displayedDurationSeconds)}</strong>
-            </span>
-            {currentBodyweight !== null && (
-              <span>
-                <small>BW {weightUnit}</small>
-                <strong>{formatWeightNumber(currentBodyweight, weightUnit)}</strong>
-              </span>
-            )}
-            <span>
-              <small>Sets</small>
-              <strong>{completedSets.length}</strong>
-            </span>
-            <span>
-              <small>Reps</small>
-              <strong>{completedReps}</strong>
-            </span>
-          </div>
-          <label className="workout-notes">
-            Workout notes
-            <textarea
-              readOnly={readOnly}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Workout notes…"
-              rows={3}
-            />
-          </label>
-        </div>
-        <WorkoutNavigationArrows navigation={navigation} />
-      </section>
+          <WorkoutNavigationArrows navigation={navigation} />
+        </section>
+      </details>
 
       {error && <DismissibleInlineError message={error} onDismiss={() => setError(null)} />}
 
@@ -4793,7 +4892,7 @@ function WorkoutLogger({
         />
       )}
       {!readOnly && (
-        <>
+        <div className="live-workout-actions">
           <button className="add-exercise-button" type="button" onClick={openExercisePicker}>
             ＋ Add exercise
           </button>
@@ -4807,7 +4906,7 @@ function WorkoutLogger({
           >
             {saving ? 'Saving…' : initialWorkout ? 'Save workout' : 'Finish workout'}
           </button>
-        </>
+        </div>
       )}
 
       {inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
