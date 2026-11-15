@@ -1,4 +1,5 @@
 import { clearActiveWorkoutReminderKey } from './activeWorkoutReminder';
+import { ACTIVE_WORKOUT_SYNC_KEY } from './activeWorkoutEvents';
 import { api, ApiError } from './api';
 import { releasePhonePushSubscription } from './push';
 import {
@@ -53,6 +54,7 @@ export async function clearUserDeviceData(
     clearActiveWorkoutReminderKey(storage);
     try {
       storage.removeItem(LAST_USER_KEY);
+      storage.removeItem(ACTIVE_WORKOUT_SYNC_KEY);
     } catch {
       // Ignore unavailable storage.
     }

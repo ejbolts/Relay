@@ -209,7 +209,30 @@ On the installed phone PWA, enable **Settings > Notifications > Phone alerts**. 
 
 The workout logger uses the same subscription for rest-timer alerts. Start a rest timer and tap **Alert** on its compact top bar once; subsequent rest timers notify that phone automatically, including while the PWA is backgrounded or the screen is locked. Extending or skipping the visible timer reschedules or cancels its pending notification.
 
-With Phone alerts enabled, an active workout also schedules one reminder at two hours. The server stores this reminder so it survives restarts and can notify a backgrounded phone. Saving or cancelling the workout cancels its reminder; if the phone is offline, cancellation retries when it reconnects. Open the updated app once to register an existing workout's reminder. Upgrade to migration `0019_active_workout_reminders` before restarting the backend. A workout left running can be saved with **Actual duration (minutes)**; the correction stays in its local draft until saved.
+Active workouts are private account-wide drafts at `GET/PUT /api/active-workout`. Both devices
+can resume and edit the same workout. The presence socket sends a content-free `active_workout`
+invalidation only to that account's authenticated windows; reconnect, focus and a visible
+30-second fallback also refresh it. Drafts remain in local storage for offline recovery.
+Each device retains its acknowledged base and the server merges independent fields and stable
+movement/set keys. Concurrent edits to the same value, or deleting a set another device edited,
+require choosing a version in **Workout sync conflict**; both copies remain until that choice.
+Finishing consumes the shared revision in the workout-save transaction. Stale completions remain
+in the device's existing recovery queue, and ended drafts cannot be revived by reconnecting.
+The additive save fields `active_workout_revision` and `active_workout_session_id` are transient
+concurrency guards; older clients retain their existing save contract. Open the updated app on
+each device to participate in live draft sync.
+
+With Phone alerts enabled on a device, the server sends **Still working out?** after 45 minutes
+without workout interactions on either device. An open socket, visible window or reconnect does
+not reset the timer. Actual input, taps and scrolling in the logger do. It sends once per idle
+period to the account's subscribed devices, survives backend restarts, and resets after further
+activity. Finishing or discarding cancels it. Offline activity and cancellation reach the server
+when that device reconnects, so the server can only act on activity it has received. Migration
+`0057_active_workout_sync` creates the private draft, revision tombstone and reminder state;
+account deletion removes them and account backups exclude them. Legacy two-hour reminders remain
+supported for older clients, and are suppressed for a session using shared activity tracking.
+A workout left running can be saved with **Actual duration (minutes)**; the correction stays in
+its draft until saved. Inactivity reminders do not finish or discard the workout.
 
 **Weekly cardio** totals include every cardio session. Personal zone goals count only sessions whose average heart rate falls within that account's inclusive zone range. Configure all five ordered, non-overlapping ranges and one or more zone-specific minute targets with **Edit** on **Training > Cardio > Weekly zone goals**; the default target is 150 minutes in Zone 2. Until ranges are configured, each session keeps its saved zone label (new sessions default to Zone 2, matching earlier releases), and saving goals alone does not change saved labels. Once ranges exist, missing or out-of-range heart rate receives no zone credit, even when an older client sends a manual zone label. The average estimates a session's zone rather than measuring time spent in it. Cardio from completed workout sets uses their duration-weighted average heart rate. Editing metrics or personal ranges recalculates goal totals, including existing sessions. Goal progress and the short session notification use text.
 

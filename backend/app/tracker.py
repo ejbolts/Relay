@@ -27,6 +27,7 @@ from .account_limits import (
     load_account_limits,
     refuse,
 )
+from .active_workouts import check_repeated_finish, finish_shared_draft
 from .auth import CurrentUser, as_utc, get_current_user
 from .body_measurement_csv import export_body_measurements, import_body_measurements
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
@@ -54,6 +55,7 @@ from .exercise_merge import exercise_aliases, merge_exercise, resolve_exercise_i
 from .machine_photos import canonical_photo, merge_machine_photos
 from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
+    ActiveWorkoutSync,
     BodyMeasurement,
     BodyWeightGoal,
     CardioSession,
@@ -81,6 +83,7 @@ from .photo_storage import (
     delete_machine_photo_files,
     store_machine_photo,
 )
+from .presence import hub as presence_hub
 from .processing import backfill_completed_video_links
 from .tracker_csv import (
     CsvImportError,
@@ -2467,6 +2470,7 @@ def create_workout(
 
     existing = saved_session()
     if existing is not None:
+        check_repeated_finish(existing, payload)
         report_workout_revision(response, db, user_id)
         return existing
     limits = load_account_limits(db, settings)
@@ -2499,16 +2503,19 @@ def create_workout(
         db.rollback()
         existing = saved_session()
         if existing is not None:
+            check_repeated_finish(existing, payload)
             report_workout_revision(response, db, user_id)
             return existing
         raise
     replace_workout_contents(db, user.id, workout, payload, is_new=True)
+    finish_shared_draft(db, user.id, client_session_id, payload.active_workout_revision)
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
+    presence_hub.active_workout_changed(user.id)
     saved = load_workout(db, user.id, workout.id)
     report_workout_revision(response, db, user_id)
     return saved
@@ -2833,18 +2840,36 @@ def update_workout(
     client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
+    if payload.active_workout_revision is not None:
+        active = db.get(ActiveWorkoutSync, user.id)
+        if (
+            active
+            and active.draft is None
+            and payload.active_workout_session_id
+            and active.session_id == str(payload.active_workout_session_id)
+        ):
+            check_repeated_finish(workout, payload)
+            report_workout_revision(response, db, user.id)
+            return workout
     # Refuse a stale editor before changing anything. Without a base revision (an older app
     # version) the workout is replaced unconditionally, as it was before revisions existed.
     advance_workout_revision(db, workout, payload.base_revision)
     payload = preserve_unknown_workout_fields(payload, workout, client_version)
     check_workout_size(payload, load_account_limits(db, settings), user, existing=workout)
     replace_workout_contents(db, user.id, workout, payload)
+    finish_shared_draft(
+        db,
+        user.id,
+        str(payload.active_workout_session_id) if payload.active_workout_session_id else None,
+        payload.active_workout_revision,
+    )
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
+    presence_hub.active_workout_changed(user.id)
     saved = load_workout(db, user.id, workout.id)
     report_workout_revision(response, db, user.id)
     return saved

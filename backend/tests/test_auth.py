@@ -863,6 +863,7 @@ ACCOUNT_TABLES = {
     "workout_comments",
     "comment_reactions",
     "live_workouts",
+    "active_workout_sync",
 }
 
 

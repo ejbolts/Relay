@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SHARED_WORKOUT_CHANGED } from './activeWorkoutEvents';
 import {
   ADMIN_ACTIVITY_SUBSCRIPTION_EVENT,
   hasAdminActivitySubscribers,
@@ -120,12 +121,17 @@ export function usePresenceConnection(userId: string | null): void {
         adminSubscribed = false;
         sendAdminSubscription();
         notifyNotificationsChanged();
+        window.dispatchEvent(new Event(SHARED_WORKOUT_CHANGED));
       };
       current.onmessage = (event: MessageEvent) => {
         if (stopped || socket !== current) return;
         try {
           const message: unknown = JSON.parse(String(event.data));
           if (message && typeof message === 'object' && 'type' in message) {
+            if (message.type === 'active_workout') {
+              window.dispatchEvent(new Event(SHARED_WORKOUT_CHANGED));
+              return;
+            }
             if (message.type === 'admin_activity_sync') {
               publishAdminActivity(null);
               return;
