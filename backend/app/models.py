@@ -565,6 +565,22 @@ class LiveWorkout(Base):
     )
 
 
+class ActiveWorkoutSync(Base):
+    """Private shared draft; retain the revision after ending to refuse stale devices."""
+
+    __tablename__ = "active_workout_sync"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    draft: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    started_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reminder_delivered: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class ActiveWorkoutReminder(Base):
     __tablename__ = "active_workout_reminders"
 
