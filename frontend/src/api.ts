@@ -1,4 +1,5 @@
 import type { BodySizeLog } from './bodySizes';
+import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { NotificationReadReference } from './types';
 import type {
   SharedWorkoutFilters,
@@ -389,6 +390,25 @@ const bodyMeasurementTransport: BodyMeasurementTransport = {
 };
 
 export const api = {
+  activeWorkout: () =>
+    request<{ revision: number; draft: ActiveWorkoutDraft | null }>('/api/active-workout', {
+      signal: AbortSignal.timeout(10_000),
+    }),
+  syncActiveWorkout: (change: {
+    revision: number;
+    base: ActiveWorkoutDraft | null;
+    draft: ActiveWorkoutDraft | null;
+    replace?: boolean;
+  }) =>
+    request<{ revision: number; draft: ActiveWorkoutDraft | null; conflict: boolean }>(
+      '/api/active-workout',
+      {
+        method: 'PUT',
+        signal: AbortSignal.timeout(10_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(change),
+      },
+    ),
   youtube: {
     connection: () => request<YouTubeConnection>('/api/youtube/connection'),
     connect: () => request<{ url: string }>('/api/youtube/connect', { method: 'POST' }),

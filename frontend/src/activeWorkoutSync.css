@@ -1,0 +1,63 @@
+.workout-sync-status {
+  display: block;
+  margin: 0 0 0.5rem auto;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted-ink);
+  background: var(--card);
+  font-size: 0.75rem;
+}
+
+.workout-sync-reopen {
+  position: fixed;
+  z-index: 80;
+  right: 1rem;
+  bottom: calc(6rem + env(safe-area-inset-bottom));
+  max-width: calc(100vw - 2rem);
+  min-height: 44px;
+}
+
+.workout-sync-dialog {
+  max-width: 40rem;
+  padding: 1.25rem;
+}
+
+.workout-sync-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  max-height: 50dvh;
+  overflow: auto;
+  margin-block: 1rem;
+}
+
+.workout-sync-comparison section {
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.workout-sync-comparison h3 {
+  margin: 0 0 0.5rem;
+}
+.workout-sync-comparison b {
+  display: block;
+  margin-top: 0.75rem;
+}
+.workout-sync-comparison ol {
+  padding-left: 1.25rem;
+}
+.workout-sync-comparison li span {
+  display: block;
+}
+.workout-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.workout-sync-actions button {
+  min-height: 44px;
+}

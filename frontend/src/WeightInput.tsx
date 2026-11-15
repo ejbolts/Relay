@@ -14,15 +14,20 @@ export function WeightInput({
   selectOnFocus?: boolean;
 }) {
   const unit = useWeightUnit();
-  const [draft, setDraft] = useState<{ value: string; unit: WeightUnit } | null>(null);
+  const [draft, setDraft] = useState<{ value: string; unit: WeightUnit; kg: number | null } | null>(
+    null,
+  );
+  // A remote update replaces the value immediately, even while focused. The temporary string
+  // belongs only to the canonical value it produced and must never overwrite a newer value.
+  const currentDraft = draft?.unit === unit && draft.kg === weightKg ? draft : null;
   return (
     <input
       {...props}
       type="text"
       inputMode="decimal"
-      value={draft?.unit === unit ? draft.value : weightInputValue(weightKg, unit)}
+      value={currentDraft ? currentDraft.value : weightInputValue(weightKg, unit)}
       onFocus={(event) => {
-        setDraft({ value: event.currentTarget.value, unit });
+        setDraft({ value: event.currentTarget.value, unit, kg: weightKg });
         if (selectOnFocus && weightKg !== null) event.currentTarget.select();
         props.onFocus?.(event);
       }}
@@ -33,13 +38,13 @@ export function WeightInput({
       onChange={(event) => {
         const value = event.target.value.replace(',', '.');
         if (!/^\d*(?:\.\d*)?$/.test(value)) return;
-        setDraft({ value, unit });
         const kg = weightInputKg(value, unit, weightKg);
+        setDraft({ value, unit, kg });
         if (kg !== weightKg) onWeightChange(kg);
       }}
       onBlur={(event) => {
-        if (draft?.unit === unit) {
-          const kg = weightInputKg(draft.value, unit, weightKg);
+        if (currentDraft) {
+          const kg = weightInputKg(currentDraft.value, unit, weightKg);
           if (kg !== weightKg) onWeightChange(kg);
         }
         setDraft(null);

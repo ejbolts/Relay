@@ -184,6 +184,15 @@ class PresenceHub:
         with contextlib.suppress(RuntimeError):
             asyncio.run_coroutine_threadsafe(broadcast(user_id), loop)
 
+    def active_workout_changed(self, user_id: str) -> None:
+        """Invalidate private drafts only on this account's authenticated windows."""
+        for window in self.windows_for([user_id]):
+            if not window.loop.is_closed():
+                with contextlib.suppress(RuntimeError):
+                    asyncio.run_coroutine_threadsafe(
+                        deliver(window, {"type": "active_workout"}), window.loop
+                    )
+
     def notifications_changed(self, *user_ids: str) -> None:
         """Invalidate only recipients' inboxes, after the request's transaction commits.
 
