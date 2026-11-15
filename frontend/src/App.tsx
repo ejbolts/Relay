@@ -10562,7 +10562,7 @@ function HistoryWorkoutCard({
               <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
               {!activeWorkout && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
-                  Resume from now
+                  Resume
                 </button>
               )}
               <button type="button" onClick={onEdit}>

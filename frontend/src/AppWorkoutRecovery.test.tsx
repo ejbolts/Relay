@@ -3610,7 +3610,7 @@ describe('inactive workout suggestions', () => {
       container.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
     );
     const resume = container.querySelector<HTMLButtonElement>('.resume-workout-button')!;
-    expect(resume.textContent).toBe('Resume from now');
+    expect(resume.textContent).toBe('Resume');
     await act(async () => resume.click());
     const resumed = readActiveWorkoutDraft()!;
     expect(resumed.resumingWorkoutId).toBe(saved.id);
