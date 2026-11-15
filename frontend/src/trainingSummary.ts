@@ -402,7 +402,9 @@ export function weekGroupLabel(weekStart: string, today: string, weekStartDay: n
 export function recentStrengthRecords(records: PersonalRecord[], limit = 3): PersonalRecord[] {
   const seen = new Set<string>();
   return records
-    .filter((record) => record.record_type === 'reps_at_weight' || record.record_type === 'weight')
+    .filter((record) =>
+      ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
+    )
     .filter((record) => record.value > 0)
     .sort(
       (left, right) =>
@@ -423,7 +425,7 @@ export function recentStrengthRecords(records: PersonalRecord[], limit = 3): Per
 export function recordCountsByWorkout(records: PersonalRecord[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const record of records) {
-    if (record.record_type !== 'reps_at_weight' && record.record_type !== 'weight') continue;
+    if (!['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type)) continue;
     counts.set(record.workout_id, (counts.get(record.workout_id) ?? 0) + 1);
   }
   return counts;

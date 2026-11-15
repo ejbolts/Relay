@@ -3,9 +3,11 @@ import type {
   TrackedWorkout,
   WorkoutSetInput,
   TrainingBlock,
+  BodyMeasurement,
 } from './types';
 import type { WorkoutDraftMovement as DraftMovement } from './workoutMovements';
 import { blockOn } from './trainingBlocks';
+import { bodyweightOn, relativeStrength } from './relativeStrength';
 
 // Compare canonical kilograms, independently of the preferred display unit.
 // Four decimals absorb conversion noise without merging distinct plate weights.
@@ -33,13 +35,15 @@ export function calculateDraftPrs(
   workoutDate: string,
   /** History older than `historicalWorkouts`, condensed per exercise by the server. */
   olderHistory?: Map<string, ExerciseHistoryBaseline> | null,
+  measurements: BodyMeasurement[] = [],
 ): Map<string, Map<string, string[]>> {
-  type State = { weight: number; reps: Map<number, number> };
+  type State = { weight: number; reps: Map<number, number>; relative: number };
   const states = new Map<string, State>();
   for (const [exerciseId, baseline] of olderHistory ?? []) {
     if (baseline.best_weight_kg === null) continue;
     states.set(exerciseId, {
       weight: prWeight(baseline.best_weight_kg),
+      relative: baseline.best_relative_strength ?? -1,
       reps: new Map(baseline.reps_by_weight.map((item) => [prWeight(item.weight_kg), item.reps])),
     });
   }
@@ -56,12 +60,21 @@ export function calculateDraftPrs(
   for (const workout of priorWorkouts) {
     for (const movement of workout.movements) {
       if (movement.exercise.kind !== 'strength') continue;
-      const state = states.get(movement.exercise.id) ?? { weight: -1, reps: new Map() };
+      const state = states.get(movement.exercise.id) ?? {
+        weight: -1,
+        reps: new Map(),
+        relative: -1,
+      };
       for (const item of movement.sets) {
         if (!isStrengthPrEligible(item)) continue;
         const weight = prWeight(item.weight_kg!);
         state.weight = Math.max(state.weight, weight);
         state.reps.set(weight, Math.max(state.reps.get(weight) ?? 0, item.reps!));
+        const ratio = relativeStrength(
+          item.weight_kg,
+          bodyweightOn(measurements, workout.workout_date, item.bodyweight_kg),
+        );
+        if (ratio !== null) state.relative = Math.max(state.relative, ratio);
       }
       states.set(movement.exercise.id, state);
     }
@@ -69,7 +82,7 @@ export function calculateDraftPrs(
 
   const result = new Map<string, Map<string, string[]>>();
   for (const movement of movements) {
-    const state = states.get(movement.exercise.id) ?? { weight: -1, reps: new Map() };
+    const state = states.get(movement.exercise.id) ?? { weight: -1, reps: new Map(), relative: -1 };
     const badges = new Map<string, string[]>();
     for (const item of movement.sets) {
       if (movement.exercise.kind !== 'strength' || !isStrengthPrEligible(item)) continue;
@@ -79,6 +92,14 @@ export function calculateDraftPrs(
       const previousReps = state.reps.get(weight);
       if (previousReps !== undefined && item.reps! > previousReps)
         labels.push('Volume PR for this weight');
+      const ratio = relativeStrength(
+        item.weight_kg,
+        bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
+      );
+      if (ratio !== null) {
+        if (state.relative >= 0 && ratio > state.relative) labels.push('Relative strength PR');
+        state.relative = Math.max(state.relative, ratio);
+      }
       state.weight = Math.max(state.weight, weight);
       state.reps.set(weight, Math.max(previousReps ?? 0, item.reps!));
       if (labels.length) badges.set(item.key, labels);
@@ -96,6 +117,7 @@ export function calculateScopedDraftPrs(
   workoutDate: string,
   olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
   blocks: TrainingBlock[],
+  measurements: BodyMeasurement[] = [],
 ) {
   const lifetime = calculateDraftPrs(
     movements,
@@ -103,6 +125,7 @@ export function calculateScopedDraftPrs(
     excludedWorkoutId,
     workoutDate,
     olderHistory,
+    measurements,
   );
   if (!blocks.length) return lifetime;
   const block = blockOn(blocks, workoutDate);
@@ -123,6 +146,7 @@ export function calculateScopedDraftPrs(
         excludedWorkoutId,
         workoutDate,
         scopedOlder,
+        measurements,
       )
     : new Map<string, Map<string, string[]>>();
   return new Map(

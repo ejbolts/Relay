@@ -6,6 +6,7 @@ import type { MachinePhoto, PersonalRecord, TrackedSet, TrackedWorkout } from '.
 import { formatMinutesDuration, formatWorkoutTimeRange } from './utils';
 import { formatWeight } from './weightUnits';
 import './sharedWorkout.css';
+import { bodyweightContext } from './relativeStrength';
 
 type FormatSet = (item: TrackedSet) => string;
 
@@ -33,7 +34,7 @@ function recordSets(workout: TrackedWorkout, personalRecords: PersonalRecord[]) 
       .filter(
         (record) =>
           record.workout_id === workout.id &&
-          (record.record_type === 'weight' || record.record_type === 'reps_at_weight'),
+          ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
       )
       .map((record) => record.set_id),
   );
@@ -123,6 +124,7 @@ export function SharedSetList({
   /** Names a record for the badge's tooltip, such as “All-time Weight PR”. */
   describeRecord?: (record: PersonalRecord) => string;
 }) {
+  const weightUnit = useWeightUnit();
   const completed = sets.filter((item) => item.completed);
   const labels = setNumberLabels(completed);
   const rows = completed.map((item, index) => ({
@@ -179,6 +181,11 @@ export function SharedSetList({
                     </strong>
                   )}
                 </span>
+                {item.bodyweight_kg != null && (
+                  <small className="shared-set-detail num">
+                    {bodyweightContext(item.weight_kg, item.bodyweight_kg, weightUnit)}
+                  </small>
+                )}
                 {(machine || item.notes) && (
                   <small className="shared-set-detail">
                     {[machine, item.notes].filter(Boolean).join(' · ')}

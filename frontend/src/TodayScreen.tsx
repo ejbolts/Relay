@@ -121,6 +121,7 @@ function formatTotal(value: number | null | undefined): string {
 }
 
 const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
+  relative_strength: 'Relative strength PR',
   reps_at_weight: 'Volume PR for this weight',
   weight: 'Weight PR',
 };
@@ -615,11 +616,16 @@ export function TodayScreen({
                   <span className="record-copy">
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {RECORD_LABELS[record.record_type]}
+                      {RECORD_LABELS[record.record_type] ?? 'PR'}
                       {record.record_type === 'reps_at_weight' && record.weight_kg != null
                         ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
                         : ''}{' '}
                       · {shortDate(record.achieved_date)}
+                      {record.bodyweight_kg != null && (
+                        <span className="record-bodyweight">
+                          at {formatWeight(record.bodyweight_kg, weightUnit)} BW
+                        </span>
+                      )}
                     </small>
                   </span>
                   <strong className="num">{recordDisplayValue(record, weightUnit)}</strong>

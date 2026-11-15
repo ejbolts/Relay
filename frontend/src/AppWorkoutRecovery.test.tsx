@@ -427,6 +427,49 @@ afterEach(async () => {
 });
 
 describe('cross-device live workout updates', () => {
+  it('records the dated bodyweight when logging and retains it through recovery', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].weight_kg = 100;
+    draft.movements[0].supersetKey = null;
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.listBodyMeasurements).mockResolvedValue([
+      {
+        id: 'future',
+        measurement_date: '2026-10-14',
+        weight_kg: 70,
+        body_fat_pct: null,
+        notes: null,
+        is_sample: false,
+        created_at: '',
+      },
+      {
+        id: 'then',
+        measurement_date: '2026-10-13',
+        weight_kg: 80,
+        body_fat_pct: null,
+        notes: null,
+        is_sample: false,
+        created_at: '',
+      },
+    ]);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+    );
+    expect(container.querySelector('.completed-set-bodyweight')?.textContent).toBe(
+      '1.25× BW · at 80 kg BW',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].bodyweight_kg).toBe(80);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(container.querySelector('.completed-set-bodyweight')?.textContent).toBe(
+      '1.25× BW · at 80 kg BW',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].bodyweight_kg).toBe(80);
+  });
   it('updates the mounted logger without replacing its focused set input or echoing old data', async () => {
     const draft = storedDraft({ clientSessionId: crypto.randomUUID() });
     draft.movements[0].sets[0].completed = false;
