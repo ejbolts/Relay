@@ -16,7 +16,14 @@ from . import comments  # noqa: F401 -- registers discussion routes on sharing_r
 from .account_archive import router as account_archive_router
 from .account_limits import SaveRateLimiter
 from .accounts import auth_router, profile_router
-from .active_workouts import DraftChange, change_draft, snapshot
+from .active_workouts import (
+    DraftChange,
+    WorkoutAutoSave,
+    auto_save_minutes,
+    change_draft,
+    set_auto_save_minutes,
+    snapshot,
+)
 from .admin import admin_router
 from .auth import (
     CsrfOriginMiddleware,
@@ -25,7 +32,7 @@ from .auth import (
     get_current_user,
     require_video_access,
 )
-from .client_versions import ClientVersionGateMiddleware
+from .client_versions import ClientVersion, ClientVersionGateMiddleware, normalized_version
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
@@ -223,11 +230,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @protected.put("/api/active-workout")
     def save_active_workout(
-        payload: DraftChange, user: CurrentUser, db: Session = Depends(get_db)
+        payload: DraftChange,
+        user: CurrentUser,
+        db: Session = Depends(get_db),
+        client_version: ClientVersion = None,
     ) -> dict:
         if not app.state.save_rate_limiter.allow(f"active-workout:{user.id}", 240):
             raise api_error(429, "draft_rate_limited", "Wait a moment before syncing again.")
-        return change_draft(db, user.id, payload)
+        return change_draft(db, user.id, payload, client_version=normalized_version(client_version))
+
+    @protected.get("/api/workout-auto-save", response_model=WorkoutAutoSave)
+    def workout_auto_save(user: CurrentUser, db: Session = Depends(get_db)) -> WorkoutAutoSave:
+        return WorkoutAutoSave(after_minutes=auto_save_minutes(db, user.id))
+
+    @protected.put("/api/workout-auto-save", response_model=WorkoutAutoSave)
+    def update_workout_auto_save(
+        payload: WorkoutAutoSave, user: CurrentUser, db: Session = Depends(get_db)
+    ) -> WorkoutAutoSave:
+        set_auto_save_minutes(db, user.id, payload.after_minutes)
+        db.commit()
+        return WorkoutAutoSave(after_minutes=auto_save_minutes(db, user.id))
 
     @app.get("/api/health", response_model=HealthRead)
     def health() -> HealthRead:

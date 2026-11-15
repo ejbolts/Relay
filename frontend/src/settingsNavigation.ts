@@ -49,6 +49,15 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '#training-split-settings',
   },
   {
+    id: 'workout-auto-save',
+    group: 'training',
+    title: 'Auto-save unfinished workouts',
+    page: 'settings',
+    keywords: 'forgot finish inactive left running automatic save timeout three hours',
+    selector: '#workout-auto-save-title',
+    requiresAccount: true,
+  },
+  {
     id: 'rest',
     group: 'training',
     title: 'Rest timer',

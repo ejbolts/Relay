@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
+import { preparedWorkoutAutoSave } from './activeWorkoutSync';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api, ApiError, revisionAfterSave } from './api';
@@ -53,6 +54,16 @@ vi.mock('./api', async (importOriginal) => {
       updateWorkout: vi.fn(),
     },
     revisionAfterSave: vi.fn(() => null),
+  };
+});
+const autoSave = vi.hoisted(() => ({ minutes: null as number | null }));
+vi.mock('./workoutAutoSaveChoice', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./workoutAutoSaveChoice')>();
+  return {
+    ...original,
+    useWorkoutAutoSaveAccount: vi.fn(),
+    useWorkoutAutoSaveMinutes: () => autoSave.minutes,
+    workoutAutoSaveMinutes: () => autoSave.minutes,
   };
 });
 vi.mock('./workoutCache', () => ({
@@ -3470,6 +3481,33 @@ describe('inactive workout suggestions', () => {
     expect(inactivePrompt()?.textContent).toContain('Recovery workout');
     expect(inactivePrompt()?.textContent).toContain('1 set logged');
     expectPreserved(draft);
+  });
+
+  it('prepares for auto-save exactly what Save in the prompt saves, only while it is on', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    writeActiveWorkoutDraft(expiredSuggestions(true));
+    await mount();
+    expect(preparedWorkoutAutoSave(readActiveWorkoutDraft())).toBeNull();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    autoSave.minutes = 120;
+    try {
+      await mount();
+      const stored = readActiveWorkoutDraft()!;
+      const prepared = preparedWorkoutAutoSave(stored);
+      expect(prepared).toMatchObject({
+        client_session_id: stored.clientSessionId,
+        name: 'Recovery workout',
+      });
+      // A different draft revision never carries it.
+      expect(preparedWorkoutAutoSave({ ...stored, notes: 'Edited elsewhere' })).toBeNull();
+      vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+      await chooseInactive('Save workout');
+      const saved = vi.mocked(api.createWorkout).mock.lastCall![0];
+      expect(prepared).toEqual(saved);
+    } finally {
+      autoSave.minutes = null;
+    }
   });
 
   it('resumes an inactive workout without saving it or asking again', async () => {

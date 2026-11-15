@@ -580,6 +580,10 @@ class ActiveWorkoutSync(Base):
     started_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
     last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reminder_delivered: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The finished workout the logging app prepared for exactly this revision, for opt-in
+    # auto-save; any other write clears it.
+    auto_save: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    auto_save_client_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class ActiveWorkoutReminder(Base):

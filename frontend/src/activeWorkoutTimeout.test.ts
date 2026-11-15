@@ -4,6 +4,7 @@ import {
   inactiveWorkoutFinishAt,
   MAX_INACTIVE_WORKOUT_MS,
   RECENT_WORKOUT_ACTIVITY_MS,
+  setInactiveWorkoutLimitMinutes,
   shouldAutoFinishWorkout,
 } from './activeWorkoutTimeout';
 
@@ -50,5 +51,22 @@ describe('inactive workout timeout', () => {
     expect(extendInactiveWorkoutFinishAt(initialFinishAt, initialFinishAt + 1)).toBe(
       initialFinishAt,
     );
+  });
+
+  it("uses the account's auto-save time while it is on, keeping the activity grace", () => {
+    try {
+      setInactiveWorkoutLimitMinutes(90);
+      expect(inactiveWorkoutFinishAt(startedAt, startedAt)).toBe(startedAt + 90 * 60 * 1000);
+      const lastActiveAt = startedAt + 80 * 60 * 1000;
+      expect(inactiveWorkoutFinishAt(startedAt, lastActiveAt)).toBe(
+        lastActiveAt + RECENT_WORKOUT_ACTIVITY_MS,
+      );
+      setInactiveWorkoutLimitMinutes(null);
+      expect(inactiveWorkoutFinishAt(startedAt, startedAt)).toBe(
+        startedAt + MAX_INACTIVE_WORKOUT_MS,
+      );
+    } finally {
+      setInactiveWorkoutLimitMinutes(null);
+    }
   });
 });

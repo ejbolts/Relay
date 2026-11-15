@@ -2629,6 +2629,26 @@ def create_workout(
         check_repeated_finish(existing, payload)
         report_workout_revision(response, db, user_id)
         return existing
+    try:
+        workout = insert_workout(db, user, settings, payload)
+    except IntegrityError:
+        db.rollback()
+        existing = saved_session()
+        if existing is not None:
+            check_repeated_finish(existing, payload)
+            report_workout_revision(response, db, user_id)
+            return existing
+        raise
+    saved = load_workout(db, user.id, workout.id)
+    report_workout_revision(response, db, user_id)
+    return saved
+
+
+def insert_workout(
+    db: Session, user: User, settings: Settings, payload: TrainingWorkoutCreate
+) -> TrainingWorkout:
+    """Save a new workout and end its live draft; shared by the API and auto-save."""
+    client_session_id = str(payload.client_session_id) if payload.client_session_id else None
     limits = load_account_limits(db, settings)
     check_workout_size(payload, limits, user)
     check_account_total(
@@ -2640,7 +2660,7 @@ def create_workout(
         WORKOUT_NOT_SAVED,
     )
     workout = TrainingWorkout(
-        user_id=user_id,
+        user_id=user.id,
         client_session_id=client_session_id,
         name=payload.name,
         workout_date=payload.workout_date,
@@ -2651,18 +2671,9 @@ def create_workout(
         end_time=payload.end_time,
     )
     db.add(workout)
-    try:
-        # Reserve the session before writing its contents. A second device/tab or a
-        # retry after a lost response must not insert another completed workout.
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        existing = saved_session()
-        if existing is not None:
-            check_repeated_finish(existing, payload)
-            report_workout_revision(response, db, user_id)
-            return existing
-        raise
+    # Reserve the session before writing its contents (IntegrityError for a duplicate). A
+    # second device/tab or a retry after a lost response must not insert another workout.
+    db.flush()
     replace_workout_contents(db, user.id, workout, payload, is_new=True)
     finish_shared_draft(db, user.id, client_session_id, payload.active_workout_revision)
     db.flush()
@@ -2672,9 +2683,7 @@ def create_workout(
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
     presence_hub.active_workout_changed(user.id)
-    saved = load_workout(db, user.id, workout.id)
-    report_workout_revision(response, db, user_id)
-    return saved
+    return workout
 
 
 @router.get("/workouts/export.csv")
@@ -3013,6 +3022,21 @@ def update_workout(
             check_repeated_finish(workout, payload)
             report_workout_revision(response, db, user.id)
             return workout
+    replace_workout(db, user, settings, workout, payload, client_version)
+    saved = load_workout(db, user.id, workout.id)
+    report_workout_revision(response, db, user.id)
+    return saved
+
+
+def replace_workout(
+    db: Session,
+    user: User,
+    settings: Settings,
+    workout: TrainingWorkout,
+    payload: TrainingWorkoutCreate,
+    client_version: str | None,
+) -> None:
+    """Replace a saved workout, ending a resumed live draft; shared by the API and auto-save."""
     # Refuse a stale editor before changing anything. Without a base revision (an older app
     # version) the workout is replaced unconditionally, as it was before revisions existed.
     advance_workout_revision(db, workout, payload.base_revision)
@@ -3032,9 +3056,6 @@ def update_workout(
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
     presence_hub.active_workout_changed(user.id)
-    saved = load_workout(db, user.id, workout.id)
-    report_workout_revision(response, db, user.id)
-    return saved
 
 
 @router.delete("/workouts/{workout_id}", status_code=204)
