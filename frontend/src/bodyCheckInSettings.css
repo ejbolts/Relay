@@ -154,6 +154,25 @@
   border-radius: 10px;
   flex: none;
 }
+/* A full-width card has room to name the action; a compact one keeps the tick. */
+.quick-check-in-save-label {
+  display: none;
+}
+@container (min-width: 300px) {
+  .quick-bodyweight.is-paired .quick-check-in-save {
+    width: auto;
+    max-width: none;
+    padding: 0 1rem;
+  }
+  .quick-bodyweight.is-paired .quick-check-in-save .pulse-icon {
+    display: none;
+  }
+  .quick-bodyweight.is-paired .quick-check-in-save-label {
+    display: inline;
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+}
 .quick-bodyweight.is-paired > .pulse-card-header + * {
   margin-top: 0;
 }

@@ -1,9 +1,21 @@
-/* Weekly review: one card that answers "what changed this week?" against the week before. */
+/* Weekly review: one popup that answers "what changed last week?" against the week before. */
 .weekly-review-popup {
   width: min(28rem, calc(100% - 2rem));
 }
 .weekly-review-popup-body {
   padding: 1rem 1.25rem 0.75rem;
+}
+.weekly-review-popup .weekly-review-week-nav {
+  justify-content: space-between;
+  margin: -0.5rem -0.5rem 0.25rem;
+}
+.weekly-review-popup .weekly-review-week-nav > span {
+  flex: 1;
+  color: var(--p-ink);
+  font-size: 0.875rem;
+}
+.weekly-review-popup .weekly-review-range {
+  text-align: center;
 }
 .weekly-review-popup .popup-dialog-actions {
   margin: 0;

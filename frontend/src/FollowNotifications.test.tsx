@@ -16,6 +16,7 @@ import {
   unreadNotificationReferences,
 } from './notificationReadState';
 import type { SharingNotifications } from './types';
+import { onWeeklyReviewRequested, publishWeeklyReviewNotice } from './weeklyReviewNotice';
 const person = {
   id: 'sample',
   display_name: 'Sam Preview',
@@ -51,6 +52,7 @@ beforeEach(() => {
   });
 });
 afterEach(async () => {
+  publishWeeklyReviewNotice(null);
   await act(async () => root.unmount());
   host.remove();
   vi.useRealTimers();
@@ -535,4 +537,37 @@ it('replies to a comment notice from a thread opened at that comment', async () 
   await click('Close Upper body workout');
   expect(document.querySelector('dialog.follow-notification-thread')).toBeNull();
   expect(document.activeElement).toBe(host.querySelector('.follow-notification-button'));
+});
+
+it("lists last week's review, counts it until it has been seen and opens it with View", async () => {
+  const requested = vi.fn();
+  const stop = onWeeklyReviewRequested(requested);
+  snapshot = { requests: [], accepted: [], reactions: [reaction] };
+  publishWeeklyReviewNotice({ weekStart: '2026-11-02', weekEnd: '2026-11-08', unread: true });
+  await render();
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications, 2 unread');
+  await click('Notifications, 2 unread');
+  const row = document.querySelector('.weekly-review-notification-row')!;
+  expect(row.textContent).toContain('Weekly review');
+  expect(row.textContent).toContain('2 Nov – 8 Nov');
+  expect(row.querySelector('.release-notification-new')?.textContent).toBe('New');
+  await click("View last week's review");
+  expect(requested).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('dialog.follow-notifications')).toBeNull();
+
+  await act(async () =>
+    publishWeeklyReviewNotice({ weekStart: '2026-11-02', weekEnd: '2026-11-08', unread: false }),
+  );
+  await click('Notifications');
+  expect(document.querySelector('.weekly-review-notification-row')).not.toBeNull();
+  expect(
+    document.querySelector('.weekly-review-notification-row .release-notification-new'),
+  ).toBeNull();
+  stop();
+});
+
+it('leaves the review out once no review is available', async () => {
+  await render();
+  await click('Notifications');
+  expect(document.querySelector('.weekly-review-notification-row')).toBeNull();
 });

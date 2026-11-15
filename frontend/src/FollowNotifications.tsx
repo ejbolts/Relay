@@ -15,6 +15,12 @@ import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { WorkoutComments } from './WorkoutComments';
 import { formatReleaseDate, type Release } from './releaseMetadata';
+import { dayMonth } from './trainingSummary';
+import {
+  requestWeeklyReview,
+  useWeeklyReviewNotice,
+  type WeeklyReviewNotice,
+} from './weeklyReviewNotice';
 import type {
   SharingConnection,
   SharingNotifications,
@@ -27,20 +33,38 @@ export const NOTIFICATIONS_PER_PAGE = 10;
 
 type NotificationRow =
   | { kind: 'release'; item: Release }
+  | { kind: 'weekly-review'; item: WeeklyReviewNotice }
   | { kind: 'comment'; item: CommentNotice }
   | { kind: 'request'; item: SharingConnection }
   | { kind: 'reaction'; item: ReactionNotice }
   | { kind: 'accepted'; item: SharingConnection };
 
-function notificationRows(items: SharingNotifications, release?: Release): NotificationRow[] {
+interface LocalNotices {
+  release?: Release;
+  weeklyReview?: WeeklyReviewNotice | null;
+}
+
+/** The start of the day after the reviewed week, when its review became available. */
+function weeklyReviewTime(notice: WeeklyReviewNotice): number {
+  const date = new Date(`${notice.weekEnd}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return date.getTime();
+}
+
+function notificationRows(
+  items: SharingNotifications,
+  { release, weeklyReview }: LocalNotices = {},
+): NotificationRow[] {
   const rows: NotificationRow[] = [
     ...(release ? [{ kind: 'release' as const, item: release }] : []),
+    ...(weeklyReview ? [{ kind: 'weekly-review' as const, item: weeklyReview }] : []),
     ...(items.comments ?? []).map((item) => ({ kind: 'comment' as const, item })),
     ...items.requests.map((item) => ({ kind: 'request' as const, item })),
     ...(items.reactions ?? []).map((item) => ({ kind: 'reaction' as const, item })),
     ...items.accepted.map((item) => ({ kind: 'accepted' as const, item })),
   ];
   const timestamp = (row: NotificationRow) => {
+    if (row.kind === 'weekly-review') return weeklyReviewTime(row.item);
     const value = Date.parse(row.kind === 'release' ? (row.item.date ?? '') : row.item.since);
     return Number.isNaN(value) ? 0 : value;
   };
@@ -50,9 +74,9 @@ function notificationRows(items: SharingNotifications, release?: Release): Notif
 function notificationPage(
   items: SharingNotifications,
   page: number,
-  release?: Release,
+  notices: LocalNotices,
 ): NotificationRow[] {
-  const rows = notificationRows(items, release);
+  const rows = notificationRows(items, notices);
   const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / NOTIFICATIONS_PER_PAGE)));
   return rows.slice(
     (currentPage - 1) * NOTIFICATIONS_PER_PAGE,
@@ -63,10 +87,10 @@ function notificationPage(
 function displayedNotifications(
   items: SharingNotifications,
   page: number,
-  release?: Release,
+  notices: LocalNotices,
 ): SharingNotifications {
   const visible: SharingNotifications = { requests: [], accepted: [], reactions: [], comments: [] };
-  for (const row of notificationPage(items, page, release)) {
+  for (const row of notificationPage(items, page, notices)) {
     if (row.kind === 'request') visible.requests.push(row.item);
     else if (row.kind === 'accepted') visible.accepted.push(row.item);
     else if (row.kind === 'reaction') visible.reactions!.push(row.item);
@@ -94,6 +118,7 @@ function NotificationDate({ since }: { since: string }) {
 export function FollowNotifications({ active }: { active: boolean }) {
   const announcement = useContext(ReleaseAnnouncementContext);
   const release = announcement?.release;
+  const weeklyReview = useWeeklyReviewNotice();
   const [items, setItems] = useState<SharingNotifications | null>(null);
   const [open, setOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
@@ -133,7 +158,9 @@ export function FollowNotifications({ active }: { active: boolean }) {
           if (cancelled) return;
           setItems(next);
           setError(null);
-          const unread = unreadNotificationReferences(displayedNotifications(next, page, release));
+          const unread = unreadNotificationReferences(
+            displayedNotifications(next, page, { release, weeklyReview }),
+          );
           if (open && unread.length) {
             await api.sharing.markNotificationsRead(unread);
             if (!cancelled)
@@ -162,7 +189,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
       window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [active, open, attempt, page, release]);
+  }, [active, open, attempt, page, release, weeklyReview]);
 
   async function respond(person: SharingConnection, action: 'accept' | 'decline') {
     if (busy) return;
@@ -191,13 +218,16 @@ export function FollowNotifications({ active }: { active: boolean }) {
     (items
       ? items.requests.length +
         unreadNotificationReferences(items).filter((item) => item.kind !== 'request').length
-      : 0) + Number(announcement?.noticeUnread ?? false);
+      : 0) +
+    Number(announcement?.noticeUnread ?? false) +
+    Number(weeklyReview?.unread ?? false);
   const currentItems = items ?? { requests: [], accepted: [] };
-  const rows = notificationRows(currentItems, release);
+  const notices = { release, weeklyReview };
+  const rows = notificationRows(currentItems, notices);
   const total = rows.length;
   const pageCount = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = notificationPage(currentItems, page, release);
+  const pageRows = notificationPage(currentItems, page, notices);
   return (
     <>
       <button
@@ -276,6 +306,35 @@ export function FollowNotifications({ active }: { active: boolean }) {
                       setOpen(false);
                       announcement?.readNotice();
                       setReleaseOpen(true);
+                    }}
+                  >
+                    View
+                  </button>
+                </li>
+              ) : row.kind === 'weekly-review' ? (
+                <li
+                  key={`weekly-review-${row.item.weekStart}`}
+                  className="release-notification-row weekly-review-notification-row"
+                >
+                  <span className="release-notification-icon" aria-hidden="true">
+                    <Icon name="trend" />
+                  </span>
+                  <div className="follow-notification-copy">
+                    <p>
+                      <strong>Weekly review</strong>
+                      {row.item.unread && <span className="release-notification-new">New</span>}
+                    </p>
+                    <p>
+                      {dayMonth(row.item.weekStart)} – {dayMonth(row.item.weekEnd)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-secondary release-notification-view"
+                    aria-label="View last week's review"
+                    onClick={() => {
+                      setOpen(false);
+                      requestWeeklyReview();
                     }}
                   >
                     View

@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { WeeklyReviewCard } from './WeeklyReviewCard';
+import { WeeklyReviewBrowser } from './WeeklyReviewBrowser';
 import { reviewCardioWeek, reviewRecord, reviewSet, reviewWorkout } from './weeklyReviewFixtures';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,7 +20,7 @@ const week = (start: string, end: string, muscle_groups: Array<[string, number]>
   })),
 });
 
-function props(overrides: Partial<Parameters<typeof WeeklyReviewCard>[0]> = {}) {
+function props(overrides: Partial<Parameters<typeof WeeklyReviewBrowser>[0]> = {}) {
   return {
     workouts: [
       reviewWorkout('this', '2026-11-03', [reviewSet(100, 5), reviewSet(100, 5)]),
@@ -69,9 +69,9 @@ function props(overrides: Partial<Parameters<typeof WeeklyReviewCard>[0]> = {}) 
   };
 }
 
-async function render(overrides: Partial<Parameters<typeof WeeklyReviewCard>[0]> = {}) {
+async function render(overrides: Partial<Parameters<typeof WeeklyReviewBrowser>[0]> = {}) {
   const value = props(overrides);
-  await act(async () => root.render(<WeeklyReviewCard {...value} />));
+  await act(async () => root.render(<WeeklyReviewBrowser {...value} />));
   return value;
 }
 
@@ -94,7 +94,7 @@ afterEach(() => {
 
 it('summarises the week against the week before', async () => {
   await render();
-  expect(host.querySelector('h2')?.textContent).toBe('Weekly review');
+  expect(text()).toContain('This week');
   expect(text()).toContain('2 Nov – 8 Nov');
   expect(text()).not.toContain('so far');
   const stats = host.querySelector('.weekly-review-stats')!.textContent!;
