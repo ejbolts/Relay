@@ -207,6 +207,16 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
   color: var(--p-good);
 }
 
+/* The clock and set count are short; never shrink the ticking clock into an ellipsis. */
+.live-workout-header .live-workout-meta > * {
+  flex: none;
+}
+
+.live-workout-header .live-workout-meta .workout-header-duration {
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .live-workout-meta .workout-header-meta::before {
   display: inline-block;
   width: 0.3rem;

@@ -80,6 +80,22 @@ it.each([
   expect(document.activeElement).toBe(menuButtonRef.current);
 });
 
+it('keeps the menu open when Safari moves tap focus to the sheet around it', async () => {
+  // Safari does not focus a tapped button; focus lands on the nearest focusable ancestor.
+  container.tabIndex = -1;
+  await click('Workout options');
+  await act(async () => container.focus());
+  expect(container.querySelector('[role="menu"]')).not.toBeNull();
+  await click('Rename workout');
+  expect(actions.onRename).toHaveBeenCalledOnce();
+  await click('Workout options');
+  const elsewhere = document.createElement('button');
+  document.body.append(elsewhere);
+  await act(async () => elsewhere.focus());
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  elsewhere.remove();
+});
+
 it('offers Resume from the menu when the workout is paused', async () => {
   await render(true);
   await click('Workout options');

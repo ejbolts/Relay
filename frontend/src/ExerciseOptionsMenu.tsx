@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import './exerciseMerge.css';
+import { leavesMenu } from './menuDismiss';
 
 export function ExerciseOptionsMenu({
   exerciseName,
@@ -27,7 +28,7 @@ export function ExerciseOptionsMenu({
     if (!open) return;
     items()[0]?.focus();
     const outside = (event: Event) => {
-      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+      if (leavesMenu(root.current, event)) setOpen(false);
     };
     document.addEventListener('pointerdown', outside);
     document.addEventListener('focusin', outside);
