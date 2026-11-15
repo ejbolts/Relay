@@ -56,11 +56,11 @@ export function ActiveWorkoutSyncDialog({
           {preview(conflict.remote.draft)}
         </section>
       </div>
-      <div className="workout-sync-actions">
+      <div className="popup-dialog-actions workout-sync-actions">
         <button type="button" onClick={() => onResolve(false)}>
           Use other device
         </button>
-        <button type="button" className="primary-action" onClick={() => onResolve(true)}>
+        <button type="button" className="popup-primary-action" onClick={() => onResolve(true)}>
           Keep this device
         </button>
       </div>
