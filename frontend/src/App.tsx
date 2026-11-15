@@ -4685,7 +4685,8 @@ function WorkoutLogger({
         />
       )}
 
-      {!initialWorkout && (
+      {/* Healthy sync stays silent; the badge only appears when it needs the user. */}
+      {!initialWorkout && (syncStatus === 'offline' || syncStatus === 'conflict') && (
         <button
           type="button"
           className="workout-sync-status"
@@ -4696,13 +4697,7 @@ function WorkoutLogger({
               : 'Sync workout across devices'
           }
         >
-          {syncStatus === 'synced'
-            ? 'Synced'
-            : syncStatus === 'syncing'
-              ? 'Syncing…'
-              : syncStatus === 'conflict'
-                ? 'Resolve sync'
-                : 'Saved on device · Retry sync'}
+          {syncStatus === 'conflict' ? 'Resolve sync' : 'Saved on device · Retry sync'}
         </button>
       )}
       {recommendation &&

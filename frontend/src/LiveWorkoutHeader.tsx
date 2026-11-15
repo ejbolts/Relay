@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Icon, type IconName } from './Icon';
 import { WorkoutHeaderMeta } from './WorkoutRestTimer';
 import { useLiveWorkoutSheet } from './liveWorkoutSheetContext';
+import { leavesMenu } from './menuDismiss';
 import './liveWorkout.css';
 
 export function LiveWorkoutHeader({
@@ -42,7 +43,7 @@ export function LiveWorkoutHeader({
     if (!open) return;
     menu.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const outside = (event: Event) => {
-      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+      if (leavesMenu(root.current, event)) setOpen(false);
     };
     document.addEventListener('pointerdown', outside);
     document.addEventListener('focusin', outside);
