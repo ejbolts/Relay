@@ -1,8 +1,19 @@
 export const MAX_INACTIVE_WORKOUT_MS = 3 * 60 * 60 * 1000;
 export const RECENT_WORKOUT_ACTIVITY_MS = 30 * 60 * 1000;
 
-export function inactiveWorkoutFinishAt(startedAt: number, lastActiveAt: number): number {
-  return Math.max(startedAt + MAX_INACTIVE_WORKOUT_MS, lastActiveAt + RECENT_WORKOUT_ACTIVITY_MS);
+// The signed-in account's auto-save time replaces the three-hour cutoff while it is on.
+let inactiveWorkoutLimitMs = MAX_INACTIVE_WORKOUT_MS;
+
+export function setInactiveWorkoutLimitMinutes(minutes: number | null): void {
+  inactiveWorkoutLimitMs = minutes ? minutes * 60 * 1000 : MAX_INACTIVE_WORKOUT_MS;
+}
+
+export function inactiveWorkoutFinishAt(
+  startedAt: number,
+  lastActiveAt: number,
+  limitMs = inactiveWorkoutLimitMs,
+): number {
+  return Math.max(startedAt + limitMs, lastActiveAt + RECENT_WORKOUT_ACTIVITY_MS);
 }
 
 export function shouldAutoFinishWorkout(

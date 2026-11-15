@@ -7,6 +7,8 @@ import {
   SHARED_WORKOUT_CHANGED,
 } from './activeWorkoutEvents';
 import { readFinishedWorkouts, FINISHED_WORKOUTS_CHANGE_EVENT } from './finishedWorkoutQueue';
+import type { WorkoutInput } from './types';
+import { workoutAutoSaveMinutes } from './workoutAutoSaveChoice';
 import {
   ACTIVE_WORKOUT_CHANGE_EVENT,
   ACTIVE_WORKOUT_DRAFT_KEY,
@@ -36,6 +38,27 @@ export function draftSignature(value: ActiveWorkoutDraft | null): string {
     }
     return item;
   });
+}
+
+// The finished workout the logger would save at the current draft's cutoff, for auto-save.
+// It travels only with that exact draft, so the server never saves a version it did not see.
+let prepared: { signature: string; workout: WorkoutInput } | null = null;
+
+export function prepareWorkoutAutoSave(
+  draft: ActiveWorkoutDraft,
+  workout: WorkoutInput | null,
+): void {
+  prepared = workout ? { signature: draftSignature(draft), workout } : null;
+}
+
+export function preparedWorkoutAutoSave(draft: ActiveWorkoutDraft | null): WorkoutInput | null {
+  if (!draft || !prepared || workoutAutoSaveMinutes() === null) return null;
+  return prepared.signature === draftSignature(draft) ? prepared.workout : null;
+}
+
+function withAutoSave<T extends { draft: ActiveWorkoutDraft | null }>(change: T) {
+  const autoSave = preparedWorkoutAutoSave(change.draft);
+  return autoSave ? { ...change, autoSave } : change;
 }
 
 interface SyncDependencies {
@@ -275,7 +298,7 @@ export function useActiveWorkoutSync(userId: string | null) {
     const sync = new ActiveWorkoutSynchronizer(
       {
         read: api.activeWorkout,
-        put: api.syncActiveWorkout,
+        put: (change) => api.syncActiveWorkout(withAutoSave(change)),
         local: readActiveWorkoutDraft,
         queued: (sessionId) =>
           Boolean(

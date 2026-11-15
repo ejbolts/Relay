@@ -401,6 +401,7 @@ export const api = {
     base: ActiveWorkoutDraft | null;
     draft: ActiveWorkoutDraft | null;
     replace?: boolean;
+    autoSave?: WorkoutInput;
   }) =>
     request<{ revision: number; draft: ActiveWorkoutDraft | null; conflict: boolean }>(
       '/api/active-workout',
@@ -1009,6 +1010,16 @@ export const api = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(colors),
+    }),
+  workoutAutoSave: () =>
+    request<{ after_minutes: number | null }>('/api/workout-auto-save', {
+      signal: AbortSignal.timeout(10_000),
+    }),
+  updateWorkoutAutoSave: (afterMinutes: number | null) =>
+    request<{ after_minutes: number | null }>('/api/workout-auto-save', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ after_minutes: afterMinutes }),
     }),
   updateTrainingPreferences: (payload: TrainingPreferences) =>
     request<TrainingPreferences>('/api/training-preferences', {

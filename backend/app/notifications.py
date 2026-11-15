@@ -264,8 +264,29 @@ class ActiveWorkoutReminderScheduler:
                     )
                     db.commit()
 
+    def deliver_auto_saves(self) -> None:
+        """Save workouts left running past their owner's auto-save time, then tell them."""
+        # Imported here: the save path depends on the tracker, which loads after this module.
+        from .workout_auto_save import save_due_workouts
+
+        for saved in save_due_workouts(self.session_factory, self.settings):
+            send_push_notification(
+                self.session_factory,
+                self.settings,
+                title="Workout saved",
+                body=f"{saved.name} was saved automatically.",
+                user_id=saved.user_id,
+                url="/#history",
+                # Replaces the earlier "Still working out?" alert on the phone.
+                tag="inactive-workout",
+            )
+
     async def _run(self) -> None:
         while True:
+            try:
+                await asyncio.to_thread(self.deliver_auto_saves)
+            except Exception:
+                logger.exception("Could not auto-save unfinished workouts")
             try:
                 await asyncio.to_thread(self.deliver_due)
             except Exception:

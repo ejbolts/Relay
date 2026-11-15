@@ -234,6 +234,27 @@ supported for older clients, and are suppressed for a session using shared activ
 A workout left running can be saved with **Actual duration (minutes)**; the correction stays in
 its draft until saved. Inactivity reminders do not finish or discard the workout.
 
+**Settings > Training > Unfinished workouts > Auto-save** is off by default. Then a workout left
+running past its cutoff (three hours from the start, and never within 30 minutes of the last
+workout activity) waits for **Save workout**, **Resume** or **Discard**. With it on, the chosen
+time from 1 to 6 hours replaces the three hours, and the server saves the workout once that
+cutoff passes, even when every app window is closed, then sends **Workout saved** to the
+account's phones. The setting is the account-owned `workout_auto_save_minutes` user setting at
+`GET/PUT /api/workout-auto-save` (`after_minutes`: null for off, or 30 to 720 in 15-minute
+steps). Each device keeps a copy so the cutoff is known offline.
+
+The server never re-derives the workout. With each draft revision the logger sends, as the
+optional `autoSave` field of `PUT /api/active-workout`, the finished workout that **Save
+workout** in the inactive-workout prompt would save at the draft's cutoff. The server keeps it
+only while it matches the stored draft exactly; any other write, including a merge with another
+device's edit or a save from an older release, clears it. The scheduler (every 15 seconds)
+saves a due workout through the normal create or resumed-workout replace path, consuming the
+shared revision in the same transaction, and clears the workout from friends' live activity.
+When the logger could not prepare it (nothing logged, sets needing a machine, an unsynced or
+offline device), or the save is refused (for example, the resumed workout was edited elsewhere),
+the workout keeps waiting for the owner's choice as it does with auto-save off. Migration
+`0059_workout_auto_save` adds the prepared copy to `active_workout_sync`.
+
 **Weekly cardio** totals include every cardio session. Personal zone goals count only sessions whose average heart rate falls within that account's inclusive zone range. Configure all five ordered, non-overlapping ranges and one or more zone-specific minute targets with **Edit** on **Training > Cardio > Weekly zone goals**; the default target is 150 minutes in Zone 2. Until ranges are configured, each session keeps its saved zone label (new sessions default to Zone 2, matching earlier releases), and saving goals alone does not change saved labels. Once ranges exist, missing or out-of-range heart rate receives no zone credit, even when an older client sends a manual zone label. The average estimates a session's zone rather than measuring time spent in it. Cardio from completed workout sets uses their duration-weighted average heart rate. Editing metrics or personal ranges recalculates goal totals, including existing sessions. Goal progress and the short session notification use text.
 
 `GET/PUT /api/cardio-preferences` reads and validates the account-owned `cardio_preferences` JSON setting, which is included in account backups without a schema migration. Saves bump the training revision so other devices refresh. The cardio overview returns `goal_weeks`; Home and shared goals return `cardio_goals`. Shared goals retain existing sharing permissions. Weekly totals and goals follow the saved week-start preference and exclude future entries. A Sunday start means Sunday through Saturday.

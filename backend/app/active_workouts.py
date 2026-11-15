@@ -2,11 +2,16 @@
 
 The shared revision also guards finishing and discarding. A tombstone prevents an offline
 device from bringing back a workout another device has already ended.
+
+With auto-save on, the logging app also sends the finished workout it would save at the
+draft's inactivity cutoff (``autoSave``). It is kept only for the exact revision it describes,
+so the server saves what the app would have saved without re-deriving it.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -18,9 +23,38 @@ from sqlalchemy.orm import Session
 
 from .auth import as_utc
 from .errors import api_error
-from .models import ActiveWorkoutSync, TrainingWorkout, utc_now
+from .models import ActiveWorkoutSync, TrainingWorkout, UserSetting, utc_now
 from .presence import hub
 from .tracker_schemas import RepRange, TrainingWorkoutCreate, WorkoutSetCreate
+
+logger = logging.getLogger(__name__)
+
+AUTO_SAVE_SETTING = "workout_auto_save_minutes"
+
+
+class WorkoutAutoSave(BaseModel):
+    """How long after starting an unfinished workout saves itself; None asks instead."""
+
+    after_minutes: int | None = Field(default=None, ge=30, le=720, multiple_of=15)
+
+
+def auto_save_minutes(db: Session, user_id: str) -> int | None:
+    row = db.get(UserSetting, (user_id, AUTO_SAVE_SETTING))
+    try:
+        return WorkoutAutoSave(after_minutes=int(row.value)).after_minutes if row else None
+    except ValueError:
+        return None
+
+
+def set_auto_save_minutes(db: Session, user_id: str, minutes: int | None) -> None:
+    row = db.get(UserSetting, (user_id, AUTO_SAVE_SETTING))
+    if minutes is None:
+        if row is not None:
+            db.delete(row)
+    elif row is None:
+        db.add(UserSetting(user_id=user_id, key=AUTO_SAVE_SETTING, value=str(minutes)))
+    else:
+        row.value = str(minutes)
 
 
 class DraftSet(WorkoutSetCreate):
@@ -88,6 +122,8 @@ class DraftChange(BaseModel):
     base: dict[str, Any] | None
     draft: dict[str, Any] | None
     replace: bool = False
+    # Optional: older apps omit it, and a workout the app could not prepare is never saved.
+    autoSave: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def validate_drafts(self) -> DraftChange:
@@ -97,7 +133,23 @@ class DraftChange(BaseModel):
                 if len(json.dumps(value)) > 512_000:
                     raise ValueError("Workout draft is too large.")
                 Draft.model_validate(value)
+        if self.autoSave is not None:
+            # A malformed copy must never stop the draft itself from syncing.
+            try:
+                if self.draft is None or len(json.dumps(self.autoSave)) > 512_000:
+                    raise ValueError("No draft for this workout.")
+                TrainingWorkoutCreate.model_validate(self.autoSave)
+            except ValueError:
+                logger.warning("Ignoring an auto-save workout that is not valid")
+                self.autoSave = None
         return self
+
+    def auto_save_for(self, merged: dict | None) -> dict | None:
+        """The prepared workout, only when it describes exactly the draft being stored."""
+        if self.autoSave is None or merged is None or merged != self.draft:
+            return None
+        session = self.autoSave.get("client_session_id")
+        return self.autoSave if session in (None, merged["clientSessionId"]) else None
 
 
 MISSING = object()
@@ -165,11 +217,29 @@ def snapshot(row: ActiveWorkoutSync | None) -> dict:
     return {"revision": row.revision if row else 0, "draft": row.draft if row else None}
 
 
-def change_draft(db: Session, user_id: str, change: DraftChange, attempts: int = 3) -> dict:
+def change_draft(
+    db: Session,
+    user_id: str,
+    change: DraftChange,
+    attempts: int = 3,
+    client_version: str | None = None,
+) -> dict:
     row = db.get(ActiveWorkoutSync, user_id)
     current = snapshot(row)
     remote = current["draft"]
     if change.draft == remote:
+        auto_save = change.auto_save_for(remote)
+        if row and auto_save is not None and row.auto_save != auto_save:
+            # The same draft, newly prepared for auto-save (for example, just switched on).
+            db.execute(
+                update(ActiveWorkoutSync)
+                .where(
+                    ActiveWorkoutSync.user_id == user_id,
+                    ActiveWorkoutSync.revision == current["revision"],
+                )
+                .values(auto_save=auto_save, auto_save_client_version=client_version)
+            )
+            db.commit()
         return {**current, "conflict": False}
     if change.replace and change.revision == current["revision"] and change.base == remote:
         if (
@@ -223,9 +293,12 @@ def change_draft(db: Session, user_id: str, change: DraftChange, attempts: int =
     else:
         session_id = row.session_id if row else None
         activity = None
+    auto_save = change.auto_save_for(merged)
     values = {
         "revision": current["revision"] + 1,
         "draft": merged,
+        "auto_save": auto_save,
+        "auto_save_client_version": client_version if auto_save is not None else None,
         "session_id": session_id,
         "started_at": str(int(merged["startedAt"]))
         if merged
@@ -259,7 +332,7 @@ def change_draft(db: Session, user_id: str, change: DraftChange, attempts: int =
             db.rollback()
             db.expire_all()
             if attempts > 1:
-                return change_draft(db, user_id, change, attempts - 1)
+                return change_draft(db, user_id, change, attempts - 1, client_version)
             return {**snapshot(db.get(ActiveWorkoutSync, user_id)), "conflict": True}
         db.commit()
     hub.active_workout_changed(user_id)
@@ -280,7 +353,13 @@ def finish_shared_draft(
             ActiveWorkoutSync.revision == revision,
             ActiveWorkoutSync.draft.is_not(None),
         )
-        .values(draft=None, revision=revision + 1, last_activity_at=None)
+        .values(
+            draft=None,
+            revision=revision + 1,
+            last_activity_at=None,
+            auto_save=None,
+            auto_save_client_version=None,
+        )
     )
     if changed.rowcount != 1:
         raise api_error(

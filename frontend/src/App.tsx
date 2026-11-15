@@ -2,7 +2,17 @@ import { MachineWeightTip } from './FeatureDiscoveryTips';
 import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
-import { sharedWorkoutFinishFields, useActiveWorkoutSync } from './activeWorkoutSync';
+import {
+  prepareWorkoutAutoSave,
+  sharedWorkoutFinishFields,
+  useActiveWorkoutSync,
+} from './activeWorkoutSync';
+import {
+  useWorkoutAutoSaveAccount,
+  useWorkoutAutoSaveMinutes,
+  workoutAutoSaveMinutes,
+} from './workoutAutoSaveChoice';
+import { WorkoutAutoSaveSetting } from './WorkoutAutoSaveSetting';
 import { ActiveWorkoutSyncDialog } from './ActiveWorkoutSyncDialog';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import {
@@ -628,6 +638,7 @@ let backupRestoredNotice = typeof window !== 'undefined' && takeBackupRestoredFl
 
 export function App() {
   const { user } = useUserSession();
+  useWorkoutAutoSaveAccount(user?.id ?? null);
   const announcement = useReleaseAnnouncement(user?.id ?? null);
   return (
     <TrainingPreferencesProvider>
@@ -3382,6 +3393,9 @@ function WorkoutLogger({
   const lastActiveAtRef = useRef(initialActivity.lastActiveAt);
   const inactiveFinishAtRef = useRef(initialActivity.finishAt);
   const savingRef = useRef(false);
+  const autoSaveWorkoutRef = useRef<() => WorkoutInput | null>(() => null);
+  const autoSaveMinutes = useWorkoutAutoSaveMinutes();
+  const autoSaveMinutesRef = useRef(autoSaveMinutes);
   const preparingFinishRef = useRef(false);
   const skipRemotePersistRef = useRef(false);
   useEffect(() => {
@@ -3453,7 +3467,7 @@ function WorkoutLogger({
     const persistDraft = () => {
       // Read synchronously: a frozen tab can wake before its storage event is delivered.
       if (savingRef.current || !isCurrentDraft()) return false;
-      const persisted = writeActiveWorkoutDraft({
+      const draft: ActiveWorkoutDraft = {
         version: 1,
         clientSessionId,
         startedAt,
@@ -3488,7 +3502,12 @@ function WorkoutLogger({
           ...(movement.repRange && { repRange: movement.repRange }),
           sets: movement.sets,
         })),
-      });
+      };
+      prepareWorkoutAutoSave(
+        draft,
+        workoutAutoSaveMinutes() === null ? null : autoSaveWorkoutRef.current(),
+      );
+      const persisted = writeActiveWorkoutDraft(draft);
       if (persisted) draftPersistedRef.current = true;
       return persisted;
     };
@@ -4393,10 +4412,27 @@ function WorkoutLogger({
       setError(check.message);
       return false;
     }
-    const { movementsToSave, durationMinutes, cardioDurationSeconds } = check;
     savingRef.current = true;
     setSaving(true);
     setError(null);
+    try {
+      cancelRestTimer();
+      await onSave({ ...sharedFields, ...finishedWorkoutInput(check) });
+      return true;
+    } catch (saveError) {
+      savingRef.current = false;
+      setError(saveError instanceof Error ? saveError.message : 'Could not save the workout.');
+      setSaving(false);
+      return false;
+    }
+  }
+
+  /** The workout a ready check saves, without the shared-draft fields added when finishing. */
+  function finishedWorkoutInput({
+    movementsToSave,
+    durationMinutes,
+    cardioDurationSeconds,
+  }: Extract<ReturnType<typeof checkFinish>, { kind: 'ready' }>): WorkoutInput {
     let completedIdentity = finalizeWorkoutIdentity(
       movements.map((movement) => movement.exercise),
       category,
@@ -4415,63 +4451,60 @@ function WorkoutLogger({
         false,
       );
     }
-    try {
-      cancelRestTimer();
-      await onSave({
-        ...sharedFields,
-        ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
-        ...((initialWorkout || resumedWorkoutId) &&
-          baseRevision !== undefined && { base_revision: baseRevision }),
-        name: completedIdentity.name,
-        workout_date: workoutDate,
-        category: completedIdentity.category,
-        workout_type_id: customTypeId,
-        notes: notes.trim() || null,
-        duration_minutes: durationMinutes,
-        start_time: initialWorkout && startTime && endTime ? startTime : null,
-        end_time:
-          initialWorkout && startTime && endTime
-            ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
-            : null,
-        movements: movementsToSave.map((movement) => ({
-          exercise_id: movement.exercise.id,
-          notes: movement.notes.trim() || null,
-          machine_photo_ids: movement.machinePhotoIds,
-          machine_settings: movement.machineSettings ?? [],
-          sets: movement.sets.map((item) => ({
-            reps: item.reps,
-            machine_photo_id:
-              item.machine_photo_id ??
-              (movement.machinePhotoIds.length === 1 ? movement.machinePhotoIds[0] : null),
-            weight_kg: item.weight_kg,
-            rpe: item.rpe,
-            rest_seconds: item.rest_seconds,
-            duration_seconds: item.duration_seconds,
-            distance_km: item.distance_km,
-            calories_kcal: item.calories_kcal,
-            average_heart_rate_bpm: item.average_heart_rate_bpm,
-            incline_percent: item.incline_percent ?? null,
-            speed_kph: item.speed_kph ?? null,
-            bodyweight_kg: item.bodyweight_kg,
-            percentile: item.percentile,
-            warmup: item.warmup,
-            set_type: item.set_type,
-            failed: item.failed,
-            target_reps: item.target_reps,
-            notes: item.notes,
-            completed: item.completed,
-          })),
-          superset_key: movement.supersetKey,
+    return {
+      ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
+      ...((initialWorkout || resumedWorkoutId) &&
+        baseRevision !== undefined && { base_revision: baseRevision }),
+      name: completedIdentity.name,
+      workout_date: workoutDate,
+      category: completedIdentity.category,
+      workout_type_id: customTypeId,
+      notes: notes.trim() || null,
+      duration_minutes: durationMinutes,
+      start_time: initialWorkout && startTime && endTime ? startTime : null,
+      end_time:
+        initialWorkout && startTime && endTime
+          ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
+          : null,
+      movements: movementsToSave.map((movement) => ({
+        exercise_id: movement.exercise.id,
+        notes: movement.notes.trim() || null,
+        machine_photo_ids: movement.machinePhotoIds,
+        machine_settings: movement.machineSettings ?? [],
+        sets: movement.sets.map((item) => ({
+          reps: item.reps,
+          machine_photo_id:
+            item.machine_photo_id ??
+            (movement.machinePhotoIds.length === 1 ? movement.machinePhotoIds[0] : null),
+          weight_kg: item.weight_kg,
+          rpe: item.rpe,
+          rest_seconds: item.rest_seconds,
+          duration_seconds: item.duration_seconds,
+          distance_km: item.distance_km,
+          calories_kcal: item.calories_kcal,
+          average_heart_rate_bpm: item.average_heart_rate_bpm,
+          incline_percent: item.incline_percent ?? null,
+          speed_kph: item.speed_kph ?? null,
+          bodyweight_kg: item.bodyweight_kg,
+          percentile: item.percentile,
+          warmup: item.warmup,
+          set_type: item.set_type,
+          failed: item.failed,
+          target_reps: item.target_reps,
+          notes: item.notes,
+          completed: item.completed,
         })),
-      });
-      return true;
-    } catch (saveError) {
-      savingRef.current = false;
-      setError(saveError instanceof Error ? saveError.message : 'Could not save the workout.');
-      setSaving(false);
-      return false;
-    }
+        superset_key: movement.supersetKey,
+      })),
+    };
   }
+  // What Save in the inactive-workout prompt would save, prepared with each draft revision so
+  // auto-save can save it on the server after the app is closed.
+  autoSaveWorkoutRef.current = () => {
+    if (initialWorkout) return null;
+    const check = checkFinish(inactiveFinishAtRef.current);
+    return check.kind === 'ready' ? finishedWorkoutInput(check) : null;
+  };
 
   const loggedSetCount = initialWorkout
     ? 0
@@ -4483,6 +4516,15 @@ function WorkoutLogger({
         0,
       );
   hasLoggedSetRef.current = loggedSetCount > 0;
+
+  useEffect(() => {
+    // A changed auto-save time moves the cutoff of the workout in progress too.
+    if (autoSaveMinutesRef.current === autoSaveMinutes) return;
+    autoSaveMinutesRef.current = autoSaveMinutes;
+    if (initialWorkout) return;
+    inactiveFinishAtRef.current = inactiveWorkoutFinishAt(startedAt, lastActiveAtRef.current);
+    persistDraftRef.current();
+  }, [autoSaveMinutes, initialWorkout, startedAt]);
 
   function continueInactiveWorkout() {
     const now = Date.now();
@@ -9316,6 +9358,7 @@ function SettingsScreen({
                     </button>
                   </div>
                 </section>
+                {account && <WorkoutAutoSaveSetting userId={account.id} />}
                 <WorkoutTypesSettings
                   collapsible
                   types={workoutTypes.types}
