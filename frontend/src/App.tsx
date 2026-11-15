@@ -6888,7 +6888,7 @@ function MachinePhotoChooser({
                           setError(null);
                         }}
                       >
-                        Select
+                        Merge
                       </button>
                     </TipSlot>
                   </div>

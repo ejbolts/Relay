@@ -7,8 +7,8 @@
   },
   mergeMachines: {
     title: 'Saved the same machine twice?',
-    homeBody: 'Choose Select to merge duplicate machines and keep their history.',
-    body: 'Choose Select to merge duplicate machines, keeping their photos and workout links together.',
+    homeBody: 'Choose Merge to combine duplicate machines and keep their history.',
+    body: 'Choose Merge to combine duplicate machines, keeping their photos and workout links together.',
     surface: 'hint',
   },
   maintenance: {
