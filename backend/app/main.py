@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 from . import comments  # noqa: F401 -- registers discussion routes on sharing_router
 from .account_limits import SaveRateLimiter
 from .accounts import auth_router, profile_router
+from .active_workouts import DraftChange, change_draft, snapshot
 from .admin import admin_router
 from .auth import (
     CsrfOriginMiddleware,
@@ -32,6 +33,7 @@ from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
 from .machine_settings import router as machine_settings_router
 from .models import (
+    ActiveWorkoutSync,
     Clip,
     ClipUploadStatus,
     PushSubscription,
@@ -213,6 +215,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # protected unless someone deliberately moves it here.
     protected = APIRouter(dependencies=[Depends(get_current_user)])
     video = APIRouter(prefix="/api/sessions", dependencies=[Depends(require_video_access)])
+
+    @protected.get("/api/active-workout")
+    def active_workout(user: CurrentUser, db: Session = Depends(get_db)) -> dict:
+        return snapshot(db.get(ActiveWorkoutSync, user.id))
+
+    @protected.put("/api/active-workout")
+    def save_active_workout(
+        payload: DraftChange, user: CurrentUser, db: Session = Depends(get_db)
+    ) -> dict:
+        if not app.state.save_rate_limiter.allow(f"active-workout:{user.id}", 240):
+            raise api_error(429, "draft_rate_limited", "Wait a moment before syncing again.")
+        return change_draft(db, user.id, payload)
 
     @app.get("/api/health", response_model=HealthRead)
     def health() -> HealthRead:

@@ -32,7 +32,7 @@ _Home: your next workout and training dashboard. Select the screenshot to view i
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
 - Open a custom exercise in **Training > Exercises**, then use its **⋮ menu > Merge with another exercise** to combine it with an official or another custom exercise of the same kind, equipment and configured muscle groups. History, records, machine photos and saved splits move to the destination; its muscle credits and existing settings are kept. Merges cannot be undone.
 - Each saved workout keeps the machine settings used for that session.
-- Resume an active workout after returning to the app, then save it to your history.
+- Resume the same active workout on your desktop or phone, with live edits on both devices. Phone alerts can remind you after 45 minutes without workout activity.
 - Keep logging without a connection. After you have signed in once on a device, Relay opens from the data it saved there, shows an offline banner across the app, and syncs finished workouts when the server is reachable again. You can finish and start as many workouts as you like while offline.
 
 Choose kilograms or pounds for weight entry and display.

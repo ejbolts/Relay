@@ -270,6 +270,8 @@ class WorkoutTypeUpdate(BaseModel):
 
 class TrainingWorkoutCreate(BaseModel):
     client_session_id: UUID | None = None
+    active_workout_revision: int | None = Field(default=None, ge=1)
+    active_workout_session_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     workout_date: date
     category: WorkoutCategory

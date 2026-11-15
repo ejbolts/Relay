@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api, ApiError, revisionAfterSave } from './api';
@@ -420,6 +421,50 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('cross-device live workout updates', () => {
+  it('updates the mounted logger without replacing its focused set input or echoing old data', async () => {
+    const draft = storedDraft({ clientSessionId: crypto.randomUUID() });
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const weight = container.querySelector<HTMLInputElement>('[aria-label="Weight kilograms"]')!;
+    await act(async () => weight.focus());
+    const remote = structuredClone(readActiveWorkoutDraft()!);
+    remote.movements[0].sets[0].weight_kg = 92.5;
+    remote.notes = 'Updated on phone';
+    remote.pausedAt = Date.now();
+    remote.pausedMs = 120000;
+    await act(async () => {
+      writeActiveWorkoutDraft(remote);
+      window.dispatchEvent(new CustomEvent(REMOTE_WORKOUT_APPLIED, { detail: remote }));
+    });
+    expect(container.querySelector('[aria-label="Weight kilograms"]')).toBe(weight);
+    expect(document.activeElement).toBe(weight);
+    expect(weight.value).toBe('92.5');
+    expect(readActiveWorkoutDraft()?.notes).toBe('Updated on phone');
+    expect(readActiveWorkoutDraft()?.pausedMs).toBe(120000);
+    expect(container.querySelector('[aria-label="Resume workout"]')).not.toBeNull();
+  });
+
+  it('records workout interactions while ignoring activity elsewhere in the app', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const draft = storedDraft({ clientSessionId: crypto.randomUUID() });
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const before = readActiveWorkoutDraft()!.lastActiveAt!;
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    expect(readActiveWorkoutDraft()!.lastActiveAt).toBe(before);
+    const input = container.querySelector<HTMLInputElement>('[aria-label="Weight kilograms"]')!;
+    await act(async () =>
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })),
+    );
+    expect(readActiveWorkoutDraft()!.lastActiveAt).toBeGreaterThan(before);
+  });
 });
 
 it('uses the top header to return from settings sections before leaving settings', async () => {

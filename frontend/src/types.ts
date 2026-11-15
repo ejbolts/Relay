@@ -247,6 +247,8 @@ export interface WorkoutSetInput {
 
 export interface WorkoutInput {
   client_session_id?: string;
+  active_workout_revision?: number;
+  active_workout_session_id?: string;
   name: string;
   workout_date: string;
   category: WorkoutCategory;

@@ -47,6 +47,7 @@ from .errors import api_error
 from .models import (
     AccountBackup,
     ActiveWorkoutReminder,
+    ActiveWorkoutSync,
     AppSetting,
     BodyMeasurement,
     BodyWeightGoal,
@@ -338,6 +339,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(BodyWeightGoal).where(BodyWeightGoal.user_id == user_id),
         delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id),
         delete(LiveWorkout).where(LiveWorkout.user_id == user_id),
+        delete(ActiveWorkoutSync).where(ActiveWorkoutSync.user_id == user_id),
         delete(PushSubscription).where(PushSubscription.user_id == user_id),
         delete(UserSetting).where(UserSetting.user_id == user_id),
         delete(ProfileSharing).where(ProfileSharing.user_id == user_id),

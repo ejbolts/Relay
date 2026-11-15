@@ -69,6 +69,17 @@ async function save() {
 }
 
 describe('weight entry saves canonical values', () => {
+  it('shows an external weight update while focused and does not undo it on blur', async () => {
+    const changed = vi.fn();
+    await act(async () => root.render(<WeightInput weightKg={80} onWeightChange={changed} />));
+    const input = container.querySelector('input')!;
+    await act(async () => input.focus());
+    await act(async () => root.render(<WeightInput weightKg={92.5} onWeightChange={changed} />));
+    expect(Number(input.value)).toBe(92.5);
+    expect(document.activeElement).toBe(input);
+    await act(async () => input.blur());
+    expect(changed).not.toHaveBeenCalled();
+  });
   it('preserves precise kg when an unchanged rounded pounds field is focused and saved', async () => {
     const originalKg = 84.237123456;
     const onSave = vi.fn();

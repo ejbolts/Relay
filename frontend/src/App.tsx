@@ -3,6 +3,9 @@ import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
 import { BodySizesCard } from './BodySizesCard';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
+import { sharedWorkoutFinishFields, useActiveWorkoutSync } from './activeWorkoutSync';
+import { ActiveWorkoutSyncDialog } from './ActiveWorkoutSyncDialog';
+import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import {
   extendInactiveWorkoutFinishAt,
   inactiveWorkoutFinishAt,
@@ -380,6 +383,7 @@ import {
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
   writeActiveWorkoutDraft,
+  type ActiveWorkoutDraft,
 } from './workoutDraft';
 import {
   completeRemainingSets,
@@ -899,7 +903,22 @@ function AppContent() {
       ? [current, ...(muscleSets.history ?? dashboard?.weekly_sets_history ?? [])]
       : [];
   }, [dashboard?.weekly_sets, dashboard?.weekly_sets_history, muscleSets]);
-  useActiveWorkoutReminder(editingWorkoutSaving ? null : activeWorkoutStartedAt);
+  // Cancel this browser's legacy elapsed-time reminder; the server tracks shared activity.
+  useActiveWorkoutReminder(null);
+  const workoutSync = useActiveWorkoutSync(user?.id ?? null);
+  const [syncConflictDismissed, setSyncConflictDismissed] = useState(false);
+  useEffect(() => {
+    const remoteWorkout = () => {
+      const draft = readActiveWorkoutDraft();
+      setActiveWorkoutStartedAt(draft?.startedAt ?? null);
+      setResumingWorkoutId(draft?.resumingWorkoutId ?? null);
+    };
+    window.addEventListener(REMOTE_WORKOUT_APPLIED, remoteWorkout);
+    return () => window.removeEventListener(REMOTE_WORKOUT_APPLIED, remoteWorkout);
+  }, []);
+  useEffect(() => {
+    if (!workoutSync.conflict) setSyncConflictDismissed(false);
+  }, [workoutSync.conflict]);
   useEffect(() => {
     // A URL (including an old phone notification) is navigation, never a Start action.
     if (tab !== 'log' || editingWorkout || activeWorkoutStartedAt !== null) return;
@@ -2161,7 +2180,7 @@ function AppContent() {
                   key={
                     editingWorkout
                       ? `edit-${editingWorkout.id}`
-                      : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
+                      : `active-${activeWorkoutStartedAt ?? workoutStartDate}-${activeDraft?.clientSessionId ?? ''}`
                   }
                   workouts={workouts}
                   initialWorkout={editingWorkout}
@@ -2171,6 +2190,11 @@ function AppContent() {
                   {(navigation, viewedWorkout) => (
                     <WorkoutLogger
                       key={viewedWorkout?.id ?? 'original'}
+                      syncStatus={workoutSync.status}
+                      onSyncRetry={() => {
+                        setSyncConflictDismissed(false);
+                        workoutSync.retry();
+                      }}
                       exercises={exercises}
                       restoredDraftMovements={restoredDraftMovements}
                       recommendation={dashboard?.recommendation ?? null}
@@ -2479,6 +2503,25 @@ function AppContent() {
             }}
           />
         )}
+        {workoutSync.conflict && !syncConflictDismissed && (
+          <ActiveWorkoutSyncDialog
+            conflict={workoutSync.conflict}
+            exercises={exercises}
+            onResolve={workoutSync.resolve}
+            onClose={() => setSyncConflictDismissed(true)}
+          />
+        )}
+        {workoutSync.conflict &&
+          syncConflictDismissed &&
+          (tab !== 'log' || activeWorkoutStartedAt === null) && (
+            <button
+              type="button"
+              className="workout-sync-reopen primary-action"
+              onClick={() => setSyncConflictDismissed(false)}
+            >
+              Resolve workout sync
+            </button>
+          )}
       </div>
     </AppContentProviders>
   );
@@ -2902,6 +2945,8 @@ function BrowsedWorkoutDetails({
 }
 
 function WorkoutLogger({
+  syncStatus,
+  onSyncRetry,
   exercises,
   restoredDraftMovements,
   categoryColors,
@@ -2933,6 +2978,8 @@ function WorkoutLogger({
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
+  syncStatus: import('./activeWorkoutSync').WorkoutSyncStatus;
+  onSyncRetry: () => void;
   categoryColors: WorkoutTypeColors;
   recommendation: WorkoutRecommendation | null;
   template: SessionTemplate | null;
@@ -3209,6 +3256,33 @@ function WorkoutLogger({
   const lastActiveAtRef = useRef(initialActivity.lastActiveAt);
   const inactiveFinishAtRef = useRef(initialActivity.finishAt);
   const savingRef = useRef(false);
+  const preparingFinishRef = useRef(false);
+  const skipRemotePersistRef = useRef(false);
+  useEffect(() => {
+    if (initialWorkout) return;
+    const apply = (event: Event) => {
+      const draft = (event as CustomEvent<ActiveWorkoutDraft | null>).detail;
+      if (!draft || draft.clientSessionId !== clientSessionId || savingRef.current) return;
+      const restored = restoreWorkoutDraftMovements(draft.movements, exercises);
+      if (!restored) return;
+      skipRemotePersistRef.current = true;
+      lastActiveAtRef.current = draft.lastActiveAt ?? draft.startedAt;
+      inactiveFinishAtRef.current =
+        draft.inactiveFinishAt ?? inactiveWorkoutFinishAt(draft.startedAt, lastActiveAtRef.current);
+      setName(draft.name);
+      setWorkoutDate(draft.workoutDate);
+      setCategory(draft.category);
+      setCustomTypeId(draft.workoutTypeId ?? null);
+      setWorkoutTypeExplicit(draft.workoutTypeExplicit ?? false);
+      setSkipHighRepWarning(draft.skipHighRepWarning ?? false);
+      setNotes(draft.notes);
+      setDurationOverrideMinutes(draft.durationOverrideMinutes ?? null);
+      setMovements(restored);
+      setPause(draftPause(draft));
+    };
+    window.addEventListener(REMOTE_WORKOUT_APPLIED, apply);
+    return () => window.removeEventListener(REMOTE_WORKOUT_APPLIED, apply);
+  }, [clientSessionId, exercises, initialWorkout]);
   // An inactive workout is never saved unasked: it waits for Save, Resume or Discard.
   const [inactivePromptOpen, setInactivePromptOpen] = useState(false);
   const hasLoggedSetRef = useRef(false);
@@ -3289,7 +3363,10 @@ function WorkoutLogger({
       if (persisted) draftPersistedRef.current = true;
       return persisted;
     };
-    const recordActivity = () => {
+    const recordActivity = (event: Event) => {
+      if (document.visibilityState !== 'visible' || window.location.hash !== '#log') return;
+      if (event.target instanceof Element && !event.target.closest('.logger-screen, dialog'))
+        return;
       if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();
       if (now >= inactiveFinishAtRef.current) {
@@ -3316,7 +3393,8 @@ function WorkoutLogger({
         persistDraft();
       }
     };
-    persistDraft();
+    if (skipRemotePersistRef.current) skipRemotePersistRef.current = false;
+    else persistDraft();
     persistDraftRef.current = persistDraft;
     const persistBeforeRefresh = (event: Event) => {
       if (savingRef.current || !persistDraft()) event.preventDefault();
@@ -4127,8 +4205,21 @@ function WorkoutLogger({
 
   /** Resolves true once the workout is handed over for saving. */
   async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
-    if (savingRef.current) return false;
+    if (savingRef.current || preparingFinishRef.current) return false;
     if (!initialWorkout && !isCurrentDraft()) return false;
+    let sharedFields: Partial<WorkoutInput> = {};
+    if (!initialWorkout) {
+      preparingFinishRef.current = true;
+      try {
+        persistDraftRef.current();
+        sharedFields = await sharedWorkoutFinishFields();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not sync this workout.');
+        return false;
+      } finally {
+        preparingFinishRef.current = false;
+      }
+    }
     const check = checkFinish(inactiveEndAt);
     if (check.kind === 'machines') {
       setMachineAssignmentError(check.exercise);
@@ -4163,6 +4254,7 @@ function WorkoutLogger({
     try {
       cancelRestTimer();
       await onSave({
+        ...sharedFields,
         ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
         name: completedIdentity.name,
         workout_date: workoutDate,
@@ -4368,6 +4460,26 @@ function WorkoutLogger({
           )
         }
       />
+      {!initialWorkout && (
+        <button
+          type="button"
+          className="workout-sync-status"
+          onClick={onSyncRetry}
+          aria-label={
+            syncStatus === 'conflict'
+              ? 'Resolve workout sync conflict'
+              : 'Sync workout across devices'
+          }
+        >
+          {syncStatus === 'synced'
+            ? 'Synced'
+            : syncStatus === 'syncing'
+              ? 'Syncing…'
+              : syncStatus === 'conflict'
+                ? 'Resolve sync'
+                : 'Saved on device · Retry sync'}
+        </button>
+      )}
       {recommendation &&
         !recommendation.is_rest_day &&
         !recommendation.needs_split_update &&
