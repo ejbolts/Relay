@@ -364,14 +364,16 @@ import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { weeklySetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
+  clockOffsetMsAt,
   draftPause,
   pauseWorkout,
-  pausedMsAt,
   resumeWorkout,
+  withElapsedSeconds,
   type WorkoutPause,
 } from './workoutPause';
 import {
@@ -3190,6 +3192,7 @@ function WorkoutLogger({
   // Paused time is left out of the live time and the saved duration; the real start is kept.
   const [pause, setPause] = useState<WorkoutPause>(() => draftPause(restoredDraft));
   const workoutPaused = !initialWorkout && pause.pausedAt !== null;
+  const [timeEditorOpen, setTimeEditorOpen] = useState(false);
   const clientSessionId = useState(() => restoredDraft?.clientSessionId ?? crypto.randomUUID())[0];
   const draftPersistedRef = useRef(Boolean(restoredDraft));
   const isCurrentDraft = useCallback(() => {
@@ -3290,6 +3293,7 @@ function WorkoutLogger({
         inactiveFinishAt: inactiveFinishAtRef.current,
         durationOverrideMinutes,
         pausedMs: pause.pausedMs,
+        ...(pause.adjustedMs !== undefined && { adjustedMs: pause.adjustedMs }),
         pausedAt: pause.pausedAt,
         name,
         workoutDate,
@@ -4095,7 +4099,7 @@ function WorkoutLogger({
           startedAt,
           finishedAt,
           durationOverrideMinutes,
-          pausedMsAt(pause, finishedAt),
+          clockOffsetMsAt(pause, finishedAt),
           cardioDurationSeconds,
         );
     const completed = movementsToSave
@@ -4362,6 +4366,7 @@ function WorkoutLogger({
             }
             paused={workoutPaused}
             onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
+            onEditTime={initialWorkout || readOnly ? undefined : () => setTimeEditorOpen(true)}
           />
         }
         onBack={onClose}
@@ -4920,6 +4925,18 @@ function WorkoutLogger({
         />
       )}
 
+      {timeEditorOpen && (
+        <WorkoutTimeEditor
+          elapsedSeconds={elapsed}
+          onClose={() => setTimeEditorOpen(false)}
+          onSave={(seconds) => {
+            // A corrected clock replaces a fixed total kept from an earlier finish attempt.
+            setDurationOverrideMinutes(null);
+            setPause((current) => withElapsedSeconds(current, startedAt, seconds));
+            setTimeEditorOpen(false);
+          }}
+        />
+      )}
       {finishConfirmationOpen && (
         <PopupDialog
           title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
