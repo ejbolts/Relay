@@ -1013,6 +1013,8 @@ export const api = {
     }),
   exportWorkouts: (range: DateRange = {}) =>
     requestBlob(`/api/workouts/export.csv${dateRangeQuery(range)}`),
+  exportWorkout: (workoutId: string) =>
+    requestBlob(`/api/workouts/export.csv?workout_id=${encodeURIComponent(workoutId)}`),
   importWorkouts: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);

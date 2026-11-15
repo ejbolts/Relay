@@ -2542,6 +2542,7 @@ def export_workout_csv(
     user: CurrentUser,
     start_date: date | None = None,
     end_date: date | None = None,
+    workout_id: str | None = None,
 ) -> Response:
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=422, detail="Start date must not be after end date.")
@@ -2551,6 +2552,24 @@ def export_workout_csv(
         .options(*workout_options())
         .order_by(TrainingWorkout.workout_date, TrainingWorkout.created_at)
     )
+    if workout_id:
+        # One saved session, with only the cardio logged inside it.
+        workouts = list(db.scalars(statement.where(TrainingWorkout.id == workout_id)))
+        if not workouts:
+            raise HTTPException(status_code=404, detail="Workout not found.")
+        cardio_sessions = db.scalars(
+            select(CardioSession).where(
+                CardioSession.user_id == user.id,
+                CardioSession.source_workout_id == workout_id,
+            )
+        )
+        content = export_workouts(workouts, list(cardio_sessions))
+        filename = f"workout-{workouts[0].workout_date.isoformat()}.csv"
+        return Response(
+            content=content.encode("utf-8-sig"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     if start_date:
         statement = statement.where(TrainingWorkout.workout_date >= start_date)
     if end_date:

@@ -249,6 +249,7 @@ import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import { WorkoutShareCard } from './WorkoutShareCard';
+import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
@@ -385,7 +386,14 @@ import {
   type WorkoutDraftMovement as DraftMovement,
   type WorkoutDraftSet as DraftSet,
 } from './workoutMovements';
-import { applySupersetSelection, clearSuperset } from './workoutSupersets';
+import {
+  applySupersetSelection,
+  clearSuperset,
+  keepSupersetTogether,
+  nextInSupersetRound,
+  supersetGroupName,
+  supersetRoundPending,
+} from './workoutSupersets';
 import {
   historyPageAnchor,
   historyPageCount,
@@ -3902,9 +3910,11 @@ function WorkoutLogger({
   }
 
   function saveSuperset(movementKey: string, partnerKeys: string[]) {
-    setMovements((items) =>
-      applySupersetSelection(items, movementKey, partnerKeys, crypto.randomUUID()),
-    );
+    setMovements((items) => {
+      const grouped = applySupersetSelection(items, movementKey, partnerKeys, crypto.randomUUID());
+      const groupKey = grouped.find((item) => item.key === movementKey)?.supersetKey;
+      return groupKey ? keepSupersetTogether(grouped, groupKey) : grouped;
+    });
     closeSupersetPicker();
   }
 
@@ -4091,6 +4101,23 @@ function WorkoutLogger({
         ? restTimerSecondsAfterSetUpdate(movement.exercise.kind, currentSet, update)
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
+    // In a superset or tri-set, go straight to the next exercise and rest after the round.
+    const nextInRound =
+      loggingSet && movement?.supersetKey
+        ? nextInSupersetRound(
+            movements.map((item) =>
+              item.key === movementKey
+                ? {
+                    ...item,
+                    sets: item.sets.map((set) =>
+                      set.key === setKey ? { ...set, completed: true } : set,
+                    ),
+                  }
+                : item,
+            ),
+            movementKey,
+          )
+        : null;
     if (loggingSet && !initialWorkout) tips.event('set-completed');
     if (
       loggingSet &&
@@ -4152,7 +4179,14 @@ function WorkoutLogger({
         };
       }),
     );
-    if (restSeconds !== null) startRestTimer(restSeconds);
+    if (restSeconds !== null && !nextInRound) startRestTimer(restSeconds);
+    if (nextInRound && !initialWorkout) {
+      window.requestAnimationFrame(() =>
+        [...(movementStackRef.current?.querySelectorAll<HTMLElement>('[data-flip-key]') ?? [])]
+          .find((card) => card.dataset.flipKey === nextInRound.key)
+          ?.scrollIntoView?.({ block: 'nearest', behavior: motionReduced() ? 'auto' : 'smooth' }),
+      );
+    }
   }
 
   const warmupOnlyMovements: WarmupOnlyMovement[] = movements
@@ -4503,6 +4537,14 @@ function WorkoutLogger({
       false,
     );
   }
+
+  const supersetLabel = (groupKey: string | null) => {
+    if (!groupKey) return null;
+    const names = movements
+      .filter((item) => item.supersetKey === groupKey)
+      .map((item) => item.exercise.name);
+    return `${supersetGroupName(names.length)} · ${names.join(' + ')}`;
+  };
 
   useEffect(() => {
     if (initialWorkout) return;
@@ -4893,14 +4935,12 @@ function WorkoutLogger({
               showRestTimes={showRestTimes}
               number={movementIndex + 1}
               prBadges={prBadges.get(movement.key) ?? new Map()}
-              supersetLabel={
-                movement.supersetKey
-                  ? `Superset ${movements
-                      .filter((item) => item.supersetKey === movement.supersetKey)
-                      .map((item) => item.exercise.name)
-                      .join(' + ')}`
-                  : null
-              }
+              supersetLabel={supersetLabel(movement.supersetKey)}
+              supersetUpNext={Boolean(
+                movement.supersetKey &&
+                !initialWorkout &&
+                supersetRoundPending(movements, movement.supersetKey)[0]?.key === movement.key,
+              )}
               history={recentExerciseHistory(
                 historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
@@ -5521,7 +5561,8 @@ function SupersetPicker({
               disabled={selectedKeys.length === 0}
               onClick={() => onSave(selectedKeys)}
             >
-              {movement.supersetKey ? 'Update Group' : 'Add Group'}
+              {movement.supersetKey ? 'Update' : 'Add'}{' '}
+              {selectedKeys.length ? supersetGroupName(selectedKeys.length + 1) : 'Group'}
             </button>
             <button type="button" onClick={onClose}>
               Close
@@ -5674,6 +5715,7 @@ function MovementCard({
   onSuggestedSets,
   prBadges,
   supersetLabel,
+  supersetUpNext = false,
   onMoveUp,
   onMoveDown,
   canMoveUp,
@@ -5703,6 +5745,8 @@ function MovementCard({
   onSuggestedSets: (previous: TrackedSet[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
+  /** The next exercise to do in its superset or tri-set round. */
+  supersetUpNext?: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
   canMoveUp: boolean;
@@ -5780,6 +5824,10 @@ function MovementCard({
   useEffect(() => {
     setExpanded(!movement.isComplete);
   }, [movement.isComplete]);
+
+  useEffect(() => {
+    if (supersetUpNext) setExpanded(true);
+  }, [supersetUpNext]);
 
   useEffect(() => {
     if (!openSetActionsKey && !typeMenuSetKey) return;
@@ -6399,7 +6447,12 @@ function MovementCard({
       className={`movement-card panel ${expanded ? '' : 'is-collapsed'} ${supersetLabel ? 'superset-card' : ''}`}
       data-flip-key={movement.key}
     >
-      {supersetLabel && <div className="superset-ribbon">{supersetLabel}</div>}
+      {supersetLabel && (
+        <div className="superset-ribbon">
+          <span>{supersetLabel}</span>
+          {supersetUpNext && <b className="superset-up-next">Up next</b>}
+        </div>
+      )}
       <header onClick={() => setExpanded((current) => !current)}>
         <ExerciseIcon
           exercise={movement.exercise}
@@ -7945,7 +7998,10 @@ export function ExercisePicker({
                 )
               }
             >
-              Add super set
+              Add{' '}
+              {selectedIds.length > 2
+                ? supersetGroupName(selectedIds.length).toLowerCase()
+                : 'superset'}
             </button>
           )}
           <button
@@ -10503,12 +10559,10 @@ function HistoryWorkoutCard({
           )}
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
-              <button type="button" onClick={() => setShareOpen(true)}>
-                Share card
-              </button>
+              <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
               {!activeWorkout && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
-                  Resume from now
+                  Resume
                 </button>
               )}
               <button type="button" onClick={onEdit}>
