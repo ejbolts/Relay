@@ -43,6 +43,8 @@ export interface ActiveWorkoutDraft {
   clientSessionId?: string;
   startedAt: number;
   resumingWorkoutId?: string;
+  /** The saved revision a resumed workout was loaded from, sent back as the save's base. */
+  resumingWorkoutRevision?: number;
   previousDurationMinutes?: number;
   updatedAt: number;
   lastActiveAt?: number;
@@ -186,6 +188,10 @@ export function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraf
     value.startedAt > 0 &&
     (value.resumingWorkoutId === undefined ||
       (typeof value.resumingWorkoutId === 'string' && value.resumingWorkoutId.length > 0)) &&
+    (value.resumingWorkoutRevision === undefined ||
+      (typeof value.resumingWorkoutRevision === 'number' &&
+        Number.isInteger(value.resumingWorkoutRevision) &&
+        value.resumingWorkoutRevision >= 1)) &&
     (value.previousDurationMinutes === undefined ||
       (typeof value.previousDurationMinutes === 'number' &&
         Number.isInteger(value.previousDurationMinutes) &&

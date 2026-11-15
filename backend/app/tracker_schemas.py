@@ -279,6 +279,9 @@ class TrainingWorkoutCreate(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     movements: list[WorkoutMovementCreate] = Field(min_length=1, max_length=100)
+    # Updates only: the revision the editor loaded. A save based on an older revision is refused
+    # with 409. Older app versions omit it and still replace the workout unconditionally.
+    base_revision: int | None = Field(default=None, ge=1, le=2_147_483_647)
 
     @field_validator("name", "notes", mode="before")
     @classmethod
@@ -363,6 +366,7 @@ class TrainingWorkoutRead(BaseModel):
     start_time: time | None
     end_time: time | None
     is_sample: bool
+    revision: int = 1
     created_at: datetime
     updated_at: datetime
     movements: list[WorkoutMovementRead] = []

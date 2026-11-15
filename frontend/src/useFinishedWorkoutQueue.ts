@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from './api';
+import { api, ApiError, isWorkoutConflict } from './api';
 import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import { isClientOutdated } from './clientVersion';
 import {
@@ -56,6 +56,9 @@ export function useFinishedWorkoutQueue(
   // a refusal before the next render.
   const [refusals, setRefusals] = useState<Record<string, string>>({});
   const refusalsRef = useRef(refusals);
+  // Refusals caused by the workout having changed on another device since it was resumed.
+  const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
+  const conflictsRef = useRef(conflicts);
   const [outdated, setOutdated] = useState(false);
   const outdatedRef = useRef(false);
   const savedCallback = useRef(onSaved);
@@ -69,12 +72,18 @@ export function useFinishedWorkoutQueue(
     });
   }, [userId]);
 
-  const setRefusal = useCallback((key: string, message: string | null) => {
+  const setRefusal = useCallback((key: string, message: string | null, conflict = false) => {
     const next = { ...refusalsRef.current };
     if (message === null) delete next[key];
     else next[key] = message;
     refusalsRef.current = next;
     setRefusals(next);
+    if (conflictsRef.current.has(key) === (conflict && message !== null)) return;
+    const nextConflicts = new Set(conflictsRef.current);
+    if (conflict && message !== null) nextConflicts.add(key);
+    else nextConflicts.delete(key);
+    conflictsRef.current = nextConflicts;
+    setConflicts(nextConflicts);
   }, []);
 
   useEffect(() => {
@@ -145,7 +154,7 @@ export function useFinishedWorkoutQueue(
               reason.status < 500 &&
               ![408, 429].includes(reason.status)
             ) {
-              setRefusal(key, reason.message);
+              setRefusal(key, reason.message, isWorkoutConflict(reason));
               continue;
             }
             retryTimer = window.setTimeout(
@@ -269,6 +278,42 @@ export function useFinishedWorkoutQueue(
     return restored;
   }
 
+  /**
+   * Resolves a conflict in favour of this device: the waiting save is rebased onto the version
+   * now on the server and sent again, replacing the other device's changes.
+   */
+  async function keepMine(key: string): Promise<boolean> {
+    const finished = readFinishedWorkouts().find((item) => finishedWorkoutKey(item) === key);
+    const workoutId = finished?.pendingSave.workoutId;
+    if (!finished || !workoutId || !conflictsRef.current.has(key)) return false;
+    let revision: number | undefined;
+    try {
+      revision = (await api.getWorkout(workoutId)).revision;
+    } catch (reason) {
+      setRefusal(
+        key,
+        reason instanceof ApiError && reason.status === 404
+          ? 'This workout was deleted on another device.'
+          : 'Could not check the latest version. Try again.',
+        !(reason instanceof ApiError && reason.status === 404),
+      );
+      return false;
+    }
+    const rebased: FinishedWorkout = {
+      ...finished,
+      resumingWorkoutRevision: revision,
+      pendingSave: {
+        ...finished.pendingSave,
+        payload: { ...finished.pendingSave.payload, base_revision: revision },
+      },
+    };
+    if (!addFinishedWorkout(rebased)) return false;
+    setRefusal(key, null);
+    reload();
+    wakeRef.current();
+    return true;
+  }
+
   /** Drops a finished workout that has not synced, such as one saved by mistake. */
   function discard(key: string): boolean {
     if (sendingKey === key) return false;
@@ -290,9 +335,11 @@ export function useFinishedWorkoutQueue(
     sendingKey,
     saving: sendingKey !== null,
     refusals,
+    conflicts,
     outdated,
     queue,
     review,
+    keepMine,
     discard,
     retry,
   };

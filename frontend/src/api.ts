@@ -120,6 +120,11 @@ export class ApiError extends Error {
   }
 }
 
+/** The server refused a workout save because the workout changed after the editor loaded it. */
+export function isWorkoutConflict(reason: unknown): reason is ApiError {
+  return reason instanceof ApiError && reason.status === 409 && reason.code === 'workout_conflict';
+}
+
 interface RequestOptions {
   /** Public auth endpoints handle their own 401s (for example a wrong password). */
   signalExpiredSession?: boolean;
