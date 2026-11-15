@@ -14,13 +14,14 @@
     radial-gradient(circle at 50% -10%, rgb(57 135 229 / 16%), transparent 24rem),
     radial-gradient(130% 90% at 50% 45%, transparent 45%, var(--auth-vignette) 100%), var(--p-page);
   color: var(--p-ink);
-  --auth-ray: rgb(255 250 242 / 7%);
-  --auth-ray-soft: rgb(255 250 242 / 3%);
+  /* Cobalt on the default Blue theme; follows the chosen accent colour. */
+  --auth-ray: color-mix(in srgb, var(--p-accent-text) 13%, transparent);
+  --auth-ray-soft: color-mix(in srgb, var(--p-accent-text) 5%, transparent);
   --auth-vignette: rgb(0 0 0 / 45%);
   --auth-grain-opacity: 0.085;
 }
 
-/* A broad, soft diagonal sun ray that drifts slowly across the screen. Fixed to the viewport so
+/* A broad, soft diagonal cobalt sun ray that drifts slowly across the screen. Fixed to the viewport so
    it stays put while a long form scrolls, and so its oversized box never adds scroll overflow. */
 .auth-screen::before,
 .auth-screen::after {
@@ -63,8 +64,8 @@
 }
 
 :root[data-colour-mode='light'] .auth-screen {
-  --auth-ray: rgb(255 255 255 / 70%);
-  --auth-ray-soft: rgb(255 255 255 / 30%);
+  --auth-ray: color-mix(in srgb, var(--p-accent) 12%, transparent);
+  --auth-ray-soft: color-mix(in srgb, var(--p-accent) 5%, transparent);
   --auth-vignette: rgb(16 24 32 / 6%);
   --auth-grain-opacity: 0.05;
 }
