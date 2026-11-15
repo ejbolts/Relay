@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0057_active_workout_sync"
-down_revision = "0054_set_machine"
+down_revision = "0056_workout_revision"
 branch_labels = None
 depends_on = None
 

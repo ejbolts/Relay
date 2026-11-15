@@ -4,19 +4,28 @@ import './exerciseMerge.css';
 
 export function ExerciseOptionsMenu({
   exerciseName,
+  hidden = false,
+  onRename,
   onMerge,
+  onToggleHidden,
 }: {
   exerciseName: string;
-  onMerge: (trigger: HTMLButtonElement) => void;
+  hidden?: boolean;
+  /** Custom exercises only. */
+  onRename?: (trigger: HTMLButtonElement) => void;
+  /** Custom exercises only. */
+  onMerge?: (trigger: HTMLButtonElement) => void;
+  onToggleHidden?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const item = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLSpanElement>(null);
   const menuId = useId();
+  const items = () => [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
   useEffect(() => {
     if (!open) return;
-    item.current?.focus();
+    items()[0]?.focus();
     const outside = (event: Event) => {
       if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
     };
@@ -28,6 +37,13 @@ export function ExerciseOptionsMenu({
     };
   }, [open]);
 
+  function choose(action?: (trigger: HTMLButtonElement) => void) {
+    setOpen(false);
+    if (action && trigger.current) action(trigger.current);
+  }
+
+  if (!onRename && !onMerge && !onToggleHidden) return null;
+
   return (
     <span
       ref={root}
@@ -38,11 +54,23 @@ export function ExerciseOptionsMenu({
           event.stopPropagation();
           setOpen(false);
           trigger.current?.focus();
-        } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-          event.preventDefault();
-          setOpen(true);
-          item.current?.focus();
+          return;
         }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        if (!open) {
+          setOpen(true);
+          return;
+        }
+        const buttons = items();
+        const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const next =
+          event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
       }}
     >
       <button
@@ -60,23 +88,37 @@ export function ExerciseOptionsMenu({
       </button>
       {open && (
         <span
+          ref={menu}
           id={menuId}
           className="exercise-options-menu"
           role="menu"
           aria-label={`Options for ${exerciseName}`}
         >
-          <button
-            ref={item}
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              if (trigger.current) onMerge(trigger.current);
-            }}
-          >
-            <Icon name="link" />
-            Merge with another exercise
-          </button>
+          {onRename && (
+            <button type="button" role="menuitem" onClick={() => choose(onRename)}>
+              <Icon name="edit" />
+              Rename
+            </button>
+          )}
+          {onMerge && (
+            <button type="button" role="menuitem" onClick={() => choose(onMerge)}>
+              <Icon name="link" />
+              Merge with another exercise
+            </button>
+          )}
+          {onToggleHidden && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onToggleHidden();
+              }}
+            >
+              <Icon name={hidden ? 'reset' : 'hide'} />
+              {hidden ? 'Show in exercise lists' : 'Hide from exercise lists'}
+            </button>
+          )}
         </span>
       )}
     </span>

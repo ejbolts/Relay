@@ -101,6 +101,8 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    # Left out of exercise pickers and lists; history, records and progress are kept.
+    hidden: bool = False
     partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
     partial_set_weeks: list[ExercisePartialSetWeekRead] = []
     muscle_contributions: list[MuscleContributionRead] = []
@@ -134,6 +136,19 @@ class ExercisePartialSetsUpdate(BaseModel):
 
 class ExerciseFavoriteUpdate(BaseModel):
     is_favorite: bool
+
+
+class ExerciseUpdate(BaseModel):
+    """Rename a custom exercise, or hide any exercise from lists. Omitted fields are unchanged."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    hidden: bool | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        # A blank name is refused by the length check rather than read as "unchanged".
+        return value.strip() if isinstance(value, str) else value
 
 
 class MachinePhotoCaptionUpdate(BaseModel):
@@ -281,6 +296,9 @@ class TrainingWorkoutCreate(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     movements: list[WorkoutMovementCreate] = Field(min_length=1, max_length=100)
+    # Updates only: the revision the editor loaded. A save based on an older revision is refused
+    # with 409. Older app versions omit it and still replace the workout unconditionally.
+    base_revision: int | None = Field(default=None, ge=1, le=2_147_483_647)
 
     @field_validator("name", "notes", mode="before")
     @classmethod
@@ -365,6 +383,7 @@ class TrainingWorkoutRead(BaseModel):
     start_time: time | None
     end_time: time | None
     is_sample: bool
+    revision: int = 1
     created_at: datetime
     updated_at: datetime
     movements: list[WorkoutMovementRead] = []
@@ -488,9 +507,25 @@ class RoutineSet(BaseModel):
     set_type: SetType = SetType.NORMAL
 
 
+class RepRange(BaseModel):
+    """The reps to aim for in each working set, such as 8 to 12."""
+
+    min: int = Field(ge=1, le=100)
+    max: int = Field(ge=1, le=100)
+
+    @model_validator(mode="after")
+    def ordered(self) -> RepRange:
+        if self.min > self.max:
+            raise ValueError("The lowest reps cannot be more than the highest.")
+        return self
+
+
 class RoutineMovement(BaseModel):
     exercise_id: str
     sets: list[RoutineSet] = Field(min_length=1, max_length=50)
+    # Optional target for a planned strength exercise. The logger shows it and suggests more
+    # weight once every top set reaches the highest reps.
+    rep_range: RepRange | None = None
 
 
 class RoutineMovementRead(RoutineMovement):

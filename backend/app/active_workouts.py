@@ -20,7 +20,7 @@ from .auth import as_utc
 from .errors import api_error
 from .models import ActiveWorkoutSync, TrainingWorkout, utc_now
 from .presence import hub
-from .tracker_schemas import TrainingWorkoutCreate, WorkoutSetCreate
+from .tracker_schemas import RepRange, TrainingWorkoutCreate, WorkoutSetCreate
 
 
 class DraftSet(WorkoutSetCreate):
@@ -39,6 +39,7 @@ class DraftMovement(BaseModel):
     supersetKey: str | None = Field(max_length=100)
     isComplete: bool | None = None
     swappedFrom: str | None = Field(default=None, max_length=200)
+    repRange: RepRange | None = None
     sets: list[DraftSet] = Field(max_length=100)
 
     @model_validator(mode="after")
@@ -58,10 +59,12 @@ class Draft(BaseModel):
     lastActiveAt: float | None = Field(default=None, gt=0, le=253402214400000)
     inactiveFinishAt: float | None = Field(default=None, gt=0, le=253402214400000)
     resumingWorkoutId: str | None = Field(default=None, max_length=36)
+    resumingWorkoutRevision: int | None = Field(default=None, ge=1)
     previousDurationMinutes: int | None = Field(default=None, ge=0, le=1440)
     durationOverrideMinutes: int | None = Field(default=None, ge=1, le=1440)
     pausedMs: float | None = Field(default=None, ge=0, le=253402214400000)
     pausedAt: float | None = Field(default=None, gt=0, le=253402214400000)
+    adjustedMs: float | None = Field(default=None, ge=-253402214400000, le=253402214400000)
     name: str = Field(max_length=200)
     workoutDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     category: Literal["upper", "lower", "push", "pull", "full_body", "cardio", "other"]
@@ -302,6 +305,7 @@ def check_repeated_finish(workout: TrainingWorkout, payload: TrainingWorkoutCrea
                 "client_session_id",
                 "active_workout_revision",
                 "active_workout_session_id",
+                "base_revision",
             }
         }
         groups = {}

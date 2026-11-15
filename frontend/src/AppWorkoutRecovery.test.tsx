@@ -436,6 +436,8 @@ describe('cross-device live workout updates', () => {
     remote.notes = 'Updated on phone';
     remote.pausedAt = Date.now();
     remote.pausedMs = 120000;
+    remote.adjustedMs = -60000;
+    remote.movements[0].repRange = { min: 8, max: 12 };
     await act(async () => {
       writeActiveWorkoutDraft(remote);
       window.dispatchEvent(new CustomEvent(REMOTE_WORKOUT_APPLIED, { detail: remote }));
@@ -445,6 +447,8 @@ describe('cross-device live workout updates', () => {
     expect(weight.value).toBe('92.5');
     expect(readActiveWorkoutDraft()?.notes).toBe('Updated on phone');
     expect(readActiveWorkoutDraft()?.pausedMs).toBe(120000);
+    expect(readActiveWorkoutDraft()?.adjustedMs).toBe(-60000);
+    expect(readActiveWorkoutDraft()?.movements[0].repRange).toEqual({ min: 8, max: 12 });
     expect(container.querySelector('[aria-label="Resume workout"]')).not.toBeNull();
   });
 

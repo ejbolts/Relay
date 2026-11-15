@@ -189,6 +189,7 @@ def test_resumed_workouts_finish_with_revision_protection_and_retry_safely(clien
         "notes": "Extra sets",
         "active_workout_revision": 1,
         "active_workout_session_id": value["clientSessionId"],
+        "base_revision": saved["revision"],
     }
     first = client.put(f"/api/workouts/{saved['id']}", json=resumed)
     assert first.status_code == 200, first.text
@@ -197,6 +198,16 @@ def test_resumed_workouts_finish_with_revision_protection_and_retry_safely(clien
     assert retry.status_code == 200, retry.text
     refused = client.put(f"/api/workouts/{saved['id']}", json={**resumed, "notes": "Different"})
     assert refused.status_code == 409, refused.text
+
+
+def test_live_time_corrections_rep_ranges_and_resumed_revisions_survive_sync(client):
+    value = {**draft(), "adjustedMs": -120000, "resumingWorkoutRevision": 3}
+    value["movements"][0]["repRange"] = {"min": 8, "max": 12}
+    put(client, value)
+    merged = put(client, {**value, "notes": "Phone"}, value, 1)
+    assert merged["draft"]["adjustedMs"] == -120000
+    assert merged["draft"]["resumingWorkoutRevision"] == 3
+    assert merged["draft"]["movements"][0]["repRange"] == {"min": 8, "max": 12}
 
 
 def test_reminder_uses_real_activity_once_per_idle_period_and_survives_restart(client, monkeypatch):

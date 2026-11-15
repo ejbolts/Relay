@@ -76,7 +76,10 @@ export function rankSwapAlternatives(
   const recentRank = new Map(recentExerciseIds.map((id, index) => [id, index]));
   const cardio = original.kind === 'cardio';
   return exercises
-    .filter((exercise) => !excluded.has(exercise.id) && exercise.kind === original.kind)
+    .filter(
+      (exercise) =>
+        !excluded.has(exercise.id) && !exercise.hidden && exercise.kind === original.kind,
+    )
     .map((exercise) => ({
       exercise,
       match: cardio ? null : muscleMatchPercent(original, exercise),

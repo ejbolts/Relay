@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import CurrentUser, get_current_user
+from .client_versions import ClientVersion, preserve_rep_ranges
 from .database import get_db
 from .exercise_merge import exercise_aliases
 from .models import Exercise, UserSetting
@@ -78,9 +79,22 @@ def list_type_exercises(db: Db, user: CurrentUser):
     response_model=WorkoutTypeExercisesRead,
     dependencies=[Depends(limit_save_rate)],
 )
-def save_type_exercises(type_id: str, payload: WorkoutTypeExercises, db: Db, user: CurrentUser):
+def save_type_exercises(
+    type_id: str,
+    payload: WorkoutTypeExercises,
+    db: Db,
+    user: CurrentUser,
+    client_version: ClientVersion = None,
+):
     if type_id not in {item.id for item in workout_type_catalog(db, user.id)}:
         raise HTTPException(404, "Workout type was not found.")
+    saved = db.get(UserSetting, (user.id, PREFIX + type_id))
+    if saved is not None:
+        preserve_rep_ranges(
+            payload.movements,
+            WorkoutTypeExercises.model_validate_json(saved.value).movements,
+            client_version,
+        )
     aliases = exercise_aliases(db, user.id)
     owned = set(db.scalars(select(Exercise.id).where(Exercise.user_id == user.id)))
     for movement in payload.movements:
