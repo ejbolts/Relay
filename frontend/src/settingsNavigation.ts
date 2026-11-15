@@ -125,6 +125,14 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '#workout-data-title',
   },
   {
+    id: 'archive',
+    group: 'data',
+    title: 'Full backup',
+    page: 'settings',
+    keywords: 'backup restore archive download zip copy move server everything',
+    selector: '#account-archive-title',
+  },
+  {
     id: 'youtube',
     group: 'data',
     title: 'YouTube connection',
