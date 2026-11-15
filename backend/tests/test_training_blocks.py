@@ -46,6 +46,24 @@ def records(client, workout):
     ).json()
 
 
+def test_relative_strength_has_independent_block_baseline(client):
+    log(client, 100, "2026-01-01", bodyweight_kg=70)
+    current = block(client)
+    log(client, 100, "2026-06-01", bodyweight_kg=100)
+    improved, _ = log(client, 100, "2026-06-02", bodyweight_kg=80)
+    relative = [r for r in records(client, improved) if r["record_type"] == "relative_strength"]
+    assert [(r["scope"], r["value"], r["bodyweight_kg"]) for r in relative] == [("block", 1.25, 80)]
+    baseline = client.get(
+        "/api/exercise-history-baselines", params={"before": "2026-06-03"}
+    ).json()[0]
+    assert baseline["best_relative_strength"] == 1.4286
+    assert baseline["block_bests"][0]["block_id"] == current["id"]
+    assert baseline["block_bests"][0]["best_relative_strength"] == 1.25
+    lifetime, _ = log(client, 100, "2026-06-03", bodyweight_kg=60)
+    relative = [r for r in records(client, lifetime) if r["record_type"] == "relative_strength"]
+    assert [(r["scope"], r["value"]) for r in relative] == [("all_time", 1.6667)]
+
+
 def test_blocks_have_independent_records_and_reuse_progress(client):
     log(client, 120, "2026-01-01")
     current = block(client)

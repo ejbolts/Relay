@@ -86,6 +86,7 @@ from .photo_storage import (
 )
 from .presence import hub as presence_hub
 from .processing import backfill_completed_video_links
+from .relative_strength import BodyweightHistory, relative_strength
 from .tracker_csv import (
     CsvImportError,
     ImportPlan,
@@ -988,6 +989,8 @@ def save_body_measurement(
     else:
         measurement = BodyMeasurement(user_id=user.id, **payload.model_dump())
         db.add(measurement)
+    db.flush()
+    rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(measurement)
@@ -1049,6 +1052,7 @@ async def import_body_measurement_csv(
         db.rollback()
         raise HTTPException(status_code=422, detail=str(error)) from error
     if summary.measurements_created or summary.measurements_updated:
+        rebuild_personal_records(db, user.id)
         bump_workout_cache_revision(db, user.id)
     db.commit()
     return BodyMeasurementCsvImportRead(**summary.__dict__)
@@ -1060,6 +1064,8 @@ def delete_body_measurement(measurement_id: str, db: DbSession, user: CurrentUse
     if not measurement:
         raise HTTPException(status_code=404, detail="Body measurement was not found.")
     db.delete(measurement)
+    db.flush()
+    rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
 
@@ -2243,8 +2249,15 @@ def list_personal_records(
         query = query.where(PersonalRecord.exercise_id == exercise_id)
     if workout_id:
         query = query.where(PersonalRecord.workout_id == workout_id)
+    bodyweights = BodyweightHistory(db, user.id)
     records = [
-        PersonalRecordRead.model_validate(record)
+        PersonalRecordRead.model_validate(record).model_copy(
+            update={
+                "bodyweight_kg": bodyweights.on(
+                    record.achieved_date, record.workout_set.bodyweight_kg
+                )
+            }
+        )
         for record in db.scalars(
             query.order_by(PersonalRecord.achieved_date.desc(), PersonalRecord.created_at.desc())
         )
@@ -2267,13 +2280,15 @@ def list_personal_records(
             unit = preferred_weight_unit(db, user.id)
             for block in config.blocks:
                 for workout, movement, item, record_type in personal_record_events(
-                    grouped[block.id]
+                    grouped[block.id], bodyweights
                 ):
                     if (workout_id and workout.id != workout_id) or (
                         exercise_id and movement.exercise_id != exercise_id
                     ):
                         continue
                     weight = normalized_weight(item.weight_kg, unit)
+                    bodyweight = bodyweights.on(workout.workout_date, item.bodyweight_kg)
+                    relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
                     records.append(
                         PersonalRecordRead(
                             id=f"block:{block.id}:{item.id}:{record_type.value}",
@@ -2285,13 +2300,20 @@ def list_personal_records(
                             set_id=item.id,
                             achieved_date=workout.workout_date,
                             record_type=record_type,
-                            value=weight
+                            value=relative_strength(item.weight_kg, bodyweight)
+                            if relative
+                            else weight
                             if record_type == PersonalRecordType.WEIGHT
                             else float(item.reps),
-                            unit=unit if record_type == PersonalRecordType.WEIGHT else "reps",
+                            unit="× BW"
+                            if relative
+                            else unit
+                            if record_type == PersonalRecordType.WEIGHT
+                            else "reps",
                             normalized_weight=weight,
                             weight_kg=item.weight_kg,
-                            formula=None,
+                            bodyweight_kg=bodyweight,
+                            formula="weight / bodyweight" if relative else None,
                             exercise_name=movement.exercise.name,
                         )
                     )
@@ -2476,6 +2498,7 @@ def exercise_history_baselines(
             TrainingWorkout.name.label("workout_name"),
             Exercise.kind,
             WorkoutSet.weight_kg,
+            WorkoutSet.bodyweight_kg,
             WorkoutSet.reps,
             WorkoutSet.completed,
             WorkoutSet.warmup,
@@ -2496,6 +2519,9 @@ def exercise_history_baselines(
     )
     config = training_blocks(db, user.id)
     block_weights = defaultdict(lambda: defaultdict(dict))
+    bodyweights = BodyweightHistory(db, user.id)
+    relative_bests = {}
+    block_relative_bests = defaultdict(dict)
     reps_by_weight: dict[str, dict[float, int]] = {}
     latest: dict[str, ExerciseLatestSessionRead] = {}
     latest_movement_ids: dict[str, str] = {}
@@ -2522,8 +2548,16 @@ def exercise_history_baselines(
         # Four decimals absorb unit-conversion noise, as in the client's comparison.
         weight = round(row.weight_kg, 4)
         weights[weight] = max(weights.get(weight, 0), row.reps)
+        ratio = relative_strength(
+            row.weight_kg, bodyweights.on(row.workout_date, row.bodyweight_kg)
+        )
+        if ratio is not None:
+            relative_bests[row.exercise_id] = max(relative_bests.get(row.exercise_id, 0), ratio)
         block = block_on(config, row.workout_date)
         if block:
+            if ratio is not None:
+                scoped_relative = block_relative_bests[row.exercise_id]
+                scoped_relative[block.id] = max(scoped_relative.get(block.id, 0), ratio)
             scoped = block_weights[row.exercise_id][block.id]
             scoped[weight] = max(scoped.get(weight, 0), row.reps)
 
@@ -2543,6 +2577,7 @@ def exercise_history_baselines(
     return [
         ExerciseHistoryBaselineRead(
             exercise_id=exercise_id,
+            best_relative_strength=relative_bests.get(exercise_id),
             best_weight_kg=max(weights) if weights else None,
             reps_by_weight=[
                 WeightRepsRead(weight_kg=weight, reps=reps)
@@ -2552,6 +2587,7 @@ def exercise_history_baselines(
             block_bests=[
                 BlockHistoryBaselineRead(
                     block_id=block_id,
+                    best_relative_strength=block_relative_bests[exercise_id].get(block_id),
                     best_weight_kg=max(values) if values else None,
                     reps_by_weight=[
                         WeightRepsRead(weight_kg=weight, reps=reps)
@@ -2647,6 +2683,7 @@ def export_workout_csv(
     user: CurrentUser,
     start_date: date | None = None,
     end_date: date | None = None,
+    workout_id: str | None = None,
 ) -> Response:
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=422, detail="Start date must not be after end date.")
@@ -2656,6 +2693,24 @@ def export_workout_csv(
         .options(*workout_options())
         .order_by(TrainingWorkout.workout_date, TrainingWorkout.created_at)
     )
+    if workout_id:
+        # One saved session, with only the cardio logged inside it.
+        workouts = list(db.scalars(statement.where(TrainingWorkout.id == workout_id)))
+        if not workouts:
+            raise HTTPException(status_code=404, detail="Workout not found.")
+        cardio_sessions = db.scalars(
+            select(CardioSession).where(
+                CardioSession.user_id == user.id,
+                CardioSession.source_workout_id == workout_id,
+            )
+        )
+        content = export_workouts(workouts, list(cardio_sessions))
+        filename = f"workout-{workouts[0].workout_date.isoformat()}.csv"
+        return Response(
+            content=content.encode("utf-8-sig"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     if start_date:
         statement = statement.where(TrainingWorkout.workout_date >= start_date)
     if end_date:
@@ -3457,7 +3512,12 @@ def movement_machine_id(movement: WorkoutMovement) -> str | None:
     return machine_ids.pop() if len(machine_ids) == 1 else None
 
 
-def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) -> ProgressPoint:
+def progress_point(
+    workout_date: date,
+    workout_id: str,
+    sets: list[WorkoutSet],
+    bodyweights: BodyweightHistory | None = None,
+) -> ProgressPoint:
     best_set = max(sets, key=lambda item: ((item.weight_kg or 0), (item.reps or 0)))
     best_e1rm = max(
         (
@@ -3467,7 +3527,36 @@ def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) 
         ),
         default=0.0,
     )
+    relative_sets = [
+        (
+            relative_strength(
+                item.weight_kg,
+                bodyweights.on(workout_date, item.bodyweight_kg)
+                if bodyweights
+                else item.bodyweight_kg,
+            ),
+            item,
+        )
+        for item in sets
+        if is_pr_eligible(item)
+    ]
+    best_relative = max(
+        (entry for entry in relative_sets if entry[0] is not None),
+        key=lambda entry: entry[0],
+        default=None,
+    )
+    relative_bodyweight = (
+        (
+            bodyweights.on(workout_date, best_relative[1].bodyweight_kg)
+            if bodyweights
+            else best_relative[1].bodyweight_kg
+        )
+        if best_relative
+        else None
+    )
     return ProgressPoint(
+        relative_strength=best_relative[0] if best_relative else None,
+        bodyweight_kg=relative_bodyweight,
         workout_date=workout_date,
         workout_id=workout_id,
         best_weight_kg=best_set.weight_kg or 0,
@@ -3507,6 +3596,7 @@ def exercise_progress(
             if m.workout.workout_date >= block.start_date
             and (block.end_date is None or m.workout.workout_date < block.end_date)
         ]
+    bodyweights = BodyweightHistory(db, user.id)
     grouped: dict[tuple[date, str], list[WorkoutSet]] = defaultdict(list)
     by_machine: dict[tuple[date, str, str | None], list[WorkoutSet]] = defaultdict(list)
     for movement in movements:
@@ -3518,13 +3608,13 @@ def exercise_progress(
                 item
             )
     points = [
-        progress_point(workout_date, workout_id, sets)
+        progress_point(workout_date, workout_id, sets, bodyweights)
         for (workout_date, workout_id), sets in sorted(grouped.items())
         if sets
     ]
     machine_points = [
         MachineProgressPoint(
-            **progress_point(workout_date, workout_id, sets).model_dump(),
+            **progress_point(workout_date, workout_id, sets, bodyweights).model_dump(),
             machine_photo_id=machine_id,
         )
         for (workout_date, workout_id, machine_id), sets in sorted(

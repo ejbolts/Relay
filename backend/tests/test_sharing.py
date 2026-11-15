@@ -20,6 +20,33 @@ NOTHING_EXTRA = {
 EVERYTHING = {key: True for key in NOTHING_EXTRA}
 
 
+def test_relative_records_cannot_reveal_unshared_bodyweight(client, other_client):
+    from test_personal_records import exercise, log
+
+    share(client, **NOTHING_EXTRA)
+    share(other_client)
+    bench = exercise(client)
+    log(client, bench["id"], [{"weight_kg": 100, "bodyweight_kg": 100, "reps": 8}])
+    log(client, bench["id"], [{"weight_kg": 105, "bodyweight_kg": 80, "reps": 8}], "2026-01-15")
+    path = f"/api/sharing/profiles/{client.user['id']}/workouts"
+    page = other_client.get(path).json()
+    assert {row["record_type"] for row in page["personal_records"]} == {"weight"}
+    assert all(row["bodyweight_kg"] is None for row in page["personal_records"])
+    assert all(
+        item["bodyweight_kg"] is None
+        for workout in page["workouts"]
+        for movement in workout["movements"]
+        for item in movement["sets"]
+    )
+    share(client, **{**NOTHING_EXTRA, "share_body_weight": True})
+    page = other_client.get(path).json()
+    relative = next(
+        row for row in page["personal_records"] if row["record_type"] == "relative_strength"
+    )
+    assert relative["value"] == 1.3125
+    assert relative["bodyweight_kg"] == 80
+
+
 def share(test_client: TestClient, visibility: str = "public", **choices: bool) -> dict:
     response = test_client.put("/api/sharing", json={"visibility": visibility, **choices})
     assert response.status_code == 200, response.text

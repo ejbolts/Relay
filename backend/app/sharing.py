@@ -58,6 +58,7 @@ from .models import (
 )
 from .photo_storage import profile_photo_path
 from .presence import FriendPresence, hub, presence_by_member
+from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
     HeatmapDay,
@@ -968,15 +969,31 @@ def list_shared_workouts(
         db.scalars(
             select(PersonalRecord)
             .where(PersonalRecord.workout_id.in_([workout.id for workout in workouts]))
-            .options(selectinload(PersonalRecord.exercise))
+            .options(
+                selectinload(PersonalRecord.exercise), selectinload(PersonalRecord.workout_set)
+            )
         )
         if workouts
         else []
     )
+    bodyweights = BodyweightHistory(db, member.id) if sharing.share_body_weight else None
     return SharedWorkoutPage(
         total=total,
         workouts=[shared_workout(workout, sharing) for workout in workouts],
-        personal_records=[PersonalRecordRead.model_validate(record) for record in records],
+        personal_records=[
+            PersonalRecordRead.model_validate(record).model_copy(
+                update={
+                    "bodyweight_kg": bodyweights.on(
+                        record.achieved_date, record.workout_set.bodyweight_kg
+                    )
+                    if bodyweights
+                    else None
+                }
+            )
+            for record in records
+            if sharing.share_body_weight
+            or record.record_type != PersonalRecordType.RELATIVE_STRENGTH
+        ],
         reactions=reaction_summaries(db, user.id, [workout.id for workout in workouts]),
     )
 

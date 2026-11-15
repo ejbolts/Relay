@@ -427,6 +427,49 @@ afterEach(async () => {
 });
 
 describe('cross-device live workout updates', () => {
+  it('records the dated bodyweight when logging and retains it through recovery', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].weight_kg = 100;
+    draft.movements[0].supersetKey = null;
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.listBodyMeasurements).mockResolvedValue([
+      {
+        id: 'future',
+        measurement_date: '2026-10-14',
+        weight_kg: 70,
+        body_fat_pct: null,
+        notes: null,
+        is_sample: false,
+        created_at: '',
+      },
+      {
+        id: 'then',
+        measurement_date: '2026-10-13',
+        weight_kg: 80,
+        body_fat_pct: null,
+        notes: null,
+        is_sample: false,
+        created_at: '',
+      },
+    ]);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+    );
+    expect(container.querySelector('.completed-set-bodyweight')?.textContent).toBe(
+      '1.25× BW · at 80 kg BW',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].bodyweight_kg).toBe(80);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(container.querySelector('.completed-set-bodyweight')?.textContent).toBe(
+      '1.25× BW · at 80 kg BW',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].bodyweight_kg).toBe(80);
+  });
   it('updates the mounted logger without replacing its focused set input or echoing old data', async () => {
     const draft = storedDraft({ clientSessionId: crypto.randomUUID() });
     draft.movements[0].sets[0].completed = false;
@@ -1190,6 +1233,48 @@ describe('rest time controls', () => {
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
     expect(document.querySelector('.app-notification-toast')).toBeNull();
+  });
+
+  it('logs a tri-set round before starting the rest', async () => {
+    const curl: Exercise = { ...bench, id: 'curl', name: 'Biceps curl', category: 'pull' };
+    vi.mocked(api.listExercises).mockResolvedValue([bench, row, curl]);
+    const draft = storedDraft();
+    draft.movements.push({ ...draft.movements[1], key: 'movement-2', exerciseId: curl.id });
+    draft.movements.forEach((movement) => {
+      movement.sets = [{ ...movement.sets[0], completed: false, rest_seconds: 30 }];
+    });
+    writeActiveWorkoutDraft(draft);
+    const scrolledTo: Array<string | null | undefined> = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      if (this.classList.contains('movement-card'))
+        scrolledTo.push(this.querySelector('h2')?.textContent);
+    };
+    await mount();
+    const cards = () => [...container.querySelectorAll<HTMLElement>('.movement-card')];
+    const upNext = () =>
+      cards()
+        .filter((card) => card.querySelector('.superset-up-next'))
+        .map((card) => card.querySelector('h2')?.textContent);
+    const logRound = async (index: number) => {
+      await act(async () =>
+        cards()[index].querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+      );
+      await act(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+    };
+
+    expect(cards()[0].querySelector('.superset-ribbon')?.textContent).toBe(
+      'Tri-set · Bench press + Cable row + Biceps curl',
+    );
+    await logRound(0);
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(upNext()).toEqual(['Cable row']);
+    await logRound(1);
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(upNext()).toEqual(['Biceps curl']);
+    await logRound(2);
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
+    expect(upNext()).toEqual([]);
+    expect(scrolledTo).toEqual(['Cable row', 'Biceps curl']);
   });
 
   it('moves the rest fill by the whole 30 seconds when time is added or taken off', async () => {
@@ -3568,7 +3653,7 @@ describe('inactive workout suggestions', () => {
       container.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
     );
     const resume = container.querySelector<HTMLButtonElement>('.resume-workout-button')!;
-    expect(resume.textContent).toBe('Resume from now');
+    expect(resume.textContent).toBe('Resume');
     await act(async () => resume.click());
     const resumed = readActiveWorkoutDraft()!;
     expect(resumed.resumingWorkoutId).toBe(saved.id);

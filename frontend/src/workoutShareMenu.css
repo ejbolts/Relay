@@ -1,0 +1,63 @@
+.workout-share-menu {
+  position: relative;
+  display: flex;
+  flex: 1;
+}
+.history-screen .workout-actions .workout-share-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+.workout-share-trigger .pulse-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 160ms ease;
+}
+.workout-share-trigger[aria-expanded='true'] .pulse-icon {
+  transform: rotate(180deg);
+}
+/* Opens upwards so the tab bar never covers it at the foot of a card. */
+.workout-share-options {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 200px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-surface-2);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
+}
+.history-screen .workout-actions .workout-share-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: left;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 13px;
+}
+.history-screen .workout-actions .workout-share-options button:is(:hover, :focus-visible) {
+  background: var(--p-accent-soft);
+}
+.workout-share-options .pulse-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workout-share-trigger .pulse-icon {
+    transition: none;
+  }
+}

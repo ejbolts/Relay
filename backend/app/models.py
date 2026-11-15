@@ -78,6 +78,7 @@ class MuscleRole(enum.StrEnum):
 class PersonalRecordType(enum.StrEnum):
     WEIGHT = "weight"
     REPS_AT_WEIGHT = "reps_at_weight"
+    RELATIVE_STRENGTH = "relative_strength"
     ESTIMATED_1RM = "estimated_1rm"
     DURATION = "duration"
     DISTANCE = "distance"

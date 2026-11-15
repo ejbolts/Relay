@@ -5976,11 +5976,30 @@ body,
   border-left: 4px solid #a78bfa;
 }
 .superset-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.45rem 0.85rem;
   background: rgb(167 139 250 / 12%);
   color: #c4b5fd;
   font-size: 0.63rem;
   font-weight: 850;
+}
+.superset-ribbon > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.superset-up-next {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  background: #a78bfa;
+  color: #1c1430;
+  font-size: 0.6rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .superset-picker-backdrop {

@@ -24,6 +24,8 @@ function session(id: string, day: number, machine: string | null, weight: number
     workout_id: id,
     workout_date: `2026-10-${String(day).padStart(2, '0')}`,
     best_weight_kg: weight,
+    relative_strength: weight / (day === 1 ? 60 : 100),
+    bodyweight_kg: day === 1 ? 60 : 100,
     best_reps: 8,
     estimated_1rm: weight,
     volume_kg: weight * 10,
@@ -202,4 +204,16 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(host.querySelector('.progress-hero-caption')?.textContent).toContain(
     'Est. 1RM in Hammer weights',
   );
+});
+
+it("shows the strongest lift-to-bodyweight ratio with that set's bodyweight", async () => {
+  const relative = () =>
+    [...host.querySelectorAll('[aria-label="Personal bests"] > div')].find((card) =>
+      card.textContent?.includes('Relative strength'),
+    )!;
+  expect(relative().querySelector('b')?.textContent).toBe('1.33× BW');
+  expect(relative().querySelector('small')?.textContent).toContain('at 60 kg BW');
+  await click(button('Life Fitness'));
+  expect(relative().querySelector('b')?.textContent).toBe('0.69× BW');
+  expect(relative().querySelector('small')?.textContent).toContain('at 100 kg BW');
 });
