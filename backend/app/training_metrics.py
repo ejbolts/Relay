@@ -7,7 +7,9 @@ Rules:
   but is PR eligible only when its configured target reps were completed.
 * Primary and secondary muscle contributions default to 1.0 and 0.5.
 * Weight PRs beat the exercise's heaviest completed working set. Volume PRs beat
-  its best reps at the same weight. First attempts establish a baseline.
+  its best reps at the same weight. Relative strength PRs beat its best lift/bodyweight
+  ratio using the set's recorded weight or the latest dated check-in. First attempts
+  establish a baseline.
 * PRs compare canonical kilograms rounded to four decimals, independently of
   display units. Estimated 1RM remains a progress metric, not a PR trigger.
 """
@@ -37,6 +39,7 @@ from .models import (
     WorkoutMovement,
     WorkoutSet,
 )
+from .relative_strength import BodyweightHistory, relative_strength
 
 KG_TO_LB = 2.2046226218
 EPLEY_FORMULA = "Epley: weight × (1 + reps ÷ 30), reps 1–30"
@@ -442,17 +445,31 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
             )
         )
     )
-    for workout, movement, item, record_type in personal_record_events(workouts):
+    bodyweights = BodyweightHistory(db, user_id)
+    for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
         display_weight = normalized_weight(item.weight_kg, unit)
+        relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
+        ratio = relative_strength(
+            item.weight_kg, bodyweights.on(workout.workout_date, item.bodyweight_kg)
+        )
         db.add(
             _pr(
                 workout,
                 movement,
                 item,
                 record_type,
-                display_weight if record_type == PersonalRecordType.WEIGHT else float(item.reps),
-                unit if record_type == PersonalRecordType.WEIGHT else "reps",
+                ratio
+                if relative
+                else display_weight
+                if record_type == PersonalRecordType.WEIGHT
+                else float(item.reps),
+                "× BW"
+                if relative
+                else unit
+                if record_type == PersonalRecordType.WEIGHT
+                else "reps",
                 display_weight,
+                "weight / bodyweight" if relative else None,
             )
         )
     db.flush()
@@ -460,9 +477,12 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
 
 def personal_record_events(
     workouts: list[TrainingWorkout],
+    bodyweights: BodyweightHistory | None = None,
 ) -> Iterator[tuple[TrainingWorkout, WorkoutMovement, WorkoutSet, PersonalRecordType]]:
     """Chronological records, with first attempts establishing each scope's baseline."""
-    state: dict[str, dict[str, object]] = defaultdict(lambda: {"weight": -1.0, "reps": {}})
+    state: dict[str, dict[str, object]] = defaultdict(
+        lambda: {"weight": -1.0, "reps": {}, "relative": -1.0}
+    )
     # SQLite returns naive UTC timestamps; newly flushed rows can still carry UTC tzinfo.
     for workout in sorted(
         workouts, key=lambda row: (row.workout_date, row.created_at.replace(tzinfo=None))
@@ -490,6 +510,16 @@ def personal_record_events(
                 if previous_reps is not None and item.reps > int(previous_reps):
                     yield workout, movement, item, PersonalRecordType.REPS_AT_WEIGHT
                 rep_bests[weight] = max(int(previous_reps or 0), item.reps)
+                bodyweight = (
+                    bodyweights.on(workout.workout_date, item.bodyweight_kg)
+                    if bodyweights
+                    else item.bodyweight_kg
+                )
+                ratio = relative_strength(item.weight_kg, bodyweight)
+                if ratio is not None:
+                    if float(current["relative"]) >= 0 and ratio > float(current["relative"]):
+                        yield workout, movement, item, PersonalRecordType.RELATIVE_STRENGTH
+                    current["relative"] = max(float(current["relative"]), ratio)
 
 
 def _pr(

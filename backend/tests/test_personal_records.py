@@ -31,6 +31,82 @@ def records(client, workout=None):
     return response.json()
 
 
+def test_relative_strength_uses_dated_bodyweight_and_survives_unit_changes(client):
+    bench = exercise(client)
+    client.post("/api/body-measurements", json={"measurement_date": "2026-01-01", "weight_kg": 100})
+    log(client, bench["id"], [{"weight_kg": 100, "reps": 8}])
+    client.post("/api/body-measurements", json={"measurement_date": "2026-01-15", "weight_kg": 80})
+    workout = log(client, bench["id"], [{"weight_kg": 100, "reps": 8}], "2026-01-15")
+    result = records(client, workout)
+    assert [(row["record_type"], row["value"], row["bodyweight_kg"]) for row in result] == [
+        ("relative_strength", 1.25, 80)
+    ]
+    # A future check-in must never change a historical ratio or bodyweight label.
+    client.post("/api/body-measurements", json={"measurement_date": "2026-02-01", "weight_kg": 70})
+    assert records(client, workout)[0]["value"] == 1.25
+    assert records(client, workout)[0]["bodyweight_kg"] == 80
+    baseline = client.get("/api/exercise-history-baselines", params={"before": "2026-02-01"}).json()
+    assert (
+        next(row for row in baseline if row["exercise_id"] == bench["id"])["best_relative_strength"]
+        == 1.25
+    )
+    points = client.get(f"/api/progress/{bench['id']}").json()["points"]
+    assert [(point["relative_strength"], point["bodyweight_kg"]) for point in points] == [
+        (1, 100),
+        (1.25, 80),
+    ]
+    client.put("/api/training-preferences", json={"preferred_weight_unit": "lb"})
+    assert records(client, workout)[0]["value"] == 1.25
+    assert records(client, workout)[0]["unit"] == "× BW"
+    assert client.delete(f"/api/workouts/{workout['id']}").status_code == 204
+    assert records(client) == []
+
+
+def test_relative_strength_recorded_bodyweight_ties_and_missing_baseline(client):
+    bench = exercise(client)
+    # No dated weight means no relative baseline, even with a later weigh-in.
+    log(client, bench["id"], [{"weight_kg": 100, "reps": 8}])
+    client.post("/api/body-measurements", json={"measurement_date": "2026-01-15", "weight_kg": 90})
+    first = log(
+        client, bench["id"], [{"weight_kg": 100, "bodyweight_kg": 80, "reps": 8}], "2026-01-15"
+    )
+    assert records(client, first) == []
+    tied = log(
+        client, bench["id"], [{"weight_kg": 90, "bodyweight_kg": 72, "reps": 8}], "2026-01-16"
+    )
+    assert records(client, tied) == []
+    better = log(
+        client,
+        bench["id"],
+        [
+            {"weight_kg": 90, "bodyweight_kg": 70, "reps": 8},
+            {"weight_kg": 120, "bodyweight_kg": 70, "reps": 8, "warmup": True},
+            {"weight_kg": 120, "bodyweight_kg": 70, "reps": 8, "failed": True},
+        ],
+        "2026-01-17",
+    )
+    relative = [row for row in records(client, better) if row["record_type"] == "relative_strength"]
+    assert len(relative) == 1
+    assert relative[0]["value"] == 1.2857
+    assert relative[0]["bodyweight_kg"] == 70
+    assert relative[0]["weight_kg"] == 90
+
+
+def test_correcting_or_removing_historical_checkin_rebuilds_relative_prs(client):
+    bench = exercise(client)
+    client.post("/api/body-measurements", json={"measurement_date": "2026-01-01", "weight_kg": 100})
+    log(client, bench["id"], [{"weight_kg": 100, "reps": 8}])
+    weight = client.post(
+        "/api/body-measurements", json={"measurement_date": "2026-01-15", "weight_kg": 80}
+    ).json()
+    workout = log(client, bench["id"], [{"weight_kg": 100, "reps": 8}], "2026-01-15")
+    assert records(client, workout)[0]["value"] == 1.25
+    client.post("/api/body-measurements", json={"measurement_date": "2026-01-15", "weight_kg": 110})
+    assert records(client, workout) == []
+    client.delete(f"/api/body-measurements/{weight['id']}")
+    assert records(client, workout) == []
+
+
 @pytest.mark.parametrize(
     ("weight", "reps", "extra", "expected"),
     [

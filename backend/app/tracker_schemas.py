@@ -439,6 +439,7 @@ class TrainingBlockSummaryRead(BaseModel):
 
 
 class BlockHistoryBaselineRead(BaseModel):
+    best_relative_strength: float | None = None
     block_id: str
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -448,6 +449,7 @@ class ExerciseHistoryBaselineRead(BaseModel):
     """An exercise's history before a date, condensed for PR checks and set suggestions."""
 
     block_bests: list[BlockHistoryBaselineRead] = Field(default_factory=list)
+    best_relative_strength: float | None = None
     exercise_id: str
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -717,6 +719,7 @@ class BodyWeightGoalRead(BodyWeightGoalCreate):
 
 
 class PersonalRecordRead(BaseModel):
+    bodyweight_kg: float | None = None
     scope: Literal["all_time", "block"] = "all_time"
     block_id: str | None = None
     block_name: str | None = None
@@ -965,6 +968,8 @@ class TrainingTimeRead(BaseModel):
 
 
 class ProgressPoint(BaseModel):
+    relative_strength: float | None = None
+    bodyweight_kg: float | None = None
     workout_date: date
     workout_id: str
     best_weight_kg: float

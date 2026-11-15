@@ -394,6 +394,8 @@ import {
   upsertWorkoutByRecency,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
+import { bodyweightOn, bodyweightContext } from './relativeStrength';
+import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { TrainingBlockControls } from './TrainingBlockControls';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -528,13 +530,16 @@ function formatDuration(totalSeconds: number): string {
 }
 
 function recordTypeLabel(type: PersonalRecord['record_type']): string {
-  return {
-    weight: 'Weight PR',
-    reps_at_weight: 'Volume PR for this weight',
-    estimated_1rm: 'estimated 1RM PR',
-    duration: 'duration PR',
-    distance: 'distance PR',
-  }[type];
+  return (
+    {
+      weight: 'Weight PR',
+      relative_strength: 'Relative strength PR',
+      reps_at_weight: 'Volume PR for this weight',
+      estimated_1rm: 'estimated 1RM PR',
+      duration: 'duration PR',
+      distance: 'distance PR',
+    }[type] ?? 'PR'
+  );
 }
 
 function WorkoutCompletionToast({
@@ -584,6 +589,8 @@ function WorkoutCompletionToast({
             {record.record_type === 'reps_at_weight' && record.weight_kg != null
               ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
               : ''}
+            {record.bodyweight_kg != null &&
+              ` · at ${formatWeight(record.bodyweight_kg, weightUnit)} BW`}
           </span>
         </div>
       ))}
@@ -2260,8 +2267,9 @@ function AppContent() {
                         currentBodyweight={
                           viewedWorkout
                             ? savedWorkoutBodyweight(viewedWorkout)
-                            : (measurements[0]?.weight_kg ?? null)
+                            : savedWorkoutBodyweight(editingWorkout ?? resumingWorkout)
                         }
+                        measurements={measurements}
                         historicalWorkouts={workouts}
                         historyBaselines={historyBaselines}
                         restTimerEnabled={restTimerEnabled}
@@ -2966,18 +2974,20 @@ function CalendarDayDetail({
   );
 }
 
-function savedWorkoutBodyweight(workout: TrackedWorkout): number | null {
+function savedWorkoutBodyweight(workout: TrackedWorkout | null): number | null {
   return (
-    workout.movements.flatMap((movement) => movement.sets).find((set) => set.bodyweight_kg !== null)
+    workout?.movements.flatMap((movement) => movement.sets).find((set) => set.bodyweight_kg != null)
       ?.bodyweight_kg ?? null
   );
 }
 
 function BrowsedWorkoutDetails({
   workout,
+  bodyweight,
   categoryColor,
 }: {
   workout: TrackedWorkout;
+  bodyweight?: number | null;
   categoryColor: string;
 }) {
   const [photo, setPhoto] = useState<MachinePhoto | null>(null);
@@ -2986,6 +2996,7 @@ function BrowsedWorkoutDetails({
     <div className="browse-history-content">
       <HistoryWorkoutCard
         detailsOnly
+        bodyweight={bodyweight}
         workout={workout}
         open
         summaryRef={null}
@@ -3019,6 +3030,7 @@ function WorkoutLogger({
   navigation,
   resumingWorkout,
   currentBodyweight,
+  measurements = [],
   historicalWorkouts,
   historyBaselines = null,
   restTimerEnabled,
@@ -3052,6 +3064,7 @@ function WorkoutLogger({
   navigation: WorkoutNavigation;
   resumingWorkout: TrackedWorkout | null;
   currentBodyweight: number | null;
+  measurements?: BodyMeasurement[];
   /** Loaded recent workouts; `historyBaselines` condenses everything older. */
   historicalWorkouts: TrackedWorkout[];
   historyBaselines?: HistoryBaselines | null;
@@ -3085,6 +3098,11 @@ function WorkoutLogger({
       restoredDraft?.workoutDate ??
       resumingWorkout?.workout_date ??
       initialDate,
+  );
+  const workoutBodyweight = bodyweightOn(
+    measurements,
+    workoutDate,
+    initialWorkout ? currentBodyweight : null,
   );
   const [category, setCategory] = useState<WorkoutCategory>(
     initialWorkout?.category ??
@@ -3628,6 +3646,7 @@ function WorkoutLogger({
         workoutDate,
         olderHistory,
         trainingBlocks.blocks,
+        measurements,
       ),
     [
       movements,
@@ -3637,6 +3656,7 @@ function WorkoutLogger({
       workoutDate,
       olderHistory,
       trainingBlocks.blocks,
+      measurements,
     ],
   );
   const completedSetKeysRef = useRef(
@@ -3685,6 +3705,7 @@ function WorkoutLogger({
               labels,
               reps: item.reps!,
               weightKg: item.weight_kg!,
+              bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
             });
           }
         }
@@ -3696,7 +3717,7 @@ function WorkoutLogger({
       setPrToastId((current) => current + 1);
       setPrToastEntries(entries);
     }
-  }, [movements, prBadges]);
+  }, [movements, prBadges, measurements, workoutDate]);
   const recentExerciseIds = useMemo(() => {
     const seen = new Set<string>();
     const recent: string[] = [];
@@ -4130,7 +4151,12 @@ function WorkoutLogger({
             ? workoutSetAfterEdit(item, {
                 restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
                 ...update,
-                ...(update.completed === true && { restRevealed: true }),
+                ...(update.completed === true && {
+                  restRevealed: true,
+                  ...(movement.exercise.kind === 'strength' && {
+                    bodyweight_kg: item.bodyweight_kg ?? workoutBodyweight,
+                  }),
+                }),
                 ...(update.rest_seconds !== undefined && { restConfirmed: true }),
               })
             : item,
@@ -4845,10 +4871,10 @@ function WorkoutLogger({
                 <small>Time</small>
                 <strong>{formatDuration(displayedDurationSeconds)}</strong>
               </span>
-              {currentBodyweight !== null && (
+              {workoutBodyweight !== null && (
                 <span>
                   <small>BW {weightUnit}</small>
-                  <strong>{formatWeightNumber(currentBodyweight, weightUnit)}</strong>
+                  <strong>{formatWeightNumber(workoutBodyweight, weightUnit)}</strong>
                 </span>
               )}
               <span>
@@ -4880,6 +4906,7 @@ function WorkoutLogger({
       {readOnly && initialWorkout ? (
         <BrowsedWorkoutDetails
           workout={initialWorkout}
+          bodyweight={workoutBodyweight}
           categoryColor={categoryColors[initialWorkout.category]}
         />
       ) : (
@@ -4891,6 +4918,7 @@ function WorkoutLogger({
               key={movement.key}
               movement={movement}
               showRestTimes={showRestTimes}
+              bodyweight={workoutBodyweight}
               number={movementIndex + 1}
               prBadges={prBadges.get(movement.key) ?? new Map()}
               supersetLabel={
@@ -5658,6 +5686,7 @@ function MovementCard({
   skipHighRepWarning,
   onSkipHighRepWarning,
   movement,
+  bodyweight = null,
   showRestTimes,
   number,
   history: exerciseHistory,
@@ -5686,6 +5715,7 @@ function MovementCard({
   skipHighRepWarning: boolean;
   onSkipHighRepWarning: () => void;
   movement: DraftMovement;
+  bodyweight?: number | null;
   showRestTimes: boolean;
   number: number;
   history: ExerciseHistoryEntry[];
@@ -6189,6 +6219,11 @@ function MovementCard({
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
+        {!cardio && (item.bodyweight_kg ?? bodyweight) != null && (
+          <small className="completed-set-bodyweight num">
+            {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
+          </small>
+        )}
         {item.notes && (
           <button
             type="button"
@@ -8015,7 +8050,6 @@ export function ProgressScreen({
   exerciseLibrary,
   dataRevision = null,
   exercises,
-  measurements,
   personalRecords,
   onOpenWorkout,
   embedded = false,
@@ -8269,7 +8303,11 @@ export function ProgressScreen({
   const bestEstimatedOneRepMax = defaultView
     ? (progress?.personal_best_estimated_1rm ?? 0)
     : (estimatedOneRepMaxPoint?.estimated_1rm ?? 0);
-  const bodyweight = measurements[0]?.weight_kg ?? null;
+  const relativeBest = viewPoints.reduce<(typeof viewPoints)[number] | null>(
+    (best, point) =>
+      (point.relative_strength ?? 0) > (best?.relative_strength ?? 0) ? point : best,
+    null,
+  );
   const tableRecordIds = useMemo(
     () =>
       new Set(
@@ -8277,7 +8315,7 @@ export function ProgressScreen({
           .filter(
             (record) =>
               record.exercise_id === exerciseId &&
-              (record.record_type === 'weight' || record.record_type === 'reps_at_weight'),
+              ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
           )
           .map((record) => record.workout_id),
       ),
@@ -8730,14 +8768,14 @@ export function ProgressScreen({
                     <div>
                       <span>Relative strength</span>
                       <b className="num">
-                        {bodyweight && bestEstimatedOneRepMax
-                          ? `${approx}${(bestEstimatedOneRepMax / bodyweight).toFixed(2)} × BW`
+                        {relativeBest?.relative_strength != null
+                          ? `${relativeBest.relative_strength.toFixed(2)}× BW`
                           : '–'}
                       </b>
                       <small>
-                        {bodyweight
-                          ? `Best e1RM at ${formatWeight(bodyweight, weightUnit)}`
-                          : 'Log bodyweight to compare'}
+                        {relativeBest?.bodyweight_kg != null
+                          ? `at ${formatWeight(relativeBest.bodyweight_kg, weightUnit)} BW · ${shortDate(relativeBest.workout_date)}`
+                          : 'No bodyweight recorded'}
                       </small>
                     </div>
                   </section>
@@ -9847,6 +9885,7 @@ function HistoryScreen({
       <HistoryWorkoutCard
         key={workout.id}
         workout={workout}
+        bodyweight={bodyweightOn(measurements, workout.workout_date)}
         open={openId === workout.id}
         summaryRef={openId === workout.id ? openWorkoutSummaryRef : null}
         targetExerciseId={targetExerciseId}
@@ -10252,6 +10291,7 @@ function SharedWorkoutHistory({
 }
 
 function HistoryWorkoutCard({
+  bodyweight = null,
   detailsOnly = false,
   shared = false,
   workout,
@@ -10276,6 +10316,7 @@ function HistoryWorkoutCard({
   onDelete,
   reactionAction,
 }: {
+  bodyweight?: number | null;
   detailsOnly?: boolean;
   /** A profile's read-only session: totals, records and each exercise's sets laid out to read. */
   shared?: boolean;
@@ -10408,6 +10449,7 @@ function HistoryWorkoutCard({
             ) : (
               <>
                 <HistorySetFlow
+                  bodyweight={bodyweight}
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}
                   machinePhotos={movement.machine_photos}
@@ -10536,10 +10578,12 @@ function HistoryWorkoutCard({
 }
 
 function HistorySetFlow({
+  bodyweight = null,
   sets,
   personalRecords,
   machinePhotos = [],
 }: {
+  bodyweight?: number | null;
   sets: TrackedSet[];
   personalRecords: PersonalRecord[];
   machinePhotos?: MachinePhoto[];
@@ -10552,6 +10596,11 @@ function HistorySetFlow({
           <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
+            {(item.bodyweight_kg ?? bodyweight) != null && (
+              <small>
+                {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
+              </small>
+            )}
             {machinePhotos.length > 1 && (
               <small className="history-set-machine">
                 {machinePhotos.find((photo) => photo.id === item.machine_photo_id)?.caption ??

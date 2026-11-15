@@ -98,7 +98,7 @@ export type ExerciseKind = 'strength' | 'cardio';
 
 export type SetType = 'warmup' | 'normal' | 'drop';
 export type PersonalRecordType =
-  'weight' | 'reps_at_weight' | 'estimated_1rm' | 'duration' | 'distance';
+  'weight' | 'reps_at_weight' | 'relative_strength' | 'estimated_1rm' | 'duration' | 'distance';
 
 export interface MuscleContribution {
   muscle_name: string;
@@ -537,7 +537,9 @@ export interface TrainingBlocks {
 
 /** An exercise's history before the loaded window, condensed by the server. */
 export interface ExerciseHistoryBaseline {
+  best_relative_strength?: number | null;
   block_bests?: Array<{
+    best_relative_strength?: number | null;
     block_id: string;
     best_weight_kg: number | null;
     reps_by_weight: Array<{ weight_kg: number; reps: number }>;
@@ -560,6 +562,7 @@ export interface MuscleVolume {
 }
 
 export interface PersonalRecord {
+  bodyweight_kg?: number | null;
   scope?: 'all_time' | 'block';
   block_id?: string | null;
   block_name?: string | null;
@@ -725,6 +728,8 @@ export interface BodyWeightGoal extends BodyWeightGoalInput {
 }
 
 export interface ProgressPoint {
+  relative_strength?: number | null;
+  bodyweight_kg?: number | null;
   workout_date: string;
   workout_id: string;
   best_weight_kg: number;
