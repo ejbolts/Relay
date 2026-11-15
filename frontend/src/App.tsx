@@ -71,7 +71,6 @@ import type {
   CardioSession,
   CardioSessionInput,
   DashboardData,
-  WeeklyMuscleContribution,
   Exercise,
   ExerciseCreateInput,
   ExerciseHistoryBaseline,
@@ -79,21 +78,23 @@ import type {
   MachinePhoto,
   MachinePhotoUsage,
   MachineSetting,
-  WeightMapping,
   PersonalRecord,
+  RepRange,
   SharedProfileSummary,
   TrackedSet,
   TrackedWorkout,
   TrainingPreferences,
+  User,
+  WeeklyMuscleContribution,
+  WeightMapping,
   WorkoutCategory,
   WorkoutHistorySummary,
-  User,
-  WorkoutTypeColors,
-  WorkoutType,
+  WorkoutImportOptions,
   WorkoutInput,
   WorkoutRecommendation,
   WorkoutSetInput,
-  WorkoutImportOptions,
+  WorkoutType,
+  WorkoutTypeColors,
 } from './types';
 import {
   BODY_TREND_DURATION_OPTIONS,
@@ -307,6 +308,7 @@ import {
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { typeSessionTemplate } from './routines';
+import { progressionHint, progressionTarget, progressionWeightKg } from './repProgression';
 import { exerciseIconFor } from './exerciseIcons';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
@@ -3179,9 +3181,31 @@ function WorkoutLogger({
   );
   /** Draft rows for planned or last-session exercises, with sets suggested from history. */
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
-    return items.map(({ exercise, plannedSets }) => ({
+    return items.map(({ exercise, plannedSets, repRange }) => {
+      // A planned range suggests its target weight for working sets the plan left blank.
+      const targetWeight =
+        repRange && plannedSets && exercise.kind !== 'cardio'
+          ? progressionWeightKg(
+              progressionTarget(
+                repRange,
+                latestExerciseSets(historicalWorkouts, exercise.id, initialDate),
+                weightUnit,
+              ),
+            )
+          : null;
+      return templateMovement(exercise, plannedSets, repRange, targetWeight);
+    });
+  }
+  function templateMovement(
+    exercise: Exercise,
+    plannedSets: SessionTemplate['exercises'][number]['plannedSets'],
+    repRange: RepRange | undefined,
+    targetWeight: number | null,
+  ): DraftMovement {
+    return {
       key: crypto.randomUUID(),
       exercise,
+      ...(repRange && { repRange }),
       notes: '',
       machinePhotoIds: [],
       machinePhotosInitialized: false,
@@ -3191,6 +3215,9 @@ function WorkoutLogger({
         ? plannedSets.map((set) => ({
             ...createWorkoutSet(exercise.kind),
             ...set,
+            ...(targetWeight !== null &&
+              set.weight_kg == null &&
+              set.set_type !== 'warmup' && { weight_kg: targetWeight }),
             key: crypto.randomUUID(),
             warmup: set.set_type === 'warmup',
             completed: false,
@@ -3206,7 +3233,7 @@ function WorkoutLogger({
               ? historyBaselines.byExercise
               : null,
           ),
-    }));
+    };
   }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
@@ -3356,6 +3383,7 @@ function WorkoutLogger({
           supersetKey: movement.supersetKey,
           isComplete: movement.isComplete,
           ...(movement.swappedFrom && { swappedFrom: movement.swappedFrom }),
+          ...(movement.repRange && { repRange: movement.repRange }),
           sets: movement.sets,
         })),
       });
@@ -6363,6 +6391,15 @@ function MovementCard({
         </div>
       </header>
 
+      {expanded && !cardio && movement.repRange && (
+        <p className="movement-rep-target">
+          {progressionHint(
+            movement.repRange,
+            progressionTarget(movement.repRange, history[0]?.sets ?? [], weightUnit),
+            weightUnit,
+          )}
+        </p>
+      )}
       {historyOpen && (
         <section
           className="movement-history"

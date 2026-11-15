@@ -176,6 +176,53 @@ it('edits sets directly on a card and preserves saved set details', async () => 
   expect(saved[0].sets).toEqual([set, set]);
 });
 
+it('sets, shows and clears a rep range on a planned strength exercise', async () => {
+  await act(async () => byLabel<HTMLButtonElement>('Upper body exercises')!.click());
+  const select = byLabel<HTMLSelectElement>('Rep range for Barbell Bench Press on Upper body')!;
+  expect(select.value).toBe('');
+  expect([...select.options].map((option) => option.textContent)).toEqual([
+    'Any',
+    '3–5',
+    '5–8',
+    '6–10',
+    '8–12',
+    '10–15',
+    '12–15',
+    '15–20',
+  ]);
+  const choose = async (value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(
+        select,
+        value,
+      );
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  const save = async () =>
+    act(async () =>
+      document
+        .querySelector('dialog form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+  await choose('8-12');
+  expect(select.value).toBe('8-12');
+  await save();
+  expect(vi.mocked(api.saveWorkoutTypeExercises).mock.calls[0][1][0].rep_range).toEqual({
+    min: 8,
+    max: 12,
+  });
+
+  await act(async () => byLabel<HTMLButtonElement>('Upper body exercises')!.click());
+  const reopened = byLabel<HTMLSelectElement>('Rep range for Barbell Bench Press on Upper body')!;
+  expect(reopened.value).toBe('8-12');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(reopened, '');
+    reopened.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await save();
+  expect(vi.mocked(api.saveWorkoutTypeExercises).mock.calls[1][1][0].rep_range).toBeNull();
+});
+
 it('adjusts cardio minutes directly without a dropdown', async () => {
   const bike: Exercise = {
     ...bench,

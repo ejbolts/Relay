@@ -3,6 +3,7 @@ import { isStoredSetLogged } from './workoutAutoSave';
 import { validStoredPause } from './workoutPause';
 import type {
   MachineSetting,
+  RepRange,
   TrackedWorkout,
   WorkoutCategory,
   WorkoutInput,
@@ -35,6 +36,8 @@ export interface StoredDraftMovement {
   supersetKey: string | null;
   isComplete?: boolean;
   swappedFrom?: string;
+  /** Target reps from the plan this exercise came from. */
+  repRange?: RepRange;
   sets: StoredDraftSet[];
 }
 

@@ -58,9 +58,10 @@ function plannedSessionTemplate(
     category,
     sourceWorkout,
     planned,
-    exercises: movements.map(({ exercise, sets }) => ({
+    exercises: movements.map(({ exercise, sets, rep_range }) => ({
       exercise,
       plannedSets: sets,
+      ...(rep_range && exercise.kind !== 'cardio' && { repRange: rep_range }),
       topSet: sets[0]
         ? {
             ...createWorkoutSet(exercise.kind),

@@ -1,4 +1,5 @@
-import type { Exercise, MachineSetting, WorkoutSetInput } from './types';
+import { isRepRange } from './repProgression';
+import type { Exercise, MachineSetting, RepRange, WorkoutSetInput } from './types';
 import type { ExerciseMachineChoices } from './exerciseMachineChoices';
 import type { StoredDraftMovement } from './workoutDraft';
 import { hasUnassignedMachineSets } from './setMachines';
@@ -21,6 +22,8 @@ export type WorkoutDraftMovement = {
   isComplete: boolean;
   /** The exercise this movement replaced mid-workout, shown on its card. */
   swappedFrom?: string;
+  /** Target reps from the plan this exercise came from. */
+  repRange?: RepRange;
   sets: WorkoutDraftSet[];
 };
 
@@ -47,6 +50,7 @@ export function restoreWorkoutDraftMovements(
       movement.sets.every((set) => set.completed) &&
       !hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
     ...(typeof movement.swappedFrom === 'string' && { swappedFrom: movement.swappedFrom }),
+    ...(isRepRange(movement.repRange) && { repRange: movement.repRange }),
     sets: movement.sets,
   }));
 }
