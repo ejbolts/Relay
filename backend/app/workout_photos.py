@@ -11,7 +11,7 @@ from .config import Settings
 from .models import WorkoutPhoto
 from .photo_storage import delete_machine_photo_files
 
-MAX_PHOTOS_PER_WORKOUT = 4
+MAX_PHOTOS_PER_WORKOUT = 3
 
 PhotoFiles = list[tuple[str, str]]
 

@@ -93,12 +93,19 @@ def test_editing_a_workout_keeps_its_photos(client):
 
 
 def test_workout_photo_limits(client, other_client):
+    # A workout holds at most three photos; the app hides Add photo at the same number.
+    assert MAX_PHOTOS_PER_WORKOUT == 3
     workout = log_workout(other_client)
     for _ in range(MAX_PHOTOS_PER_WORKOUT):
         assert add_photo(other_client, workout["id"]).status_code == 201
     full = add_photo(other_client, workout["id"])
     assert full.status_code == 422
-    assert full.json()["error"]["code"] == "too_many_workout_photos"
+    assert full.json()["error"] == {
+        "code": "too_many_workout_photos",
+        "message": "A workout can have up to 3 photos.",
+    }
+    assert len(client.get("/api/workouts").json()) == 0
+    assert len(other_client.get(f"/api/workouts/{workout['id']}").json()["photos"]) == 3
     assert len(photo_files()) == MAX_PHOTOS_PER_WORKOUT * 2
 
     # The account total is refused quietly, like the other account limits.

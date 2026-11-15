@@ -261,6 +261,24 @@ it('opens a photo full screen, steps between photos and removes your own', async
   expect(document.body.querySelector('.undo-toast')?.textContent).toContain('Photo removed');
 });
 
+it('stops offering Add photo once your workout has three photos', async () => {
+  vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
+    items: [
+      item(workout('mine', { photos: [photo('p1'), photo('p2'), photo('p3')] }), {
+        id: 'me',
+        display_name: 'Me',
+        is_you: true,
+      }),
+    ],
+    has_more: false,
+  });
+  await render();
+  const collage = host.querySelector('.workout-photos-feed')!;
+  expect(collage.getAttribute('data-count')).toBe('3');
+  expect(collage.querySelectorAll('img')).toHaveLength(3);
+  expect(button(host, 'Add photo')).toBeUndefined();
+});
+
 it('shows only a friend’s photos, without a way to remove them', async () => {
   vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
     items: [item(workout('theirs', { photos: [photo('p1')] }))],

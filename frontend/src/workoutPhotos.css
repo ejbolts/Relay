@@ -56,10 +56,6 @@
   grid-row: span 2;
 }
 
-.workout-photos-feed[data-count='4'] {
-  grid-template-columns: 1fr 1fr;
-}
-
 .workout-photos-feed:not([data-count='1']) > button {
   aspect-ratio: 1;
 }
