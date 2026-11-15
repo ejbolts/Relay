@@ -1079,6 +1079,48 @@ describe('rest time controls', () => {
     expect(document.querySelector('.app-notification-toast')).toBeNull();
   });
 
+  it('logs a tri-set round before starting the rest', async () => {
+    const curl: Exercise = { ...bench, id: 'curl', name: 'Biceps curl', category: 'pull' };
+    vi.mocked(api.listExercises).mockResolvedValue([bench, row, curl]);
+    const draft = storedDraft();
+    draft.movements.push({ ...draft.movements[1], key: 'movement-2', exerciseId: curl.id });
+    draft.movements.forEach((movement) => {
+      movement.sets = [{ ...movement.sets[0], completed: false, rest_seconds: 30 }];
+    });
+    writeActiveWorkoutDraft(draft);
+    const scrolledTo: Array<string | null | undefined> = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      if (this.classList.contains('movement-card'))
+        scrolledTo.push(this.querySelector('h2')?.textContent);
+    };
+    await mount();
+    const cards = () => [...container.querySelectorAll<HTMLElement>('.movement-card')];
+    const upNext = () =>
+      cards()
+        .filter((card) => card.querySelector('.superset-up-next'))
+        .map((card) => card.querySelector('h2')?.textContent);
+    const logRound = async (index: number) => {
+      await act(async () =>
+        cards()[index].querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+      );
+      await act(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+    };
+
+    expect(cards()[0].querySelector('.superset-ribbon')?.textContent).toBe(
+      'Tri-set · Bench press + Cable row + Biceps curl',
+    );
+    await logRound(0);
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(upNext()).toEqual(['Cable row']);
+    await logRound(1);
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(upNext()).toEqual(['Biceps curl']);
+    await logRound(2);
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
+    expect(upNext()).toEqual([]);
+    expect(scrolledTo).toEqual(['Cable row', 'Biceps curl']);
+  });
+
   it('moves the rest fill by the whole 30 seconds when time is added or taken off', async () => {
     await startRest();
     await act(async () => vi.advanceTimersByTimeAsync(5_000));

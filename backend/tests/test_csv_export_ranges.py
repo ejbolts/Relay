@@ -102,3 +102,34 @@ def test_empty_export_range_preserves_csv_headers(client, export_source):
 def test_export_rejects_invalid_date_ranges(client, export_source, params):
     endpoint, _, _ = export_source
     assert client.get(endpoint, params=params).status_code == 422
+
+
+def test_export_one_workout_keeps_other_sessions_on_that_day_out(client, other_client):
+    content = (
+        "Date Lifted,Exercise,Weight (kg),Reps,Warmup,Workout ID,Workout name\n"
+        "2026-08-28,Barbell Bench Press,80,8,0,morning,Push AM\n"
+        "2026-08-28,Barbell Bench Press,82.5,6,0,morning,Push AM\n"
+        "2026-08-28,Barbell Squat,100,5,0,evening,Legs PM\n"
+        "2026-08-29,Barbell Squat,105,5,0,next-day,Legs\n"
+    )
+    imported = client.post(
+        "/api/workouts/import",
+        files={"file": ("history.csv", content.encode(), "text/csv")},
+    )
+    assert imported.status_code == 201, imported.text
+    workouts = client.get("/api/workouts").json()
+    morning = next(item for item in workouts if item["name"] == "Push AM")
+
+    response = client.get("/api/workouts/export.csv", params={"workout_id": morning["id"]})
+
+    assert response.status_code == 200, response.text
+    assert 'filename="workout-2026-08-28.csv"' in response.headers["content-disposition"]
+    rows = list(csv.DictReader(StringIO(response.content.decode("utf-8-sig"))))
+    assert [(row["Workout name"], row["Weight (kg)"]) for row in rows] == [
+        ("Push AM", "80"),
+        ("Push AM", "82.5"),
+    ]
+    assert {row["Workout ID"] for row in rows} == {morning["id"]}
+    # Another account cannot export it by ID.
+    hidden = other_client.get("/api/workouts/export.csv", params={"workout_id": morning["id"]})
+    assert hidden.status_code == 404
