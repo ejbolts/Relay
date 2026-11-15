@@ -66,6 +66,7 @@ export function ExerciseLibraryList({
   const [muscle, setMuscle] = useState('All');
   const [equipment, setEquipment] = useState('');
   const [customOnly, setCustomOnly] = useState(false);
+  const [hiddenOnly, setHiddenOnly] = useState(false);
   const [sort, setSort] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -87,9 +88,12 @@ export function ExerciseLibraryList({
       ),
     ),
   ].sort();
+  const hiddenCount = exercises.filter((exercise) => exercise.hidden).length;
+  const showHidden = hiddenOnly && hiddenCount > 0;
   const list = exercises
     .filter(
       (exercise) =>
+        Boolean(exercise.hidden) === showHidden &&
         (!customOnly || exercise.is_custom) &&
         (muscle === 'All' || exerciseMuscles(exercise).includes(muscle)) &&
         (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
@@ -172,6 +176,20 @@ export function ExerciseLibraryList({
             setPage(1);
           }}
         />
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="exercise-custom-filter"
+            aria-label={`Hidden exercises, ${hiddenCount}`}
+            aria-pressed={showHidden}
+            onClick={() => {
+              setHiddenOnly(!showHidden);
+              setPage(1);
+            }}
+          >
+            Hidden
+          </button>
+        )}
         <div className="exercise-muscle-filters" role="group" aria-label="Muscle group">
           {['All', ...muscles].map((name) => (
             <button

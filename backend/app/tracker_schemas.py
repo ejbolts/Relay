@@ -101,6 +101,8 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    # Left out of exercise pickers and lists; history, records and progress are kept.
+    hidden: bool = False
     partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
     partial_set_weeks: list[ExercisePartialSetWeekRead] = []
     muscle_contributions: list[MuscleContributionRead] = []
@@ -134,6 +136,19 @@ class ExercisePartialSetsUpdate(BaseModel):
 
 class ExerciseFavoriteUpdate(BaseModel):
     is_favorite: bool
+
+
+class ExerciseUpdate(BaseModel):
+    """Rename a custom exercise, or hide any exercise from lists. Omitted fields are unchanged."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    hidden: bool | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        # A blank name is refused by the length check rather than read as "unchanged".
+        return value.strip() if isinstance(value, str) else value
 
 
 class MachinePhotoCaptionUpdate(BaseModel):
