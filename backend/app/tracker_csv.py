@@ -378,6 +378,13 @@ def parse_rows(raw: bytes) -> tuple[list[ParsedRow], list[str]]:
 
 def infer_exercise(name: str) -> tuple[WorkoutCategory, ExerciseKind, str, str | None]:
     lowered = name.casefold()
+    if "neck" in lowered:
+        if any(word in lowered for word in ("lateral", "side")):
+            return WorkoutCategory.UPPER, ExerciseKind.STRENGTH, "Lateral neck flexors", None
+        if any(word in lowered for word in ("extension", "reverse")):
+            return WorkoutCategory.UPPER, ExerciseKind.STRENGTH, "Neck extensors", None
+        if any(word in lowered for word in ("flexion", "curl")):
+            return WorkoutCategory.UPPER, ExerciseKind.STRENGTH, "Neck flexors", None
     if any(
         phrase in lowered
         for phrase in ("crunch", "sit up", "sit-up", "knee raise", "leg raise", "plank")

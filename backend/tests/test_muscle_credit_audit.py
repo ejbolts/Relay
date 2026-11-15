@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
+from app.exercise_aliases import canonical_exercise_name
 from app.models import (
     Exercise,
     ExerciseKind,
@@ -13,6 +14,7 @@ from app.models import (
     WorkoutCategory,
 )
 from app.tracker import DEFAULT_CARDIO, DEFAULT_EXERCISES, workout_cache_revision
+from app.tracker_csv import infer_exercise
 from app.training_metrics import DEFAULT_MUSCLE_MAPPING, muscle_credits, seed_muscle_mappings
 
 
@@ -94,6 +96,15 @@ def test_every_builtin_strength_exercise_has_distinct_canonical_credits():
         ("Lying Leg Curl", {"Hamstrings": 1, "Calves": 0.5}),
         ("Plank", {"Core": 1}),
         ("Hanging Leg Raise", {"Core": 1, "Hip flexors": 1}),
+        ("Machine Neck Flexion", {"Neck flexors": 1}),
+        ("Plate Neck Flexion", {"Neck flexors": 1}),
+        ("Band Neck Flexion", {"Neck flexors": 1}),
+        ("Machine Lateral Neck Flexion", {"Lateral neck flexors": 1}),
+        ("Plate Lateral Neck Flexion", {"Lateral neck flexors": 1}),
+        ("Band Lateral Neck Flexion", {"Lateral neck flexors": 1}),
+        ("Machine Neck Extension", {"Neck extensors": 1}),
+        ("Plate Neck Extension", {"Neck extensors": 1}),
+        ("Band Neck Extension", {"Neck extensors": 1}),
     ],
 )
 def test_reviewed_direct_and_indirect_credits(name, expected):
@@ -208,3 +219,29 @@ def test_default_resync_invalidates_only_changed_account_and_preserves_custom(cl
             ]
             == expected
         )
+
+
+@pytest.mark.parametrize(
+    ("name", "muscle_group"),
+    [
+        ("Neck Curl", "Neck flexors"),
+        ("Lying Neck Flexion", "Neck flexors"),
+        ("Side Neck Curl", "Lateral neck flexors"),
+        ("Lateral Neck Flexion (Band)", "Lateral neck flexors"),
+        ("Reverse Neck Curl", "Neck extensors"),
+        ("4-Way Neck Extension", "Neck extensors"),
+    ],
+)
+def test_imported_neck_exercises_infer_the_moving_muscle_group(name, muscle_group):
+    assert infer_exercise(name) == (
+        WorkoutCategory.UPPER,
+        ExerciseKind.STRENGTH,
+        muscle_group,
+        None,
+    )
+
+
+def test_neck_aliases_resolve_to_builtin_plate_exercises():
+    assert canonical_exercise_name("neck curl") == "Plate Neck Flexion"
+    assert canonical_exercise_name("Side Neck Curl") == "Plate Lateral Neck Flexion"
+    assert canonical_exercise_name("Reverse  Neck Curl") == "Plate Neck Extension"

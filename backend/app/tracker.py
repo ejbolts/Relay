@@ -328,6 +328,21 @@ DEFAULT_EXERCISES = (
     ("Cable Crunch", WorkoutCategory.FULL_BODY, "Core", "Cable"),
     ("Crunch", WorkoutCategory.FULL_BODY, "Core", "Bodyweight"),
     ("Band Row", WorkoutCategory.PULL, "Mid / Upper Back", "Resistance band"),
+    # Neck work, grouped by direction: flexion (front), lateral flexion (side), extension (back).
+    ("Machine Neck Flexion", WorkoutCategory.UPPER, "Neck flexors", "Machine"),
+    ("Plate Neck Flexion", WorkoutCategory.UPPER, "Neck flexors", "Weight plate"),
+    ("Band Neck Flexion", WorkoutCategory.UPPER, "Neck flexors", "Resistance band"),
+    ("Machine Lateral Neck Flexion", WorkoutCategory.UPPER, "Lateral neck flexors", "Machine"),
+    ("Plate Lateral Neck Flexion", WorkoutCategory.UPPER, "Lateral neck flexors", "Weight plate"),
+    (
+        "Band Lateral Neck Flexion",
+        WorkoutCategory.UPPER,
+        "Lateral neck flexors",
+        "Resistance band",
+    ),
+    ("Machine Neck Extension", WorkoutCategory.UPPER, "Neck extensors", "Machine"),
+    ("Plate Neck Extension", WorkoutCategory.UPPER, "Neck extensors", "Weight plate"),
+    ("Band Neck Extension", WorkoutCategory.UPPER, "Neck extensors", "Resistance band"),
 )
 
 DEFAULT_CARDIO = (
