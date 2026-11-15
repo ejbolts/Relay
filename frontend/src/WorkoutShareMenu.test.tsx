@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WorkoutExportButton } from './WorkoutExportButton';
+import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { api } from './api';
 import { workoutExportFileName } from './downloadFile';
 import type { TrackedWorkout } from './types';
@@ -18,6 +18,7 @@ const workout = {
 let root: Root;
 let container: HTMLDivElement;
 const downloads: string[] = [];
+const onShareCard = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,6 +33,7 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+  act(() => root.render(<WorkoutShareMenu workout={workout} onShareCard={onShareCard} />));
 });
 
 afterEach(() => {
@@ -43,20 +45,65 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const button = () => container.querySelector<HTMLButtonElement>('.export-workout-button')!;
+const trigger = () => container.querySelector<HTMLButtonElement>('.workout-share-trigger')!;
+const menuItems = () => [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+const choose = async (label: string) => {
+  act(() => trigger().click());
+  await act(async () =>
+    menuItems()
+      .find((item) => item.textContent === label)!
+      .click(),
+  );
+};
 
-describe('single workout export', () => {
-  it('names the file after the workout date and name', () => {
+describe('workout share menu', () => {
+  it('names the export file after the workout date and name', () => {
     expect(workoutExportFileName(workout)).toBe('workout-2026-11-14-push-day-chest-triceps.csv');
     expect(workoutExportFileName({ ...workout, name: '!!!' })).toBe('workout-2026-11-14.csv');
+  });
+
+  it('offers the share card and CSV export from one button', () => {
+    expect(trigger().textContent).toBe('Share');
+    expect(menuItems()).toHaveLength(0);
+
+    act(() => trigger().click());
+
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    expect(menuItems().map((item) => item.textContent)).toEqual(['Share card', 'Export CSV']);
+    expect(document.activeElement).toBe(menuItems()[0]);
+  });
+
+  it('opens the share card and closes the menu', async () => {
+    await choose('Share card');
+
+    expect(onShareCard).toHaveBeenCalledOnce();
+    expect(menuItems()).toHaveLength(0);
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it('closes with Escape and moves between options with the arrow keys', () => {
+    act(() => trigger().click());
+    const key = (name: string) =>
+      act(() =>
+        document.activeElement!.dispatchEvent(
+          new KeyboardEvent('keydown', { key: name, bubbles: true }),
+        ),
+      );
+
+    key('ArrowDown');
+    expect(document.activeElement?.textContent).toBe('Export CSV');
+    key('ArrowDown');
+    expect(document.activeElement?.textContent).toBe('Share card');
+    key('Escape');
+    expect(menuItems()).toHaveLength(0);
+    expect(document.activeElement).toBe(trigger());
   });
 
   it('downloads only that workout and confirms in a toast that clears itself', async () => {
     vi.useFakeTimers();
     vi.mocked(api.exportWorkout).mockResolvedValue(new Blob(['rows']));
-    act(() => root.render(<WorkoutExportButton workout={workout} />));
 
-    await act(async () => button().click());
+    await choose('Export CSV');
 
     expect(api.exportWorkout).toHaveBeenCalledWith('workout-1');
     expect(downloads).toEqual(['workout-2026-11-14-push-day-chest-triceps.csv']);
@@ -69,15 +116,14 @@ describe('single workout export', () => {
     expect(document.body.querySelector('.top-toast')).toBeNull();
   });
 
-  it('shows the failure beside the button and creates no download', async () => {
+  it('shows an export failure beside the button and creates no download', async () => {
     vi.mocked(api.exportWorkout).mockRejectedValue(new Error('You are offline.'));
-    act(() => root.render(<WorkoutExportButton workout={workout} />));
 
-    await act(async () => button().click());
+    await choose('Export CSV');
 
     expect(downloads).toEqual([]);
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('You are offline.');
     expect(document.body.querySelector('.top-toast')).toBeNull();
-    expect(button().disabled).toBe(false);
+    expect(trigger().disabled).toBe(false);
   });
 });

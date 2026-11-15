@@ -2202,7 +2202,20 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .history-screen .workout-actions .workout-export-error {
   flex-basis: 100%;
+  grid-column: 1 / -1;
   margin: 0;
+}
+
+/* Too narrow for one row of four: two even rows instead of a stray last button. */
+@media (max-width: 359px) {
+  .history-screen .workout-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-screen .workout-actions .resume-workout-button {
+    grid-column: auto;
+  }
 }
 
 /* Set flow inside history: compact pills without “rest not set” noise. */

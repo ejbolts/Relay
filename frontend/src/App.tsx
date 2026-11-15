@@ -249,7 +249,7 @@ import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
 import { WorkoutShareCard } from './WorkoutShareCard';
-import { WorkoutExportButton } from './WorkoutExportButton';
+import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
@@ -10434,10 +10434,7 @@ function HistoryWorkoutCard({
           )}
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
-              <button type="button" onClick={() => setShareOpen(true)}>
-                Share card
-              </button>
-              <WorkoutExportButton workout={workout} />
+              <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
               {!activeWorkout && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
                   Resume from now
