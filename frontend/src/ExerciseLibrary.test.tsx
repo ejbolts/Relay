@@ -187,23 +187,131 @@ it('opens merging from a custom exercise detail with that exercise selected', as
   expect(document.body.textContent).toContain('Exercises merged');
   expect(host.querySelector('.exercise-options')).toBeNull();
 });
-it('keeps merge unavailable for official exercises', async () => {
+function EditableScreen({
+  exercises,
+  refreshed,
+}: {
+  exercises: Exercise[];
+  refreshed: () => Promise<void>;
+}) {
+  return (
+    <ProgressScreen
+      exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
+      exercises={exercises}
+      measurements={[]}
+      personalRecords={[]}
+      onOpenWorkout={onOpenWorkout}
+      onExercisesMerged={refreshed}
+      embedded
+      browseFirst
+    />
+  );
+}
+const menuItems = () =>
+  [...host.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
+it('keeps merge and rename unavailable for official exercises, which can only be hidden', async () => {
   await act(async () =>
     root.render(
-      <ProgressScreen
-        exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
-        exercises={catalogue}
-        measurements={[]}
-        personalRecords={[]}
-        onOpenWorkout={onOpenWorkout}
-        onExercisesMerged={vi.fn().mockResolvedValue(undefined)}
-        embedded
-        browseFirst
-      />,
+      <EditableScreen exercises={catalogue} refreshed={vi.fn().mockResolvedValue(undefined)} />,
     ),
   );
   await click(host.querySelector('[data-exercise-id="pec"]')!);
-  expect(host.querySelector('.exercise-options')).toBeNull();
+  await click(host.querySelector('[aria-label="Options for Pec Deck"]')!);
+  expect(menuItems()).toEqual(['Hide from exercise lists']);
+});
+it('renames a custom exercise from its options menu', async () => {
+  const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
+  const refreshed = vi.fn().mockResolvedValue(undefined);
+  const update = vi
+    .spyOn(api, 'updateExercise')
+    .mockResolvedValue({ ...custom, name: 'Seated cable row' });
+  vi.mocked(api.exerciseProgress).mockImplementation(async () => progress(custom));
+  await act(async () =>
+    root.render(<EditableScreen exercises={[custom, row]} refreshed={refreshed} />),
+  );
+  await click(host.querySelector('[data-exercise-id="custom-row"]')!);
+  await click(host.querySelector('[aria-label="Options for My cable row"]')!);
+  expect(menuItems()).toEqual([
+    'Rename',
+    'Merge with another exercise',
+    'Hide from exercise lists',
+  ]);
+  await click(named('Rename'));
+  const input = document.querySelector<HTMLInputElement>('.exercise-rename-dialog input')!;
+  expect(input.value).toBe('My cable row');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      input,
+      '  Seated cable row ',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click(document.querySelector('.exercise-rename-dialog [type="submit"]')!);
+  expect(update).toHaveBeenCalledExactlyOnceWith('custom-row', { name: 'Seated cable row' });
+  expect(refreshed).toHaveBeenCalledOnce();
+  expect(document.querySelector('.exercise-rename-dialog')).toBeNull();
+  expect(document.querySelector('.undo-toast')?.textContent).toContain('Exercise renamed');
+});
+it('keeps the rename dialog open with the reason when the name is taken', async () => {
+  const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
+  vi.spyOn(api, 'updateExercise').mockRejectedValue(
+    new Error('An exercise with that name already exists.'),
+  );
+  vi.mocked(api.exerciseProgress).mockImplementation(async () => progress(custom));
+  await act(async () =>
+    root.render(
+      <EditableScreen exercises={[custom, row]} refreshed={vi.fn().mockResolvedValue(undefined)} />,
+    ),
+  );
+  await click(host.querySelector('[data-exercise-id="custom-row"]')!);
+  await click(host.querySelector('[aria-label="Options for My cable row"]')!);
+  await click(named('Rename'));
+  const input = document.querySelector<HTMLInputElement>('.exercise-rename-dialog input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      input,
+      'Cable Row',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click(document.querySelector('.exercise-rename-dialog [type="submit"]')!);
+  expect(document.querySelector('.exercise-rename-dialog [role="alert"]')?.textContent).toBe(
+    'An exercise with that name already exists.',
+  );
+});
+it('hides an exercise with Undo, and lists hidden exercises under their own pill', async () => {
+  const refreshed = vi.fn().mockResolvedValue(undefined);
+  const update = vi.spyOn(api, 'updateExercise').mockResolvedValue({ ...pec, hidden: true });
+  await act(async () =>
+    root.render(<EditableScreen exercises={catalogue} refreshed={refreshed} />),
+  );
+  expect(host.querySelector('[aria-label^="Hidden exercises"]')).toBeNull();
+  await click(host.querySelector('[data-exercise-id="pec"]')!);
+  await click(host.querySelector('[aria-label="Options for Pec Deck"]')!);
+  await click(named('Hide from exercise lists'));
+  expect(update).toHaveBeenCalledExactlyOnceWith('pec', { hidden: true });
+  expect(refreshed).toHaveBeenCalledOnce();
+  const toast = document.querySelector('.undo-toast')!;
+  expect(toast.textContent).toContain('Hidden from exercise lists');
+  await click([...toast.querySelectorAll('button')].find((b) => b.textContent === 'Undo')!);
+  expect(update).toHaveBeenLastCalledWith('pec', { hidden: false });
+
+  // With the refreshed catalogue, the hidden lift leaves the list until the Hidden pill is on.
+  await act(async () =>
+    root.render(
+      <EditableScreen exercises={[{ ...pec, hidden: true }, row, empty]} refreshed={refreshed} />,
+    ),
+  );
+  await click(named('Exercises'));
+  const ids = () =>
+    [...host.querySelectorAll<HTMLElement>('[data-exercise-id]')].map(
+      (item) => item.dataset.exerciseId,
+    );
+  expect(ids()).not.toContain('pec');
+  const pill = host.querySelector<HTMLButtonElement>('[aria-label="Hidden exercises, 1"]')!;
+  await click(pill);
+  expect(pill.getAttribute('aria-pressed')).toBe('true');
+  expect(ids()).toEqual(['pec']);
 });
 it('combines equipment, muscle and reordered search, retaining equipment after detail', async () => {
   await render();

@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -122,6 +122,7 @@ from .tracker_schemas import (
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
+    ExerciseUpdate,
     HeatmapDay,
     ImportBatchRead,
     ImportUndoRead,
@@ -639,6 +640,31 @@ def load_workout(db: Session, user_id: str, workout_id: str) -> TrainingWorkout:
     return workout
 
 
+WORKOUT_CHANGED_ELSEWHERE = "This workout was changed on another device after you opened it here."
+
+
+def advance_workout_revision(
+    db: Session, workout: TrainingWorkout, base_revision: int | None = None
+) -> None:
+    """Record a change to the workout's content by advancing its revision.
+
+    With ``base_revision`` the change is refused (409, nothing saved) unless the workout is still
+    at the revision the editor loaded. Checking and advancing is one statement, so two saves based
+    on the same revision cannot both pass.
+    """
+    statement = (
+        update(TrainingWorkout)
+        .where(TrainingWorkout.id == workout.id)
+        .values(revision=TrainingWorkout.revision + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if base_revision is not None:
+        statement = statement.where(TrainingWorkout.revision == base_revision)
+    if db.execute(statement).rowcount != 1:
+        raise api_error(409, "workout_conflict", WORKOUT_CHANGED_ELSEWHERE)
+    db.expire(workout, ["revision"])
+
+
 def replace_workout_contents(
     db: Session,
     user_id: str,
@@ -861,11 +887,26 @@ def sync_all_workout_cardio_sessions(db: Session, user_id: str | None = None) ->
         sync_workout_cardio_sessions(db, workout)
 
 
+HIDDEN_EXERCISES_KEY = "hidden_exercises"
+
+
+def hidden_exercise_ids(db: Session, user_id: str) -> set[str]:
+    """Exercises the account has hidden from its lists, stored with its other settings."""
+    try:
+        values = json.loads(get_setting(db, user_id, HIDDEN_EXERCISES_KEY, "[]"))
+    except ValueError:
+        return set()
+    return (
+        {value for value in values if isinstance(value, str)} if isinstance(values, list) else set()
+    )
+
+
 def exercise_read(db: Session, user_id: str, exercise: Exercise) -> ExerciseRead:
     aliases = exercise_aliases(db, user_id)
     return ExerciseRead.model_validate(exercise).model_copy(
         update={
-            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id]
+            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id],
+            "hidden": exercise.id in hidden_exercise_ids(db, user_id),
         }
     )
 
@@ -880,10 +921,12 @@ def list_exercises(
     if search:
         query = query.where(Exercise.name.ilike(f"%{search.strip()}%"))
     aliases = exercise_aliases(db, user.id)
+    hidden = hidden_exercise_ids(db, user.id)
     return [
         ExerciseRead.model_validate(item).model_copy(
             update={
-                "merged_from_ids": [old for old, target in aliases.items() if target == item.id]
+                "merged_from_ids": [old for old, target in aliases.items() if target == item.id],
+                "hidden": item.id in hidden,
             }
         )
         for item in db.scalars(query)
@@ -1054,6 +1097,44 @@ def merge_custom_exercise(
     db.commit()
     db.refresh(target)
     return exercise_read(db, user.id, target)
+
+
+@router.patch("/exercises/{exercise_id}", response_model=ExerciseRead)
+def update_exercise(
+    exercise_id: str, payload: ExerciseUpdate, db: DbSession, user: CurrentUser
+) -> ExerciseRead:
+    """Rename a custom exercise or hide one from lists, keeping all of its history."""
+    exercise = get_owned(db, Exercise, exercise_id, user.id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise was not found.")
+    if payload.name is not None and payload.name != exercise.name:
+        if not exercise.is_custom:
+            raise HTTPException(status_code=422, detail="Only your own exercises can be renamed.")
+        name = canonical_exercise_name(payload.name)
+        if any(
+            canonical_exercise_name(other).casefold() == name.casefold()
+            for other in db.scalars(
+                select(Exercise.name).where(Exercise.user_id == user.id, Exercise.id != exercise.id)
+            )
+        ):
+            raise HTTPException(
+                status_code=409, detail="An exercise with that name already exists."
+            )
+        exercise.name = name
+    if payload.hidden is not None:
+        hidden = hidden_exercise_ids(db, user.id)
+        hidden = hidden | {exercise.id} if payload.hidden else hidden - {exercise.id}
+        set_setting(db, user.id, HIDDEN_EXERCISES_KEY, json.dumps(sorted(hidden)))
+    bump_workout_cache_revision(db, user.id)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="An exercise with that name already exists."
+        ) from error
+    db.refresh(exercise)
+    return exercise_read(db, user.id, exercise)
 
 
 @router.patch("/exercises/{exercise_id}/favorite", response_model=ExerciseRead)
@@ -1915,6 +1996,8 @@ def sync_cardio_session_metrics_to_workout_sets(
     if "incline_percent" in fields:
         for workout_set in completed_sets:
             workout_set.incline_percent = session.incline_percent
+    # The workout's sets changed, so an editor still holding the old ones must not overwrite them.
+    advance_workout_revision(db, workout)
     return True
 
 
@@ -2731,6 +2814,9 @@ def update_workout(
     client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
+    # Refuse a stale editor before changing anything. Without a base revision (an older app
+    # version) the workout is replaced unconditionally, as it was before revisions existed.
+    advance_workout_revision(db, workout, payload.base_revision)
     payload = preserve_unknown_workout_fields(payload, workout, client_version)
     check_workout_size(payload, load_account_limits(db, settings), user, existing=workout)
     replace_workout_contents(db, user.id, workout, payload)

@@ -18,6 +18,8 @@ import type {
   CardioSessionInput,
   CardioMetricsInput,
   Clip,
+  ArchivePreview,
+  ArchiveRestored,
   CsvImportResult,
   ImportBatch,
   ImportUndoResult,
@@ -118,6 +120,11 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+/** The server refused a workout save because the workout changed after the editor loaded it. */
+export function isWorkoutConflict(reason: unknown): reason is ApiError {
+  return reason instanceof ApiError && reason.status === 409 && reason.code === 'workout_conflict';
 }
 
 interface RequestOptions {
@@ -300,7 +307,14 @@ async function requestBlob(path: string): Promise<Blob> {
   checkAccount();
   if (!response.ok) {
     if (response.status === 401) emitAuthExpired();
-    throw new ApiError(`Export failed (${response.status})`, 'export_failed', response.status);
+    const body = (await response.json().catch(() => null)) as {
+      error?: { code?: string; message?: string };
+    } | null;
+    throw new ApiError(
+      body?.error?.message ?? `Export failed (${response.status})`,
+      body?.error?.code ?? 'export_failed',
+      response.status,
+    );
   }
   const blob = await response.blob();
   checkAccount();
@@ -652,6 +666,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercise: (exerciseId: string, changes: { name?: string; hidden?: boolean }) =>
+    request<Exercise>(`/api/exercises/${exerciseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    }),
   mergeExercise: (sourceId: string, targetId: string) =>
     request<Exercise>(`/api/exercises/${sourceId}/merge`, {
       method: 'POST',
@@ -949,7 +969,12 @@ export const api = {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify({
-        movements: movements.map(({ exercise_id, sets }) => ({ exercise_id, sets })),
+        // Always sent, null included, so clearing a range is not read as an older app's save.
+        movements: movements.map(({ exercise_id, sets, rep_range }) => ({
+          exercise_id,
+          sets,
+          rep_range: rep_range ?? null,
+        })),
       }),
     }),
   deleteWorkoutType: (id: string) =>
@@ -1018,6 +1043,17 @@ export const api = {
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
+  downloadAccountArchive: () => requestBlob('/api/account-archive'),
+  previewAccountArchive: (file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<ArchivePreview>('/api/account-archive/preview', { method: 'POST', body: form });
+  },
+  restoreAccountArchive: (file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<ArchiveRestored>('/api/account-archive/restore', { method: 'POST', body: form });
+  },
   exerciseProgress: (id: string, blockId?: string) =>
     accountRead<ExerciseProgress>(
       `/api/progress/${id}${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,

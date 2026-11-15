@@ -3,6 +3,7 @@ import { isStoredSetLogged } from './workoutAutoSave';
 import { validStoredPause } from './workoutPause';
 import type {
   MachineSetting,
+  RepRange,
   TrackedWorkout,
   WorkoutCategory,
   WorkoutInput,
@@ -35,6 +36,8 @@ export interface StoredDraftMovement {
   supersetKey: string | null;
   isComplete?: boolean;
   swappedFrom?: string;
+  /** Target reps from the plan this exercise came from. */
+  repRange?: RepRange;
   sets: StoredDraftSet[];
 }
 
@@ -43,6 +46,8 @@ export interface ActiveWorkoutDraft {
   clientSessionId?: string;
   startedAt: number;
   resumingWorkoutId?: string;
+  /** The saved revision a resumed workout was loaded from, sent back as the save's base. */
+  resumingWorkoutRevision?: number;
   previousDurationMinutes?: number;
   updatedAt: number;
   lastActiveAt?: number;
@@ -52,6 +57,8 @@ export interface ActiveWorkoutDraft {
   pausedMs?: number;
   /** When the current pause began, or null while the live workout is running. */
   pausedAt?: number | null;
+  /** Time a manual correction added to the live clock; see workoutPause.ts. */
+  adjustedMs?: number;
   name: string;
   workoutDate: string;
   category: WorkoutCategory;
@@ -186,6 +193,10 @@ export function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraf
     value.startedAt > 0 &&
     (value.resumingWorkoutId === undefined ||
       (typeof value.resumingWorkoutId === 'string' && value.resumingWorkoutId.length > 0)) &&
+    (value.resumingWorkoutRevision === undefined ||
+      (typeof value.resumingWorkoutRevision === 'number' &&
+        Number.isInteger(value.resumingWorkoutRevision) &&
+        value.resumingWorkoutRevision >= 1)) &&
     (value.previousDurationMinutes === undefined ||
       (typeof value.previousDurationMinutes === 'number' &&
         Number.isInteger(value.previousDurationMinutes) &&
@@ -204,7 +215,7 @@ export function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraf
         Number.isInteger(value.durationOverrideMinutes) &&
         value.durationOverrideMinutes >= 1 &&
         value.durationOverrideMinutes <= 1440)) &&
-    validStoredPause(value.pausedMs, value.pausedAt) &&
+    validStoredPause(value.pausedMs, value.pausedAt, value.adjustedMs) &&
     typeof value.updatedAt === 'number' &&
     typeof value.name === 'string' &&
     typeof value.workoutDate === 'string' &&

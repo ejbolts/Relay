@@ -116,6 +116,8 @@ export interface Exercise {
   equipment: string | null;
   is_custom: boolean;
   is_favorite: boolean;
+  /** Left out of exercise pickers and lists; history and progress are kept. */
+  hidden?: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
   default_muscle_set_credits?: { muscle_name: string; sets: number }[];
@@ -210,6 +212,11 @@ export interface TrackedWorkout {
   start_time: string | null;
   end_time: string | null;
   is_sample: boolean;
+  /**
+   * Advances with every saved change. Editors send the revision they loaded so a stale device
+   * cannot overwrite newer edits. Absent only from data cached before revisions existed.
+   */
+  revision?: number;
   created_at: string;
   updated_at: string;
   movements: TrackedMovement[];
@@ -263,6 +270,8 @@ export interface WorkoutInput {
     superset_key?: string | null;
     sets: WorkoutSetInput[];
   }>;
+  /** Edits: the revision the editor loaded. Omitted, the save replaces the workout regardless. */
+  base_revision?: number;
 }
 
 export interface HeatmapDay {
@@ -366,10 +375,21 @@ export interface RoutineSet {
   set_type: SetType;
 }
 
+/** The reps to aim for in each working set of a planned exercise. */
+export interface RepRange {
+  min: number;
+  max: number;
+}
+
 export interface RoutineDay {
   workout_type_id: string | null;
   workout_type: WorkoutType | null;
-  movements: { exercise_id: string; exercise: Exercise; sets: RoutineSet[] }[];
+  movements: {
+    exercise_id: string;
+    exercise: Exercise;
+    sets: RoutineSet[];
+    rep_range?: RepRange | null;
+  }[];
 }
 
 export type RoutineMovement = RoutineDay['movements'][number];
@@ -733,6 +753,28 @@ export interface ExerciseLibrarySummary {
   change_kg: number | null;
   change_percent: number | null;
   trend: { date: string; estimated_1rm: number }[];
+}
+
+export interface ArchiveCounts {
+  workouts: number;
+  cardio_sessions: number;
+  body_check_ins: number;
+  custom_exercises: number;
+  photos: number;
+}
+
+/** What restoring a full backup would bring back, next to what the account holds now. */
+export interface ArchivePreview {
+  created_at: string | null;
+  username: string | null;
+  archive: ArchiveCounts;
+  current: ArchiveCounts;
+  photos_skipped: number;
+}
+
+export interface ArchiveRestored {
+  restored: ArchiveCounts;
+  photos_skipped: number;
 }
 
 export interface CsvImportResult {

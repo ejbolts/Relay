@@ -92,7 +92,11 @@ export function LiveWorkoutHeader({
         <div className="overlay-header-copy">
           <strong title={name}>{name}</strong>
           <div className="live-workout-meta">
-            <WorkoutHeaderMeta durationLabel={durationLabel} paused={paused} />
+            <WorkoutHeaderMeta
+              durationLabel={durationLabel}
+              paused={paused}
+              onEditTime={onAdjustTime}
+            />
             <span aria-hidden="true">·</span>
             <span>
               {loggedSets} {loggedSets === 1 ? 'set' : 'sets'}

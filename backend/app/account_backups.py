@@ -312,26 +312,16 @@ def finish_backup(
     details: dict,
     fingerprint: str | None = None,
 ) -> AccountBackup:
-    files = [
-        {
-            "path": path.relative_to(staging).as_posix(),
-            "size": path.stat().st_size,
-            "sha256": sha256_of(path),
-        }
-        for path in sorted(path for path in staging.rglob("*") if path.is_file())
-    ]
-    manifest = {
-        "format": 2,
-        "id": backup_id,
-        "kind": kind.value,
-        "label": label,
-        "owner": {"id": user.id, "username": user.username},
-        "created_at": created_at.isoformat(),
-        "schema_revision": schema_revision,
-        **details,
-        "files": files,
-    }
-    (staging / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    files = write_manifest(
+        staging,
+        backup_id=backup_id,
+        kind=kind,
+        label=label,
+        user=user,
+        created_at=created_at,
+        schema_revision=schema_revision,
+        details=details,
+    )
     folder = backup_folder(settings, user.id, backup_id)
     staging.rename(folder)
     backup = AccountBackup(
@@ -353,6 +343,41 @@ def finish_backup(
         shutil.rmtree(folder, ignore_errors=True)
         raise
     return backup
+
+
+def write_manifest(
+    staging: Path,
+    *,
+    backup_id: str,
+    kind: AccountBackupKind,
+    label: str,
+    user: User,
+    created_at: datetime,
+    schema_revision: str | None,
+    details: dict,
+) -> list[dict]:
+    """Write ``manifest.json`` listing every file in ``staging``; return the file entries."""
+    files = [
+        {
+            "path": path.relative_to(staging).as_posix(),
+            "size": path.stat().st_size,
+            "sha256": sha256_of(path),
+        }
+        for path in sorted(path for path in staging.rglob("*") if path.is_file())
+    ]
+    manifest = {
+        "format": 2,
+        "id": backup_id,
+        "kind": kind.value,
+        "label": label,
+        "owner": {"id": user.id, "username": user.username},
+        "created_at": created_at.isoformat(),
+        "schema_revision": schema_revision,
+        **details,
+        "files": files,
+    }
+    (staging / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return files
 
 
 def start_staging(settings: Settings, user_id: str, backup_id: str) -> Path:

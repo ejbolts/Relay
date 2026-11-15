@@ -1,6 +1,5 @@
-import { MachineWeightTip, BodyWeightTip } from './FeatureDiscoveryTips';
+import { MachineWeightTip } from './FeatureDiscoveryTips';
 import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
-import { BodySizesCard } from './BodySizesCard';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
 import {
@@ -57,7 +56,6 @@ import {
   formatWeightNumber,
   recordDisplayValue,
   weightFromKg,
-  weightInputValue,
   weightUnitName,
 } from './weightUnits';
 import type { WeightUnit } from './weightUnits';
@@ -66,12 +64,7 @@ import { RestAlertReminder } from './RestAlertReminder';
 import { shouldShowRestAlertReminder } from './restAlertReminderState';
 import type {
   BodyMeasurement,
-  BodyWeightGoal,
-  CardioOverview,
-  CardioSession,
-  CardioSessionInput,
   DashboardData,
-  WeeklyMuscleContribution,
   Exercise,
   ExerciseCreateInput,
   ExerciseHistoryBaseline,
@@ -79,43 +72,27 @@ import type {
   MachinePhoto,
   MachinePhotoUsage,
   MachineSetting,
-  WeightMapping,
   PersonalRecord,
+  RepRange,
   SharedProfileSummary,
   TrackedSet,
   TrackedWorkout,
   TrainingPreferences,
+  User,
+  WeeklyMuscleContribution,
+  WeightMapping,
   WorkoutCategory,
   WorkoutHistorySummary,
-  User,
-  WorkoutTypeColors,
-  WorkoutType,
+  WorkoutImportOptions,
   WorkoutInput,
   WorkoutRecommendation,
   WorkoutSetInput,
-  WorkoutImportOptions,
+  WorkoutType,
+  WorkoutTypeColors,
 } from './types';
-import {
-  BODY_TREND_DURATION_OPTIONS,
-  clipBodyWeightGoalPath,
-  filterMeasurementsByRange,
-  summarizeBodyWeightTrend,
-} from './bodyTrend';
+import { BODY_TREND_DURATION_OPTIONS } from './bodyTrend';
 import type { BodyTrendDuration, BodyTrendRange, BodyTrendStatistic } from './bodyTrend';
 import {
-  bodyGoalKind,
-  bodyGoalName,
-  bodyGoalTarget,
-  maintenanceRange,
-  maintenanceStatus,
-  bodyHistoryWithWeightChanges,
-  summarizeBodyHistory,
-} from './bodyMeasurementHistory';
-import type { BodyGoalKind, BodyHistoryPeriod } from './bodyMeasurementHistory';
-import { BodyHistoryGoalDivider, BodyHistoryWeightChange } from './BodyHistoryWeightChange';
-import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
-import {
-  DEFAULT_BODY_TREND_PREFERENCE,
   loadBodyTrendPreference,
   saveBodyTrendPreference,
   type BodyTrendPreference,
@@ -189,12 +166,6 @@ import { plural } from './sharedProfileDisplay';
 import { CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
 import { BackgroundActivityBar } from './BackgroundActivityBar';
-import { CardioTrendCard } from './CardioTrendCard';
-import { groupCardioHistory } from './cardioTrend';
-import { CardioMetricsEditor } from './CardioMetricsEditor';
-import { CardioZoneSettings } from './CardioZoneSettings';
-import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
-import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
 import { useBackdropDismiss } from './backdropDismiss';
@@ -205,6 +176,7 @@ import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
+import { ExerciseRenameDialog } from './ExerciseRenameDialog';
 import { ExerciseSwapSheet } from './ExerciseSwapSheet';
 import { swapMovementExercise } from './exerciseSwap';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
@@ -268,13 +240,12 @@ import { AppTabBar } from './AppTabBar';
 import { PaginationControls } from './PaginationControls';
 import { useHomeLayout } from './useHomeLayout';
 import { Icon } from './Icon';
-import { TrendChart, type GoalPath, type TrendPoint } from './PulseCharts';
+import { TrendChart, type TrendPoint } from './PulseCharts';
 import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayScreen';
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
-import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
-import { cardioWorkoutForSharing } from './workoutCard';
+import { WorkoutShareCard } from './WorkoutShareCard';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
@@ -306,6 +277,7 @@ import {
 import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { typeSessionTemplate } from './routines';
+import { progressionHint, progressionTarget, progressionWeightKg } from './repProgression';
 import { exerciseIconFor } from './exerciseIcons';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
@@ -326,6 +298,7 @@ import {
 import { VideoUpload } from './VideoUpload';
 import { YouTubeConnectionPanel } from './YouTubeConnectionPanel';
 import { ProfileScreen } from './ProfileScreen';
+import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
@@ -361,19 +334,23 @@ import {
   workoutsWithPreview,
 } from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
+import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { LiveWorkoutResumeBar, type LiveWorkoutSummary } from './LiveWorkoutResumeBar';
+import { WorkoutTimeEditor } from './WorkoutTimeEditor';
+
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { weeklySetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
+  clockOffsetMsAt,
   draftPause,
   pauseWorkout,
-  pausedMsAt,
   resumeWorkout,
+  withElapsedSeconds,
   type WorkoutPause,
 } from './workoutPause';
 import {
@@ -430,13 +407,21 @@ import {
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
-import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
+import { TIME_RANGE_OPTIONS } from './dateRanges';
 import {
   captureFriendInvite,
   clearFriendInvite,
   FRIEND_INVITE_EVENT,
   pendingFriendInvite,
 } from './friendInvite';
+import { HISTORY_PAGE_SIZE, RANGE_LABELS, numberOrNull, prettyDate } from './appShared';
+import { LoadingState } from './LoadingState';
+import { BodyCompositionScreen } from './BodyCompositionScreen';
+import { CardioScreen } from './CardioScreen';
+import { LandscapeChartFrame } from './LandscapeChartFrame';
+
+// Screens that live in their own files; re-exported for existing imports of './App'.
+export { BodyCompositionScreen, CardioScreen };
 
 type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
@@ -453,19 +438,15 @@ const categoryNames: Record<WorkoutCategory, string> = {
   other: 'Other',
 };
 
-const HISTORY_PAGE_SIZE = 8;
-
 /** Each exercise's history before `before`, the start of the window loaded at the time. */
 type HistoryBaselines = {
   before: string;
   byExercise: Map<string, ExerciseHistoryBaseline>;
 };
 
-const CARDIO_HISTORY_PAGE_SIZE = 5;
 const UNDO_TOAST_MS = 4000;
 /** How long a logger notice, such as why a set can't be deleted, stays up. */
 const LOGGER_NOTICE_MS = 5000;
-const IMPORTED_BODYWEIGHT_NOTE = 'Imported from workout CSV.';
 
 function emptySet(
   kind: Exercise['kind'],
@@ -512,10 +493,6 @@ function suggestedSetsFromHistory(
   }));
 }
 
-function numberOrNull(value: string): number | null {
-  return value === '' ? null : Number(value);
-}
-
 function completedSetPerformance(
   item: DraftSet,
   cardio: boolean,
@@ -544,17 +521,6 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
 
 function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
-}
-
-// Building a formatter is far slower than using one, and the calendar formats thousands of days.
-const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-});
-
-function prettyDate(value: string): string {
-  return prettyDateFormat.format(new Date(`${value}T12:00:00`));
 }
 
 function recordTypeLabel(type: PersonalRecord['record_type']): string {
@@ -621,6 +587,23 @@ function WorkoutCompletionToast({
     document.body,
   );
 }
+
+/** Set just before the reload that follows a backup restore, so it can be confirmed. */
+const BACKUP_RESTORED_KEY = 'relay-backup-restored';
+const BACKUP_RESTORED_MESSAGE = 'Backup restored.';
+
+/** Read once per page load: whether this load follows a backup restore. */
+function takeBackupRestoredFlag(): boolean {
+  try {
+    if (window.sessionStorage.getItem(BACKUP_RESTORED_KEY) !== '1') return false;
+    window.sessionStorage.removeItem(BACKUP_RESTORED_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let backupRestoredNotice = typeof window !== 'undefined' && takeBackupRestoredFlag();
 
 export function App() {
   const { user } = useUserSession();
@@ -817,6 +800,7 @@ function AppContent() {
   const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
     completeWorkoutSave(saved, false, resumedId, queued),
   );
+  const conflictPrompt = useWorkoutConflictPrompt();
   const workoutSaving = editingWorkoutSaving || finishedQueue.saving;
   // Finished workouts wait in their own queue, so only saving an edit stops a new workout.
   const workoutSaveBlocked = editingWorkoutSaving;
@@ -1411,12 +1395,19 @@ function AppContent() {
         wasEditing || resumedId ? 'Saving workout changes…' : 'Saving workout…',
         () =>
           editingWorkout
-            ? api.updateWorkout(editingWorkout.id, payload)
+            ? conflictPrompt.saveEdit(editingWorkout, payload)
             : resumedId
               ? api.updateWorkout(resumedId, payload)
               : api.createWorkout(payload),
       );
     } catch (error) {
+      if (error instanceof WorkoutEditDiscarded) {
+        // The other device's version was chosen: close the editor and show what is saved.
+        setEditingWorkout(null);
+        if (currentTabRef.current === 'log') setTab('history', { replace: true });
+        void refreshData({ silent: true });
+        return;
+      }
       if (currentTabRef.current === (wasEditing ? 'history' : 'dashboard'))
         setTab('log', { replace: true });
       else if (currentTabRef.current !== 'log')
@@ -1529,6 +1520,18 @@ function AppContent() {
               : ''
           }.`,
     );
+  }
+
+  async function restoreAccountArchive(file: File) {
+    await api.restoreAccountArchive(file);
+    // A restore replaces splits, blocks, layout and preferences as well as training, so the
+    // app reloads once to read them all again, then confirms.
+    try {
+      window.sessionStorage.setItem(BACKUP_RESTORED_KEY, '1');
+    } catch {
+      // The restore succeeded either way; only the confirmation is lost.
+    }
+    window.location.reload();
   }
 
   async function deleteSampleData() {
@@ -1702,6 +1705,13 @@ function AppContent() {
               : tab === 'admin' && isAdmin
                 ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
                 : null;
+  useEffect(() => {
+    // After the first load, which replaces any message with its own outcome when it finishes.
+    if (loading || !backupRestoredNotice) return;
+    backupRestoredNotice = false;
+    setMessage(BACKUP_RESTORED_MESSAGE);
+  }, [loading]);
+
   const activeMainTab = mainTabFor(tab);
   const liveSheetOpen = tab === 'log' && !editingWorkout && activeWorkoutStartedAt !== null;
   const showTabBar = (tab !== 'log' && tab !== 'split') || liveSheetOpen;
@@ -1969,7 +1979,13 @@ function AppContent() {
         <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (
-          <NotificationDialog key={message} message={message} onClose={() => setMessage(null)} />
+          <NotificationDialog
+            key={message}
+            message={message}
+            onClose={() => {
+              setMessage(null);
+            }}
+          />
         )}
         {completionRecords.length > 0 && (
           <WorkoutCompletionToast
@@ -1978,6 +1994,7 @@ function AppContent() {
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
+        {conflictPrompt.dialog}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -2010,6 +2027,11 @@ function AppContent() {
                     if (finishedQueue.discard(key)) setMessage('Workout discarded.');
                   }}
                   reviewBlocked={activeWorkoutStartedAt !== null}
+                  onKeepMine={
+                    finishedQueue.conflicts.has(key)
+                      ? () => void finishedQueue.keepMine(key)
+                      : undefined
+                  }
                   onReview={
                     refusal === undefined
                       ? undefined
@@ -2375,6 +2397,7 @@ function AppContent() {
                 csvGuideOpen={csvGuideOpen}
                 onCsvGuideOpenChange={setCsvGuideOpen}
                 onDeleteSamples={deleteSampleData}
+                onRestoreArchive={restoreAccountArchive}
                 onDataChange={refreshAfterMutation}
                 account={user}
                 onOpenProfile={() => setTab('profile')}
@@ -2526,15 +2549,6 @@ function AppContent() {
         )}
       </div>
     </AppContentProviders>
-  );
-}
-
-function LoadingState() {
-  return (
-    <section className="loading-state">
-      <span />
-      <p>Loading your training log…</p>
-    </section>
   );
 }
 
@@ -3164,9 +3178,31 @@ function WorkoutLogger({
   );
   /** Draft rows for planned or last-session exercises, with sets suggested from history. */
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
-    return items.map(({ exercise, plannedSets }) => ({
+    return items.map(({ exercise, plannedSets, repRange }) => {
+      // A planned range suggests its target weight for working sets the plan left blank.
+      const targetWeight =
+        repRange && plannedSets && exercise.kind !== 'cardio'
+          ? progressionWeightKg(
+              progressionTarget(
+                repRange,
+                latestExerciseSets(historicalWorkouts, exercise.id, initialDate),
+                weightUnit,
+              ),
+            )
+          : null;
+      return templateMovement(exercise, plannedSets, repRange, targetWeight);
+    });
+  }
+  function templateMovement(
+    exercise: Exercise,
+    plannedSets: SessionTemplate['exercises'][number]['plannedSets'],
+    repRange: RepRange | undefined,
+    targetWeight: number | null,
+  ): DraftMovement {
+    return {
       key: crypto.randomUUID(),
       exercise,
+      ...(repRange && { repRange }),
       notes: '',
       machinePhotoIds: [],
       machinePhotosInitialized: false,
@@ -3176,6 +3212,9 @@ function WorkoutLogger({
         ? plannedSets.map((set) => ({
             ...createWorkoutSet(exercise.kind),
             ...set,
+            ...(targetWeight !== null &&
+              set.weight_kg == null &&
+              set.set_type !== 'warmup' && { weight_kg: targetWeight }),
             key: crypto.randomUUID(),
             warmup: set.set_type === 'warmup',
             completed: false,
@@ -3191,7 +3230,7 @@ function WorkoutLogger({
               ? historyBaselines.byExercise
               : null,
           ),
-    }));
+    };
   }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
@@ -3225,6 +3264,7 @@ function WorkoutLogger({
   // Paused time is left out of the live time and the saved duration; the real start is kept.
   const [pause, setPause] = useState<WorkoutPause>(() => draftPause(restoredDraft));
   const workoutPaused = !initialWorkout && pause.pausedAt !== null;
+  const [timeEditorOpen, setTimeEditorOpen] = useState(false);
   const clientSessionId = useState(() => restoredDraft?.clientSessionId ?? crypto.randomUUID())[0];
   const draftPersistedRef = useRef(Boolean(restoredDraft));
   const isCurrentDraft = useCallback(() => {
@@ -3238,6 +3278,14 @@ function WorkoutLogger({
   const resumedWorkoutId = restoredDraft?.resumingWorkoutId ?? resumingWorkout?.id ?? null;
   const previousDurationMinutes = useState(
     () => restoredDraft?.previousDurationMinutes ?? resumingWorkout?.duration_minutes ?? 0,
+  )[0];
+  // The saved version these entries were loaded from. A save names it, so the server can refuse
+  // to replace a version another device has saved since.
+  const baseRevision = useState(
+    () =>
+      initialWorkout?.revision ??
+      restoredDraft?.resumingWorkoutRevision ??
+      resumingWorkout?.revision,
   )[0];
   const initialActivity = useState(() => {
     const lastActiveAt = Math.max(
@@ -3309,6 +3357,7 @@ function WorkoutLogger({
         startedAt,
         ...(resumedWorkoutId && {
           resumingWorkoutId: resumedWorkoutId,
+          resumingWorkoutRevision: baseRevision,
           previousDurationMinutes,
         }),
         updatedAt: Date.now(),
@@ -3316,6 +3365,7 @@ function WorkoutLogger({
         inactiveFinishAt: inactiveFinishAtRef.current,
         durationOverrideMinutes,
         pausedMs: pause.pausedMs,
+        ...(pause.adjustedMs !== undefined && { adjustedMs: pause.adjustedMs }),
         pausedAt: pause.pausedAt,
         name,
         workoutDate,
@@ -3333,6 +3383,7 @@ function WorkoutLogger({
           supersetKey: movement.supersetKey,
           isComplete: movement.isComplete,
           ...(movement.swappedFrom && { swappedFrom: movement.swappedFrom }),
+          ...(movement.repRange && { repRange: movement.repRange }),
           sets: movement.sets,
         })),
       });
@@ -3396,6 +3447,7 @@ function WorkoutLogger({
     name,
     notes,
     previousDurationMinutes,
+    baseRevision,
     resumedWorkoutId,
     startedAt,
     workoutDate,
@@ -4120,7 +4172,7 @@ function WorkoutLogger({
           startedAt,
           finishedAt,
           durationOverrideMinutes,
-          pausedMsAt(pause, finishedAt),
+          clockOffsetMsAt(pause, finishedAt),
           cardioDurationSeconds,
         );
     const completed = movementsToSave
@@ -4214,6 +4266,8 @@ function WorkoutLogger({
       cancelRestTimer();
       await onSave({
         ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
+        ...((initialWorkout || resumedWorkoutId) &&
+          baseRevision !== undefined && { base_revision: baseRevision }),
         name: completedIdentity.name,
         workout_date: workoutDate,
         category: completedIdentity.category,
@@ -4416,6 +4470,7 @@ function WorkoutLogger({
           menuButtonRef={deleteButtonRef}
           onMinimise={onClose}
           onRename={openNameEditor}
+          onAdjustTime={() => setTimeEditorOpen(true)}
           onAddNote={() => revealDetails('.workout-notes textarea')}
           onTogglePause={toggleWorkoutPause}
           saving={saving}
@@ -4469,6 +4524,7 @@ function WorkoutLogger({
           }
         />
       )}
+
       {recommendation &&
         !recommendation.is_rest_day &&
         !recommendation.needs_split_update &&
@@ -5016,6 +5072,18 @@ function WorkoutLogger({
         />
       )}
 
+      {timeEditorOpen && (
+        <WorkoutTimeEditor
+          elapsedSeconds={elapsed}
+          onClose={() => setTimeEditorOpen(false)}
+          onSave={(seconds) => {
+            // A corrected clock replaces a fixed total kept from an earlier finish attempt.
+            setDurationOverrideMinutes(null);
+            setPause((current) => withElapsedSeconds(current, startedAt, seconds));
+            setTimeEditorOpen(false);
+          }}
+        />
+      )}
       {finishConfirmationOpen && (
         <PopupDialog
           title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
@@ -6397,6 +6465,15 @@ function MovementCard({
         </div>
       </header>
 
+      {expanded && !cardio && movement.repRange && (
+        <p className="movement-rep-target">
+          {progressionHint(
+            movement.repRange,
+            progressionTarget(movement.repRange, history[0]?.sets ?? [], weightUnit),
+            weightUnit,
+          )}
+        </p>
+      )}
       {historyOpen && (
         <section
           className="movement-history"
@@ -6678,15 +6755,6 @@ function SetEntryConfirmationDialog({
       </section>
     </div>,
     document.body,
-  );
-}
-
-function ScanningLabel() {
-  return (
-    <span className="scanning-label">
-      <span className="scanning-spinner" aria-hidden="true" />
-      Scanning
-    </span>
   );
 }
 
@@ -7336,6 +7404,7 @@ export function ExercisePicker({
   const query = search.trim();
   const available = exercises.filter(
     (exercise) =>
+      !exercise.hidden &&
       !excludedIds.includes(exercise.id) &&
       (!customOnly || exercise.is_custom) &&
       (bodyPart === 'all' || exercise.category === bodyPart) &&
@@ -7813,155 +7882,6 @@ export function ExercisePicker({
   );
 }
 
-type LockableScreenOrientation = ScreenOrientation & {
-  lock?: (orientation: 'landscape') => Promise<void>;
-  unlock?: () => void;
-};
-
-function LandscapeChartFrame({
-  title,
-  controls,
-  children,
-}: {
-  title: string;
-  controls: ReactNode;
-  children: (expanded: boolean, close: () => void) => ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const expandedRef = useRef(false);
-  const viewerRef = useRef<HTMLDivElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-
-  const close = useCallback(() => {
-    expandedRef.current = false;
-    setExpanded(false);
-  }, []);
-
-  const focusToggle = useCallback(() => {
-    // The portal remounts the toggle; use its current node when restoring the compact view.
-    toggleRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  function unlockOrientation() {
-    try {
-      (screen.orientation as LockableScreenOrientation).unlock?.();
-    } catch {
-      // Orientation locking is optional, so the visual fallback can still close.
-    }
-  }
-
-  async function enterLandscape() {
-    // Mount the portal synchronously while the click still grants fullscreen permission.
-    expandedRef.current = true;
-    flushSync(() => setExpanded(true));
-    const viewer = viewerRef.current;
-    try {
-      if (viewer?.requestFullscreen && !document.fullscreenElement) {
-        // Fullscreen browsers override the target's transform. Rotate its child instead.
-        await viewer.requestFullscreen();
-      }
-    } catch {
-      // The fixed landscape layout below is the fallback on browsers without fullscreen support.
-    }
-    if (!expandedRef.current || viewerRef.current !== viewer) {
-      if (document.fullscreenElement === viewer) {
-        void document.exitFullscreen().catch(() => undefined);
-      }
-      return;
-    }
-    try {
-      await (screen.orientation as LockableScreenOrientation).lock?.('landscape');
-    } catch {
-      // Orientation locking is not supported on every mobile browser.
-    }
-    if (!expandedRef.current || viewerRef.current !== viewer) unlockOrientation();
-  }
-
-  useEffect(() => {
-    if (!expanded) return;
-    const viewer = viewerRef.current;
-    document.body.classList.add('chart-fullscreen-open');
-    focusToggle();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        close();
-      } else if (event.key === 'Tab' && viewer) {
-        const focusable = viewer.querySelectorAll<HTMLElement>('button, [tabindex="0"]');
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (
-          event.shiftKey &&
-          (document.activeElement === first || !viewer.contains(document.activeElement))
-        ) {
-          event.preventDefault();
-          last?.focus();
-        } else if (
-          !event.shiftKey &&
-          (document.activeElement === last || !viewer.contains(document.activeElement))
-        ) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) close();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.body.classList.remove('chart-fullscreen-open');
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      expandedRef.current = false;
-      unlockOrientation();
-      if (document.fullscreenElement === viewer) {
-        void document.exitFullscreen().catch(() => undefined);
-      }
-      focusToggle();
-    };
-  }, [expanded, close, focusToggle]);
-
-  const frame = (
-    <div className={`landscape-chart-frame ${expanded ? 'landscape-chart-expanded' : ''}`}>
-      <div className="landscape-chart-toolbar">
-        <strong className="landscape-chart-title">{title}</strong>
-        <div className="landscape-chart-options">{controls}</div>
-        <button
-          type="button"
-          ref={toggleRef}
-          className="landscape-chart-toggle"
-          aria-label={
-            expanded ? `Exit full-screen ${title}` : `View ${title} full screen in landscape`
-          }
-          onClick={() => (expanded ? close() : void enterLandscape())}
-        >
-          <span aria-hidden="true">
-            <Icon name={expanded ? 'close' : 'expand'} />
-          </span>
-          {expanded ? 'Exit' : 'Landscape'}
-        </button>
-      </div>
-      <div className="landscape-chart-content">{children(expanded, close)}</div>
-    </div>
-  );
-
-  return expanded
-    ? createPortal(
-        <div
-          ref={viewerRef}
-          className="landscape-chart-viewer"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${title} full screen`}
-        >
-          {frame}
-        </div>,
-        document.body,
-      )
-    : frame;
-}
-
 const MAPPING_NOTICE_MS = 4000;
 
 const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
@@ -7970,19 +7890,13 @@ const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: st
   { value: 'volume_kg', label: 'Volume', series: 'Session volume' },
 ];
 
-const RANGE_LABELS: Record<BodyTrendRange, string> = {
-  '1m': '1M',
-  '3m': '3M',
-  '9m': '9M',
-  '1y': '1Y',
-  all: 'All',
-};
-
 interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
   onBack: () => void;
   onMerge?: (trigger: HTMLButtonElement) => void;
+  onRename?: (trigger: HTMLButtonElement) => void;
+  onToggleHidden?: () => void;
 }
 
 export function ProgressScreen({
@@ -8066,6 +7980,7 @@ export function ProgressScreen({
   const rangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const selectedExercise = strengthExercises.find((exercise) => exercise.id === exerciseId) ?? null;
   const canMergeSelected = Boolean(selectedExercise?.is_custom && onExercisesMerged);
+  const canEditSelected = Boolean(selectedExercise && onExercisesMerged);
   const openSelectedMerge = useCallback(
     (trigger: HTMLButtonElement) => {
       mergeTrigger.current = trigger;
@@ -8073,6 +7988,40 @@ export function ProgressScreen({
     },
     [exerciseId],
   );
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [exerciseNotice, setExerciseNotice] = useState<{
+    text: string;
+    undo?: () => void;
+  } | null>(null);
+  useEffect(() => {
+    if (!exerciseNotice) return;
+    const timer = setTimeout(() => setExerciseNotice(null), UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [exerciseNotice]);
+  const openSelectedRename = useCallback((trigger: HTMLButtonElement) => {
+    mergeTrigger.current = trigger;
+    setRenameOpen(true);
+  }, []);
+  const setSelectedHidden = useCallback(
+    async (exercise: Exercise, hidden: boolean, undoable: boolean) => {
+      try {
+        await api.updateExercise(exercise.id, { hidden });
+        await onExercisesMerged?.();
+        setExerciseNotice({
+          text: hidden ? 'Hidden from exercise lists' : 'Shown in exercise lists',
+          undo: undoable ? () => void setSelectedHidden(exercise, !hidden, false) : undefined,
+        });
+      } catch (caught) {
+        setExerciseNotice({
+          text: caught instanceof Error ? caught.message : 'The exercise could not be changed.',
+        });
+      }
+    },
+    [onExercisesMerged],
+  );
+  const toggleSelectedHidden = useCallback(() => {
+    if (selectedExercise) void setSelectedHidden(selectedExercise, !selectedExercise.hidden, true);
+  }, [selectedExercise, setSelectedHidden]);
 
   const backToExercises = useCallback(() => {
     setFullProgress(false);
@@ -8093,6 +8042,9 @@ export function ProgressScreen({
             sessionCount: progressSessionCount,
             onBack: backToExercises,
             onMerge: canMergeSelected ? openSelectedMerge : undefined,
+            onRename:
+              canEditSelected && selectedExercise.is_custom ? openSelectedRename : undefined,
+            onToggleHidden: canEditSelected ? toggleSelectedHidden : undefined,
           }
         : null,
     );
@@ -8104,7 +8056,10 @@ export function ProgressScreen({
     progressSessionCount,
     backToExercises,
     canMergeSelected,
+    canEditSelected,
     openSelectedMerge,
+    openSelectedRename,
+    toggleSelectedHidden,
   ]);
   useEffect(() => () => onDetailChange?.(null), [onDetailChange]);
 
@@ -8310,6 +8265,53 @@ export function ProgressScreen({
           }}
         />
       )}
+      {renameOpen && selectedExercise && (
+        <ExerciseRenameDialog
+          exercise={selectedExercise}
+          onClose={() => {
+            setRenameOpen(false);
+            requestAnimationFrame(
+              () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
+            );
+          }}
+          onRenamed={() => {
+            setRenameOpen(false);
+            setExerciseNotice({ text: 'Exercise renamed' });
+            void onExercisesMerged?.();
+          }}
+        />
+      )}
+      {exerciseNotice &&
+        createPortal(
+          <div
+            className="undo-toast top-toast"
+            role="status"
+            style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
+          >
+            <span>{exerciseNotice.text}</span>
+            {exerciseNotice.undo && (
+              <button
+                className="undo-toast-action"
+                type="button"
+                onClick={() => {
+                  exerciseNotice.undo?.();
+                  setExerciseNotice(null);
+                }}
+              >
+                Undo
+              </button>
+            )}
+            <button
+              type="button"
+              className="undo-toast-close"
+              aria-label="Dismiss exercise notification"
+              onClick={() => setExerciseNotice(null)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
       {mergeNotice &&
         createPortal(
           <div className="undo-toast top-toast" role="status">
@@ -8364,11 +8366,14 @@ export function ProgressScreen({
             actions={
               <>
                 {selectedExercise && <ExerciseMuscleHelp exercise={selectedExercise} />}
-                {canMergeSelected && selectedExercise && (
+                {canEditSelected && selectedExercise && (
                   <ExerciseOptionsMenu
                     key={selectedExercise.id}
                     exerciseName={selectedExercise.name}
-                    onMerge={openSelectedMerge}
+                    hidden={selectedExercise.hidden}
+                    onRename={selectedExercise.is_custom ? openSelectedRename : undefined}
+                    onMerge={canMergeSelected ? openSelectedMerge : undefined}
+                    onToggleHidden={toggleSelectedHidden}
                   />
                 )}
                 {!browseFirst && (
@@ -8744,6 +8749,7 @@ function SettingsScreen({
   csvGuideOpen,
   onCsvGuideOpenChange,
   onDeleteSamples,
+  onRestoreArchive,
   onDataChange,
   account,
   onOpenProfile,
@@ -8788,6 +8794,7 @@ function SettingsScreen({
   csvGuideOpen: boolean;
   onCsvGuideOpenChange: (open: boolean) => void;
   onDeleteSamples: () => Promise<void>;
+  onRestoreArchive: (file: File) => Promise<void>;
   onDataChange: () => Promise<void>;
 }) {
   useSettingsPageJump('settings', active);
@@ -9363,6 +9370,8 @@ function SettingsScreen({
                   </div>
                 </section>
 
+                {account && <AccountArchivePanel onRestore={onRestoreArchive} />}
+
                 <YouTubeConnectionPanel canConnect={canUploadVideos(account)} />
               </>
             ),
@@ -9486,1714 +9495,6 @@ function SettingsScreen({
         />
       )}
     </section>
-  );
-}
-
-export function BodyCompositionScreen({
-  dataRevision = null,
-  measurements,
-  onSave,
-  onDelete,
-  onDataChange,
-  entryRequest = 0,
-  trendPreference = DEFAULT_BODY_TREND_PREFERENCE,
-  onOpenSettings,
-  accountActions,
-}: {
-  dataRevision?: string | null;
-  measurements: BodyMeasurement[];
-  onSave: (payload: {
-    measurement_date: string;
-    weight_kg: number;
-    body_fat_pct: number | null;
-    notes: string | null;
-  }) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onDataChange: () => Promise<void>;
-  entryRequest?: number;
-  trendPreference?: BodyTrendPreference;
-  onOpenSettings?: () => void;
-  accountActions?: ReactNode;
-}) {
-  const weightUnit = useWeightUnit();
-  const [goalsReady, setGoalsReady] = useState(false);
-  const [measurementDate, setMeasurementDate] = useState(localDate());
-  const [entryOpen, setEntryOpen] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(false);
-  const [weight, setWeight] = useState<number | null>(null);
-  const [bodyFat, setBodyFat] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [goals, setGoals] = useState<BodyWeightGoal[]>([]);
-  const [goalRemovalError, setGoalRemovalError] = useState<string | null>(null);
-  const [goalTarget, setGoalTarget] = useState<number | null>(null);
-  const [goalMinimum, setGoalMinimum] = useState<number | null>(null);
-  const [goalMaximum, setGoalMaximum] = useState<number | null>(null);
-  const [goalKind, setGoalKind] = useState<BodyGoalKind>('loss');
-  const [goalDate, setGoalDate] = useState('');
-  const [savingGoal, setSavingGoal] = useState(false);
-  const [editingMeasurement, setEditingMeasurement] = useState<BodyMeasurement | null>(null);
-  const [editWeight, setEditWeight] = useState<number | null>(null);
-  const [editBodyFat, setEditBodyFat] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [checkInPage, setCheckInPage] = useState(1);
-  const [historyView, setHistoryView] = useState<'daily' | BodyHistoryPeriod>('daily');
-  const historyViewIndicatorRef = useSlidingIndicator<HTMLDivElement>(historyView);
-  const [trendDuration, setTrendDuration] = useState<BodyTrendDuration>(trendPreference.duration);
-  const [trendStatistic, setTrendStatistic] = useState<BodyTrendStatistic>(
-    trendPreference.statistic,
-  );
-  const goalRemoval = useGoalRemoval<BodyWeightGoal>({
-    remove: (id) => api.deleteBodyWeightGoal(id),
-    onRemoved: () => void onDataChange(),
-    onRestore: ({ goal, index }) =>
-      setGoals((current) =>
-        current.some((item) => item.id === goal.id)
-          ? current
-          : [...current.slice(0, index), goal, ...current.slice(index)],
-      ),
-    onFailed: setGoalRemovalError,
-  });
-  const pendingGoalId = goalRemoval.pendingId;
-  const activeGoal = goals.find((goal) => goal.active) ?? null;
-  const dailyHistory = bodyHistoryWithWeightChanges(
-    measurements
-      .slice()
-      .sort((first, second) => second.measurement_date.localeCompare(first.measurement_date)),
-    goals,
-    (measurement) => measurement.measurement_date,
-  );
-  // A week or month is judged by the goal in force on its last day.
-  const historySummaries = bodyHistoryWithWeightChanges(
-    historyView === 'daily' ? [] : summarizeBodyHistory(measurements, historyView, trendStatistic),
-    goals,
-    (summary) => summary.end_date,
-  );
-  const historyCount = historyView === 'daily' ? measurements.length : historySummaries.length;
-  const checkInPageCount = Math.max(1, Math.ceil(historyCount / HISTORY_PAGE_SIZE));
-  const pagedMeasurements = dailyHistory.slice(
-    (checkInPage - 1) * HISTORY_PAGE_SIZE,
-    checkInPage * HISTORY_PAGE_SIZE,
-  );
-  const pagedSummaries = historySummaries.slice(
-    (checkInPage - 1) * HISTORY_PAGE_SIZE,
-    checkInPage * HISTORY_PAGE_SIZE,
-  );
-  const latest = measurements[0];
-  const targetWeight = goalTarget;
-  const hasValidTarget =
-    targetWeight !== null &&
-    Number.isFinite(targetWeight) &&
-    targetWeight > 0 &&
-    targetWeight <= 500;
-  const trendSummary = summarizeBodyWeightTrend(measurements, trendDuration);
-  const trendValue = trendSummary[trendStatistic];
-
-  useEffect(() => {
-    setCheckInPage((page) => Math.min(page, checkInPageCount));
-  }, [checkInPageCount]);
-
-  useEffect(() => {
-    if (entryRequest === 0) return;
-    setEntryOpen(true);
-    setGoalOpen(false);
-  }, [entryRequest]);
-
-  useEffect(() => {
-    setTrendDuration(trendPreference.duration);
-    setTrendStatistic(trendPreference.statistic);
-  }, [trendPreference]);
-  useEffect(() => {
-    let cancelled = false;
-    setGoalsReady(false);
-    void api
-      .listBodyWeightGoals()
-      .then((next) => {
-        // A goal waiting out its Undo window stays hidden when the list reloads.
-        if (!cancelled) {
-          setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
-          setGoalsReady(true);
-        }
-      })
-      .catch((reason) => {
-        if (!cancelled)
-          setError(reason instanceof Error ? reason.message : 'Could not load body-weight goals.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dataRevision, pendingGoalId]);
-
-  /** A goal divider in body history; swipe it left to remove the goal, with Undo. */
-  function renderGoalDivider(goal: BodyWeightGoal) {
-    return (
-      <SwipeToDeleteSetRow
-        className="body-goal-swipe"
-        label={`goal: ${bodyGoalName(goal, weightUnit)}`}
-        onDelete={() => {
-          const index = goals.findIndex((item) => item.id === goal.id);
-          if (index < 0) return;
-          setGoalRemovalError(null);
-          setGoals((current) => current.filter((item) => item.id !== goal.id));
-          goalRemoval.start(goal, index);
-        }}
-      >
-        <BodyHistoryGoalDivider goal={goal} unit={weightUnit} />
-      </SwipeToDeleteSetRow>
-    );
-  }
-
-  function chooseGoalKind(kind: BodyGoalKind) {
-    setGoalKind(kind);
-  }
-
-  async function saveGoal() {
-    const range = maintenanceRange({
-      maintenance_min_kg: goalMinimum,
-      maintenance_max_kg: goalMaximum,
-    });
-    if (goalKind === 'maintain' && !range) {
-      setError(
-        `Enter a minimum and a higher maximum, both above 0 and at most ${formatWeight(500, weightUnit)}.`,
-      );
-      return;
-    }
-    if (!latest || (goalKind !== 'maintain' && !hasValidTarget) || !goalDate) {
-      setError('Log a current weight, target weight, and target date first.');
-      return;
-    }
-    const savedTarget =
-      range && goalKind === 'maintain' ? (range[0] + range[1]) / 2 : targetWeight!;
-    const direction = bodyGoalKind({
-      start_weight_kg: latest.weight_kg,
-      target_weight_kg: targetWeight!,
-    });
-    if (goalKind !== 'maintain' && direction !== goalKind) {
-      setError(
-        `For a weight-${goalKind} goal, choose a target ${goalKind === 'loss' ? 'below' : 'above'} your current ${formatWeight(latest.weight_kg, weightUnit)}.`,
-      );
-      return;
-    }
-    setSavingGoal(true);
-    setError(null);
-    try {
-      const goal = await api.createBodyWeightGoal({
-        start_date: localDate(),
-        target_date: goalDate,
-        start_weight_kg: goalKind === 'maintain' ? savedTarget : latest.weight_kg,
-        target_weight_kg: savedTarget,
-        ...(goalKind === 'maintain' && range
-          ? { maintenance_min_kg: range[0], maintenance_max_kg: range[1] }
-          : {}),
-        active: true,
-      });
-      setGoals((current) => [goal, ...current.map((item) => ({ ...item, active: false }))]);
-      await onDataChange();
-      setGoalTarget(null);
-      setGoalMinimum(null);
-      setGoalMaximum(null);
-      setGoalDate('');
-      setGoalOpen(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save this target.');
-    } finally {
-      setSavingGoal(false);
-    }
-  }
-
-  async function submitMeasurement() {
-    const weightValue = weight;
-    if (
-      weightValue === null ||
-      !Number.isFinite(weightValue) ||
-      weightValue <= 0 ||
-      weightValue > 500
-    ) {
-      setError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave({
-        measurement_date: measurementDate,
-        weight_kg: weightValue,
-        body_fat_pct: bodyFat ? Number(bodyFat) : null,
-        notes: notes.trim() || null,
-      });
-      setWeight(null);
-      setBodyFat('');
-      setNotes('');
-      setEntryOpen(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save this measurement.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function beginMeasurementEdit(measurement: BodyMeasurement) {
-    setEditingMeasurement(measurement);
-    setEditWeight(measurement.weight_kg);
-    setEditBodyFat(measurement.body_fat_pct === null ? '' : String(measurement.body_fat_pct));
-    setEditError(null);
-  }
-
-  async function submitMeasurementEdit() {
-    if (!editingMeasurement) return;
-    const weightValue = editWeight;
-    const bodyFatValue = editBodyFat.trim() ? Number(editBodyFat) : null;
-    if (
-      weightValue === null ||
-      !Number.isFinite(weightValue) ||
-      weightValue <= 0 ||
-      weightValue > 500
-    ) {
-      setEditError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    if (
-      bodyFatValue !== null &&
-      (!Number.isFinite(bodyFatValue) || bodyFatValue < 1 || bodyFatValue > 70)
-    ) {
-      setEditError('Enter a body-fat percentage between 1 and 70, or leave it blank.');
-      return;
-    }
-    setEditSaving(true);
-    setEditError(null);
-    try {
-      await onSave({
-        measurement_date: editingMeasurement.measurement_date,
-        weight_kg: weightValue,
-        body_fat_pct: bodyFatValue,
-        notes:
-          editingMeasurement.notes === IMPORTED_BODYWEIGHT_NOTE ? null : editingMeasurement.notes,
-      });
-      setEditingMeasurement(null);
-    } catch (saveError) {
-      setEditError(
-        saveError instanceof Error ? saveError.message : 'Could not update this check-in.',
-      );
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
-  return (
-    <section className="body-screen content-page">
-      <PageHeader
-        eyebrow={`${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${shortDate(latest.measurement_date)}` : ''}`}
-        title="Body"
-        onOpenSettings={onOpenSettings}
-        accountActions={accountActions}
-      />
-      <BodyWeightTip measurementCount={measurements.length} goals={goals} ready={goalsReady} />
-      <div className="body-reference-stats" aria-label="Bodyweight summary">
-        <div>
-          <span>Bodyweight</span>
-          <strong>{latest ? formatWeight(latest.weight_kg, weightUnit) : '–'}</strong>
-        </div>
-        <div>
-          <span>
-            {activeGoal
-              ? `${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} goal`
-              : 'Weight goal'}
-          </span>
-          <strong>{activeGoal ? bodyGoalTarget(activeGoal, weightUnit) : '–'}</strong>
-          {activeGoal && latest && maintenanceRange(activeGoal) && (
-            <small>{maintenanceStatus(activeGoal, latest.weight_kg)}</small>
-          )}
-        </div>
-        <div>
-          <span>Body fat</span>
-          <strong>
-            {latest && latest.body_fat_pct !== null ? `${latest.body_fat_pct}%` : '–'}
-          </strong>
-        </div>
-        <div className="body-trend-stat">
-          <div className="body-trend-stat-controls">
-            <label>
-              <span className="sr-only">Bodyweight trend statistic</span>
-              <select
-                aria-label="Bodyweight trend statistic"
-                value={trendStatistic}
-                onChange={(event) => setTrendStatistic(event.target.value as BodyTrendStatistic)}
-              >
-                <option value="average">Average</option>
-                <option value="median">Median</option>
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Bodyweight trend duration</span>
-              <select
-                aria-label="Bodyweight trend duration"
-                value={trendDuration}
-                onChange={(event) => setTrendDuration(event.target.value as BodyTrendDuration)}
-              >
-                {BODY_TREND_DURATION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <strong>
-            {trendValue === null
-              ? '–'
-              : `${weightFromKg(trendValue, weightUnit).toFixed(1)} ${weightUnit}`}
-          </strong>
-          <small>
-            {trendSummary.count} {trendSummary.count === 1 ? 'check-in' : 'check-ins'}
-          </small>
-        </div>
-      </div>
-
-      {measurements.length > 1 && (
-        <section className="pulse-card body-trend-panel">
-          <header className="pulse-card-header">
-            <h2>Trend</h2>
-            <span>Tap or drag the chart to read a check-in</span>
-          </header>
-          <BodyTrendChart measurements={measurements} goals={goals} />
-        </section>
-      )}
-
-      <div className="body-reference-actions">
-        <button
-          className={entryOpen ? 'active' : ''}
-          type="button"
-          onClick={() => {
-            setError(null);
-            setEntryOpen(true);
-            setGoalOpen(false);
-          }}
-        >
-          Log weigh-in
-        </button>
-        <button
-          className={goalOpen ? 'active' : ''}
-          type="button"
-          onClick={() => {
-            setError(null);
-            setGoalKind(activeGoal ? bodyGoalKind(activeGoal) : 'loss');
-            setGoalMinimum(activeGoal?.maintenance_min_kg ?? null);
-            setGoalMaximum(activeGoal?.maintenance_max_kg ?? null);
-            setGoalOpen(true);
-            setEntryOpen(false);
-          }}
-        >
-          {activeGoal ? 'New goal' : 'Set a goal'}
-        </button>
-      </div>
-
-      <BodySizesCard dataRevision={dataRevision} />
-
-      {goalOpen && (
-        <PopupDialog
-          title="Add bodyweight goal"
-          kicker="GOAL"
-          className="body-goal-popup"
-          onClose={() => setGoalOpen(false)}
-        >
-          <form
-            className="body-goal-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveGoal();
-            }}
-          >
-            {activeGoal && latest && bodyGoalKind(activeGoal) === 'maintain' && (
-              <div className="body-goal-progress">
-                <div>
-                  <strong>{formatWeight(latest.weight_kg, weightUnit)}</strong>
-                  <span>
-                    Maintaining {bodyGoalTarget(activeGoal, weightUnit)} until{' '}
-                    {prettyDate(activeGoal.target_date)}
-                  </span>
-                </div>
-              </div>
-            )}
-            {activeGoal && latest && bodyGoalKind(activeGoal) !== 'maintain' && (
-              <div className="body-goal-progress">
-                <div>
-                  <strong>{formatWeight(latest.weight_kg, weightUnit)}</strong>
-                  <span>
-                    → {formatWeight(activeGoal.target_weight_kg, weightUnit)} by{' '}
-                    {prettyDate(activeGoal.target_date)}
-                  </span>
-                </div>
-                <div className="zone2-track">
-                  <i
-                    style={{
-                      width: `${Math.min(100, Math.max(0, (Math.abs(latest.weight_kg - activeGoal.start_weight_kg) / Math.max(Math.abs(activeGoal.target_weight_kg - activeGoal.start_weight_kg), 0.1)) * 100))}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            <div className="segmented-control body-goal-kind" role="radiogroup" aria-label="Goal">
-              {(
-                [
-                  ['loss', 'Lose'],
-                  ['gain', 'Gain'],
-                  ['maintain', 'Maintain'],
-                ] as const
-              ).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  role="radio"
-                  aria-checked={goalKind === kind}
-                  className={goalKind === kind ? 'active' : ''}
-                  onClick={() => chooseGoalKind(kind)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="goal-entry-fields">
-              {goalKind === 'maintain' ? (
-                <>
-                  <label>
-                    Minimum ({weightUnit})
-                    <WeightInput weightKg={goalMinimum} onWeightChange={setGoalMinimum} />
-                  </label>
-                  <label>
-                    Maximum ({weightUnit})
-                    <WeightInput weightKg={goalMaximum} onWeightChange={setGoalMaximum} />
-                  </label>
-                </>
-              ) : (
-                <label>
-                  Target ({weightUnit})
-                  <WeightInput weightKg={goalTarget} onWeightChange={setGoalTarget} />
-                </label>
-              )}
-              <label>
-                {goalKind === 'maintain' ? 'Until' : 'Target date'}
-                <input
-                  type="date"
-                  value={goalDate}
-                  onChange={(event) => setGoalDate(event.target.value)}
-                />
-              </label>
-            </div>
-            {error && <p className="inline-error">{error}</p>}
-            <footer className="popup-dialog-actions">
-              <button type="button" disabled={savingGoal} onClick={() => setGoalOpen(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={savingGoal}>
-                {savingGoal ? 'Saving…' : 'Set goal'}
-              </button>
-            </footer>
-          </form>
-        </PopupDialog>
-      )}
-
-      {entryOpen && (
-        <PopupDialog
-          title="Log measurement"
-          kicker="CHECK-IN"
-          className="body-entry-popup"
-          onClose={() => setEntryOpen(false)}
-        >
-          <form
-            className="body-entry-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitMeasurement();
-            }}
-          >
-            <div className="body-entry-fields">
-              <label>
-                Date
-                <input
-                  type="date"
-                  value={measurementDate}
-                  onChange={(event) => setMeasurementDate(event.target.value)}
-                />
-              </label>
-              <label>
-                Weight ({weightUnit})
-                <WeightInput
-                  autoFocus
-                  weightKg={weight}
-                  onWeightChange={setWeight}
-                  placeholder={weightInputValue(measurements[0]?.weight_kg ?? 88, weightUnit)}
-                />
-              </label>
-              <label>
-                Body fat %
-                <input
-                  inputMode="decimal"
-                  type="number"
-                  min="1"
-                  max="70"
-                  step="0.1"
-                  value={bodyFat}
-                  onChange={(event) => setBodyFat(event.target.value)}
-                  placeholder="Optional"
-                />
-              </label>
-            </div>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Conditions or anything worth remembering…"
-              rows={2}
-            />
-            {error && <p className="inline-error">{error}</p>}
-            <footer className="popup-dialog-actions">
-              <button type="button" disabled={saving} onClick={() => setEntryOpen(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={saving}>
-                {saving ? 'Saving…' : 'Save check-in'}
-              </button>
-            </footer>
-          </form>
-        </PopupDialog>
-      )}
-
-      <div
-        ref={historyViewIndicatorRef}
-        className="body-log-tabs slide-indicator"
-        role="tablist"
-        aria-label="Bodyweight records"
-      >
-        {(
-          [
-            ['daily', 'Daily'],
-            ['week', `${trendStatistic === 'average' ? 'Avg' : 'Median'} Week`],
-            ['month', `${trendStatistic === 'average' ? 'Avg' : 'Median'} Monthly`],
-          ] as const
-        ).map(([view, label]) => (
-          <button
-            key={view}
-            className={historyView === view ? 'active' : ''}
-            type="button"
-            role="tab"
-            aria-selected={historyView === view}
-            onClick={() => {
-              setHistoryView(view);
-              setCheckInPage(1);
-              setEditingMeasurement(null);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <section className="panel body-history-panel" role="tabpanel">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">HISTORY</p>
-            <h2>Check-ins</h2>
-          </div>
-        </div>
-        {!historyCount && <p className="body-empty">Your first check-in will appear here.</p>}
-        {historyCount > 0 && (
-          <div
-            className={`body-history-table-head${historyView === 'daily' ? '' : ' body-history-summary-grid'}`}
-            aria-hidden="true"
-          >
-            <span>
-              {historyView === 'daily' ? 'Date' : historyView === 'week' ? 'Week' : 'Month'}
-            </span>
-            <span>Bodyweight</span>
-            <span>Body fat</span>
-            {historyView === 'daily' && <span />}
-          </div>
-        )}
-        {goalRemovalError && (
-          <p className="inline-error" role="alert">
-            {goalRemovalError}
-          </p>
-        )}
-        {historyView === 'daily' &&
-          pagedMeasurements.map((measurement) => (
-            <Fragment key={measurement.id}>
-              <article>
-                <div className="body-history-date">
-                  <strong>
-                    {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
-                      new Date(`${measurement.measurement_date}T12:00:00`),
-                    )}
-                  </strong>
-                  <small>{measurement.measurement_date.slice(0, 4)}</small>
-                </div>
-                <div className="body-history-weight">
-                  <strong>
-                    {formatWeight(measurement.weight_kg, weightUnit)}
-                    <BodyHistoryWeightChange
-                      change={measurement.weight_change}
-                      comparison="previous check-in"
-                      unit={weightUnit}
-                      decimals={2}
-                    />
-                  </strong>
-                  <small>{measurement.is_sample && 'Sample'}</small>
-                  {measurement.notes && <p>{measurement.notes}</p>}
-                </div>
-                <div className="body-history-fat">
-                  <strong>
-                    {measurement.body_fat_pct !== null ? `${measurement.body_fat_pct}%` : '–'}
-                  </strong>
-                  <small>{measurement.body_fat_pct !== null ? 'estimate' : ''}</small>
-                </div>
-                <details className="body-row-menu">
-                  <summary aria-label={`Actions for ${prettyDate(measurement.measurement_date)}`}>
-                    ⋮
-                  </summary>
-                  <div className="body-history-actions">
-                    <button type="button" onClick={() => beginMeasurementEdit(measurement)}>
-                      Edit
-                    </button>
-                    <InlineConfirmButton
-                      label="Delete"
-                      confirmLabel="Delete check-in"
-                      onConfirm={() => onDelete(measurement.id)}
-                    />
-                  </div>
-                </details>
-              </article>
-              {editingMeasurement?.id === measurement.id && (
-                <form
-                  className="body-edit-form"
-                  aria-label={`Edit check-in for ${prettyDate(editingMeasurement.measurement_date)}`}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void submitMeasurementEdit();
-                  }}
-                >
-                  <header>
-                    <div>
-                      <p className="section-kicker">EDIT CHECK-IN</p>
-                      <h2>{prettyDate(editingMeasurement.measurement_date)}</h2>
-                    </div>
-                  </header>
-                  <div className="body-edit-content">
-                    <div className="body-edit-fields">
-                      <label>
-                        Weight ({weightUnit})
-                        <WeightInput weightKg={editWeight} onWeightChange={setEditWeight} />
-                      </label>
-                      <label>
-                        Body fat %
-                        <input
-                          inputMode="decimal"
-                          type="number"
-                          min="1"
-                          max="70"
-                          step="0.1"
-                          value={editBodyFat}
-                          onChange={(event) => setEditBodyFat(event.target.value)}
-                          placeholder="Optional"
-                        />
-                      </label>
-                    </div>
-                    {editError && <p className="inline-error">{editError}</p>}
-                  </div>
-                  <div className="body-edit-actions">
-                    <button
-                      type="button"
-                      disabled={editSaving}
-                      onClick={() => setEditingMeasurement(null)}
-                    >
-                      Cancel
-                    </button>
-                    <button type="submit" disabled={editSaving}>
-                      {editSaving ? 'Saving…' : 'Save changes'}
-                    </button>
-                  </div>
-                </form>
-              )}
-              {measurement.goal_change && renderGoalDivider(measurement.goal_change)}
-            </Fragment>
-          ))}
-        {historyView !== 'daily' &&
-          pagedSummaries.map((summary) => (
-            <Fragment key={summary.start_date}>
-              <article className="body-history-summary-grid">
-                <div className="body-history-date">
-                  <strong>
-                    {historyView === 'week'
-                      ? `${new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(`${summary.start_date}T12:00:00`))} – ${new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(`${summary.end_date}T12:00:00`))}`
-                      : new Intl.DateTimeFormat(undefined, { month: 'long' }).format(
-                          new Date(`${summary.start_date}T12:00:00`),
-                        )}
-                  </strong>
-                  <small>
-                    {summary.start_date.slice(0, 4)}
-                    {summary.start_date.slice(0, 4) !== summary.end_date.slice(0, 4)
-                      ? `–${summary.end_date.slice(0, 4)}`
-                      : ''}
-                  </small>
-                </div>
-                <div className="body-history-weight">
-                  <strong>
-                    {weightFromKg(summary.weight_kg, weightUnit).toFixed(1)} {weightUnit}
-                    <BodyHistoryWeightChange
-                      change={summary.weight_change}
-                      comparison={`previous ${historyView === 'week' ? 'week' : 'month'} with check-ins`}
-                      unit={weightUnit}
-                      decimals={1}
-                      fixed
-                    />
-                  </strong>
-                  <small>
-                    {summary.count} {summary.count === 1 ? 'check-in' : 'check-ins'}
-                  </small>
-                </div>
-                <div className="body-history-fat">
-                  <strong>
-                    {summary.body_fat_pct === null ? '–' : `${summary.body_fat_pct.toFixed(1)}%`}
-                  </strong>
-                </div>
-              </article>
-              {summary.goal_change && renderGoalDivider(summary.goal_change)}
-            </Fragment>
-          ))}
-        <PaginationControls
-          currentPage={checkInPage}
-          totalPages={checkInPageCount}
-          onPageChange={setCheckInPage}
-          label={`${historyView} bodyweight history`}
-        />
-      </section>
-      {goalRemoval.pending &&
-        createPortal(
-          <div
-            key={goalRemoval.pending.goal.id}
-            className="undo-toast top-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
-          >
-            <span>Goal removed</span>
-            <button className="undo-toast-action" type="button" onClick={goalRemoval.undo}>
-              Undo
-            </button>
-            <button
-              className="undo-toast-close"
-              type="button"
-              aria-label="Dismiss goal notification"
-              onClick={goalRemoval.dismiss}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
-    </section>
-  );
-}
-
-function BodyTrendChart({
-  measurements,
-  goals,
-}: {
-  measurements: BodyMeasurement[];
-  goals: BodyWeightGoal[];
-}) {
-  const weightUnit = useWeightUnit();
-  const [displayRange, setDisplayRange] = useState<BodyTrendRange>('3m');
-  // Weight and body fat use different units, so they are separate views rather than two y-axes.
-  const [series, setSeries] = useState<'weight' | 'fat'>('weight');
-  const ordered = filterMeasurementsByRange(measurements, displayRange).slice().reverse();
-  const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
-  const selectedDateRange = dateRangeForDates(
-    measurements.map((item) => item.measurement_date),
-    displayRange,
-  );
-  const activeGoal = goals.find((goal) => goal.active) ?? null;
-  // Clip only the start: a future target date extends the chart so the goal line reaches it.
-  const clippedGoal = activeGoal
-    ? clipBodyWeightGoalPath(activeGoal, selectedDateRange.start_date)
-    : null;
-  const weekMs = 7 * 86_400_000;
-  const averagePoints = useMemo<TrendPoint[]>(
-    () =>
-      ordered.map((item) => {
-        const end = new Date(`${item.measurement_date}T12:00:00`).getTime();
-        const window = measurements.filter((candidate) => {
-          const time = new Date(`${candidate.measurement_date}T12:00:00`).getTime();
-          return time <= end && time > end - weekMs;
-        });
-        const average =
-          window.reduce((total, candidate) => total + candidate.weight_kg, 0) / window.length;
-        return {
-          date: item.measurement_date,
-          value: weightFromKg(average, weightUnit),
-          detail: `weighed ${formatWeight(item.weight_kg, weightUnit)}`,
-        };
-      }),
-    // ordered is derived from measurements and the range.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
-  );
-  const dailyPoints = useMemo<TrendPoint[]>(
-    () =>
-      ordered.map((item) => ({
-        date: item.measurement_date,
-        value: weightFromKg(item.weight_kg, weightUnit),
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
-  );
-  const fatPoints = useMemo<TrendPoint[]>(
-    () =>
-      ordered
-        .filter((item) => item.body_fat_pct !== null)
-        .map((item) => ({ date: item.measurement_date, value: item.body_fat_pct! })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
-  );
-  const goalPath = useMemo<GoalPath | null>(
-    () =>
-      clippedGoal && series === 'weight'
-        ? {
-            startDate: clippedGoal.start_date,
-            startValue: weightFromKg(clippedGoal.start_weight_kg, weightUnit),
-            endDate: clippedGoal.target_date,
-            endValue: weightFromKg(clippedGoal.target_weight_kg, weightUnit),
-            ...(maintenanceRange(activeGoal!)
-              ? {
-                  minValue: weightFromKg(activeGoal!.maintenance_min_kg!, weightUnit),
-                  maxValue: weightFromKg(activeGoal!.maintenance_max_kg!, weightUnit),
-                }
-              : {}),
-            label: `Goal ${bodyGoalTarget(activeGoal!, weightUnit)}`,
-          }
-        : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      clippedGoal?.start_date,
-      clippedGoal?.target_date,
-      clippedGoal?.start_weight_kg,
-      clippedGoal?.target_weight_kg,
-      activeGoal?.maintenance_min_kg,
-      activeGoal?.maintenance_max_kg,
-      series,
-      weightUnit,
-    ],
-  );
-  const showFat = series === 'fat' && hasBodyFat;
-  const bodyRangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
-  const bodySeriesIndicatorRef = useSlidingIndicator<HTMLDivElement>(showFat);
-
-  return (
-    <div className="body-trend-chart">
-      <div className="body-trend-chart-controls">
-        <div
-          ref={bodyRangeIndicatorRef}
-          className="range-chips slide-indicator"
-          role="tablist"
-          aria-label="Body composition range"
-        >
-          {TIME_RANGE_OPTIONS.map((option) => (
-            <button
-              type="button"
-              role="tab"
-              key={option.value}
-              aria-selected={displayRange === option.value}
-              aria-label={option.label}
-              className={displayRange === option.value ? 'active' : ''}
-              onClick={() => setDisplayRange(option.value)}
-            >
-              {RANGE_LABELS[option.value]}
-            </button>
-          ))}
-        </div>
-        {hasBodyFat && (
-          <div
-            ref={bodySeriesIndicatorRef}
-            className="segmented-control compact slide-indicator"
-            role="tablist"
-            aria-label="Body measure"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showFat}
-              className={!showFat ? 'active' : ''}
-              onClick={() => setSeries('weight')}
-            >
-              Weight
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={showFat}
-              className={showFat ? 'active' : ''}
-              onClick={() => setSeries('fat')}
-            >
-              Body fat
-            </button>
-          </div>
-        )}
-      </div>
-      <LandscapeChartFrame title={showFat ? 'Body fat trend' : 'Bodyweight trend'} controls={null}>
-        {(expanded) =>
-          showFat ? (
-            <TrendChart
-              points={fatPoints}
-              label="Body fat percentage"
-              seriesLabel="Body fat"
-              unit="%"
-              height={200}
-              fillHeight={expanded}
-            />
-          ) : (
-            <TrendChart
-              points={averagePoints}
-              backgroundPoints={dailyPoints}
-              label="Bodyweight, 7-day average over daily weigh-ins"
-              seriesLabel="7-day average"
-              unit={weightUnit}
-              area={false}
-              goalPath={goalPath}
-              height={200}
-              fillHeight={expanded}
-            />
-          )
-        }
-      </LandscapeChartFrame>
-      <ul className="chart-legend" aria-label="Chart legend">
-        {showFat ? (
-          <li>
-            <i className="legend-line" aria-hidden="true" />
-            Body fat · {fatPoints.length} {fatPoints.length === 1 ? 'reading' : 'readings'}
-          </li>
-        ) : (
-          <>
-            <li>
-              <i className="legend-dot" aria-hidden="true" />
-              Daily weigh-in
-            </li>
-            <li>
-              <i className="legend-line" aria-hidden="true" />
-              7-day average
-            </li>
-            {goalPath && (
-              <li>
-                <i className="legend-goal" aria-hidden="true" />
-                Goal
-              </li>
-            )}
-          </>
-        )}
-      </ul>
-    </div>
-  );
-}
-
-export function CardioScreen({
-  dataRevision,
-  exercises,
-  onDataChange,
-  onOpenWorkout,
-}: {
-  dataRevision: string | null;
-  exercises: Exercise[];
-  onDataChange: () => Promise<void>;
-  onOpenWorkout: (workoutId: string) => void;
-}) {
-  const tips = useTips();
-  const cardioExercises = exercises.filter((exercise) => exercise.kind === 'cardio');
-  const defaultExercise =
-    cardioExercises.find(
-      (exercise) => exercise.name.toLocaleLowerCase() === 'incline treadmill walking',
-    ) ??
-    cardioExercises[0] ??
-    null;
-  const weightUnit = useWeightUnit();
-  const empty: CardioSessionInput = {
-    session_date: localDate(),
-    exercise_id: defaultExercise?.id ?? null,
-    activity_type: defaultExercise?.name ?? '',
-    duration_minutes: 30,
-    calories_kcal: null,
-    average_heart_rate_bpm: null,
-    distance_km: null,
-    average_speed_kph: null,
-    incline_percent: null,
-    average_power_watts: null,
-    average_mets: null,
-    intensity: null,
-    zone: null,
-    qualifies_zone2: false,
-    notes: null,
-  };
-  const [overview, setOverview] = useState<CardioOverview | null>(null);
-  const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
-  const [draft, setDraft] = useState<CardioSessionInput>(empty);
-  const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
-  const [cardioSharing, setCardioSharing] = useState<{
-    session: CardioSession;
-    prompt: boolean;
-  } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [scanStatus, setScanStatus] = useState<{ message: string; warning: boolean } | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'pure_cardio' | 'workout_plus_cardio'>(
-    'all',
-  );
-  const [historyPage, setHistoryPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const cardioFormRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (!editingId) return;
-    const frame = window.requestAnimationFrame(() =>
-      cardioFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    );
-    return () => window.cancelAnimationFrame(frame);
-  }, [editingId]);
-  const load = () =>
-    api
-      .cardioOverview()
-      .then(setOverview)
-      .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : 'Could not load cardio.'),
-      );
-  useEffect(() => {
-    void load();
-    const reloadPreferences = () => void load();
-    window.addEventListener('training-preferences-updated', reloadPreferences);
-    return () => window.removeEventListener('training-preferences-updated', reloadPreferences);
-  }, [dataRevision]);
-  const filteredSessions =
-    overview?.sessions.filter(
-      (session) =>
-        historyFilter === 'all' ||
-        (session.workout_context === 'workout_plus_cardio'
-          ? 'workout_plus_cardio'
-          : 'pure_cardio') === historyFilter,
-    ) ?? [];
-  const historyPageCount = Math.max(
-    1,
-    Math.ceil(filteredSessions.length / CARDIO_HISTORY_PAGE_SIZE),
-  );
-  const currentHistoryPage = Math.min(historyPage, historyPageCount);
-  const pagedSessions = filteredSessions.slice(
-    (currentHistoryPage - 1) * CARDIO_HISTORY_PAGE_SIZE,
-    currentHistoryPage * CARDIO_HISTORY_PAGE_SIZE,
-  );
-
-  useEffect(() => {
-    setHistoryPage((page) => Math.min(page, historyPageCount));
-  }, [historyPageCount]);
-  async function importScreenshot(file: File) {
-    if (scanning) return;
-    setError(null);
-    setScanStatus(null);
-    setScanning(true);
-    try {
-      const scan = await api.scanCardioScreenshot(file);
-      tips.learn('cardio');
-      const scannedExercise = scan.activity_type
-        ? cardioExercises.find(
-            (exercise) =>
-              exercise.name.toLocaleLowerCase() === scan.activity_type?.toLocaleLowerCase(),
-          )
-        : null;
-      setDraft((current) => ({
-        ...current,
-        session_date: scan.session_date ?? current.session_date,
-        exercise_id: scannedExercise?.id ?? current.exercise_id,
-        activity_type: scannedExercise?.name ?? current.activity_type,
-        duration_minutes: scan.duration_minutes ?? current.duration_minutes,
-        calories_kcal: scan.calories_kcal,
-        average_heart_rate_bpm: scan.average_heart_rate_bpm,
-        distance_km: scan.distance_km,
-        average_speed_kph: scan.average_speed_kph,
-        incline_percent: null,
-        average_power_watts: null,
-        average_mets: null,
-      }));
-      const scanned = scan.fields_found.join(', ');
-      const activityWarning =
-        scan.activity_type && !scannedExercise
-          ? ` ${scan.activity_type} is not in the activity list, so the current activity was kept.`
-          : '';
-      setScanStatus({
-        message: `Scanned ${scanned}.${activityWarning}${scan.warning ? ` ${scan.warning}` : ''} Review the fields below, then add the session.`,
-        warning: Boolean(scan.warning || activityWarning),
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not scan that screenshot.');
-    } finally {
-      setScanning(false);
-    }
-  }
-  async function save() {
-    if (saving) return;
-    setError(null);
-    try {
-      if (!editingId && !draft.exercise_id) {
-        setError('Choose a cardio exercise.');
-        return;
-      }
-      const payload = {
-        ...draft,
-        intensity: null,
-        zone: null,
-        qualifies_zone2: false,
-      };
-      setSaving(true);
-      if (editingId) await api.updateCardio(editingId, payload);
-      else {
-        const saved = await api.createCardio(payload);
-        if (!scanStatus) tips.event('manual-cardio', 'cardio', 2);
-        setCardioSharing({ session: saved, prompt: true });
-      }
-      setDraft(empty);
-      setScanStatus(null);
-      setEditingId(null);
-      setFormOpen(false);
-      await onDataChange();
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save cardio.');
-    } finally {
-      setSaving(false);
-    }
-  }
-  async function remove(id: string) {
-    try {
-      await api.deleteCardio(id);
-      await onDataChange();
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not delete cardio.');
-    }
-  }
-  if (!overview) return <LoadingState />;
-  const week = overview.current_week;
-  const today = localDate();
-  const historyGroups = groupCardioHistory(pagedSessions, weekStartDayFrom(week.week_start));
-  const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
-  return (
-    <div className="cardio-screen">
-      {cardioSharing &&
-        (cardioSharing.prompt ? (
-          <WorkoutSharePrompt
-            workout={cardioWorkoutForSharing(cardioSharing.session)}
-            records={0}
-            onClose={() => setCardioSharing(null)}
-          />
-        ) : (
-          <WorkoutShareCard
-            workout={cardioWorkoutForSharing(cardioSharing.session)}
-            records={0}
-            onClose={() => setCardioSharing(null)}
-          />
-        ))}
-      {zoneSettingsOpen && (
-        <CardioZoneSettings
-          preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
-          onClose={() => setZoneSettingsOpen(false)}
-          onSaved={async () => {
-            await onDataChange();
-            await load();
-          }}
-        />
-      )}
-      {error && <p className="inline-error">{error}</p>}
-      {metricSession && (
-        <CardioMetricsEditor
-          key={metricSession.id}
-          session={metricSession}
-          onClose={() => setMetricSession(null)}
-          onSave={async (metrics) => {
-            await api.updateCardioMetrics(metricSession.id, metrics);
-            await onDataChange();
-            await load();
-          }}
-        />
-      )}
-      {!formOpen && !editingId ? (
-        <div className="cardio-page-actions">
-          <button
-            type="button"
-            className="pulse-button primary"
-            onClick={() => {
-              setError(null);
-              setFormOpen(true);
-            }}
-          >
-            <Icon name="plus" />
-            Log session
-          </button>
-          <button
-            type="button"
-            className="pulse-button secondary"
-            aria-label="Import screenshot"
-            onClick={() => {
-              setError(null);
-              setFormOpen(true);
-              requestAnimationFrame(() =>
-                cardioFormRef.current
-                  ?.querySelector<HTMLInputElement>('input[type="file"]')
-                  ?.click(),
-              );
-            }}
-          >
-            <Icon name="camera" />
-            Import screenshot
-          </button>
-        </div>
-      ) : (
-        <section className="panel cardio-form" ref={cardioFormRef}>
-          <h2>{editingId ? 'Edit cardio session' : 'Log cardio session'}</h2>
-          <div className="cardio-screenshot-import">
-            <div className="cardio-screenshot-copy">
-              <strong>Import workout screenshot</strong>
-              <small>
-                OCR fills the form for review. Calories always come from Active Calories; Total
-                Calories are ignored.
-              </small>
-            </div>
-            <label className={scanning ? 'disabled' : ''}>
-              {scanning ? <ScanningLabel /> : 'Choose screenshot'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                disabled={scanning}
-                aria-label="Upload workout screenshot"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = '';
-                  if (file) void importScreenshot(file);
-                }}
-              />
-            </label>
-          </div>
-          {scanStatus && (
-            <p
-              className={`cardio-scan-status${scanStatus.warning ? ' warning' : ''}`}
-              role="status"
-            >
-              {scanStatus.message}
-            </p>
-          )}
-          <div className="cardio-fields">
-            <label>
-              Date
-              <input
-                type="date"
-                value={draft.session_date}
-                onChange={(event) => setDraft({ ...draft, session_date: event.target.value })}
-              />
-            </label>
-            <label>
-              Activity
-              <select
-                value={draft.exercise_id ?? ''}
-                disabled={cardioExercises.length === 0}
-                onChange={(event) => {
-                  const exercise = cardioExercises.find((item) => item.id === event.target.value);
-                  setDraft({
-                    ...draft,
-                    exercise_id: exercise?.id ?? null,
-                    activity_type: exercise?.name ?? '',
-                  });
-                }}
-              >
-                {cardioExercises.length === 0 && <option value="">No cardio exercises</option>}
-                {cardioExercises.map((exercise) => (
-                  <option key={exercise.id} value={exercise.id}>
-                    {exercise.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Minutes
-              <input
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={draft.duration_minutes}
-                onChange={(event) =>
-                  setDraft({ ...draft, duration_minutes: Number(event.target.value) })
-                }
-              />
-            </label>
-            <label>
-              Calories burned (kcal)
-              <input
-                type="number"
-                min="0"
-                max="100000"
-                step="1"
-                inputMode="numeric"
-                value={draft.calories_kcal ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, calories_kcal: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 350"
-              />
-            </label>
-            <label>
-              Average HR (bpm)
-              <input
-                type="number"
-                min="20"
-                max="250"
-                step="1"
-                inputMode="numeric"
-                value={draft.average_heart_rate_bpm ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_heart_rate_bpm: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 142"
-              />
-            </label>
-            <label>
-              Distance (km)
-              <input
-                type="number"
-                min="0"
-                max="10000"
-                step="0.01"
-                inputMode="decimal"
-                value={draft.distance_km ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, distance_km: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Average speed (km/h)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_speed_kph ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_speed_kph: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Incline (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.incline_percent ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, incline_percent: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            {(draft.activity_type.toLocaleLowerCase().includes('cycl') ||
-              draft.activity_type.toLocaleLowerCase().includes('bike')) && (
-              <label>
-                Average power (watts)
-                <input
-                  type="number"
-                  min="1"
-                  max="3000"
-                  step="1"
-                  inputMode="numeric"
-                  value={draft.average_power_watts ?? ''}
-                  onChange={(event) =>
-                    setDraft({ ...draft, average_power_watts: numberOrNull(event.target.value) })
-                  }
-                  placeholder="Optional"
-                />
-              </label>
-            )}
-            <label>
-              Average METs
-              <input
-                type="number"
-                min="0.1"
-                max="50"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_mets ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_mets: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 7.5"
-              />
-            </label>
-          </div>
-          <p className="cardio-calorie-hint">
-            Performance metrics are optional. For calories, prefer your watch or machine’s active
-            calorie estimate. MET-minutes are calculated as average METs × session minutes.
-          </p>
-          <textarea
-            value={draft.notes ?? ''}
-            onChange={(event) => setDraft({ ...draft, notes: event.target.value || null })}
-            placeholder="Notes"
-          />
-          <button className="primary-action" disabled={saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add cardio session'}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => {
-              setEditingId(null);
-              setFormOpen(false);
-              setDraft(empty);
-              setError(null);
-              setScanStatus(null);
-            }}
-          >
-            {editingId ? 'Cancel edit' : 'Cancel'}
-          </button>
-        </section>
-      )}
-      <CardioTrendCard overview={overview} today={today} />
-      <section className="pulse-card cardio-history">
-        <div className="cardio-history-header">
-          <h2>History</h2>
-          <div
-            className="segmented-control cardio-history-filters"
-            role="group"
-            aria-label="Filter cardio history"
-          >
-            {[
-              ['all', 'All'],
-              ['pure_cardio', 'Cardio only'],
-              ['workout_plus_cardio', 'After workout'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={historyFilter === value}
-                onClick={() => {
-                  setHistoryFilter(value as 'all' | 'pure_cardio' | 'workout_plus_cardio');
-                  setHistoryPage(1);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {filteredSessions.length === 0 && (
-          <p className="cardio-history-empty">No cardio sessions match this filter.</p>
-        )}
-        {historyGroups.map((group) => (
-          <section className="cardio-history-week" key={group.start}>
-            <h3>
-              Week of {prettyDate(group.start)}
-              <span>
-                {allHistoryGroups
-                  .find((item) => item.start === group.start)!
-                  .sessions.reduce((total, item) => total + item.duration_minutes, 0)}{' '}
-                min
-              </span>
-            </h3>
-            {group.sessions.map((session, index) => {
-              const workoutContext =
-                session.workout_context === 'workout_plus_cardio'
-                  ? 'workout_plus_cardio'
-                  : 'pure_cardio';
-              const workoutName = session.source_workout_name?.replace(/\s+workout$/i, '');
-              return (
-                <details
-                  className={`cardio-history-row${index > 0 && group.sessions[index - 1].session_date !== session.session_date ? ' cardio-history-new-day' : ''}`}
-                  key={session.id}
-                >
-                  <summary>
-                    <span className="cardio-activity-icon">
-                      <Icon name="pulse" />
-                    </span>
-                    <span className="cardio-history-row-title">
-                      <strong>{session.activity_type}</strong>
-                      <small>
-                        {prettyDate(session.session_date)} ·{' '}
-                        {workoutContext === 'workout_plus_cardio'
-                          ? 'After workout'
-                          : (session.zone ?? 'Cardio only')}
-                      </small>
-                    </span>
-                    <span className="cardio-history-row-minutes">
-                      {session.duration_minutes} min
-                    </span>
-                    <Icon name="chevron-down" />
-                  </summary>
-                  <div className="cardio-history-row-content">
-                    <div className="cardio-session-title-row">
-                      {workoutContext === 'workout_plus_cardio' && (
-                        <span className="cardio-context-badge workout-plus-cardio">
-                          After workout
-                        </span>
-                      )}
-                      {session.source_workout_id ? (
-                        <button
-                          type="button"
-                          className="cardio-history-workout-link"
-                          onClick={() => onOpenWorkout(session.source_workout_id!)}
-                        >
-                          <strong>{session.activity_type}</strong>
-                        </button>
-                      ) : (
-                        <strong>{session.activity_type}</strong>
-                      )}
-                    </div>
-                    <small className="cardio-session-date">
-                      {prettyDate(session.session_date)}
-                    </small>
-                    <small className="cardio-session-summary">
-                      {session.duration_minutes} min ·{' '}
-                      {session.zone ?? session.intensity ?? 'Unspecified'}
-                      {workoutName ? ` · ${workoutName}` : ''}
-                    </small>
-                    <small className="cardio-session-energy">
-                      {session.calories_kcal == null
-                        ? 'Calories not logged'
-                        : `${session.calories_kcal.toLocaleString()} kcal · ≈ ${fatEnergyEquivalent(session.calories_kcal, weightUnit)} fat burnt`}
-                    </small>
-                    <small className="cardio-session-performance">
-                      {[
-                        session.average_heart_rate_bpm == null
-                          ? null
-                          : `${session.average_heart_rate_bpm} bpm avg`,
-                        session.distance_km == null ? null : `${session.distance_km} km`,
-                        session.average_speed_kph == null
-                          ? null
-                          : `${session.average_speed_kph} km/h avg`,
-                        session.incline_percent == null
-                          ? null
-                          : `${session.incline_percent}% incline`,
-                        session.average_power_watts == null
-                          ? null
-                          : `${session.average_power_watts} W avg`,
-                        session.average_mets == null ? null : `${session.average_mets} METs avg`,
-                        session.average_mets == null
-                          ? null
-                          : `${(session.average_mets * session.duration_minutes).toLocaleString(
-                              undefined,
-                              { maximumFractionDigits: 1 },
-                            )} MET-min`,
-                      ]
-                        .filter((value): value is string => value !== null)
-                        .join(' · ') || 'Performance metrics not logged'}
-                    </small>
-                  </div>
-                  <div className="cardio-session-actions">
-                    <button
-                      type="button"
-                      onClick={() => setCardioSharing({ session, prompt: false })}
-                    >
-                      Share card
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMetricSession(session)}
-                      aria-label={`Edit performance metrics for ${session.activity_type} on ${session.session_date}`}
-                    >
-                      {[
-                        session.calories_kcal,
-                        session.average_heart_rate_bpm,
-                        session.distance_km,
-                        session.average_speed_kph,
-                        session.incline_percent,
-                        session.average_power_watts,
-                        session.average_mets,
-                      ].some((value) => value != null)
-                        ? 'Edit metrics'
-                        : 'Log metrics'}
-                    </button>
-                    {!session.source_workout_id && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditingId(session.id);
-                            setDraft({
-                              ...session,
-                              exercise_id:
-                                cardioExercises.find((item) => item.name === session.activity_type)
-                                  ?.id ?? null,
-                            });
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <InlineConfirmButton
-                          label="Delete"
-                          confirmLabel="Delete session"
-                          onConfirm={() => remove(session.id)}
-                        />
-                      </>
-                    )}
-                  </div>
-                </details>
-              );
-            })}
-          </section>
-        ))}
-        <PaginationControls
-          currentPage={currentHistoryPage}
-          totalPages={historyPageCount}
-          onPageChange={setHistoryPage}
-          label="cardio history"
-        />
-      </section>
-      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
-        <header>
-          <h2 id="cardio-goals-title">Weekly zone goals</h2>
-          <button
-            type="button"
-            className="cardio-goals-edit"
-            aria-label="Edit heart-rate zones and goals"
-            onClick={() => setZoneSettingsOpen(true)}
-          >
-            <Icon name="edit" />
-            Edit
-          </button>
-        </header>
-        <ul className="cardio-goal-list">
-          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
-            const range = overview.cardio_preferences?.heart_rate_zones.find(
-              (item) => item.zone === goal.zone,
-            );
-            return (
-              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
-                <span>
-                  <strong>Zone {goal.zone}</strong>
-                  {range && (
-                    <small>
-                      {range.min_bpm}–{range.max_bpm} bpm
-                    </small>
-                  )}
-                </span>
-                <span>
-                  <b>
-                    {goal.completed_minutes} / {goal.goal_minutes} min
-                  </b>
-                  <small>
-                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
-                  </small>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    </div>
   );
 }
 
@@ -11509,13 +9810,14 @@ function HistoryScreen({
           actions={
             <>
               <ExerciseMuscleHelp exercise={exerciseHeader.exercise} />
-              {exerciseHeader.onMerge && (
-                <ExerciseOptionsMenu
-                  key={exerciseHeader.exercise.id}
-                  exerciseName={exerciseHeader.exercise.name}
-                  onMerge={exerciseHeader.onMerge}
-                />
-              )}
+              <ExerciseOptionsMenu
+                key={exerciseHeader.exercise.id}
+                exerciseName={exerciseHeader.exercise.name}
+                hidden={exerciseHeader.exercise.hidden}
+                onRename={exerciseHeader.onRename}
+                onMerge={exerciseHeader.onMerge}
+                onToggleHidden={exerciseHeader.onToggleHidden}
+              />
             </>
           }
         />
