@@ -166,46 +166,104 @@ button.relay-tip-dot {
   outline-offset: 2px;
 }
 
-.relay-tip-actions {
+/* Home tips wait behind a bulb beside the date, so nothing on Home moves. */
+.page-eyebrow-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-}
-.relay-tip-home {
-  touch-action: pan-y;
-}
-
-/* Home keeps one short instruction and its controls in a single quiet row. */
-.relay-tip-home.is-compact {
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 10px;
-  padding: 8px 6px 8px 10px;
-  border-color: var(--p-line);
-  border-radius: 10px;
-  background: var(--p-surface);
-}
-.relay-tip-home.is-compact > svg {
-  width: 15px;
-  height: 15px;
-  flex-basis: 15px;
-  margin-right: 4px;
-  color: var(--p-accent);
-}
-button.relay-tip-summary {
-  flex: 1;
+  gap: 0.375rem;
   min-width: 0;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--p-ink-2);
-  font-size: 0.78rem;
-  line-height: 1.45;
-  text-align: left;
+  min-height: 1.375rem;
+  margin: 0 0 0.125rem;
 }
-.relay-tip-summary:focus-visible {
+.page-eyebrow-row .page-eyebrow {
+  margin: 0;
+}
+button.home-tip-button {
+  display: inline-flex;
+  position: relative;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.375rem;
+  min-height: 0;
+  padding: 0 0.5rem 0 0.375rem;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p-muted) 14%, transparent);
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1;
+}
+button.home-tip-button.is-unread {
+  background: var(--p-gold-soft);
+  color: var(--p-gold);
+}
+/* A 44px-tall touch target without growing the date line. */
+.home-tip-button::after {
+  content: '';
+  position: absolute;
+  inset: -0.6875rem -0.25rem;
+}
+.home-tip-button svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.home-tip-button:focus-visible,
+.home-tip-done:focus-visible {
   outline: 2px solid var(--p-accent-text);
   outline-offset: 2px;
+}
+.home-tip-popover {
+  width: min(320px, calc(100vw - 24px));
+}
+.home-tip-popover::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: calc(var(--home-tip-arrow, 24px) - 5px);
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid var(--p-line-strong);
+  border-left: 1px solid var(--p-line-strong);
+  background: var(--p-surface);
+  transform: rotate(45deg);
+}
+.home-tip-popover footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.home-tip-dots {
+  display: flex;
+  gap: 4px;
+}
+.home-tip-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--p-line-strong);
+}
+.home-tip-dots i.is-current {
+  background: var(--p-gold);
+}
+.home-tip-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.home-tip-actions button.relay-tip-link {
+  padding: 0 4px;
+}
+button.home-tip-done {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--p-accent);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 650;
 }

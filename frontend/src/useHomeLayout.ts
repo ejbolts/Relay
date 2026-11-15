@@ -1,7 +1,7 @@
 import { useTips } from './Tips';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { DEFAULT_HOME_SECTION_SETTINGS, defaultHomeLayout } from './homeLayout';
+import { DEFAULT_HOME_SECTION_SETTINGS, defaultHomeLayout, isHomeSectionId } from './homeLayout';
 import { useUserSession } from './userContext';
 
 export function useHomeLayout(active = true) {
@@ -47,9 +47,11 @@ export function useHomeLayout(active = true) {
       .then((saved) => {
         if (!cancelled) {
           const defaults = defaultHomeLayout();
+          const order = saved.order.filter(isHomeSectionId);
+          const hidden = saved.hidden.filter(isHomeSectionId);
           if (
-            saved.order.join() !== defaults.order.join() ||
-            [...saved.hidden].sort().join() !== [...defaults.hidden].sort().join() ||
+            order.join() !== defaults.order.join() ||
+            [...hidden].sort().join() !== [...defaults.hidden].sort().join() ||
             Object.keys(saved.widths ?? {}).length > 0
           )
             learn('home');

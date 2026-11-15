@@ -44,13 +44,6 @@ export const HOME_SECTIONS = [
     size: 'stat',
   },
   {
-    id: 'weekly-review',
-    title: 'Weekly review',
-    description: 'What changed against last week',
-    icon: 'trend',
-    size: 'full',
-  },
-  {
     id: 'this-week',
     title: 'This week',
     description: 'Each day of the current week',
@@ -115,6 +108,14 @@ export const HOME_SECTIONS = [
 }>;
 
 export type HomeSectionId = (typeof HOME_SECTIONS)[number]['id'];
+
+/**
+ * Saved layouts can still name sections this release no longer shows, such as the weekly review
+ * that became a popup. Older apps keep reading them, so they are ignored here rather than removed.
+ */
+export function isHomeSectionId(id: string): id is HomeSectionId {
+  return HOME_SECTIONS.some((section) => section.id === id);
+}
 export type HomeSectionWidth = 'compact' | 'full' | 'third';
 export type HomeSectionWidths = Partial<Record<HomeSectionId, HomeSectionWidth>>;
 export type CardioGoalCardStyle = 'progress' | 'ring' | 'list';

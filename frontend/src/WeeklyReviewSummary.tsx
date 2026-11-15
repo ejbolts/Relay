@@ -44,7 +44,7 @@ function Delta({
   );
 }
 
-/** One week's figures against the week before, shared by the Home card and the weekly popup. */
+/** One week's figures against the week before, shown in the weekly review popup. */
 export function WeeklyReviewSummary({
   review,
   weightUnit,

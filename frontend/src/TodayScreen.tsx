@@ -7,7 +7,6 @@ import { ConsistencyCard } from './ConsistencyCard';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
-import { WeeklyReviewCard } from './WeeklyReviewCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
@@ -38,7 +37,6 @@ import {
 } from './trainingSummary';
 import type {
   BodyMeasurement,
-  CardioWeek,
   DashboardData,
   PersonalRecord,
   TrackedWorkout,
@@ -68,6 +66,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
+  eyebrowAction,
   title,
   titleAction,
   actions,
@@ -76,6 +75,8 @@ export function PageHeader({
   headingLevel = 1,
 }: {
   eyebrow?: string;
+  /** Sits beside the eyebrow; the row keeps its height whether or not it renders. */
+  eyebrowAction?: ReactNode;
   title: string;
   titleAction?: ReactNode;
   actions?: ReactNode;
@@ -87,7 +88,15 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div>
-        {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
+        {eyebrow &&
+          (eyebrowAction ? (
+            <div className="page-eyebrow-row">
+              <p className="page-eyebrow">{eyebrow}</p>
+              {eyebrowAction}
+            </div>
+          ) : (
+            <p className="page-eyebrow">{eyebrow}</p>
+          ))}
         {titleAction ? (
           <div className="page-header-title-row">
             <Heading>{title}</Heading>
@@ -125,8 +134,6 @@ const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
   reps_at_weight: 'Volume PR for this weight',
   weight: 'Weight PR',
 };
-
-const NO_CARDIO_WEEKS: CardioWeek[] = [];
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
@@ -280,10 +287,6 @@ export function TodayScreen({
     [measurements, today, weekStartDay],
   );
   const records = recentStrengthRecords(personalRecords, 3);
-  const reviewMuscleWeeks = useMemo(() => {
-    const current = muscleSets?.weeklySets ?? data?.weekly_sets;
-    return current ? [current, ...(muscleSets?.history ?? data?.weekly_sets_history ?? [])] : [];
-  }, [data?.weekly_sets, data?.weekly_sets_history, muscleSets]);
   const strengthRecordCount = useMemo(
     () =>
       personalRecords.filter((record) => record.value > 0 && record.record_type in RECORD_LABELS)
@@ -523,23 +526,6 @@ export function TodayScreen({
         />
       </button>
     ),
-    'weekly-review': data ? (
-      <WeeklyReviewCard
-        workouts={workouts}
-        records={personalRecords}
-        measurements={measurements}
-        muscleWeeks={reviewMuscleWeeks}
-        muscleGoal={muscleSetGoal}
-        muscleGoals={muscleGoals}
-        cardioWeeks={data.cardio_weeks ?? NO_CARDIO_WEEKS}
-        weightUnit={weightUnit}
-        today={today}
-        weekStartDay={weekStartDay}
-        onOpenProgress={onOpenProgress}
-        onOpenCardio={onOpenCardio}
-        onOpenBody={onOpenBody}
-      />
-    ) : null,
     'this-week': thisWeek ? <ThisWeekCard>{thisWeek}</ThisWeekCard> : null,
     consistency: (
       <ConsistencyCard streak={data?.current_streak ?? 0} trainingDays={trainingDays}>
@@ -649,6 +635,14 @@ export function TodayScreen({
           day: 'numeric',
           month: 'long',
         })}
+        eyebrowAction={
+          <HomeTips
+            workouts={workouts}
+            createdAt={profile?.created_at}
+            hasSplit={!!data?.recommendation?.split_name}
+            measurementCount={measurements.length}
+          />
+        }
         title="Home"
         onOpenSettings={onOpenSettings}
         accountActions={
@@ -697,12 +691,6 @@ export function TodayScreen({
         }
       />
 
-      <HomeTips
-        workouts={workouts}
-        createdAt={profile?.created_at}
-        hasSplit={!!data?.recommendation?.split_name}
-        measurementCount={measurements.length}
-      />
       {home.loadError && (
         <p className="inline-error" role="alert">
           Could not load your saved layout.{' '}
@@ -1014,6 +1002,9 @@ export function DashboardQuickBodyweight({
             disabled={saving || busy || (fatOnly && todayBodyweight === null)}
           >
             <Icon name="check" />
+            <span className="quick-check-in-save-label" aria-hidden="true">
+              {hasToday ? 'Update' : 'Log'}
+            </span>
           </button>
         )}
       </header>

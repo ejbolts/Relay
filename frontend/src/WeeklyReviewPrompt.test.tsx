@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DashboardData } from './types';
 import { WeeklyReviewPrompt } from './WeeklyReviewPrompt';
 import { markWeeklyReviewShown, weeklyReviewShownFor } from './weeklyReviewPromptState';
+import { requestWeeklyReview, useWeeklyReviewNotice } from './weeklyReviewNotice';
 import { reviewCardioWeek, reviewRecord, reviewSet, reviewWorkout } from './weeklyReviewFixtures';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -87,6 +88,7 @@ afterEach(() => {
 
 it('opens last week once at the start of a new week and remembers that it did', async () => {
   const value = await render();
+  expect(popup()?.querySelector('h2')?.textContent).toBe('Weekly review');
   expect(popup()?.textContent).toContain('Last week');
   expect(popup()?.textContent).toContain('2 Nov – 8 Nov');
   expect(popup()?.textContent).not.toContain('so far');
@@ -136,5 +138,62 @@ it('closes before opening the exercise behind a record', async () => {
     (document.body.querySelector('.weekly-review-records button') as HTMLButtonElement).click(),
   );
   expect(value.onOpenProgress).toHaveBeenCalledWith('bench');
+  expect(popup()).toBeNull();
+});
+
+function NoticeProbe() {
+  const notice = useWeeklyReviewNotice();
+  return (
+    <output>{notice ? `${notice.weekStart}:${notice.unread ? 'unread' : 'read'}` : 'none'}</output>
+  );
+}
+
+async function renderWithNotice(overrides: Partial<Parameters<typeof WeeklyReviewPrompt>[0]> = {}) {
+  const value = props(overrides);
+  await act(async () =>
+    root.render(
+      <>
+        <WeeklyReviewPrompt {...value} />
+        <NoticeProbe />
+      </>,
+    ),
+  );
+  return value;
+}
+
+const notice = () => host.querySelector('output')?.textContent;
+
+it('lists the review as a notice that reopens the popup after it was dismissed', async () => {
+  await renderWithNotice({ enabled: false });
+  expect(popup()).toBeNull();
+  expect(notice()).toBe('2026-11-02:unread');
+
+  await act(async () => requestWeeklyReview());
+  expect(popup()).not.toBeNull();
+  expect(notice()).toBe('2026-11-02:read');
+  await act(async () => button('Got it').click());
+  expect(popup()).toBeNull();
+
+  await act(async () => requestWeeklyReview());
+  expect(popup()?.textContent).toContain('Last week');
+});
+
+it('steps from last week to earlier weeks and this week so far', async () => {
+  await render();
+  const nav = (label: string) =>
+    popup()!.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+  await act(async () => nav('Next week').click());
+  expect(popup()?.textContent).toContain('This week');
+  expect(popup()?.textContent).toContain('so far');
+  await act(async () => nav('Previous week').click());
+  await act(async () => nav('Previous week').click());
+  expect(popup()?.textContent).toContain('2 weeks ago');
+  expect(popup()?.textContent).toContain('26 Oct – 1 Nov');
+});
+
+it('has no notice when last week had nothing logged', async () => {
+  await renderWithNotice({ workouts: [], records: [] });
+  expect(notice()).toBe('none');
+  await act(async () => requestWeeklyReview());
   expect(popup()).toBeNull();
 });

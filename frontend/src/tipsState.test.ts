@@ -4,8 +4,6 @@ import {
   canShowTip,
   countTipEvent,
   freshTips,
-  HOME_TIP_SNOOZE_MS,
-  homeTipSnoozed,
   loadTips,
   saveTips,
   TIP_COOLDOWN,
@@ -35,15 +33,16 @@ describe('tip persistence and allowance', () => {
     expect(canShowTip({ ...state, enabled: false }, 'setType', 101)).toBe(false);
     expect(canShowTip({ ...state, seen: { setType: 'seen' } }, 'setType', 101)).toBe(false);
   });
-  it('snoozes the Home tip slot for ten minutes after it is closed', () => {
-    const state = { ...freshTips(), homeDismissedAt: 1000 };
-    saveTips('alice', state);
-    expect(loadTips('alice').homeDismissedAt).toBe(1000);
-    expect(homeTipSnoozed(freshTips(), 1000)).toBe(false);
-    expect(homeTipSnoozed(state, 1000 + HOME_TIP_SNOOZE_MS - 1)).toBe(true);
-    expect(homeTipSnoozed(state, 1000 + HOME_TIP_SNOOZE_MS)).toBe(false);
-    localStorage.setItem(tipStorageKey('a'), JSON.stringify({ homeDismissedAt: 'soon' }));
-    expect(loadTips('a').homeDismissedAt).toBeUndefined();
+  it('remembers which Home tips were read, ignoring unknown or repeated ids', () => {
+    saveTips('alice', { ...freshTips(), homeRead: ['home', 'friends'] });
+    expect(loadTips('alice').homeRead).toEqual(['home', 'friends']);
+    localStorage.setItem(
+      tipStorageKey('a'),
+      JSON.stringify({ homeRead: ['home', 'unknown', 'home', 3], homeDismissedAt: 1000 }),
+    );
+    expect(loadTips('a')).toEqual({ ...freshTips(), homeRead: ['home'] });
+    localStorage.setItem(tipStorageKey('b'), JSON.stringify({ homeRead: 'home' }));
+    expect(loadTips('b').homeRead).toBeUndefined();
   });
   it('recovers from malformed and partially invalid storage', () => {
     localStorage.setItem(tipStorageKey('a'), '{');

@@ -1,18 +1,17 @@
 import { PopupDialog } from './PopupDialog';
 import type { WeightUnit } from './weightUnits';
-import type { WeeklyReview } from './weeklyReview';
-import { WeeklyReviewSummary } from './WeeklyReviewSummary';
+import { WeeklyReviewBrowser, type WeeklyReviewData } from './WeeklyReviewBrowser';
 
-/** The finished week's review, opened once at the start of each new week. */
+/** The weekly review, opening on the finished week with arrows to earlier weeks and this week. */
 export function WeeklyReviewPopup({
-  review,
+  data,
   weightUnit,
   onClose,
   onOpenProgress,
   onOpenCardio,
   onOpenBody,
 }: {
-  review: WeeklyReview;
+  data: WeeklyReviewData;
   weightUnit: WeightUnit;
   onClose: () => void;
   onOpenProgress: (exerciseId?: string) => void;
@@ -20,17 +19,12 @@ export function WeeklyReviewPopup({
   onOpenBody: () => void;
 }) {
   return (
-    <PopupDialog
-      title="Last week"
-      kicker="WEEKLY REVIEW"
-      className="weekly-review-popup"
-      onClose={onClose}
-    >
+    <PopupDialog title="Weekly review" className="weekly-review-popup" onClose={onClose}>
       <div className="weekly-review-popup-body">
-        <WeeklyReviewSummary
-          review={review}
+        <WeeklyReviewBrowser
+          {...data}
           weightUnit={weightUnit}
-          isCurrentWeek={false}
+          initialWeeksAgo={1}
           onOpenProgress={onOpenProgress}
           onOpenCardio={onOpenCardio}
           onOpenBody={onOpenBody}
