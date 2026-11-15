@@ -226,7 +226,8 @@ body {
   display: contents;
 }
 
-.today-screen > header.page-header .page-eyebrow {
+.today-screen > header.page-header .page-eyebrow,
+.today-screen > header.page-header .page-eyebrow-row {
   grid-column: 1 / -1;
 }
 

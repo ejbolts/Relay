@@ -66,6 +66,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
+  eyebrowAction,
   title,
   titleAction,
   actions,
@@ -74,6 +75,8 @@ export function PageHeader({
   headingLevel = 1,
 }: {
   eyebrow?: string;
+  /** Sits beside the eyebrow; the row keeps its height whether or not it renders. */
+  eyebrowAction?: ReactNode;
   title: string;
   titleAction?: ReactNode;
   actions?: ReactNode;
@@ -85,7 +88,15 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div>
-        {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
+        {eyebrow &&
+          (eyebrowAction ? (
+            <div className="page-eyebrow-row">
+              <p className="page-eyebrow">{eyebrow}</p>
+              {eyebrowAction}
+            </div>
+          ) : (
+            <p className="page-eyebrow">{eyebrow}</p>
+          ))}
         {titleAction ? (
           <div className="page-header-title-row">
             <Heading>{title}</Heading>
@@ -624,6 +635,14 @@ export function TodayScreen({
           day: 'numeric',
           month: 'long',
         })}
+        eyebrowAction={
+          <HomeTips
+            workouts={workouts}
+            createdAt={profile?.created_at}
+            hasSplit={!!data?.recommendation?.split_name}
+            measurementCount={measurements.length}
+          />
+        }
         title="Home"
         onOpenSettings={onOpenSettings}
         accountActions={
@@ -672,12 +691,6 @@ export function TodayScreen({
         }
       />
 
-      <HomeTips
-        workouts={workouts}
-        createdAt={profile?.created_at}
-        hasSplit={!!data?.recommendation?.split_name}
-        measurementCount={measurements.length}
-      />
       {home.loadError && (
         <p className="inline-error" role="alert">
           Could not load your saved layout.{' '}

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
-import { loadTips, saveTips, freshTips, HOME_TIP_SNOOZE_MS, TIP_COOLDOWN } from './tipsState';
+import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
 
 let root: Root, container: HTMLDivElement;
 let controller: ReturnType<typeof useTips>;
@@ -198,43 +198,6 @@ describe('shared tip presentation', () => {
     await advance();
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
   });
-  it('holds a rotating Home card without consuming contextual discovery', async () => {
-    page = 'dashboard';
-    await render(
-      'alice',
-      <>
-        <Harness />
-        <HomeTips workouts={[]} createdAt="2026-10-01" hasSplit />
-      </>,
-    );
-    // The dot would otherwise compete with Home in this artificial harness.
-    await act(async () => controller.learn('plates'));
-    await advance();
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('Put sets in order');
-    await advance();
-    expect(document.querySelector('.relay-tip-home')).not.toBeNull();
-  });
-  it('allows a deliberate Home carousel change without allowing a second automatic tip', async () => {
-    page = 'dashboard';
-    await render(
-      'alice',
-      <>
-        <Harness />
-        <HomeTips
-          workouts={Array.from({ length: 3 }, () => ({ workout_date: '2026-11-09' })) as never[]}
-          createdAt="2026-10-01"
-          hasSplit={false}
-        />
-      </>,
-    );
-    await act(async () => controller.learn('plates'));
-    await advance();
-    await act(async () => button('Next tip').click());
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('One less tap');
-    await act(async () => controller.dismiss());
-    await advance();
-    expect(document.querySelector('.relay-tip-home')).toBeNull();
-  });
   it('supports a quiet completed-set moment when the rest timer is disabled', async () => {
     saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
     resting = false;
@@ -266,14 +229,14 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
     expect(button('Show tips on this device').getAttribute('aria-checked')).toBe('false');
   });
-  async function rotatingHome() {
+  async function homeBulb(child = <HomeTips workouts={[]} hasSplit />) {
     page = 'dashboard';
     saveTips('alice', { ...freshTips(), lastShown: Date.now(), seen: { plates: 'learned' } });
     await render(
       'alice',
       <>
         <Harness />
-        <HomeTips workouts={[]} hasSplit />
+        {child}
       </>,
     );
     await advance();
@@ -284,93 +247,90 @@ describe('shared tip presentation', () => {
     );
     await advance();
   }
-  it('shows Home discovery during the daily contextual cooldown without consuming it', async () => {
-    await rotatingHome();
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('Put sets in order');
-    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+  const bulb = () => document.querySelector<HTMLButtonElement>('.home-tip-button');
+  const popover = () => document.querySelector('.home-tip-popover');
+  it('waits behind a bulb instead of a Home card, without spending contextual discovery', async () => {
+    await homeBulb();
+    expect(document.querySelector('.relay-tip-home')).toBeNull();
+    expect(popover()).toBeNull();
+    expect(bulb()?.classList.contains('is-unread')).toBe(true);
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tip, new');
+    await act(async () => bulb()!.click());
+    expect(bulb()?.getAttribute('aria-expanded')).toBe('true');
+    expect(popover()?.textContent).toContain('Put sets in order');
+    expect(loadTips('alice').homeRead).toEqual(['reorder']);
     expect(loadTips('alice').seen.reorder).toBeUndefined();
     expect(loadTips('alice').lastShown).toBe(Date.now() - 2500);
-  });
-  it('keeps a quick return stable, rotates after five minutes away, and does not rotate in place', async () => {
-    await rotatingHome();
-    await navigate('body');
-    await navigate('dashboard');
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('Put sets in order');
-    vi.setSystemTime(Date.now() + 300000);
     await advance();
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('Put sets in order');
-    await navigate('body');
-    await navigate('dashboard');
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('One less tap');
+    expect(popover()).not.toBeNull();
   });
-  it('advances on a new app mount and skips learned or dismissed entries', async () => {
-    await rotatingHome();
-    await render('other');
-    await render(
-      'alice',
-      <>
-        <Harness />
-        <HomeTips workouts={[]} hasSplit />
-      </>,
+  it('turns grey once every tip is read and opens on the next unread tip', async () => {
+    await homeBulb();
+    await act(async () => bulb()!.click());
+    await act(async () => button('Next').click());
+    expect(popover()?.textContent).toContain('One less tap');
+    await act(async () => bulb()!.click());
+    expect(popover()).toBeNull();
+    expect(bulb()?.classList.contains('is-unread')).toBe(true);
+    await act(async () => bulb()!.click());
+    expect(popover()?.textContent).toContain('Train alongside a friend');
+    expect(bulb()?.classList.contains('is-unread')).toBe(false);
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tip');
+    await act(async () => button('Next').click());
+    expect(popover()?.textContent).toContain('Put sets in order');
+  });
+  it('retires a tip with Got it and disappears when none are left', async () => {
+    await homeBulb();
+    for (const id of ['reorder', 'swipe'] as const) await act(async () => controller.learn(id));
+    await act(async () => bulb()!.click());
+    expect(popover()?.textContent).toContain('Train alongside a friend');
+    expect(button('Next')).toBeUndefined();
+    await act(async () => button('Got it').click());
+    expect(loadTips('alice').seen.friends).toBe('dismissed');
+    expect(popover()).toBeNull();
+    expect(bulb()).toBeNull();
+  });
+  it('closes the popover with Escape, an outside tap or leaving Home', async () => {
+    await homeBulb();
+    await act(async () => bulb()!.click());
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(bulb());
+    await act(async () => bulb()!.click());
+    await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    expect(popover()).toBeNull();
+    await act(async () => bulb()!.click());
+    await navigate('body');
+    expect(popover()).toBeNull();
+  });
+  it('hides the bulb when tips are off or before a first workout', async () => {
+    workoutCount = 0;
+    await homeBulb();
+    expect(bulb()).toBeNull();
+    await act(async () =>
+      controller.configure({ page: 'dashboard', ready: true, resting: false, workoutCount: 5 }),
     );
-    await advance();
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('One less tap');
-    await act(async () => controller.learn('friends'));
-    await act(async () => controller.dismiss());
-    await advance();
-    expect(document.querySelector('.relay-tip-home')).toBeNull();
-    vi.setSystemTime(Date.now() + HOME_TIP_SNOOZE_MS);
-    await navigate('body');
-    await navigate('dashboard');
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('Put sets in order');
+    expect(bulb()).not.toBeNull();
+    await act(async () => button('Show tips on this device').click());
+    expect(bulb()).toBeNull();
   });
-  it('keeps a closed Home tip hidden for ten minutes across visits and reloads', async () => {
-    await rotatingHome();
-    await act(async () => button('Dismiss tip').click());
-    const dismissedAt = Date.now();
-    expect(loadTips('alice').homeDismissedAt).toBe(dismissedAt);
-    expect(document.querySelector('.relay-tip-home')).toBeNull();
-    await navigate('body');
-    await navigate('dashboard');
-    expect(document.querySelector('.relay-tip-home')).toBeNull();
-    await render('other');
-    await render(
-      'alice',
-      <>
-        <Harness />
-        <HomeTips workouts={[]} hasSplit />
-      </>,
+  it('includes relevant machine and maintenance tips', async () => {
+    await homeBulb(
+      <HomeTips
+        measurementCount={3}
+        hasSplit
+        workouts={
+          [
+            {
+              is_sample: false,
+              workout_date: '2026-11-09',
+              movements: [{ exercise: { equipment: 'Machine', kind: 'strength' } }],
+            },
+          ] as never[]
+        }
+      />,
     );
-    vi.setSystemTime(dismissedAt + HOME_TIP_SNOOZE_MS - 3000);
-    await advance();
-    expect(document.querySelector('.relay-tip-home')).toBeNull();
-    await advance(1000);
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('One less tap');
-    expect(loadTips('alice').seen.reorder).toBe('dismissed');
-  });
-  it('includes relevant machine and maintenance tips in the Home carousel', async () => {
-    page = 'dashboard';
-    await render(
-      'alice',
-      <>
-        <Harness />
-        <HomeTips
-          measurementCount={3}
-          hasSplit
-          workouts={
-            [
-              {
-                is_sample: false,
-                workout_date: '2026-11-09',
-                movements: [{ exercise: { equipment: 'Machine', kind: 'strength' } }],
-              },
-            ] as never[]
-          }
-        />
-      </>,
-    );
-    await act(async () => controller.learn('plates'));
-    await advance();
+    await act(async () => bulb()!.click());
     for (const title of [
       'One less tap',
       'Different machines, one progress chart',
@@ -378,21 +338,10 @@ describe('shared tip presentation', () => {
       'Remember your machine',
       'Maintain a range, not a single number',
     ]) {
-      await act(async () => button('Next tip').click());
-      expect(document.querySelector('.relay-tip-home')?.textContent).toContain(title);
+      await act(async () => button('Next').click());
+      expect(popover()?.textContent).toContain(title);
       expect(document.querySelector('.relay-tip-dot')).toBeNull();
       expect(document.querySelector('.relay-tip-nudge')).toBeNull();
     }
-  });
-  it('rotates after returning from a backgrounded app after five minutes', async () => {
-    await rotatingHome();
-    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
-    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
-    expect(document.querySelector('.relay-tip-home')).toBeNull();
-    vi.setSystemTime(Date.now() + 300000);
-    visibility.mockReturnValue('visible');
-    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
-    await advance();
-    expect(document.querySelector('.relay-tip-home')?.textContent).toContain('One less tap');
   });
 });
