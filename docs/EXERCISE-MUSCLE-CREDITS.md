@@ -158,4 +158,35 @@ classification is the app's judgment, not an exercise-specific result claimed by
 
 ## Equipment variants
 
-The expanded catalogue uses the existing movement estimates for equivalent equipment variants; each variant retains its own exercise ID and progress. These remain bookkeeping estimates. Chest-supported dumbbell rows and band rows use the supported/cable row mapping, without spinal-erector credit. Straight-arm pulldowns and dumbbell pullovers give one direct lat credit without curl/biceps credit. Cable kickbacks and hip abduction give one direct glute credit. All 83 built-in strength exercises have explicit mappings.
+The expanded catalogue uses the existing movement estimates for equivalent equipment variants; each variant retains its own exercise ID and progress. These remain bookkeeping estimates. Chest-supported dumbbell rows and band rows use the supported/cable row mapping, without spinal-erector credit. Straight-arm pulldowns and dumbbell pullovers give one direct lat credit without curl/biceps credit. Cable kickbacks and hip abduction give one direct glute credit. All 92 built-in strength exercises have explicit mappings.
+
+## Neck exercises
+
+Added 15 November 2026. The neck is split into three groups, named for the head movement
+each produces:
+
+| Region | Muscle group | Movement |
+| --- | --- | --- |
+| Front of the neck | Neck flexors | Flexion: chin toward chest |
+| Side of the neck | Lateral neck flexors | Lateral flexion: ear toward shoulder |
+| Back of the neck | Neck extensors | Extension: head back |
+
+| Exercise | Equipment | Direct credit: 1.0 | Assisting credit: 0.5 |
+| --- | --- | --- | --- |
+| Machine Neck Flexion | Machine | Neck flexors | — |
+| Plate Neck Flexion | Weight plate | Neck flexors | — |
+| Band Neck Flexion | Resistance band | Neck flexors | — |
+| Machine Lateral Neck Flexion | Machine | Lateral neck flexors | — |
+| Plate Lateral Neck Flexion | Weight plate | Lateral neck flexors | — |
+| Band Lateral Neck Flexion | Resistance band | Lateral neck flexors | — |
+| Machine Neck Extension | Machine | Neck extensors | — |
+| Plate Neck Extension | Weight plate | Neck extensors | — |
+| Band Neck Extension | Resistance band | Neck extensors | — |
+
+Each exercise credits only the group that produces the movement. Upper-trapezius
+involvement in neck extension is not credited, so these sets do not add to **Upper traps**.
+Lateral flexion is logged as one exercise; a set for each side counts like any other
+unilateral exercise. Plate variants are performed lying on a bench with a plate held
+against the head, and accept the common names **Neck Curl**, **Side Neck Curl** and
+**Reverse Neck Curl** on import. Imported custom names containing "neck" are classified
+by their movement words (lateral/side, extension/reverse, flexion/curl).

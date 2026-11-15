@@ -117,7 +117,7 @@ def test_upgrade_keeps_ambiguous_custom_names_without_assuming_their_equipment(c
 def test_catalogue_has_distinct_equipment_variants_and_explicit_muscle_credits(client):
     exercises = client.get("/api/exercises").json()
     strength = [exercise for exercise in exercises if exercise["kind"] == "strength"]
-    assert len(strength) == len(DEFAULT_EXERCISES) == 83
+    assert len(strength) == len(DEFAULT_EXERCISES) == 92
     assert {exercise["equipment"] for exercise in strength} == {
         "Barbell",
         "Dumbbell",
@@ -128,6 +128,7 @@ def test_catalogue_has_distinct_equipment_variants_and_explicit_muscle_credits(c
         "Trap bar",
         "Kettlebell",
         "Resistance band",
+        "Weight plate",
         "Bodyweight",
     }
     assert all(exercise["muscle_contributions"] for exercise in strength)

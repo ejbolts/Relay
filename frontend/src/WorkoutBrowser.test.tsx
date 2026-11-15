@@ -55,11 +55,17 @@ async function click(direction: 'previous' | 'next') {
 }
 async function mount(
   workouts: TrackedWorkout[],
-  options: { initial?: TrackedWorkout; resumed?: string; older?: boolean } = {},
+  options: {
+    initial?: TrackedWorkout;
+    resumed?: string;
+    older?: boolean;
+    resumeRequest?: number;
+  } = {},
 ) {
   await act(async () =>
     root.render(
       <WorkoutBrowser
+        resumeRequest={options.resumeRequest}
         workouts={workouts}
         initialWorkout={options.initial ?? null}
         resumedWorkoutId={options.resumed ?? null}
@@ -87,6 +93,18 @@ afterEach(async () => {
 });
 
 describe('workout browsing', () => {
+  it('returns to the same live logger on a resume request after browsing an older workout', async () => {
+    const workouts = [workout('Earlier', '2026-10-19')];
+    await mount(workouts);
+    const original = active().querySelector('textarea')!;
+    await click('previous');
+    expect(active().textContent).not.toContain('Original session');
+    expect(active().querySelector('textarea')).not.toBe(original);
+    await mount(workouts, { resumeRequest: 1 });
+    expect(active().querySelector('textarea')).toBe(original);
+    expect(original.value).toBe('Unsaved original notes');
+  });
+
   it('orders same-day sessions, stops at both ends, and preserves the mounted original', async () => {
     await mount([
       workout('Later', '2026-10-19', '18:00'),

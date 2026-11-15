@@ -255,7 +255,10 @@ describe('correcting the live workout time', () => {
     expect(container.querySelector('.workout-header-meta')?.className).toContain('is-paused');
     vi.setSystemTime(Date.now() + 5 * MINUTE);
     await act(async () =>
-      container.querySelector<HTMLButtonElement>('.workout-header-pause')!.click(),
+      container.querySelector<HTMLButtonElement>('[aria-label="Workout options"]')!.click(),
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume workout"]')!.click(),
     );
     expect(timeButton()?.textContent).toBe('Live 25:00');
   });
