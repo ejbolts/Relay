@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple, get_args
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, case, delete, exists, func, or_, select
@@ -51,6 +51,7 @@ from .models import (
     User,
     WorkoutCategory,
     WorkoutMovement,
+    WorkoutPhoto,
     WorkoutReaction,
     movement_machine_photos,
     utc_now,
@@ -282,6 +283,28 @@ class FriendFeedRead(BaseModel):
     items: list[FriendFeedItem]
     friends: int
     with_sessions: int
+
+
+class TimelineMember(BaseModel):
+    id: str
+    display_name: str
+    profile_photo_url: str | None
+    is_you: bool = False
+
+
+class TimelineItem(BaseModel):
+    member: TimelineMember
+    workout: TrainingWorkoutRead
+    reactions: WorkoutReactions
+    # Weight and reps records set in the workout, as counted on the member's history.
+    record_count: int = 0
+
+
+class TimelineRead(BaseModel):
+    """Social's feed: your workouts and your friends', newest first, a page at a time."""
+
+    items: list[TimelineItem]
+    has_more: bool = False
 
 
 class FriendLatest(BaseModel):
@@ -572,6 +595,11 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
     shared = TrainingWorkoutRead.model_validate(workout)
     if not sharing.share_notes:
         shared.notes = None
+    # Photos of the session are part of the workout: whoever can see it sees them.
+    for photo in shared.photos:
+        base = f"/api/sharing/profiles/{sharing.user_id}/workout-photos/{photo.id}"
+        photo.thumbnail_url = f"{base}?variant=thumbnail"
+        photo.full_url = f"{base}?variant=full"
     for movement in shared.movements:
         movement.exercise.is_favorite = False
         if sharing.share_machine_photos:
@@ -1053,6 +1081,42 @@ def get_shared_machine_photo(
     )
 
 
+@sharing_router.get("/profiles/{user_id}/workout-photos/{photo_id}")
+def get_shared_workout_photo(
+    user_id: str,
+    photo_id: str,
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    settings: AppSettings,
+    variant: Annotated[str, Query(pattern="^(thumbnail|full)$")] = "full",
+) -> Response:
+    member, _sharing = viewable_member(db, user, user_id)
+    photo = db.scalar(
+        select(WorkoutPhoto)
+        .join(TrainingWorkout, TrainingWorkout.id == WorkoutPhoto.workout_id)
+        .where(
+            WorkoutPhoto.id == photo_id,
+            WorkoutPhoto.user_id == member.id,
+            TrainingWorkout.user_id == member.id,
+            TrainingWorkout.is_sample.is_(False),
+        )
+    )
+    if photo is None:
+        raise api_error(404, "workout_photo_not_found", "That workout photo is not shared.")
+    filename = photo.thumbnail_filename if variant == "thumbnail" else photo.full_filename
+    root = settings.machine_photos_dir.resolve()
+    path = (root / filename).resolve()
+    if root not in path.parents or not path.is_file():
+        raise api_error(404, "workout_photo_not_found", "That workout photo is not shared.")
+    # Checked again on every use, so it disappears as soon as the owner stops sharing. A stored
+    # photo never changes, so a browser that already holds it is told so instead of sent it again.
+    headers = {"Cache-Control": "private, no-cache", "ETag": f'"{photo.id}-{variant}"'}
+    if headers["ETag"] in request.headers.get("if-none-match", ""):
+        return Response(status_code=304, headers=headers)
+    return FileResponse(path, media_type=photo.media_type, headers=headers)
+
+
 def accept_request(friendship: Friendship) -> None:
     friendship.status = ACCEPTED
     friendship.accepted_at = utc_now()
@@ -1245,6 +1309,85 @@ def friend_feed(
                 reactions=reactions[workout.id],
             )
             for workout, member, sharing in rows
+        ],
+    )
+
+
+@sharing_router.get("/timeline", response_model=TimelineRead)
+def workout_timeline(
+    user: CurrentUser,
+    db: Db,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=MAX_WORKOUT_PAGE)] = 10,
+) -> TimelineRead:
+    """Social's feed: every shared workout by you and your friends, newest first."""
+    require_sharing(db, user)
+    newest_first = (
+        TrainingWorkout.workout_date.desc(),
+        TrainingWorkout.created_at.desc(),
+        TrainingWorkout.id.desc(),
+    )
+    rows = db.execute(
+        select(TrainingWorkout, User)
+        .join(User, User.id == TrainingWorkout.user_id)
+        .where(
+            or_(
+                TrainingWorkout.user_id == user.id,
+                TrainingWorkout.user_id.in_(shared_friend_ids(db, user.id)),
+            ),
+            TrainingWorkout.is_sample.is_(False),
+        )
+        .options(*workout_options())
+        .order_by(*newest_first)
+        .offset(offset)
+        # One more than the page, to know whether another page follows.
+        .limit(limit + 1)
+    ).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    workout_ids = [workout.id for workout, _ in rows]
+    sharings = {
+        sharing.user_id: sharing
+        for sharing in db.scalars(
+            select(ProfileSharing).where(
+                ProfileSharing.user_id.in_({member.id for _, member in rows})
+            )
+        )
+    }
+    reactions = reaction_summaries(db, user.id, workout_ids)
+    records = (
+        dict(
+            db.execute(
+                select(PersonalRecord.workout_id, func.count())
+                .where(
+                    PersonalRecord.workout_id.in_(workout_ids),
+                    PersonalRecord.record_type.in_(
+                        (PersonalRecordType.WEIGHT, PersonalRecordType.REPS_AT_WEIGHT)
+                    ),
+                )
+                .group_by(PersonalRecord.workout_id)
+            ).all()
+        )
+        if workout_ids
+        else {}
+    )
+    return TimelineRead(
+        has_more=has_more,
+        items=[
+            TimelineItem(
+                member=TimelineMember(
+                    id=member.id,
+                    display_name=member.display_name,
+                    profile_photo_url=photo_url(member),
+                    is_you=member.id == user.id,
+                ),
+                workout=shared_workout(
+                    workout, sharings.get(member.id) or sharing_choices(db, member.id)
+                ),
+                reactions=reactions[workout.id],
+                record_count=records.get(workout.id, 0),
+            )
+            for workout, member in rows
         ],
     )
 

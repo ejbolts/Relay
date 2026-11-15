@@ -74,6 +74,7 @@ from .models import (
     UserSetting,
     WorkoutCategory,
     WorkoutMovement,
+    WorkoutPhoto,
     WorkoutSet,
     WorkoutType,
     movement_machine_photos,
@@ -155,6 +156,7 @@ from .tracker_schemas import (
     WeightRepsRead,
     WorkoutCacheRevisionRead,
     WorkoutHistorySummaryRead,
+    WorkoutPhotoRead,
     WorkoutRecommendationRead,
     WorkoutSetRead,
     WorkoutSnapshotRead,
@@ -189,6 +191,11 @@ from .training_split import (
     validate_split_types,
 )
 from .training_time import training_time_totals
+from .workout_photos import (
+    MAX_PHOTOS_PER_WORKOUT,
+    delete_workout_photo_files,
+    workout_photo_files,
+)
 from .workout_types import (
     ARCHIVED_KEY,
     DEFAULT_NAMES,
@@ -644,6 +651,7 @@ def workout_options():
         .selectinload(WorkoutMovement.machine_photos)
         .selectinload(MachinePhoto.merged_photos),
         selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.superset_group),
+        selectinload(TrainingWorkout.photos),
     )
 
 
@@ -1498,6 +1506,103 @@ def delete_machine_photo(
     db.commit()
     for full_filename, thumbnail_filename in files:
         delete_machine_photo_files(settings, full_filename, thumbnail_filename)
+
+
+@router.post("/workouts/{workout_id}/photos", response_model=WorkoutPhotoRead, status_code=201)
+async def upload_workout_photo(
+    workout_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    file: Annotated[UploadFile, File(...)],
+) -> WorkoutPhoto:
+    """Add a photo of the whole session. Friends who can see the workout see it too."""
+    workout = get_owned(db, TrainingWorkout, workout_id, user.id)
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout was not found.")
+    if len(workout.photos) >= MAX_PHOTOS_PER_WORKOUT:
+        raise api_error(
+            422,
+            "too_many_workout_photos",
+            f"A workout can have up to {MAX_PHOTOS_PER_WORKOUT} photos.",
+        )
+    limits = load_account_limits(db, settings)
+    check_account_total(
+        db,
+        user,
+        WorkoutPhoto,
+        limits.workout_photos_per_account,
+        "workout_photos_per_account",
+        PHOTO_NOT_UPLOADED,
+    )
+    try:
+        stored = await store_machine_photo(
+            upload=file,
+            settings=settings,
+            max_bytes=limits.photo_upload_megabytes * 1024 * 1024,
+        )
+    except PhotoValidationError as error:
+        raise api_error(error.status_code, error.code, error.message) from error
+
+    photo = WorkoutPhoto(
+        user_id=user.id,
+        workout_id=workout.id,
+        original_filename=stored.original_filename,
+        full_filename=stored.full_filename,
+        thumbnail_filename=stored.thumbnail_filename,
+        media_type="image/webp",
+        file_size=stored.file_size,
+        width=stored.width,
+        height=stored.height,
+    )
+    try:
+        db.add(photo)
+        # Other devices reload the workout; its own revision is for edits to what was logged.
+        bump_workout_cache_revision(db, user.id)
+        db.commit()
+        db.refresh(photo)
+        return photo
+    except Exception:
+        db.rollback()
+        delete_machine_photo_files(settings, stored.full_filename, stored.thumbnail_filename)
+        raise
+
+
+@router.get("/workout-photos/{photo_id}/image")
+def get_workout_photo_image(
+    photo_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    variant: str = Query(default="full", pattern="^(thumbnail|full)$"),
+) -> FileResponse:
+    photo = get_owned(db, WorkoutPhoto, photo_id, user.id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Workout photo was not found.")
+    filename = photo.thumbnail_filename if variant == "thumbnail" else photo.full_filename
+    root = settings.machine_photos_dir.resolve()
+    path = (root / filename).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(status_code=404, detail="Workout photo file was not found.")
+    return FileResponse(
+        path,
+        media_type=photo.media_type,
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+
+@router.delete("/workout-photos/{photo_id}", status_code=204)
+def delete_workout_photo(
+    photo_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+) -> None:
+    photo = get_owned(db, WorkoutPhoto, photo_id, user.id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Workout photo was not found.")
+    files = [(photo.full_filename, photo.thumbnail_filename)]
+    db.delete(photo)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    delete_workout_photo_files(settings, files)
 
 
 def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
@@ -2656,7 +2761,9 @@ def list_import_batches(db: DbSession, user: CurrentUser) -> list[ImportBatchRea
 
 
 @router.delete("/workouts/import/batches/{batch_id}", response_model=ImportUndoRead)
-def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> ImportUndoRead:
+def undo_import_batch(
+    batch_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+) -> ImportUndoRead:
     # Serialize undo with imports so another batch cannot claim entries being removed.
     db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     batch = get_owned(db, ImportBatch, batch_id, user.id)
@@ -2668,6 +2775,9 @@ def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> Import
                 TrainingWorkout.user_id == user.id, TrainingWorkout.id.in_(batch.workout_ids)
             )
         )
+    )
+    photo_files = workout_photo_files(
+        db, WorkoutPhoto.workout_id.in_([workout.id for workout in workouts])
     )
     for workout in workouts:
         db.execute(
@@ -2705,6 +2815,7 @@ def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> Import
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
+    delete_workout_photo_files(settings, photo_files)
     return ImportUndoRead(
         workouts_removed=len(workouts),
         body_measurements_removed=removed,
@@ -2872,24 +2983,31 @@ def update_workout(
 
 
 @router.delete("/workouts/{workout_id}", status_code=204)
-def delete_workout(workout_id: str, db: DbSession, user: CurrentUser) -> None:
+def delete_workout(
+    workout_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+) -> None:
     workout = load_workout(db, user.id, workout_id)
+    photo_files = workout_photo_files(db, WorkoutPhoto.workout_id == workout.id)
     db.execute(delete(CardioSession).where(CardioSession.source_workout_id == workout.id))
     db.delete(workout)
     db.flush()
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
+    delete_workout_photo_files(settings, photo_files)
 
 
 @router.delete("/sample-data", status_code=204)
-def delete_sample_data(db: DbSession, user: CurrentUser) -> None:
+def delete_sample_data(db: DbSession, user: CurrentUser, settings: SettingsDependency) -> None:
     samples = list(
         db.scalars(
             select(TrainingWorkout).where(
                 TrainingWorkout.user_id == user.id, TrainingWorkout.is_sample.is_(True)
             )
         )
+    )
+    photo_files = workout_photo_files(
+        db, WorkoutPhoto.workout_id.in_([workout.id for workout in samples])
     )
     for workout in samples:
         db.delete(workout)
@@ -2903,6 +3021,7 @@ def delete_sample_data(db: DbSession, user: CurrentUser) -> None:
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
+    delete_workout_photo_files(settings, photo_files)
 
 
 def completed_working_sets(workout: TrainingWorkout) -> list[WorkoutSet]:

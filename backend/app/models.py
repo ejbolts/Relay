@@ -832,6 +832,11 @@ class TrainingWorkout(Base):
     personal_records: Mapped[list[PersonalRecord]] = relationship(
         back_populates="workout", cascade="all, delete-orphan"
     )
+    photos: Mapped[list[WorkoutPhoto]] = relationship(
+        back_populates="workout",
+        cascade="all, delete-orphan",
+        order_by="WorkoutPhoto.created_at, WorkoutPhoto.id",
+    )
 
     __table_args__ = (
         Index(
@@ -849,6 +854,44 @@ class TrainingWorkout(Base):
             "(start_time IS NOT NULL AND end_time IS NOT NULL)",
             name="training_workout_times_together",
         ),
+    )
+
+
+class WorkoutPhoto(Base):
+    """A photo of the whole session, shown with the workout to everyone who can see it."""
+
+    __tablename__ = "workout_photos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    workout_id: Mapped[str] = mapped_column(
+        ForeignKey("training_workouts.id", ondelete="CASCADE"), index=True
+    )
+    original_filename: Mapped[str] = mapped_column(String(500))
+    full_filename: Mapped[str] = mapped_column(String(200), unique=True)
+    thumbnail_filename: Mapped[str] = mapped_column(String(200), unique=True)
+    media_type: Mapped[str] = mapped_column(String(100), default="image/webp")
+    file_size: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    workout: Mapped[TrainingWorkout] = relationship(back_populates="photos")
+
+    @property
+    def thumbnail_url(self) -> str:
+        return f"/api/workout-photos/{self.id}/image?variant=thumbnail"
+
+    @property
+    def full_url(self) -> str:
+        return f"/api/workout-photos/{self.id}/image?variant=full"
+
+    __table_args__ = (
+        CheckConstraint("file_size > 0", name="workout_photo_file_size_positive"),
+        CheckConstraint("width > 0", name="workout_photo_width_positive"),
+        CheckConstraint("height > 0", name="workout_photo_height_positive"),
     )
 
 

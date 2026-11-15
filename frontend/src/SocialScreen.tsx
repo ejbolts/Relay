@@ -5,6 +5,7 @@ import { AccountHeaderActions } from './AccountHeaderActions';
 import { useFriendConnections } from './friendConnections';
 import { FriendsList } from './FriendsList';
 import { FindPanel } from './SharedProfiles';
+import { SocialFeed } from './SocialFeed';
 import { PageHeader } from './TodayScreen';
 import { useSlidingIndicator } from './motionHooks';
 import type { SharedProfileSummary, TrackedWorkout, User } from './types';
@@ -29,7 +30,7 @@ export function SocialScreen({
   account?: User;
   openFeedback?: number;
 }) {
-  const [section, setSection] = useState<'friends' | 'find'>('friends');
+  const [section, setSection] = useState<'feed' | 'friends' | 'find'>('feed');
   const indicator = useSlidingIndicator<HTMLDivElement>(section);
   const { connections, state, error, refresh, updateReactions } = useFriendConnections(active);
   const requests = connections?.requests.length ?? 0;
@@ -38,7 +39,7 @@ export function SocialScreen({
     <section className="social-screen content-page">
       <PageHeader
         title="Social"
-        eyebrow="Friends · sessions · reactions"
+        eyebrow="Feed · friends · reactions"
         onOpenSettings={onOpenSettings}
         accountActions={
           <AccountHeaderActions
@@ -55,6 +56,15 @@ export function SocialScreen({
         role="tablist"
         aria-label="Social sections"
       >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === 'feed'}
+          className={section === 'feed' ? 'active' : ''}
+          onClick={() => setSection('feed')}
+        >
+          Feed
+        </button>
         <button
           type="button"
           role="tab"
@@ -88,6 +98,16 @@ export function SocialScreen({
         id="friends"
         eligible={active && state === 'ready' && connections?.friends.length === 0}
       />
+      <CachedTabPanel active={section === 'feed'}>
+        <SocialFeed
+          active={active && section === 'feed'}
+          friends={connections?.friends ?? null}
+          onOpenProfile={onOpenProfile}
+          onOpenOwnProfile={onOpenOwnProfile}
+          onOpenFind={() => setSection('find')}
+          onChooseSharing={onChooseSharing}
+        />
+      </CachedTabPanel>
       <CachedTabPanel active={section === 'friends'}>
         <FriendsList
           active={active && section === 'friends'}

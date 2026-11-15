@@ -177,6 +177,19 @@ class MachinePhotoRead(MachinePhotoImageRead):
     images: list[MachinePhotoImageRead] = Field(default_factory=list)
 
 
+class WorkoutPhotoRead(BaseModel):
+    """A photo of the whole workout; shared copies swap in URLs their viewer can load."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    thumbnail_url: str
+    full_url: str
+    width: int
+    height: int
+    created_at: datetime
+
+
 class MachinePhotoMerge(MachinePhotoCaptionUpdate):
     photo_ids: list[str] = Field(min_length=2, max_length=100)
     keep_photo_id: str
@@ -387,6 +400,7 @@ class TrainingWorkoutRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     movements: list[WorkoutMovementRead] = []
+    photos: list[WorkoutPhotoRead] = []
 
 
 class WorkoutCacheRevisionRead(BaseModel):

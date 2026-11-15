@@ -37,6 +37,7 @@ const defaults: AccountLimits = {
   cardio_sessions_per_account: 5000,
   custom_exercises_per_account: 100,
   photos_per_account: 25,
+  workout_photos_per_account: 500,
   saves_per_minute: 60,
   exercises_per_workout: 20,
   sets_per_workout: 100,

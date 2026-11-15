@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import shutil
+from collections import Counter
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,6 +43,7 @@ from .models import (
     TrainingWorkout,
     User,
     UserSession,
+    WorkoutPhoto,
     WorkoutSession,
 )
 from .photo_storage import machine_photo_paths
@@ -57,6 +59,8 @@ from .session_events import session_events
 
 DbDependency = Annotated[Session, Depends(get_db)]
 Throttle = Annotated[LoginThrottle, Depends(get_login_throttle)]
+# Machine and workout photos are stored alike and counted together.
+PHOTO_MODELS = (MachinePhoto, WorkoutPhoto)
 
 # Lowercase letters and digits without look-alikes (no i, l, o, 0 or 1), so a temporary password
 # can be read out or typed without mix-ups.
@@ -182,17 +186,16 @@ def _counts_by_user(db: Session, model, *conditions) -> dict[str, int]:
 
 def _photo_bytes_by_user(db: Session, settings: Settings) -> dict[str, int]:
     totals: dict[str, int] = {}
-    rows = db.execute(
-        select(MachinePhoto.user_id, MachinePhoto.full_filename, MachinePhoto.thumbnail_filename)
-    )
-    for user_id, full_filename, thumbnail_filename in rows:
-        if user_id is None:
-            continue
-        size = sum(
-            _file_size(path)
-            for path in machine_photo_paths(settings, full_filename, thumbnail_filename)
-        )
-        totals[user_id] = totals.get(user_id, 0) + size
+    for model in PHOTO_MODELS:
+        rows = db.execute(select(model.user_id, model.full_filename, model.thumbnail_filename))
+        for user_id, full_filename, thumbnail_filename in rows:
+            if user_id is None:
+                continue
+            size = sum(
+                _file_size(path)
+                for path in machine_photo_paths(settings, full_filename, thumbnail_filename)
+            )
+            totals[user_id] = totals.get(user_id, 0) + size
     return totals
 
 
@@ -203,7 +206,9 @@ def _admin_user_reads(
     activity = admin_presence_by_member(db, users)
     versions = _device_versions_by_user(db)
     workouts = _counts_by_user(db, TrainingWorkout)
-    photos = _counts_by_user(db, MachinePhoto)
+    photos = Counter()
+    for model in PHOTO_MODELS:
+        photos.update(_counts_by_user(db, model))
     video_sessions = _counts_by_user(db, WorkoutSession)
     photo_bytes = _photo_bytes_by_user(db, settings)
     return [
@@ -413,7 +418,9 @@ def server_status(db: DbDependency, settings: AppSettings) -> ServerStatusRead:
     return ServerStatusRead(
         disk=DiskUsageRead(total_bytes=disk.total, used_bytes=disk.used, free_bytes=disk.free),
         database_bytes=_file_size(settings.database_path),
-        photos=db.scalar(select(func.count(MachinePhoto.id))) or 0,
+        photos=sum(
+            db.scalar(select(func.count()).select_from(model)) or 0 for model in PHOTO_MODELS
+        ),
         photo_bytes=_tree_size([settings.machine_photos_dir]),
         video_file_bytes=video_file_bytes,
         video_queue={status.value: queued.get(status, 0) for status in VIDEO_QUEUE_STATUSES},

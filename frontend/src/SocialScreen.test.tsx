@@ -68,6 +68,7 @@ beforeEach(() => {
     reactions: [],
   });
   vi.spyOn(api.sharing, 'profiles').mockResolvedValue([]);
+  vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [], has_more: false });
   clearSharedProfileCache();
   vi.spyOn(api.sharing, 'profile').mockImplementation(
     async (id) => ({ id, display_name: id, can_view: true }) as SharedProfile,
@@ -96,7 +97,8 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render(active = true) {
+/** Social opens on its feed; these tests start from the Friends tab unless told otherwise. */
+async function render(active = true, section: 'Feed' | 'Friends' = 'Friends') {
   await act(async () =>
     root.render(
       <SocialScreen
@@ -108,9 +110,10 @@ async function render(active = true) {
       />,
     ),
   );
+  if (section === 'Friends') await act(async () => tab('Friends').click());
 }
 
-function tab(name: 'Friends' | 'Find') {
+function tab(name: 'Feed' | 'Friends' | 'Find') {
   return [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((item) =>
     item.textContent?.startsWith(name),
   )!;
