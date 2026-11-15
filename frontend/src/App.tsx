@@ -364,6 +364,7 @@ import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
+import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { LiveWorkoutResumeBar, type LiveWorkoutSummary } from './LiveWorkoutResumeBar';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { weeklySetGains } from './weeklySetsUpdate';
@@ -1066,7 +1067,7 @@ function AppContent() {
     window.requestAnimationFrame(() => {
       document
         .querySelector<HTMLButtonElement>(
-          '.workout-browser [data-workout-session]:not([hidden]) .overlay-header-back',
+          '.workout-browser [data-workout-session]:not([hidden]) .workout-sheet-grab, .workout-browser [data-workout-session]:not([hidden]) .overlay-header-back',
         )
         ?.focus({ preventScroll: true });
     });
@@ -1702,7 +1703,8 @@ function AppContent() {
                 ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
                 : null;
   const activeMainTab = mainTabFor(tab);
-  const showTabBar = tab !== 'log' && tab !== 'split';
+  const liveSheetOpen = tab === 'log' && !editingWorkout && activeWorkoutStartedAt !== null;
+  const showTabBar = (tab !== 'log' && tab !== 'split') || liveSheetOpen;
   const showLiveWorkoutBar =
     tab !== 'log' &&
     activeWorkoutStartedAt !== null &&
@@ -1988,7 +1990,7 @@ function AppContent() {
         )}
 
         <main
-          className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || tab === 'log' ? 'with-overlay-header' : ''}`}
+          className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || (tab === 'log' && !liveSheetOpen) ? 'with-overlay-header' : ''}`}
           data-nav-direction={navDirection}
         >
           {tab !== 'log' &&
@@ -2053,8 +2055,8 @@ function AppContent() {
             tab !== 'profile' &&
             tab !== 'shared-profile' &&
             tab !== 'admin' && <TodaySkeleton />}
-          {(tab === 'dashboard' || visitedTabs.has('dashboard')) && (
-            <CachedTabPanel active={tab === 'dashboard'}>
+          {(tab === 'dashboard' || liveSheetOpen || visitedTabs.has('dashboard')) && (
+            <CachedTabPanel active={tab === 'dashboard' || liveSheetOpen} inert={liveSheetOpen}>
               {loading && dashboard === null ? (
                 <TodaySkeleton />
               ) : (
@@ -2177,103 +2179,111 @@ function AppContent() {
           )}
           {!loading && (activeWorkoutStartedAt !== null || editingWorkout !== null) && (
             <CachedTabPanel active={tab === 'log'}>
-              {workoutCatalogueReady ? (
-                <WorkoutBrowser
-                  key={
-                    editingWorkout
-                      ? `edit-${editingWorkout.id}`
-                      : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
-                  }
-                  workouts={workouts}
-                  initialWorkout={editingWorkout}
-                  resumedWorkoutId={resumingWorkoutId}
-                  hasOlder={olderHistoryAvailable}
-                  resumeRequest={editingWorkout ? undefined : workoutResumeRequest}
-                >
-                  {(navigation, viewedWorkout) => (
-                    <WorkoutLogger
-                      key={viewedWorkout?.id ?? 'original'}
-                      exercises={exercises}
-                      restoredDraftMovements={restoredDraftMovements}
-                      recommendation={dashboard?.recommendation ?? null}
-                      template={workoutTemplate}
-                      startCategory={workoutStartCategory}
-                      startType={workoutStartType}
-                      initialDate={workoutStartDate}
-                      initialWorkout={viewedWorkout ?? editingWorkout}
-                      readOnly={Boolean(viewedWorkout)}
-                      navigation={navigation}
-                      resumingWorkout={viewedWorkout ? null : resumingWorkout}
-                      currentBodyweight={
-                        viewedWorkout
-                          ? savedWorkoutBodyweight(viewedWorkout)
-                          : (measurements[0]?.weight_kg ?? null)
-                      }
-                      historicalWorkouts={workouts}
-                      historyBaselines={historyBaselines}
-                      restTimerEnabled={restTimerEnabled}
-                      showRestTimes={showRestTimes}
-                      weeklySets={
-                        viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
-                      }
-                      categoryColors={workoutTypeColors}
-                      onExerciseHistory={(exerciseId) => openHistorySection('progress', exerciseId)}
-                      onExerciseFavorite={updateExerciseFavorite}
-                      onCreateExercise={createExercise}
-                      onSave={saveWorkout}
-                      onShow={resumeLiveWorkout}
-                      activeStartedAt={activeWorkoutStartedAt}
-                      onRestTimerChange={
-                        editingWorkout || viewedWorkout ? undefined : setRestEndsAt
-                      }
-                      onRestTimerComplete={notifyRestComplete}
-                      onLiveSummaryChange={setLiveWorkoutSummary}
-                      onClose={navigateBack}
-                      onDelete={() => {
-                        if (workoutSaveBlocked) return;
-                        if (editingWorkout) {
-                          void deleteWorkout(editingWorkout);
-                          setTab('history');
-                        } else {
-                          clearActiveWorkoutDraft();
-                          setActiveWorkoutStartedAt(null);
-                          setResumingWorkoutId(null);
-                          setTab('dashboard');
-                        }
-                        setEditingWorkout(null);
-                      }}
-                    />
-                  )}
-                </WorkoutBrowser>
-              ) : (
-                <section className="logger-screen content-page" aria-live="polite">
-                  <OverlayScreenHeader
-                    title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
-                    subtitle={
-                      activeDraft
-                        ? 'Your workout is saved on this device'
-                        : 'Load your exercise library to start'
+              <LiveWorkoutSheet
+                active={tab === 'log'}
+                enabled={!editingWorkout}
+                onMinimise={() => setTab('dashboard')}
+              >
+                {workoutCatalogueReady ? (
+                  <WorkoutBrowser
+                    key={
+                      editingWorkout
+                        ? `edit-${editingWorkout.id}`
+                        : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
                     }
-                    onBack={navigateBack}
-                  />
-                  <p>
-                    {exerciseCatalogue.error
-                      ? 'Your exercises could not be loaded.'
-                      : 'Some exercises in your saved workout are not available yet.'}{' '}
-                    {activeDraft
-                      ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
-                      : 'Reload the exercises to start your workout.'}
-                  </p>
-                  {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                    workouts={workouts}
+                    initialWorkout={editingWorkout}
+                    resumedWorkoutId={resumingWorkoutId}
+                    hasOlder={olderHistoryAvailable}
+                    resumeRequest={editingWorkout ? undefined : workoutResumeRequest}
                   >
-                    Retry loading exercises
-                  </button>
-                </section>
-              )}
+                    {(navigation, viewedWorkout) => (
+                      <WorkoutLogger
+                        key={viewedWorkout?.id ?? 'original'}
+                        exercises={exercises}
+                        restoredDraftMovements={restoredDraftMovements}
+                        recommendation={dashboard?.recommendation ?? null}
+                        template={workoutTemplate}
+                        startCategory={workoutStartCategory}
+                        startType={workoutStartType}
+                        initialDate={workoutStartDate}
+                        initialWorkout={viewedWorkout ?? editingWorkout}
+                        readOnly={Boolean(viewedWorkout)}
+                        navigation={navigation}
+                        resumingWorkout={viewedWorkout ? null : resumingWorkout}
+                        currentBodyweight={
+                          viewedWorkout
+                            ? savedWorkoutBodyweight(viewedWorkout)
+                            : (measurements[0]?.weight_kg ?? null)
+                        }
+                        historicalWorkouts={workouts}
+                        historyBaselines={historyBaselines}
+                        restTimerEnabled={restTimerEnabled}
+                        showRestTimes={showRestTimes}
+                        weeklySets={
+                          viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
+                        }
+                        categoryColors={workoutTypeColors}
+                        onExerciseHistory={(exerciseId) =>
+                          openHistorySection('progress', exerciseId)
+                        }
+                        onExerciseFavorite={updateExerciseFavorite}
+                        onCreateExercise={createExercise}
+                        onSave={saveWorkout}
+                        onShow={resumeLiveWorkout}
+                        activeStartedAt={activeWorkoutStartedAt}
+                        onRestTimerChange={
+                          editingWorkout || viewedWorkout ? undefined : setRestEndsAt
+                        }
+                        onRestTimerComplete={notifyRestComplete}
+                        onLiveSummaryChange={setLiveWorkoutSummary}
+                        onClose={navigateBack}
+                        onDelete={() => {
+                          if (workoutSaveBlocked) return;
+                          if (editingWorkout) {
+                            void deleteWorkout(editingWorkout);
+                            setTab('history');
+                          } else {
+                            clearActiveWorkoutDraft();
+                            setActiveWorkoutStartedAt(null);
+                            setResumingWorkoutId(null);
+                            setTab('dashboard');
+                          }
+                          setEditingWorkout(null);
+                        }}
+                      />
+                    )}
+                  </WorkoutBrowser>
+                ) : (
+                  <section className="logger-screen content-page" aria-live="polite">
+                    <OverlayScreenHeader
+                      title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
+                      subtitle={
+                        activeDraft
+                          ? 'Your workout is saved on this device'
+                          : 'Load your exercise library to start'
+                      }
+                      onBack={navigateBack}
+                    />
+                    <p>
+                      {exerciseCatalogue.error
+                        ? 'Your exercises could not be loaded.'
+                        : 'Some exercises in your saved workout are not available yet.'}{' '}
+                      {activeDraft
+                        ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
+                        : 'Reload the exercises to start your workout.'}
+                    </p>
+                    {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                    >
+                      Retry loading exercises
+                    </button>
+                  </section>
+                )}
+              </LiveWorkoutSheet>
             </CachedTabPanel>
           )}
           {!loading && (tab === 'body' || visitedTabs.has('body')) && (
@@ -2472,9 +2482,10 @@ function AppContent() {
 
         {showTabBar && (
           <AppTabBar
-            resumeInBar={showLiveWorkoutBar}
+            resumeInBar={showLiveWorkoutBar || liveSheetOpen}
+            inert={liveSheetOpen}
             homeLayout={home}
-            active={activeMainTab}
+            active={liveSheetOpen ? 'dashboard' : activeMainTab}
             workoutStartedAt={activeWorkoutStartedAt}
             restEndsAt={restEndsAt}
             workoutSaving={workoutSaveBlocked}
@@ -3206,6 +3217,7 @@ function WorkoutLogger({
   const [error, setError] = useState<string | null>(null);
   const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelWorkoutButtonRef = useRef<HTMLButtonElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(Boolean(initialWorkout));
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
@@ -4406,7 +4418,8 @@ function WorkoutLogger({
           onRename={openNameEditor}
           onAddNote={() => revealDetails('.workout-notes textarea')}
           onTogglePause={toggleWorkoutPause}
-          onDiscard={() => setDeleteConfirmationOpen(true)}
+          saving={saving}
+          onFinish={openFinishConfirmation}
         />
       ) : (
         <OverlayScreenHeader
@@ -4896,16 +4909,25 @@ function WorkoutLogger({
           <button className="add-exercise-button" type="button" onClick={openExercisePicker}>
             ＋ Add exercise
           </button>
-          <button
-            className="primary-action finish-workout-bottom"
-            disabled={saving}
-            onClick={() => {
-              if (initialWorkout) void finishWorkout();
-              else openFinishConfirmation();
-            }}
-          >
-            {saving ? 'Saving…' : initialWorkout ? 'Save workout' : 'Finish workout'}
-          </button>
+          {initialWorkout ? (
+            <button
+              className="primary-action finish-workout-bottom"
+              disabled={saving}
+              onClick={() => void finishWorkout()}
+            >
+              {saving ? 'Saving…' : 'Save workout'}
+            </button>
+          ) : (
+            <button
+              ref={cancelWorkoutButtonRef}
+              className="cancel-live-workout-button"
+              type="button"
+              disabled={saving}
+              onClick={() => setDeleteConfirmationOpen(true)}
+            >
+              Cancel workout
+            </button>
+          )}
         </div>
       )}
 
@@ -4939,7 +4961,9 @@ function WorkoutLogger({
           resuming={Boolean(resumedWorkoutId)}
           onCancel={() => {
             setDeleteConfirmationOpen(false);
-            window.requestAnimationFrame(() => deleteButtonRef.current?.focus());
+            window.requestAnimationFrame(() =>
+              (cancelWorkoutButtonRef.current ?? deleteButtonRef.current)?.focus(),
+            );
           }}
           onConfirm={() => {
             cancelRestTimer();

@@ -24,6 +24,7 @@ import {
 } from './finishedWorkoutQueue';
 import { isStrengthPrEligible } from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
+import { applyReduceMotion } from './motion';
 import type {
   DashboardData,
   Exercise,
@@ -390,6 +391,7 @@ beforeEach(() => {
   };
   window.localStorage.clear();
   window.localStorage.setItem('gym-logger-reduce-motion', 'reduced');
+  applyReduceMotion(true);
   window.history.replaceState(null, '', '#log');
   vi.mocked(api.dashboard).mockResolvedValue({ recommendation: null } as unknown as DashboardData);
   vi.mocked(api.listExercises).mockResolvedValue([bench, row]);
@@ -420,6 +422,7 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  applyReduceMotion(false);
 });
 
 it('uses the top header to return from settings sections before leaving settings', async () => {
@@ -1043,9 +1046,7 @@ describe('rest time controls', () => {
   it('minimises into the resume bar without saving or losing sets, notes or the running rest', async () => {
     await startRest();
     const before = readActiveWorkoutDraft()!;
-    const minimise = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Minimise live workout"]',
-    )!;
+    const minimise = container.querySelector<HTMLButtonElement>('[aria-label="Minimise workout"]')!;
     minimise.focus();
     await act(async () => minimise.click());
     expect(window.location.hash).toBe('#dashboard');
@@ -1067,6 +1068,26 @@ describe('rest time controls', () => {
     expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
   });
 
+  it('places Add exercise and Cancel workout after the last movement, and finishes from the header', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const actions = container.querySelector('.live-workout-actions')!;
+    const last = [...container.querySelectorAll('.movement-card')].at(-1)!;
+    expect(last.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(actions.querySelector('.finish-workout-bottom')).toBeNull();
+    expect(actions.querySelector('.cancel-live-workout-button')?.textContent).toBe(
+      'Cancel workout',
+    );
+    expect(
+      container.querySelector('.live-workout-header [aria-label="Finish workout"]'),
+    ).not.toBeNull();
+    await act(async () =>
+      actions.querySelector<HTMLButtonElement>('.cancel-live-workout-button')!.click(),
+    );
+    expect(document.querySelector('.workout-close-dialog')).not.toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
   it('collapses details by default and opens the notes from the workout menu', async () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
@@ -1086,7 +1107,7 @@ describe('rest time controls', () => {
       const systemNotification = await startRest(scheduled);
       await click('Hide rest timer');
       await act(async () =>
-        container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click(),
+        container.querySelector<HTMLButtonElement>('.workout-sheet-grab')!.click(),
       );
       await act(async () =>
         container.querySelector<HTMLButtonElement>('.app-tab[data-guide-target="body"]')!.click(),
@@ -2192,6 +2213,7 @@ describe('finishing workouts in the background', () => {
     expect(document.querySelector('.workout-completion-toast')?.textContent).toContain('1 new PR');
     expect(document.querySelector('[aria-modal="true"], #root[inert]')).toBeNull();
     expect(document.body.style.overflow).not.toBe('hidden');
+    expect(document.body.classList.contains('live-workout-sheet-open')).toBe(false);
     await navigateTo('Training');
     expect(window.location.hash).toBe('#training');
     expect(document.querySelector('.workout-completion-toast')).not.toBeNull();
@@ -2869,7 +2891,7 @@ describe('cardio set editing defaults', () => {
     await act(async () => tick().click());
     expect(workoutTime()).toBe('10:00');
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
+      container.querySelector<HTMLButtonElement>('.logger-screen .workout-sheet-grab')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
     expect(container.querySelector('.live-workout-resume-duration')?.textContent).toBe('10:00');
@@ -2878,7 +2900,7 @@ describe('cardio set editing defaults', () => {
     );
     await act(async () => tick().click());
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!.click();
+      container.querySelector<HTMLButtonElement>('.logger-screen .workout-sheet-grab')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
     expect(container.querySelector('.live-workout-resume-duration')?.textContent).toBe('10:00');
@@ -3753,7 +3775,7 @@ describe('live muscle totals while logging', () => {
     expect(api.dashboard).toHaveBeenCalledOnce();
     expect(api.createWorkout).not.toHaveBeenCalled();
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click();
+      container.querySelector<HTMLButtonElement>('.workout-sheet-grab')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
     await navigateTo('Home');

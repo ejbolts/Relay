@@ -26,6 +26,7 @@ export function AppTabBar({
   workoutStartedAt,
   restEndsAt = null,
   resumeInBar = false,
+  inert = false,
   workoutSaving = false,
   onSelect,
   onStart,
@@ -38,6 +39,7 @@ export function AppTabBar({
   restEndsAt?: number | null;
   /** A separate full-width bar resumes the workout instead of the centre tab. */
   resumeInBar?: boolean;
+  inert?: boolean;
   workoutSaving?: boolean;
   onSelect: (tab: MainTab) => void;
   /** Resumes the live workout, or starts one when there is no Start menu. */
@@ -150,6 +152,8 @@ export function AppTabBar({
         </>
       )}
       <nav
+        inert={inert}
+        aria-hidden={inert || undefined}
         className={`app-tab-bar${editing ? ' is-editing-home' : ''}`}
         aria-label={editing ? 'Home layout controls' : 'Main navigation'}
       >

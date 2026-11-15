@@ -120,7 +120,9 @@ export function WorkoutBrowser({
       }
       if (!mounted.current) return;
       flushSync(() => setSelectedId(target!));
-      window.scrollTo({ top: 0, behavior: 'instant' });
+      const sheetScroll = root.current?.closest<HTMLElement>('.live-workout-sheet-scroll');
+      if (sheetScroll) sheetScroll.scrollTo?.({ top: 0, behavior: 'instant' });
+      else window.scrollTo({ top: 0, behavior: 'instant' });
       if (animate) {
         await Promise.all(
           content().map((element) =>

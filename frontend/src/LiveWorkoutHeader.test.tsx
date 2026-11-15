@@ -12,7 +12,7 @@ const actions = {
   onAdjustTime: vi.fn(),
   onAddNote: vi.fn(),
   onTogglePause: vi.fn(),
-  onDiscard: vi.fn(),
+  onFinish: vi.fn(),
 };
 const menuButtonRef = createRef<HTMLButtonElement>();
 
@@ -54,19 +54,6 @@ async function key(element: HTMLElement, key: string) {
     element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })),
   );
 }
-async function pointer(type: string, x: number, y: number, target: Element = header(), extra = {}) {
-  const event = new Event(type, { bubbles: true });
-  Object.assign(event, {
-    clientX: x,
-    clientY: y,
-    pointerId: 1,
-    isPrimary: true,
-    button: 0,
-    ...extra,
-  });
-  await act(async () => target.dispatchEvent(event));
-}
-
 it('shows a compact title, live time and set count with secondary actions in the menu', async () => {
   expect(header().textContent).toContain('Lower body workout');
   expect(header().textContent).toContain('Live 12:48');
@@ -77,13 +64,7 @@ it('shows a compact title, live time and set count with secondary actions in the
   await click('Workout options');
   expect(
     [...container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-  ).toEqual([
-    'Rename workout',
-    'Adjust workout time',
-    'Add note',
-    'Pause workout',
-    'Discard workout',
-  ]);
+  ).toEqual(['Rename workout', 'Adjust workout time', 'Add note', 'Pause workout']);
 });
 
 it.each([
@@ -91,7 +72,6 @@ it.each([
   ['Adjust workout time', 'onAdjustTime'],
   ['Add note', 'onAddNote'],
   ['Pause workout', 'onTogglePause'],
-  ['Discard workout', 'onDiscard'],
 ] as const)('runs %s and dismisses the menu', async (label, action) => {
   await click('Workout options');
   await click(label);
@@ -114,8 +94,8 @@ it('supports keyboard menu navigation, Escape and outside dismissal', async () =
   await key(button('Rename workout'), 'ArrowDown');
   expect(document.activeElement).toBe(button('Adjust workout time'));
   await key(button('Adjust workout time'), 'End');
-  expect(document.activeElement).toBe(button('Discard workout'));
-  await key(button('Discard workout'), 'Escape');
+  expect(document.activeElement).toBe(button('Pause workout'));
+  await key(button('Pause workout'), 'Escape');
   expect(menuButtonRef.current?.getAttribute('aria-expanded')).toBe('false');
   expect(document.activeElement).toBe(menuButtonRef.current);
   await click('Workout options');
@@ -123,45 +103,10 @@ it('supports keyboard menu navigation, Escape and outside dismissal', async () =
   expect(container.querySelector('[role="menu"]')).toBeNull();
 });
 
-it('minimises from a downward header drag and from the accessible button', async () => {
-  await pointer('pointerdown', 100, 10);
-  await pointer('pointermove', 102, 55);
-  expect(header().style.transform).not.toBe('');
-  await pointer('pointerup', 103, 95);
+it('finishes from the green tick and minimises from the accessible handle', async () => {
+  expect(container.querySelector('.live-workout-minimise')).toBeNull();
+  await click('Finish workout');
+  expect(actions.onFinish).toHaveBeenCalledOnce();
+  await click('Minimise workout');
   expect(actions.onMinimise).toHaveBeenCalledOnce();
-  await click('Minimise live workout');
-  expect(actions.onMinimise).toHaveBeenCalledTimes(2);
-});
-
-it('keeps tracking when implicit touch capture moves from the handle to the header', async () => {
-  const handle = button('Minimise workout');
-  await pointer('pointerdown', 100, 10, handle);
-  await pointer('pointermove', 100, 30);
-  await pointer('lostpointercapture', 100, 30, handle);
-  await pointer('pointerup', 100, 100);
-  expect(actions.onMinimise).toHaveBeenCalledOnce();
-});
-
-it.each([
-  ['short', 100, 35],
-  ['upward', 100, -80],
-  ['horizontal', 200, 20],
-] as const)('ignores a %s drag', async (_name, x, y) => {
-  await pointer('pointerdown', 100, 10);
-  await pointer('pointermove', x, y);
-  await pointer('pointerup', x, y);
-  expect(actions.onMinimise).not.toHaveBeenCalled();
-  expect(header().style.transform).toBe('');
-});
-
-it('ignores controls and cancelled/multitouch gestures', async () => {
-  await pointer('pointerdown', 100, 10, button('Workout options'));
-  await pointer('pointerup', 100, 110);
-  await pointer('pointerdown', 100, 10, header(), { isPrimary: false });
-  await pointer('pointerup', 100, 110);
-  await pointer('pointerdown', 100, 10);
-  await pointer('pointermove', 100, 90);
-  await pointer('pointercancel', 100, 90);
-  await pointer('pointerup', 100, 110);
-  expect(actions.onMinimise).not.toHaveBeenCalled();
 });

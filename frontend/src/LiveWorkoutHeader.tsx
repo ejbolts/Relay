@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Icon, type IconName } from './Icon';
 import { WorkoutHeaderMeta } from './WorkoutRestTimer';
+import { useLiveWorkoutSheet } from './liveWorkoutSheetContext';
 import './liveWorkout.css';
 
 export function LiveWorkoutHeader({
@@ -14,7 +15,8 @@ export function LiveWorkoutHeader({
   onAdjustTime,
   onAddNote,
   onTogglePause,
-  onDiscard,
+  onFinish,
+  saving = false,
 }: {
   name: string;
   durationLabel: string;
@@ -26,14 +28,14 @@ export function LiveWorkoutHeader({
   onAdjustTime?: () => void;
   onAddNote: () => void;
   onTogglePause: () => void;
-  onDiscard: () => void;
+  onFinish: () => void;
+  saving?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [pull, setPull] = useState(0);
+  const sheet = useLiveWorkoutSheet();
+  const minimise = sheet?.minimise ?? onMinimise;
   const root = useRef<HTMLElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  const gesture = useRef<{ id: number; x: number; y: number } | null>(null);
-  const suppressClick = useRef(false);
   const menuId = useId();
 
   useEffect(() => {
@@ -61,62 +63,12 @@ export function LiveWorkoutHeader({
       icon: paused ? 'play' : 'pause',
       run: onTogglePause,
     },
-    { label: 'Discard workout', icon: 'close', run: onDiscard, danger: true },
   ];
-
-  function resetGesture() {
-    gesture.current = null;
-    setPull(0);
-  }
 
   return (
     <header
       ref={root}
-      className={`overlay-screen-header live-workout-header${pull > 0 ? ' is-pulling' : ''}`}
-      style={{ transform: pull > 0 ? `translateY(${pull * 0.25}px)` : undefined }}
-      onPointerDown={(event) => {
-        if (!event.isPrimary) {
-          resetGesture();
-          return;
-        }
-        if (event.button !== 0 || open) return;
-        const target = event.target as HTMLElement;
-        if (target.closest('button, input, textarea, a') && !target.closest('.workout-sheet-grab'))
-          return;
-        suppressClick.current = false;
-        gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
-      }}
-      onPointerMove={(event) => {
-        const start = gesture.current;
-        if (!start || start.id !== event.pointerId) return;
-        const dx = Math.abs(event.clientX - start.x);
-        const dy = event.clientY - start.y;
-        if (dy < -12 || (dx > 12 && dx > dy)) {
-          resetGesture();
-          return;
-        }
-        if (dy > 8) {
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-          suppressClick.current = true;
-          setPull(Math.min(dy, 96));
-        }
-      }}
-      onPointerUp={(event) => {
-        const start = gesture.current;
-        if (!start || start.id !== event.pointerId) return;
-        const dy = event.clientY - start.y;
-        const minimise = dy >= 72 && Math.abs(event.clientX - start.x) < dy * 0.7;
-        resetGesture();
-        if (minimise) onMinimise();
-        // Pointer-up can synthesize a click on the handle after a drag.
-        window.setTimeout(() => (suppressClick.current = false), 0);
-      }}
-      onPointerCancel={resetGesture}
-      onLostPointerCapture={(event) => {
-        // Touch initially captures the handle button. Moving capture to this header
-        // emits a bubbling loss event from the button, not a cancelled header drag.
-        if (event.target === event.currentTarget) resetGesture();
-      }}
+      className="overlay-screen-header live-workout-header"
       onKeyDown={(event) => {
         if (event.key === 'Escape' && open) {
           event.preventDefault();
@@ -131,20 +83,12 @@ export function LiveWorkoutHeader({
         className="workout-sheet-grab"
         aria-label="Minimise workout"
         onClick={() => {
-          if (!suppressClick.current) onMinimise();
+          minimise();
         }}
       >
         <span />
       </button>
       <div className="live-workout-toolbar">
-        <button
-          className="overlay-header-back live-workout-minimise"
-          type="button"
-          aria-label="Minimise live workout"
-          onClick={onMinimise}
-        >
-          <Icon name="chevron-down" />
-        </button>
         <div className="overlay-header-copy">
           <strong title={name}>{name}</strong>
           <div className="live-workout-meta">
@@ -172,6 +116,18 @@ export function LiveWorkoutHeader({
           }}
         >
           <Icon name="more" />
+        </button>
+        <button
+          type="button"
+          className="live-workout-finish"
+          aria-label="Finish workout"
+          title="Finish workout"
+          disabled={saving}
+          aria-busy={saving}
+          onClick={onFinish}
+        >
+          <Icon name="check" />
+          <span className="sr-only">Finish workout</span>
         </button>
       </div>
       {open && (
