@@ -8,9 +8,75 @@
   justify-items: center;
   padding: calc(env(safe-area-inset-top) + 1.5rem) max(1rem, env(safe-area-inset-right))
     calc(env(safe-area-inset-bottom) + 1.5rem) max(1rem, env(safe-area-inset-left));
+  /* Keeps the sun ray and grain layers behind the content but above this background. */
+  isolation: isolate;
   background:
-    radial-gradient(circle at 50% -10%, rgb(57 135 229 / 16%), transparent 24rem), var(--p-page);
+    radial-gradient(circle at 50% -10%, rgb(57 135 229 / 16%), transparent 24rem),
+    radial-gradient(130% 90% at 50% 45%, transparent 45%, var(--auth-vignette) 100%), var(--p-page);
   color: var(--p-ink);
+  --auth-ray: rgb(255 250 242 / 7%);
+  --auth-ray-soft: rgb(255 250 242 / 3%);
+  --auth-vignette: rgb(0 0 0 / 45%);
+  --auth-grain-opacity: 0.085;
+}
+
+/* A broad, soft diagonal sun ray that drifts slowly across the screen. Fixed to the viewport so
+   it stays put while a long form scrolls, and so its oversized box never adds scroll overflow. */
+.auth-screen::before,
+.auth-screen::after {
+  position: fixed;
+  z-index: -1;
+  content: '';
+  pointer-events: none;
+}
+
+.auth-screen::before {
+  inset: -50%;
+  background: linear-gradient(
+    118deg,
+    transparent 34%,
+    var(--auth-ray-soft) 43%,
+    var(--auth-ray) 50%,
+    var(--auth-ray-soft) 57%,
+    transparent 66%
+  );
+  animation: auth-sun-ray 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
+.auth-screen::after {
+  inset: -10vh 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)' opacity='.45'/%3E%3C/svg%3E");
+  opacity: var(--auth-grain-opacity);
+}
+
+@keyframes auth-sun-ray {
+  from {
+    transform: translate3d(-14%, 6%, 0) rotate(-2deg);
+  }
+  to {
+    transform: translate3d(13%, -5%, 0) rotate(3deg);
+  }
+}
+
+:root[data-colour-mode='light'] .auth-screen {
+  --auth-ray: rgb(255 255 255 / 70%);
+  --auth-ray-soft: rgb(255 255 255 / 30%);
+  --auth-vignette: rgb(16 24 32 / 6%);
+  --auth-grain-opacity: 0.05;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-screen::before {
+    animation: none;
+  }
+}
+
+[data-reduce-motion] .auth-screen::before {
+  animation: none;
 }
 
 .auth-shell {
