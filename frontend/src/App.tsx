@@ -3302,7 +3302,10 @@ function WorkoutLogger({
   }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
-  useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));
+  const animateAddedMovements = useFlipAnimation(
+    movementStackRef,
+    movements.map((movement) => movement.key).join('|'),
+  );
   const [switchingMovementKey, setSwitchingMovementKey] = useState<string | null>(null);
   const [swapSheetMovementKey, setSwapSheetMovementKey] = useState<string | null>(null);
   const [swapUndo, setSwapUndo] = useState<{
@@ -3781,6 +3784,7 @@ function WorkoutLogger({
     createSuperset = false,
     machineChoices: ExerciseMachineChoices = {},
   ) {
+    animateAddedMovements();
     setMovements((current) => {
       const merged = mergeUniqueById(
         current.map((item) => item.exercise),

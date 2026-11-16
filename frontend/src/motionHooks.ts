@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { motionReduced } from './motion';
 
 const ACTIVE_CHILD =
@@ -52,17 +52,30 @@ export function useSlidingIndicator<T extends HTMLElement>(
 }
 
 const MOVE_EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+const ENTER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const ENTER_STAGGER_MS = 80;
+const ENTER_MAX_STAGGERED = 5;
 
 /**
  * FLIP animation for keyed lists: when `orderKey` changes (reorder, insert, delete), elements
  * marked with `data-flip-key` glide from their previous position and new ones fade in.
+ *
+ * Call the returned function from the event handler that adds items the user picked; the items
+ * the next render introduces then rise in one after another and the first is brought into view,
+ * even when the list was empty.
  */
-export function useFlipAnimation(containerRef: RefObject<HTMLElement | null>, orderKey: string) {
+export function useFlipAnimation(
+  containerRef: RefObject<HTMLElement | null>,
+  orderKey: string,
+): () => void {
   const positions = useRef(new Map<string, number>());
   const previousOrder = useRef(orderKey);
+  const entrancePending = useRef(false);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
+    const announcedEntrance = entrancePending.current;
+    entrancePending.current = false;
     if (!container) return;
     if (container.offsetWidth === 0) {
       // Hidden screens measure as zero; start fresh once visible.
@@ -78,10 +91,34 @@ export function useFlipAnimation(containerRef: RefObject<HTMLElement | null>, or
     });
 
     const orderChanged = previousOrder.current !== orderKey;
-    const measuredBefore = positions.current.size > 0;
-    if (orderChanged && measuredBefore && !motionReduced()) {
-      elements.forEach((element) => {
+    const entering =
+      orderChanged && announcedEntrance
+        ? elements.filter((element) => !positions.current.has(element.dataset.flipKey!))
+        : [];
+    const reduced = motionReduced();
+    entering[0]?.scrollIntoView?.({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+    if (!reduced) {
+      entering.forEach((element, index) => {
         if (typeof element.animate !== 'function') return;
+        element.animate(
+          [
+            { opacity: 0, transform: 'translateY(1.75rem) scale(0.96)' },
+            { opacity: 1, transform: 'none' },
+          ],
+          {
+            duration: 460,
+            delay: Math.min(index, ENTER_MAX_STAGGERED) * ENTER_STAGGER_MS,
+            easing: ENTER_EASING,
+            fill: 'backwards',
+          },
+        );
+      });
+    }
+
+    const measuredBefore = positions.current.size > 0;
+    if (orderChanged && measuredBefore && !reduced) {
+      elements.forEach((element) => {
+        if (typeof element.animate !== 'function' || entering.includes(element)) return;
         const key = element.dataset.flipKey!;
         const before = positions.current.get(key);
         if (before === undefined) {
@@ -106,6 +143,10 @@ export function useFlipAnimation(containerRef: RefObject<HTMLElement | null>, or
     positions.current = next;
     previousOrder.current = orderKey;
   });
+
+  return useCallback(() => {
+    entrancePending.current = true;
+  }, []);
 }
 
 const EXPAND_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
