@@ -4419,6 +4419,15 @@ body:has(.popup-dialog[open]) {
   padding: 0 1rem 1rem;
 }
 
+.workout-finish-dialog > p.workout-finish-summary {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.workout-finish-dialog > p.workout-finish-summary + p {
+  padding-top: 0.35rem;
+}
+
 .workout-finish-dialog > p.workout-finish-blocker {
   margin: 1rem 1rem 0;
   padding: 0.7rem 0.8rem;

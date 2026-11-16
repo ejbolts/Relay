@@ -3,11 +3,14 @@ import {
   compactSetSummary,
   groupByYear,
   groupWorkoutsByWeek,
+  latestTopSets,
   mostTrainedExerciseId,
   niceTicks,
   recentStrengthRecords,
   sessionTemplateFor,
+  setLabel,
   trainingDayGrid,
+  upNextSetLabel,
   weekGroupLabel,
   weekStartFor,
   weeklyBestPoints,
@@ -365,5 +368,71 @@ describe('groupByYear', () => {
 
   it('returns no groups for an empty list', () => {
     expect(groupByYear([], (date: string) => date)).toEqual([]);
+  });
+});
+
+describe('Up next set labels', () => {
+  const pullUp = { ...exercise('pull-up', 'Pull-up'), equipment: 'Bodyweight' };
+  const planned = (weight: number | null, reps = 6) => ({
+    ...trackedSet(0, reps),
+    weight_kg: weight,
+    completed: false,
+  });
+
+  it('uses the newest top set for a planned exercise without a weight', () => {
+    const latest = latestTopSets(workouts, '2026-10-06');
+    expect(
+      upNextSetLabel(
+        {
+          exercise: squat,
+          topSet: planned(null),
+          plannedSets: [
+            { reps: 6, weight_kg: null },
+            { reps: 6, weight_kg: null },
+          ] as never,
+          summary: '2 sets',
+        },
+        latest.get('squat'),
+      ),
+    ).toEqual({ text: '125×7', title: '125 kg × 7' });
+  });
+
+  it('keeps a planned weight, and shows sets and target reps before any history', () => {
+    expect(
+      upNextSetLabel({ exercise: squat, topSet: planned(100), summary: '100 kg × 6' }, undefined),
+    ).toEqual({ text: '100×6', title: '100 kg × 6' });
+    expect(
+      upNextSetLabel(
+        {
+          exercise: squat,
+          topSet: planned(null),
+          plannedSets: [{}, {}, {}] as never,
+          repRange: { min: 8, max: 12 },
+          summary: '3 sets',
+        },
+        undefined,
+      ),
+    ).toEqual({ text: '3×8–12', title: '3 sets of 8–12 reps' });
+  });
+
+  it('shows reps for bodyweight sets instead of 0 kg', () => {
+    const latest = latestTopSets(
+      [workout('bw', '2026-10-01', 'pull', [{ exercise: pullUp, sets: [trackedSet(0, 9)] }])],
+      '2026-10-06',
+    );
+    expect(
+      upNextSetLabel(
+        { exercise: pullUp, topSet: planned(null), summary: '3 sets' },
+        latest.get('pull-up'),
+      ),
+    ).toEqual({ text: '9 reps', title: '9 reps' });
+    expect(setLabel(trackedSet(0, 9))).toBe('9 reps');
+    expect(setLabel(trackedSet(60, 9))).toBe('60 kg × 9');
+  });
+
+  it('ignores workouts after today when finding the latest set', () => {
+    const latest = latestTopSets(workouts, '2026-10-04');
+    expect(latest.has('squat')).toBe(false);
+    expect(latest.get('deadlift')?.weight_kg).toBe(157.5);
   });
 });

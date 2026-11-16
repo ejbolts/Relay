@@ -135,6 +135,43 @@ describe('exercise fuzzy search', () => {
     ]);
   });
 
+  it('lists exercises named by the search before recent ones matching only a muscle', () => {
+    const exercises = [
+      { id: 'bench', name: 'Barbell Bench Press', muscle_group: 'Chest', equipment: 'Barbell' },
+      {
+        id: 'incline',
+        name: 'Incline Dumbbell Press',
+        muscle_group: 'Chest',
+        equipment: 'Dumbbell',
+      },
+      { id: 'machine', name: 'Machine Chest Press', muscle_group: 'Chest', equipment: 'Machine' },
+    ];
+
+    expect(
+      rankExerciseSearchMatches(exercises, 'chest press', ['bench', 'incline', 'machine']).map(
+        (exercise) => exercise.id,
+      ),
+    ).toEqual(['machine', 'bench', 'incline']);
+  });
+
+  it('keeps recency among exercises that all contain the searched words', () => {
+    const exercises = [
+      { id: 'lat', name: 'Lat Pulldown', muscle_group: 'Lats', equipment: 'Cable' },
+      {
+        id: 'single',
+        name: 'Single-Arm Cable Lat Pulldown',
+        muscle_group: 'Lats',
+        equipment: 'Cable',
+      },
+    ];
+
+    expect(
+      rankExerciseSearchMatches(exercises, 'cable lat pulldown', ['lat', 'single']).map(
+        (exercise) => exercise.id,
+      ),
+    ).toEqual(['lat', 'single']);
+  });
+
   it('keeps fuzzy relevance ordering when neither exercise has been performed', () => {
     const exercises = [
       {

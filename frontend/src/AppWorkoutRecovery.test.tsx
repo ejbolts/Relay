@@ -383,6 +383,14 @@ async function keepWorkingOut() {
   expect(document.querySelector('.workout-finish-dialog')).toBeNull();
 }
 
+async function closeFinishConfirmation() {
+  const keep = [
+    ...document.querySelectorAll<HTMLButtonElement>('.workout-finish-dialog button'),
+  ].find((button) => button.textContent === 'Keep working out')!;
+  await act(async () => keep.click());
+  expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+}
+
 function restoreOldLoggerLocation() {
   const state = createAppHistoryState('log', 0);
   window.history.replaceState(state, '', '#log');
@@ -1904,6 +1912,38 @@ describe('phantom workout prevention', () => {
 });
 
 describe('finishing workouts in the background', () => {
+  it('says how many sets are ticked before finishing a workout with unticked sets', async () => {
+    const draft = storedDraft();
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-unticked',
+      completed: false,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    expect(
+      document.querySelector('.workout-finish-dialog .workout-finish-summary')?.textContent,
+    ).toBe("2 of 3 sets ticked. Unticked sets won't count.");
+    await closeFinishConfirmation();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('keeps the finish confirmation short when every set is ticked', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    expect(document.querySelector('.workout-finish-dialog')).not.toBeNull();
+    expect(document.querySelector('.workout-finish-summary')).toBeNull();
+    await closeFinishConfirmation();
+  });
+
   it('explains how to finish an empty workout without discarding it', async () => {
     const draft = storedDraft({ movements: [] });
     writeActiveWorkoutDraft(draft);

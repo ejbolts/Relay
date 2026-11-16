@@ -4231,6 +4231,15 @@ function WorkoutLogger({
       sets: movement.sets,
     }));
 
+  const tickedSetCount = movements.reduce(
+    (total, movement) => total + movement.sets.filter((item) => item.completed).length,
+    0,
+  );
+  const untickedSetCount = movements.reduce(
+    (total, movement) => total + movement.sets.filter((item) => !item.completed).length,
+    0,
+  );
+
   function toggleSet(movement: DraftMovement, item: DraftSet) {
     updateSet(movement.key, item.key, { completed: !item.completed });
   }
@@ -5298,7 +5307,19 @@ function WorkoutLogger({
               {finishBlocker}
             </p>
           ) : (
-            <p>This saves your workout and stops the live timer. You can resume it from History.</p>
+            <>
+              {untickedSetCount > 0 && (
+                <p className="workout-finish-summary">
+                  <strong>
+                    {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked.
+                  </strong>{' '}
+                  Unticked sets won't count.
+                </p>
+              )}
+              <p>
+                This saves your workout and stops the live timer. You can resume it from History.
+              </p>
+            </>
           )}
           <div className="popup-dialog-actions workout-finish-actions">
             <button
@@ -6517,19 +6538,25 @@ function MovementCard({
           warning={onlyWarmupsLogged && movement.isComplete}
         />
         <div>
-          <h2>
-            <button
-              type="button"
-              className="movement-history-link"
-              onClick={(event) => {
-                event.stopPropagation();
-                onExerciseHistory();
-              }}
-              aria-label={`View full history for ${movement.exercise.name}`}
-            >
-              {movement.exercise.name}
-            </button>
-          </h2>
+          <div className="movement-title-row">
+            <h2>
+              <button
+                type="button"
+                className="movement-history-link"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onExerciseHistory();
+                }}
+                aria-label={`View full history for ${movement.exercise.name}`}
+              >
+                {movement.exercise.name}
+              </button>
+            </h2>
+            {/* Beside the name, so the name keeps the width the header actions leave. */}
+            <span className="movement-title-help" onClick={(event) => event.stopPropagation()}>
+              <ExerciseMuscleHelp exercise={movement.exercise} />
+            </span>
+          </div>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
             {[movement.exercise.muscle_group, movement.exercise.equipment]
@@ -6553,7 +6580,6 @@ function MovementCard({
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
-          <ExerciseMuscleHelp exercise={movement.exercise} />
           <button
             type="button"
             className="movement-expand-toggle"
@@ -10785,6 +10811,8 @@ function HistorySetFlow({
 }
 
 function setResult(item: TrackedSet, weightUnit: WeightUnit): string {
+  // A bodyweight set is saved at 0 kg; its reps are what matter.
+  if (item.weight_kg === 0 && item.reps !== null) return `${item.reps} reps`;
   if (item.weight_kg !== null)
     return `${formatWeight(item.weight_kg, weightUnit)} × ${item.reps ?? '–'}`;
   const cardioValues = [

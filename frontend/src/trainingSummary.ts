@@ -274,10 +274,58 @@ export function topWorkingSet(sets: TrackedSet[]): TrackedSet | null {
   }, null);
 }
 
+/** Each exercise's top working set from its newest workout on or before `today`. */
+export function latestTopSets(workouts: TrackedWorkout[], today: string): Map<string, TrackedSet> {
+  const latest = new Map<string, { date: string; set: TrackedSet }>();
+  for (const workout of workouts) {
+    if (workout.workout_date > today) continue;
+    for (const movement of workout.movements) {
+      const top = topWorkingSet(movement.sets);
+      const known = latest.get(movement.exercise.id);
+      if (top && (!known || workout.workout_date > known.date)) {
+        latest.set(movement.exercise.id, { date: workout.workout_date, set: top });
+      }
+    }
+  }
+  return new Map([...latest].map(([id, { set }]) => [id, set]));
+}
+
+/**
+ * The compact set shown for an exercise in Home's Up next list: the planned weight when the plan
+ * has one, otherwise the last top set the logger will suggest, otherwise the planned sets.
+ */
+export function upNextSetLabel(
+  item: SessionTemplateExercise,
+  latest: TrackedSet | undefined,
+  unit: WeightUnit = 'kg',
+): { text: string; title: string } {
+  if (item.exercise.kind === 'cardio') return { text: item.summary, title: item.summary };
+  const planned = item.topSet?.weight_kg != null ? item.topSet : null;
+  const shown = planned ?? latest ?? null;
+  if (shown && (shown.weight_kg ?? 0) > 0) {
+    const text = `${formatWeightNumber(shown.weight_kg ?? 0, unit)}×${shown.reps ?? '–'}`;
+    return { text, title: `${formatWeight(shown.weight_kg ?? 0, unit)} × ${shown.reps ?? '–'}` };
+  }
+  if (shown?.reps) return { text: `${shown.reps} reps`, title: `${shown.reps} reps` };
+  const sets = item.plannedSets?.length ?? 0;
+  const reps = item.repRange
+    ? `${item.repRange.min}–${item.repRange.max}`
+    : (item.topSet?.reps ?? null);
+  if (sets && reps !== null) {
+    return {
+      text: `${sets}×${reps}`,
+      title: `${sets} ${sets === 1 ? 'set' : 'sets'} of ${reps} reps`,
+    };
+  }
+  return { text: item.summary, title: item.summary };
+}
+
 export function setLabel(
   item: Pick<TrackedSet, 'weight_kg' | 'reps'>,
   unit: WeightUnit = 'kg',
 ): string {
+  // Bodyweight sets are saved at 0 kg; "8 reps" reads better than "0 kg × 8".
+  if (!item.weight_kg && item.reps !== null) return `${item.reps} reps`;
   return `${formatWeight(item.weight_kg ?? 0, unit)} × ${item.reps ?? '–'}`;
 }
 
