@@ -6197,3 +6197,38 @@ html[data-reduce-motion] ::backdrop {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
+
+/* The exercise picker fills the phone screen, so it drops its rounded corners there. */
+@media (max-width: 620px) {
+  .exercise-picker-backdrop .exercise-picker {
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+/* The exercise picker is frosted over the dimmed app, with its search, filters and rows. */
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker {
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
