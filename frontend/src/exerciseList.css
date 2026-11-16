@@ -10,7 +10,14 @@
 .exercise-library-equipment {
   margin-top: 0.65rem;
 }
-.exercise-library-equipment select {
+.exercise-picker-equipment {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem 0.8rem;
+}
+.exercise-library-equipment select,
+.exercise-picker-equipment select {
   min-width: 0;
   width: 100%;
   min-height: 2.75rem;
