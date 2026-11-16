@@ -279,10 +279,11 @@
   margin-top: 1rem;
 }
 
-/* A panel's title never sits directly on its first field or button. Zero specificity, so
-   content that sets its own top margin keeps it. */
-:where(.settings-hub .settings-panel > header) + :where(:not(p, .notification-setting-row)) {
-  margin-top: 0.75rem;
+/* A panel's title never sits directly on its first field or button. Vertical margins
+   collapse, so content with its own larger top margin keeps it. */
+.settings-hub .settings-panel:not(.is-collapsed) > header,
+.settings-hub .collapsible-section:not(.is-collapsed) > header {
+  margin-bottom: 0.75rem;
 }
 
 .settings-hub .training-preferences-grid label,
