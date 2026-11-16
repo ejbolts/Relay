@@ -358,7 +358,7 @@ html[data-reduce-motion] .release-confetti {
 
 /* Only the update banner reserves space above the app. */
 .tracker-app {
-  --app-update-height: calc(4.5rem + env(safe-area-inset-top));
+  --app-update-height: calc(5.25rem + env(safe-area-inset-top));
   --app-banner-height: 0px;
 }
 
@@ -374,7 +374,8 @@ html[data-reduce-motion] .release-confetti {
 .app-update-banner {
   position: fixed;
   z-index: 100;
-  top: calc(env(safe-area-inset-top) + 0.5rem);
+  /* Clear of the blurred status bar edge iOS draws over the top of the page. */
+  top: calc(env(safe-area-inset-top) + 1.25rem);
   left: max(0.75rem, env(safe-area-inset-left), calc((100% - 34rem) / 2));
   right: max(0.75rem, env(safe-area-inset-right), calc((100% - 34rem) / 2));
   min-height: 3.25rem;
