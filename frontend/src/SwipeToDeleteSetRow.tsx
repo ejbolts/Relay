@@ -6,7 +6,7 @@ import { completesSetRowDeleteSwipe, setRowSwipeOffset, setRowSwipeProgress } fr
 
 const SWIPE_AXIS_LOCK_PX = 8;
 const DELETE_ANIMATION_MS = 280;
-const ADD_ANIMATION_MS = 340;
+const ADD_ANIMATION_MS = 560;
 const ADD_EASING = 'cubic-bezier(0.22, 0.72, 0.1, 1)';
 
 interface ActivePointer {

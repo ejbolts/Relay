@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import {
   COLOUR_MODES,
   COLOUR_THEMES,
@@ -23,6 +23,7 @@ import {
   saveSunRay,
 } from './colourThemes';
 import { Icon } from './Icon';
+import { useTips } from './Tips';
 import './colourThemes.css';
 
 export function ColourThemePanel() {
@@ -34,6 +35,9 @@ export function ColourThemePanel() {
   const [lightStyle, setLightStyle] = useState(lightStylePreference);
   const [sunRay, setSunRay] = useState(sunRayPreference);
   const [status, setStatus] = useState('');
+  const { learn } = useTips();
+  // Opening these settings is what the Appearance tip points to, so it counts as learned.
+  useEffect(() => learn('appearance'), [learn]);
   return (
     <section
       className="settings-panel panel colour-theme-panel"

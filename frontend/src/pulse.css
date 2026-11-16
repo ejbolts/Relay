@@ -6100,7 +6100,8 @@ html[data-reduce-motion] ::backdrop {
     .settings-category-card,
     .settings-profile-link,
     .home-section-stat .pulse-kpi,
-    .body-screen .body-reference-stats
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure
   ) {
   position: relative;
 }
@@ -6113,7 +6114,8 @@ html[data-reduce-motion] ::backdrop {
     .settings-category-card,
     .settings-profile-link,
     .home-section-stat .pulse-kpi,
-    .body-screen .body-reference-stats
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure
   ) {
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
 }
@@ -6126,7 +6128,8 @@ html[data-reduce-motion] ::backdrop {
     .settings-category-card,
     .settings-profile-link,
     .home-section-stat .pulse-kpi,
-    .body-screen .body-reference-stats
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure
   )::before {
   position: absolute;
   z-index: -1;
@@ -6246,4 +6249,11 @@ html[data-reduce-motion] ::backdrop {
 /* The picker's exercise list drops its older solid backing so the rows are frosted too. */
 :where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-list {
   background: transparent;
+}
+
+/* The plate calculator button is a frosted chip like the other header controls. */
+:where(:root:not([data-glass='off'])) .logger-screen .plate-calculator-button {
+  background: color-mix(in srgb, var(--p-surface-2-solid) var(--glass-control-alpha), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
