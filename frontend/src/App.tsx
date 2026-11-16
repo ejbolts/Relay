@@ -6310,7 +6310,8 @@ function MovementCard({
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
-        {!cardio && (item.bodyweight_kg ?? bodyweight) != null && (
+        {/* Only a logged set has a ratio to show; suggestions would repeat it on every row. */}
+        {!cardio && item.completed && (item.bodyweight_kg ?? bodyweight) != null && (
           <small className="completed-set-bodyweight num">
             {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
           </small>

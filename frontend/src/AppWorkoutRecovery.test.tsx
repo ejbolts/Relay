@@ -474,6 +474,8 @@ describe('cross-device live workout updates', () => {
       },
     ]);
     await mount();
+    // A set still to lift shows no ratio yet.
+    expect(container.querySelector('.completed-set-bodyweight')).toBeNull();
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
     );
