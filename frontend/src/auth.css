@@ -15,8 +15,8 @@
     radial-gradient(130% 90% at 50% 45%, transparent 45%, var(--auth-vignette) 100%), var(--p-page);
   color: var(--p-ink);
   /* Cobalt on the default Blue theme; follows the chosen accent colour. */
-  --auth-ray: color-mix(in srgb, var(--p-accent-text) 13%, transparent);
-  --auth-ray-soft: color-mix(in srgb, var(--p-accent-text) 5%, transparent);
+  --auth-ray: color-mix(in srgb, var(--p-accent) 42%, transparent);
+  --auth-ray-soft: color-mix(in srgb, var(--p-accent) 16%, transparent);
   --auth-vignette: rgb(0 0 0 / 45%);
   --auth-grain-opacity: 0.085;
 }
@@ -64,8 +64,8 @@
 }
 
 :root[data-colour-mode='light'] .auth-screen {
-  --auth-ray: color-mix(in srgb, var(--p-accent) 12%, transparent);
-  --auth-ray-soft: color-mix(in srgb, var(--p-accent) 5%, transparent);
+  --auth-ray: color-mix(in srgb, var(--p-accent) 20%, transparent);
+  --auth-ray-soft: color-mix(in srgb, var(--p-accent) 8%, transparent);
   --auth-vignette: rgb(16 24 32 / 6%);
   --auth-grain-opacity: 0.05;
 }
