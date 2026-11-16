@@ -107,8 +107,94 @@
 html,
 body,
 .tracker-app {
-  background: var(--p-page);
   color: var(--p-ink);
+}
+
+/* Only the root paints the page colour, so the sun ray and grain below can sit between it and
+   the app's content without giving the app its own stacking context. */
+html {
+  background: var(--p-page);
+}
+
+/* Overrides the older body and app backgrounds in styles.css. */
+body,
+.tracker-app {
+  background: transparent;
+}
+
+/* Sun ray: a broad, soft diagonal band in the accent colour (cobalt on the default Blue theme)
+   that drifts slowly. The sign-in screen draws its own copy above its opaque backdrop. Fixed to
+   the viewport so it stays put while pages scroll and its oversized box adds no overflow. */
+:root {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 32%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 12%, transparent);
+  --sun-grain-opacity: 0.085;
+}
+
+:root[data-colour-mode='light'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 20%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 8%, transparent);
+  --sun-grain-opacity: 0.05;
+}
+
+body::before,
+body::after,
+.auth-screen::before,
+.auth-screen::after {
+  position: fixed;
+  z-index: -1;
+  content: '';
+  pointer-events: none;
+}
+
+body::before,
+.auth-screen::before {
+  inset: -50%;
+  background: linear-gradient(
+    118deg,
+    transparent 34%,
+    var(--sun-ray-soft) 43%,
+    var(--sun-ray) 50%,
+    var(--sun-ray-soft) 57%,
+    transparent 66%
+  );
+  /* Box coordinates: transparent at the viewport top, which iOS paints behind the status bar,
+     and full strength about a quarter of the way down, so there is no hard line under it. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  animation: sun-ray-drift 15s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
+body::after,
+.auth-screen::after {
+  inset: -10vh 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)' opacity='.45'/%3E%3C/svg%3E");
+  opacity: var(--sun-grain-opacity);
+}
+
+@keyframes sun-ray-drift {
+  from {
+    transform: translate3d(-14%, 6%, 0) rotate(-2deg);
+  }
+  to {
+    transform: translate3d(13%, -5%, 0) rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  .auth-screen::before {
+    animation: none;
+  }
+}
+
+[data-reduce-motion] body::before,
+[data-reduce-motion] .auth-screen::before {
+  animation: none;
 }
 
 body {
@@ -121,10 +207,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-.tracker-app {
-  background: var(--p-page);
 }
 
 .num,
