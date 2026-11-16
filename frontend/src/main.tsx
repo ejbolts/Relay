@@ -18,6 +18,7 @@ import {
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  resetAppearanceOnce,
   lightStylePreference,
   sunRayPreference,
 } from './colourThemes';
@@ -42,6 +43,7 @@ captureInstallPrompt();
 preventIosInputZoom();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());
+resetAppearanceOnce();
 applyDarkStyle(darkStylePreference());
 applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());

@@ -10,6 +10,7 @@ import {
   saveDarkStyle,
   saveGlass,
   saveSunRay,
+  resetAppearanceOnce,
   saveLightStyle,
   lightStylePreference,
   sunRayPreference,
@@ -179,4 +180,25 @@ it('saves a light style separately and tints the light browser bar when Stained'
   expect(meta.content).not.toBe('#f3f5f7');
   localStorage.setItem('gym-logger-light-style', 'oled');
   expect(lightStylePreference()).toBe('default');
+});
+it('moves a device onto the default look once, keeping its accent colour', () => {
+  localStorage.setItem('gym-logger-colour-theme', 'coral');
+  localStorage.setItem('gym-logger-colour-mode', 'light');
+  localStorage.setItem('gym-logger-dark-style', 'oled');
+  localStorage.setItem('gym-logger-light-style', 'stained');
+  localStorage.setItem('gym-logger-sun-ray', 'blank');
+  localStorage.setItem('gym-logger-glass', 'off');
+  resetAppearanceOnce();
+  expect(colourThemePreference()).toBe('coral');
+  expect(colourModePreference()).toBe('dark');
+  expect(darkStylePreference()).toBe('default');
+  expect(lightStylePreference()).toBe('default');
+  expect(sunRayPreference()).toBe('colour');
+  expect(glassPreference()).toBe('medium');
+  // Choices made after the reset stay put on later loads.
+  saveSunRay('blank');
+  saveColourMode('light');
+  resetAppearanceOnce();
+  expect(sunRayPreference()).toBe('blank');
+  expect(colourModePreference()).toBe('light');
 });

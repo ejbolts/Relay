@@ -4,6 +4,9 @@ const DARK_STYLE_KEY = 'gym-logger-dark-style';
 const GLASS_KEY = 'gym-logger-glass';
 const SUN_RAY_KEY = 'gym-logger-sun-ray';
 const LIGHT_STYLE_KEY = 'gym-logger-light-style';
+const APPEARANCE_RESET_KEY = 'gym-logger-appearance-reset';
+/** Bump to move every device onto the default look again once, keeping its accent colour. */
+export const APPEARANCE_RESET_VERSION = '1';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
@@ -285,5 +288,23 @@ export function saveLightStyle(id: LightStyleId): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Once per device, moves existing appearance choices onto the default look (Dark, Default style,
+ * Sun ray, Medium glass) while keeping the accent colour. Later choices are left alone.
+ */
+export function resetAppearanceOnce(): void {
+  try {
+    if (localStorage.getItem(APPEARANCE_RESET_KEY) === APPEARANCE_RESET_VERSION) return;
+    localStorage.removeItem(MODE_KEY);
+    localStorage.removeItem(DARK_STYLE_KEY);
+    localStorage.removeItem(LIGHT_STYLE_KEY);
+    localStorage.removeItem(SUN_RAY_KEY);
+    localStorage.removeItem(GLASS_KEY);
+    localStorage.setItem(APPEARANCE_RESET_KEY, APPEARANCE_RESET_VERSION);
+  } catch {
+    // Without storage every choice already falls back to the defaults.
   }
 }
