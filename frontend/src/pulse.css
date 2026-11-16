@@ -6242,6 +6242,33 @@ html[data-reduce-motion] ::backdrop {
   }
 }
 
+/* On phones, Add exercise slides the full-screen picker up from the bottom, like the logger. */
+@media (max-width: 620px) {
+  .exercise-picker-backdrop .exercise-picker {
+    animation: exercise-picker-in 400ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+  }
+}
+
+@media (max-width: 620px) and (prefers-reduced-motion: reduce) {
+  .exercise-picker-backdrop .exercise-picker {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
+  animation: none;
+}
+
+@keyframes exercise-picker-in {
+  from {
+    translate: 0 100%;
+  }
+
+  to {
+    translate: 0 0;
+  }
+}
+
 /* On phones the frosted picker covers the whole app, so the dimming behind it would only darken
    the glass; the picker's own blur does the work instead. */
 @media (max-width: 620px) {
