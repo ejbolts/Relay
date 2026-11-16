@@ -197,6 +197,9 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   localStorage.setItem('gym-logger-light-style', 'stained');
   localStorage.setItem('gym-logger-sun-ray', 'blank');
   localStorage.setItem('gym-logger-glass', 'off');
+  localStorage.setItem('gym-logger-set-tint', 'strong');
+  // A device that ran the first version of the reset is moved onto the current defaults too.
+  localStorage.setItem('gym-logger-appearance-reset', '1');
   resetAppearanceOnce();
   expect(colourThemePreference()).toBe('coral');
   expect(colourModePreference()).toBe('dark');
@@ -204,6 +207,7 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   expect(lightStylePreference()).toBe('default');
   expect(sunRayPreference()).toBe('colour');
   expect(glassPreference()).toBe('subtle');
+  expect(setTintPreference()).toBe('medium');
   // Choices made after the reset stay put on later loads.
   saveSunRay('blank');
   saveColourMode('light');
