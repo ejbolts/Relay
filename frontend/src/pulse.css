@@ -6206,7 +6206,17 @@ html[data-reduce-motion] ::backdrop {
   }
 }
 
-/* The exercise picker is frosted over the dimmed app, with its search, filters and rows. */
+/* On phones the frosted picker covers the whole app, so the dimming behind it would only darken
+   the glass; the picker's own blur does the work instead. */
+@media (max-width: 620px) {
+  :where(:root:not([data-glass='off'])) .exercise-picker-backdrop {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* The exercise picker is frosted over the app, with its search, filters and rows. */
 :where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker {
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
   --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
