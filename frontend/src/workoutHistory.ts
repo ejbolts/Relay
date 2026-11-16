@@ -60,3 +60,25 @@ export function historyPageCount(
 ): number {
   return oldestDate ? historyPageForDate(oldestDate, anchor, weekStartDay) : 1;
 }
+
+/**
+ * A profile's workout page, counting only weeks that have workouts, two to a page. The server
+ * lists workouts newest first in chunks, so the last loaded week may continue in workouts not read
+ * yet: a page is complete once a later week has loaded or nothing older remains.
+ */
+export function weekGroupPage(loadedWeeks: number, requestedPage: number, hasMore: boolean) {
+  const perPage = HISTORY_WEEKS_PER_PAGE;
+  const loadedPages = Math.max(1, Math.ceil(loadedWeeks / perPage));
+  const requested = Math.max(0, requestedPage);
+  const page = hasMore ? requested : Math.min(requested, loadedPages - 1);
+  const start = page * perPage;
+  return {
+    page,
+    start,
+    end: start + perPage,
+    needsMore: hasMore && loadedWeeks <= start + perPage,
+    hasNext: hasMore || loadedWeeks > start + perPage,
+    /** Known only once every workout has loaded. */
+    totalPages: hasMore ? null : loadedPages,
+  };
+}

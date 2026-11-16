@@ -445,30 +445,109 @@
 }
 
 .shared-workouts-header {
-  padding-top: 1.25rem;
-}
-
-.shared-workout-filters {
-  margin: 0 0 1rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface);
-}
-
-.shared-workout-filters summary {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem;
-  color: var(--p-ink-2);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
+  padding: 1.25rem 0.375rem 0.25rem;
 }
 
-.shared-workout-filters summary .pulse-icon {
-  width: 1rem;
-  height: 1rem;
+.shared-workouts-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.shared-workout-filter-toggle {
+  position: relative;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--p-surface);
+  color: var(--p-ink-2);
+}
+
+.shared-workout-filter-toggle:hover,
+.shared-workout-filter-toggle[aria-expanded='true'] {
+  border-color: var(--p-accent);
+  color: var(--p-ink);
+}
+
+.shared-workout-filter-toggle.is-filtered {
+  color: var(--p-accent-text);
+}
+
+.shared-workout-filter-toggle .pulse-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.shared-workout-filter-toggle > span {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.35rem;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 0.2rem;
+  background: var(--p-accent);
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.shared-workout-filters {
+  margin: 0.5rem 0 0.25rem;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding-top: 0.85rem;
+  background: var(--p-surface);
+}
+
+.shared-workout-filters[hidden] {
+  display: none;
+}
+
+.shared-workout-pager.pagination-controls {
+  grid-template-columns: 2.75rem minmax(5.5rem, auto) 2.75rem;
+  align-items: center;
+  margin-top: 1rem;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.shared-workout-pager .pagination-arrow {
+  border-color: var(--p-line);
+  border-radius: 12px;
+  background: var(--p-surface);
+  color: var(--p-ink);
+}
+
+.shared-workout-pager .pagination-arrow:not(:disabled):hover {
+  border-color: var(--p-accent);
+  color: var(--p-ink);
+}
+
+.shared-workout-pager .pagination-arrow .pulse-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.shared-workout-pager .pagination-status {
+  grid-column: auto;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.shared-workout-pages {
+  scroll-margin-top: 0.5rem;
 }
 
 .shared-workout-filter-fields {

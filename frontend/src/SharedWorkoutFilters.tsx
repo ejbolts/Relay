@@ -6,29 +6,55 @@ import type {
   WorkoutCategory,
 } from './types';
 
+/** How many workout filters are set. */
+function activeFilterCount(filters: Filters) {
+  return Object.values(filters).filter(Boolean).length;
+}
+
+/** The filter button beside a profile's Workouts title, with the number of filters set. */
+export function SharedWorkoutFilterToggle({
+  filters,
+  open,
+  controls,
+  onToggle,
+}: {
+  filters: Filters;
+  open: boolean;
+  controls: string;
+  onToggle: (open: boolean) => void;
+}) {
+  const active = activeFilterCount(filters);
+  return (
+    <button
+      type="button"
+      className={`shared-workout-filter-toggle${active > 0 ? ' is-filtered' : ''}`}
+      aria-label={active > 0 ? `Filter workouts, ${active} set` : 'Filter workouts'}
+      aria-expanded={open}
+      aria-controls={controls}
+      onClick={() => onToggle(!open)}
+    >
+      <Icon name="filter" />
+      {active > 0 && <span aria-hidden="true">{active}</span>}
+    </button>
+  );
+}
+
 export function SharedWorkoutFilters({
+  id,
   filters,
   options,
   open,
-  onToggle,
   onChange,
 }: {
+  id: string;
   filters: Filters;
   options: SharedWorkoutFilterOptions;
   open: boolean;
-  onToggle: (open: boolean) => void;
   onChange: (next: Filters) => void;
 }) {
-  const active = Object.values(filters).filter(Boolean).length;
+  const active = activeFilterCount(filters);
   return (
-    <details
-      className="shared-workout-filters"
-      open={open}
-      onToggle={(event) => onToggle(event.currentTarget.open)}
-    >
-      <summary>
-        <Icon name="filter" /> Filter workouts {active > 0 && <span>{active}</span>}
-      </summary>
+    <div className="shared-workout-filters" id={id} hidden={!open}>
       <div className="shared-workout-filter-fields">
         <label>
           Workout type
@@ -129,6 +155,6 @@ export function SharedWorkoutFilters({
           </button>
         )}
       </div>
-    </details>
+    </div>
   );
 }
