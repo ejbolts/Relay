@@ -178,6 +178,50 @@ button.relay-tip-dot {
 .page-eyebrow-row .page-eyebrow {
   margin: 0;
 }
+/* Web beta label: tinted with the user's accent so it follows their colour theme and mode. */
+.app-edition-badge {
+  display: inline-flex;
+  position: relative;
+  flex: none;
+  align-items: center;
+  gap: 0.3125rem;
+  height: 1.375rem;
+  min-height: 0;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 0.71875rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+button.app-edition-badge::after {
+  content: '';
+  position: absolute;
+  inset: -0.6875rem -0.25rem;
+}
+.app-edition-version {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.app-edition-badge:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+.page-eyebrow-separator {
+  flex: none;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--p-muted);
+  opacity: 0.7;
+}
+.page-eyebrow-row .page-eyebrow + .home-tip-button {
+  margin-left: auto;
+}
 button.home-tip-button {
   display: inline-flex;
   position: relative;

@@ -17,7 +17,7 @@ import { runningAsInstalledApp } from './homeScreenGuideState';
 import { TIP_DEFINITIONS, type TipId } from './tipsState';
 import type { TrackedWorkout } from './types';
 
-/** A bulb beside Home's date: amber while a tip is unread, grey once read, gone when none are left. */
+/** Tips at the end of Home's date line: amber with a count while tips are unread, grey once read. */
 export function HomeTips({
   workouts,
   createdAt,
@@ -101,16 +101,12 @@ export function HomeTips({
   const [position, setPosition] = useState({ left: 12, top: 0, arrow: 24 });
   const popId = useId();
   const titleId = useId();
-  // Before a first saved workout, Home stays free of tips.
-  const shown =
-    tips.state.enabled &&
-    tips.environment.ready &&
-    tips.environment.workoutCount > 0 &&
-    eligible.length > 0;
-  const current = eligible[Math.min(index, eligible.length - 1)];
-  const showing = open && shown && tips.environment.page === 'dashboard' && !!current;
+  // Stays on Home while tips are on, so tips are always one tap away.
+  const shown = tips.state.enabled && tips.environment.ready;
+  const current = eligible.length ? eligible[Math.min(index, eligible.length - 1)] : undefined;
+  const showing = open && shown && tips.environment.page === 'dashboard';
   useEffect(() => {
-    if (showing) readHome(current);
+    if (showing && current) readHome(current);
   }, [showing, current, readHome]);
   useLayoutEffect(() => {
     if (!showing) return;
@@ -149,14 +145,16 @@ export function HomeTips({
     };
   }, [showing]);
   if (!shown) return null;
-  const tip = TIP_DEFINITIONS[current];
+  const tip = current
+    ? TIP_DEFINITIONS[current]
+    : { title: "You're all caught up", body: 'New tips appear here as you use more of Relay.' };
   const toggle = () => {
     // Open on the first unread tip, or the first tip once everything has been read.
     if (!showing) setIndex(Math.max(0, eligible.indexOf(unread[0])));
     setOpen(!showing);
   };
   const gotIt = () => {
-    tips.dismissTip(current);
+    if (current) tips.dismissTip(current);
     setOpen(false);
     button.current?.focus();
   };
@@ -166,13 +164,13 @@ export function HomeTips({
         ref={button}
         type="button"
         className={`home-tip-button${unread.length ? ' is-unread' : ''}`}
-        aria-label={unread.length ? 'Tip, new' : 'Tip'}
+        aria-label={unread.length ? `Tips, ${unread.length} new` : 'Tips'}
         aria-expanded={showing}
         aria-controls={popId}
         onClick={toggle}
       >
         <Icon name="bulb" />
-        <span aria-hidden="true">Tip</span>
+        <span aria-hidden="true">{unread.length || 'Tips'}</span>
       </button>
       {showing &&
         createPortal(
@@ -193,7 +191,7 @@ export function HomeTips({
             <strong id={titleId}>{tip.title}</strong>
             <p>{tip.body}</p>
             <footer>
-              {eligible.length > 1 && (
+              {current && eligible.length > 1 && (
                 <span
                   className="home-tip-dots"
                   role="img"
@@ -205,7 +203,7 @@ export function HomeTips({
                 </span>
               )}
               <span className="home-tip-actions">
-                {eligible.length > 1 && (
+                {current && eligible.length > 1 && (
                   <button
                     type="button"
                     className="relay-tip-link"
@@ -215,7 +213,7 @@ export function HomeTips({
                   </button>
                 )}
                 <button type="button" className="home-tip-done" onClick={gotIt}>
-                  Got it
+                  {current ? 'Got it' : 'Done'}
                 </button>
               </span>
             </footer>

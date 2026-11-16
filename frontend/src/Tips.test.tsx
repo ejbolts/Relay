@@ -254,7 +254,8 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-home')).toBeNull();
     expect(popover()).toBeNull();
     expect(bulb()?.classList.contains('is-unread')).toBe(true);
-    expect(bulb()?.getAttribute('aria-label')).toBe('Tip, new');
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 4 new');
+    expect(bulb()?.textContent).toBe('4');
     await act(async () => bulb()!.click());
     expect(bulb()?.getAttribute('aria-expanded')).toBe('true');
     expect(popover()?.textContent).toContain('Put sets in order');
@@ -279,14 +280,15 @@ describe('shared tip presentation', () => {
     expect(popover()?.textContent).toContain('Make Relay look your way');
     await act(async () => bulb()!.click());
     expect(bulb()?.classList.contains('is-unread')).toBe(false);
-    expect(bulb()?.getAttribute('aria-label')).toBe('Tip');
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips');
+    expect(bulb()?.textContent).toBe('Tips');
     await act(async () => bulb()!.click());
     const seenInOrder = [popover()?.textContent ?? ''];
     await act(async () => button('Next').click());
     seenInOrder.push(popover()?.textContent ?? '');
     expect(seenInOrder.join(' ')).toContain('Put sets in order');
   });
-  it('retires a tip with Got it and disappears when none are left', async () => {
+  it('retires a tip with Got it and stays as a caught-up bulb when none are left', async () => {
     await homeBulb();
     for (const id of ['reorder', 'swipe', 'appearance'] as const)
       await act(async () => controller.learn(id));
@@ -296,7 +298,13 @@ describe('shared tip presentation', () => {
     await act(async () => button('Got it').click());
     expect(loadTips('alice').seen.friends).toBe('dismissed');
     expect(popover()).toBeNull();
-    expect(bulb()).toBeNull();
+    expect(bulb()?.classList.contains('is-unread')).toBe(false);
+    await act(async () => bulb()!.click());
+    expect(popover()?.textContent).toContain("You're all caught up");
+    expect(document.querySelector('.home-tip-dots')).toBeNull();
+    await act(async () => button('Done').click());
+    expect(popover()).toBeNull();
+    expect(bulb()).not.toBeNull();
   });
   it('closes the popover with Escape, an outside tap or leaving Home', async () => {
     await homeBulb();
@@ -311,13 +319,9 @@ describe('shared tip presentation', () => {
     await navigate('body');
     expect(popover()).toBeNull();
   });
-  it('hides the bulb when tips are off or before a first workout', async () => {
+  it('shows the bulb before a first workout and hides it when tips are off', async () => {
     workoutCount = 0;
     await homeBulb();
-    expect(bulb()).toBeNull();
-    await act(async () =>
-      controller.configure({ page: 'dashboard', ready: true, resting: false, workoutCount: 5 }),
-    );
     expect(bulb()).not.toBeNull();
     await act(async () => button('Show tips on this device').click());
     expect(bulb()).toBeNull();
