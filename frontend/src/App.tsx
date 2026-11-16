@@ -355,7 +355,7 @@ import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
-import { LiveWorkoutResumeBar, type LiveWorkoutSummary } from './LiveWorkoutResumeBar';
+import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
@@ -1762,11 +1762,6 @@ function AppContent() {
   const activeMainTab = mainTabFor(tab);
   const liveSheetOpen = tab === 'log' && !editingWorkout && activeWorkoutStartedAt !== null;
   const showTabBar = (tab !== 'log' && tab !== 'split') || liveSheetOpen;
-  const showLiveWorkoutBar =
-    tab !== 'log' &&
-    activeWorkoutStartedAt !== null &&
-    liveWorkoutSummary !== null &&
-    !home.editing;
   // The home screen guide follows the release announcement, behind the same interruptions.
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
@@ -1946,7 +1941,7 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${showLiveWorkoutBar ? ' has-live-workout-bar' : ''}${tab === 'log' && !editingWorkout ? ' has-compact-logger' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${tab === 'log' && !editingWorkout ? ' has-compact-logger' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner
@@ -2546,19 +2541,10 @@ function AppContent() {
           )}
         </main>
 
-        {showLiveWorkoutBar && liveWorkoutSummary && activeWorkoutStartedAt !== null && (
-          <LiveWorkoutResumeBar
-            startedAt={activeWorkoutStartedAt}
-            summary={liveWorkoutSummary}
-            restEndsAt={restEndsAt}
-            aboveTabBar={showTabBar}
-            onResume={resumeLiveWorkout}
-          />
-        )}
-
         {showTabBar && (
           <AppTabBar
-            resumeInBar={showLiveWorkoutBar || liveSheetOpen}
+            hideStart={liveSheetOpen}
+            liveSummary={liveWorkoutSummary}
             inert={liveSheetOpen}
             homeLayout={home}
             active={liveSheetOpen ? 'dashboard' : activeMainTab}
@@ -2570,7 +2556,7 @@ function AppContent() {
                 setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
               else setTab(nextTab);
             }}
-            onStart={() => startWorkout()}
+            onStart={() => (activeWorkoutStartedAt !== null ? resumeLiveWorkout() : startWorkout())}
             startMenu={{
               upNextLabel:
                 upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
