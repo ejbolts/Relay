@@ -7527,7 +7527,7 @@ body:has(.notification-dialog[open]) {
 .pagination-controls {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 2.75rem);
+  grid-template-columns: 2.75rem auto 2.75rem;
   justify-content: center;
   gap: 0.55rem;
   margin-top: 0.8rem;
@@ -7547,6 +7547,21 @@ body:has(.notification-dialog[open]) {
   color: var(--ink);
   font-size: 1.05rem;
   font-weight: 900;
+}
+
+/* The page picker shows the current page, so it grows with "12 / 30". */
+.pagination-more {
+  width: auto;
+  min-width: 4.5rem;
+  padding: 0 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.pagination-current small {
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .pagination-arrow:not(:disabled):hover,
