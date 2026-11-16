@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CardioMetricsInput, CardioSession } from './types';
 import { PopupDialog } from './PopupDialog';
+import { prettyDate } from './appShared';
 
 function optionalNumber(value: string): number | null {
   return value.trim() === '' ? null : Number(value);
@@ -52,7 +53,8 @@ export function CardioMetricsEditor({
         }}
       >
         <p>
-          {session.activity_type} · {session.session_date} · {session.duration_minutes} min
+          {session.activity_type} · {prettyDate(session.session_date)} · {session.duration_minutes}{' '}
+          min
         </p>
         <div className="cardio-metric-fields">
           <label>

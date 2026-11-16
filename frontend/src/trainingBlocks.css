@@ -194,8 +194,9 @@
 }
 
 /* New / edit form */
+/* The first field starts clear of the title bar. */
 .training-block-form {
-  padding: 0 16px 16px;
+  padding: 12px 16px 16px;
 }
 .training-block-form fieldset {
   display: grid;
