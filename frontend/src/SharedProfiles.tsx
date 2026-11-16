@@ -8,6 +8,7 @@ import {
 } from './bodyMeasurementHistory';
 import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
 import {
+  Fragment,
   useEffect,
   useId,
   useMemo,
@@ -27,7 +28,7 @@ import { ProfileIdentity } from './ProfileIdentity';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
 import { ProfileCardioCard } from './ProfileCardioCard';
-import { SharedWorkoutFilters } from './SharedWorkoutFilters';
+import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
@@ -40,7 +41,6 @@ import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
 import {
   friendStatusLabel,
-  plural,
   SHARED_WORKOUT_PAGE_SIZE,
   sinceMonthLabel,
 } from './sharedProfileDisplay';
@@ -1128,6 +1128,14 @@ export interface SharedWorkoutListProps {
   personalRecords: PersonalRecord[];
   onFilterMachine?: (photo: MachinePhoto) => void;
   renderWorkoutAction?: (workout: TrackedWorkout) => ReactNode;
+  /** The server holds older workouts than `workouts`. */
+  hasMore?: boolean;
+  /** Older workouts are being read, or the list is refreshing. */
+  loadingMore?: boolean;
+  /** Reading older workouts failed; nothing more is read until the reader tries again. */
+  loadMoreFailed?: boolean;
+  /** Reads the next older workouts onto the end of `workouts`. */
+  onLoadMore?: () => void;
 }
 
 function SharedConsistencyCalendar({
@@ -1284,6 +1292,7 @@ export function SharedProfileScreen({
     seed?.options ?? { exercises: [], machines: [] },
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersId = useId();
   const [loadingWorkouts, setLoadingWorkouts] = useState(seed !== null && active);
   const linkedWorkoutId =
     targetWorkout &&
@@ -1469,13 +1478,17 @@ export function SharedProfileScreen({
         filters,
       );
       if (currentQuery.current !== requestedQuery) return;
+      const added = page.workouts.filter(
+        (item) => !workouts.some((existing) => existing.id === item.id),
+      );
       setWorkouts((current) => [
         ...current,
         ...page.workouts.filter((item) => !current.some((existing) => existing.id === item.id)),
       ]);
       setRecords((current) => [...current, ...page.personal_records]);
       setReactions((current) => ({ ...current, ...page.reactions }));
-      setTotal(page.total);
+      // Pages read on demand stop once the server has nothing new, even if its total disagrees.
+      setTotal(added.length ? page.total : workouts.length);
     } catch (reason) {
       if (currentQuery.current === requestedQuery) setMoreError(authErrorMessage(reason));
     } finally {
@@ -1738,9 +1751,14 @@ export function SharedProfileScreen({
             className="history-screen shared-workouts"
             aria-labelledby="shared-workouts-title"
           >
-            <header className="history-week-header shared-workouts-header">
+            <header className="shared-workouts-header">
               <h2 id="shared-workouts-title">Workouts</h2>
-              <span className="num">{plural(total, 'workout')}</span>
+              <SharedWorkoutFilterToggle
+                filters={filters}
+                open={filtersOpen}
+                controls={filtersId}
+                onToggle={setFiltersOpen}
+              />
             </header>
             {linkedWorkoutId &&
               !loadingWorkouts &&
@@ -1750,10 +1768,10 @@ export function SharedProfileScreen({
                 </p>
               )}
             <SharedWorkoutFilters
+              id={filtersId}
               filters={filters}
               options={filterOptions}
               open={filtersOpen}
-              onToggle={setFiltersOpen}
               onChange={setFilters}
             />
             {invalidDates ? (
@@ -1772,50 +1790,55 @@ export function SharedProfileScreen({
                   : 'No workouts logged yet.'}
               </p>
             ) : (
-              renderWorkouts({
-                workouts,
-                focusWorkoutId: linkedWorkoutId,
-                personalRecords: records,
-                renderWorkoutAction: (workout) => (
-                  <WorkoutReactionControl
-                    ownWorkout={profile.is_you}
-                    onOpenMember={onOpenMember}
-                    workoutId={workout.id}
-                    subject={`${profile.display_name}’s ${workout.name}`}
-                    reactions={reactions[workout.id] ?? { counts: [], yours: null }}
-                    open={picking === workout.id}
-                    showSummary
-                    onOpenChange={(value) =>
-                      setPicking((current) =>
-                        value ? workout.id : current === workout.id ? null : current,
-                      )
-                    }
-                    onChange={(value) => {
-                      if (cacheable) updateCachedReactions(viewerId, profileId, workout.id, value);
-                      setReactions((current) => ({ ...current, [workout.id]: value }));
-                    }}
-                  />
-                ),
-                onFilterMachine: (photo) => {
-                  setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
-                  setFiltersOpen(true);
-                },
-              })
+              <Fragment key={filterKey}>
+                {renderWorkouts({
+                  workouts,
+                  hasMore: workouts.length < total,
+                  loadingMore: loadingMore || loadingWorkouts,
+                  loadMoreFailed: Boolean(moreError),
+                  onLoadMore: () => void loadMore(),
+                  focusWorkoutId: linkedWorkoutId,
+                  personalRecords: records,
+                  renderWorkoutAction: (workout) => (
+                    <WorkoutReactionControl
+                      ownWorkout={profile.is_you}
+                      onOpenMember={onOpenMember}
+                      workoutId={workout.id}
+                      subject={`${profile.display_name}’s ${workout.name}`}
+                      reactions={reactions[workout.id] ?? { counts: [], yours: null }}
+                      open={picking === workout.id}
+                      showSummary
+                      onOpenChange={(value) =>
+                        setPicking((current) =>
+                          value ? workout.id : current === workout.id ? null : current,
+                        )
+                      }
+                      onChange={(value) => {
+                        if (cacheable)
+                          updateCachedReactions(viewerId, profileId, workout.id, value);
+                        setReactions((current) => ({ ...current, [workout.id]: value }));
+                      }}
+                    />
+                  ),
+                  onFilterMachine: (photo) => {
+                    setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
+                    setFiltersOpen(true);
+                  },
+                })}
+              </Fragment>
             )}
             {moreError && (
-              <p className="inline-error" role="alert">
-                {moreError}
-              </p>
-            )}
-            {!invalidDates && !loadingWorkouts && workouts.length < total && (
-              <button
-                type="button"
-                className="show-more-button"
-                disabled={loadingMore}
-                onClick={() => void loadMore()}
-              >
-                {loadingMore ? 'Loading…' : `Show more · ${total - workouts.length} older`}
-              </button>
+              <div className="history-page-status" role="alert">
+                <p>{moreError}</p>
+                <button
+                  type="button"
+                  className="show-more-button"
+                  disabled={loadingMore}
+                  onClick={() => void loadMore()}
+                >
+                  Retry loading older workouts
+                </button>
+              </div>
             )}
           </section>
         </>

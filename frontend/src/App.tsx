@@ -355,7 +355,7 @@ import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
-import { LiveWorkoutResumeBar, type LiveWorkoutSummary } from './LiveWorkoutResumeBar';
+import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
@@ -407,11 +407,13 @@ import {
   supersetRoundPending,
 } from './workoutSupersets';
 import {
+  HISTORY_WEEKS_PER_PAGE,
   historyPageAnchor,
   historyPageCount,
   historyPageForDate,
   historyPageWindow,
   upsertWorkoutByRecency,
+  weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
 import { bodyweightOn, bodyweightContext } from './relativeStrength';
@@ -1762,11 +1764,6 @@ function AppContent() {
   const activeMainTab = mainTabFor(tab);
   const liveSheetOpen = tab === 'log' && !editingWorkout && activeWorkoutStartedAt !== null;
   const showTabBar = (tab !== 'log' && tab !== 'split') || liveSheetOpen;
-  const showLiveWorkoutBar =
-    tab !== 'log' &&
-    activeWorkoutStartedAt !== null &&
-    liveWorkoutSummary !== null &&
-    !home.editing;
   // The home screen guide follows the release announcement, behind the same interruptions.
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
@@ -1946,7 +1943,7 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${showLiveWorkoutBar ? ' has-live-workout-bar' : ''}${tab === 'log' && !editingWorkout ? ' has-compact-logger' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${tab === 'log' && !editingWorkout ? ' has-compact-logger' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner
@@ -2546,19 +2543,9 @@ function AppContent() {
           )}
         </main>
 
-        {showLiveWorkoutBar && liveWorkoutSummary && activeWorkoutStartedAt !== null && (
-          <LiveWorkoutResumeBar
-            startedAt={activeWorkoutStartedAt}
-            summary={liveWorkoutSummary}
-            restEndsAt={restEndsAt}
-            aboveTabBar={showTabBar}
-            onResume={resumeLiveWorkout}
-          />
-        )}
-
         {showTabBar && (
           <AppTabBar
-            resumeInBar={showLiveWorkoutBar || liveSheetOpen}
+            liveSummary={liveWorkoutSummary}
             inert={liveSheetOpen}
             homeLayout={home}
             active={liveSheetOpen ? 'dashboard' : activeMainTab}
@@ -2570,7 +2557,7 @@ function AppContent() {
                 setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
               else setTab(nextTab);
             }}
-            onStart={() => startWorkout()}
+            onStart={() => (activeWorkoutStartedAt !== null ? resumeLiveWorkout() : startWorkout())}
             startMenu={{
               upNextLabel:
                 upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
@@ -10311,17 +10298,25 @@ function HistoryScreen({
   );
 }
 
-/** Another member's shared workouts, grouped by week like History but read-only. */
+/**
+ * A profile's shared workouts, grouped by week like History but read-only, two weeks with
+ * workouts to a page. Older workouts are read as later pages need them.
+ */
 function SharedWorkoutHistory({
   workouts,
   focusWorkoutId,
   personalRecords,
   onFilterMachine,
   renderWorkoutAction,
+  hasMore = false,
+  loadingMore = false,
+  loadMoreFailed = false,
+  onLoadMore,
   categoryColors,
   weekStartDay,
 }: SharedWorkoutListProps & { categoryColors: WorkoutTypeColors; weekStartDay: number }) {
-  const weightUnit = useWeightUnit();
+  const [chosenPage, setChosenPage] = useState<number | null>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
   const [openId, setOpenId] = useState<string | null>(focusWorkoutId ?? null);
   const summaryRef = useRef<HTMLButtonElement>(null);
   const revealed = useRef(false);
@@ -10333,6 +10328,38 @@ function SharedWorkoutHistory({
     [weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
+  // A linked workout opens on its page until another page is chosen.
+  const focusWeek = focusWorkoutId
+    ? weekGroups.findIndex((group) => group.workouts.some((item) => item.id === focusWorkoutId))
+    : -1;
+  const {
+    page,
+    start: pageStart,
+    end: pageEnd,
+    needsMore: pageNeedsMore,
+    hasNext: hasNextPage,
+    totalPages,
+  } = weekGroupPage(
+    weekGroups.length,
+    chosenPage ?? Math.max(0, Math.floor(focusWeek / HISTORY_WEEKS_PER_PAGE)),
+    hasMore,
+  );
+  const pageWeeks = weekGroups.slice(pageStart, pageEnd);
+
+  useEffect(() => {
+    if (pageNeedsMore && !loadingMore && !loadMoreFailed) onLoadMore?.();
+  }, [loadMoreFailed, loadingMore, onLoadMore, pageNeedsMore, workouts.length]);
+
+  function changePage(next: number) {
+    setChosenPage(Math.max(0, next));
+    setOpenId(null);
+    window.requestAnimationFrame(() =>
+      pagesRef.current?.scrollIntoView({
+        behavior: motionReduced() ? 'instant' : 'smooth',
+        block: 'start',
+      }),
+    );
+  }
 
   useEffect(() => {
     if (!focusWorkoutId || revealed.current || !summaryRef.current) return;
@@ -10348,43 +10375,75 @@ function SharedWorkoutHistory({
     return () => window.cancelAnimationFrame(frame);
   }, [focusWorkoutId, workouts]);
 
-  return weekGroups.map((group) => {
-    const label = weekGroupLabel(group.weekStart, today, weekStartDay);
-    return (
-      <section className="history-week" key={group.weekStart} aria-label={label}>
-        <header className="history-week-header">
-          <h2>{label}</h2>
-          <span className="num">
-            {group.workouts.length} {group.workouts.length === 1 ? 'workout' : 'workouts'} ·{' '}
-            {group.sets} sets
-            {group.volumeKg > 0 ? ` · ${formatVolume(group.volumeKg, weightUnit)}` : ''}
-          </span>
-        </header>
-        <div className="history-week-list">
-          {group.workouts.map((workout) => (
-            <HistoryWorkoutCard
-              key={workout.id}
-              shared
-              workout={workout}
-              open={openId === workout.id}
-              summaryRef={workout.id === focusWorkoutId ? summaryRef : null}
-              targetExerciseId={null}
-              targetExerciseRef={targetExerciseRef}
-              categoryColor={workout.workout_type?.color ?? categoryColors[workout.category]}
-              records={recordCounts.get(workout.id) ?? 0}
-              personalRecords={personalRecords}
-              activeWorkout={false}
-              expandedPhoto={expandedPhoto}
-              onExpandPhoto={setExpandedPhoto}
-              onFilterMachine={onFilterMachine}
-              onToggle={() => setOpenId((current) => (current === workout.id ? null : workout.id))}
-              reactionAction={renderWorkoutAction?.(workout)}
-            />
-          ))}
+  return (
+    <div className="shared-workout-pages" ref={pagesRef}>
+      {pageWeeks.length === 0 && (
+        <div className="history-page-status" role="status">
+          <p>{loadMoreFailed ? 'Older workouts could not load.' : 'Loading older workouts…'}</p>
         </div>
-      </section>
-    );
-  });
+      )}
+      {pageWeeks.map((group) => {
+        const label = weekGroupLabel(group.weekStart, today, weekStartDay);
+        return (
+          <section className="history-week" key={group.weekStart} aria-label={label}>
+            <header className="history-week-header">
+              <h2>{label}</h2>
+            </header>
+            <div className="history-week-list">
+              {group.workouts.map((workout) => (
+                <HistoryWorkoutCard
+                  key={workout.id}
+                  shared
+                  workout={workout}
+                  open={openId === workout.id}
+                  summaryRef={workout.id === focusWorkoutId ? summaryRef : null}
+                  targetExerciseId={null}
+                  targetExerciseRef={targetExerciseRef}
+                  categoryColor={workout.workout_type?.color ?? categoryColors[workout.category]}
+                  records={recordCounts.get(workout.id) ?? 0}
+                  personalRecords={personalRecords}
+                  activeWorkout={false}
+                  expandedPhoto={expandedPhoto}
+                  onExpandPhoto={setExpandedPhoto}
+                  onFilterMachine={onFilterMachine}
+                  onToggle={() =>
+                    setOpenId((current) => (current === workout.id ? null : workout.id))
+                  }
+                  reactionAction={renderWorkoutAction?.(workout)}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      {(page > 0 || hasNextPage) && (
+        <nav className="pagination-controls shared-workout-pager" aria-label="Workout pages">
+          <button
+            type="button"
+            className="pagination-arrow"
+            disabled={page === 0}
+            onClick={() => changePage(page - 1)}
+            aria-label="Newer workouts"
+          >
+            <Icon name="chevron-left" />
+          </button>
+          <small className="pagination-status" aria-live="polite">
+            Page {page + 1}
+            {totalPages ? ` of ${totalPages}` : ''}
+          </small>
+          <button
+            type="button"
+            className="pagination-arrow"
+            disabled={!hasNextPage || pageNeedsMore}
+            onClick={() => changePage(page + 1)}
+            aria-label="Older workouts"
+          >
+            <Icon name="chevron-right" />
+          </button>
+        </nav>
+      )}
+    </div>
+  );
 }
 
 function HistoryWorkoutCard({
