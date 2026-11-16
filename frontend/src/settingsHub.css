@@ -319,6 +319,11 @@
   outline-offset: 3px;
 }
 
+/* Opening a section moves focus to its heading for screen readers; a tap shows no ring. */
+.settings-section-heading h2:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .settings-hub .settings-panel.danger-zone {
   margin-top: 1.75rem;
   border-color: color-mix(in srgb, var(--p-danger) 35%, transparent);

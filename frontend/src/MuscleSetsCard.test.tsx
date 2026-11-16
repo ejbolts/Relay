@@ -227,6 +227,10 @@ it('compares each muscle with the week before and steps back through earlier wee
     ['Quads', '8', '±0', true],
     ['Calves', '0', '−4', true],
   ]);
+  // The week is still going, so a shortfall reads as sets to go rather than a red drop.
+  const chestChange = host.querySelector('.muscle-bars > li .muscle-set-change')!;
+  expect(chestChange.className).toBe('muscle-set-change is-pending');
+  expect(chestChange.getAttribute('aria-label')).toBe('3 to match the week before');
 
   await act(async () => arrow('Previous week').click());
   expect(weekLabel()).toBe('Last week');
@@ -238,6 +242,9 @@ it('compares each muscle with the week before and steps back through earlier wee
     ['Quads', '8', '−1.5', true],
     ['Calves', '4', '+4', false],
   ]);
+  expect(host.querySelectorAll('.muscle-set-change')[1].className).toBe(
+    'muscle-set-change is-down',
+  );
 
   // The oldest week has nothing before it to compare with.
   await act(async () => arrow('Previous week').click());

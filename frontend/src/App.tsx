@@ -10023,7 +10023,7 @@ function HistoryScreen({
           <PageHeader
             eyebrow={
               section === 'progress'
-                ? 'Exercise charts · records · sessions'
+                ? 'Charts · records · sessions'
                 : section === 'cardio'
                   ? 'Zones · energy · sessions'
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`

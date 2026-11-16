@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   decimalNumberOrNull,
   formatBytes,
@@ -7,6 +7,7 @@ import {
   formatWorkoutTimeRange,
   mergeUniqueById,
   itemsInSelectionOrder,
+  localDateOf,
   reorder,
   workoutDurationMinutes,
   workoutTimeInputValue,
@@ -105,5 +106,24 @@ describe('workout list helpers', () => {
       sets[1],
     ]);
     expect(sets.map((item) => item.key)).toEqual(['warmup', 'working', 'drop']);
+  });
+});
+
+describe('localDateOf', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('dates a UTC timestamp by the local calendar day', () => {
+    vi.stubEnv('TZ', 'Australia/Sydney');
+    expect(localDateOf('2026-11-16T14:27:23.800705Z')).toBe('2026-11-17');
+    vi.stubEnv('TZ', 'America/Los_Angeles');
+    expect(localDateOf('2026-11-16T04:00:00Z')).toBe('2026-11-15');
+    vi.stubEnv('TZ', 'UTC');
+    expect(localDateOf('2026-11-16T14:27:23Z')).toBe('2026-11-16');
+  });
+
+  it('falls back to the leading date of an unreadable value', () => {
+    expect(localDateOf('2026-11-16 later')).toBe('2026-11-16');
   });
 });
