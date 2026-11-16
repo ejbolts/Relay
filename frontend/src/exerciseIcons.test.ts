@@ -18,6 +18,57 @@ function exercise(
 
 describe('exerciseIconKey', () => {
   it.each([
+    ['Smith Machine Bench Press', 'smith-bench-press'],
+    ['Smith Machine Shoulder Press', 'smith-shoulder-press'],
+    ['Smith Machine Squat', 'smith-squat'],
+    ['Machine Lat Pulldown', 'machine-lat-pulldown'],
+    ['Cable Glute Kickback', 'cable-glute-kickback'],
+    ['Cable Crunch', 'cable-crunch'],
+    ['Straight-Arm Cable Pulldown', 'straight-arm-cable-pulldown'],
+    ['Overhead Cable Triceps Extension', 'overhead-cable-triceps-extension'],
+    ['Cable Lateral Raise', 'cable-lateral-raise'],
+    ['Barbell Row', 'barbell-row'],
+  ])('corrects the movement and equipment illustration for %s', (name, key) => {
+    const movement = exercise(name);
+    expect(exerciseIconKey(movement)).toBe(key);
+    expect(exerciseIconFor(movement)).toContain(`${key}.webp`);
+  });
+
+  it.each([
+    ['Bench Press', 'Smith machine', 'smith-bench-press'],
+    ['Chest Press', 'Smith machine', 'smith-bench-press'],
+    ['Shoulder Press', 'Smith machine', 'smith-shoulder-press'],
+    ['Overhead Press', 'Smith machine', 'smith-shoulder-press'],
+    ['Back Squat', 'Smith machine', 'smith-squat'],
+    ['Lat Pulldown', 'Machine', 'machine-lat-pulldown'],
+    ['Wide Lat Pull-down', 'Plate-loaded machine', 'machine-lat-pulldown'],
+    ['Glute Kickback', 'Cable', 'cable-glute-kickback'],
+    ['Kneeling Crunch', 'Cable', 'cable-crunch'],
+    ['Straight Arm Pull-down', 'Cable machine', 'straight-arm-cable-pulldown'],
+    ['Overhead Triceps Extension', 'Cable machine', 'overhead-cable-triceps-extension'],
+    ['Lateral Raise', 'Cable', 'cable-lateral-raise'],
+    ['Bent-over Row', 'Barbell', 'barbell-row'],
+  ])('uses %s with %s equipment to select the second-batch icon', (name, equipment, key) => {
+    expect(exerciseIconKey(exercise(name, { equipment }))).toBe(key);
+  });
+
+  it.each([
+    ['Back Squat', 'Barbell', 'back-squat'],
+    ['Lat Pulldown', 'Cable', 'lat-pulldown'],
+    ['Single-Arm Lat Pulldown (Machine)', 'Machine', 'lat-pulldown'],
+    ['Single-Arm Cable Lat Pulldown', 'Cable', 'lat-pulldown'],
+    ['Crunch', 'Bodyweight', 'core'],
+    ['Seated Ab Crunch Machine', 'Machine', 'ab-crunch-machine'],
+    ['Overhead Dumbbell Triceps Extension', 'Dumbbell', 'triceps-pushdown'],
+    ['Triceps Cable Kickback', 'Cable', 'triceps-pushdown'],
+    ['Single-Arm Cable Pullover', 'Cable', 'lat-pulldown'],
+    ['Band Row', 'Resistance band', 'seated-row'],
+    ['Barbell Upright Row', 'Barbell', 'seated-row'],
+  ])('does not apply a second-batch icon to the different movement %s', (name, equipment, key) => {
+    expect(exerciseIconKey(exercise(name, { equipment }))).toBe(key);
+  });
+
+  it.each([
     ['Machine Chest Press', 'machine-chest-press'],
     ['Machine Shoulder Press', 'machine-shoulder-press'],
     ['Machine Lateral Raise', 'machine-lateral-raise'],
@@ -59,9 +110,6 @@ describe('exerciseIconKey', () => {
     ['Barbell Bench Press', 'Barbell', 'bench-press'],
     ['Hip Thrust', 'Barbell', 'hip-thrust'],
     ['Dumbbell Shoulder Press', 'Dumbbell', 'overhead-press'],
-    ['Smith Machine Shoulder Press', 'Smith machine', 'overhead-press'],
-    ['Shoulder Press', 'Smith machine', 'overhead-press'],
-    ['Cable Lateral Raise', 'Cable', 'lateral-raise'],
     ['Seated Cable Row', 'Cable', 'seated-row'],
     ['Single-Arm Cable Row', 'Cable machine', 'seated-row'],
     ['Dumbbell Row', 'Dumbbell', 'seated-row'],

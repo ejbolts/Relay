@@ -1,10 +1,14 @@
 import abCrunchMachineIcon from './assets/exercise-icons/ab-crunch-machine.webp';
 import backExtensionIcon from './assets/exercise-icons/back-extension.webp';
 import backSquatIcon from './assets/exercise-icons/back-squat.webp';
+import barbellRowIcon from './assets/exercise-icons/barbell-row.webp';
 import benchPressIcon from './assets/exercise-icons/bench-press.webp';
 import bicepsCurlIcon from './assets/exercise-icons/biceps-curl.webp';
 import bulgarianSplitSquatIcon from './assets/exercise-icons/bulgarian-split-squat.webp';
 import calfRaiseIcon from './assets/exercise-icons/calf-raise.webp';
+import cableCrunchIcon from './assets/exercise-icons/cable-crunch.webp';
+import cableGluteKickbackIcon from './assets/exercise-icons/cable-glute-kickback.webp';
+import cableLateralRaiseIcon from './assets/exercise-icons/cable-lateral-raise.webp';
 import chestFlyIcon from './assets/exercise-icons/chest-fly.webp';
 import coreIcon from './assets/exercise-icons/core.webp';
 import cyclingIcon from './assets/exercise-icons/cycling.webp';
@@ -24,9 +28,11 @@ import legPressIcon from './assets/exercise-icons/leg-press.webp';
 import machineChestPressIcon from './assets/exercise-icons/machine-chest-press.webp';
 import machineHipThrustIcon from './assets/exercise-icons/machine-hip-thrust.webp';
 import machineLateralRaiseIcon from './assets/exercise-icons/machine-lateral-raise.webp';
+import machineLatPulldownIcon from './assets/exercise-icons/machine-lat-pulldown.webp';
 import machineRowIcon from './assets/exercise-icons/machine-row.webp';
 import machineShoulderPressIcon from './assets/exercise-icons/machine-shoulder-press.webp';
 import overheadPressIcon from './assets/exercise-icons/overhead-press.webp';
+import overheadCableTricepsExtensionIcon from './assets/exercise-icons/overhead-cable-triceps-extension.webp';
 import pecDeckIcon from './assets/exercise-icons/pec-deck.webp';
 import preacherCurlIcon from './assets/exercise-icons/preacher-curl.webp';
 import pullUpIcon from './assets/exercise-icons/pull-up.webp';
@@ -37,7 +43,11 @@ import runningIcon from './assets/exercise-icons/running.webp';
 import seatedRowIcon from './assets/exercise-icons/seated-row.webp';
 import seatedCalfRaiseIcon from './assets/exercise-icons/seated-calf-raise.webp';
 import seatedLegCurlIcon from './assets/exercise-icons/seated-leg-curl.webp';
+import smithBenchPressIcon from './assets/exercise-icons/smith-bench-press.webp';
+import smithShoulderPressIcon from './assets/exercise-icons/smith-shoulder-press.webp';
+import smithSquatIcon from './assets/exercise-icons/smith-squat.webp';
 import stairClimberIcon from './assets/exercise-icons/stair-climber.webp';
+import straightArmCablePulldownIcon from './assets/exercise-icons/straight-arm-cable-pulldown.webp';
 import tricepsPushdownIcon from './assets/exercise-icons/triceps-pushdown.webp';
 import tricepsExtensionMachineIcon from './assets/exercise-icons/triceps-extension-machine.webp';
 import type { Exercise } from './types';
@@ -46,10 +56,14 @@ export type ExerciseIconKey =
   | 'ab-crunch-machine'
   | 'back-extension'
   | 'back-squat'
+  | 'barbell-row'
   | 'bench-press'
   | 'biceps-curl'
   | 'bulgarian-split-squat'
   | 'calf-raise'
+  | 'cable-crunch'
+  | 'cable-glute-kickback'
+  | 'cable-lateral-raise'
   | 'chest-fly'
   | 'core'
   | 'cycling'
@@ -69,9 +83,11 @@ export type ExerciseIconKey =
   | 'machine-chest-press'
   | 'machine-hip-thrust'
   | 'machine-lateral-raise'
+  | 'machine-lat-pulldown'
   | 'machine-row'
   | 'machine-shoulder-press'
   | 'overhead-press'
+  | 'overhead-cable-triceps-extension'
   | 'pec-deck'
   | 'preacher-curl'
   | 'pull-up'
@@ -82,7 +98,11 @@ export type ExerciseIconKey =
   | 'seated-row'
   | 'seated-calf-raise'
   | 'seated-leg-curl'
+  | 'smith-bench-press'
+  | 'smith-shoulder-press'
+  | 'smith-squat'
   | 'stair-climber'
+  | 'straight-arm-cable-pulldown'
   | 'triceps-pushdown'
   | 'triceps-extension-machine';
 
@@ -95,10 +115,14 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'ab-crunch-machine': abCrunchMachineIcon,
   'back-extension': backExtensionIcon,
   'back-squat': backSquatIcon,
+  'barbell-row': barbellRowIcon,
   'bench-press': benchPressIcon,
   'biceps-curl': bicepsCurlIcon,
   'bulgarian-split-squat': bulgarianSplitSquatIcon,
   'calf-raise': calfRaiseIcon,
+  'cable-crunch': cableCrunchIcon,
+  'cable-glute-kickback': cableGluteKickbackIcon,
+  'cable-lateral-raise': cableLateralRaiseIcon,
   'chest-fly': chestFlyIcon,
   core: coreIcon,
   cycling: cyclingIcon,
@@ -118,9 +142,11 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'machine-chest-press': machineChestPressIcon,
   'machine-hip-thrust': machineHipThrustIcon,
   'machine-lateral-raise': machineLateralRaiseIcon,
+  'machine-lat-pulldown': machineLatPulldownIcon,
   'machine-row': machineRowIcon,
   'machine-shoulder-press': machineShoulderPressIcon,
   'overhead-press': overheadPressIcon,
+  'overhead-cable-triceps-extension': overheadCableTricepsExtensionIcon,
   'pec-deck': pecDeckIcon,
   'preacher-curl': preacherCurlIcon,
   'pull-up': pullUpIcon,
@@ -131,7 +157,11 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'seated-row': seatedRowIcon,
   'seated-calf-raise': seatedCalfRaiseIcon,
   'seated-leg-curl': seatedLegCurlIcon,
+  'smith-bench-press': smithBenchPressIcon,
+  'smith-shoulder-press': smithShoulderPressIcon,
+  'smith-squat': smithSquatIcon,
   'stair-climber': stairClimberIcon,
+  'straight-arm-cable-pulldown': straightArmCablePulldownIcon,
   'triceps-pushdown': tricepsPushdownIcon,
   'triceps-extension-machine': tricepsExtensionMachineIcon,
 };
@@ -141,9 +171,12 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'back squat': 'back-squat',
   'barbell bench press': 'bench-press',
   'barbell curl': 'biceps-curl',
-  'barbell row': 'seated-row',
+  'barbell row': 'barbell-row',
   'bulgarian split squat': 'bulgarian-split-squat',
   'cable fly': 'chest-fly',
+  'cable crunch': 'cable-crunch',
+  'cable glute kickback': 'cable-glute-kickback',
+  'cable lateral raise': 'cable-lateral-raise',
   'cable shoulder extensions': 'face-pull',
   cycling: 'cycling',
   'cycling (indoor)': 'cycling',
@@ -166,9 +199,11 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'machine chest press': 'machine-chest-press',
   'machine shoulder press': 'machine-shoulder-press',
   'machine lateral raise': 'machine-lateral-raise',
+  'machine lat pulldown': 'machine-lat-pulldown',
   'machine hip thrust': 'machine-hip-thrust',
   'hip abduction machine': 'hip-abduction-machine',
   'overhead press': 'overhead-press',
+  'overhead cable triceps extension': 'overhead-cable-triceps-extension',
   'pec deck': 'pec-deck',
   'reverse pec deck': 'reverse-pec-deck',
   plank: 'core',
@@ -187,9 +222,12 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'single-arm cable triceps pushdown': 'triceps-pushdown',
   'single-arm lat pulldown (machine)': 'lat-pulldown',
   'single-arm preacher curl': 'preacher-curl',
+  'smith machine bench press': 'smith-bench-press',
+  'smith machine shoulder press': 'smith-shoulder-press',
+  'smith machine squat': 'smith-squat',
   'stair climber': 'stair-climber',
   'standing calf raise': 'calf-raise',
-  'straight-arm cable pulldown': 'lat-pulldown',
+  'straight-arm cable pulldown': 'straight-arm-cable-pulldown',
   'triceps machine extension': 'triceps-extension-machine',
   'triceps pushdown': 'triceps-pushdown',
   walking: 'incline-walk',
@@ -210,6 +248,35 @@ function includesAny(value: string, words: string[]) {
 export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey {
   const name = normalized(exercise.name);
   const equipment = normalized(exercise.equipment);
+  const gear = `${name} ${equipment}`;
+
+  if (exercise.kind !== 'cardio') {
+    if (gear.includes('smith')) {
+      if (name.includes('squat')) return 'smith-squat';
+      if (name.includes('press')) {
+        if (includesAny(name, ['shoulder', 'overhead', 'military'])) return 'smith-shoulder-press';
+        if (includesAny(name, ['bench', 'chest'])) return 'smith-bench-press';
+      }
+    }
+    if (gear.includes('cable')) {
+      if (name.includes('glute') && name.includes('kickback')) return 'cable-glute-kickback';
+      if (name.includes('crunch')) return 'cable-crunch';
+      if (name.includes('lateral raise')) return 'cable-lateral-raise';
+      if (includesAny(name, ['pulldown', 'pull-down']) && /\bstraight[- ]arms?\b/.test(name)) {
+        return 'straight-arm-cable-pulldown';
+      }
+      if (name.includes('overhead') && name.includes('tricep') && name.includes('extension')) {
+        return 'overhead-cable-triceps-extension';
+      }
+    }
+    if (
+      gear.includes('barbell') &&
+      /\brows?\b/.test(name) &&
+      !includesAny(name, ['upright', 'seated', 'supported'])
+    ) {
+      return 'barbell-row';
+    }
+  }
 
   // Respect explicit equipment in the movement name. A cable station or Smith
   // machine must not turn into one of the seated lever-machine illustrations.
@@ -225,6 +292,12 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
       'bodyweight',
     ]);
   if (exercise.kind !== 'cardio' && machine) {
+    if (
+      includesAny(name, ['lat pulldown', 'lat pull-down']) &&
+      !includesAny(name, ['single', 'one-arm', 'one arm', 'unilateral'])
+    ) {
+      return 'machine-lat-pulldown';
+    }
     if (name.includes('hip abduction')) return 'hip-abduction-machine';
     if (name.includes('hip thrust')) return 'machine-hip-thrust';
     if (name.includes('seated') && name.includes('calf')) return 'seated-calf-raise';
