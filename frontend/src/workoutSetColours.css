@@ -39,27 +39,11 @@
   --set-type-rgb: 230 103 103;
 }
 
-/* Settings > App theme > Set colours scales how strongly rows are tinted by set type. */
-:root {
-  --set-tint-fill: 12%;
-  --set-tint-border: 34%;
-}
-
-:root[data-set-tint='subtle'] {
-  --set-tint-fill: 6%;
-  --set-tint-border: 20%;
-}
-
-:root[data-set-tint='strong'] {
-  --set-tint-fill: 20%;
-  --set-tint-border: 50%;
-}
-
 /* Also override the legacy suggested/completed/editing row surfaces in both themes. */
 .logger-screen .set-grid .set-details[data-set-type],
 .logger-screen .set-grid .set-details.previous-set-details[data-set-type] {
-  border-color: rgb(var(--set-type-rgb) / var(--set-tint-border));
-  background: rgb(var(--set-type-rgb) / var(--set-tint-fill));
+  border-color: rgb(var(--set-type-rgb) / 34%);
+  background: rgb(var(--set-type-rgb) / 12%);
 }
 
 /* Cardio stays on the editing surface until the set is completed. */

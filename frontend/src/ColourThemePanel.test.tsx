@@ -58,10 +58,8 @@ it('lists Neutral with the accent colour presets', () => {
   expect(markup).toMatch(/<input[^>]*name="colour-theme"[^>]*value="neutral"/);
 });
 
-it('offers Subtle, Medium and Strong set colours with Medium selected by default', () => {
+it('no longer offers a Set colours choice', () => {
   const markup = renderToStaticMarkup(<ColourThemePanel />);
-  expect(markup).toContain('<legend>Set colours</legend>');
-  expect(markup.match(/<input[^>]*name="set-tint"[^>]*value="medium"[^>]*>/)?.[0]).toContain(
-    'checked=""',
-  );
+  expect(markup).not.toContain('<legend>Set colours</legend>');
+  expect(markup).not.toContain('name="set-tint"');
 });

@@ -9,8 +9,6 @@ import {
   glassPreference,
   saveDarkStyle,
   saveGlass,
-  saveSetTint,
-  setTintPreference,
   resetAppearanceOnce,
   saveLightStyle,
   lightStylePreference,
@@ -179,19 +177,12 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   // The retired Background choice is cleared too.
   expect(localStorage.getItem('gym-logger-sun-ray')).toBeNull();
   expect(glassPreference()).toBe('subtle');
-  expect(setTintPreference()).toBe('medium');
+  // The retired Set colours choice is cleared too.
+  expect(localStorage.getItem('gym-logger-set-tint')).toBeNull();
   // Choices made after the reset stay put on later loads.
   saveGlass('strong');
   saveColourMode('light');
   resetAppearanceOnce();
   expect(glassPreference()).toBe('strong');
   expect(colourModePreference()).toBe('light');
-});
-it('saves the set colour intensity, defaulting to Medium', () => {
-  expect(setTintPreference()).toBe('medium');
-  expect(saveSetTint('strong')).toBe(true);
-  expect(setTintPreference()).toBe('strong');
-  expect(document.documentElement.dataset.setTint).toBe('strong');
-  localStorage.setItem('gym-logger-set-tint', 'neon');
-  expect(setTintPreference()).toBe('medium');
 });

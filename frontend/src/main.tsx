@@ -12,13 +12,11 @@ import {
   applyColourTheme,
   applyDarkStyle,
   applyGlass,
-  applySetTint,
   applyLightStyle,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
-  setTintPreference,
   resetAppearanceOnce,
   lightStylePreference,
 } from './colourThemes';
@@ -47,7 +45,6 @@ resetAppearanceOnce();
 applyDarkStyle(darkStylePreference());
 applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());
-applySetTint(setTintPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
 
