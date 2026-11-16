@@ -196,7 +196,7 @@ body::before,
      and full strength about a third of the way down, so there is no hard line under it. */
   -webkit-mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
   mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
-  animation: sun-ray-sweep 20s linear infinite;
+  animation: sun-ray-sweep 30s linear infinite;
 }
 
 /* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
