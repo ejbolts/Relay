@@ -155,8 +155,6 @@
   max-height: calc(100dvh - 2rem);
   margin: auto auto max(0.75rem, env(safe-area-inset-bottom));
   border-radius: 24px;
-  /* The shared pop-in animation would restart whenever a drag snaps back. */
-  animation: none;
   transform: translateY(var(--sheet-offset, 0px));
   transition: transform 180ms ease-out;
 }
@@ -181,10 +179,43 @@
   background: var(--p-surface);
   touch-action: none;
 }
+/* Slides up from the bottom when it opens. It animates the separate translate property, so a
+   drag snapping back (which moves transform) never restarts it. */
+.popup-dialog.muscle-contribution-sheet[open] {
+  animation: muscle-sheet-in 420ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+}
+
+@keyframes muscle-sheet-in {
+  from {
+    translate: 0 calc(100% + 1.5rem);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+/* A light dim and blur, like the Start menu, so Home stays visible behind the sheet. */
+.popup-dialog.muscle-contribution-sheet::backdrop {
+  background: rgb(5 6 8 / 50%);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+:root[data-colour-mode='light'] .popup-dialog.muscle-contribution-sheet::backdrop {
+  background: rgb(243 245 247 / 55%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .popup-dialog.muscle-contribution-sheet {
     transition: none;
   }
+  .popup-dialog.muscle-contribution-sheet[open] {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .popup-dialog.muscle-contribution-sheet[open] {
+  animation: none;
 }
 .muscle-contribution-sheet .popup-dialog-close {
   width: auto;

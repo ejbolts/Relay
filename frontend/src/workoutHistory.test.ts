@@ -5,6 +5,7 @@ import {
   historyPageForDate,
   historyPageWindow,
   upsertWorkoutByRecency,
+  weekGroupPage,
   workoutPageForId,
 } from './workoutHistory';
 
@@ -94,5 +95,33 @@ describe('optimistic workout history updates', () => {
     const edited = { ...older, workout_date: '2026-09-01' };
 
     expect(upsertWorkoutByRecency([newer, older], edited)).toEqual([edited, newer]);
+  });
+});
+
+describe('profile workout pages', () => {
+  it('shows two loaded weeks with workouts per page and waits for a week that may continue', () => {
+    expect(weekGroupPage(3, 0, true)).toMatchObject({
+      page: 0,
+      start: 0,
+      end: 2,
+      needsMore: false,
+      hasNext: true,
+      totalPages: null,
+    });
+    // The second week is the last loaded, so older workouts in it may not have been read yet.
+    expect(weekGroupPage(2, 0, true)).toMatchObject({ needsMore: true, hasNext: true });
+    expect(weekGroupPage(3, 1, true)).toMatchObject({ start: 2, end: 4, needsMore: true });
+  });
+
+  it('counts pages and stops at the last one once every workout has loaded', () => {
+    expect(weekGroupPage(5, 2, false)).toMatchObject({
+      page: 2,
+      needsMore: false,
+      hasNext: false,
+      totalPages: 3,
+    });
+    expect(weekGroupPage(5, 7, false)).toMatchObject({ page: 2, start: 4 });
+    expect(weekGroupPage(0, 0, false)).toMatchObject({ page: 0, hasNext: false, totalPages: 1 });
+    expect(weekGroupPage(4, -1, false).page).toBe(0);
   });
 });

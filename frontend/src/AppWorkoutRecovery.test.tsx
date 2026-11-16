@@ -1149,26 +1149,26 @@ describe('rest time controls', () => {
     return systemNotification;
   }
 
-  it('minimises into the resume bar without saving or losing sets, notes or the running rest', async () => {
+  it('minimises to the live Start bubble without saving or losing sets, notes or the running rest', async () => {
     await startRest();
     const before = readActiveWorkoutDraft()!;
+    // Behind the open sheet the tab bar already shows the live Start bubble, so pulling the sheet
+    // down reveals it instead of it popping in; the bar stays inert until the sheet closes.
+    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+    expect(container.querySelector('.app-tab-bar')?.hasAttribute('inert')).toBe(true);
     const minimise = container.querySelector<HTMLButtonElement>('[aria-label="Minimise workout"]')!;
     minimise.focus();
     await act(async () => minimise.click());
     expect(window.location.hash).toBe('#dashboard');
-    const bar = () => container.querySelector<HTMLButtonElement>('.live-workout-resume')!;
-    expect(bar().textContent).toContain(before.name);
-    expect(bar().textContent).toContain('2 sets logged');
-    expect(bar().textContent).toContain('Rest 0:30');
-    expect(document.activeElement).toBe(bar());
-    expect(container.querySelector('.app-tab-start.live')).toBeNull();
-    await act(async () => vi.advanceTimersByTimeAsync(5000));
-    expect(bar().querySelector('.live-workout-resume-duration')?.textContent).toBe('10:05');
-    expect(bar().textContent).toContain('Rest 0:25');
-    expect(api.createWorkout).not.toHaveBeenCalled();
-    await act(async () => bar().click());
-    expect(window.location.hash).toBe('#log');
+    const start = () => container.querySelector<HTMLButtonElement>('.app-tab-start.live')!;
+    expect(start().getAttribute('aria-label')).toBe('Resume active workout, rest 0:30 left');
+    expect(document.activeElement).toBe(start());
     expect(container.querySelector('.live-workout-resume')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(start().getAttribute('aria-label')).toBe('Resume active workout, rest 0:25 left');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => start().click());
+    expect(window.location.hash).toBe('#log');
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
     expect(readActiveWorkoutDraft()?.movements).toEqual(before.movements);
     expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
@@ -1998,7 +1998,7 @@ describe('finishing workouts in the background', () => {
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')?.disabled,
     ).toBe(false);
-    expect(container.querySelector('.live-workout-resume')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     expect(document.querySelector('.app-notification-toast')).toBeNull();
@@ -3042,16 +3042,16 @@ describe('cardio set editing defaults', () => {
       container.querySelector<HTMLButtonElement>('.logger-screen .workout-sheet-grab')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
-    expect(container.querySelector('.live-workout-resume-duration')?.textContent).toBe('10:00');
+    expect(container.querySelector('.app-tab-live-time')?.textContent).toBe('10:00');
     await act(async () =>
-      container.querySelector<HTMLButtonElement>('.live-workout-resume')!.click(),
+      container.querySelector<HTMLButtonElement>('.app-tab-start.live')!.click(),
     );
     await act(async () => tick().click());
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.logger-screen .workout-sheet-grab')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
-    expect(container.querySelector('.live-workout-resume-duration')?.textContent).toBe('10:00');
+    expect(container.querySelector('.app-tab-live-time')?.textContent).toBe('10:00');
   });
 
   it.each([
@@ -3353,7 +3353,7 @@ describe('inactive workout suggestions', () => {
       await mount();
       expect(readActiveWorkoutDraft()).toBeNull();
       expect(window.location.hash).toBe('#dashboard');
-      expect(container.querySelector('.live-workout-resume')).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
       expect(container.querySelector('.logger-screen')).toBeNull();
       expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
       expect(api.createWorkout).not.toHaveBeenCalled();
@@ -3375,7 +3375,7 @@ describe('inactive workout suggestions', () => {
       draft.inactiveFinishAt = Date.now() + 60_000;
       writeActiveWorkoutDraft(draft);
       await mount();
-      expect(container.querySelector('.live-workout-resume')).not.toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
       expect(readActiveWorkoutDraft()).not.toBeNull();
       await act(async () => {
         if (trigger === 'timer') await vi.advanceTimersByTimeAsync(60_000);
@@ -3386,7 +3386,7 @@ describe('inactive workout suggestions', () => {
         }
       });
       expect(readActiveWorkoutDraft()).toBeNull();
-      expect(container.querySelector('.live-workout-resume')).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
       expect(api.createWorkout).not.toHaveBeenCalled();
     },
   );
@@ -3396,7 +3396,7 @@ describe('inactive workout suggestions', () => {
     writeActiveWorkoutDraft(emptyDraft());
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
-    expect(container.querySelector('.live-workout-resume')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
@@ -3541,7 +3541,7 @@ describe('inactive workout suggestions', () => {
     );
     expect(inactivePrompt()).toBeNull();
     expect(window.location.hash).toBe('#dashboard');
-    expect(container.querySelector('.live-workout-resume')).not.toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expectPreserved(draft);
   });
@@ -3563,7 +3563,7 @@ describe('inactive workout suggestions', () => {
     );
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(inactivePrompt()).toBeNull();
-    expect(container.querySelector('.live-workout-resume')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
@@ -3577,7 +3577,7 @@ describe('inactive workout suggestions', () => {
     await mount();
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(inactivePrompt()).toBeNull();
-    expect(container.querySelector('.live-workout-resume')).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
@@ -3936,7 +3936,7 @@ describe('live muscle totals while logging', () => {
     expect(document.querySelector('.notification-toast-action')).toBeNull();
   });
 
-  it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
+  it('updates Home immediately, opens the live source, and reverses unticking', async () => {
     await mount();
     await navigateTo('Home');
     await navigateTo('Training');
@@ -3946,7 +3946,7 @@ describe('live muscle totals while logging', () => {
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
     );
-    expect(chestTotals()).toEqual(['1', '1']);
+    expect(chestTotals()).toEqual(['1']);
     expect(api.dashboard).toHaveBeenCalledOnce();
     expect(api.createWorkout).not.toHaveBeenCalled();
     await act(async () => {

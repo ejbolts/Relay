@@ -90,15 +90,22 @@ function renderProfile(
         active={active}
         onOpenSplits={onOpenSplits}
         onChooseSharing={() => {}}
-        renderWorkouts={({ workouts, renderWorkoutAction }) => (
-          <ul>
-            {workouts.map((item) => (
-              <li key={item.id}>
-                {item.name}
-                {renderWorkoutAction?.(item)}
-              </li>
-            ))}
-          </ul>
+        renderWorkouts={({ workouts, renderWorkoutAction, hasMore, onLoadMore }) => (
+          <>
+            <ul>
+              {workouts.map((item) => (
+                <li key={item.id}>
+                  {item.name}
+                  {renderWorkoutAction?.(item)}
+                </li>
+              ))}
+            </ul>
+            {hasMore && (
+              <button type="button" onClick={onLoadMore}>
+                Load older
+              </button>
+            )}
+          </>
         )}
       />,
     ),
@@ -443,11 +450,45 @@ describe('shared history filtering', () => {
       'This workout is no longer available.',
     );
     await act(async () =>
-      container.querySelector<HTMLElement>('.shared-workout-filters summary')!.click(),
+      container.querySelector<HTMLElement>('.shared-workout-filter-toggle')!.click(),
     );
     await chooseType('push');
     expect(container.textContent).not.toContain('This workout is no longer available.');
     expect(container.textContent).toContain('No workouts match these filters.');
+  });
+
+  it('opens the filters from an icon beside the Workouts title and counts those set', async () => {
+    const header = container.querySelector('.shared-workouts-header')!;
+    expect(header.textContent).toBe('Workouts');
+    const toggle = header.querySelector<HTMLButtonElement>('.shared-workout-filter-toggle')!;
+    const panel = container.querySelector<HTMLElement>('.shared-workout-filters')!;
+    expect(toggle.getAttribute('aria-label')).toBe('Filter workouts');
+    expect(toggle.getAttribute('aria-controls')).toBe(panel.id);
+    expect(panel.hidden).toBe(true);
+    await act(async () => toggle.click());
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.hidden).toBe(false);
+    await chooseType('lower');
+    expect(toggle.getAttribute('aria-label')).toBe('Filter workouts, 1 set');
+    expect(toggle.textContent).toBe('1');
+    await act(async () => toggle.click());
+    expect(panel.hidden).toBe(true);
+  });
+
+  it('offers a retry when older workouts fail to load', async () => {
+    vi.mocked(api.sharing.workouts).mockRejectedValueOnce(new Error('Offline'));
+    await act(async () => button('Load older').click());
+    expect(container.querySelector('.shared-workouts [role="alert"]')?.textContent).toContain(
+      'Retry loading older workouts',
+    );
+    vi.mocked(api.sharing.workouts).mockResolvedValueOnce({
+      total: 2,
+      workouts: [{ ...workout, id: 'older', name: 'Older workout' }],
+      personal_records: [],
+    });
+    await act(async () => button('Retry loading older workouts').click());
+    expect(container.textContent).toContain('Older workout');
+    expect(container.textContent).not.toContain('Retry loading older workouts');
   });
 
   it('preserves friends-only access for a linked workout', async () => {
@@ -516,7 +557,7 @@ describe('shared history filtering', () => {
       workouts: [{ ...workout, id: 'older', name: 'Older workout' }],
       personal_records: [],
     });
-    await act(async () => button('Show more').click());
+    await act(async () => button('Load older').click());
     expect(api.sharing.workouts).toHaveBeenLastCalledWith(
       'friend',
       1,
@@ -534,7 +575,7 @@ describe('shared history filtering', () => {
           finish = resolve;
         }),
     );
-    await act(async () => button('Show more').click());
+    await act(async () => button('Load older').click());
     await chooseType('push');
     await act(async () =>
       finish({

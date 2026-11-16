@@ -174,3 +174,35 @@ it('leaves Escape in a nested portal dialog to that dialog', async () => {
   await act(async () => vi.advanceTimersByTime(400));
   expect(minimise).not.toHaveBeenCalled();
 });
+
+it('slides up when it opens after the app has loaded, then settles', async () => {
+  vi.spyOn(performance, 'now').mockReturnValue(10_000);
+  await render(false);
+  await render(true);
+  expect(sheet().classList.contains('is-opening')).toBe(true);
+  expect(
+    container.querySelector('.live-workout-sheet-backdrop')?.classList.contains('is-opening'),
+  ).toBe(true);
+  await act(async () => vi.advanceTimersByTimeAsync(600));
+  expect(sheet().classList.contains('is-opening')).toBe(false);
+});
+
+it('shows in place when the app opens straight into a workout or motion is reduced', async () => {
+  vi.spyOn(performance, 'now').mockReturnValue(200);
+  await render(false);
+  await render(true);
+  expect(sheet().classList.contains('is-opening')).toBe(false);
+  vi.spyOn(performance, 'now').mockReturnValue(10_000);
+  document.documentElement.setAttribute('data-reduce-motion', '');
+  await render(false);
+  await render(true);
+  expect(sheet().classList.contains('is-opening')).toBe(false);
+});
+
+it('lets a drag take over from the opening slide', async () => {
+  vi.spyOn(performance, 'now').mockReturnValue(10_000);
+  await render(false);
+  await render(true);
+  await pointer('pointerdown', 20, 20);
+  expect(sheet().classList.contains('is-opening')).toBe(false);
+});
