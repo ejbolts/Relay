@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +20,8 @@ from .training_metrics import get_setting, set_setting
 
 KEY = "training_blocks"
 
+BlockKind = Literal["strength", "hypertrophy", "recovery", "deload"]
+
 
 class BlockInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -29,6 +31,16 @@ class BlockInput(BaseModel):
     # A lighter recovery block. Its summary has no comparison and later blocks compare with the
     # last regular block instead. Older apps omit it, so updates keep the saved value.
     deload: bool = False
+    # The block's type, which colours and numbers it. Older apps omit it, and blocks saved
+    # before types existed have none; updates keep the saved value when it is omitted.
+    kind: BlockKind | None = None
+    # What a recovery block rehabilitates, such as "Left shoulder".
+    focus: str | None = Field(default=None, max_length=60)
+
+    @field_validator("focus")
+    @classmethod
+    def clean_focus(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
 
     @field_validator("name")
     @classmethod
@@ -128,7 +140,10 @@ def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> Train
         raise HTTPException(422, "You can save up to 200 training blocks.")
     if any(block.start_date == payload.start_date for block in config.blocks):
         raise HTTPException(422, "A training block already starts on that date.")
-    config.blocks.append(TrainingBlock(id=str(uuid4()), **payload.model_dump()))
+    block = TrainingBlock(id=str(uuid4()), **payload.model_dump())
+    if payload.kind:
+        block.deload = payload.kind == "deload"
+    config.blocks.append(block)
     return save_blocks(db, user.id, config)
 
 
@@ -148,6 +163,12 @@ def update_block(
     block.planned_end_date = payload.planned_end_date
     if "deload" in payload.model_fields_set:
         block.deload = payload.deload
+    if "kind" in payload.model_fields_set:
+        block.kind = payload.kind
+        if payload.kind:
+            block.deload = payload.kind == "deload"
+    if "focus" in payload.model_fields_set:
+        block.focus = payload.focus
     return save_blocks(db, user.id, config)
 
 

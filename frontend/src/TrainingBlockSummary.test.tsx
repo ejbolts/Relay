@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
-import { blockChange, blockFinished, nextBlockName } from './trainingBlocks';
+import { blockChange, blockFinished } from './trainingBlocks';
 import { TrainingBlockHome } from './TrainingBlockSummary';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { BlockStats, TrainingBlock, TrainingBlockSummary, TrainingBlocks } from './types';
@@ -82,13 +82,10 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it('finishes a block the day after its planned end and names the next one', () => {
+it('finishes a block the day after its planned end', () => {
   expect(blockFinished(rebuild, '2026-10-25')).toBe(false);
   expect(blockFinished(rebuild, '2026-10-26')).toBe(true);
   expect(blockFinished({ ...rebuild, planned_end_date: null }, '2027-01-01')).toBe(false);
-  expect(nextBlockName(config.blocks)).toBe('Block 3');
-  expect(nextBlockName([...config.blocks, { ...base, id: 'd', deload: true }])).toBe('Block 3');
-  expect(nextBlockName([])).toBe('Block 1');
 });
 
 it('describes the change from the previous block', () => {
@@ -179,7 +176,10 @@ it('starts the next block today and confirms with a toast', async () => {
   await act(async () => host.querySelector('button')!.click());
   await click('Start next block');
   const name = document.querySelector<HTMLInputElement>('.training-block-form input')!;
-  expect(name.value).toBe('Block 3');
+  expect(name.value).toBe('Strength 1');
+  expect(document.querySelector('[aria-label="Type"] [aria-checked="true"]')?.textContent).toBe(
+    'Strength',
+  );
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'Peak');
     name.dispatchEvent(new Event('input', { bubbles: true }));
@@ -198,6 +198,8 @@ it('starts the next block today and confirms with a toast', async () => {
     name: 'Peak',
     start_date: TODAY,
     planned_end_date: '2027-01-02',
+    kind: 'strength',
+    focus: null,
   });
   expect(document.querySelector('dialog')).toBeNull();
   expect(document.querySelector('[role="status"]')?.textContent).toContain(
@@ -219,6 +221,7 @@ it('offers a deload week before the next block', async () => {
     start_date: TODAY,
     planned_end_date: '2026-11-14',
     deload: true,
+    kind: 'deload',
   });
   expect(document.querySelector('[role="status"]')?.textContent).toContain('Deload week started');
 });

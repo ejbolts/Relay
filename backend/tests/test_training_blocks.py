@@ -299,3 +299,51 @@ def test_summary_is_private_and_needs_an_existing_block(client, other_client):
     current = block(client)
     assert client.get("/api/training-blocks/missing/summary").status_code == 404
     assert other_client.get(f"/api/training-blocks/{current['id']}/summary").status_code == 404
+
+
+def test_block_kinds_and_focus_are_optional_and_kept_by_older_apps(client):
+    created = client.post(
+        "/api/training-blocks",
+        json={
+            "name": "Recovery · Left shoulder",
+            "start_date": "2026-05-04",
+            "kind": "recovery",
+            "focus": "  Left shoulder ",
+        },
+    )
+    assert created.status_code == 201, created.text
+    saved = created.json()["blocks"][0]
+    assert (saved["kind"], saved["focus"], saved["deload"]) == ("recovery", "Left shoulder", False)
+
+    untyped = block(client, "Rebuild", "2026-06-01")
+    assert (untyped["kind"], untyped["focus"]) == (None, None)
+
+    # An older app's edit omits the new fields, so the saved type and focus stay.
+    older = client.put(
+        f"/api/training-blocks/{saved['id']}",
+        json={"name": "Shoulder rehab", "start_date": "2026-05-04"},
+    )
+    kept = next(b for b in older.json()["blocks"] if b["id"] == saved["id"])
+    assert (kept["name"], kept["kind"], kept["focus"]) == (
+        "Shoulder rehab",
+        "recovery",
+        "Left shoulder",
+    )
+
+    # A deload type also marks the block as a deload for summaries and older apps.
+    changed = client.put(
+        f"/api/training-blocks/{untyped['id']}",
+        json={"name": "Deload", "start_date": "2026-06-01", "kind": "deload", "focus": None},
+    ).json()["blocks"]
+    assert next(b for b in changed if b["id"] == untyped["id"])["deload"] is True
+    back = client.put(
+        f"/api/training-blocks/{untyped['id']}",
+        json={"name": "Strength 1", "start_date": "2026-06-01", "kind": "strength"},
+    ).json()["blocks"]
+    assert next(b for b in back if b["id"] == untyped["id"])["deload"] is False
+
+    invalid = client.post(
+        "/api/training-blocks",
+        json={"name": "Power", "start_date": "2026-07-01", "kind": "power"},
+    )
+    assert invalid.status_code == 422

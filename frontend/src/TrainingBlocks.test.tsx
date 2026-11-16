@@ -158,13 +158,19 @@ it('chooses a block from list options and shows ranges and workout counts on the
   await chooseScope('base');
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'base');
   await click('Training blocks');
-  expect(document.querySelector('.training-block-bar')?.getAttribute('aria-label')).toBe(
-    'Timeline: Before blocks, Base, Rebuild',
+  const year = new Date().getFullYear();
+  if (year === 2026) {
+    expect(document.querySelector('.training-block-year-bar')?.getAttribute('aria-label')).toBe(
+      '2026: Base, Rebuild',
+    );
+    const cards = document.querySelector('.training-block-cards')?.textContent;
+    expect(cards).toContain('1 Jan – 31 May 2026');
+    expect(cards).toContain('12 workouts');
+  }
+  for (let shown = year; shown > 2025; shown -= 1) await click('Previous year');
+  expect(document.querySelector('.training-block-cards')?.textContent).toBe(
+    'Before blocks1 Mar 2024 – 31 Dec 202540 workouts',
   );
-  const cards = document.querySelector('.training-block-cards')?.textContent;
-  expect(cards).toContain('1 Jan – 31 May 2026');
-  expect(cards).toContain('12 workouts');
-  expect(cards).toContain('Before blocks1 Mar 2024 – 31 Dec 202540 workouts');
 });
 
 it('formats ranges with the exclusive end date and the current year', () => {
@@ -202,6 +208,8 @@ it('creates a named custom block and shows an automatically dismissing toast', a
     name: 'Winter strength',
     start_date: '2026-07-01',
     planned_end_date: null,
+    kind: 'strength',
+    focus: null,
   });
   expect(document.querySelector('[role="status"]')?.textContent).toContain(
     'Training block started',
@@ -229,6 +237,8 @@ it('starts the first block from the all-time view', async () => {
     name: 'Rebuild',
     start_date: `${new Date().getFullYear()}-01-01`,
     planned_end_date: addDays(`${new Date().getFullYear()}-01-01`, 83),
+    kind: 'strength',
+    focus: null,
   });
 });
 
@@ -249,6 +259,8 @@ it('keeps failed saves editable and supports renaming and removing only the boun
     name: 'Rebuild',
     start_date: '2026-06-01',
     planned_end_date: null,
+    kind: null,
+    focus: null,
   });
   expect(document.querySelector('.training-block-cards')).not.toBeNull();
   await click('Edit Rebuild');
@@ -324,6 +336,8 @@ it('keeps a custom planned end when editing and validates it after the start', a
     name: 'Rebuild',
     start_date: '2026-06-01',
     planned_end_date: '2026-09-30',
+    kind: null,
+    focus: null,
   });
 });
 

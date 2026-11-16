@@ -509,9 +509,15 @@ export interface TrainingBlock {
   planned_end_date?: string | null;
   /** A recovery block: its summary has no comparison and later blocks skip it. */
   deload?: boolean;
+  /** Strength, hypertrophy, recovery or deload; absent on blocks saved before types. */
+  kind?: string | null;
+  /** What a recovery block rehabilitates, such as “Left shoulder”. */
+  focus?: string | null;
   /** Derived by the server on read. */
   workout_count?: number;
 }
+
+export type BlockKind = 'strength' | 'hypertrophy' | 'recovery' | 'deload';
 
 export interface TrainingBlockInput {
   name: string;
@@ -519,6 +525,8 @@ export interface TrainingBlockInput {
   planned_end_date: string | null;
   /** Omit to keep the saved value when editing. */
   deload?: boolean;
+  kind?: BlockKind | null;
+  focus?: string | null;
 }
 
 export interface BlockStats {

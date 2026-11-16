@@ -8,16 +8,18 @@ import {
   blockFinished,
   blockProgress,
   blockRange,
-  nextBlockName,
   weeksEnd,
 } from './trainingBlocks';
 import { TrainingBlockDialog, TrainingBlockToast } from './TrainingBlockDialog';
 import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import { BlockKindFields } from './TrainingBlockYear';
+import { blockKind, suggestedBlockName } from './blockKinds';
 import type { TrainingBlockCardStyle } from './homeLayout';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { formatVolume, addDays } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type {
+  BlockKind,
   BlockStats,
   TrainingBlock,
   TrainingBlockInput,
@@ -106,7 +108,13 @@ export function TrainingBlockSummaryDialog({
   const [view, setView] = useState<View>('summary');
   const [summary, setSummary] = useState<TrainingBlockSummary | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [name, setName] = useState(() => nextBlockName(blocks));
+  // The next block keeps a strength or hypertrophy type; after a deload or recovery, strength.
+  const [kind, setKind] = useState<BlockKind | null>(() =>
+    blockKind(block) === 'hypertrophy' ? 'hypertrophy' : 'strength',
+  );
+  const [focus, setFocus] = useState('');
+  const [customName, setCustomName] = useState<string | null>(null);
+  const name = customName ?? suggestedBlockName(blocks, kind ?? 'strength', today, focus);
   const [plan, setPlan] = useState<Plan>('none');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -156,6 +164,8 @@ export function TrainingBlockSummaryDialog({
         name: name.trim(),
         start_date: today,
         planned_end_date: plan === 'none' ? null : weeksEnd(today, Number(plan)),
+        kind,
+        focus: kind === 'recovery' ? focus.trim() || null : null,
       },
       'Training block started',
     );
@@ -230,13 +240,14 @@ export function TrainingBlockSummaryDialog({
       {view === 'next' && (
         <form onSubmit={submitNext} className="training-block-form">
           <fieldset disabled={busy}>
+            <BlockKindFields kind={kind} focus={focus} onKind={setKind} onFocus={setFocus} />
             <label>
               Block name
               <input
                 required
                 maxLength={80}
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => setCustomName(event.target.value)}
               />
             </label>
             <div className="training-block-starts plan three" role="radiogroup" aria-label="Ends">
@@ -288,6 +299,7 @@ export function TrainingBlockSummaryDialog({
                     start_date: today,
                     planned_end_date: deloadEnd,
                     deload: true,
+                    kind: 'deload',
                   },
                   'Deload week started',
                 )
