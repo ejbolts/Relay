@@ -161,24 +161,42 @@ body::after,
   pointer-events: none;
 }
 
+/* Rays of different widths (wide, thin, medium) sweep in one direction and loop seamlessly:
+   the pattern repeats every 1000px along its 118deg line, and the image slides sideways by the
+   distance that moves it exactly one repeat (1000px / sin 118deg). The element itself stays
+   still, so the top fade below holds steady while the rays pass through it. */
 body::before,
 .auth-screen::before,
 .live-workout-sheet::before {
-  inset: -50%;
-  background: linear-gradient(
+  --sun-ray-shift: calc(1000px / 0.882948);
+  inset: 0;
+  background-image: repeating-linear-gradient(
     118deg,
-    transparent 34%,
-    var(--sun-ray-soft) 43%,
-    var(--sun-ray) 50%,
-    var(--sun-ray-soft) 57%,
-    transparent 66%
+    transparent 0,
+    var(--sun-ray-soft) 110px,
+    var(--sun-ray) 210px,
+    var(--sun-ray-soft) 310px,
+    transparent 400px,
+    transparent 520px,
+    var(--sun-ray-soft) 548px,
+    var(--sun-ray) 566px,
+    var(--sun-ray-soft) 584px,
+    transparent 612px,
+    transparent 720px,
+    var(--sun-ray-soft) 770px,
+    var(--sun-ray) 820px,
+    var(--sun-ray-soft) 870px,
+    transparent 920px,
+    transparent 1000px
   );
-  /* Box coordinates: transparent at the viewport top, which iOS paints behind the status bar,
-     and full strength about a quarter of the way down, so there is no hard line under it. */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
-  mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
-  animation: sun-ray-drift 15s ease-in-out infinite alternate;
-  will-change: transform;
+  background-repeat: no-repeat;
+  background-size: calc(100% + 1300px) 100%;
+  background-position: calc(var(--sun-ray-shift) * -1) 0;
+  /* Viewport coordinates: transparent at the very top, which iOS paints behind the status bar,
+     and full strength about a third of the way down, so there is no hard line under it. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
+  mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
+  animation: sun-ray-sweep 20s linear infinite;
 }
 
 /* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
@@ -192,12 +210,12 @@ body::after,
   opacity: var(--sun-grain-opacity);
 }
 
-@keyframes sun-ray-drift {
+@keyframes sun-ray-sweep {
   from {
-    transform: translate3d(-14%, 6%, 0) rotate(-2deg);
+    background-position: calc(var(--sun-ray-shift) * -1) 0;
   }
   to {
-    transform: translate3d(13%, -5%, 0) rotate(3deg);
+    background-position: 0 0;
   }
 }
 
