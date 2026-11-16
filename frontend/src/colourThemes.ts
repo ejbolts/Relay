@@ -29,10 +29,9 @@ export const GLASS_LEVELS = [
 ] as const;
 export type GlassLevelId = (typeof GLASS_LEVELS)[number]['id'];
 export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
-/** The drifting light behind the app: in the accent colour, neutral grey, or none at all. */
+/** The drifting light behind the app, in the accent colour, or none at all. */
 export const SUN_RAY_STYLES = [
-  { id: 'colour', name: 'Colour' },
-  { id: 'grey', name: 'Grey' },
+  { id: 'colour', name: 'Sun ray' },
   { id: 'blank', name: 'Blank' },
 ] as const;
 export type SunRayStyleId = (typeof SUN_RAY_STYLES)[number]['id'];
@@ -82,6 +81,15 @@ export const COLOUR_THEMES = [
     hover: '#ac6020',
     text: '#efb06d',
     lightText: '#8a4410',
+  },
+  {
+    id: 'neutral',
+    name: 'Neutral',
+    detail: 'Silver grey',
+    accent: '#5f6670',
+    hover: '#6c747e',
+    text: '#c5cbd2',
+    lightText: '#4a525b',
   },
 ] as const;
 export type ColourThemeId = (typeof COLOUR_THEMES)[number]['id'];

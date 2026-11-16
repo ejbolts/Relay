@@ -236,7 +236,7 @@
   background: color-mix(in srgb, var(--p-surface) 46%, transparent);
 }
 .sun-ray-options > div {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 /* The page behind the cards with each background's light. */
 .sun-ray-swatch {
@@ -256,13 +256,7 @@
 .sun-ray-swatch[data-style='colour'] {
   --sun-ray-swatch: color-mix(in srgb, var(--p-accent) 70%, transparent);
 }
-.sun-ray-swatch[data-style='grey'] {
-  --sun-ray-swatch: rgb(205 210 216 / 45%);
-}
-:root[data-colour-mode='light'] .sun-ray-swatch[data-style='grey'] {
-  --sun-ray-swatch: rgb(16 24 32 / 18%);
-}
-.light-style-options {
+:root[data-colour-mode='light'] .light-style-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 /* A tiny page-and-card preview of each light style. */

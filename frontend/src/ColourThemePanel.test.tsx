@@ -46,13 +46,19 @@ it('shows the frosted glass levels in light mode and selects the saved one', () 
   );
 });
 
-it('offers Colour, Grey and Blank backgrounds with the saved one selected', () => {
-  localStorage.setItem('gym-logger-sun-ray', 'grey');
+it('offers Sun ray and Blank backgrounds with the saved one selected', () => {
+  localStorage.setItem('gym-logger-sun-ray', 'blank');
   const markup = renderToStaticMarkup(<ColourThemePanel />);
   expect(markup).toContain('<legend>Background</legend>');
-  for (const name of ['Colour', 'Grey', 'Blank'])
-    expect(markup).toContain(`<strong>${name}</strong>`);
-  expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="grey"[^>]*>/)?.[0]).toContain(
+  for (const name of ['Sun ray', 'Blank']) expect(markup).toContain(`<strong>${name}</strong>`);
+  expect(markup).not.toContain('<strong>Grey</strong>');
+  expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="blank"[^>]*>/)?.[0]).toContain(
     'checked=""',
   );
+});
+
+it('lists Neutral with the accent colour presets', () => {
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).toContain('<strong>Neutral</strong>');
+  expect(markup).toMatch(/<input[^>]*name="colour-theme"[^>]*value="neutral"/);
 });

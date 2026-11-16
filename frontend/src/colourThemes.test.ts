@@ -144,12 +144,18 @@ it('defaults the background to Colour and ignores unknown saved styles', () => {
   localStorage.setItem('gym-logger-sun-ray', 'rainbow');
   expect(sunRayPreference()).toBe('colour');
 });
-it('saves the Grey and Blank backgrounds and marks the page with them', () => {
-  expect(saveSunRay('grey')).toBe(true);
-  expect(sunRayPreference()).toBe('grey');
-  expect(document.documentElement.dataset.sunRay).toBe('grey');
-  saveSunRay('blank');
+it('saves the Blank background, and treats the retired Grey background as the sun ray', () => {
+  expect(saveSunRay('blank')).toBe(true);
+  expect(sunRayPreference()).toBe('blank');
   expect(document.documentElement.dataset.sunRay).toBe('blank');
+  localStorage.setItem('gym-logger-sun-ray', 'grey');
+  expect(sunRayPreference()).toBe('colour');
+});
+it('offers a Neutral accent preset that applies its silver grey accent', () => {
+  expect(COLOUR_THEMES.map((theme) => theme.id)).toContain('neutral');
+  saveColourTheme('neutral');
+  expect(colourThemePreference()).toBe('neutral');
+  expect(document.documentElement.style.getPropertyValue('--p-accent')).toBe('#5f6670');
 });
 it('keeps the background for this visit when storage is unavailable', () => {
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
