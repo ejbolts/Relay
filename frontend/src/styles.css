@@ -7558,7 +7558,12 @@ body:has(.notification-dialog[open]) {
   font-weight: 800;
 }
 
-.pagination-current small {
+/* A span, not <small>: some lists style every <small> inside them as a block. */
+.pagination-current {
+  white-space: nowrap;
+}
+
+.pagination-total {
   color: var(--muted-ink);
   font-size: 0.8rem;
   font-weight: 700;

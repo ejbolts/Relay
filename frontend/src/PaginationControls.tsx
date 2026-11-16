@@ -62,7 +62,7 @@ export function PaginationControls({
           {/* The page itself, so the button says where you are and that it picks a page. */}
           <span className="pagination-current num" aria-hidden="true">
             {currentPage}
-            <small> / {totalPages}</small>
+            <span className="pagination-total"> / {totalPages}</span>
           </span>
         </button>
         {pickerOpen && (
