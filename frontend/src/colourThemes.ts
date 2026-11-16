@@ -7,7 +7,7 @@ const LIGHT_STYLE_KEY = 'gym-logger-light-style';
 const SET_TINT_KEY = 'gym-logger-set-tint';
 const APPEARANCE_RESET_KEY = 'gym-logger-appearance-reset';
 /** Bump to move every device onto the default look again once, keeping its accent colour. */
-export const APPEARANCE_RESET_VERSION = '2';
+export const APPEARANCE_RESET_VERSION = '3';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
@@ -50,7 +50,7 @@ export const SUN_RAY_STYLES = [
   { id: 'blank', name: 'Blank' },
 ] as const;
 export type SunRayStyleId = (typeof SUN_RAY_STYLES)[number]['id'];
-export const DEFAULT_SUN_RAY_STYLE: SunRayStyleId = 'colour';
+export const DEFAULT_SUN_RAY_STYLE: SunRayStyleId = 'dim';
 export const COLOUR_THEMES = [
   {
     id: 'blue',

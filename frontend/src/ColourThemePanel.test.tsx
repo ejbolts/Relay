@@ -71,3 +71,10 @@ it('offers Subtle, Medium and Strong set colours with Medium selected by default
     'checked=""',
   );
 });
+
+it('selects the Dim background by default', () => {
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="dim"[^>]*>/)?.[0]).toContain(
+    'checked=""',
+  );
+});

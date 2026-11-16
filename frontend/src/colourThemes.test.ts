@@ -142,17 +142,17 @@ it('keeps the frosted glass level for this visit when storage is unavailable', (
   expect(saveGlass('subtle')).toBe(false);
   expect(document.documentElement.dataset.glass).toBe('subtle');
 });
-it('defaults the background to the Medium ray and ignores unknown saved styles', () => {
-  expect(sunRayPreference()).toBe('colour');
+it('defaults the background to the Dim ray and ignores unknown saved styles', () => {
+  expect(sunRayPreference()).toBe('dim');
   localStorage.setItem('gym-logger-sun-ray', 'rainbow');
-  expect(sunRayPreference()).toBe('colour');
+  expect(sunRayPreference()).toBe('dim');
 });
-it('saves the Blank background, and treats the retired Grey background as the sun ray', () => {
+it('saves the Blank background, and treats the retired Grey background as the default ray', () => {
   expect(saveSunRay('blank')).toBe(true);
   expect(sunRayPreference()).toBe('blank');
   expect(document.documentElement.dataset.sunRay).toBe('blank');
   localStorage.setItem('gym-logger-sun-ray', 'grey');
-  expect(sunRayPreference()).toBe('colour');
+  expect(sunRayPreference()).toBe('dim');
 });
 it('saves Dim and Strong rays and marks the page with them', () => {
   expect(saveSunRay('dim')).toBe(true);
@@ -195,17 +195,17 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   localStorage.setItem('gym-logger-colour-mode', 'light');
   localStorage.setItem('gym-logger-dark-style', 'oled');
   localStorage.setItem('gym-logger-light-style', 'stained');
-  localStorage.setItem('gym-logger-sun-ray', 'blank');
+  localStorage.setItem('gym-logger-sun-ray', 'colour');
   localStorage.setItem('gym-logger-glass', 'off');
   localStorage.setItem('gym-logger-set-tint', 'strong');
-  // A device that ran the first version of the reset is moved onto the current defaults too.
-  localStorage.setItem('gym-logger-appearance-reset', '1');
+  // A device that ran an earlier version of the reset is moved onto the current defaults too.
+  localStorage.setItem('gym-logger-appearance-reset', '2');
   resetAppearanceOnce();
   expect(colourThemePreference()).toBe('coral');
   expect(colourModePreference()).toBe('dark');
   expect(darkStylePreference()).toBe('default');
   expect(lightStylePreference()).toBe('default');
-  expect(sunRayPreference()).toBe('colour');
+  expect(sunRayPreference()).toBe('dim');
   expect(glassPreference()).toBe('subtle');
   expect(setTintPreference()).toBe('medium');
   // Choices made after the reset stay put on later loads.
