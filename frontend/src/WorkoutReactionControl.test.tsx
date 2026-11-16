@@ -67,7 +67,8 @@ it('shows a smiley-plus and unselected counts before reacting, with no default c
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);
   expect(host.querySelector('.is-yours')).toBeNull();
   const comments = button('0 comments on Upper body');
-  expect(comments.textContent).toBe('0');
+  // No comments yet: the icon alone, with the count kept in its label.
+  expect(comments.textContent).toBe('');
   expect(comments.querySelector('svg')).not.toBeNull();
   await act(async () => button('React to Upper body').click());
   expect(host.querySelector('[aria-pressed="true"]')).toBeNull();

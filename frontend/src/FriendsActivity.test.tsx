@@ -193,8 +193,8 @@ it("shows each friend's latest session with one reaction button and opens their 
 
   const rows = [...host.querySelectorAll('.friend-activity-list li')];
   expect(rows.map((row) => row.textContent)).toEqual([
-    'JJordan PreviewLeg dayStrengthToday · 2 sets👍 1❤️ 20',
-    'AAlex PreviewIncline walkCardioYesterday · 2.8 km0',
+    'JJordan PreviewLeg dayStrengthToday · 2 sets👍 1❤️ 2',
+    'AAlex PreviewIncline walkCardioYesterday · 2.8 km',
   ]);
   // One picker trigger and one comments button per friend, alongside per-emoji counts.
   expect(host.querySelectorAll('.friend-react-button')).toHaveLength(2);
