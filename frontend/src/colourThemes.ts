@@ -1,6 +1,7 @@
 const THEME_KEY = 'gym-logger-colour-theme';
 const MODE_KEY = 'gym-logger-colour-mode';
 const DARK_STYLE_KEY = 'gym-logger-dark-style';
+const GLASS_KEY = 'gym-logger-glass';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
@@ -12,6 +13,15 @@ export const DARK_STYLES = [
   { id: 'oled', name: 'OLED' },
 ] as const;
 export type DarkStyleId = (typeof DARK_STYLES)[number]['id'];
+/** How see-through the frosted-glass cards and tab bar are; `off` keeps them solid. */
+export const GLASS_LEVELS = [
+  { id: 'off', name: 'Off' },
+  { id: 'subtle', name: 'Subtle' },
+  { id: 'medium', name: 'Medium' },
+  { id: 'strong', name: 'Strong' },
+] as const;
+export type GlassLevelId = (typeof GLASS_LEVELS)[number]['id'];
+export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
 export const COLOUR_THEMES = [
   {
     id: 'blue',
@@ -177,6 +187,29 @@ export function saveColourMode(id: ColourModeId): boolean {
   applyColourMode(id);
   try {
     localStorage.setItem(MODE_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function glassPreference(): GlassLevelId {
+  try {
+    const saved = localStorage.getItem(GLASS_KEY);
+    return GLASS_LEVELS.find((level) => level.id === saved)?.id ?? DEFAULT_GLASS_LEVEL;
+  } catch {
+    return DEFAULT_GLASS_LEVEL;
+  }
+}
+
+export function applyGlass(id: GlassLevelId) {
+  document.documentElement.dataset.glass = id;
+}
+
+export function saveGlass(id: GlassLevelId): boolean {
+  applyGlass(id);
+  try {
+    localStorage.setItem(GLASS_KEY, id);
     return true;
   } catch {
     return false;

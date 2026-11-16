@@ -6,7 +6,9 @@ import {
   browserThemeColour,
   COLOUR_THEMES,
   darkStylePreference,
+  glassPreference,
   saveDarkStyle,
+  saveGlass,
   colourModePreference,
   colourThemePreference,
   saveColourMode,
@@ -18,6 +20,7 @@ afterEach(() => {
   delete document.documentElement.dataset.colourTheme;
   delete document.documentElement.dataset.colourMode;
   delete document.documentElement.dataset.darkStyle;
+  delete document.documentElement.dataset.glass;
   document.head.querySelector('meta[name="theme-color"]')?.remove();
   vi.restoreAllMocks();
 });
@@ -110,4 +113,23 @@ it('tints the Stained browser bar colour with the accent theme', () => {
   expect(browserThemeColour('dark', 'default', 'blue')).toBe('#0b0d0f');
   expect(browserThemeColour('dark', 'stained', 'blue')).toBe('#0c141f');
   expect(browserThemeColour('dark', 'stained', 'coral')).toBe('#151116');
+});
+it('defaults frosted glass to Medium and ignores unknown saved levels', () => {
+  expect(glassPreference()).toBe('medium');
+  localStorage.setItem('gym-logger-glass', 'opaque');
+  expect(glassPreference()).toBe('medium');
+});
+it('saves a frosted glass level and marks the page with it', () => {
+  expect(saveGlass('strong')).toBe(true);
+  expect(glassPreference()).toBe('strong');
+  expect(document.documentElement.dataset.glass).toBe('strong');
+  saveGlass('off');
+  expect(document.documentElement.dataset.glass).toBe('off');
+});
+it('keeps the frosted glass level for this visit when storage is unavailable', () => {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('unavailable');
+  });
+  expect(saveGlass('subtle')).toBe(false);
+  expect(document.documentElement.dataset.glass).toBe('subtle');
 });

@@ -5991,3 +5991,59 @@ html[data-reduce-motion] ::backdrop {
   inset: -2px;
   content: '';
 }
+
+/* ───────── Frosted glass ─────────
+   Cards on the main screens and the tab bar let the sun ray show through, blurred. The level is
+   chosen in Settings > App theme (html[data-glass]); `off` keeps everything solid.
+   The blur lives on a ::before layer behind each card rather than on the card itself, because
+   backdrop-filter on the card would trap fixed-position menus and full-screen views inside it.
+   The card keeps a translucent fill, so it still reads as a card where nothing can be blurred.
+   The tab bar stays more opaque than the cards because text scrolls right behind it. */
+
+:root {
+  --glass-alpha: 66%;
+  --glass-bar-alpha: 80%;
+  --glass-blur: 18px;
+}
+
+:root[data-glass='subtle'] {
+  --glass-alpha: 82%;
+  --glass-bar-alpha: 92%;
+  --glass-blur: 12px;
+}
+
+:root[data-glass='strong'] {
+  --glass-alpha: 46%;
+  --glass-bar-alpha: 66%;
+  --glass-blur: 26px;
+}
+
+/* Zero specificity, so a card's own position (sticky, absolute) still wins. */
+:where(:root:not([data-glass='off'])) :where(.tracker-app) :where(.pulse-card, .panel) {
+  position: relative;
+}
+
+:where(:root:not([data-glass='off'])) .tracker-app :is(.pulse-card, .panel) {
+  background: color-mix(in srgb, var(--p-surface) var(--glass-alpha), transparent);
+}
+
+:where(:root:not([data-glass='off'])) .tracker-app :is(.pulse-card, .panel)::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+:root:not([data-glass='off']) .app-tab-bar {
+  background: color-mix(in srgb, var(--p-tab-bar-bg) var(--glass-bar-alpha), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+}
+
+:root[data-colour-mode='light']:not([data-glass='off']) .app-tab-bar {
+  background: rgb(255 255 255 / calc(var(--glass-bar-alpha) * 0.88));
+}

@@ -19,3 +19,22 @@ it('hides the dark styles in light mode', () => {
   localStorage.setItem('gym-logger-colour-mode', 'light');
   expect(renderToStaticMarkup(<ColourThemePanel />)).not.toContain('dark-style-options');
 });
+
+it('offers Off, Subtle, Medium and Strong frosted glass with Medium selected by default', () => {
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).toContain('<legend>Frosted glass</legend>');
+  for (const name of ['Off', 'Subtle', 'Medium', 'Strong'])
+    expect(markup).toContain(`<strong>${name}</strong>`);
+  expect(markup.match(/<input[^>]*name="glass-level"[^>]*value="medium"[^>]*>/)?.[0]).toContain(
+    'checked=""',
+  );
+});
+
+it('shows the frosted glass levels in light mode and selects the saved one', () => {
+  localStorage.setItem('gym-logger-colour-mode', 'light');
+  localStorage.setItem('gym-logger-glass', 'off');
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup.match(/<input[^>]*name="glass-level"[^>]*value="off"[^>]*>/)?.[0]).toContain(
+    'checked=""',
+  );
+});

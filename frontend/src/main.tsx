@@ -11,9 +11,11 @@ import {
   applyColourMode,
   applyColourTheme,
   applyDarkStyle,
+  applyGlass,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
+  glassPreference,
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
@@ -37,6 +39,7 @@ preventIosInputZoom();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());
 applyDarkStyle(darkStylePreference());
+applyGlass(glassPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
 

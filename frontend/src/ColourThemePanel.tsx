@@ -3,12 +3,15 @@ import {
   COLOUR_MODES,
   COLOUR_THEMES,
   DARK_STYLES,
+  GLASS_LEVELS,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
+  glassPreference,
   saveColourMode,
   saveColourTheme,
   saveDarkStyle,
+  saveGlass,
 } from './colourThemes';
 import { Icon } from './Icon';
 import './colourThemes.css';
@@ -17,6 +20,7 @@ export function ColourThemePanel() {
   const [selected, setSelected] = useState(colourThemePreference);
   const [mode, setMode] = useState(colourModePreference);
   const [darkStyle, setDarkStyle] = useState(darkStylePreference);
+  const [glass, setGlass] = useState(glassPreference);
   const [status, setStatus] = useState('');
   return (
     <section
@@ -109,6 +113,29 @@ export function ColourThemePanel() {
             </span>
           </label>
         ))}
+      </fieldset>
+      <fieldset className="glass-options">
+        <legend>Frosted glass</legend>
+        <div>
+          {GLASS_LEVELS.map((level) => (
+            <label key={level.id} className={glass === level.id ? 'is-selected' : ''}>
+              <input
+                type="radio"
+                name="glass-level"
+                value={level.id}
+                checked={glass === level.id}
+                onChange={() => {
+                  setGlass(level.id);
+                  saveGlass(level.id);
+                }}
+              />
+              <span className="glass-swatch" data-level={level.id} aria-hidden="true">
+                <span />
+              </span>
+              <strong>{level.name}</strong>
+            </label>
+          ))}
+        </div>
       </fieldset>
       <p className="notification-setting-status" role="status">
         {status}
