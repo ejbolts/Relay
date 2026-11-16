@@ -12,6 +12,7 @@ import {
 } from './trainingBlocks';
 import { addDays, daysBetween } from './trainingSummary';
 import type { BlockKind, BlockStats, TrainingBlock, TrainingBlocks } from './types';
+import './trainingBlockYear.css';
 
 type KindFilter = 'all' | BlockKind | 'none';
 type Segment = {

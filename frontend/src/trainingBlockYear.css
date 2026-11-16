@@ -1,0 +1,259 @@
+/* Block types */
+.kind-strength {
+  --block-kind: #7fb0f0;
+}
+.kind-hypertrophy {
+  --block-kind: #b59cf0;
+}
+.kind-recovery {
+  --block-kind: #6fd0b8;
+}
+.kind-deload {
+  --block-kind: #9aa4ad;
+}
+.kind-none {
+  --block-kind: #d2b06f;
+}
+.training-block-swatch[class*='kind-'],
+.training-block-kind-dot {
+  background: var(--block-kind);
+}
+.training-block-kind-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.training-block-kind-dot.kind-recovery {
+  border-radius: 2px;
+}
+
+/* Year view */
+.training-block-years {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.training-block-years strong {
+  display: block;
+  font-size: 1rem;
+}
+.training-block-years small {
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.training-block-dialog .training-block-years button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+.training-block-dialog .training-block-years button:disabled {
+  opacity: 0.35;
+}
+.training-block-years .pulse-icon {
+  width: 18px;
+  height: 18px;
+}
+.training-block-year-bar {
+  position: relative;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--p-page, var(--p-surface));
+}
+.training-block-year-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-right: 2px solid var(--p-surface);
+  background: var(--block-kind);
+  color: #0b0d0f;
+  font-size: 0.66rem;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+.training-block-year-segment.kind-earlier {
+  background: repeating-linear-gradient(135deg, var(--p-surface-3) 0 5px, var(--p-deemph) 5px 10px);
+}
+.training-block-year-segment.planned {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--block-kind) 70%, transparent) 0 5px,
+    color-mix(in srgb, var(--block-kind) 25%, transparent) 5px 10px
+  );
+}
+.training-block-year-segment.faded {
+  opacity: 0.18;
+}
+.training-block-year-month {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px dotted color-mix(in srgb, var(--p-ink) 45%, transparent);
+  pointer-events: none;
+}
+.training-block-year-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--p-danger);
+  pointer-events: none;
+}
+.training-block-year-axis {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  margin: 4px 0 0;
+  color: var(--p-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  text-align: center;
+}
+.training-block-kinds {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin: 12px -16px 0;
+  padding: 0 16px 2px;
+  scrollbar-width: none;
+}
+.training-block-dialog .training-block-kinds button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  width: auto;
+  min-height: 34px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.training-block-dialog .training-block-kinds button[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-surface-3);
+  box-shadow: inset 0 0 0 1px var(--p-accent);
+  color: var(--p-ink);
+}
+.training-block-kind-count {
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.training-block-now-section h3 {
+  margin: 16px 0 8px;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.training-block-now {
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--p-surface-2);
+}
+.training-block-now header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 10px;
+}
+.training-block-now header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+.training-block-now header em {
+  color: var(--p-accent-text);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 700;
+}
+.training-block-weeks {
+  display: grid;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--p-page, var(--p-surface));
+}
+.training-block-weeks span {
+  display: grid;
+  place-items: center;
+  border-left: 1.5px dotted color-mix(in srgb, var(--p-ink) 35%, transparent);
+  color: var(--p-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+.training-block-weeks span:first-child {
+  border-left: 0;
+}
+.training-block-weeks span.done {
+  background: color-mix(in srgb, var(--block-kind) 60%, transparent);
+  color: #0b0d0f;
+}
+.training-block-weeks span.now {
+  background: color-mix(in srgb, var(--block-kind) 28%, transparent);
+  color: var(--p-ink);
+}
+.training-block-vs {
+  margin: 10px 0 0;
+  color: var(--p-muted);
+  font-size: 0.76rem;
+}
+.training-block-vs b.up {
+  color: var(--p-good);
+}
+.training-block-vs b.down {
+  color: var(--p-danger);
+}
+.training-block-now-section + .training-block-cards,
+.training-block-kinds + .training-block-cards {
+  margin-top: 16px;
+}
+.training-block-cards li.empty {
+  justify-content: center;
+  color: var(--p-muted);
+  font-size: 0.85rem;
+}
+.training-block-starts.kinds {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.training-block-dialog .training-block-starts.kinds button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .training-block-year-segment {
+    transition: none;
+  }
+}
