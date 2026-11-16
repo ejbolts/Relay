@@ -9283,6 +9283,7 @@ function SettingsScreen({
                   {trainingPreferences && (
                     <button
                       type="button"
+                      className="pulse-button secondary"
                       disabled={savingTrainingPreferences}
                       onClick={() => void saveTrainingPreferences()}
                     >

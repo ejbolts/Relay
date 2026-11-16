@@ -1137,7 +1137,7 @@ button.pulse-card:hover {
   position: relative;
   overflow: hidden;
   border-radius: 4px;
-  background: #1c3350;
+  background: color-mix(in srgb, var(--p-accent) 24%, transparent);
 }
 
 .pulse-meter i {
@@ -1844,8 +1844,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .calendar-panel .calendar-day.in-progress {
-  background: rgb(57 135 229 / 14%);
-  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 45%);
+  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 /* The live dot already marks the day; drop the legacy corner dot that stacked under it. */
@@ -1965,8 +1965,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .week-strip-day.in-progress {
-  background: rgb(57 135 229 / 14%);
-  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 45%);
+  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 .week-strip-day.today {
@@ -3267,7 +3267,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .logger-screen .add-exercise-button {
-  border: 1px dashed rgb(57 135 229 / 45%);
+  border: 1px dashed color-mix(in srgb, var(--p-accent) 45%, transparent);
   border-radius: 16px;
   background: var(--p-accent-soft);
   color: var(--p-accent-text);
@@ -3301,8 +3301,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .video-content .picker {
-  border: 2px dotted rgb(57 135 229 / 75%);
-  background: rgb(57 135 229 / 8%);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 75%, transparent);
+  background: color-mix(in srgb, var(--p-accent) 8%, transparent);
 }
 
 .video-content .picker,
@@ -4114,7 +4114,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 /* An open set is edited in place on a blue row, and reads as being edited even if already logged. */
 .logger-screen .set-grid .set-details.is-open {
-  border-color: rgb(57 135 229 / 28%);
+  border-color: color-mix(in srgb, var(--p-accent) 28%, transparent);
   background: var(--p-accent-soft);
 }
 
@@ -4173,7 +4173,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .set-editor select:focus {
   border-color: var(--p-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(57 135 229 / 28%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-accent) 28%, transparent);
 }
 
 .logger-screen .set-editor .row-complete-button:not(.done) {
@@ -4261,7 +4261,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px dashed rgb(57 135 229 / 55%);
+  border: 1px dashed color-mix(in srgb, var(--p-accent) 55%, transparent);
   border-radius: 10px;
   padding: 0 0.75rem;
   background: transparent;
@@ -5730,7 +5730,7 @@ html[data-reduce-motion] ::backdrop {
   grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: 0.85rem;
   align-items: start;
-  border-color: rgb(57 135 229 / 45%);
+  border-color: color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 .machine-filter-banner > img {
@@ -6021,38 +6021,111 @@ html[data-reduce-motion] ::backdrop {
 
 :root {
   --glass-alpha: 66%;
+  --glass-control-alpha: 70%;
   --glass-bar-alpha: 80%;
   --glass-blur: 18px;
 }
 
 :root[data-glass='subtle'] {
   --glass-alpha: 82%;
+  --glass-control-alpha: 85%;
   --glass-bar-alpha: 92%;
   --glass-blur: 12px;
 }
 
 :root[data-glass='strong'] {
   --glass-alpha: 46%;
+  --glass-control-alpha: 55%;
   --glass-bar-alpha: 66%;
   --glass-blur: 26px;
+}
+
+/* Solid copies of the surface colours, resolved on the root for whichever mode and style is on. */
+:root {
+  --p-surface-solid: var(--p-surface);
+  --p-surface-2-solid: var(--p-surface-2);
+  --p-surface-3-solid: var(--p-surface-3);
+  --p-page-solid: var(--p-page);
+}
+
+/* Inside the main screens the shared surfaces turn translucent, so every card, tile, button and
+   control drawn with them is frosted too. Wells drawn in the page colour do the same inside cards. */
+:where(:root:not([data-glass='off'])) .tracker-content {
+  --p-surface: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-content
+  :is(.pulse-card, .panel, .settings-category-card, .home-section-stat .pulse-kpi) {
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+}
+
+/* Menus, popovers, sheets, dialogs and toasts float over content, so they stay solid. */
+:where(:root:not([data-glass='off']))
+  .tracker-content
+  :is(
+    dialog,
+    [role='dialog'],
+    [role='menu'],
+    [role='listbox'],
+    [role='tooltip'],
+    [class*='menu'],
+    [class*='popover'],
+    [class*='dropdown'],
+    [class*='sheet'],
+    [class*='toast'],
+    .overlay-screen-header
+  ) {
+  --p-surface: var(--p-surface-solid);
+  --p-surface-2: var(--p-surface-2-solid);
+  --p-surface-3: var(--p-surface-3-solid);
+  --p-page: var(--p-page-solid);
 }
 
 /* Zero specificity, so a card's own position (sticky, absolute) still wins. */
 :where(:root:not([data-glass='off']))
   :where(.tracker-app)
-  :where(.pulse-card, .panel, .settings-category-card, .settings-profile-link) {
+  :where(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi
+  ) {
   position: relative;
 }
 
 :where(:root:not([data-glass='off']))
   .tracker-app
-  :is(.pulse-card, .panel, .settings-category-card, .settings-profile-link) {
-  background: color-mix(in srgb, var(--p-surface) var(--glass-alpha), transparent);
+  :is(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi
+  ) {
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
 }
 
 :where(:root:not([data-glass='off']))
   .tracker-app
-  :is(.pulse-card, .panel, .settings-category-card, .settings-profile-link)::before {
+  :is(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi
+  )::before {
   position: absolute;
   z-index: -1;
   inset: 0;
