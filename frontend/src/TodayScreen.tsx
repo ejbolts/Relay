@@ -460,15 +460,19 @@ export function TodayScreen({
                 Start workout
               </button>
             )}
-            <button
-              className="pulse-button primary next-session-empty"
-              type="button"
-              onClick={onStartEmpty}
-              aria-label="Start empty workout"
-              disabled={workoutSaving}
-            >
-              Empty
-            </button>
+            {/* On a rest day, or while the split needs updating, Start workout already starts
+                empty, so a second Empty button would do the same thing. */}
+            {(template || !(isRestDay || needsSplitUpdate)) && (
+              <button
+                className="pulse-button primary next-session-empty"
+                type="button"
+                onClick={onStartEmpty}
+                aria-label="Start empty workout"
+                disabled={workoutSaving}
+              >
+                Empty
+              </button>
+            )}
           </div>
         </section>
       ) : null,

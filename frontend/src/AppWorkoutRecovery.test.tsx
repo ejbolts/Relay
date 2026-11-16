@@ -986,6 +986,9 @@ describe('saved training splits on Home', () => {
     await mount();
     expect(container.querySelector('#next-session-title')?.textContent).toBe('Rest day');
     expect(container.querySelector('.next-session-exercises')).toBeNull();
+    // Start workout already starts an empty workout, so there is no second Empty button.
+    expect(container.querySelector('.next-session-empty')).toBeNull();
+    expect(container.querySelector('.next-session-actions')?.textContent).toBe('Start workout');
     const start = container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!;
     await act(async () => start.click());
     expect(container.querySelector('.start-menu')?.textContent).not.toContain('Rest day');

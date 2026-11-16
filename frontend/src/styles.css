@@ -6783,16 +6783,17 @@ body,
   margin: 0.3rem 0 1rem;
 }
 .pr-summary > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  /* The exercise above its record, so neither is squeezed into a narrow column on a phone. */
+  display: grid;
+  gap: 0.2rem;
   border-top: 1px solid var(--line);
   padding: 0.65rem 0;
   text-align: left;
 }
 .pr-summary > div span {
   color: var(--muted-ink);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 .pr-summary > .pr-summary-done {
   width: 100%;
