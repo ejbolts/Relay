@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { motionReduced } from './motion';
+import { takeSetAdded } from './setRowEntrance';
 import { completesSetRowDeleteSwipe, setRowSwipeOffset, setRowSwipeProgress } from './setRowSwipe';
 
 const SWIPE_AXIS_LOCK_PX = 8;
 const DELETE_ANIMATION_MS = 280;
+const ADD_ANIMATION_MS = 560;
+const ADD_EASING = 'cubic-bezier(0.22, 0.72, 0.1, 1)';
 
 interface ActivePointer {
   id: number;
@@ -38,6 +42,31 @@ export function SwipeToDeleteSetRow({
   const [offsetX, setOffsetX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+
+  // A newly added set grows open and drops out from under the set above it; rows that mount
+  // with the workout, or move when sets are reordered, stay put.
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || !takeSetAdded(flipKey) || motionReduced() || !shell.animate) return;
+    const height = shell.offsetHeight;
+    shell.animate(
+      [
+        { height: '0px', opacity: 0 },
+        { height: `${height}px`, opacity: 1 },
+      ],
+      {
+        duration: ADD_ANIMATION_MS,
+        easing: ADD_EASING,
+      },
+    );
+    (shell.firstElementChild as HTMLElement | null)?.animate(
+      [{ transform: 'translateY(-55%)' }, { transform: 'translateY(0)' }],
+      { duration: ADD_ANIMATION_MS, easing: ADD_EASING },
+    );
+    // Only on mount: a set is new once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     onDeleteRef.current = onDelete;
@@ -140,6 +169,7 @@ export function SwipeToDeleteSetRow({
 
   return (
     <div
+      ref={shellRef}
       className={`set-swipe-shell ${className} ${dragging ? 'is-dragging' : ''} ${deleting ? 'is-deleting' : ''} ${disabled ? 'is-disabled' : ''} ${overlayOpen ? 'has-open-overlay' : ''}`}
       data-flip-key={flipKey}
       style={style}

@@ -71,6 +71,7 @@ export function HomeTips({
       ...(oldEnough ? ['home' as const] : []),
       ...(experienced && !hasSplit ? ['split' as const] : []),
       'friends',
+      'appearance',
       ...(typeof window !== 'undefined' && runningAsInstalledApp() ? ['back' as const] : []),
     ];
     return pool.filter(

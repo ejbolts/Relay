@@ -384,7 +384,8 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
 }
 
 .logger-screen.is-live-workout .live-workout-actions .add-exercise-button {
-  background: var(--p-accent-soft);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 60%, transparent);
+  background: transparent;
   color: var(--p-accent-text);
 }
 

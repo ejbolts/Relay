@@ -107,8 +107,90 @@
 html,
 body,
 .tracker-app {
-  background: var(--p-page);
   color: var(--p-ink);
+}
+
+/* Only the root paints the page colour, so the sun ray and grain below can sit between it and
+   the app's content without giving the app its own stacking context. */
+html {
+  background: var(--p-page);
+}
+
+/* Overrides the older body and app backgrounds in styles.css. */
+body,
+.tracker-app {
+  background: transparent;
+}
+
+/* Sun ray: a broad, soft diagonal band in the accent colour (cobalt on the default Blue theme)
+   that drifts slowly behind the sign-in and create-account screens only; the app itself keeps a
+   plain page colour. Fixed to the viewport so its oversized box adds no overflow. */
+:root {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 17%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 6%, transparent);
+  --sun-grain-opacity: 0.085;
+}
+
+:root[data-colour-mode='light'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 11%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 4%, transparent);
+  --sun-grain-opacity: 0.05;
+}
+
+.auth-screen::before,
+.auth-screen::after {
+  position: fixed;
+  z-index: -1;
+  content: '';
+  pointer-events: none;
+}
+
+/* One broad, soft diagonal ray that glides slowly back and forth. The element is oversized so
+   the moving ray never shows an edge. */
+.auth-screen::before {
+  inset: -50%;
+  background: linear-gradient(
+    118deg,
+    transparent 34%,
+    var(--sun-ray-soft) 43%,
+    var(--sun-ray) 50%,
+    var(--sun-ray-soft) 57%,
+    transparent 66%
+  );
+  /* Box coordinates: transparent at the viewport top, which iOS paints behind the status bar,
+     and full strength about a quarter of the way down, so there is no hard line under it. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  animation: sun-ray-drift 20s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
+.auth-screen::after {
+  inset: -10vh 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)' opacity='.45'/%3E%3C/svg%3E");
+  opacity: var(--sun-grain-opacity);
+}
+
+@keyframes sun-ray-drift {
+  from {
+    transform: translate3d(-14%, 6%, 0) rotate(-2deg);
+  }
+  to {
+    transform: translate3d(13%, -5%, 0) rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-screen::before {
+    animation: none;
+  }
+}
+
+[data-reduce-motion] .auth-screen::before {
+  animation: none;
 }
 
 body {
@@ -121,10 +203,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-.tracker-app {
-  background: var(--p-page);
 }
 
 .num,
@@ -1036,7 +1114,7 @@ button.pulse-card:hover {
   position: relative;
   overflow: hidden;
   border-radius: 4px;
-  background: #1c3350;
+  background: color-mix(in srgb, var(--p-accent) 24%, transparent);
 }
 
 .pulse-meter i {
@@ -1743,8 +1821,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .calendar-panel .calendar-day.in-progress {
-  background: rgb(57 135 229 / 14%);
-  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 45%);
+  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 /* The live dot already marks the day; drop the legacy corner dot that stacked under it. */
@@ -1864,8 +1942,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .week-strip-day.in-progress {
-  background: rgb(57 135 229 / 14%);
-  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 45%);
+  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 .week-strip-day.today {
@@ -3166,9 +3244,9 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .logger-screen .add-exercise-button {
-  border: 1px dashed rgb(57 135 229 / 45%);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 60%, transparent);
   border-radius: 16px;
-  background: var(--p-accent-soft);
+  background: transparent;
   color: var(--p-accent-text);
   font-weight: 600;
 }
@@ -3200,8 +3278,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .video-content .picker {
-  border: 2px dotted rgb(57 135 229 / 75%);
-  background: rgb(57 135 229 / 8%);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 75%, transparent);
+  background: color-mix(in srgb, var(--p-accent) 8%, transparent);
 }
 
 .video-content .picker,
@@ -3463,6 +3541,18 @@ html.edge-swipe-ready .edge-swipe-indicator {
   height: 2px;
   border-radius: 1px;
   background: var(--p-accent);
+}
+
+/* Body trend draws its line in the page ink (white in dark mode) rather than the accent. */
+.body-screen .pulse-chart-line,
+.body-screen .chart-legend .legend-line {
+  stroke: var(--p-ink);
+  background: var(--p-ink);
+}
+
+.body-screen .pulse-chart-marker,
+.body-screen .pulse-chart-cursor circle {
+  fill: var(--p-ink);
 }
 
 .chart-legend .legend-goal {
@@ -4013,7 +4103,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 /* An open set is edited in place on a blue row, and reads as being edited even if already logged. */
 .logger-screen .set-grid .set-details.is-open {
-  border-color: rgb(57 135 229 / 28%);
+  border-color: color-mix(in srgb, var(--p-accent) 28%, transparent);
   background: var(--p-accent-soft);
 }
 
@@ -4072,7 +4162,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .set-editor select:focus {
   border-color: var(--p-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(57 135 229 / 28%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-accent) 28%, transparent);
 }
 
 .logger-screen .set-editor .row-complete-button:not(.done) {
@@ -4160,7 +4250,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px dashed rgb(57 135 229 / 55%);
+  border: 1px dashed color-mix(in srgb, var(--p-accent) 55%, transparent);
   border-radius: 10px;
   padding: 0 0.75rem;
   background: transparent;
@@ -4315,7 +4405,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .add-set-button {
-  margin: 0.5rem 0.875rem 0;
+  margin: 0.5rem 0.875rem 0.375rem;
   border: 0;
   border-radius: 12px;
   background: var(--p-surface-2);
@@ -4892,9 +4982,21 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .exercise-picker .exercise-filter-selects select {
   border: 1px solid var(--p-line-strong);
   border-radius: 12px;
+  padding-left: 0.75rem;
   background-color: var(--p-surface-2);
   color: var(--p-ink);
   font-size: 0.875rem;
+}
+
+/* Body part, Equipment and + share one row at every phone width, with even space under it. */
+.exercise-picker .exercise-filter-selects {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
+  gap: 0.5rem;
+  padding-bottom: 0.875rem;
+}
+
+.exercise-picker .exercise-filter-selects > select:first-child {
+  grid-column: auto;
 }
 
 .exercise-picker .create-exercise-trigger {
@@ -5629,7 +5731,7 @@ html[data-reduce-motion] ::backdrop {
   grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: 0.85rem;
   align-items: start;
-  border-color: rgb(57 135 229 / 45%);
+  border-color: color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 .machine-filter-banner > img {
@@ -5908,4 +6010,289 @@ html[data-reduce-motion] ::backdrop {
   position: absolute;
   inset: -2px;
   content: '';
+}
+
+/* ───────── Frosted glass ─────────
+   Cards on the main screens and the tab bar let the sun ray show through, blurred. The level is
+   chosen in Settings > App theme (html[data-glass]); `off` keeps everything solid.
+   The blur lives on a ::before layer behind each card rather than on the card itself, because
+   backdrop-filter on the card would trap fixed-position menus and full-screen views inside it.
+   The card keeps a translucent fill, so it still reads as a card where nothing can be blurred.
+   The tab bar stays more opaque than the cards because text scrolls right behind it. */
+
+:root {
+  --glass-alpha: 66%;
+  --glass-control-alpha: 70%;
+  --glass-bar-alpha: 80%;
+  --glass-blur: 18px;
+}
+
+:root[data-glass='subtle'] {
+  --glass-alpha: 82%;
+  --glass-control-alpha: 85%;
+  --glass-bar-alpha: 92%;
+  --glass-blur: 12px;
+}
+
+:root[data-glass='strong'] {
+  --glass-alpha: 46%;
+  --glass-control-alpha: 55%;
+  --glass-bar-alpha: 66%;
+  --glass-blur: 26px;
+}
+
+/* Solid copies of the surface colours, resolved on the root for whichever mode and style is on. */
+:root {
+  --p-surface-solid: var(--p-surface);
+  --p-surface-2-solid: var(--p-surface-2);
+  --p-surface-3-solid: var(--p-surface-3);
+  --p-page-solid: var(--p-page);
+}
+
+/* Inside the main screens the shared surfaces turn translucent, so every card, tile, button and
+   control drawn with them is frosted too. Wells drawn in the page colour do the same inside cards. */
+:where(:root:not([data-glass='off'])) .tracker-content {
+  --p-surface: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-content
+  :is(.pulse-card, .panel, .settings-category-card, .home-section-stat .pulse-kpi) {
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+}
+
+/* Menus, popovers, sheets, dialogs and toasts float over content, so they stay solid. */
+:where(:root:not([data-glass='off']))
+  .tracker-content
+  :is(
+    dialog,
+    [role='dialog'],
+    [role='menu'],
+    [role='listbox'],
+    [role='tooltip'],
+    [class*='menu'],
+    [class*='popover'],
+    [class*='dropdown'],
+    [class*='sheet']:not([class*='live-workout-sheet']),
+    [class*='toast'],
+    .overlay-screen-header
+  ) {
+  --p-surface: var(--p-surface-solid);
+  --p-surface-2: var(--p-surface-2-solid);
+  --p-surface-3: var(--p-surface-3-solid);
+  --p-page: var(--p-page-solid);
+}
+
+/* Zero specificity, so a card's own position (sticky, absolute) still wins. */
+:where(:root:not([data-glass='off']))
+  :where(.tracker-app)
+  :where(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure,
+    .exercise-list-rows
+  ) {
+  position: relative;
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-app
+  :is(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure,
+    .exercise-list-rows
+  ) {
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-app
+  :is(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure,
+    .exercise-list-rows
+  )::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+:root:not([data-glass='off']) .app-tab-bar {
+  background: color-mix(in srgb, var(--p-tab-bar-bg) var(--glass-bar-alpha), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+}
+
+:root[data-colour-mode='light']:not([data-glass='off']) .app-tab-bar {
+  background: rgb(255 255 255 / calc(var(--glass-bar-alpha) * 0.88));
+}
+
+/* The Body summary draws its dividers through 1px gaps over a line-coloured backing, which
+   tints see-through cells grey. With glass on, the grid itself is frosted and the cells draw
+   their own dividers. */
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats {
+  gap: 0;
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > div {
+  background: transparent;
+  box-shadow: inset -1px 0 0 var(--p-line);
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > div:nth-child(3) {
+  box-shadow: none;
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > .body-trend-stat {
+  margin-top: 0;
+  border-top: 1px solid var(--p-line);
+  box-shadow: none;
+}
+
+/* The sign-in and account creation card is frosted too, with its tabs, inputs and notes. */
+:where(:root:not([data-glass='off'])) .auth-screen .auth-card {
+  position: relative;
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off'])) .auth-screen .auth-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* The exercise picker fills the phone screen, so it drops its rounded corners there. */
+@media (max-width: 620px) {
+  .exercise-picker-backdrop .exercise-picker {
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+/* On phones, Add exercise slides the full-screen picker up from the bottom, like the logger. */
+@media (max-width: 620px) {
+  .exercise-picker-backdrop .exercise-picker {
+    animation: exercise-picker-in 400ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+  }
+}
+
+@media (max-width: 620px) and (prefers-reduced-motion: reduce) {
+  .exercise-picker-backdrop .exercise-picker {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
+  animation: none;
+}
+
+@keyframes exercise-picker-in {
+  from {
+    translate: 0 100%;
+  }
+
+  to {
+    translate: 0 0;
+  }
+}
+
+/* On phones the frosted picker covers the whole app, so the dimming behind it would only darken
+   the glass; the picker's own blur does the work instead. */
+@media (max-width: 620px) {
+  :where(:root:not([data-glass='off'])) .exercise-picker-backdrop {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* The exercise picker is frosted over the app, with its search, filters and rows. */
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker {
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* The picker's exercise list drops its older solid backing so the rows are frosted too. */
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-list {
+  background: transparent;
+}
+
+/* The plate calculator button is a frosted chip like the other header controls. */
+:where(:root:not([data-glass='off'])) .logger-screen .plate-calculator-button {
+  background: color-mix(in srgb, var(--p-surface-2-solid) var(--glass-control-alpha), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* With glass on, the Exercises list sits on a frosted card like the other sections. */
+:where(:root:not([data-glass='off'])) .tracker-content .exercise-list-rows {
+  border: 1px solid var(--p-card-border, var(--p-line));
+  border-radius: var(--p-radius);
+  padding: 0 0.875rem;
 }
