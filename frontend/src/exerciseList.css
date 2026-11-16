@@ -382,6 +382,40 @@
 .exercise-progress-chart .progress-delta {
   margin: 0.25rem 0 0;
 }
+.progress-block-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem 0.2rem 0.65rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.progress-block-scope i {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+.progress-block-scope .pulse-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--p-muted);
+}
+.progress-block-scope:hover .pulse-icon,
+.progress-block-scope:focus-visible .pulse-icon {
+  color: var(--p-ink);
+}
+.progress-block-scope:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
 .exercise-progress-chart .range-chips {
   margin: 0.65rem 0 0.3rem;
 }
