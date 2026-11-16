@@ -77,7 +77,7 @@ export function PageHeader({
   headingLevel = 1,
 }: {
   eyebrow?: string;
-  /** Leads the eyebrow line, separated from it by a dot. */
+  /** Leads the eyebrow line, before the eyebrow text. */
   eyebrowLead?: ReactNode;
   /** Sits beside the eyebrow; the row keeps its height whether or not it renders. */
   eyebrowAction?: ReactNode;
@@ -95,12 +95,7 @@ export function PageHeader({
         {eyebrow &&
           (eyebrowAction || eyebrowLead ? (
             <div className="page-eyebrow-row">
-              {eyebrowLead && (
-                <>
-                  {eyebrowLead}
-                  <span className="page-eyebrow-separator" aria-hidden="true" />
-                </>
-              )}
+              {eyebrowLead}
               <p className="page-eyebrow">{eyebrow}</p>
               {eyebrowAction}
             </div>
