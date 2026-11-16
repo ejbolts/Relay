@@ -87,7 +87,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'App theme',
     page: 'settings',
     keywords:
-      'appearance light dark mode colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency background sun ray blank oled',
+      'appearance light dark mode colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
     selector: '#colour-theme-title',
   },
   {

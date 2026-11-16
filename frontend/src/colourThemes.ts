@@ -2,6 +2,7 @@ const THEME_KEY = 'gym-logger-colour-theme';
 const MODE_KEY = 'gym-logger-colour-mode';
 const DARK_STYLE_KEY = 'gym-logger-dark-style';
 const GLASS_KEY = 'gym-logger-glass';
+// Retired Background choice; the reset clears any value a device still holds.
 const SUN_RAY_KEY = 'gym-logger-sun-ray';
 const LIGHT_STYLE_KEY = 'gym-logger-light-style';
 const SET_TINT_KEY = 'gym-logger-set-tint';
@@ -41,16 +42,6 @@ export const SET_TINT_LEVELS = [
 export type SetTintId = (typeof SET_TINT_LEVELS)[number]['id'];
 export const DEFAULT_SET_TINT: SetTintId = 'medium';
 export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'subtle';
-/** The drifting light behind the app, in the accent colour, or none at all. */
-export const SUN_RAY_STYLES = [
-  { id: 'dim', name: 'Dim' },
-  // Keeps its original id, so a saved "Sun ray" choice carries over as Medium.
-  { id: 'colour', name: 'Medium' },
-  { id: 'strong', name: 'Strong' },
-  { id: 'blank', name: 'Blank' },
-] as const;
-export type SunRayStyleId = (typeof SUN_RAY_STYLES)[number]['id'];
-export const DEFAULT_SUN_RAY_STYLE: SunRayStyleId = 'dim';
 export const COLOUR_THEMES = [
   {
     id: 'blue',
@@ -256,29 +247,6 @@ export function saveGlass(id: GlassLevelId): boolean {
   }
 }
 
-export function sunRayPreference(): SunRayStyleId {
-  try {
-    const saved = localStorage.getItem(SUN_RAY_KEY);
-    return SUN_RAY_STYLES.find((style) => style.id === saved)?.id ?? DEFAULT_SUN_RAY_STYLE;
-  } catch {
-    return DEFAULT_SUN_RAY_STYLE;
-  }
-}
-
-export function applySunRay(id: SunRayStyleId) {
-  document.documentElement.dataset.sunRay = id;
-}
-
-export function saveSunRay(id: SunRayStyleId): boolean {
-  applySunRay(id);
-  try {
-    localStorage.setItem(SUN_RAY_KEY, id);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function lightStylePreference(): LightStyleId {
   try {
     const saved = localStorage.getItem(LIGHT_STYLE_KEY);
@@ -305,7 +273,7 @@ export function saveLightStyle(id: LightStyleId): boolean {
 
 /**
  * Once per device, moves existing appearance choices onto the default look (Dark, Default style,
- * Medium sun ray, Subtle glass, Medium set colours) while keeping the accent colour. Later choices are left alone.
+ * Subtle glass, Medium set colours) while keeping the accent colour. Later choices are left alone.
  */
 export function resetAppearanceOnce(): void {
   try {

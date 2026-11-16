@@ -83,7 +83,7 @@
   },
   appearance: {
     title: 'Make Relay look your way',
-    body: 'Pick a colour theme, background and glass level in Settings › Appearance.',
+    body: 'Pick a colour theme, glass level and set colours in Settings › Appearance.',
     surface: 'home',
   },
 } as const;

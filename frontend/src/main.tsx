@@ -14,7 +14,6 @@ import {
   applyGlass,
   applySetTint,
   applyLightStyle,
-  applySunRay,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
@@ -22,7 +21,6 @@ import {
   setTintPreference,
   resetAppearanceOnce,
   lightStylePreference,
-  sunRayPreference,
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
@@ -50,7 +48,6 @@ applyDarkStyle(darkStylePreference());
 applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());
 applySetTint(setTintPreference());
-applySunRay(sunRayPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
 

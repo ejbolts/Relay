@@ -9,13 +9,11 @@ import {
   glassPreference,
   saveDarkStyle,
   saveGlass,
-  saveSunRay,
   saveSetTint,
   setTintPreference,
   resetAppearanceOnce,
   saveLightStyle,
   lightStylePreference,
-  sunRayPreference,
   colourModePreference,
   colourThemePreference,
   saveColourMode,
@@ -28,7 +26,6 @@ afterEach(() => {
   delete document.documentElement.dataset.colourMode;
   delete document.documentElement.dataset.darkStyle;
   delete document.documentElement.dataset.glass;
-  delete document.documentElement.dataset.sunRay;
   delete document.documentElement.dataset.lightStyle;
   document.head.querySelector('meta[name="theme-color"]')?.remove();
   vi.restoreAllMocks();
@@ -142,37 +139,11 @@ it('keeps the frosted glass level for this visit when storage is unavailable', (
   expect(saveGlass('subtle')).toBe(false);
   expect(document.documentElement.dataset.glass).toBe('subtle');
 });
-it('defaults the background to the Dim ray and ignores unknown saved styles', () => {
-  expect(sunRayPreference()).toBe('dim');
-  localStorage.setItem('gym-logger-sun-ray', 'rainbow');
-  expect(sunRayPreference()).toBe('dim');
-});
-it('saves the Blank background, and treats the retired Grey background as the default ray', () => {
-  expect(saveSunRay('blank')).toBe(true);
-  expect(sunRayPreference()).toBe('blank');
-  expect(document.documentElement.dataset.sunRay).toBe('blank');
-  localStorage.setItem('gym-logger-sun-ray', 'grey');
-  expect(sunRayPreference()).toBe('dim');
-});
-it('saves Dim and Strong rays and marks the page with them', () => {
-  expect(saveSunRay('dim')).toBe(true);
-  expect(document.documentElement.dataset.sunRay).toBe('dim');
-  saveSunRay('strong');
-  expect(sunRayPreference()).toBe('strong');
-  expect(document.documentElement.dataset.sunRay).toBe('strong');
-});
 it('offers a Neutral accent preset that applies its silver grey accent', () => {
   expect(COLOUR_THEMES.map((theme) => theme.id)).toContain('neutral');
   saveColourTheme('neutral');
   expect(colourThemePreference()).toBe('neutral');
   expect(document.documentElement.style.getPropertyValue('--p-accent')).toBe('#5f6670');
-});
-it('keeps the background for this visit when storage is unavailable', () => {
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-    throw new Error('unavailable');
-  });
-  expect(saveSunRay('blank')).toBe(false);
-  expect(document.documentElement.dataset.sunRay).toBe('blank');
 });
 it('saves a light style separately and tints the light browser bar when Stained', () => {
   const meta = document.createElement('meta');
@@ -205,14 +176,15 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   expect(colourModePreference()).toBe('dark');
   expect(darkStylePreference()).toBe('default');
   expect(lightStylePreference()).toBe('default');
-  expect(sunRayPreference()).toBe('dim');
+  // The retired Background choice is cleared too.
+  expect(localStorage.getItem('gym-logger-sun-ray')).toBeNull();
   expect(glassPreference()).toBe('subtle');
   expect(setTintPreference()).toBe('medium');
   // Choices made after the reset stay put on later loads.
-  saveSunRay('blank');
+  saveGlass('strong');
   saveColourMode('light');
   resetAppearanceOnce();
-  expect(sunRayPreference()).toBe('blank');
+  expect(glassPreference()).toBe('strong');
   expect(colourModePreference()).toBe('light');
 });
 it('saves the set colour intensity, defaulting to Medium', () => {

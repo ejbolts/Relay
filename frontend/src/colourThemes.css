@@ -235,33 +235,6 @@
 .glass-swatch[data-level='strong'] > span {
   background: color-mix(in srgb, var(--p-surface) 46%, transparent);
 }
-.sun-ray-options > div {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-/* The page behind the cards with each background's light. */
-.sun-ray-swatch {
-  width: 3rem;
-  height: 2.25rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 9px;
-  background:
-    linear-gradient(
-      118deg,
-      transparent 25%,
-      var(--sun-ray-swatch, transparent) 50%,
-      transparent 75%
-    ),
-    var(--p-page);
-}
-.sun-ray-swatch[data-style='dim'] {
-  --sun-ray-swatch: color-mix(in srgb, var(--p-accent) 35%, transparent);
-}
-.sun-ray-swatch[data-style='colour'] {
-  --sun-ray-swatch: color-mix(in srgb, var(--p-accent) 70%, transparent);
-}
-.sun-ray-swatch[data-style='strong'] {
-  --sun-ray-swatch: var(--p-accent);
-}
 :root[data-colour-mode='light'] .light-style-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

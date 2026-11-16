@@ -6,21 +6,18 @@ import {
   GLASS_LEVELS,
   SET_TINT_LEVELS,
   LIGHT_STYLES,
-  SUN_RAY_STYLES,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
   setTintPreference,
   lightStylePreference,
-  sunRayPreference,
   saveColourMode,
   saveColourTheme,
   saveDarkStyle,
   saveGlass,
   saveSetTint,
   saveLightStyle,
-  saveSunRay,
 } from './colourThemes';
 import { Icon } from './Icon';
 import { useTips } from './Tips';
@@ -33,7 +30,6 @@ export function ColourThemePanel() {
   const [glass, setGlass] = useState(glassPreference);
   const [setTint, setSetTint] = useState(setTintPreference);
   const [lightStyle, setLightStyle] = useState(lightStylePreference);
-  const [sunRay, setSunRay] = useState(sunRayPreference);
   const [status, setStatus] = useState('');
   const { learn } = useTips();
   // Opening these settings is what the Appearance tip points to, so it counts as learned.
@@ -152,27 +148,6 @@ export function ColourThemePanel() {
             </span>
           </label>
         ))}
-      </fieldset>
-      <fieldset className="glass-options sun-ray-options">
-        <legend>Background</legend>
-        <div>
-          {SUN_RAY_STYLES.map((style) => (
-            <label key={style.id} className={sunRay === style.id ? 'is-selected' : ''}>
-              <input
-                type="radio"
-                name="sun-ray-style"
-                value={style.id}
-                checked={sunRay === style.id}
-                onChange={() => {
-                  setSunRay(style.id);
-                  saveSunRay(style.id);
-                }}
-              />
-              <span className="sun-ray-swatch" data-style={style.id} aria-hidden="true" />
-              <strong>{style.name}</strong>
-            </label>
-          ))}
-        </div>
       </fieldset>
       <fieldset className="glass-options">
         <legend>Frosted glass</legend>

@@ -46,16 +46,10 @@ it('shows the frosted glass levels in light mode and selects the saved one', () 
   );
 });
 
-it('offers Dim, Medium, Strong and Blank backgrounds with the saved one selected', () => {
-  localStorage.setItem('gym-logger-sun-ray', 'blank');
+it('no longer offers a Background choice, since only the sign-in screen has the sun ray', () => {
   const markup = renderToStaticMarkup(<ColourThemePanel />);
-  expect(markup).toContain('<legend>Background</legend>');
-  for (const name of ['Dim', 'Medium', 'Strong', 'Blank'])
-    expect(markup).toContain(`<strong>${name}</strong>`);
-  expect(markup).not.toContain('<strong>Grey</strong>');
-  expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="blank"[^>]*>/)?.[0]).toContain(
-    'checked=""',
-  );
+  expect(markup).not.toContain('<legend>Background</legend>');
+  expect(markup).not.toContain('name="sun-ray-style"');
 });
 
 it('lists Neutral with the accent colour presets', () => {
@@ -68,13 +62,6 @@ it('offers Subtle, Medium and Strong set colours with Medium selected by default
   const markup = renderToStaticMarkup(<ColourThemePanel />);
   expect(markup).toContain('<legend>Set colours</legend>');
   expect(markup.match(/<input[^>]*name="set-tint"[^>]*value="medium"[^>]*>/)?.[0]).toContain(
-    'checked=""',
-  );
-});
-
-it('selects the Dim background by default', () => {
-  const markup = renderToStaticMarkup(<ColourThemePanel />);
-  expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="dim"[^>]*>/)?.[0]).toContain(
     'checked=""',
   );
 });
