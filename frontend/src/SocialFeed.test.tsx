@@ -198,14 +198,14 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   // Three exercises are listed; the rest are counted.
   expect(
     [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent),
-  ).toEqual(['Bench press, ', 'Row, ', 'Curl', '+2 more']);
+  ).toEqual(['Bench press, ', 'Row, ', 'Curl ', '+2 more']);
   // Tapping the count lists them all, and tapping again folds them away.
   const rows = () =>
     [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent);
   const more = button(friendCard, 'Show 2 more exercises')!;
   expect(more.getAttribute('aria-expanded')).toBe('false');
   await click(more);
-  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip', 'Show fewer']);
+  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip ', 'Show fewer']);
   expect(button(friendCard, 'Show fewer exercises')?.getAttribute('aria-expanded')).toBe('true');
   await click(button(friendCard, 'Show fewer exercises'));
   expect(rows()).toHaveLength(4);

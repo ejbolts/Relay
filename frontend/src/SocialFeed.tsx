@@ -178,7 +178,8 @@ function FeedCard({
             {listed.map((movement, index) => (
               <li key={movement.id}>
                 {movement.exercise.name}
-                {index < listed.length - 1 && ', '}
+                {/* The space lets "+N more" wrap to the next line without an indent. */}
+                {index < listed.length - 1 ? ', ' : hidden > 0 ? ' ' : null}
               </li>
             ))}
             {hidden > 0 && (

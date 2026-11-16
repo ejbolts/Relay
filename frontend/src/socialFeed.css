@@ -212,7 +212,7 @@
   /* A text link, with the tap area extended above and below the line. */
   margin: -0.625rem 0;
   border: 0;
-  padding: 0.625rem 0.75rem 0.625rem 0.25rem;
+  padding: 0.625rem 0.75rem 0.625rem 0;
   background: transparent;
   color: var(--p-accent-text);
   font: inherit;
