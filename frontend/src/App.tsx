@@ -299,7 +299,6 @@ import { exerciseIconFor } from './exerciseIcons';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
-import { ExerciseCustomFilter } from './ExerciseCustomFilter';
 import { exerciseEquipment } from './exerciseEquipment';
 import {
   formatMinutesDuration,
@@ -7619,7 +7618,6 @@ export function ExercisePicker({
   const [openMachinesId, setOpenMachinesId] = useState<string | null>(null);
   const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
   const [customOnly, setCustomOnly] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'favorites' | 'recent'>('all');
   const [equipment, setEquipment] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteSavingIds, setFavoriteSavingIds] = useState<string[]>([]);
@@ -7645,9 +7643,7 @@ export function ExercisePicker({
       !excludedIds.includes(exercise.id) &&
       (!customOnly || exercise.is_custom) &&
       (bodyPart === 'all' || exercise.category === bodyPart) &&
-      (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
-      (filter !== 'favorites' || exercise.is_favorite) &&
-      (filter !== 'recent' || recentExerciseIds.slice(0, 10).includes(exercise.id)),
+      (!equipment || exerciseEquipment(exercise.equipment) === equipment),
   );
   const recent = recentExerciseIds
     .slice(0, 10)
@@ -7660,10 +7656,6 @@ export function ExercisePicker({
       title: 'Search results',
       exercises: rankExerciseSearchMatches(available, query, recentExerciseIds),
     });
-  } else if (filter === 'favorites') {
-    sections.push({ title: 'Favorites', exercises: available.filter((item) => item.is_favorite) });
-  } else if (filter === 'recent') {
-    sections.push({ title: 'Recently used', exercises: recent });
   } else {
     const scoped = available;
     const favorites = scoped.filter((exercise) => exercise.is_favorite);
@@ -7855,7 +7847,7 @@ export function ExercisePicker({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
-  }, [search, filter, bodyPart, equipment, customOnly]);
+  }, [search, bodyPart, equipment, customOnly]);
 
   useEffect(() => {
     let active = true;
@@ -7992,7 +7984,7 @@ export function ExercisePicker({
             value={bodyPart}
             onChange={(event) => setBodyPart(event.target.value as WorkoutCategory | 'all')}
           >
-            <option value="all">Any body part</option>
+            <option value="all">Body part</option>
             {(
               [
                 'push',
@@ -8009,15 +8001,13 @@ export function ExercisePicker({
               </option>
             ))}
           </select>
-          <select
-            aria-label="Exercise category"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as 'all' | 'favorites' | 'recent')}
-          >
-            <option value="all">Any category</option>
-            <option value="favorites">Favorites</option>
-            <option value="recent">Recently Used</option>
-          </select>
+          <ExerciseEquipmentFilter
+            exercises={exercises}
+            value={equipment}
+            onChange={setEquipment}
+            customOnly={customOnly}
+            onCustomOnlyChange={setCustomOnly}
+          />
           <button
             type="button"
             className="create-exercise-trigger"
@@ -8027,14 +8017,6 @@ export function ExercisePicker({
           >
             +
           </button>
-        </div>
-        <div className="exercise-picker-equipment">
-          <ExerciseCustomFilter active={customOnly} onChange={setCustomOnly} />
-          <ExerciseEquipmentFilter
-            exercises={exercises}
-            value={equipment}
-            onChange={setEquipment}
-          />
         </div>
         <div className="exercise-list" ref={listRef}>
           {sections.map(
@@ -8046,15 +8028,7 @@ export function ExercisePicker({
                 </section>
               ),
           )}
-          {!visibleExerciseCount && (
-            <p className="muted-empty">
-              {filter === 'favorites' && !query && !equipment && !customOnly && bodyPart === 'all'
-                ? 'Tap the bookmark beside an exercise to add a favorite.'
-                : filter === 'recent' && !query && !equipment && !customOnly && bodyPart === 'all'
-                  ? 'Exercises from completed workouts will appear here.'
-                  : 'No exercises match that search.'}
-            </p>
-          )}
+          {!visibleExerciseCount && <p className="muted-empty">No exercises match that search.</p>}
           {pickerError && <p className="inline-error">{pickerError}</p>}
         </div>
         <div className={`exercise-picker-actions ${singleSelect ? 'single-action' : ''}`}>
@@ -8106,8 +8080,8 @@ export function ExercisePicker({
           onCreated={(exercise) => {
             setCreateExerciseOpen(false);
             setPickerError(null);
-            setFilter('all');
             setBodyPart('all');
+            setCustomOnly(false);
             setEquipment('');
             setSearch(exercise.name);
             setSelectedIds((current) =>
