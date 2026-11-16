@@ -93,6 +93,23 @@ function LibraryScreen({
 async function render(revision: string | null = null, exercises: Exercise[] = catalogue) {
   await act(async () => root.render(<LibraryScreen revision={revision} exercises={exercises} />));
 }
+const listOptions = () => click(host.querySelector('.exercise-list-options')!);
+const closeListOptions = () => click(document.querySelector('[aria-label="Close Exercise list"]')!);
+async function chooseEquipment(value: string) {
+  await listOptions();
+  const equipment = document.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
+  await act(async () => {
+    equipment.value = value;
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await closeListOptions();
+}
+async function equipmentValue() {
+  await listOptions();
+  const value = document.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!.value;
+  await closeListOptions();
+  return value;
+}
 async function search(value: string) {
   const input = host.querySelector<HTMLInputElement>('[aria-label="Search exercises"]')!;
   await act(async () => {
@@ -315,17 +332,13 @@ it('hides an exercise with Undo, and lists hidden exercises under their own pill
 });
 it('combines equipment, muscle and reordered search, retaining equipment after detail', async () => {
   await render();
-  const equipment = host.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
-  await act(async () => {
-    equipment.value = 'Cable';
-    equipment.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await chooseEquipment('Cable');
   await click(named('Back'));
   await search('back cable row');
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
   await click(host.querySelector('[data-exercise-id="row"]')!);
   await click(host.querySelector('.training-back')!);
-  expect(equipment.value).toBe('Cable');
+  expect(await equipmentValue()).toBe('Cable');
   await search('machine');
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(0);
   expect(host.querySelector('[role="status"]')?.textContent).toContain('No exercises match');
@@ -340,20 +353,13 @@ it('combines the Custom pill with equipment and muscle filters and preserves it 
   await click(custom);
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(1);
   await click(named('Back'));
-  const equipment = host.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
-  await act(async () => {
-    equipment.value = 'Cable';
-    equipment.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await chooseEquipment('Cable');
   await search('row');
   await click(host.querySelector('[data-exercise-id="row"]')!);
   await click(host.querySelector('.training-back')!);
   expect(custom.getAttribute('aria-pressed')).toBe('true');
   await click(host.querySelector('[aria-label="Clear search"]')!);
-  await act(async () => {
-    equipment.value = 'Machine';
-    equipment.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await chooseEquipment('Machine');
   expect(host.querySelectorAll('.exercise-list-rows li')).toHaveLength(0);
   await click(custom);
   await click(named('All'));
@@ -578,7 +584,7 @@ it('preserves the library page when returning from a lift and resets it for a ne
     id: `lift-${index}`,
     name: `Lift ${String(index).padStart(2, '0')}`,
   }));
-  vi.mocked(api.exerciseProgress).mockResolvedValue(progress(many[10]));
+  vi.mocked(api.exerciseProgress).mockResolvedValue(progress(many[5]));
   await act(async () =>
     root.render(
       <ProgressScreen
@@ -593,12 +599,10 @@ it('preserves the library page when returning from a lift and resets it for a ne
     ),
   );
   await click(host.querySelector('[aria-label="Next exercises page"]')!);
-  await click(host.querySelector('[data-exercise-id="lift-10"]')!);
+  await click(host.querySelector('[data-exercise-id="lift-5"]')!);
   await click(host.querySelector('.training-back')!);
-  expect(host.textContent).toContain('Page 2 of 3');
-  expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe(
-    'lift-10',
-  );
+  expect(host.textContent).toContain('Page 2 of 5');
+  expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe('lift-5');
   await search('Lift 02');
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(1);
   expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe('lift-2');
