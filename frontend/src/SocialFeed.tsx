@@ -108,6 +108,8 @@ function FeedCard({
   const photos = workout.photos ?? [];
   const movements = workout.movements.filter((movement) => completedSets(movement).length > 0);
   const hidden = movements.length - SHOWN_EXERCISES;
+  const [showAll, setShowAll] = useState(false);
+  const exercisesId = `feed-exercises-${workout.id}`;
 
   return (
     <li className={`feed-card${picking ? ' is-picking' : ''}`}>
@@ -155,8 +157,8 @@ function FeedCard({
           <WorkoutPhotos photos={photos} subject={subject} />
         )}
         {movements.length > 0 && (
-          <ul className="feed-exercises" aria-label="Exercises">
-            {movements.slice(0, SHOWN_EXERCISES).map((movement) => (
+          <ul id={exercisesId} className="feed-exercises" aria-label="Exercises">
+            {(showAll ? movements : movements.slice(0, SHOWN_EXERCISES)).map((movement) => (
               <li key={movement.id}>
                 <span>{movement.exercise.name}</span>
                 <span className="num">{movementResult(movement)}</span>
@@ -164,7 +166,16 @@ function FeedCard({
             ))}
             {hidden > 0 && (
               <li className="feed-exercises-more">
-                +{hidden} more {hidden === 1 ? 'exercise' : 'exercises'}
+                <button
+                  type="button"
+                  aria-expanded={showAll}
+                  aria-controls={exercisesId}
+                  onClick={() => setShowAll((current) => !current)}
+                >
+                  {showAll
+                    ? 'Show fewer'
+                    : `+${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
+                </button>
               </li>
             )}
           </ul>
