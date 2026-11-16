@@ -12,10 +12,12 @@ import {
   applyColourTheme,
   applyDarkStyle,
   applyGlass,
+  applySunRay,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  sunRayPreference,
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
@@ -40,6 +42,7 @@ preventIosInputZoom();
 applyReduceMotion(reduceMotionPreference());
 applyDarkStyle(darkStylePreference());
 applyGlass(glassPreference());
+applySunRay(sunRayPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
 

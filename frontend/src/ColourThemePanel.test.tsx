@@ -38,3 +38,14 @@ it('shows the frosted glass levels in light mode and selects the saved one', () 
     'checked=""',
   );
 });
+
+it('offers Colour, Grey and Blank backgrounds with the saved one selected', () => {
+  localStorage.setItem('gym-logger-sun-ray', 'grey');
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).toContain('<legend>Background</legend>');
+  for (const name of ['Colour', 'Grey', 'Blank'])
+    expect(markup).toContain(`<strong>${name}</strong>`);
+  expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="grey"[^>]*>/)?.[0]).toContain(
+    'checked=""',
+  );
+});

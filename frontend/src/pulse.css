@@ -137,6 +137,25 @@ body,
   --sun-grain-opacity: 0.05;
 }
 
+/* Grey: a neutral silver ray that suits any accent, and OLED black. */
+:root[data-sun-ray='grey'] {
+  --sun-ray: rgb(205 210 216 / 10%);
+  --sun-ray-soft: rgb(205 210 216 / 4%);
+}
+
+:root[data-colour-mode='light'][data-sun-ray='grey'] {
+  --sun-ray: rgb(16 24 32 / 7%);
+  --sun-ray-soft: rgb(16 24 32 / 3%);
+}
+
+/* Blank: no ray and no grain, just the page colour. */
+:root[data-sun-ray='blank'] body::before,
+:root[data-sun-ray='blank'] body::after,
+:root[data-sun-ray='blank'] .auth-screen::before,
+:root[data-sun-ray='blank'] .auth-screen::after {
+  display: none;
+}
+
 body::before,
 body::after,
 .auth-screen::before,

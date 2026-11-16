@@ -4,14 +4,17 @@ import {
   COLOUR_THEMES,
   DARK_STYLES,
   GLASS_LEVELS,
+  SUN_RAY_STYLES,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  sunRayPreference,
   saveColourMode,
   saveColourTheme,
   saveDarkStyle,
   saveGlass,
+  saveSunRay,
 } from './colourThemes';
 import { Icon } from './Icon';
 import './colourThemes.css';
@@ -21,6 +24,7 @@ export function ColourThemePanel() {
   const [mode, setMode] = useState(colourModePreference);
   const [darkStyle, setDarkStyle] = useState(darkStylePreference);
   const [glass, setGlass] = useState(glassPreference);
+  const [sunRay, setSunRay] = useState(sunRayPreference);
   const [status, setStatus] = useState('');
   return (
     <section
@@ -113,6 +117,27 @@ export function ColourThemePanel() {
             </span>
           </label>
         ))}
+      </fieldset>
+      <fieldset className="glass-options sun-ray-options">
+        <legend>Background</legend>
+        <div>
+          {SUN_RAY_STYLES.map((style) => (
+            <label key={style.id} className={sunRay === style.id ? 'is-selected' : ''}>
+              <input
+                type="radio"
+                name="sun-ray-style"
+                value={style.id}
+                checked={sunRay === style.id}
+                onChange={() => {
+                  setSunRay(style.id);
+                  saveSunRay(style.id);
+                }}
+              />
+              <span className="sun-ray-swatch" data-style={style.id} aria-hidden="true" />
+              <strong>{style.name}</strong>
+            </label>
+          ))}
+        </div>
       </fieldset>
       <fieldset className="glass-options">
         <legend>Frosted glass</legend>

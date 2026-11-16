@@ -9,6 +9,8 @@ import {
   glassPreference,
   saveDarkStyle,
   saveGlass,
+  saveSunRay,
+  sunRayPreference,
   colourModePreference,
   colourThemePreference,
   saveColourMode,
@@ -21,6 +23,7 @@ afterEach(() => {
   delete document.documentElement.dataset.colourMode;
   delete document.documentElement.dataset.darkStyle;
   delete document.documentElement.dataset.glass;
+  delete document.documentElement.dataset.sunRay;
   document.head.querySelector('meta[name="theme-color"]')?.remove();
   vi.restoreAllMocks();
 });
@@ -132,4 +135,23 @@ it('keeps the frosted glass level for this visit when storage is unavailable', (
   });
   expect(saveGlass('subtle')).toBe(false);
   expect(document.documentElement.dataset.glass).toBe('subtle');
+});
+it('defaults the background to Colour and ignores unknown saved styles', () => {
+  expect(sunRayPreference()).toBe('colour');
+  localStorage.setItem('gym-logger-sun-ray', 'rainbow');
+  expect(sunRayPreference()).toBe('colour');
+});
+it('saves the Grey and Blank backgrounds and marks the page with them', () => {
+  expect(saveSunRay('grey')).toBe(true);
+  expect(sunRayPreference()).toBe('grey');
+  expect(document.documentElement.dataset.sunRay).toBe('grey');
+  saveSunRay('blank');
+  expect(document.documentElement.dataset.sunRay).toBe('blank');
+});
+it('keeps the background for this visit when storage is unavailable', () => {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('unavailable');
+  });
+  expect(saveSunRay('blank')).toBe(false);
+  expect(document.documentElement.dataset.sunRay).toBe('blank');
 });

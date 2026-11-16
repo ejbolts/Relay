@@ -2,6 +2,7 @@ const THEME_KEY = 'gym-logger-colour-theme';
 const MODE_KEY = 'gym-logger-colour-mode';
 const DARK_STYLE_KEY = 'gym-logger-dark-style';
 const GLASS_KEY = 'gym-logger-glass';
+const SUN_RAY_KEY = 'gym-logger-sun-ray';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
@@ -22,6 +23,14 @@ export const GLASS_LEVELS = [
 ] as const;
 export type GlassLevelId = (typeof GLASS_LEVELS)[number]['id'];
 export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
+/** The drifting light behind the app: in the accent colour, neutral grey, or none at all. */
+export const SUN_RAY_STYLES = [
+  { id: 'colour', name: 'Colour' },
+  { id: 'grey', name: 'Grey' },
+  { id: 'blank', name: 'Blank' },
+] as const;
+export type SunRayStyleId = (typeof SUN_RAY_STYLES)[number]['id'];
+export const DEFAULT_SUN_RAY_STYLE: SunRayStyleId = 'colour';
 export const COLOUR_THEMES = [
   {
     id: 'blue',
@@ -210,6 +219,29 @@ export function saveGlass(id: GlassLevelId): boolean {
   applyGlass(id);
   try {
     localStorage.setItem(GLASS_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function sunRayPreference(): SunRayStyleId {
+  try {
+    const saved = localStorage.getItem(SUN_RAY_KEY);
+    return SUN_RAY_STYLES.find((style) => style.id === saved)?.id ?? DEFAULT_SUN_RAY_STYLE;
+  } catch {
+    return DEFAULT_SUN_RAY_STYLE;
+  }
+}
+
+export function applySunRay(id: SunRayStyleId) {
+  document.documentElement.dataset.sunRay = id;
+}
+
+export function saveSunRay(id: SunRayStyleId): boolean {
+  applySunRay(id);
+  try {
+    localStorage.setItem(SUN_RAY_KEY, id);
     return true;
   } catch {
     return false;
