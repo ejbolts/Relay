@@ -18,6 +18,53 @@ function exercise(
 
 describe('exerciseIconKey', () => {
   it.each([
+    ['Single-Arm Lat Pulldown (Machine)', 'single-arm-machine-lat-pulldown'],
+    ['Single-Arm Cable Lat Pulldown', 'single-arm-cable-lat-pulldown'],
+    ['Single-Arm Cable Biceps Curl', 'single-arm-cable-biceps-curl'],
+    ['Single-Arm Cable Triceps Pushdown', 'single-arm-cable-triceps-pushdown'],
+    ['Dumbbell Row', 'dumbbell-row'],
+    ['Dumbbell Shoulder Press', 'dumbbell-shoulder-press'],
+    ['Dumbbell Bench Press', 'dumbbell-bench-press'],
+    ['Incline Dumbbell Press', 'incline-dumbbell-press'],
+    ['Dumbbell Reverse Fly', 'dumbbell-reverse-fly'],
+    ['Push-up', 'push-up'],
+  ])('gives %s the third-batch movement and equipment illustration', (name, key) => {
+    const movement = exercise(name);
+    expect(exerciseIconKey(movement)).toBe(key);
+    expect(exerciseIconFor(movement)).toContain(`${key}.webp`);
+  });
+
+  it.each([
+    ['Single arm lat pulldown', 'Machine', 'single-arm-machine-lat-pulldown'],
+    ['Single Arm Machine Lat Pull Down', 'Machine', 'single-arm-machine-lat-pulldown'],
+    ['One-arm lat pull-down', 'Plate-loaded machine', 'single-arm-machine-lat-pulldown'],
+    ['Unilateral lat pulldown', 'Cable machine', 'single-arm-cable-lat-pulldown'],
+    ['Single arm lat pull down', 'Cable', 'single-arm-cable-lat-pulldown'],
+    ['Single-arm biceps curl', 'Cable', 'single-arm-cable-biceps-curl'],
+    ['One arm triceps push-down', 'Cable', 'single-arm-cable-triceps-pushdown'],
+    ['Single-arm Row', 'Dumbbell', 'dumbbell-row'],
+    ['Shoulder Press', 'Dumbbell', 'dumbbell-shoulder-press'],
+    ['Flat Bench Press', 'Dumbbell', 'dumbbell-bench-press'],
+    ['Incline Bench Press', 'Dumbbell', 'incline-dumbbell-press'],
+    ['Rear Delt Fly', 'Dumbbell', 'dumbbell-reverse-fly'],
+    ['Push ups', 'Bodyweight', 'push-up'],
+  ])('uses the correct third-batch icon for %s on %s', (name, equipment, key) => {
+    expect(exerciseIconKey(exercise(name, { equipment }))).toBe(key);
+  });
+
+  it.each([
+    ['Cable Biceps Curl', 'Cable', 'biceps-curl'],
+    ['Single-Arm Preacher Curl', 'Dumbbell', 'preacher-curl'],
+    ['Single-Arm Cable Hammer Curl', 'Cable', 'biceps-curl'],
+    ['Single-Arm Cable Leg Curl', 'Cable', 'hamstring-curl'],
+    ['Chest-Supported Dumbbell Row', 'Dumbbell', 'seated-row'],
+    ['Overhead Press', 'Barbell', 'overhead-press'],
+    ['Incline Barbell Bench Press', 'Barbell', 'bench-press'],
+  ])('keeps the different equipment or movement for %s', (name, equipment, key) => {
+    expect(exerciseIconKey(exercise(name, { equipment }))).toBe(key);
+  });
+
+  it.each([
     ['Smith Machine Bench Press', 'smith-bench-press'],
     ['Smith Machine Shoulder Press', 'smith-shoulder-press'],
     ['Smith Machine Squat', 'smith-squat'],
@@ -55,8 +102,6 @@ describe('exerciseIconKey', () => {
   it.each([
     ['Back Squat', 'Barbell', 'back-squat'],
     ['Lat Pulldown', 'Cable', 'lat-pulldown'],
-    ['Single-Arm Lat Pulldown (Machine)', 'Machine', 'lat-pulldown'],
-    ['Single-Arm Cable Lat Pulldown', 'Cable', 'lat-pulldown'],
     ['Crunch', 'Bodyweight', 'core'],
     ['Seated Ab Crunch Machine', 'Machine', 'ab-crunch-machine'],
     ['Overhead Dumbbell Triceps Extension', 'Dumbbell', 'triceps-pushdown'],
@@ -109,11 +154,8 @@ describe('exerciseIconKey', () => {
     ['Pec Deck', 'Machine', 'pec-deck'],
     ['Barbell Bench Press', 'Barbell', 'bench-press'],
     ['Hip Thrust', 'Barbell', 'hip-thrust'],
-    ['Dumbbell Shoulder Press', 'Dumbbell', 'overhead-press'],
     ['Seated Cable Row', 'Cable', 'seated-row'],
     ['Single-Arm Cable Row', 'Cable machine', 'seated-row'],
-    ['Dumbbell Row', 'Dumbbell', 'seated-row'],
-    ['Dumbbell Reverse Fly', 'Dumbbell', 'face-pull'],
     ['Triceps Pushdown', 'Cable', 'triceps-pushdown'],
   ])('keeps the distinct existing illustration for %s', (name, equipment, key) => {
     expect(exerciseIconKey(exercise(name, { equipment }))).toBe(key);

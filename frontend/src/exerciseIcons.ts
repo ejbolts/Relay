@@ -14,6 +14,10 @@ import coreIcon from './assets/exercise-icons/core.webp';
 import cyclingIcon from './assets/exercise-icons/cycling.webp';
 import deadliftIcon from './assets/exercise-icons/deadlift.webp';
 import dipsIcon from './assets/exercise-icons/dips.webp';
+import dumbbellBenchPressIcon from './assets/exercise-icons/dumbbell-bench-press.webp';
+import dumbbellReverseFlyIcon from './assets/exercise-icons/dumbbell-reverse-fly.webp';
+import dumbbellRowIcon from './assets/exercise-icons/dumbbell-row.webp';
+import dumbbellShoulderPressIcon from './assets/exercise-icons/dumbbell-shoulder-press.webp';
 import facePullIcon from './assets/exercise-icons/face-pull.webp';
 import hackSquatIcon from './assets/exercise-icons/hack-squat.webp';
 import hamstringCurlIcon from './assets/exercise-icons/hamstring-curl.webp';
@@ -21,6 +25,7 @@ import hangingLegRaiseIcon from './assets/exercise-icons/hanging-leg-raise.webp'
 import hipThrustIcon from './assets/exercise-icons/hip-thrust.webp';
 import hipAbductionMachineIcon from './assets/exercise-icons/hip-abduction-machine.webp';
 import inclineWalkIcon from './assets/exercise-icons/incline-walk.webp';
+import inclineDumbbellPressIcon from './assets/exercise-icons/incline-dumbbell-press.webp';
 import latPulldownIcon from './assets/exercise-icons/lat-pulldown.webp';
 import lateralRaiseIcon from './assets/exercise-icons/lateral-raise.webp';
 import legExtensionIcon from './assets/exercise-icons/leg-extension.webp';
@@ -36,6 +41,7 @@ import overheadCableTricepsExtensionIcon from './assets/exercise-icons/overhead-
 import pecDeckIcon from './assets/exercise-icons/pec-deck.webp';
 import preacherCurlIcon from './assets/exercise-icons/preacher-curl.webp';
 import pullUpIcon from './assets/exercise-icons/pull-up.webp';
+import pushUpIcon from './assets/exercise-icons/push-up.webp';
 import romanianDeadliftIcon from './assets/exercise-icons/romanian-deadlift.webp';
 import reversePecDeckIcon from './assets/exercise-icons/reverse-pec-deck.webp';
 import rowingIcon from './assets/exercise-icons/rowing.webp';
@@ -43,6 +49,10 @@ import runningIcon from './assets/exercise-icons/running.webp';
 import seatedRowIcon from './assets/exercise-icons/seated-row.webp';
 import seatedCalfRaiseIcon from './assets/exercise-icons/seated-calf-raise.webp';
 import seatedLegCurlIcon from './assets/exercise-icons/seated-leg-curl.webp';
+import singleArmCableBicepsCurlIcon from './assets/exercise-icons/single-arm-cable-biceps-curl.webp';
+import singleArmCableLatPulldownIcon from './assets/exercise-icons/single-arm-cable-lat-pulldown.webp';
+import singleArmCableTricepsPushdownIcon from './assets/exercise-icons/single-arm-cable-triceps-pushdown.webp';
+import singleArmMachineLatPulldownIcon from './assets/exercise-icons/single-arm-machine-lat-pulldown.webp';
 import smithBenchPressIcon from './assets/exercise-icons/smith-bench-press.webp';
 import smithShoulderPressIcon from './assets/exercise-icons/smith-shoulder-press.webp';
 import smithSquatIcon from './assets/exercise-icons/smith-squat.webp';
@@ -69,6 +79,10 @@ export type ExerciseIconKey =
   | 'cycling'
   | 'deadlift'
   | 'dips'
+  | 'dumbbell-bench-press'
+  | 'dumbbell-reverse-fly'
+  | 'dumbbell-row'
+  | 'dumbbell-shoulder-press'
   | 'face-pull'
   | 'hack-squat'
   | 'hamstring-curl'
@@ -76,6 +90,7 @@ export type ExerciseIconKey =
   | 'hip-thrust'
   | 'hip-abduction-machine'
   | 'incline-walk'
+  | 'incline-dumbbell-press'
   | 'lat-pulldown'
   | 'lateral-raise'
   | 'leg-extension'
@@ -91,6 +106,7 @@ export type ExerciseIconKey =
   | 'pec-deck'
   | 'preacher-curl'
   | 'pull-up'
+  | 'push-up'
   | 'romanian-deadlift'
   | 'reverse-pec-deck'
   | 'rowing'
@@ -98,6 +114,10 @@ export type ExerciseIconKey =
   | 'seated-row'
   | 'seated-calf-raise'
   | 'seated-leg-curl'
+  | 'single-arm-cable-biceps-curl'
+  | 'single-arm-cable-lat-pulldown'
+  | 'single-arm-cable-triceps-pushdown'
+  | 'single-arm-machine-lat-pulldown'
   | 'smith-bench-press'
   | 'smith-shoulder-press'
   | 'smith-squat'
@@ -128,6 +148,10 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   cycling: cyclingIcon,
   deadlift: deadliftIcon,
   dips: dipsIcon,
+  'dumbbell-bench-press': dumbbellBenchPressIcon,
+  'dumbbell-reverse-fly': dumbbellReverseFlyIcon,
+  'dumbbell-row': dumbbellRowIcon,
+  'dumbbell-shoulder-press': dumbbellShoulderPressIcon,
   'face-pull': facePullIcon,
   'hack-squat': hackSquatIcon,
   'hamstring-curl': hamstringCurlIcon,
@@ -135,6 +159,7 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'hip-thrust': hipThrustIcon,
   'hip-abduction-machine': hipAbductionMachineIcon,
   'incline-walk': inclineWalkIcon,
+  'incline-dumbbell-press': inclineDumbbellPressIcon,
   'lat-pulldown': latPulldownIcon,
   'lateral-raise': lateralRaiseIcon,
   'leg-extension': legExtensionIcon,
@@ -150,6 +175,7 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'pec-deck': pecDeckIcon,
   'preacher-curl': preacherCurlIcon,
   'pull-up': pullUpIcon,
+  'push-up': pushUpIcon,
   'romanian-deadlift': romanianDeadliftIcon,
   'reverse-pec-deck': reversePecDeckIcon,
   rowing: rowingIcon,
@@ -157,6 +183,10 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'seated-row': seatedRowIcon,
   'seated-calf-raise': seatedCalfRaiseIcon,
   'seated-leg-curl': seatedLegCurlIcon,
+  'single-arm-cable-biceps-curl': singleArmCableBicepsCurlIcon,
+  'single-arm-cable-lat-pulldown': singleArmCableLatPulldownIcon,
+  'single-arm-cable-triceps-pushdown': singleArmCableTricepsPushdownIcon,
+  'single-arm-machine-lat-pulldown': singleArmMachineLatPulldownIcon,
   'smith-bench-press': smithBenchPressIcon,
   'smith-shoulder-press': smithShoulderPressIcon,
   'smith-squat': smithSquatIcon,
@@ -182,13 +212,16 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'cycling (indoor)': 'cycling',
   deadlift: 'deadlift',
   dips: 'dips',
-  'dumbbell shoulder press': 'overhead-press',
+  'dumbbell bench press': 'dumbbell-bench-press',
+  'dumbbell reverse fly': 'dumbbell-reverse-fly',
+  'dumbbell row': 'dumbbell-row',
+  'dumbbell shoulder press': 'dumbbell-shoulder-press',
   'face pull': 'face-pull',
   'front squat': 'back-squat',
   'hammer curl': 'biceps-curl',
   'hanging leg raise': 'hanging-leg-raise',
   'hip thrust': 'hip-thrust',
-  'incline dumbbell press': 'bench-press',
+  'incline dumbbell press': 'incline-dumbbell-press',
   'incline treadmill walking': 'incline-walk',
   'lat pulldown': 'lat-pulldown',
   'lateral raise': 'lateral-raise',
@@ -208,6 +241,7 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'reverse pec deck': 'reverse-pec-deck',
   plank: 'core',
   'pull-up': 'pull-up',
+  'push-up': 'push-up',
   rowing: 'rowing',
   running: 'running',
   'romanian deadlift': 'romanian-deadlift',
@@ -217,10 +251,11 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'seated machine row': 'machine-row',
   'seated calf raise': 'seated-calf-raise',
   'single leg press': 'leg-press',
-  'single-arm cable biceps curl': 'biceps-curl',
+  'single-arm cable biceps curl': 'single-arm-cable-biceps-curl',
+  'single-arm cable lat pulldown': 'single-arm-cable-lat-pulldown',
   'single-arm cable pullover': 'lat-pulldown',
-  'single-arm cable triceps pushdown': 'triceps-pushdown',
-  'single-arm lat pulldown (machine)': 'lat-pulldown',
+  'single-arm cable triceps pushdown': 'single-arm-cable-triceps-pushdown',
+  'single-arm lat pulldown (machine)': 'single-arm-machine-lat-pulldown',
   'single-arm preacher curl': 'preacher-curl',
   'smith machine bench press': 'smith-bench-press',
   'smith machine shoulder press': 'smith-shoulder-press',
@@ -249,6 +284,7 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
   const name = normalized(exercise.name);
   const equipment = normalized(exercise.equipment);
   const gear = `${name} ${equipment}`;
+  const singleArm = /\b(single[- ]arm|one[- ]arm|unilateral)\b/.test(name);
 
   if (exercise.kind !== 'cardio') {
     if (gear.includes('smith')) {
@@ -259,6 +295,19 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
       }
     }
     if (gear.includes('cable')) {
+      if (singleArm) {
+        if (includesAny(name, ['lat pulldown', 'lat pull-down', 'lat pull down']))
+          return 'single-arm-cable-lat-pulldown';
+        if (name.includes('tricep') && includesAny(name, ['pushdown', 'push-down'])) {
+          return 'single-arm-cable-triceps-pushdown';
+        }
+        if (
+          name.includes('curl') &&
+          !includesAny(name, ['leg', 'hamstring', 'preacher', 'hammer'])
+        ) {
+          return 'single-arm-cable-biceps-curl';
+        }
+      }
       if (name.includes('glute') && name.includes('kickback')) return 'cable-glute-kickback';
       if (name.includes('crunch')) return 'cable-crunch';
       if (name.includes('lateral raise')) return 'cable-lateral-raise';
@@ -269,6 +318,20 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
         return 'overhead-cable-triceps-extension';
       }
     }
+    if (gear.includes('dumbbell')) {
+      if (includesAny(name, ['reverse fly', 'rear delt fly'])) return 'dumbbell-reverse-fly';
+      if (/\brows?\b/.test(name) && !includesAny(name, ['supported', 'upright', 'seated'])) {
+        return 'dumbbell-row';
+      }
+      if (name.includes('press')) {
+        if (includesAny(name, ['shoulder', 'overhead', 'military']))
+          return 'dumbbell-shoulder-press';
+        if (includesAny(name, ['bench', 'chest', 'incline'])) {
+          return name.includes('incline') ? 'incline-dumbbell-press' : 'dumbbell-bench-press';
+        }
+      }
+    }
+    if (/\bpush[- ]?ups?\b/.test(name)) return 'push-up';
     if (
       gear.includes('barbell') &&
       /\brows?\b/.test(name) &&
@@ -292,11 +355,8 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
       'bodyweight',
     ]);
   if (exercise.kind !== 'cardio' && machine) {
-    if (
-      includesAny(name, ['lat pulldown', 'lat pull-down']) &&
-      !includesAny(name, ['single', 'one-arm', 'one arm', 'unilateral'])
-    ) {
-      return 'machine-lat-pulldown';
+    if (includesAny(name, ['lat pulldown', 'lat pull-down', 'lat pull down'])) {
+      return singleArm ? 'single-arm-machine-lat-pulldown' : 'machine-lat-pulldown';
     }
     if (name.includes('hip abduction')) return 'hip-abduction-machine';
     if (name.includes('hip thrust')) return 'machine-hip-thrust';
