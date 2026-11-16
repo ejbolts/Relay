@@ -7796,7 +7796,9 @@ body,
   box-shadow: none;
 }
 
-.movement-card:has(.movement-overflow[open]) {
+/* An open exercise or set menu hangs below its card, so that card sits above the next one. */
+.movement-card:has(.movement-overflow[open]),
+.movement-card:has(.set-swipe-shell.has-open-overlay) {
   z-index: 25;
 }
 
