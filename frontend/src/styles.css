@@ -5511,10 +5511,15 @@ html.edge-swipe-active .edge-swipe-indicator {
 }
 
 .body-row-menu > summary {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: grid;
+  place-items: center;
   color: #5598e7;
   font-size: 1.25rem;
   list-style: none;
   text-align: center;
+  cursor: pointer;
 }
 
 .body-row-menu > summary::-webkit-details-marker {
@@ -5528,15 +5533,26 @@ html.edge-swipe-active .edge-swipe-indicator {
   right: 0;
   width: 9rem;
   display: grid;
+  overflow: hidden;
   border: 1px solid #454b4e;
+  border-radius: 12px;
   background: #202325;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
 }
 
 .body-row-menu .body-history-actions button {
+  min-height: 2.75rem;
   border: 0;
   border-bottom: 1px solid #454b4e;
   border-radius: 0;
+  padding: 0.6rem 0.85rem;
   background: transparent;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.body-row-menu .body-history-actions button:last-child {
+  border-bottom: 0;
 }
 
 /* Workout history reference. */
@@ -6358,6 +6374,11 @@ body,
 .total-cardio-card > p,
 .total-cardio-card small {
   color: var(--muted-ink);
+}
+
+.cardio-form > .cardio-form-cancel {
+  width: 100%;
+  margin-top: 0.5rem;
 }
 
 .cardio-screenshot-import {

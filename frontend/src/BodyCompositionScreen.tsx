@@ -500,7 +500,7 @@ export function BodyCompositionScreen({
 
       {entryOpen && (
         <PopupDialog
-          title="Log measurement"
+          title="Log weigh-in"
           kicker="CHECK-IN"
           className="body-entry-popup"
           onClose={() => setEntryOpen(false)}

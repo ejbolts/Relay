@@ -279,6 +279,12 @@
   margin-top: 1rem;
 }
 
+/* A panel's title never sits directly on its first field or button. Zero specificity, so
+   content that sets its own top margin keeps it. */
+:where(.settings-hub .settings-panel > header) + :where(:not(p, .notification-setting-row)) {
+  margin-top: 0.75rem;
+}
+
 .settings-hub .training-preferences-grid label,
 .settings-hub .body-trend-default-fields label {
   color: var(--p-ink-2);

@@ -5858,6 +5858,8 @@ html[data-reduce-motion] ::backdrop {
 
 .machine-filter-list small:last-child {
   color: var(--p-ink-2);
+  /* "Last used 16 Nov 2026 · yesterday" wraps rather than losing its end. */
+  white-space: normal;
 }
 
 .machine-filter-list small.unused {
