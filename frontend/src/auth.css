@@ -10,7 +10,10 @@
     calc(env(safe-area-inset-bottom) + 1.5rem) max(1rem, env(safe-area-inset-left));
   /* Keeps the sun ray and grain layers behind the content but above this background. */
   isolation: isolate;
+  /* The top fades to the page colour, which iOS also paints behind the status bar, so the
+     ray and glow never end in a hard line under it. */
   background:
+    linear-gradient(to bottom, var(--p-page) 0, transparent 9rem),
     radial-gradient(circle at 50% -10%, rgb(57 135 229 / 16%), transparent 24rem),
     radial-gradient(130% 90% at 50% 45%, transparent 45%, var(--auth-vignette) 100%), var(--p-page);
   color: var(--p-ink);
@@ -41,7 +44,10 @@
     var(--auth-ray-soft) 57%,
     transparent 66%
   );
-  animation: auth-sun-ray 22s ease-in-out infinite alternate;
+  /* Box coordinates: transparent at the viewport top, full strength about a quarter down. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  animation: auth-sun-ray 15s ease-in-out infinite alternate;
   will-change: transform;
 }
 
