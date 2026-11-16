@@ -193,6 +193,23 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(
     [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent),
   ).toEqual(['Bench press3 sets', 'Row3 sets', 'Curl2 sets', '+2 more exercises']);
+  // Tapping the count lists them all, and tapping again folds them away.
+  const rows = () =>
+    [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent);
+  const more = button(friendCard, '+2 more exercises')!;
+  expect(more.getAttribute('aria-expanded')).toBe('false');
+  await click(more);
+  expect(rows()).toEqual([
+    'Bench press3 sets',
+    'Row3 sets',
+    'Curl2 sets',
+    'Fly2 sets',
+    'Dip2 sets',
+    'Show fewer',
+  ]);
+  expect(button(friendCard, 'Show fewer')?.getAttribute('aria-expanded')).toBe('true');
+  await click(button(friendCard, 'Show fewer'));
+  expect(rows()).toHaveLength(4);
   expect(button(friendCard, 'React to Alex Sample’s Upper body')).toBeDefined();
   expect(button(own, 'React to Your Leg day')).toBeUndefined();
 
