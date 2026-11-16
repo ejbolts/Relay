@@ -472,6 +472,8 @@ html[data-reduce-motion] .release-confetti {
 }
 
 .app-update-refresh[aria-busy='true'] svg {
+  /* The arrow's circle is centred at (12, 13) in its 24-unit box, so it turns about that point. */
+  transform-origin: 50% 54.17%;
   animation: tracker-spin 0.8s linear infinite;
 }
 
