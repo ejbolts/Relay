@@ -1,33 +1,20 @@
-/* Block types */
-.kind-strength {
-  --block-kind: var(--block-color-strength, #7fb0f0);
+/* Block colours: each element sets --block-color inline. */
+.training-block-swatch[style],
+.training-block-dot {
+  background: var(--block-color);
 }
-.kind-hypertrophy {
-  --block-kind: var(--block-color-hypertrophy, #b59cf0);
-}
-.kind-recovery {
-  --block-kind: var(--block-color-recovery, #6fd0b8);
-}
-.kind-deload {
-  --block-kind: var(--block-color-deload, #9aa4ad);
-}
-.kind-none {
-  --block-kind: #d2b06f;
-}
-.training-block-bar .training-block-segment[class*='kind-'],
-.training-block-swatch[class*='kind-'],
-.training-block-kind-dot {
-  background: var(--block-kind);
-}
-.training-block-kind-dot {
+.training-block-dot {
   display: inline-block;
   flex: 0 0 auto;
   width: 9px;
   height: 9px;
   border-radius: 50%;
 }
-.training-block-kind-dot.kind-recovery {
-  border-radius: 2px;
+.training-block-now .training-block-dot {
+  background: var(--block-color);
+}
+.training-block-bar .training-block-segment.current.custom {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--p-ink) 85%, transparent);
 }
 
 /* Year view */
@@ -78,19 +65,20 @@
   position: absolute;
   top: 2px;
   bottom: 2px;
-  display: grid;
-  place-items: center;
+  display: block;
   overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  line-height: 30px;
   margin: 0;
   border: 0;
   border-radius: 6px;
   padding: 0 3px;
-  background: var(--block-kind);
+  background: var(--block-color);
   color: #0b0d0f;
-  font: inherit;
+  font-family: inherit;
   font-size: 0.66rem;
   font-weight: 800;
-  line-height: 1;
   white-space: nowrap;
   transition: opacity 0.2s ease;
 }
@@ -109,18 +97,15 @@ button.training-block-year-segment {
   outline: 2px solid var(--p-accent-text);
   outline-offset: 2px;
 }
-.training-block-year-segment.kind-earlier {
+.training-block-year-segment.earlier {
   background: repeating-linear-gradient(135deg, var(--p-surface-3) 0 5px, var(--p-deemph) 5px 10px);
 }
 .training-block-year-segment.planned {
   background: repeating-linear-gradient(
     135deg,
-    color-mix(in srgb, var(--block-kind) 70%, transparent) 0 5px,
-    color-mix(in srgb, var(--block-kind) 25%, transparent) 5px 10px
+    color-mix(in srgb, var(--block-color) 70%, transparent) 0 5px,
+    color-mix(in srgb, var(--block-color) 25%, transparent) 5px 10px
   );
-}
-.training-block-year-segment.faded {
-  opacity: 0.18;
 }
 .training-block-year-month,
 .training-block-year-week {
@@ -142,10 +127,10 @@ button.training-block-year-segment {
   height: 46px;
 }
 .training-block-year.detail .training-block-year-segment {
-  justify-items: start;
   padding: 0 6px;
   font-size: 0.72rem;
-  text-overflow: ellipsis;
+  line-height: 42px;
+  text-align: left;
 }
 .training-block-year.detail .training-block-year-axis {
   font-size: 0.68rem;
@@ -168,41 +153,6 @@ button.training-block-year-segment {
   font-size: 0.64rem;
   font-weight: 600;
   text-align: center;
-}
-.training-block-kinds {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  margin: 12px -16px 0;
-  padding: 0 16px 2px;
-  scrollbar-width: none;
-}
-.training-block-dialog .training-block-kinds button {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-  width: auto;
-  min-height: 34px;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 999px;
-  padding: 0 12px;
-  background: transparent;
-  color: var(--p-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.training-block-dialog .training-block-kinds button[aria-pressed='true'] {
-  border-color: var(--p-accent);
-  background: var(--p-surface-3);
-  box-shadow: inset 0 0 0 1px var(--p-accent);
-  color: var(--p-ink);
-}
-.training-block-kind-count {
-  color: var(--p-muted);
-  font-size: 0.72rem;
-  font-weight: 700;
 }
 .training-block-now-section h3 {
   margin: 16px 0 8px;
@@ -259,11 +209,11 @@ button.training-block-year-segment {
   border-left: 0;
 }
 .training-block-weeks span.done {
-  background: color-mix(in srgb, var(--block-kind) 60%, transparent);
+  background: color-mix(in srgb, var(--block-color) 60%, transparent);
   color: #0b0d0f;
 }
 .training-block-weeks span.now {
-  background: color-mix(in srgb, var(--block-kind) 28%, transparent);
+  background: color-mix(in srgb, var(--block-color) 28%, transparent);
   color: var(--p-ink);
 }
 .training-block-vs {
@@ -278,22 +228,13 @@ button.training-block-year-segment {
   color: var(--p-danger);
 }
 .training-block-now-section + .training-block-cards,
-.training-block-kinds + .training-block-cards {
+.training-block-year-frame + .training-block-cards {
   margin-top: 16px;
 }
 .training-block-cards li.empty {
   justify-content: center;
   color: var(--p-muted);
   font-size: 0.85rem;
-}
-.training-block-starts.kinds {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.training-block-dialog .training-block-starts.kinds button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
 }
 @media (prefers-reduced-motion: reduce) {
   .training-block-year-segment {
@@ -325,8 +266,7 @@ button.training-block-year-segment {
 }
 .training-block-dialog
   .training-block-year-frame:not(.landscape-chart-expanded)
-  .landscape-chart-toggle,
-.training-block-dialog .training-block-colours-open {
+  .landscape-chart-toggle {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -346,47 +286,48 @@ button.training-block-year-segment {
   color: inherit;
   line-height: 0;
 }
-.training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toggle .pulse-icon,
-.training-block-colours-open .pulse-icon {
+.training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toggle .pulse-icon {
   width: 18px;
   height: 18px;
 }
 .training-block-years > div {
   flex: 1;
 }
+/* Colour field in the block form: Auto plus the palette. */
 .training-block-colours {
   display: grid;
-  gap: 16px;
-  padding: 16px;
-}
-.training-block-colour-row h3 {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  margin: 0 0 8px;
-  font-size: 0.9rem;
+  min-width: 0;
+}
+.training-block-colours > span {
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
 }
 .training-block-swatches {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
 }
 .training-block-dialog .training-block-swatches button {
   aspect-ratio: 1;
   width: 100%;
+  min-width: 0;
   min-height: 0;
   margin: 0;
   border: 0;
   border-radius: 50%;
   padding: 0;
+  background: var(--block-color);
+}
+.training-block-dialog .training-block-swatches button.automatic {
+  color: #0b0d0f;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 .training-block-dialog .training-block-swatches button[aria-checked='true'] {
   box-shadow:
     0 0 0 2px var(--p-surface),
     0 0 0 4px var(--p-ink);
-}
-.training-block-dialog .training-block-swatches button:disabled {
-  opacity: 0.6;
 }
 .landscape-chart-expanded .training-block-years {
   display: none;
@@ -429,8 +370,4 @@ button.training-block-year-segment {
 }
 .training-block-full-detail strong {
   color: var(--p-ink);
-}
-
-.training-block-bar .training-block-segment.current[class*='kind-'] {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--p-ink) 85%, transparent);
 }

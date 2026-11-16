@@ -301,75 +301,32 @@ def test_summary_is_private_and_needs_an_existing_block(client, other_client):
     assert other_client.get(f"/api/training-blocks/{current['id']}/summary").status_code == 404
 
 
-def test_block_kinds_and_focus_are_optional_and_kept_by_older_apps(client):
+def test_block_colour_is_optional_validated_and_kept_by_older_apps(client):
     created = client.post(
         "/api/training-blocks",
-        json={
-            "name": "Recovery · Left shoulder",
-            "start_date": "2026-05-04",
-            "kind": "recovery",
-            "focus": "  Left shoulder ",
-        },
+        json={"name": "Winter strength", "start_date": "2026-05-04", "color": "#F0A07F"},
     )
     assert created.status_code == 201, created.text
     saved = created.json()["blocks"][0]
-    assert (saved["kind"], saved["focus"], saved["deload"]) == ("recovery", "Left shoulder", False)
+    assert saved["color"] == "#F0A07F"
+    assert block(client, "Rebuild", "2026-06-01")["color"] is None
 
-    untyped = block(client, "Rebuild", "2026-06-01")
-    assert (untyped["kind"], untyped["focus"]) == (None, None)
-
-    # An older app's edit omits the new fields, so the saved type and focus stay.
+    # An older app's edit omits the colour, so the saved colour stays.
     older = client.put(
         f"/api/training-blocks/{saved['id']}",
-        json={"name": "Shoulder rehab", "start_date": "2026-05-04"},
-    )
-    kept = next(b for b in older.json()["blocks"] if b["id"] == saved["id"])
-    assert (kept["name"], kept["kind"], kept["focus"]) == (
-        "Shoulder rehab",
-        "recovery",
-        "Left shoulder",
-    )
-
-    # A deload type also marks the block as a deload for summaries and older apps.
-    changed = client.put(
-        f"/api/training-blocks/{untyped['id']}",
-        json={"name": "Deload", "start_date": "2026-06-01", "kind": "deload", "focus": None},
+        json={"name": "Winter block", "start_date": "2026-05-04"},
     ).json()["blocks"]
-    assert next(b for b in changed if b["id"] == untyped["id"])["deload"] is True
-    back = client.put(
-        f"/api/training-blocks/{untyped['id']}",
-        json={"name": "Strength 1", "start_date": "2026-06-01", "kind": "strength"},
+    assert next(b for b in older if b["id"] == saved["id"])["color"] == "#F0A07F"
+
+    cleared = client.put(
+        f"/api/training-blocks/{saved['id']}",
+        json={"name": "Winter block", "start_date": "2026-05-04", "color": None},
     ).json()["blocks"]
-    assert next(b for b in back if b["id"] == untyped["id"])["deload"] is False
+    assert next(b for b in cleared if b["id"] == saved["id"])["color"] is None
 
-    invalid = client.post(
-        "/api/training-blocks",
-        json={"name": "Power", "start_date": "2026-07-01", "kind": "power"},
-    )
-    assert invalid.status_code == 422
-
-
-def test_block_type_colours_are_saved_validated_and_kept_by_block_edits(client):
-    rebuild = block(client, "Strength 1", "2026-06-01")
-    assert client.get("/api/training-blocks").json()["kind_colors"] == {}
-    saved = client.put(
-        "/api/training-blocks/colors",
-        json={"kind_colors": {"strength": "#F0A07F", "recovery": "#6fd0b8"}},
-    )
-    assert saved.status_code == 200, saved.text
-    assert saved.json()["kind_colors"] == {"strength": "#F0A07F", "recovery": "#6fd0b8"}
-
-    # Saving or removing blocks keeps the colours.
-    client.put(
-        f"/api/training-blocks/{rebuild['id']}",
-        json={"name": "Strength 1", "start_date": "2026-06-02"},
-    )
-    block(client, "Strength 2", "2026-07-01")
-    assert client.get("/api/training-blocks").json()["kind_colors"]["strength"] == "#F0A07F"
-
-    for bad in ({"strength": "red"}, {"power": "#ffffff"}, {"strength": "#fff"}):
-        response = client.put("/api/training-blocks/colors", json={"kind_colors": bad})
+    for bad in ("red", "#fff", "#12345g"):
+        response = client.post(
+            "/api/training-blocks",
+            json={"name": "Peak", "start_date": "2026-07-01", "color": bad},
+        )
         assert response.status_code == 422, bad
-
-    cleared = client.put("/api/training-blocks/colors", json={"kind_colors": {}})
-    assert cleared.json()["kind_colors"] == {}

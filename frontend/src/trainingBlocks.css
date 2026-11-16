@@ -221,6 +221,25 @@
   color: var(--p-ink);
   font: inherit;
 }
+.training-block-form label {
+  min-width: 0;
+}
+/* iOS sizes native date fields to their content, which cropped the dates and let the form
+   scroll sideways; fill the field instead, as the video date field does. */
+.training-block-form input[type='date'] {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-inline-size: 0;
+  min-height: 2.9rem;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+.training-block-form input[type='date']::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
+}
 .training-block-starts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

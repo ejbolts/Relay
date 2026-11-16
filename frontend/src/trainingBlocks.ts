@@ -84,6 +84,11 @@ export function blockChange(current: number, previous: number | undefined, perce
   } as const;
 }
 
+/** “Block 3”: numbered after the regular blocks already saved. */
+export function nextBlockName(blocks: TrainingBlock[]) {
+  return `Block ${blocks.filter((block) => !block.deload).length + 1}`;
+}
+
 /** Days after today until the planned end: “Last day” on the planned end itself. */
 export function daysLeftLabel(daysLeft: number) {
   if (daysLeft === 0) return 'Last day';

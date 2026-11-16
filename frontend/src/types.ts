@@ -509,15 +509,11 @@ export interface TrainingBlock {
   planned_end_date?: string | null;
   /** A recovery block: its summary has no comparison and later blocks skip it. */
   deload?: boolean;
-  /** Strength, hypertrophy, recovery or deload; absent on blocks saved before types. */
-  kind?: string | null;
-  /** What a recovery block rehabilitates, such as “Left shoulder”. */
-  focus?: string | null;
+  /** The block's #rrggbb colour on timelines; absent uses the app's palette. */
+  color?: string | null;
   /** Derived by the server on read. */
   workout_count?: number;
 }
-
-export type BlockKind = 'strength' | 'hypertrophy' | 'recovery' | 'deload';
 
 export interface TrainingBlockInput {
   name: string;
@@ -525,8 +521,8 @@ export interface TrainingBlockInput {
   planned_end_date: string | null;
   /** Omit to keep the saved value when editing. */
   deload?: boolean;
-  kind?: BlockKind | null;
-  focus?: string | null;
+  /** Null uses the app's palette; omit to keep the saved colour when editing. */
+  color?: string | null;
 }
 
 export interface BlockStats {
@@ -549,8 +545,6 @@ export interface TrainingBlockSummary {
 
 export interface TrainingBlocks {
   blocks: TrainingBlock[];
-  /** Hex colours chosen for block types; a missing type uses the app's default. */
-  kind_colors?: Partial<Record<string, string>>;
   /** Workouts dated before the first block. */
   earlier_workout_count?: number;
   /** Date of the earliest logged workout. */

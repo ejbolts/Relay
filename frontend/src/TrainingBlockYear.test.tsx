@@ -3,21 +3,19 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
-import { blockCode, blockKind, kindColor, suggestedBlockName } from './blockKinds';
+import { blockColor } from './blockColors';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { BlockStats, TrainingBlock, TrainingBlocks } from './types';
 
 const block = (
   id: string,
-  kind: TrainingBlock['kind'],
   start: string,
   end: string | null,
   extra: Partial<TrainingBlock> = {},
 ): TrainingBlock => ({
   id,
   name: id,
-  kind,
   start_date: start,
   end_date: end,
   workout_count: 10,
@@ -25,17 +23,12 @@ const block = (
 });
 const config: TrainingBlocks = {
   blocks: [
-    block('Strength 1', 'strength', '2025-03-17', '2025-07-14'),
-    block('Recovery · Lower back', 'recovery', '2025-07-14', '2026-03-02', {
-      focus: 'Lower back',
-    }),
-    block('Strength 1 ', 'strength', '2026-03-02', '2026-05-04'),
-    block('Recovery · Left shoulder', 'recovery', '2026-05-04', '2026-06-15', {
-      focus: 'Left shoulder',
-    }),
-    block('Hypertrophy 1', 'hypertrophy', '2026-06-15', '2026-08-10'),
-    block('Strength 2', 'strength', '2026-08-10', '2026-11-02'),
-    block('Strength 3', 'strength', '2026-11-02', null, { planned_end_date: '2026-12-13' }),
+    block('Base', '2025-03-17', '2025-07-14'),
+    block('Shoulder rehab', '2025-07-14', '2026-03-02', { color: '#6fd0b8' }),
+    block('Spring strength', '2026-03-02', '2026-08-10', { color: '#f0a07f' }),
+    block('Summer strength', '2026-08-10', '2026-10-26'),
+    block('Deload week', '2026-10-26', '2026-11-02', { deload: true }),
+    block('Peak', '2026-11-02', null, { planned_end_date: '2026-12-13' }),
   ],
 };
 const stats = (id: string, volume: number, prs: number): BlockStats => ({
@@ -49,17 +42,13 @@ const stats = (id: string, volume: number, prs: number): BlockStats => ({
 });
 
 let host: HTMLDivElement, root: Root;
-const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
+const onClose = vi.fn();
 const button = (label: string) =>
-  buttons().find(
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,
   )!;
 const click = async (target: string | HTMLElement) =>
   act(async () => (typeof target === 'string' ? button(target) : target).click());
-const chip = (label: string) =>
-  [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Block type"] button')].find(
-    (item) => item.textContent?.startsWith(label),
-  )!;
 const cardNames = () =>
   [...document.querySelectorAll('.training-block-cards li strong')].map((item) =>
     item.firstChild?.textContent?.trim(),
@@ -70,17 +59,28 @@ const segments = () => [
 const segmentNames = () => segments().map((item) => item.getAttribute('aria-label')?.split(',')[0]);
 const segment = (name: string) =>
   segments().find((item) => item.getAttribute('aria-label')?.startsWith(`${name},`))!;
+const title = () => document.querySelector('dialog[open] h2')?.textContent;
+const field = (label: string) =>
+  [...document.querySelectorAll<HTMLInputElement>('input')].find((item) =>
+    item.closest('label')?.textContent?.startsWith(label),
+  )!;
 async function type(input: HTMLInputElement, value: string) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+const submit = () =>
+  act(async () =>
+    document
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
 async function open(start: 'blocks' | 'new' = 'blocks') {
   await act(async () =>
     root.render(
       <TrainingBlocksProvider>
-        <TrainingBlockDialog start={start} onClose={() => {}} onNotice={() => {}} />
+        <TrainingBlockDialog start={start} onClose={onClose} onNotice={() => {}} />
       </TrainingBlocksProvider>,
     ),
   );
@@ -99,9 +99,10 @@ beforeEach(() => {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
+  onClose.mockReset();
   vi.spyOn(api.trainingBlocks, 'get').mockResolvedValue(structuredClone(config));
   vi.spyOn(api.trainingBlocks, 'summary').mockImplementation(async (id) => ({
-    block: id === 'Strength 3' ? stats(id, 6000, 4) : stats(id, 12000, 6),
+    block: id === 'Peak' ? stats(id, 6000, 4) : stats(id, 12000, 6),
     previous: null,
   }));
 });
@@ -112,207 +113,149 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-it('names, numbers and codes blocks by type within each year', () => {
-  expect(blockKind({ kind: 'power' })).toBeNull();
-  expect(blockKind({ kind: null, deload: true })).toBe('deload');
-  expect(blockCode(config.blocks, config.blocks[5])).toBe('S2');
-  expect(blockCode(config.blocks, config.blocks[3])).toBe('R');
-  expect(blockCode(config.blocks, block('Peak', null, '2026-01-01', null))).toBe('P');
-  expect(suggestedBlockName(config.blocks, 'strength', '2026-11-16')).toBe('Strength 4');
-  expect(suggestedBlockName(config.blocks, 'strength', '2027-01-04')).toBe('Strength 1');
-  expect(suggestedBlockName(config.blocks, 'hypertrophy', '2026-11-16')).toBe('Hypertrophy 2');
-  expect(suggestedBlockName(config.blocks, 'recovery', '2026-11-16', ' Left knee ')).toBe(
-    'Recovery · Left knee',
-  );
-  expect(suggestedBlockName(config.blocks, 'deload', '2026-11-16')).toBe('Deload');
+it('colours a block with its own choice, the accent while current, or a tone', () => {
+  const today = '2026-11-16';
+  expect(blockColor(config.blocks, config.blocks[2], today)).toBe('#f0a07f');
+  expect(blockColor(config.blocks, config.blocks[5], today)).toBe('var(--p-accent-text)');
+  expect(blockColor(config.blocks, config.blocks[0], today)).toBe('#8aa4bd');
+  expect(blockColor(config.blocks, { ...config.blocks[3], color: 'red' }, today)).toBe('#6fb59a');
 });
 
-it('shows one year at a time and filters its blocks by type', async () => {
+it('shows one year at a time with each block in its colour', async () => {
   await open();
-  expect(document.querySelector('.training-block-years')?.textContent).toContain('20265 blocks');
+  expect(document.querySelector('.training-block-years')?.textContent).toContain('20264 blocks');
   expect(segmentNames()).toEqual([
-    'Recovery · Lower back',
-    'Strength 1 ',
-    'Recovery · Left shoulder',
-    'Hypertrophy 1',
-    'Strength 2',
-    'Strength 3',
+    'Shoulder rehab',
+    'Spring strength',
+    'Summer strength',
+    'Deload week',
+    'Peak',
   ]);
-  expect(
-    [...document.querySelectorAll('.training-block-year-segment:not(.planned)')].map(
-      (item) => item.textContent,
-    ),
-  ).toEqual(['R', 'S1', 'R', 'H1', 'S2', 'S3']);
+  expect(segment('Spring strength').style.getPropertyValue('--block-color')).toBe('#f0a07f');
   expect(document.querySelectorAll('.training-block-year-month')).toHaveLength(11);
   expect(document.querySelector('.training-block-year-segment.planned')).not.toBeNull();
-  expect(chip('Strength').textContent).toBe('Strength3');
-  expect(chip('Recovery').textContent).toBe('Recovery1');
-  // The 2025 recovery block still shows where it runs into 2026, but belongs to 2025's list.
-  expect(cardNames()).not.toContain('Recovery · Lower back');
-
-  await click(chip('Strength'));
-  expect(cardNames()).toEqual(['Strength 3', 'Strength 2', 'Strength 1']);
-  expect(document.querySelectorAll('.training-block-year-segment.faded').length).toBeGreaterThan(0);
-  await click(chip('Strength'));
-  expect(cardNames()).toHaveLength(5);
+  expect(document.querySelector('[aria-label="Block type"]')).toBeNull();
+  // A block belongs to the year it starts in, though the bar shows it running into this one.
+  expect(cardNames()).toEqual(['Peak', 'Deload week', 'Summer strength', 'Spring strength']);
 
   await click('Previous year');
   expect(document.querySelector('.training-block-years')?.textContent).toContain('20252 blocks');
-  expect(cardNames()).toEqual(['Recovery · Lower back', 'Strength 1']);
+  expect(cardNames()).toEqual(['Shoulder rehab', 'Base']);
   expect(document.querySelector('.training-block-now')).toBeNull();
   expect(button('Previous year').disabled).toBe(true);
 });
 
-it('compares the current block with the last block of its type', async () => {
+it('compares the current block with the last regular block, skipping deloads', async () => {
   await open();
   const now = document.querySelector('.training-block-now')!;
-  expect(now.querySelector('header')?.textContent).toBe('Strength 3Week 3 of 6 · 27 days left');
+  expect(now.querySelector('header')?.textContent).toBe('PeakWeek 3 of 6 · 27 days left');
   expect(
     [...now.querySelectorAll('.training-block-weeks span')].map((item) => item.className),
   ).toEqual(['done', 'done', 'now', '', '', '']);
-  // 6,000 kg over 15 days against 12,000 kg over Strength 2's 12 weeks.
+  // 6,000 kg over 15 days against 12,000 kg over Summer strength's 11 weeks.
   expect(now.querySelector('.training-block-vs')?.textContent).toBe(
-    'vs Strength 2: +180% volume per week · 4 PRs vs 6',
+    'vs Summer strength: +157% volume per week · 4 PRs vs 6',
   );
-  expect(api.trainingBlocks.summary).toHaveBeenCalledWith('Strength 2');
-});
-
-it('starts a typed block with a suggested name and an injury for recovery', async () => {
-  const create = vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(structuredClone(config));
-  await open('new');
-  const name = () =>
-    [...document.querySelectorAll<HTMLInputElement>('input')].find((item) =>
-      item.closest('label')?.textContent?.startsWith('Block name'),
-    )!;
-  expect(document.querySelector('[aria-label="Type"] [aria-checked="true"]')?.textContent).toBe(
-    'Strength',
-  );
-  expect(name().value).toBe('Strength 4');
-  await click(
-    [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Type"] button')].find(
-      (item) => item.textContent === 'Recovery',
-    )!,
-  );
-  const injury = [...document.querySelectorAll<HTMLInputElement>('input')].find((item) =>
-    item.closest('label')?.textContent?.startsWith('Injury or focus'),
-  )!;
-  await type(injury, 'Left knee');
-  expect(name().value).toBe('Recovery · Left knee');
-  await type(name(), 'Knee rehab');
-  await type(injury, 'Right knee');
-  expect(name().value).toBe('Knee rehab');
-  await act(async () =>
-    document
-      .querySelector('form')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
-  expect(create).toHaveBeenCalledWith({
-    name: 'Knee rehab',
-    start_date: '2026-11-16',
-    planned_end_date: null,
-    kind: 'recovery',
-    focus: 'Right knee',
-  });
-});
-
-it('keeps a block type and its name when editing', async () => {
-  const update = vi.spyOn(api.trainingBlocks, 'update').mockResolvedValue(structuredClone(config));
-  await open();
-  await click('Edit Recovery · Left shoulder');
-  expect(document.querySelector('[aria-label="Type"] [aria-checked="true"]')?.textContent).toBe(
-    'Recovery',
-  );
-  await click(
-    [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Type"] button')].find(
-      (item) => item.textContent === 'Strength',
-    )!,
-  );
-  await act(async () =>
-    document
-      .querySelector('form')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
-  expect(update).toHaveBeenCalledWith('Recovery · Left shoulder', {
-    name: 'Recovery · Left shoulder',
-    start_date: '2026-05-04',
-    planned_end_date: null,
-    kind: 'strength',
-    focus: null,
-  });
+  expect(api.trainingBlocks.summary).toHaveBeenCalledWith('Summer strength');
 });
 
 it('highlights a block and its card when its part of the timeline is tapped', async () => {
   await open();
-  await click(chip('Hypertrophy'));
-  await click(segment('Strength 2'));
-  expect(segment('Strength 2').getAttribute('aria-pressed')).toBe('true');
-  expect(chip('Hypertrophy').getAttribute('aria-pressed')).toBe('false');
+  await click(segment('Summer strength'));
+  expect(segment('Summer strength').getAttribute('aria-pressed')).toBe('true');
   expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
-    'Strength 2',
+    'Summer strength',
   );
-  // The 2025 recovery block runs into January, and tapping it moves to its own year.
-  await click(segment('Recovery · Lower back'));
+  // The 2025 rehab block runs into 2026, and tapping it moves to its own year.
+  await click(segment('Shoulder rehab'));
   expect(document.querySelector('.training-block-years strong')?.textContent).toBe('2025');
   expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
-    'Recovery · Lower back',
+    'Shoulder rehab',
   );
-  await click(segment('Recovery · Lower back'));
+  await click(segment('Shoulder rehab'));
   expect(document.querySelector('.training-block-cards li.selected')).toBeNull();
 });
 
 it('shows every year in a landscape full-screen timeline with week lines', async () => {
   await open();
-  await click('View Training timeline full screen in landscape');
+  const toggle = button('View Training timeline full screen in landscape');
+  expect(toggle.textContent).toBe('');
+  await click(toggle);
   const viewer = document.querySelector<HTMLDialogElement>('dialog.landscape-chart-modal')!;
   expect(viewer.open).toBe(true);
   expect(
     [...viewer.querySelectorAll('.training-block-full-year h4')].map((item) => item.textContent),
   ).toEqual(['2026', '2025']);
   expect(viewer.querySelectorAll('.training-block-year-week').length).toBeGreaterThan(80);
-  expect(
-    [...viewer.querySelectorAll('.training-block-year-segment')].some(
-      (item) => item.textContent === 'Hypertrophy 1',
-    ),
-  ).toBe(true);
   await click(
     [...viewer.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].find((item) =>
-      item.getAttribute('aria-label')?.startsWith('Strength 1,'),
+      item.getAttribute('aria-label')?.startsWith('Base,'),
     )!,
   );
   expect(viewer.querySelector('.training-block-full-detail')?.textContent).toBe(
-    'Strength 1Strength · 17 Mar – 13 Jul 2025 · 10 workouts',
+    'Base17 Mar – 13 Jul 2025 · 10 workouts',
   );
   await click('Exit full-screen Training timeline');
   expect(document.querySelector('dialog.landscape-chart-modal')).toBeNull();
   expect(document.querySelector('.training-block-years strong')?.textContent).toBe('2025');
   expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
-    'Strength 1',
+    'Base',
   );
 });
 
-it('saves a colour for each block type and applies it everywhere', async () => {
-  expect(kindColor('strength', { strength: 'red' })).toBe('#7fb0f0');
-  expect(kindColor('recovery', { recovery: '#F0A07F' })).toBe('#F0A07F');
-  const saved = { ...structuredClone(config), kind_colors: { strength: '#f0a07f' } };
-  const colors = vi.spyOn(api.trainingBlocks, 'colors').mockResolvedValue(saved);
+it('starts a named block with an optional colour', async () => {
+  const create = vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(structuredClone(config));
+  await open('new');
+  expect(document.querySelector('[aria-label="Type"]')).toBeNull();
+  expect(field('Block name').value).toBe('');
+  expect(
+    [...document.querySelectorAll('[aria-label="Starts"] [role="radio"]')].map(
+      (item) => item.firstChild?.textContent,
+    ),
+  ).toEqual(['Today', '1 January', 'Custom']);
+  expect(
+    [...document.querySelectorAll('[aria-label="Ends"] [role="radio"]')].map(
+      (item) => item.firstChild?.textContent,
+    ),
+  ).toContain('Custom');
+  expect(button('Automatic colour').getAttribute('aria-checked')).toBe('true');
+  await type(field('Block name'), 'Winter strength');
+  await click('#f0a07f');
+  expect(button('#f0a07f').getAttribute('aria-checked')).toBe('true');
+  await submit();
+  expect(create).toHaveBeenCalledWith({
+    name: 'Winter strength',
+    start_date: '2026-11-16',
+    planned_end_date: null,
+    color: '#f0a07f',
+  });
+});
+
+it('returns to the blocks from an edit or removal instead of closing', async () => {
+  const update = vi.spyOn(api.trainingBlocks, 'update').mockResolvedValue(structuredClone(config));
   await open();
-  const toggle = button('View Training timeline full screen in landscape');
-  expect(toggle.textContent).toBe('');
-  await click('Block colours');
-  expect(document.querySelector('dialog[open] h2')?.textContent).toContain('Block colours');
-  const swatch = (kind: string, color: string) =>
-    document.querySelector<HTMLButtonElement>(
-      `[aria-label="${kind} colour"] [aria-label^="${color}"]`,
-    )!;
-  expect(swatch('Strength', '#7fb0f0').getAttribute('aria-checked')).toBe('true');
-  await click(swatch('Strength', '#f0a07f'));
-  expect(colors).toHaveBeenCalledWith({ strength: '#f0a07f' });
-  expect(document.documentElement.style.getPropertyValue('--block-color-strength')).toBe('#f0a07f');
-  expect(swatch('Strength', '#f0a07f').getAttribute('aria-checked')).toBe('true');
-  colors.mockResolvedValue(structuredClone(config));
-  await click(swatch('Strength', '#7fb0f0'));
-  expect(colors).toHaveBeenLastCalledWith({});
-  expect(document.documentElement.style.getPropertyValue('--block-color-strength')).toBe('');
-  await click('Done');
-  expect(document.querySelector('.training-block-year-bar')).not.toBeNull();
+  await click('Edit Spring strength');
+  expect(title()).toBe('Edit block');
+  expect(button('#f0a07f').getAttribute('aria-checked')).toBe('true');
+  await click('Close Edit block');
+  expect(onClose).not.toHaveBeenCalled();
+  expect(title()).toBe('Training blocks');
+
+  await click('Edit Spring strength');
+  await click('Remove');
+  expect(title()).toBe('Remove training block?');
+  await click('Close Remove training block?');
+  expect(title()).toBe('Edit block');
+  await click('Automatic colour');
+  await submit();
+  expect(update).toHaveBeenCalledWith('Spring strength', {
+    name: 'Spring strength',
+    start_date: '2026-03-02',
+    planned_end_date: null,
+    color: null,
+  });
+  expect(title()).toBe('Training blocks');
+
+  await click('Close Training blocks');
+  expect(onClose).toHaveBeenCalledOnce();
 });

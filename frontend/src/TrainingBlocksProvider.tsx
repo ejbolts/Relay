@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from './api';
 import { localDate } from './utils';
 import { blockOn } from './trainingBlocks';
-import { BLOCK_KINDS, kindColor } from './blockKinds';
 import { TrainingBlocksContext } from './trainingBlocksContext';
 import type { TrainingBlocks } from './types';
 
@@ -40,16 +39,6 @@ export function TrainingBlocksProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('training-data-refreshed', retry);
     };
   }, [retry]);
-  // Block type colours apply app-wide, including the landscape timeline outside this tree.
-  const colors = config.kind_colors;
-  useEffect(() => {
-    const root = document.documentElement.style;
-    for (const kind of BLOCK_KINDS) {
-      if (colors?.[kind]) root.setProperty(`--block-color-${kind}`, kindColor(kind, colors));
-      else root.removeProperty(`--block-color-${kind}`);
-    }
-    return () => BLOCK_KINDS.forEach((kind) => root.removeProperty(`--block-color-${kind}`));
-  }, [colors]);
   const block =
     selection === 'current'
       ? blockOn(config.blocks, localDate())

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from datetime import date
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,10 +20,6 @@ from .training_metrics import get_setting, set_setting
 
 KEY = "training_blocks"
 
-BlockKind = Literal["strength", "hypertrophy", "recovery", "deload"]
-# Hex colours the account chose for block types; a missing type keeps the app's default.
-KindColors = dict[BlockKind, Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]]
-
 
 class BlockInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -33,16 +29,9 @@ class BlockInput(BaseModel):
     # A lighter recovery block. Its summary has no comparison and later blocks compare with the
     # last regular block instead. Older apps omit it, so updates keep the saved value.
     deload: bool = False
-    # The block's type, which colours and numbers it. Older apps omit it, and blocks saved
-    # before types existed have none; updates keep the saved value when it is omitted.
-    kind: BlockKind | None = None
-    # What a recovery block rehabilitates, such as "Left shoulder".
-    focus: str | None = Field(default=None, max_length=60)
-
-    @field_validator("focus")
-    @classmethod
-    def clean_focus(cls, value: str | None) -> str | None:
-        return (value or "").strip() or None
+    # The block's colour on timelines, as #rrggbb; none uses the app's palette. Older apps omit
+    # it, so updates keep the saved value.
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
 
     @field_validator("name")
     @classmethod
@@ -65,11 +54,6 @@ class TrainingBlock(BlockInput):
 
 class TrainingBlocks(BaseModel):
     blocks: list[TrainingBlock] = Field(default_factory=list)
-    kind_colors: KindColors = Field(default_factory=dict)
-
-
-class KindColorsInput(BaseModel):
-    kind_colors: KindColors
 
 
 class TrainingBlockRead(TrainingBlock):
@@ -80,7 +64,6 @@ class TrainingBlocksRead(BaseModel):
     """Response-only view: counts are derived on read and never saved with the boundaries."""
 
     blocks: list[TrainingBlockRead]
-    kind_colors: KindColors = Field(default_factory=dict)
     earlier_workout_count: int = 0
     history_start: date | None = None
 
@@ -92,7 +75,7 @@ def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
     blocks = sorted(config.blocks, key=lambda block: block.start_date)
     for index, block in enumerate(blocks):
         block.end_date = blocks[index + 1].start_date if index + 1 < len(blocks) else None
-    return TrainingBlocks(blocks=blocks, kind_colors=config.kind_colors)
+    return TrainingBlocks(blocks=blocks)
 
 
 def block_on(config: TrainingBlocks, day: date) -> TrainingBlock | None:
@@ -114,7 +97,6 @@ def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBl
             TrainingBlockRead(**block.model_dump(), workout_count=counts[index + 1])
             for index, block in enumerate(config.blocks)
         ],
-        kind_colors=config.kind_colors,
         earlier_workout_count=counts[0],
         history_start=min((day for day, _ in rows), default=None),
     )
@@ -149,19 +131,7 @@ def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> Train
         raise HTTPException(422, "You can save up to 200 training blocks.")
     if any(block.start_date == payload.start_date for block in config.blocks):
         raise HTTPException(422, "A training block already starts on that date.")
-    block = TrainingBlock(id=str(uuid4()), **payload.model_dump())
-    if payload.kind:
-        block.deload = payload.kind == "deload"
-    config.blocks.append(block)
-    return save_blocks(db, user.id, config)
-
-
-@router.put("/colors", response_model=TrainingBlocksRead)
-def update_kind_colors(
-    payload: KindColorsInput, db: DbSession, user: CurrentUser
-) -> TrainingBlocksRead:
-    config = training_blocks(db, user.id)
-    config.kind_colors = payload.kind_colors
+    config.blocks.append(TrainingBlock(id=str(uuid4()), **payload.model_dump()))
     return save_blocks(db, user.id, config)
 
 
@@ -181,12 +151,8 @@ def update_block(
     block.planned_end_date = payload.planned_end_date
     if "deload" in payload.model_fields_set:
         block.deload = payload.deload
-    if "kind" in payload.model_fields_set:
-        block.kind = payload.kind
-        if payload.kind:
-            block.deload = payload.kind == "deload"
-    if "focus" in payload.model_fields_set:
-        block.focus = payload.focus
+    if "color" in payload.model_fields_set:
+        block.color = payload.color
     return save_blocks(db, user.id, config)
 
 

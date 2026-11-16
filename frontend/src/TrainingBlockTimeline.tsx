@@ -1,4 +1,4 @@
-import { blockKind } from './blockKinds';
+import { validBlockColor } from './blockColors';
 import { MONTHS } from './trainingBlocks';
 import './trainingBlockYear.css';
 import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
@@ -58,22 +58,22 @@ export function BlockTimeline({
       >
         {segments.map((item) => {
           const index = config.blocks.findIndex((block) => block.id === item.id);
-          // Typed blocks share the training blocks dialog's colours; untyped ones keep a tone.
-          const kind = index >= 0 ? blockKind(config.blocks[index]) : null;
           const tone =
             item.id === 'earlier'
               ? 'earlier'
-              : [
-                  item.id === currentId ? 'current' : '',
-                  kind ? `kind-${kind}` : item.id === currentId ? '' : `tone-${index % TONES}`,
-                ]
-                  .filter(Boolean)
-                  .join(' ');
+              : item.id === currentId
+                ? 'current'
+                : `tone-${index % TONES}`;
+          // A block's chosen colour replaces its tone; the current block keeps an outline.
+          const color = index >= 0 ? validBlockColor(config.blocks[index].color) : null;
           return (
             <span
               key={item.id}
-              className={`training-block-segment ${tone}`}
-              style={{ flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0` }}
+              className={`training-block-segment ${tone}${color ? ' custom' : ''}`}
+              style={{
+                flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0`,
+                ...(color ? { background: color } : {}),
+              }}
               title={item.name}
             >
               {item.id === 'earlier' ? (hidden ? 'Earlier' : 'Before') : item.name}

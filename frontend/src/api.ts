@@ -1,6 +1,6 @@
 import type { BodySizeLog } from './bodySizes';
 import type { ActiveWorkoutDraft } from './workoutDraft';
-import type { BlockKind, NotificationReadReference } from './types';
+import type { NotificationReadReference } from './types';
 import type {
   SharedWorkoutFilters,
   SharedWorkoutFilterOptions,
@@ -908,12 +908,6 @@ export const api = {
       }),
     summary: (id: string) =>
       request<TrainingBlockSummary>(`/api/training-blocks/${encodeURIComponent(id)}/summary`),
-    colors: (kindColors: Partial<Record<BlockKind, string>>) =>
-      request<TrainingBlocks>('/api/training-blocks/colors', {
-        method: 'PUT',
-        headers: jsonHeaders,
-        body: JSON.stringify({ kind_colors: kindColors }),
-      }),
   },
   listPersonalRecords: (params?: { exerciseId?: string; workoutId?: string }) => {
     const query = new URLSearchParams();

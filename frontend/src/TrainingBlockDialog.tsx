@@ -7,12 +7,12 @@ import { blockDay, blockOn, weeksEnd } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { addDays } from './trainingSummary';
 import { localDate } from './utils';
-import type { BlockKind, TrainingBlock, TrainingBlocks } from './types';
-import { blockKind, suggestedBlockName } from './blockKinds';
-import { BlockColoursView, BlockKindFields, TrainingBlockYearView } from './TrainingBlockYear';
+import type { TrainingBlock, TrainingBlocks } from './types';
+import { blockColor, validBlockColor } from './blockColors';
+import { BlockColorField, TrainingBlockYearView } from './TrainingBlockYear';
 import './trainingBlocks.css';
 
-type View = 'blocks' | 'form' | 'remove' | 'colours';
+type View = 'blocks' | 'form' | 'remove';
 /** Where the dialog opens: the blocks overview, or straight into a new block. */
 export type TrainingBlockDialogStart = 'blocks' | 'new';
 type StartPreset = 'today' | 'january' | 'custom';
@@ -22,12 +22,6 @@ function planFor(start: string, end: string | null | undefined): PlanPreset {
   if (!end) return 'none';
   if (end === weeksEnd(start, 8)) return '8';
   return end === weeksEnd(start, 12) ? '12' : 'custom';
-}
-
-/** New blocks start as the type of the block in progress, or strength. */
-function defaultKind(blocks: TrainingBlock[]): BlockKind {
-  const current = blockOn(blocks, localDate());
-  return current && blockKind(current) === 'hypertrophy' ? 'hypertrophy' : 'strength';
 }
 
 function presetFor(start: string): StartPreset {
@@ -84,12 +78,9 @@ export function TrainingBlockDialog({
   const [view, setView] = useState<View>(opening === 'new' ? 'form' : 'blocks');
   const [formBack, setFormBack] = useState<View | null>(null);
   const [editing, setEditing] = useState<TrainingBlock | null>(null);
-  // Null until the name is typed; until then it follows the type, start date and injury.
-  const [customName, setCustomName] = useState<string | null>(null);
-  const [kind, setKind] = useState<BlockKind | null>(() =>
-    opening === 'new' ? defaultKind(config.blocks) : null,
-  );
-  const [focus, setFocus] = useState('');
+  const [name, setName] = useState('');
+  // Null uses the app's palette.
+  const [color, setColor] = useState<string | null>(null);
   const [start, setStart] = useState(localDate());
   const [preset, setPreset] = useState<StartPreset>('today');
   const [plan, setPlan] = useState<PlanPreset>('none');
@@ -100,16 +91,19 @@ export function TrainingBlockDialog({
   const today = localDate();
   const january = `${today.slice(0, 4)}-01-01`;
 
+  // Closing a form or confirmation returns to the blocks it came from; the list closes the dialog.
   const close = () => {
-    if (!busyRef.current) onClose();
+    if (busyRef.current) return;
+    setError(null);
+    if (view === 'remove') setView('form');
+    else if (view === 'form' && formBack) setView(formBack);
+    else onClose();
   };
   const startForm = (item: TrainingBlock | null, back: View | null) => {
     setEditing(item);
     const date = item?.start_date ?? today;
-    const itemKind = item ? blockKind(item) : defaultKind(config.blocks);
-    setKind(itemKind);
-    setFocus(item?.focus ?? '');
-    setCustomName(item?.name ?? null);
+    setName(item?.name ?? '');
+    setColor(validBlockColor(item?.color));
     setStart(date);
     setPreset(presetFor(date));
     setPlan(planFor(date, item?.planned_end_date));
@@ -146,8 +140,7 @@ export function TrainingBlockDialog({
       name: name.trim(),
       start_date: start,
       planned_end_date: plannedEnd,
-      kind,
-      focus: kind === 'recovery' ? focus.trim() || null : null,
+      color,
     };
     if (editing) {
       void save(
@@ -168,8 +161,10 @@ export function TrainingBlockDialog({
     );
   }
 
-  const name =
-    customName ?? (kind ? suggestedBlockName(config.blocks, kind, start, focus, editing?.id) : '');
+  // The colour a block gets without a choice: its tone, or the accent for a new current block.
+  const automaticColor = editing
+    ? blockColor(config.blocks, { ...editing, color: null }, today)
+    : 'var(--p-accent-text)';
   const plannedEnd =
     plan === 'none' ? null : plan === 'custom' ? planEnd : weeksEnd(start, Number(plan));
   const dialogTitle =
@@ -179,9 +174,7 @@ export function TrainingBlockDialog({
         : 'New training block'
       : view === 'remove'
         ? 'Remove training block?'
-        : view === 'colours'
-          ? 'Block colours'
-          : 'Training blocks';
+        : 'Training blocks';
 
   return (
     <PopupDialog
@@ -207,30 +200,29 @@ export function TrainingBlockDialog({
           today={today}
           busy={busy}
           onEdit={(item) => startForm(item, 'blocks')}
-          onColours={() => setView('colours')}
         />
       )}
-      {view === 'colours' && <BlockColoursView onDone={() => setView('blocks')} />}
       {view === 'form' && (
         <form onSubmit={submit} className="training-block-form">
           <fieldset disabled={busy}>
-            <BlockKindFields kind={kind} focus={focus} onKind={setKind} onFocus={setFocus} />
             <label>
               Block name
               <input
                 required
                 maxLength={80}
                 value={name}
-                onChange={(event) => setCustomName(event.target.value)}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Winter strength"
               />
             </label>
+            <BlockColorField value={color} automatic={automaticColor} onChange={setColor} />
             <div className="training-block-starts" role="radiogroup" aria-label="Starts">
               <span aria-hidden="true">Starts</span>
               {(
                 [
                   ['today', 'Today', blockDay(today, false), today],
                   ['january', '1 January', january.slice(0, 4), january],
-                  ['custom', 'Pick date', preset === 'custom' ? blockDay(start, true) : '', start],
+                  ['custom', 'Custom', preset === 'custom' ? blockDay(start, true) : '', start],
                 ] as const
               ).map(([value, label, detail, date]) => (
                 <button
@@ -267,7 +259,7 @@ export function TrainingBlockDialog({
                   ['none', 'No end', ''],
                   ['8', '8 weeks', blockDay(weeksEnd(start, 8), false)],
                   ['12', '12 weeks', blockDay(weeksEnd(start, 12), false)],
-                  ['custom', 'Pick date', plan === 'custom' ? blockDay(planEnd, false) : ''],
+                  ['custom', 'Custom', plan === 'custom' ? blockDay(planEnd, false) : ''],
                 ] as const
               ).map(([value, label, detail]) => (
                 <button
