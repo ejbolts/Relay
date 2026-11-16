@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { api } from './api';
 import { BLOCK_COLOR_CHOICES, blockColor } from './blockColors';
 import { Icon } from './Icon';
@@ -75,116 +75,6 @@ function segments(config: TrainingBlocks, today: string): Segment[] {
   return list;
 }
 
-/** Mondays in the year, for the week lines of the detailed bar. */
-function mondays(year: number) {
-  const first = `${year}-01-01`;
-  const offset = (8 - parseLocalDate(first).getDay()) % 7;
-  const days: string[] = [];
-  for (let day = addDays(first, offset); day < `${year + 1}-01-01`; day = addDays(day, 7)) {
-    if (day.slice(8) !== '01') days.push(day);
-  }
-  return days;
-}
-
-/**
- * One calendar year with a dotted line at each month and each block in its colour. With
- * `onSelect`, each block is a button; the detailed variant marks every week too.
- */
-export function BlockYearBar({
-  config,
-  year,
-  today,
-  selectedId = null,
-  onSelect,
-  detail = false,
-}: {
-  config: TrainingBlocks;
-  year: number;
-  today: string;
-  selectedId?: string | null;
-  onSelect?: (blockId: string) => void;
-  detail?: boolean;
-}) {
-  const start = `${year}-01-01`;
-  const end = `${year + 1}-01-01`;
-  const total = daysBetween(start, end);
-  const at = (day: string) => (Math.min(total, Math.max(0, daysBetween(start, day))) / total) * 100;
-  const shown = segments(config, today).filter((item) => item.end > start && item.start < end);
-  const actual = shown.filter((item) => !item.planned && item.color);
-  const summary = actual.length
-    ? `${year}: ${actual.map((item) => item.name).join(', ')}`
-    : `${year}: no training blocks`;
-  return (
-    <div className={`training-block-year${detail ? ' detail' : ''}`}>
-      <div
-        className="training-block-year-bar"
-        role={onSelect ? 'group' : 'img'}
-        aria-label={onSelect ? `${year} timeline` : summary}
-      >
-        {detail &&
-          mondays(year).map((day) => (
-            <span key={day} className="training-block-year-week" style={{ left: `${at(day)}%` }} />
-          ))}
-        {MONTHS.slice(1).map((month, index) => (
-          <span
-            key={month}
-            className="training-block-year-month"
-            style={{ left: `${at(`${year}-${String(index + 2).padStart(2, '0')}-01`)}%` }}
-          />
-        ))}
-        {shown.map((item) => {
-          const left = at(item.start);
-          const width = at(item.end) - left;
-          const label = !item.planned && width >= (detail ? 4 : 7) ? item.name : '';
-          const className = `training-block-year-segment${item.color ? '' : ' earlier'}${item.planned ? ' planned' : ''}${item.blockId && item.blockId === selectedId ? ' selected' : ''}`;
-          // Inset each block by a pixel so neighbours and the bar's rounded ends never clip it.
-          const style = {
-            ...(item.color ? colorStyle(item.color) : {}),
-            left: `calc(${left}% + 1px)`,
-            width: `max(3px, calc(${width}% - 2px))`,
-          };
-          if (onSelect && item.blockId) {
-            const blockId = item.blockId;
-            const block = config.blocks.find((entry) => entry.id === blockId);
-            return (
-              <button
-                key={item.key}
-                type="button"
-                className={className}
-                style={style}
-                tabIndex={item.planned ? -1 : undefined}
-                aria-hidden={item.planned ? true : undefined}
-                aria-pressed={item.planned ? undefined : blockId === selectedId}
-                aria-label={
-                  block
-                    ? `${block.name}, ${blockRange(block.start_date, block.end_date)}`
-                    : undefined
-                }
-                onClick={() => onSelect(blockId)}
-              >
-                {label}
-              </button>
-            );
-          }
-          return (
-            <span key={item.key} className={className} style={style} title={item.name}>
-              {label}
-            </span>
-          );
-        })}
-        {today >= start && today < end && (
-          <span className="training-block-year-today" style={{ left: `${at(today)}%` }} />
-        )}
-      </div>
-      <div className="training-block-year-axis" aria-hidden="true">
-        {MONTHS.map((month) => (
-          <span key={month}>{detail ? month : month.charAt(0)}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function firstYear(config: TrainingBlocks, today: string) {
   return Number(
     [config.history_start, config.blocks[0]?.start_date]
@@ -201,8 +91,279 @@ function lastYear(config: TrainingBlocks, today: string) {
   );
 }
 
-/** Every year of blocks for the landscape view, newest first, with the chosen block's details. */
-function BlockTimelineYears({
+/** Width of the timeline's scroller, kept current as it resizes. */
+function useScrollerWidth(ref: React.RefObject<HTMLDivElement | null>) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  // jsdom and the first frame have no layout; a phone-sized width keeps the maths usable.
+  return width || 320;
+}
+
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+
+/**
+ * Every block on one continuous timeline. Swipe to scroll through the years, and pinch (or
+ * Ctrl + wheel, or + and -) to zoom; week lines appear once weeks are wide enough to read.
+ */
+export function ScrollTimeline({
+  config,
+  today,
+  detail = false,
+  selectedId = null,
+  onSelect,
+  onCentreYear,
+  scrollRequest = null,
+}: {
+  config: TrainingBlocks;
+  today: string;
+  detail?: boolean;
+  selectedId?: string | null;
+  onSelect?: (blockId: string) => void;
+  /** Reports the year in the middle of the view as the timeline scrolls. */
+  onCentreYear?: (year: number) => void;
+  /** Scrolls so the date is at the left edge; a new key repeats the request. */
+  scrollRequest?: { date: string; key: number } | null;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const width = useScrollerWidth(scroller);
+  const first = firstYear(config, today);
+  const last = lastYear(config, today);
+  const start = `${first}-01-01`;
+  const end = `${last + 1}-01-01`;
+  const total = daysBetween(start, end);
+  // Zoom is pixels per day: from the whole history in view to about two weeks across.
+  const minZoom = width / total;
+  const maxZoom = width / 14;
+  const [chosenZoom, setChosenZoom] = useState<number | null>(null);
+  const zoom = clamp(chosenZoom ?? width / 365, minZoom, maxZoom);
+  const x = (day: string) => clamp(daysBetween(start, day), 0, total) * zoom;
+  const pendingScroll = useRef<number | null>(null);
+  const reportedYear = useRef<number | null>(null);
+  const placed = useRef(false);
+  const frame = useRef(0);
+
+  // Zoom about a point on screen, keeping the date under it in place.
+  const zoomAt = (next: number, focal = width / 2) => {
+    const element = scroller.current;
+    const scrollLeft = element?.scrollLeft ?? 0;
+    const target = clamp(next, minZoom, maxZoom);
+    pendingScroll.current = ((scrollLeft + focal) / zoom) * target - focal;
+    setChosenZoom(target);
+  };
+  const latest = useRef({ zoomAt, zoom });
+  useEffect(() => {
+    latest.current = { zoomAt, zoom };
+  });
+
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    if (pendingScroll.current !== null) {
+      element.scrollLeft = pendingScroll.current;
+      pendingScroll.current = null;
+    } else if (!placed.current && element.clientWidth) {
+      // Open with today a little right of centre, so recent blocks lead into it.
+      placed.current = true;
+      element.scrollLeft = x(today) - element.clientWidth * 0.6;
+    }
+  });
+
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element || !scrollRequest) return;
+    const left = x(scrollRequest.date);
+    if (element.scrollTo) element.scrollTo({ left, behavior: 'smooth' });
+    else element.scrollLeft = left;
+    // Only a new request scrolls; zooming keeps the reader's place instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollRequest?.key]);
+
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    let pinch: { distance: number; zoom: number } | null = null;
+    const spread = (touches: TouchList) =>
+      Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 2)
+        pinch = { distance: spread(event.touches), zoom: latest.current.zoom };
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!pinch || event.touches.length !== 2) return;
+      event.preventDefault();
+      const middle = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      latest.current.zoomAt(
+        pinch.zoom * (spread(event.touches) / Math.max(1, pinch.distance)),
+        middle - element.getBoundingClientRect().left,
+      );
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (event.touches.length < 2) pinch = null;
+    };
+    // Trackpad pinches arrive as Ctrl + wheel.
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      latest.current.zoomAt(
+        latest.current.zoom * Math.exp(-event.deltaY * 0.01),
+        event.clientX - element.getBoundingClientRect().left,
+      );
+    };
+    // Safari's own pinch would zoom the page instead of the timeline.
+    const stopGesture = (event: Event) => event.preventDefault();
+    element.addEventListener('touchstart', onTouchStart, { passive: true });
+    element.addEventListener('touchmove', onTouchMove, { passive: false });
+    element.addEventListener('touchend', onTouchEnd);
+    element.addEventListener('touchcancel', onTouchEnd);
+    element.addEventListener('wheel', onWheel, { passive: false });
+    element.addEventListener('gesturestart', stopGesture);
+    return () => {
+      element.removeEventListener('touchstart', onTouchStart);
+      element.removeEventListener('touchmove', onTouchMove);
+      element.removeEventListener('touchend', onTouchEnd);
+      element.removeEventListener('touchcancel', onTouchEnd);
+      element.removeEventListener('wheel', onWheel);
+      element.removeEventListener('gesturestart', stopGesture);
+    };
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+
+  const reportCentre = () => {
+    if (!onCentreYear) return;
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      const element = scroller.current;
+      if (!element) return;
+      const centre = addDays(
+        start,
+        Math.floor((element.scrollLeft + element.clientWidth / 2) / zoom),
+      );
+      const year = Number(centre.slice(0, 4));
+      if (year !== reportedYear.current && year >= first && year <= last) {
+        reportedYear.current = year;
+        onCentreYear(year);
+      }
+    });
+  };
+
+  // Gridlines and labels: years always, months when there is room, weeks once readable.
+  const monthWidth = zoom * 30.4;
+  const lines: { key: string; left: number; kind: 'year' | 'month' | 'week' }[] = [];
+  const labels: { key: string; left: number; text: string; year: boolean }[] = [];
+  for (let year = first; year <= last; year += 1) {
+    for (let month = 0; month < 12; month += 1) {
+      const day = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      if (month === 0) {
+        if (year > first) lines.push({ key: day, left: x(day), kind: 'year' });
+        labels.push({ key: day, left: x(day), text: String(year), year: true });
+      } else if (monthWidth >= 6) {
+        lines.push({ key: day, left: x(day), kind: 'month' });
+        // Initials leave no room after a year label, so February gives way to the year.
+        if (monthWidth >= 16 && (monthWidth >= 34 || month > 1))
+          labels.push({
+            key: day,
+            left: x(day),
+            text: monthWidth >= 34 ? MONTHS[month] : MONTHS[month].charAt(0),
+            year: false,
+          });
+      }
+    }
+  }
+  if (zoom * 7 >= 12) {
+    const offset = (8 - parseLocalDate(start).getDay()) % 7;
+    for (let day = addDays(start, offset); day < end; day = addDays(day, 7)) {
+      if (day.slice(8) !== '01') lines.push({ key: `w${day}`, left: x(day), kind: 'week' });
+    }
+  }
+  const shown = segments(config, today);
+  return (
+    <div
+      ref={scroller}
+      className={`training-block-scroll${detail ? ' detail' : ''}`}
+      role="group"
+      aria-label="Training timeline"
+      tabIndex={0}
+      onScroll={reportCentre}
+      onKeyDown={(event) => {
+        if (event.key === '+' || event.key === '=') zoomAt(zoom * 1.5);
+        else if (event.key === '-' || event.key === '_') zoomAt(zoom / 1.5);
+        else return;
+        event.preventDefault();
+      }}
+    >
+      <div className="training-block-scroll-track" style={{ width: total * zoom }}>
+        <div className="training-block-year-bar">
+          {lines.map((line) => (
+            <span
+              key={line.key}
+              className={`training-block-scroll-line ${line.kind}`}
+              style={{ left: line.left }}
+            />
+          ))}
+          {shown.map((item) => {
+            const left = x(item.start);
+            const span = x(item.end) - left;
+            const className = `training-block-year-segment${item.color ? '' : ' earlier'}${item.planned ? ' planned' : ''}${item.blockId && item.blockId === selectedId ? ' selected' : ''}`;
+            // Inset each block by a pixel so neighbours and the bar's ends never clip it.
+            const style = {
+              ...(item.color ? colorStyle(item.color) : {}),
+              left: left + 1,
+              width: Math.max(3, span - 2),
+            };
+            const label = !item.planned && span >= 36 ? item.name : '';
+            if (onSelect && item.blockId) {
+              const blockId = item.blockId;
+              const block = config.blocks.find((entry) => entry.id === blockId);
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={className}
+                  style={style}
+                  tabIndex={item.planned ? -1 : undefined}
+                  aria-hidden={item.planned ? true : undefined}
+                  aria-pressed={item.planned ? undefined : blockId === selectedId}
+                  aria-label={
+                    block
+                      ? `${block.name}, ${blockRange(block.start_date, block.end_date)}`
+                      : undefined
+                  }
+                  onClick={() => onSelect(blockId)}
+                >
+                  {label}
+                </button>
+              );
+            }
+            return (
+              <span key={item.key} className={className} style={style} title={item.name}>
+                {label}
+              </span>
+            );
+          })}
+          {today >= start && today < end && (
+            <span className="training-block-year-today" style={{ left: x(today) }} />
+          )}
+        </div>
+        <div className="training-block-scroll-axis" aria-hidden="true">
+          {labels.map((label) => (
+            <span key={label.key} className={label.year ? 'year' : ''} style={{ left: label.left }}>
+              {label.text}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The landscape view: the timeline at full size, with the chosen block's details. */
+function BlockTimelineFull({
   config,
   today,
   selectedId,
@@ -213,27 +374,16 @@ function BlockTimelineYears({
   selectedId: string | null;
   onSelect: (blockId: string) => void;
 }) {
-  const first = firstYear(config, today);
-  const last = lastYear(config, today);
-  const years = Array.from({ length: last - first + 1 }, (_, index) => last - index);
   const selected = config.blocks.find((block) => block.id === selectedId);
   return (
     <div className="training-block-full">
-      <div className="training-block-full-years">
-        {years.map((year) => (
-          <section key={year} className="training-block-full-year" aria-label={String(year)}>
-            <h4>{year}</h4>
-            <BlockYearBar
-              config={config}
-              year={year}
-              today={today}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              detail
-            />
-          </section>
-        ))}
-      </div>
+      <ScrollTimeline
+        config={config}
+        today={today}
+        detail
+        selectedId={selectedId}
+        onSelect={onSelect}
+      />
       <p className="training-block-full-detail" aria-live="polite">
         {selected && (
           <>
@@ -369,7 +519,13 @@ export function TrainingBlockYearView({
   const last = lastYear(config, today);
   const [year, setYear] = useState(thisYear);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [scrollRequest, setScrollRequest] = useState<{ date: string; key: number } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // The arrows move the timeline to a year; scrolling it moves the year and list along.
+  const goToYear = (next: number) => {
+    setYear(next);
+    setScrollRequest((request) => ({ date: `${next}-01-01`, key: (request?.key ?? 0) + 1 }));
+  };
   const current = blockOn(config.blocks, today);
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year + 1}-01-01`;
@@ -404,7 +560,7 @@ export function TrainingBlockYearView({
         type="button"
         aria-label="Previous year"
         disabled={year <= first}
-        onClick={() => setYear(year - 1)}
+        onClick={() => goToYear(year - 1)}
       >
         <Icon name="chevron-left" />
       </button>
@@ -418,7 +574,7 @@ export function TrainingBlockYearView({
         type="button"
         aria-label="Next year"
         disabled={year >= last}
-        onClick={() => setYear(year + 1)}
+        onClick={() => goToYear(year + 1)}
       >
         <Icon name="chevron-right" />
       </button>
@@ -435,19 +591,20 @@ export function TrainingBlockYearView({
       >
         {(expanded) =>
           expanded ? (
-            <BlockTimelineYears
+            <BlockTimelineFull
               config={config}
               today={today}
               selectedId={selected}
               onSelect={choose}
             />
           ) : (
-            <BlockYearBar
+            <ScrollTimeline
               config={config}
-              year={year}
               today={today}
               selectedId={selected}
               onSelect={choose}
+              onCentreYear={setYear}
+              scrollRequest={scrollRequest}
             />
           )
         }

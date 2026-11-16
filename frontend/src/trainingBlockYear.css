@@ -107,8 +107,30 @@ button.training-block-year-segment {
     color-mix(in srgb, var(--block-color) 25%, transparent) 5px 10px
   );
 }
-.training-block-year-month,
-.training-block-year-week {
+/* Scrollable, zoomable timeline: native sideways scrolling, pinches handled in code. */
+.training-block-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 9px;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.training-block-scroll::-webkit-scrollbar {
+  display: none;
+}
+.training-block-scroll:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+.training-block-scroll-track {
+  position: relative;
+  min-width: 100%;
+}
+.training-block-scroll .training-block-year-bar {
+  border-radius: 9px;
+}
+.training-block-scroll-line {
   position: absolute;
   z-index: 2;
   top: 0;
@@ -116,24 +138,42 @@ button.training-block-year-segment {
   border-left: 1.5px dotted color-mix(in srgb, var(--p-ink) 45%, transparent);
   pointer-events: none;
 }
-.training-block-year-week {
+.training-block-scroll-line.week {
   border-left-width: 1px;
   border-left-color: color-mix(in srgb, var(--p-ink) 22%, transparent);
 }
-.training-block-year.detail .training-block-year-month {
-  border-left: 1.5px dashed color-mix(in srgb, var(--p-ink) 60%, transparent);
+.training-block-scroll-line.year {
+  border-left: 1.5px dashed color-mix(in srgb, var(--p-ink) 75%, transparent);
 }
-.training-block-year.detail .training-block-year-bar {
-  height: 46px;
+.training-block-scroll-axis {
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
+  color: var(--p-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
-.training-block-year.detail .training-block-year-segment {
-  padding: 0 6px;
-  font-size: 0.72rem;
-  line-height: 42px;
+.training-block-scroll-axis span {
+  position: absolute;
+  top: 0;
+  padding-left: 3px;
+}
+.training-block-scroll-axis span.year {
+  color: var(--p-ink);
+  font-weight: 800;
+}
+.training-block-scroll.detail .training-block-year-bar {
+  height: 72px;
+}
+.training-block-scroll.detail .training-block-year-segment {
+  padding: 0 8px;
+  font-size: 0.78rem;
+  line-height: 68px;
   text-align: left;
 }
-.training-block-year.detail .training-block-year-axis {
-  font-size: 0.68rem;
+.training-block-scroll.detail .training-block-scroll-axis {
+  font-size: 0.72rem;
 }
 .training-block-year-today {
   position: absolute;
@@ -144,15 +184,6 @@ button.training-block-year-segment {
   margin-left: -1px;
   background: var(--p-danger);
   pointer-events: none;
-}
-.training-block-year-axis {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  margin: 4px 0 0;
-  color: var(--p-muted);
-  font-size: 0.64rem;
-  font-weight: 600;
-  text-align: center;
 }
 .training-block-now-section h3 {
   margin: 16px 0 8px;
@@ -335,28 +366,10 @@ button.training-block-year-segment {
 .training-block-full {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 8px;
   height: 100%;
   min-height: 0;
-}
-.training-block-full-years {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  overflow-y: auto;
-  padding: 4px 2px;
-}
-.training-block-full-year {
-  display: grid;
-  grid-template-columns: 3rem minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-}
-.training-block-full-year h4 {
-  margin: 0;
-  padding-top: 14px;
-  color: var(--p-ink);
-  font-size: 0.85rem;
 }
 .training-block-full-detail {
   display: flex;

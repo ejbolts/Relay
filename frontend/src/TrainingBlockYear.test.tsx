@@ -54,8 +54,19 @@ const cardNames = () =>
     item.firstChild?.textContent?.trim(),
   );
 const segments = () => [
-  ...document.querySelectorAll<HTMLButtonElement>('.training-block-year-bar button[aria-pressed]'),
+  ...document.querySelectorAll<HTMLButtonElement>(
+    '.training-block-scroll:not(.detail) .training-block-year-bar button[aria-pressed]',
+  ),
 ];
+const scroller = () => document.querySelector<HTMLElement>('.training-block-scroll')!;
+const trackWidth = () =>
+  parseFloat(document.querySelector<HTMLElement>('.training-block-scroll-track')!.style.width);
+const fire = (target: HTMLElement, type: string, init: Record<string, unknown>) =>
+  act(async () => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, init);
+    target.dispatchEvent(event);
+  });
 const segmentNames = () => segments().map((item) => item.getAttribute('aria-label')?.split(',')[0]);
 const segment = (name: string) =>
   segments().find((item) => item.getAttribute('aria-label')?.startsWith(`${name},`))!;
@@ -121,10 +132,11 @@ it('colours a block with its own choice, the accent while current, or a tone', (
   expect(blockColor(config.blocks, { ...config.blocks[3], color: 'red' }, today)).toBe('#6fb59a');
 });
 
-it('shows one year at a time with each block in its colour', async () => {
+it('shows every block on one timeline and lists the year in view', async () => {
   await open();
   expect(document.querySelector('.training-block-years')?.textContent).toContain('20264 blocks');
   expect(segmentNames()).toEqual([
+    'Base',
     'Shoulder rehab',
     'Spring strength',
     'Summer strength',
@@ -132,7 +144,10 @@ it('shows one year at a time with each block in its colour', async () => {
     'Peak',
   ]);
   expect(segment('Spring strength').style.getPropertyValue('--block-color')).toBe('#f0a07f');
-  expect(document.querySelectorAll('.training-block-year-month')).toHaveLength(11);
+  // Two years: a dashed line where 2026 starts and a dotted line for every other month.
+  expect(document.querySelectorAll('.training-block-scroll-line.year')).toHaveLength(1);
+  expect(document.querySelectorAll('.training-block-scroll-line.month')).toHaveLength(22);
+  expect(document.querySelectorAll('.training-block-scroll-line.week')).toHaveLength(0);
   expect(document.querySelector('.training-block-year-segment.planned')).not.toBeNull();
   expect(document.querySelector('[aria-label="Block type"]')).toBeNull();
   // A block belongs to the year it starts in, though the bar shows it running into this one.
@@ -176,17 +191,44 @@ it('highlights a block and its card when its part of the timeline is tapped', as
   expect(document.querySelector('.training-block-cards li.selected')).toBeNull();
 });
 
-it('shows every year in a landscape full-screen timeline with week lines', async () => {
+it('zooms the timeline with a pinch, Ctrl + wheel or the keyboard', async () => {
+  await open();
+  const start = trackWidth();
+  // Showing a year across a 320px view: weeks are too narrow for their own lines.
+  expect(start).toBeCloseTo((320 / 365) * 730, 0);
+  const wheel = new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, cancelable: true });
+  await act(async () => scroller().dispatchEvent(wheel));
+  expect(wheel.defaultPrevented).toBe(true);
+  expect(trackWidth()).toBeCloseTo(start * Math.E, 0);
+  expect(document.querySelectorAll('.training-block-scroll-line.week').length).toBeGreaterThan(90);
+
+  await act(async () => {
+    scroller().dispatchEvent(new KeyboardEvent('keydown', { key: '-', bubbles: true }));
+  });
+  expect(trackWidth()).toBeCloseTo((start * Math.E) / 1.5, 0);
+
+  const touch = (x: number) => ({ clientX: x, clientY: 0 });
+  await fire(scroller(), 'touchstart', { touches: [touch(100), touch(200)] });
+  await fire(scroller(), 'touchmove', { touches: [touch(50), touch(250)] });
+  expect(trackWidth()).toBeCloseTo(((start * Math.E) / 1.5) * 2, 0);
+  await fire(scroller(), 'touchend', { touches: [] });
+  // Zooming out stops once the whole history fits.
+  for (let step = 0; step < 6; step += 1) {
+    await act(async () => {
+      scroller().dispatchEvent(new KeyboardEvent('keydown', { key: '-', bubbles: true }));
+    });
+  }
+  expect(trackWidth()).toBeCloseTo(320, 0);
+});
+
+it('shows the timeline full screen in landscape with the tapped block', async () => {
   await open();
   const toggle = button('View Training timeline full screen in landscape');
   expect(toggle.textContent).toBe('');
   await click(toggle);
   const viewer = document.querySelector<HTMLDialogElement>('dialog.landscape-chart-modal')!;
   expect(viewer.open).toBe(true);
-  expect(
-    [...viewer.querySelectorAll('.training-block-full-year h4')].map((item) => item.textContent),
-  ).toEqual(['2026', '2025']);
-  expect(viewer.querySelectorAll('.training-block-year-week').length).toBeGreaterThan(80);
+  expect(viewer.querySelector('.training-block-scroll.detail')).not.toBeNull();
   await click(
     [...viewer.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].find((item) =>
       item.getAttribute('aria-label')?.startsWith('Base,'),
