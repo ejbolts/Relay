@@ -123,10 +123,10 @@ it('tints the Stained browser bar colour with the accent theme', () => {
   expect(browserThemeColour('dark', 'stained', 'blue')).toBe('#0c141f');
   expect(browserThemeColour('dark', 'stained', 'coral')).toBe('#151116');
 });
-it('defaults frosted glass to Medium and ignores unknown saved levels', () => {
-  expect(glassPreference()).toBe('medium');
+it('defaults frosted glass to Subtle and ignores unknown saved levels', () => {
+  expect(glassPreference()).toBe('subtle');
   localStorage.setItem('gym-logger-glass', 'opaque');
-  expect(glassPreference()).toBe('medium');
+  expect(glassPreference()).toBe('subtle');
 });
 it('saves a frosted glass level and marks the page with it', () => {
   expect(saveGlass('strong')).toBe(true);
@@ -196,7 +196,7 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   expect(darkStylePreference()).toBe('default');
   expect(lightStylePreference()).toBe('default');
   expect(sunRayPreference()).toBe('colour');
-  expect(glassPreference()).toBe('medium');
+  expect(glassPreference()).toBe('subtle');
   // Choices made after the reset stay put on later loads.
   saveSunRay('blank');
   saveColourMode('light');

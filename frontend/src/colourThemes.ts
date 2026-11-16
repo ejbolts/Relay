@@ -40,7 +40,7 @@ export const SET_TINT_LEVELS = [
 ] as const;
 export type SetTintId = (typeof SET_TINT_LEVELS)[number]['id'];
 export const DEFAULT_SET_TINT: SetTintId = 'medium';
-export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
+export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'subtle';
 /** The drifting light behind the app, in the accent colour, or none at all. */
 export const SUN_RAY_STYLES = [
   { id: 'colour', name: 'Sun ray' },
@@ -302,7 +302,7 @@ export function saveLightStyle(id: LightStyleId): boolean {
 
 /**
  * Once per device, moves existing appearance choices onto the default look (Dark, Default style,
- * Sun ray, Medium glass) while keeping the accent colour. Later choices are left alone.
+ * Sun ray, Subtle glass) while keeping the accent colour. Later choices are left alone.
  */
 export function resetAppearanceOnce(): void {
   try {
