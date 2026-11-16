@@ -1,3 +1,4 @@
+import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -66,6 +67,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
+  eyebrowLead,
   eyebrowAction,
   title,
   titleAction,
@@ -75,6 +77,8 @@ export function PageHeader({
   headingLevel = 1,
 }: {
   eyebrow?: string;
+  /** Leads the eyebrow line, before the eyebrow text. */
+  eyebrowLead?: ReactNode;
   /** Sits beside the eyebrow; the row keeps its height whether or not it renders. */
   eyebrowAction?: ReactNode;
   title: string;
@@ -89,8 +93,9 @@ export function PageHeader({
     <header className="page-header">
       <div>
         {eyebrow &&
-          (eyebrowAction ? (
+          (eyebrowAction || eyebrowLead ? (
             <div className="page-eyebrow-row">
+              {eyebrowLead}
               <p className="page-eyebrow">{eyebrow}</p>
               {eyebrowAction}
             </div>
@@ -635,6 +640,7 @@ export function TodayScreen({
           day: 'numeric',
           month: 'long',
         })}
+        eyebrowLead={<AppEditionBadge />}
         eyebrowAction={
           <HomeTips
             workouts={workouts}
