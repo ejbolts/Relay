@@ -30,51 +30,33 @@ function completedSets(movement: TrackedMovement) {
   return movement.sets.filter((item) => item.completed);
 }
 
-/** "3 sets", or the distance or time for a cardio exercise. */
-function movementResult(movement: TrackedMovement): string {
-  const completed = completedSets(movement);
-  if (movement.exercise.kind === 'cardio') {
-    const distance = completed.reduce((total, item) => total + (item.distance_km ?? 0), 0);
-    if (distance > 0) return `${Number(distance.toFixed(1))} km`;
-    const seconds = completed.reduce((total, item) => total + (item.duration_seconds ?? 0), 0);
-    if (seconds > 0) return formatMinutesDuration(Math.round(seconds / 60));
-  }
-  return `${completed.length} ${completed.length === 1 ? 'set' : 'sets'}`;
-}
-
 function FeedStats({ workout, records }: { workout: TrackedWorkout; records: number }) {
   const weightUnit = useWeightUnit();
   const session = friendSession(workout);
   const sets = workingSets(workout).length;
   const volume = workoutVolumeKg(workout);
-  const stats: Array<[string, string]> = [];
-  if (workout.duration_minutes)
-    stats.push(['Time', formatMinutesDuration(workout.duration_minutes)]);
+  // One line: each value carries its own unit, so none needs a label.
+  const stats: string[] = [];
+  if (workout.duration_minutes) stats.push(formatMinutesDuration(workout.duration_minutes));
   if (session.cardio) {
-    if (session.detail) stats.push(['Distance', session.detail]);
+    if (session.detail) stats.push(session.detail);
   } else {
-    if (sets) stats.push(['Sets', String(sets)]);
-    if (volume > 0) stats.push(['Volume', formatVolume(volume, weightUnit)]);
+    if (sets) stats.push(`${sets} ${sets === 1 ? 'set' : 'sets'}`);
+    if (volume > 0) stats.push(formatVolume(volume, weightUnit));
   }
   if (!stats.length && !records) return null;
   return (
-    <dl className="feed-stats">
-      {stats.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd className="num">{value}</dd>
-        </div>
+    <ul className="feed-stats num" aria-label="Summary">
+      {stats.map((value) => (
+        <li key={value}>{value}</li>
       ))}
       {records > 0 && (
-        <div className="feed-stat-records">
-          <dt>Records</dt>
-          <dd className="num">
-            <Icon name="trophy" />
-            {records} {records === 1 ? 'PR' : 'PRs'}
-          </dd>
-        </div>
+        <li className="feed-stat-records">
+          <Icon name="trophy" />
+          {records} {records === 1 ? 'PR' : 'PRs'}
+        </li>
       )}
-    </dl>
+    </ul>
   );
 }
 
@@ -107,91 +89,117 @@ function FeedCard({
   const subject = `${owner} ${workout.name}`;
   const photos = workout.photos ?? [];
   const movements = workout.movements.filter((movement) => completedSets(movement).length > 0);
+  // A session of one exercise named after it (a run called "Running") needs no exercise line.
+  const listExercises =
+    movements.length > 1 ||
+    (movements.length === 1 &&
+      movements[0].exercise.name.toLocaleLowerCase() !== session.name.toLocaleLowerCase());
   const hidden = movements.length - SHOWN_EXERCISES;
   const [showAll, setShowAll] = useState(false);
   const exercisesId = `feed-exercises-${workout.id}`;
+  const listed = showAll ? movements : movements.slice(0, SHOWN_EXERCISES);
+  const reactionControl = (
+    <div className="feed-card-social">
+      <WorkoutReactionControl
+        compact
+        ownWorkout={member.is_you}
+        onOpenMember={onOpenPerson}
+        workoutId={workout.id}
+        subject={subject}
+        reactions={item.reactions}
+        open={picking}
+        onOpenChange={onPickingChange}
+        onChange={onReactionsChange}
+      />
+    </div>
+  );
 
   return (
     <li className={`feed-card${picking ? ' is-picking' : ''}`}>
       <article aria-label={subject}>
         <header className="feed-card-header">
+          {/* The name beside it opens the same profile, so the avatar stays out of the tab order. */}
           <button
             type="button"
-            className="feed-card-person"
-            aria-label={
-              member.is_you ? 'Open your profile' : `Open ${member.display_name}’s profile`
-            }
+            className="feed-card-avatar"
+            tabIndex={-1}
+            aria-hidden="true"
             onClick={onOpenMember}
           >
             <ProfileAvatar
               className="shared-profile-avatar small"
               user={{ ...member, username: '' }}
             />
-            <span className="feed-card-name">
-              <b>{member.is_you ? 'You' : member.display_name}</b>
-              <small>{relativeDay(workout.workout_date, today)}</small>
-            </span>
           </button>
-          <span className={`friend-activity-kind ${session.cardio ? 'cardio' : 'strength'}`}>
-            {session.cardio ? 'Cardio' : 'Strength'}
-          </span>
+          <div className="feed-card-heading">
+            <button
+              type="button"
+              className="feed-card-title friend-workout-link"
+              aria-label={`Open ${subject} workout`}
+              onClick={onOpenWorkout}
+            >
+              {session.name}
+            </button>
+            <button
+              type="button"
+              className="feed-card-person"
+              aria-label={
+                member.is_you ? 'Open your profile' : `Open ${member.display_name}’s profile`
+              }
+              onClick={onOpenMember}
+            >
+              <span className="feed-card-name">
+                <b>{member.is_you ? 'You' : member.display_name}</b>
+                <small>{relativeDay(workout.workout_date, today)}</small>
+              </span>
+            </button>
+          </div>
         </header>
-        <button
-          type="button"
-          className="feed-card-title friend-workout-link"
-          aria-label={`Open ${subject} workout`}
-          onClick={onOpenWorkout}
-        >
-          {session.name}
-        </button>
-        <FeedStats workout={workout} records={item.record_count} />
         {member.is_you ? (
-          <WorkoutPhotoEditor
-            workoutId={workout.id}
-            photos={photos}
-            subject={subject}
-            layout="feed"
-            onChange={onPhotosChange}
-          />
+          <>
+            <WorkoutPhotoEditor
+              workoutId={workout.id}
+              photos={photos}
+              subject={subject}
+              layout="feed"
+              onChange={onPhotosChange}
+            />
+            {reactionControl}
+          </>
         ) : (
-          <WorkoutPhotos photos={photos} subject={subject} />
+          <>
+            {reactionControl}
+            <WorkoutPhotos photos={photos} subject={subject} />
+          </>
         )}
-        {movements.length > 0 && (
+        <FeedStats workout={workout} records={item.record_count} />
+        {listExercises && (
           <ul id={exercisesId} className="feed-exercises" aria-label="Exercises">
-            {(showAll ? movements : movements.slice(0, SHOWN_EXERCISES)).map((movement) => (
+            {listed.map((movement, index) => (
               <li key={movement.id}>
-                <span>{movement.exercise.name}</span>
-                <span className="num">{movementResult(movement)}</span>
+                {movement.exercise.name}
+                {index < listed.length - 1 && ', '}
               </li>
             ))}
             {hidden > 0 && (
               <li className="feed-exercises-more">
                 <button
                   type="button"
+                  aria-label={
+                    showAll
+                      ? 'Show fewer exercises'
+                      : `Show ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`
+                  }
                   aria-expanded={showAll}
                   aria-controls={exercisesId}
                   onClick={() => setShowAll((current) => !current)}
                 >
-                  {showAll
-                    ? 'Show fewer'
-                    : `+${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
+                  {showAll ? 'Show fewer' : `+${hidden} more`}
                 </button>
               </li>
             )}
           </ul>
         )}
-        <div className="feed-card-social">
-          <WorkoutReactionControl
-            ownWorkout={member.is_you}
-            onOpenMember={onOpenPerson}
-            workoutId={workout.id}
-            subject={subject}
-            reactions={item.reactions}
-            open={picking}
-            onOpenChange={onPickingChange}
-            onChange={onReactionsChange}
-          />
-        </div>
       </article>
     </li>
   );

@@ -20,6 +20,7 @@ export function WorkoutReactionControl({
   onChange,
   onOpenMember,
   ownWorkout = false,
+  compact = false,
 }: {
   workoutId: string;
   subject: string;
@@ -30,6 +31,8 @@ export function WorkoutReactionControl({
   onChange: (value: WorkoutReactions) => void;
   showSummary?: boolean;
   ownWorkout?: boolean;
+  /** One reaction total instead of a count per emoji, for a narrow space such as a card header. */
+  compact?: boolean;
   onOpenMember?: (person: WorkoutComment['author']) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -156,41 +159,73 @@ export function WorkoutReactionControl({
     </button>
   );
 
+  const totalButton = (className: string, withEmojis: boolean) => (
+    <button
+      type="button"
+      className={className}
+      aria-label={`View ${reactionCount} on ${subject}`}
+      aria-haspopup="dialog"
+      aria-expanded={shown === 'people'}
+      onClick={(event) => {
+        peopleTrigger.current = event.currentTarget;
+        show(shown === 'people' ? null : 'people');
+      }}
+    >
+      {withEmojis && <span aria-hidden="true">{summary.emojis.join('')}</span>} {summary.total}
+    </button>
+  );
+  const compactReactions = ownWorkout ? (
+    summary.total > 0 && totalButton('discussion-button discussion-reaction-summary', true)
+  ) : summary.total > 0 ? (
+    <div
+      className={`discussion-button discussion-reaction-summary is-joined${selected ? ' is-yours' : ''}`}
+    >
+      {reactButton}
+      {totalButton('discussion-reaction-count', false)}
+    </div>
+  ) : (
+    reactButton
+  );
+
   return (
     <div ref={container} className="workout-discussion">
       <div className="workout-discussion-actions">
-        {REACTIONS.map(({ kind, emoji, label }) => {
-          const count = reactions.counts.find((entry) => entry.reaction === kind)?.count ?? 0;
-          const mine = selected && yours === kind;
-          if (count <= 0 && !mine) return null;
-          const peopleButton = (
-            <button
-              key={kind}
-              type="button"
-              className={
-                mine ? 'discussion-reaction-count' : 'discussion-button discussion-reaction-summary'
-              }
-              aria-label={`View ${count} ${label} ${count === 1 ? 'reaction' : 'reactions'} on ${subject}`}
-              aria-haspopup="dialog"
-              aria-expanded={shown === 'people'}
-              onClick={(event) => {
-                peopleTrigger.current = event.currentTarget;
-                show(shown === 'people' ? null : 'people');
-              }}
-            >
-              {!mine && <span aria-hidden="true">{emoji}</span>} {count}
-            </button>
-          );
-          return mine ? (
-            <div key={kind} className="discussion-button discussion-reaction-summary is-yours">
-              {reactButton}
-              {peopleButton}
-            </div>
-          ) : (
-            peopleButton
-          );
-        })}
-        {!ownWorkout && !selected && reactButton}
+        {compact && compactReactions}
+        {!compact &&
+          REACTIONS.map(({ kind, emoji, label }) => {
+            const count = reactions.counts.find((entry) => entry.reaction === kind)?.count ?? 0;
+            const mine = selected && yours === kind;
+            if (count <= 0 && !mine) return null;
+            const peopleButton = (
+              <button
+                key={kind}
+                type="button"
+                className={
+                  mine
+                    ? 'discussion-reaction-count'
+                    : 'discussion-button discussion-reaction-summary'
+                }
+                aria-label={`View ${count} ${label} ${count === 1 ? 'reaction' : 'reactions'} on ${subject}`}
+                aria-haspopup="dialog"
+                aria-expanded={shown === 'people'}
+                onClick={(event) => {
+                  peopleTrigger.current = event.currentTarget;
+                  show(shown === 'people' ? null : 'people');
+                }}
+              >
+                {!mine && <span aria-hidden="true">{emoji}</span>} {count}
+              </button>
+            );
+            return mine ? (
+              <div key={kind} className="discussion-button discussion-reaction-summary is-yours">
+                {reactButton}
+                {peopleButton}
+              </div>
+            ) : (
+              peopleButton
+            );
+          })}
+        {!compact && !ownWorkout && !selected && reactButton}
         <button
           ref={commentTrigger}
           type="button"

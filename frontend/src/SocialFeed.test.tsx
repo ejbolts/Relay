@@ -179,10 +179,16 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(friendCard.getAttribute('aria-label')).toBe('Alex Sample’s Upper body');
   expect(friendCard.querySelector('.feed-card-name small')?.textContent).toBe('Yesterday');
   expect(button(friendCard, 'Add photo')).toBeUndefined();
-  const stats = [...friendCard.querySelectorAll('.feed-stats > div')].map((entry) =>
+  // The workout name leads; who and when sit beneath it.
+  expect(friendCard.querySelector('.feed-card-heading')?.textContent).toBe(
+    'Upper bodyAlex SampleYesterday',
+  );
+  expect(friendCard.querySelector('.friend-activity-kind')).toBeNull();
+  // One summary line, each value with its own unit.
+  const stats = [...friendCard.querySelectorAll('.feed-stats > li')].map((entry) =>
     entry.textContent?.trim(),
   );
-  expect(stats).toEqual(['Time52min', 'Sets12', 'Volume5,760 kg', 'Records2 PRs']);
+  expect(stats).toEqual(['52min', '12 sets', '5,760 kg', '2 PRs']);
   const collage = friendCard.querySelector('.workout-photos-feed')!;
   expect(collage.getAttribute('data-count')).toBe('2');
   expect(collage.querySelectorAll('img')).toHaveLength(2);
@@ -192,24 +198,19 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   // Three exercises are listed; the rest are counted.
   expect(
     [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent),
-  ).toEqual(['Bench press3 sets', 'Row3 sets', 'Curl2 sets', '+2 more exercises']);
+  ).toEqual(['Bench press, ', 'Row, ', 'Curl', '+2 more']);
   // Tapping the count lists them all, and tapping again folds them away.
   const rows = () =>
     [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent);
-  const more = button(friendCard, '+2 more exercises')!;
+  const more = button(friendCard, 'Show 2 more exercises')!;
   expect(more.getAttribute('aria-expanded')).toBe('false');
   await click(more);
-  expect(rows()).toEqual([
-    'Bench press3 sets',
-    'Row3 sets',
-    'Curl2 sets',
-    'Fly2 sets',
-    'Dip2 sets',
-    'Show fewer',
-  ]);
-  expect(button(friendCard, 'Show fewer')?.getAttribute('aria-expanded')).toBe('true');
-  await click(button(friendCard, 'Show fewer'));
+  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip', 'Show fewer']);
+  expect(button(friendCard, 'Show fewer exercises')?.getAttribute('aria-expanded')).toBe('true');
+  await click(button(friendCard, 'Show fewer exercises'));
   expect(rows()).toHaveLength(4);
+  // Your one-exercise workout still names its exercise, as it differs from the workout's name.
+  expect(own.querySelector('.feed-exercises')?.textContent).toBe('Bench press');
   expect(button(friendCard, 'React to Alex Sample’s Upper body')).toBeDefined();
   expect(button(own, 'React to Your Leg day')).toBeUndefined();
 
@@ -219,6 +220,53 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(openProfile).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'alex' }));
   await click(button(own, 'Open your profile'));
   expect(openOwnProfile).toHaveBeenCalledOnce();
+});
+
+it('shows one reaction total in the card header, and no exercise line that repeats the name', async () => {
+  const mine = workout('mine', { name: 'Bench press' });
+  const theirs = workout('theirs', { workout_date: '2026-11-14' });
+  vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
+    items: [
+      item(
+        mine,
+        { id: 'me', display_name: 'Me', is_you: true },
+        {
+          reactions: {
+            counts: [
+              { reaction: 'strong', count: 2 },
+              { reaction: 'fire', count: 1 },
+            ],
+            yours: null,
+            comment_count: 0,
+          },
+        },
+      ),
+      item(
+        theirs,
+        {},
+        {
+          reactions: { counts: [{ reaction: 'fire', count: 2 }], yours: 'fire', comment_count: 3 },
+        },
+      ),
+    ],
+    has_more: false,
+  });
+  await render();
+
+  const [own, friendCard] = cards();
+  // Your own workout: the emojis people chose and one total, which opens who reacted.
+  const total = button(own, 'View 3 reactions on Your Bench press')!;
+  expect(total.textContent).toBe('💪🔥 3');
+  expect(own.querySelectorAll('.discussion-reaction-summary')).toHaveLength(1);
+  expect(button(own, '0 comments on Your Bench press')?.textContent).toBe('');
+  // The workout is one exercise with the same name, so it is not repeated underneath.
+  expect(own.querySelector('.feed-exercises')).toBeNull();
+
+  // A friend's workout: your reaction and the total side by side, then the comment count.
+  const yours = friendCard.querySelector('.discussion-reaction-summary.is-yours')!;
+  expect(yours.textContent).toBe('🔥 2');
+  expect(button(friendCard, 'View 2 reactions on Alex Sample’s Upper body')).toBeDefined();
+  expect(button(friendCard, '3 comments on Alex Sample’s Upper body')?.textContent).toBe('3');
 });
 
 it('adds a photo to your own workout and confirms it in a popup', async () => {
