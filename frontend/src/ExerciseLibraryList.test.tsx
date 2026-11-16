@@ -80,22 +80,22 @@ async function render(items = exercises) {
     root.render(<ExerciseLibraryList exercises={items} library={emptyLibrary} onOpen={open} />),
   );
 }
-it('defaults to ten, paginates without duplicates, and resets when page size or filters change', async () => {
+it('defaults to five, paginates without duplicates, and resets when page size or filters change', async () => {
   await render();
-  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(10);
-  expect(host.textContent).toContain('Page 1 of 3');
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(5);
+  expect(host.textContent).toContain('Page 1 of 5');
   await click(button('Next exercises page'));
   expect(host.querySelector('[data-exercise-id]')?.getAttribute('data-exercise-id')).toBe(
-    'exercise-10',
+    'exercise-5',
   );
-  await click(button('Next exercises page'));
+  for (let page = 3; page <= 5; page += 1) await click(button('Next exercises page'));
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(3);
   expect(button('Next exercises page').disabled).toBe(true);
   await click(host.querySelector('[aria-label="Muscle group"] button:nth-child(2)')!);
-  expect(host.textContent).toContain('Page 1 of 3');
+  expect(host.textContent).toContain('Page 1 of 5');
   await click(button('Exercise list options'));
   const select = document.querySelector<HTMLSelectElement>('[aria-label="Exercises per page"]')!;
-  expect(select.value).toBe('10');
+  expect(select.value).toBe('5');
   await act(async () => {
     select.value = '20';
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -133,12 +133,32 @@ it('filters by actual direct and half-set credits instead of compound labels, an
   await click(host.querySelector('[data-exercise-id="bench"]')!);
   expect(open).toHaveBeenCalledExactlyOnceWith('bench');
 });
+it('filters equipment from list options and marks the filter button', async () => {
+  await render([
+    ...exercises.slice(0, 6),
+    { ...bench, id: 'cable-fly', name: 'Cable Fly', equipment: 'Cable' },
+  ]);
+  expect(host.querySelector('[aria-label="Equipment"]')).toBeNull();
+  expect(button('Exercise list options').hasAttribute('data-active')).toBe(false);
+  await click(button('Exercise list options'));
+  expect(document.querySelector('[aria-label="Training block"]')).toBeNull();
+  const equipment = document.querySelector<HTMLSelectElement>('dialog [aria-label="Equipment"]')!;
+  await act(async () => {
+    equipment.value = 'Cable';
+    equipment.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect([...host.querySelectorAll('[data-exercise-id]')].map((item) => item.textContent)).toEqual([
+    'Cable Fly',
+  ]);
+  const filter = host.querySelector('.exercise-list-options')!;
+  expect(filter.hasAttribute('data-active')).toBe(true);
+  expect(filter.getAttribute('aria-label')).toBe('Exercise list options, equipment filtered');
+});
 it('clamps the last page when a catalogue shrinks', async () => {
   await render();
-  await click(button('Next exercises page'));
-  await click(button('Next exercises page'));
+  for (let page = 2; page <= 5; page += 1) await click(button('Next exercises page'));
   await render(exercises.slice(0, 12));
-  expect(host.textContent).toContain('Page 2 of 2');
+  expect(host.textContent).toContain('Page 3 of 3');
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(2);
 });
 it('toggles a selected muscle back to All and resets pagination', async () => {
@@ -152,14 +172,14 @@ it('toggles a selected muscle back to All and resets pagination', async () => {
   expect(pectorals.getAttribute('aria-pressed')).toBe('true');
   expect(all.getAttribute('aria-pressed')).toBe('false');
   await click(button('Next exercises page'));
-  expect(host.textContent).toContain('Page 2 of 3');
+  expect(host.textContent).toContain('Page 2 of 5');
   await click(pectorals);
   expect(pectorals.getAttribute('aria-pressed')).toBe('false');
   expect(all.getAttribute('aria-pressed')).toBe('true');
-  expect(host.textContent).toContain('Page 1 of 3');
+  expect(host.textContent).toContain('Page 1 of 5');
   await click(all);
   expect(all.getAttribute('aria-pressed')).toBe('true');
-  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(10);
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(5);
 });
 it('restores all muscles without clearing Custom, and toggles Custom off independently', async () => {
   const curl = {

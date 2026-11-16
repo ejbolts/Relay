@@ -3936,7 +3936,7 @@ describe('live muscle totals while logging', () => {
     expect(document.querySelector('.notification-toast-action')).toBeNull();
   });
 
-  it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
+  it('updates Home immediately, opens the live source, and reverses unticking', async () => {
     await mount();
     await navigateTo('Home');
     await navigateTo('Training');
@@ -3946,7 +3946,7 @@ describe('live muscle totals while logging', () => {
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
     );
-    expect(chestTotals()).toEqual(['1', '1']);
+    expect(chestTotals()).toEqual(['1']);
     expect(api.dashboard).toHaveBeenCalledOnce();
     expect(api.createWorkout).not.toHaveBeenCalled();
     await act(async () => {

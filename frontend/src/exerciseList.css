@@ -7,17 +7,14 @@
 .exercise-list-library {
   margin-top: 0.75rem;
 }
-.exercise-library-equipment {
-  margin-top: 0.65rem;
-}
 .exercise-picker-equipment {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0 1rem 0.8rem;
 }
-.exercise-library-equipment select,
-.exercise-picker-equipment select {
+.exercise-picker-equipment select,
+.exercise-page-size select {
   min-width: 0;
   width: 100%;
   min-height: 2.75rem;
@@ -167,58 +164,66 @@
   box-shadow: inset 0 0 0 1px var(--p-accent);
   color: var(--p-ink);
 }
-.exercise-list-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.8rem 0 0.3rem;
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-}
-.exercise-list-meta > span {
-  flex: 1;
-}
-.exercise-list-meta .exercise-list-options {
+.exercise-list-toolbar .exercise-list-options {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0;
+  flex-shrink: 0;
+  width: 2.875rem;
+  height: 2.875rem;
   margin: 0;
-  border: 1px solid var(--p-line);
-  border-radius: 10px;
-  background: var(--p-surface);
-  color: var(--p-ink-2);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 13px;
+  padding: 0;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
 }
-.exercise-list-meta .exercise-list-options .pulse-icon {
+.exercise-list-toolbar .exercise-list-options .pulse-icon {
   width: 1.2rem;
   height: 1.2rem;
 }
+.exercise-list-toolbar .exercise-list-options[data-active]::after {
+  content: '';
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--p-accent);
+}
+.exercise-list-toolbar .exercise-list-options:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 3px;
+}
 .exercise-page-size {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 1.25rem;
+  display: grid;
+  gap: 0.4rem;
+  margin: 1rem 1.25rem;
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 .exercise-page-size select {
-  width: auto;
-  min-width: 5rem;
+  width: 100%;
 }
-.exercise-list-meta button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  min-height: 2rem;
-  font-size: 0.75rem;
+.exercise-list-options-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem;
 }
-.exercise-list-meta .pulse-icon {
-  width: 0.875rem;
-  height: 0.875rem;
+.exercise-list-options-actions .pulse-button {
+  flex: 1;
+}
+.exercise-list-options-error {
+  margin: 0 1.25rem;
+  color: var(--p-danger);
+  font-size: 0.8125rem;
 }
 .exercise-list-rows {
   display: grid;
+  margin-top: 0.75rem;
   grid-template-columns: 2.3rem minmax(0, 1fr) 2.75rem 3rem max-content;
   column-gap: 0.65rem;
   list-style: none;

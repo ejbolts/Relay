@@ -7,6 +7,7 @@ import { BodyCompositionScreen } from './App';
 import { TrainingPreferencesContext } from './trainingPreferencesContext';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
 import type { WeightUnit } from './weightUnits';
+import type { BodyTrendStatistic } from './bodyTrend';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -58,6 +59,7 @@ async function render(
   measurements: BodyMeasurement[],
   goals: BodyWeightGoal[],
   unit: WeightUnit = 'kg',
+  statistic: BodyTrendStatistic = 'average',
 ) {
   vi.spyOn(api, 'listBodyWeightGoals').mockResolvedValue(goals);
   await act(async () =>
@@ -79,6 +81,7 @@ async function render(
           onSave={vi.fn()}
           onDelete={vi.fn()}
           onDataChange={vi.fn()}
+          trendPreference={{ duration: '30d', statistic }}
         />
       </TrainingPreferencesContext.Provider>,
     ),
@@ -251,25 +254,18 @@ describe('Body history goal-aware arrows', () => {
     expect(container.querySelectorAll('.body-history-weight-change')).toHaveLength(0);
   });
 
-  it('updates period comparisons when the selected statistic changes', async () => {
-    await render(
-      [
-        measurement('2026-10-07', 100),
-        measurement('2026-10-06', 80),
-        measurement('2026-10-05', 80),
-        measurement('2026-09-07', 82),
-      ],
-      [goal(90, 75)],
-    );
+  it('updates period comparisons when the saved statistic changes', async () => {
+    const checkIns = [
+      measurement('2026-10-07', 100),
+      measurement('2026-10-06', 80),
+      measurement('2026-10-05', 80),
+      measurement('2026-09-07', 82),
+    ];
+    await render(checkIns, [goal(90, 75)]);
     await selectTab('Avg Week');
     expect(arrow(rows()[0])?.classList.contains('unfavorable')).toBe(true);
-    const select = container.querySelector<HTMLSelectElement>(
-      '[aria-label="Bodyweight trend statistic"]',
-    )!;
-    await act(async () => {
-      select.value = 'median';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await render(checkIns, [goal(90, 75)], 'kg', 'median');
+    await selectTab('Median Week');
     expect(arrow(rows()[0])?.classList.contains('favorable')).toBe(true);
     await selectTab('Median Monthly');
     expect(arrow(rows()[0])?.classList.contains('favorable')).toBe(true);

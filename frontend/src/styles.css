@@ -4426,25 +4426,6 @@ body:has(.popup-dialog[open]) {
   font-size: 0.85rem;
 }
 
-.body-reference-stats .body-trend-stat {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  margin-top: 0.45rem;
-  border-top: 1px solid #383e40;
-  padding: 0.85rem 0.35rem 0;
-  text-align: left;
-}
-
-.body-trend-stat-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.body-trend-stat-controls select,
 .body-trend-default-fields select {
   min-height: 2.2rem;
   border: 1px solid #42494b;
@@ -4454,17 +4435,6 @@ body:has(.popup-dialog[open]) {
   color: #d8d5d1;
   font-size: 0.68rem;
   font-weight: 750;
-}
-
-.body-reference-stats .body-trend-stat > strong {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  margin: 0;
-}
-
-.body-reference-stats .body-trend-stat > small {
-  color: var(--muted-ink);
-  font-size: 0.62rem;
 }
 
 .body-trend-default-fields {
@@ -4490,10 +4460,6 @@ body:has(.popup-dialog[open]) {
   .body-goal-form .goal-entry-fields,
   .body-trend-default-fields {
     grid-template-columns: 1fr;
-  }
-
-  .body-trend-stat-controls {
-    flex-wrap: wrap;
   }
 }
 
