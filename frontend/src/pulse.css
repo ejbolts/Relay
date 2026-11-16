@@ -180,13 +180,13 @@ body::after,
   pointer-events: none;
 }
 
-/* Rays of different widths (wide, thin, medium) sweep in one direction and loop seamlessly:
-   the pattern repeats every 1000px along its 118deg line, and the image slides sideways by the
-   distance that moves it exactly one repeat (1000px / sin 118deg). The element itself stays
-   still, so the top fade below holds steady while the rays pass through it. */
+/* One soft ray sweeps in one direction and loops seamlessly: the pattern repeats every 1300px
+   along its 118deg line (so a phone shows one ray at a time), and the image slides sideways by
+   the distance that moves it exactly one repeat (1300px / sin 118deg). The element itself stays
+   still, so the top fade below holds steady while the ray passes through it. */
 body::before,
 .auth-screen::before {
-  --sun-ray-shift: calc(1000px / 0.882948);
+  --sun-ray-shift: calc(1300px / 0.882948);
   inset: 0;
   background-image: repeating-linear-gradient(
     118deg,
@@ -194,27 +194,17 @@ body::before,
     var(--sun-ray-soft) 110px,
     var(--sun-ray) 210px,
     var(--sun-ray-soft) 310px,
-    transparent 400px,
-    transparent 520px,
-    var(--sun-ray-soft) 548px,
-    var(--sun-ray) 566px,
-    var(--sun-ray-soft) 584px,
-    transparent 612px,
-    transparent 720px,
-    var(--sun-ray-soft) 770px,
-    var(--sun-ray) 820px,
-    var(--sun-ray-soft) 870px,
-    transparent 920px,
-    transparent 1000px
+    transparent 420px,
+    transparent 1300px
   );
   background-repeat: no-repeat;
-  background-size: calc(100% + 1300px) 100%;
+  background-size: calc(100% + 1500px) 100%;
   background-position: calc(var(--sun-ray-shift) * -1) 0;
   /* Viewport coordinates: transparent at the very top, which iOS paints behind the status bar,
      and full strength about a third of the way down, so there is no hard line under it. */
   -webkit-mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
   mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
-  animation: sun-ray-sweep 30s linear infinite;
+  animation: sun-ray-sweep 39s linear infinite;
 }
 
 /* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
