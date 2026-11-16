@@ -67,11 +67,53 @@ body.live-workout-sheet-open {
   padding-top: 0;
 }
 
+/* Starting or reopening a workout slides the sheet up from the bottom, the reverse of minimising.
+   The chain matches the rule above that switches off the panel's own entrance animation. */
+.live-workout-sheet.is-opening,
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .live-workout-sheet.is-opening {
+  animation: live-workout-sheet-in 420ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+}
+
+.live-workout-sheet-backdrop.is-opening,
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .live-workout-sheet-backdrop.is-opening {
+  animation: live-workout-backdrop-in 320ms ease both;
+}
+
+@keyframes live-workout-sheet-in {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes live-workout-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .live-workout-sheet,
   .live-workout-sheet-backdrop {
     transition: none;
   }
+  .live-workout-sheet.is-opening,
+  .live-workout-sheet-backdrop.is-opening {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .live-workout-sheet.is-opening,
+html[data-reduce-motion] .live-workout-sheet-backdrop.is-opening {
+  animation: none;
 }
 
 html[data-reduce-motion] .live-workout-sheet,
