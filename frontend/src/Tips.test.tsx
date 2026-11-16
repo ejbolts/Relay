@@ -272,16 +272,24 @@ describe('shared tip presentation', () => {
     await act(async () => bulb()!.click());
     expect(popover()).toBeNull();
     expect(bulb()?.classList.contains('is-unread')).toBe(true);
+    // The next unread tips follow on in order.
     await act(async () => bulb()!.click());
     expect(popover()?.textContent).toContain('Train alongside a friend');
+    await act(async () => button('Next').click());
+    expect(popover()?.textContent).toContain('Make Relay look your way');
+    await act(async () => bulb()!.click());
     expect(bulb()?.classList.contains('is-unread')).toBe(false);
     expect(bulb()?.getAttribute('aria-label')).toBe('Tip');
+    await act(async () => bulb()!.click());
+    const seenInOrder = [popover()?.textContent ?? ''];
     await act(async () => button('Next').click());
-    expect(popover()?.textContent).toContain('Put sets in order');
+    seenInOrder.push(popover()?.textContent ?? '');
+    expect(seenInOrder.join(' ')).toContain('Put sets in order');
   });
   it('retires a tip with Got it and disappears when none are left', async () => {
     await homeBulb();
-    for (const id of ['reorder', 'swipe'] as const) await act(async () => controller.learn(id));
+    for (const id of ['reorder', 'swipe', 'appearance'] as const)
+      await act(async () => controller.learn(id));
     await act(async () => bulb()!.click());
     expect(popover()?.textContent).toContain('Train alongside a friend');
     expect(button('Next')).toBeUndefined();

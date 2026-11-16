@@ -170,6 +170,16 @@
   height: 1.25rem;
 }
 
+/* The title takes the free space, so Remove sits beside the close button rather than mid-header. */
+.workout-photo-viewer > header {
+  gap: 0.5rem;
+}
+
+.workout-photo-viewer > header > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .workout-photo-viewer .workout-photo-remove {
   min-height: 2.25rem;
   border: 1px solid var(--p-line-strong);

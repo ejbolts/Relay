@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { motionReduced } from './motion';
 import { LiveWorkoutSheetContext } from './liveWorkoutSheetContext';
 import './liveWorkout.css';
+
+/** Opening the app straight into a workout shows it in place; later openings slide up. */
+const OPEN_ANIMATION_AFTER_LOAD_MS = 1500;
+const OPEN_ANIMATION_MS = 420;
 
 /** A mounted workout with its own scroll position, sliding over Home without stopping its clocks. */
 export function LiveWorkoutSheet({
@@ -21,10 +25,25 @@ export function LiveWorkoutSheet({
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const openTimer = useRef<number | null>(null);
   const closingRef = useRef(false);
   const timer = useRef<number | null>(null);
   const gesture = useRef<{ id: number; x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
+
+  // Before the first paint, so the sheet never shows in place and then jumps down to slide up.
+  useLayoutEffect(() => {
+    if (!enabled || !active) return;
+    if (motionReduced() || performance.now() < OPEN_ANIMATION_AFTER_LOAD_MS) return;
+    setOpening(true);
+    openTimer.current = window.setTimeout(() => setOpening(false), OPEN_ANIMATION_MS + 80);
+    return () => {
+      if (openTimer.current !== null) window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+      setOpening(false);
+    };
+  }, [active, enabled]);
 
   useEffect(() => {
     const element = dialog.current;
@@ -73,7 +92,7 @@ export function LiveWorkoutSheet({
   return (
     <LiveWorkoutSheetContext.Provider value={{ minimise }}>
       <div
-        className={`live-workout-sheet-backdrop${dragging ? ' is-dragging' : ''}`}
+        className={`live-workout-sheet-backdrop${dragging ? ' is-dragging' : ''}${opening ? ' is-opening' : ''}`}
         hidden={!active}
         aria-hidden="true"
         style={{ opacity: Math.max(0, 1 - offset / Math.max(1, window.innerHeight)) }}
@@ -85,7 +104,7 @@ export function LiveWorkoutSheet({
         aria-modal={active ? true : undefined}
         hidden={!active}
         tabIndex={-1}
-        className={`live-workout-sheet${dragging ? ' is-dragging' : ''}${closing ? ' is-closing' : ''}`}
+        className={`live-workout-sheet${dragging ? ' is-dragging' : ''}${closing ? ' is-closing' : ''}${opening ? ' is-opening' : ''}`}
         aria-label="Live workout"
         style={{ transform: `translate3d(0, ${offset}px, 0)` }}
         onKeyDown={(event) => {
@@ -119,6 +138,9 @@ export function LiveWorkoutSheet({
             first.focus();
           }
         }}
+        onAnimationEnd={(event) => {
+          if (event.target === event.currentTarget) setOpening(false);
+        }}
         onTransitionEnd={(event) => {
           if (event.target === event.currentTarget && event.propertyName === 'transform') finish();
         }}
@@ -128,6 +150,8 @@ export function LiveWorkoutSheet({
             return;
           }
           if (event.button !== 0 || closingRef.current) return;
+          // A drag takes over from the opening slide straight away.
+          setOpening(false);
           const target = event.target as HTMLElement;
           if (!target.closest('.live-workout-header') || target.closest('[role="menu"]')) return;
           if (

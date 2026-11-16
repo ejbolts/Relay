@@ -4,6 +4,8 @@ import type { TrainingBlocks } from './types';
 import { localDate } from './utils';
 
 export const TONES = 4;
+/** The strip names this many recent blocks; older ones share one "Earlier" segment. */
+export const TIMELINE_BLOCKS = 6;
 
 /** Proportional strip showing how blocks divide the logged history. */
 export function BlockTimeline({
@@ -20,11 +22,24 @@ export function BlockTimeline({
     config.history_start && config.history_start < first.start_date && config.earlier_workout_count
       ? config.history_start
       : null;
+  // With many blocks, only the most recent are named so each stays readable.
+  const shown = config.blocks.slice(-TIMELINE_BLOCKS);
+  const hidden = config.blocks.length - shown.length;
+  const earlierName = hidden
+    ? `${hidden} earlier block${hidden === 1 ? '' : 's'}${earlierStart ? ' and history' : ''}`
+    : 'Before blocks';
   const segments = [
-    ...(earlierStart
-      ? [{ id: 'earlier', name: 'Before blocks', start: earlierStart, end: first.start_date }]
+    ...(earlierStart || hidden
+      ? [
+          {
+            id: 'earlier',
+            name: earlierName,
+            start: earlierStart ?? first.start_date,
+            end: shown[0].start_date,
+          },
+        ]
       : []),
-    ...config.blocks.map((block) => ({
+    ...shown.map((block) => ({
       id: block.id,
       name: block.name,
       start: block.start_date,
@@ -54,7 +69,7 @@ export function BlockTimeline({
               style={{ flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0` }}
               title={item.name}
             >
-              {item.id === 'earlier' ? 'Before' : item.name}
+              {item.id === 'earlier' ? (hidden ? 'Earlier' : 'Before') : item.name}
             </span>
           );
         })}

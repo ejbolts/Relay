@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MainTab } from './appNavigation';
 import { Icon, type IconName } from './Icon';
-import { formatElapsed, useElapsedSeconds, useLiveWorkoutClock } from './elapsed';
+import { formatElapsed, useLiveWorkoutClock } from './elapsed';
+import { liveWorkoutDurationSeconds, type LiveWorkoutSummary } from './liveWorkoutSummary';
 import { useRestCountdown } from './restTimer';
 import { formatSeconds } from './utils';
 import type { useHomeLayout } from './useHomeLayout';
@@ -25,7 +26,7 @@ export function AppTabBar({
   active,
   workoutStartedAt,
   restEndsAt = null,
-  resumeInBar = false,
+  liveSummary = null,
   inert = false,
   workoutSaving = false,
   onSelect,
@@ -37,8 +38,11 @@ export function AppTabBar({
   workoutStartedAt: number | null;
   /** While the live workout's rest runs, the button shows a timer counting it down. */
   restEndsAt?: number | null;
-  /** A separate full-width bar resumes the workout instead of the centre tab. */
-  resumeInBar?: boolean;
+  /** Lets the live timer include time from before a workout was resumed. */
+  liveSummary?: Pick<
+    LiveWorkoutSummary,
+    'previousDurationMinutes' | 'durationOverrideMinutes'
+  > | null;
   inert?: boolean;
   workoutSaving?: boolean;
   onSelect: (tab: MainTab) => void;
@@ -57,6 +61,15 @@ export function AppTabBar({
   const [menuOpen, setMenuOpen] = useState(false);
   const open = menuOpen && menuAvailable && !editing;
   const startButton = useRef<HTMLButtonElement>(null);
+  const startVisible = live && !inert;
+
+  // Minimising the live workout hides the focused control in its sheet; Start takes over focus.
+  useEffect(() => {
+    if (!startVisible) return;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.closest('[hidden]'))
+      startButton.current?.focus({ preventScroll: true });
+  }, [startVisible]);
 
   // A workout starting elsewhere, or Home's layout editor opening, dismisses the menu for good.
   useEffect(() => {
@@ -157,54 +170,48 @@ export function AppTabBar({
         className={`app-tab-bar${editing ? ' is-editing-home' : ''}`}
         aria-label={editing ? 'Home layout controls' : 'Main navigation'}
       >
-        <div
-          className={`app-tab-items app-tab-navigation${resumeInBar ? ' has-workout-resume-bar' : ''}`}
-          inert={editing}
-          aria-hidden={editing}
-        >
+        <div className="app-tab-items app-tab-navigation" inert={editing} aria-hidden={editing}>
           {TABS.slice(0, 2).map(renderTab)}
-          {!resumeInBar && (
-            <button
-              type="button"
-              ref={startButton}
-              className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${open ? ' menu-open' : ''}`}
-              data-guide-target="start"
-              aria-expanded={menuAvailable ? open : undefined}
-              aria-controls={menuAvailable ? 'start-menu' : undefined}
-              aria-label={
-                workoutSaving
-                  ? 'Saving workout'
-                  : resting
-                    ? `Resume active workout, rest ${formatSeconds(restLeft)} left`
-                    : live
-                      ? 'Resume active workout'
-                      : 'Start workout'
-              }
-              disabled={workoutSaving}
-              onClick={() => (menuAvailable ? setMenuOpen(!open) : onStart())}
-            >
-              <span className="app-tab-start-bubble">
-                {resting ? (
-                  <Icon name="timer" />
-                ) : live ? (
-                  <LiveDot startedAt={workoutStartedAt} />
-                ) : (
-                  <Icon name={workoutSaving ? 'check' : 'plus'} />
-                )}
-              </span>
-              <span>
-                {workoutSaving ? (
-                  'Saving'
-                ) : resting ? (
-                  <span className="num">{formatSeconds(restLeft)}</span>
-                ) : live ? (
-                  <LiveElapsed startedAt={workoutStartedAt} />
-                ) : (
-                  'Start'
-                )}
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            ref={startButton}
+            className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${open ? ' menu-open' : ''}`}
+            data-guide-target="start"
+            aria-expanded={menuAvailable ? open : undefined}
+            aria-controls={menuAvailable ? 'start-menu' : undefined}
+            aria-label={
+              workoutSaving
+                ? 'Saving workout'
+                : resting
+                  ? `Resume active workout, rest ${formatSeconds(restLeft)} left`
+                  : live
+                    ? 'Resume active workout'
+                    : 'Start workout'
+            }
+            disabled={workoutSaving}
+            onClick={() => (menuAvailable ? setMenuOpen(!open) : onStart())}
+          >
+            <span className="app-tab-start-bubble">
+              {resting ? (
+                <Icon name="timer" />
+              ) : live ? (
+                <LiveDot startedAt={workoutStartedAt} />
+              ) : (
+                <Icon name={workoutSaving ? 'check' : 'plus'} />
+              )}
+            </span>
+            <span>
+              {workoutSaving ? (
+                'Saving'
+              ) : resting ? (
+                <span className="num">{formatSeconds(restLeft)}</span>
+              ) : live ? (
+                <LiveElapsed startedAt={workoutStartedAt} summary={liveSummary} />
+              ) : (
+                'Start'
+              )}
+            </span>
+          </button>
           {TABS.slice(2).map(renderTab)}
         </div>
         {homeLayout && (
@@ -260,7 +267,17 @@ function LiveDot({ startedAt }: { startedAt: number }) {
   return <i className={`live-dot${paused ? ' paused' : ''}`} aria-hidden="true" />;
 }
 
-function LiveElapsed({ startedAt }: { startedAt: number }) {
-  const elapsed = useElapsedSeconds(startedAt);
-  return <span className="num">{formatElapsed(elapsed)}</span>;
+function LiveElapsed({
+  startedAt,
+  summary,
+}: {
+  startedAt: number;
+  summary: Pick<LiveWorkoutSummary, 'previousDurationMinutes' | 'durationOverrideMinutes'> | null;
+}) {
+  const { elapsed } = useLiveWorkoutClock(startedAt);
+  return (
+    <span className="num app-tab-live-time">
+      {formatElapsed(liveWorkoutDurationSeconds(summary, elapsed))}
+    </span>
+  );
 }
