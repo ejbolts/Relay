@@ -163,18 +163,16 @@ body,
 :root[data-sun-ray='blank'] body::after,
 :root[data-sun-ray='blank'] .auth-screen::before,
 :root[data-sun-ray='blank'] .auth-screen::after,
-:root[data-sun-ray='blank'] .live-workout-sheet::before,
 :root[data-sun-ray='blank'] .live-workout-sheet::after {
   display: none;
 }
 
-/* The live workout sheet covers Home with its own page colour, so it draws its own copy too.
-   Its transform makes these fixed layers follow the sheet as it slides. */
+/* The live workout sheet covers Home with its own page colour and keeps only the grain, so
+   logging stays calm; its transform makes the grain follow the sheet as it slides. */
 body::before,
 body::after,
 .auth-screen::before,
 .auth-screen::after,
-.live-workout-sheet::before,
 .live-workout-sheet::after {
   position: fixed;
   z-index: -1;
@@ -187,8 +185,7 @@ body::after,
    distance that moves it exactly one repeat (1000px / sin 118deg). The element itself stays
    still, so the top fade below holds steady while the rays pass through it. */
 body::before,
-.auth-screen::before,
-.live-workout-sheet::before {
+.auth-screen::before {
   --sun-ray-shift: calc(1000px / 0.882948);
   inset: 0;
   background-image: repeating-linear-gradient(
@@ -242,15 +239,13 @@ body::after,
 
 @media (prefers-reduced-motion: reduce) {
   body::before,
-  .auth-screen::before,
-  .live-workout-sheet::before {
+  .auth-screen::before {
     animation: none;
   }
 }
 
 [data-reduce-motion] body::before,
-[data-reduce-motion] .auth-screen::before,
-[data-reduce-motion] .live-workout-sheet::before {
+[data-reduce-motion] .auth-screen::before {
   animation: none;
 }
 
