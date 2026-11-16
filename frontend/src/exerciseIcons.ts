@@ -15,21 +15,31 @@ import hackSquatIcon from './assets/exercise-icons/hack-squat.webp';
 import hamstringCurlIcon from './assets/exercise-icons/hamstring-curl.webp';
 import hangingLegRaiseIcon from './assets/exercise-icons/hanging-leg-raise.webp';
 import hipThrustIcon from './assets/exercise-icons/hip-thrust.webp';
+import hipAbductionMachineIcon from './assets/exercise-icons/hip-abduction-machine.webp';
 import inclineWalkIcon from './assets/exercise-icons/incline-walk.webp';
 import latPulldownIcon from './assets/exercise-icons/lat-pulldown.webp';
 import lateralRaiseIcon from './assets/exercise-icons/lateral-raise.webp';
 import legExtensionIcon from './assets/exercise-icons/leg-extension.webp';
 import legPressIcon from './assets/exercise-icons/leg-press.webp';
+import machineChestPressIcon from './assets/exercise-icons/machine-chest-press.webp';
+import machineHipThrustIcon from './assets/exercise-icons/machine-hip-thrust.webp';
+import machineLateralRaiseIcon from './assets/exercise-icons/machine-lateral-raise.webp';
+import machineRowIcon from './assets/exercise-icons/machine-row.webp';
+import machineShoulderPressIcon from './assets/exercise-icons/machine-shoulder-press.webp';
 import overheadPressIcon from './assets/exercise-icons/overhead-press.webp';
 import pecDeckIcon from './assets/exercise-icons/pec-deck.webp';
 import preacherCurlIcon from './assets/exercise-icons/preacher-curl.webp';
 import pullUpIcon from './assets/exercise-icons/pull-up.webp';
 import romanianDeadliftIcon from './assets/exercise-icons/romanian-deadlift.webp';
+import reversePecDeckIcon from './assets/exercise-icons/reverse-pec-deck.webp';
 import rowingIcon from './assets/exercise-icons/rowing.webp';
 import runningIcon from './assets/exercise-icons/running.webp';
 import seatedRowIcon from './assets/exercise-icons/seated-row.webp';
+import seatedCalfRaiseIcon from './assets/exercise-icons/seated-calf-raise.webp';
+import seatedLegCurlIcon from './assets/exercise-icons/seated-leg-curl.webp';
 import stairClimberIcon from './assets/exercise-icons/stair-climber.webp';
 import tricepsPushdownIcon from './assets/exercise-icons/triceps-pushdown.webp';
+import tricepsExtensionMachineIcon from './assets/exercise-icons/triceps-extension-machine.webp';
 import type { Exercise } from './types';
 
 export type ExerciseIconKey =
@@ -50,21 +60,31 @@ export type ExerciseIconKey =
   | 'hamstring-curl'
   | 'hanging-leg-raise'
   | 'hip-thrust'
+  | 'hip-abduction-machine'
   | 'incline-walk'
   | 'lat-pulldown'
   | 'lateral-raise'
   | 'leg-extension'
   | 'leg-press'
+  | 'machine-chest-press'
+  | 'machine-hip-thrust'
+  | 'machine-lateral-raise'
+  | 'machine-row'
+  | 'machine-shoulder-press'
   | 'overhead-press'
   | 'pec-deck'
   | 'preacher-curl'
   | 'pull-up'
   | 'romanian-deadlift'
+  | 'reverse-pec-deck'
   | 'rowing'
   | 'running'
   | 'seated-row'
+  | 'seated-calf-raise'
+  | 'seated-leg-curl'
   | 'stair-climber'
-  | 'triceps-pushdown';
+  | 'triceps-pushdown'
+  | 'triceps-extension-machine';
 
 type ExerciseIconExercise = Pick<
   Exercise,
@@ -89,21 +109,31 @@ const iconUrls: Record<ExerciseIconKey, string> = {
   'hamstring-curl': hamstringCurlIcon,
   'hanging-leg-raise': hangingLegRaiseIcon,
   'hip-thrust': hipThrustIcon,
+  'hip-abduction-machine': hipAbductionMachineIcon,
   'incline-walk': inclineWalkIcon,
   'lat-pulldown': latPulldownIcon,
   'lateral-raise': lateralRaiseIcon,
   'leg-extension': legExtensionIcon,
   'leg-press': legPressIcon,
+  'machine-chest-press': machineChestPressIcon,
+  'machine-hip-thrust': machineHipThrustIcon,
+  'machine-lateral-raise': machineLateralRaiseIcon,
+  'machine-row': machineRowIcon,
+  'machine-shoulder-press': machineShoulderPressIcon,
   'overhead-press': overheadPressIcon,
   'pec-deck': pecDeckIcon,
   'preacher-curl': preacherCurlIcon,
   'pull-up': pullUpIcon,
   'romanian-deadlift': romanianDeadliftIcon,
+  'reverse-pec-deck': reversePecDeckIcon,
   rowing: rowingIcon,
   running: runningIcon,
   'seated-row': seatedRowIcon,
+  'seated-calf-raise': seatedCalfRaiseIcon,
+  'seated-leg-curl': seatedLegCurlIcon,
   'stair-climber': stairClimberIcon,
   'triceps-pushdown': tricepsPushdownIcon,
+  'triceps-extension-machine': tricepsExtensionMachineIcon,
 };
 
 const exactIcons: Record<string, ExerciseIconKey> = {
@@ -133,9 +163,14 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'leg press': 'leg-press',
   'lying leg curl': 'hamstring-curl',
   'machine bicep preacher curl': 'preacher-curl',
-  'machine chest press': 'bench-press',
+  'machine chest press': 'machine-chest-press',
+  'machine shoulder press': 'machine-shoulder-press',
+  'machine lateral raise': 'machine-lateral-raise',
+  'machine hip thrust': 'machine-hip-thrust',
+  'hip abduction machine': 'hip-abduction-machine',
   'overhead press': 'overhead-press',
   'pec deck': 'pec-deck',
+  'reverse pec deck': 'reverse-pec-deck',
   plank: 'core',
   'pull-up': 'pull-up',
   rowing: 'rowing',
@@ -143,8 +178,9 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'romanian deadlift': 'romanian-deadlift',
   'seated ab crunch machine': 'ab-crunch-machine',
   'seated cable row': 'seated-row',
-  'seated leg curl': 'hamstring-curl',
-  'seated machine row': 'seated-row',
+  'seated leg curl': 'seated-leg-curl',
+  'seated machine row': 'machine-row',
+  'seated calf raise': 'seated-calf-raise',
   'single leg press': 'leg-press',
   'single-arm cable biceps curl': 'biceps-curl',
   'single-arm cable pullover': 'lat-pulldown',
@@ -154,7 +190,7 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'stair climber': 'stair-climber',
   'standing calf raise': 'calf-raise',
   'straight-arm cable pulldown': 'lat-pulldown',
-  'triceps machine extension': 'triceps-pushdown',
+  'triceps machine extension': 'triceps-extension-machine',
   'triceps pushdown': 'triceps-pushdown',
   walking: 'incline-walk',
 };
@@ -173,6 +209,38 @@ function includesAny(value: string, words: string[]) {
 
 export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey {
   const name = normalized(exercise.name);
+  const equipment = normalized(exercise.equipment);
+
+  // Respect explicit equipment in the movement name. A cable station or Smith
+  // machine must not turn into one of the seated lever-machine illustrations.
+  const machine =
+    includesAny(`${name} ${equipment}`, ['machine', 'plate-loaded', 'selectorized']) &&
+    !includesAny(`${name} ${equipment}`, [
+      'cable',
+      'smith',
+      'barbell',
+      'dumbbell',
+      'kettlebell',
+      'band',
+      'bodyweight',
+    ]);
+  if (exercise.kind !== 'cardio' && machine) {
+    if (name.includes('hip abduction')) return 'hip-abduction-machine';
+    if (name.includes('hip thrust')) return 'machine-hip-thrust';
+    if (name.includes('seated') && name.includes('calf')) return 'seated-calf-raise';
+    if (name.includes('seated') && includesAny(name, ['leg curl', 'hamstring curl'])) {
+      return 'seated-leg-curl';
+    }
+    if (includesAny(name, ['reverse pec', 'reverse fly', 'rear delt fly']))
+      return 'reverse-pec-deck';
+    if (name.includes('lateral raise')) return 'machine-lateral-raise';
+    if (/\brows?\b/.test(name)) return 'machine-row';
+    if (name.includes('tricep') && name.includes('extension')) return 'triceps-extension-machine';
+    if (name.includes('press')) {
+      if (includesAny(name, ['shoulder', 'overhead', 'military'])) return 'machine-shoulder-press';
+      if (includesAny(name, ['chest', 'bench'])) return 'machine-chest-press';
+    }
+  }
   const exact = exactIcons[name];
   if (exact) return exact;
 
@@ -187,7 +255,6 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
   }
 
   const muscle = normalized(exercise.muscle_group);
-  const equipment = normalized(exercise.equipment);
   const searchable = `${name} ${muscle} ${equipment}`;
 
   if (name.includes('hack squat')) return 'hack-squat';
@@ -197,14 +264,16 @@ export function exerciseIconKey(exercise: ExerciseIconExercise): ExerciseIconKey
   if (name.includes('deadlift')) return 'deadlift';
   if (name.includes('leg press')) return 'leg-press';
   if (name.includes('leg extension')) return 'leg-extension';
-  if (includesAny(name, ['leg curl', 'hamstring curl'])) return 'hamstring-curl';
+  if (includesAny(name, ['leg curl', 'hamstring curl'])) {
+    return name.includes('seated') ? 'seated-leg-curl' : 'hamstring-curl';
+  }
   if (includesAny(name, ['hip thrust', 'glute bridge'])) return 'hip-thrust';
-  if (name.includes('calf')) return 'calf-raise';
+  if (name.includes('calf')) return name.includes('seated') ? 'seated-calf-raise' : 'calf-raise';
   if (name.includes('back extension')) return 'back-extension';
   if (includesAny(name, ['hanging leg raise', 'hanging knee raise'])) return 'hanging-leg-raise';
   if (name.includes('crunch')) return equipment.includes('machine') ? 'ab-crunch-machine' : 'core';
   if (includesAny(name, ['plank', 'sit-up', 'situp', 'core'])) return 'core';
-  if (name.includes('pec deck')) return 'pec-deck';
+  if (name.includes('pec deck')) return name.includes('reverse') ? 'reverse-pec-deck' : 'pec-deck';
   if (includesAny(name, ['reverse fly', 'rear delt fly'])) return 'face-pull';
   if (name.includes('fly')) return equipment.includes('machine') ? 'pec-deck' : 'chest-fly';
   if (name.includes('lateral raise')) return 'lateral-raise';
