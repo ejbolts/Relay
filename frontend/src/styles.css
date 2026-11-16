@@ -5152,9 +5152,15 @@ html.edge-swipe-active .edge-swipe-indicator {
   font-size: 0.875rem;
 }
 
+/* The fields start clear of the title bar. */
+.create-exercise-dialog > form {
+  padding-top: 0.75rem;
+}
+
 .create-exercise-muscle-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
+  /* The muscle name needs more room than the credit, so "Choose muscle" is not cut short. */
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 2.75rem;
   align-items: end;
   gap: 0.5rem;
 }
@@ -7893,6 +7899,10 @@ body,
   display: block;
   width: 1.1rem;
   height: 1.1rem;
+  margin: 0 auto;
+}
+
+.movement-overflow-menu button > span > .trash-can-icon {
   margin: 0 auto;
 }
 

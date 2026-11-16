@@ -415,7 +415,7 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
-import { bodyweightOn, bodyweightContext } from './relativeStrength';
+import { bodyweightOn, bodyweightContext, sharedBodyweight } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -2938,6 +2938,8 @@ function CalendarDayDetail({
                   <small>
                     {effectiveWorkoutType(workout, types).name} ·{' '}
                     {formatMinutesDuration(workout.duration_minutes)}
+                    {sharedBodyweight(workout.exercises) !== null &&
+                      ` · at ${formatWeight(sharedBodyweight(workout.exercises)!, weightUnit)} BW`}
                   </small>
                 </span>
                 <svg className="disclosure-chevron" viewBox="0 0 20 20" aria-hidden="true">
@@ -2949,9 +2951,12 @@ function CalendarDayDetail({
                   <span>
                     {exercise.exercise_name}
                     {exercise.bodyweight_kg !== null &&
-                      ` @ ${formatWeight(exercise.bodyweight_kg, weightUnit)}`}
+                      sharedBodyweight(workout.exercises) === null &&
+                      ` · at ${formatWeight(exercise.bodyweight_kg, weightUnit)} BW`}
                   </span>
-                  <b>{exercise.set_count} sets</b>
+                  <b>
+                    {exercise.set_count} {exercise.set_count === 1 ? 'set' : 'sets'}
+                  </b>
                 </p>
               ))}
               <button
@@ -5549,7 +5554,9 @@ function SupersetPicker({
         aria-describedby="superset-picker-description"
       >
         <header>
-          <h2 id="superset-picker-title">Add Group</h2>
+          <h2 id="superset-picker-title">
+            {movement.supersetKey ? 'Edit superset' : 'Group as superset'}
+          </h2>
           <button
             ref={closeButtonRef}
             type="button"
@@ -5559,7 +5566,9 @@ function SupersetPicker({
             ×
           </button>
         </header>
-        <p id="superset-picker-description">Alternate exercises in a superset/circuit.</p>
+        <p id="superset-picker-description">
+          Alternate {movement.exercise.name} with the exercises you choose.
+        </p>
 
         <div className="superset-options" aria-label="Exercises in this workout">
           {candidates.length === 0 ? (
@@ -5601,7 +5610,7 @@ function SupersetPicker({
         <footer>
           {movement.supersetKey && (
             <button className="remove-superset-button" type="button" onClick={onRemove}>
-              Remove group
+              Remove superset
             </button>
           )}
           <div className="superset-picker-actions">
@@ -5612,10 +5621,12 @@ function SupersetPicker({
               onClick={() => onSave(selectedKeys)}
             >
               {movement.supersetKey ? 'Update' : 'Add'}{' '}
-              {selectedKeys.length ? supersetGroupName(selectedKeys.length + 1) : 'Group'}
+              {selectedKeys.length
+                ? supersetGroupName(selectedKeys.length + 1).toLowerCase()
+                : 'superset'}
             </button>
             <button type="button" onClick={onClose}>
-              Close
+              Cancel
             </button>
           </div>
         </footer>
@@ -6623,7 +6634,7 @@ function MovementCard({
                 <span aria-hidden="true">
                   <Icon name="history" />
                 </span>
-                {historyOpen ? 'Hide Recent History' : 'Recent History'}
+                {historyOpen ? 'Hide recent history' : 'Recent history'}
               </button>
               <button
                 type="button"
@@ -6637,7 +6648,7 @@ function MovementCard({
                 <span aria-hidden="true">
                   <Icon name="link" />
                 </span>
-                {supersetLabel ? 'Edit Group' : 'Group Superset'}
+                {supersetLabel ? 'Edit superset' : 'Group as superset'}
               </button>
               <button
                 type="button"
@@ -6647,7 +6658,7 @@ function MovementCard({
                 }}
               >
                 <span aria-hidden="true">⇄</span>
-                Swap Exercise
+                Swap exercise
               </button>
               <button
                 type="button"
@@ -6657,8 +6668,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">↑</span>
-                Move Earlier
+                <span aria-hidden="true">
+                  <Icon name="up" />
+                </span>
+                Move earlier
               </button>
               <button
                 type="button"
@@ -6668,8 +6681,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">↓</span>
-                Move Later
+                <span aria-hidden="true">
+                  <Icon name="down" />
+                </span>
+                Move later
               </button>
               <button
                 type="button"
@@ -6679,8 +6694,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">■</span>
-                Delete
+                <span aria-hidden="true">
+                  <i className="trash-can-icon" />
+                </span>
+                Remove exercise
               </button>
             </div>
           </details>
