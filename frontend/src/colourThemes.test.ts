@@ -118,10 +118,10 @@ it('tints the Stained browser bar colour with the accent theme', () => {
   expect(browserThemeColour('dark', 'stained', 'blue')).toBe('#0c141f');
   expect(browserThemeColour('dark', 'stained', 'coral')).toBe('#151116');
 });
-it('defaults frosted glass to Subtle and ignores unknown saved levels', () => {
-  expect(glassPreference()).toBe('subtle');
+it('defaults frosted glass to Medium and ignores unknown saved levels', () => {
+  expect(glassPreference()).toBe('medium');
   localStorage.setItem('gym-logger-glass', 'opaque');
-  expect(glassPreference()).toBe('subtle');
+  expect(glassPreference()).toBe('medium');
 });
 it('saves a frosted glass level and marks the page with it', () => {
   expect(saveGlass('strong')).toBe(true);
@@ -168,7 +168,7 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   localStorage.setItem('gym-logger-glass', 'off');
   localStorage.setItem('gym-logger-set-tint', 'strong');
   // A device that ran an earlier version of the reset is moved onto the current defaults too.
-  localStorage.setItem('gym-logger-appearance-reset', '2');
+  localStorage.setItem('gym-logger-appearance-reset', '3');
   resetAppearanceOnce();
   expect(colourThemePreference()).toBe('coral');
   expect(colourModePreference()).toBe('dark');
@@ -176,7 +176,7 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   expect(lightStylePreference()).toBe('default');
   // The retired Background choice is cleared too.
   expect(localStorage.getItem('gym-logger-sun-ray')).toBeNull();
-  expect(glassPreference()).toBe('subtle');
+  expect(glassPreference()).toBe('medium');
   // The retired Set colours choice is cleared too.
   expect(localStorage.getItem('gym-logger-set-tint')).toBeNull();
   // Choices made after the reset stay put on later loads.

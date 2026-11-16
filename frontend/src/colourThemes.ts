@@ -9,7 +9,7 @@ const LIGHT_STYLE_KEY = 'gym-logger-light-style';
 const SET_TINT_KEY = 'gym-logger-set-tint';
 const APPEARANCE_RESET_KEY = 'gym-logger-appearance-reset';
 /** Bump to move every device onto the default look again once, keeping its accent colour. */
-export const APPEARANCE_RESET_VERSION = '3';
+export const APPEARANCE_RESET_VERSION = '4';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
@@ -34,7 +34,7 @@ export const GLASS_LEVELS = [
   { id: 'strong', name: 'Strong' },
 ] as const;
 export type GlassLevelId = (typeof GLASS_LEVELS)[number]['id'];
-export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'subtle';
+export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
 export const COLOUR_THEMES = [
   {
     id: 'blue',
@@ -266,7 +266,7 @@ export function saveLightStyle(id: LightStyleId): boolean {
 
 /**
  * Once per device, moves existing appearance choices onto the default look (Dark, Default style,
- * Subtle glass) while keeping the accent colour. Later choices are left alone.
+ * Medium glass) while keeping the accent colour. Later choices are left alone.
  */
 export function resetAppearanceOnce(): void {
   try {

@@ -27,12 +27,12 @@ it('swaps the dark styles for Default and Stained light styles in light mode', (
   );
 });
 
-it('offers Off, Subtle, Medium and Strong frosted glass with Subtle selected by default', () => {
+it('offers Off, Subtle, Medium and Strong frosted glass with Medium selected by default', () => {
   const markup = renderToStaticMarkup(<ColourThemePanel />);
   expect(markup).toContain('<legend>Frosted glass</legend>');
   for (const name of ['Off', 'Subtle', 'Medium', 'Strong'])
     expect(markup).toContain(`<strong>${name}</strong>`);
-  expect(markup.match(/<input[^>]*name="glass-level"[^>]*value="subtle"[^>]*>/)?.[0]).toContain(
+  expect(markup.match(/<input[^>]*name="glass-level"[^>]*value="medium"[^>]*>/)?.[0]).toContain(
     'checked=""',
   );
 });
