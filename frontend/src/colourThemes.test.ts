@@ -10,6 +10,8 @@ import {
   saveDarkStyle,
   saveGlass,
   saveSunRay,
+  saveSetTint,
+  setTintPreference,
   resetAppearanceOnce,
   saveLightStyle,
   lightStylePreference,
@@ -201,4 +203,12 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   resetAppearanceOnce();
   expect(sunRayPreference()).toBe('blank');
   expect(colourModePreference()).toBe('light');
+});
+it('saves the set colour intensity, defaulting to Medium', () => {
+  expect(setTintPreference()).toBe('medium');
+  expect(saveSetTint('strong')).toBe(true);
+  expect(setTintPreference()).toBe('strong');
+  expect(document.documentElement.dataset.setTint).toBe('strong');
+  localStorage.setItem('gym-logger-set-tint', 'neon');
+  expect(setTintPreference()).toBe('medium');
 });

@@ -4,18 +4,21 @@ import {
   COLOUR_THEMES,
   DARK_STYLES,
   GLASS_LEVELS,
+  SET_TINT_LEVELS,
   LIGHT_STYLES,
   SUN_RAY_STYLES,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  setTintPreference,
   lightStylePreference,
   sunRayPreference,
   saveColourMode,
   saveColourTheme,
   saveDarkStyle,
   saveGlass,
+  saveSetTint,
   saveLightStyle,
   saveSunRay,
 } from './colourThemes';
@@ -27,6 +30,7 @@ export function ColourThemePanel() {
   const [mode, setMode] = useState(colourModePreference);
   const [darkStyle, setDarkStyle] = useState(darkStylePreference);
   const [glass, setGlass] = useState(glassPreference);
+  const [setTint, setSetTint] = useState(setTintPreference);
   const [lightStyle, setLightStyle] = useState(lightStylePreference);
   const [sunRay, setSunRay] = useState(sunRayPreference);
   const [status, setStatus] = useState('');
@@ -183,6 +187,30 @@ export function ColourThemePanel() {
               />
               <span className="glass-swatch" data-level={level.id} aria-hidden="true">
                 <span />
+              </span>
+              <strong>{level.name}</strong>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset className="glass-options set-tint-options">
+        <legend>Set colours</legend>
+        <div>
+          {SET_TINT_LEVELS.map((level) => (
+            <label key={level.id} className={setTint === level.id ? 'is-selected' : ''}>
+              <input
+                type="radio"
+                name="set-tint"
+                value={level.id}
+                checked={setTint === level.id}
+                onChange={() => {
+                  setSetTint(level.id);
+                  saveSetTint(level.id);
+                }}
+              />
+              <span className="set-tint-swatch" data-level={level.id} aria-hidden="true">
+                <span data-kind="warmup" />
+                <span data-kind="normal" />
               </span>
               <strong>{level.name}</strong>
             </label>

@@ -12,12 +12,14 @@ import {
   applyColourTheme,
   applyDarkStyle,
   applyGlass,
+  applySetTint,
   applyLightStyle,
   applySunRay,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  setTintPreference,
   resetAppearanceOnce,
   lightStylePreference,
   sunRayPreference,
@@ -47,6 +49,7 @@ resetAppearanceOnce();
 applyDarkStyle(darkStylePreference());
 applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());
+applySetTint(setTintPreference());
 applySunRay(sunRayPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());

@@ -4,6 +4,7 @@ const DARK_STYLE_KEY = 'gym-logger-dark-style';
 const GLASS_KEY = 'gym-logger-glass';
 const SUN_RAY_KEY = 'gym-logger-sun-ray';
 const LIGHT_STYLE_KEY = 'gym-logger-light-style';
+const SET_TINT_KEY = 'gym-logger-set-tint';
 const APPEARANCE_RESET_KEY = 'gym-logger-appearance-reset';
 /** Bump to move every device onto the default look again once, keeping its accent colour. */
 export const APPEARANCE_RESET_VERSION = '1';
@@ -31,6 +32,14 @@ export const GLASS_LEVELS = [
   { id: 'strong', name: 'Strong' },
 ] as const;
 export type GlassLevelId = (typeof GLASS_LEVELS)[number]['id'];
+/** How strongly logged sets are tinted by type (green working, orange warm-up and so on). */
+export const SET_TINT_LEVELS = [
+  { id: 'subtle', name: 'Subtle' },
+  { id: 'medium', name: 'Medium' },
+  { id: 'strong', name: 'Strong' },
+] as const;
+export type SetTintId = (typeof SET_TINT_LEVELS)[number]['id'];
+export const DEFAULT_SET_TINT: SetTintId = 'medium';
 export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
 /** The drifting light behind the app, in the accent colour, or none at all. */
 export const SUN_RAY_STYLES = [
@@ -306,5 +315,28 @@ export function resetAppearanceOnce(): void {
     localStorage.setItem(APPEARANCE_RESET_KEY, APPEARANCE_RESET_VERSION);
   } catch {
     // Without storage every choice already falls back to the defaults.
+  }
+}
+
+export function setTintPreference(): SetTintId {
+  try {
+    const saved = localStorage.getItem(SET_TINT_KEY);
+    return SET_TINT_LEVELS.find((level) => level.id === saved)?.id ?? DEFAULT_SET_TINT;
+  } catch {
+    return DEFAULT_SET_TINT;
+  }
+}
+
+export function applySetTint(id: SetTintId) {
+  document.documentElement.dataset.setTint = id;
+}
+
+export function saveSetTint(id: SetTintId): boolean {
+  applySetTint(id);
+  try {
+    localStorage.setItem(SET_TINT_KEY, id);
+    return true;
+  } catch {
+    return false;
   }
 }

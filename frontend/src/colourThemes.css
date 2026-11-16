@@ -286,3 +286,40 @@
   border-color: color-mix(in srgb, var(--p-accent) 30%, transparent);
   background: color-mix(in srgb, var(--p-accent) 6%, #ffffff);
 }
+.set-tint-options > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* Two set rows, warm-up and working, at the level they preview. */
+.set-tint-swatch {
+  display: grid;
+  gap: 3px;
+  width: 3rem;
+  padding: 4px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 9px;
+  background: var(--p-page);
+}
+.set-tint-swatch > span {
+  height: 0.6rem;
+  border: 1px solid rgb(var(--swatch-rgb) / var(--swatch-border));
+  border-radius: 3px;
+  background: rgb(var(--swatch-rgb) / var(--swatch-fill));
+}
+.set-tint-swatch > span[data-kind='warmup'] {
+  --swatch-rgb: 240 140 40;
+}
+.set-tint-swatch > span[data-kind='normal'] {
+  --swatch-rgb: 35 166 62;
+}
+.set-tint-swatch[data-level='subtle'] {
+  --swatch-fill: 10%;
+  --swatch-border: 30%;
+}
+.set-tint-swatch[data-level='medium'] {
+  --swatch-fill: 22%;
+  --swatch-border: 50%;
+}
+.set-tint-swatch[data-level='strong'] {
+  --swatch-fill: 38%;
+  --swatch-border: 75%;
+}

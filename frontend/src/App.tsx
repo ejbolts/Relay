@@ -239,6 +239,7 @@ import {
   setNumberLabels,
 } from './setFieldValues';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
+import { markSetAdded } from './setRowEntrance';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
   appTabFromHash,
@@ -4258,15 +4259,12 @@ function WorkoutLogger({
       tips.event('re-add-set', 'reorder');
     recentRemoval.current = null;
     setMovements((current) =>
-      current.map((item) =>
-        item.key === movement.key
-          ? {
-              ...item,
-              isComplete: false,
-              sets: [...item.sets, emptySet(item.exercise.kind, item.sets.at(-1))],
-            }
-          : item,
-      ),
+      current.map((item) => {
+        if (item.key !== movement.key) return item;
+        const added = emptySet(item.exercise.kind, item.sets.at(-1));
+        markSetAdded(added.key);
+        return { ...item, isComplete: false, sets: [...item.sets, added] };
+      }),
     );
   }
 

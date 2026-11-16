@@ -6242,3 +6242,8 @@ html[data-reduce-motion] ::backdrop {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
+
+/* The picker's exercise list drops its older solid backing so the rows are frosted too. */
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-list {
+  background: transparent;
+}
