@@ -142,7 +142,6 @@ import {
   type ExerciseMachineChoices,
 } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
-import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
@@ -417,7 +416,6 @@ import { calculateScopedDraftPrs } from './workoutPr';
 import { bodyweightOn, bodyweightContext } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
-import { TrainingBlockControls } from './TrainingBlockControls';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import {
@@ -2403,9 +2401,6 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
-                weeklySets={muscleSets.weeklySets}
-                weeklySetsHistory={muscleSets.history}
-                onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={shownDashboard?.history ?? null}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -8463,7 +8458,6 @@ export function ProgressScreen({
     <section
       className={`progress-screen ${embedded ? '' : 'content-page'}${browseFirst ? ' exercise-list-detail' : ''}`}
     >
-      <TrainingBlockControls />
       {browseFirst && fullProgress && !onDetailChange && (
         <button type="button" className="training-back text-link" onClick={backToExercises}>
           <Icon name="chevron-left" /> Exercises
@@ -9767,9 +9761,6 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
-  weeklySets,
-  weeklySetsHistory,
-  onOpenMuscleWorkout,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -9803,9 +9794,6 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
-  weeklySets: MuscleSetsWeek | undefined;
-  weeklySetsHistory: MuscleSetsWeek[] | undefined;
-  onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -9824,9 +9812,6 @@ function HistoryScreen({
     setCreatedExerciseName(null);
     setCreateExerciseOpen(true);
   };
-  const musclePreferences = useTrainingPreferences().preferences;
-  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
-  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [chosenHistoryPage, setChosenHistoryPage] = useState<number | null>(null);
@@ -10297,15 +10282,6 @@ function HistoryScreen({
             />
           )}
         </CachedTabPanel>
-      )}
-      {!exerciseHeader && (
-        <MuscleSetsCard
-          weeklySets={weeklySets}
-          history={weeklySetsHistory}
-          goal={muscleSetGoal}
-          goals={muscleGoals}
-          onOpenWorkout={onOpenMuscleWorkout}
-        />
       )}
     </section>
   );

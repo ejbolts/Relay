@@ -1,113 +1,3 @@
-.training-block-scope {
-  position: relative;
-  margin-bottom: 18px;
-  border: 1px solid var(--p-line);
-  border-radius: 14px;
-  padding: 10px;
-  background: var(--p-surface);
-}
-.training-block-scope-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.training-block-scope .segmented-control {
-  flex: 1;
-  min-width: 0;
-  background: var(--p-page);
-}
-.tracker-app .training-block-help {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  position: relative;
-  width: 28px;
-  min-height: 28px;
-  height: 28px;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 50%;
-  padding: 0;
-  background: transparent;
-  color: var(--p-muted);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-.training-block-help::after {
-  content: '';
-  position: absolute;
-  inset: -8px;
-}
-.tracker-app .training-block-help[aria-expanded='true'],
-.tracker-app .training-block-help:hover {
-  border-color: var(--p-accent-text);
-  color: var(--p-accent-text);
-}
-.training-block-popover {
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: var(--p-surface-3);
-  color: var(--p-ink-2);
-  font-size: 0.8rem;
-}
-.training-block-popover p {
-  margin: 0;
-}
-.training-block-popover strong {
-  color: var(--p-ink);
-}
-.tracker-app .training-block-pill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 52px;
-  margin: 9px 0 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 11px;
-  padding: 8px 12px;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-  text-align: left;
-}
-.training-block-pill > span {
-  flex: 1;
-  min-width: 0;
-}
-.training-block-pill strong,
-.training-block-pill small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.training-block-pill strong {
-  font-size: 0.9rem;
-}
-.training-block-pill small {
-  margin-top: 2px;
-  color: var(--p-muted);
-  font-size: 0.75rem;
-}
-.training-block-pill .pulse-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--p-muted);
-}
-.tracker-app .training-block-pill:disabled {
-  opacity: 1;
-  cursor: default;
-  background: transparent;
-}
-.training-block-empty {
-  flex: 1;
-  font-size: 0.9rem;
-}
-.tracker-app .training-block-start,
 .training-block-dialog .training-block-new {
   display: inline-flex;
   align-items: center;
@@ -130,7 +20,6 @@
   background: var(--p-accent);
   color: white;
 }
-.training-block-start .pulse-icon,
 .training-block-new .pulse-icon {
   width: 16px;
   height: 16px;
@@ -203,7 +92,7 @@
 
 /* Blocks page */
 .training-block-page {
-  padding: 0 16px 16px;
+  padding: 16px;
 }
 .training-block-bar {
   display: flex;
