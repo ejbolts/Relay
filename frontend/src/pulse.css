@@ -6169,3 +6169,31 @@ html[data-reduce-motion] ::backdrop {
   border-top: 1px solid var(--p-line);
   box-shadow: none;
 }
+
+/* The sign-in and account creation card is frosted too, with its tabs, inputs and notes. */
+:where(:root:not([data-glass='off'])) .auth-card {
+  position: relative;
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off'])) .auth-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
