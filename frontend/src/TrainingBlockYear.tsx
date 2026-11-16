@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { BLOCK_KIND_LABELS, BLOCK_KINDS, blockCode, blockKind } from './blockKinds';
+import {
+  BLOCK_KIND_LABELS,
+  BLOCK_KINDS,
+  DEFAULT_KIND_COLORS,
+  KIND_COLOR_CHOICES,
+  blockCode,
+  blockKind,
+  kindColor,
+} from './blockKinds';
+import { useTrainingBlocks } from './trainingBlocksContext';
 import { Icon } from './Icon';
 import {
   MONTHS,
@@ -366,11 +375,13 @@ export function TrainingBlockYearView({
   today,
   busy,
   onEdit,
+  onColours,
 }: {
   config: TrainingBlocks;
   today: string;
   busy: boolean;
   onEdit: (block: TrainingBlock) => void;
+  onColours: () => void;
 }) {
   const thisYear = Number(today.slice(0, 4));
   const first = firstYear(config, today);
@@ -442,6 +453,16 @@ export function TrainingBlockYearView({
       >
         <Icon name="chevron-right" />
       </button>
+      <button
+        type="button"
+        className="training-block-colours-open"
+        aria-label="Block colours"
+        title="Block colours"
+        disabled={busy}
+        onClick={onColours}
+      >
+        <Icon name="palette" />
+      </button>
     </div>
   );
   return (
@@ -450,6 +471,7 @@ export function TrainingBlockYearView({
         title="Training timeline"
         controls={years}
         modal
+        iconOnly
         className="training-block-year-frame"
       >
         {(expanded) =>
@@ -589,5 +611,72 @@ export function BlockKindFields({
         </label>
       )}
     </>
+  );
+}
+
+/** A colour for each block type, saved to the account and used wherever blocks appear. */
+export function BlockColoursView({ onDone }: { onDone: () => void }) {
+  const { config, changed } = useTrainingBlocks();
+  const [saving, setSaving] = useState<BlockKind | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function choose(kind: BlockKind, color: string) {
+    if (saving || kindColor(kind, config.kind_colors) === color) return;
+    const next: Partial<Record<BlockKind, string>> = {};
+    for (const item of BLOCK_KINDS) {
+      const value = item === kind ? color : config.kind_colors?.[item];
+      if (value && value !== DEFAULT_KIND_COLORS[item]) next[item] = value;
+    }
+    setSaving(kind);
+    setError(null);
+    try {
+      changed(await api.trainingBlocks.colors(next));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save the colour.');
+    } finally {
+      setSaving(null);
+    }
+  }
+  return (
+    <div className="training-block-colours">
+      {BLOCK_KINDS.map((kind) => {
+        const current = kindColor(kind, config.kind_colors);
+        return (
+          <section key={kind} className="training-block-colour-row">
+            <h3>
+              <span className={`training-block-kind-dot kind-${kind}`} aria-hidden="true" />
+              {BLOCK_KIND_LABELS[kind]}
+            </h3>
+            <div
+              className="training-block-swatches"
+              role="radiogroup"
+              aria-label={`${BLOCK_KIND_LABELS[kind]} colour`}
+            >
+              {KIND_COLOR_CHOICES.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  role="radio"
+                  aria-checked={current === color}
+                  aria-label={`${color}${color === DEFAULT_KIND_COLORS[kind] ? ' (default)' : ''}`}
+                  disabled={!!saving}
+                  style={{ background: color }}
+                  onClick={() => void choose(kind, color)}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      {error && (
+        <p role="alert" className="error-message">
+          {error}
+        </p>
+      )}
+      <div className="training-block-actions">
+        <button type="button" className="primary-action" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </div>
   );
 }

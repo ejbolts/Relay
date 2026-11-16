@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
-import { blockCode, blockKind, suggestedBlockName } from './blockKinds';
+import { blockCode, blockKind, kindColor, suggestedBlockName } from './blockKinds';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { BlockStats, TrainingBlock, TrainingBlocks } from './types';
@@ -288,4 +288,31 @@ it('shows every year in a landscape full-screen timeline with week lines', async
   expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
     'Strength 1',
   );
+});
+
+it('saves a colour for each block type and applies it everywhere', async () => {
+  expect(kindColor('strength', { strength: 'red' })).toBe('#7fb0f0');
+  expect(kindColor('recovery', { recovery: '#F0A07F' })).toBe('#F0A07F');
+  const saved = { ...structuredClone(config), kind_colors: { strength: '#f0a07f' } };
+  const colors = vi.spyOn(api.trainingBlocks, 'colors').mockResolvedValue(saved);
+  await open();
+  const toggle = button('View Training timeline full screen in landscape');
+  expect(toggle.textContent).toBe('');
+  await click('Block colours');
+  expect(document.querySelector('dialog[open] h2')?.textContent).toContain('Block colours');
+  const swatch = (kind: string, color: string) =>
+    document.querySelector<HTMLButtonElement>(
+      `[aria-label="${kind} colour"] [aria-label^="${color}"]`,
+    )!;
+  expect(swatch('Strength', '#7fb0f0').getAttribute('aria-checked')).toBe('true');
+  await click(swatch('Strength', '#f0a07f'));
+  expect(colors).toHaveBeenCalledWith({ strength: '#f0a07f' });
+  expect(document.documentElement.style.getPropertyValue('--block-color-strength')).toBe('#f0a07f');
+  expect(swatch('Strength', '#f0a07f').getAttribute('aria-checked')).toBe('true');
+  colors.mockResolvedValue(structuredClone(config));
+  await click(swatch('Strength', '#7fb0f0'));
+  expect(colors).toHaveBeenLastCalledWith({});
+  expect(document.documentElement.style.getPropertyValue('--block-color-strength')).toBe('');
+  await click('Done');
+  expect(document.querySelector('.training-block-year-bar')).not.toBeNull();
 });

@@ -133,6 +133,7 @@ def test_snapshot_holds_only_its_owners_data(client, other_client):
             }
             for block in owner_blocks["blocks"]
         ],
+        "kind_colors": {},
     }
     assert backup.user_id == owner_id
     assert rows(database, "SELECT id, password_hash FROM users") == [(owner_id, "")]

@@ -347,3 +347,29 @@ def test_block_kinds_and_focus_are_optional_and_kept_by_older_apps(client):
         json={"name": "Power", "start_date": "2026-07-01", "kind": "power"},
     )
     assert invalid.status_code == 422
+
+
+def test_block_type_colours_are_saved_validated_and_kept_by_block_edits(client):
+    rebuild = block(client, "Strength 1", "2026-06-01")
+    assert client.get("/api/training-blocks").json()["kind_colors"] == {}
+    saved = client.put(
+        "/api/training-blocks/colors",
+        json={"kind_colors": {"strength": "#F0A07F", "recovery": "#6fd0b8"}},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["kind_colors"] == {"strength": "#F0A07F", "recovery": "#6fd0b8"}
+
+    # Saving or removing blocks keeps the colours.
+    client.put(
+        f"/api/training-blocks/{rebuild['id']}",
+        json={"name": "Strength 1", "start_date": "2026-06-02"},
+    )
+    block(client, "Strength 2", "2026-07-01")
+    assert client.get("/api/training-blocks").json()["kind_colors"]["strength"] == "#F0A07F"
+
+    for bad in ({"strength": "red"}, {"power": "#ffffff"}, {"strength": "#fff"}):
+        response = client.put("/api/training-blocks/colors", json={"kind_colors": bad})
+        assert response.status_code == 422, bad
+
+    cleared = client.put("/api/training-blocks/colors", json={"kind_colors": {}})
+    assert cleared.json()["kind_colors"] == {}

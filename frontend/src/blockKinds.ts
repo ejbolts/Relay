@@ -2,6 +2,36 @@ import type { BlockKind, TrainingBlock } from './types';
 
 export const BLOCK_KINDS: readonly BlockKind[] = ['strength', 'hypertrophy', 'recovery', 'deload'];
 
+/** The app's colours for each type; dark text stays readable on all of them. */
+export const DEFAULT_KIND_COLORS: Record<BlockKind, string> = {
+  strength: '#7fb0f0',
+  hypertrophy: '#b59cf0',
+  recovery: '#6fd0b8',
+  deload: '#9aa4ad',
+};
+
+/** Colours offered for block types, all light enough for the bar's dark labels. */
+export const KIND_COLOR_CHOICES = [
+  '#7fb0f0',
+  '#7fd8f0',
+  '#6fd0b8',
+  '#9fd67a',
+  '#f0d36a',
+  '#d2b06f',
+  '#f0a07f',
+  '#f09cc4',
+  '#b59cf0',
+  '#9aa4ad',
+];
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** The colour shown for a type: the account's choice when valid, else the default. */
+export function kindColor(kind: BlockKind, colors: Partial<Record<string, string>> | undefined) {
+  const chosen = colors?.[kind];
+  return chosen && HEX.test(chosen) ? chosen : DEFAULT_KIND_COLORS[kind];
+}
+
 export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
   strength: 'Strength',
   hypertrophy: 'Hypertrophy',

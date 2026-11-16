@@ -1,15 +1,15 @@
 /* Block types */
 .kind-strength {
-  --block-kind: #7fb0f0;
+  --block-kind: var(--block-color-strength, #7fb0f0);
 }
 .kind-hypertrophy {
-  --block-kind: #b59cf0;
+  --block-kind: var(--block-color-hypertrophy, #b59cf0);
 }
 .kind-recovery {
-  --block-kind: #6fd0b8;
+  --block-kind: var(--block-color-recovery, #6fd0b8);
 }
 .kind-deload {
-  --block-kind: #9aa4ad;
+  --block-kind: var(--block-color-deload, #9aa4ad);
 }
 .kind-none {
   --block-kind: #d2b06f;
@@ -325,9 +325,11 @@ button.training-block-year-segment {
 }
 .training-block-dialog
   .training-block-year-frame:not(.landscape-chart-expanded)
-  .landscape-chart-toggle {
+  .landscape-chart-toggle,
+.training-block-dialog .training-block-colours-open {
   display: grid;
   place-items: center;
+  flex: 0 0 auto;
   width: 36px;
   height: 36px;
   min-height: 0;
@@ -337,11 +339,54 @@ button.training-block-year-segment {
   padding: 0;
   background: var(--p-surface-2);
   color: var(--p-ink);
-  font-size: 0;
 }
 .training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toggle > span {
+  display: grid;
+  place-items: center;
   color: inherit;
-  font-size: 1rem;
+  line-height: 0;
+}
+.training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toggle .pulse-icon,
+.training-block-colours-open .pulse-icon {
+  width: 18px;
+  height: 18px;
+}
+.training-block-years > div {
+  flex: 1;
+}
+.training-block-colours {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+.training-block-colour-row h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+.training-block-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+  gap: 8px;
+}
+.training-block-dialog .training-block-swatches button {
+  aspect-ratio: 1;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+}
+.training-block-dialog .training-block-swatches button[aria-checked='true'] {
+  box-shadow:
+    0 0 0 2px var(--p-surface),
+    0 0 0 4px var(--p-ink);
+}
+.training-block-dialog .training-block-swatches button:disabled {
+  opacity: 0.6;
 }
 .landscape-chart-expanded .training-block-years {
   display: none;

@@ -12,6 +12,7 @@ export function LandscapeChartFrame({
   title,
   controls,
   modal = false,
+  iconOnly = false,
   className = '',
   children,
 }: {
@@ -19,6 +20,8 @@ export function LandscapeChartFrame({
   controls: ReactNode;
   /** Open the viewer as a modal dialog, so it stays above a dialog the frame sits in. */
   modal?: boolean;
+  /** Show only the icon on the compact toggle; its accessible name stays the same. */
+  iconOnly?: boolean;
   className?: string;
   children: (expanded: boolean, close: () => void) => ReactNode;
 }) {
@@ -139,7 +142,7 @@ export function LandscapeChartFrame({
           <span aria-hidden="true">
             <Icon name={expanded ? 'close' : 'expand'} />
           </span>
-          {expanded ? 'Exit' : 'Landscape'}
+          {expanded ? 'Exit' : iconOnly ? null : 'Landscape'}
         </button>
       </div>
       <div className="landscape-chart-content">{children(expanded, close)}</div>

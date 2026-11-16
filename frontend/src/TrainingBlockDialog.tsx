@@ -9,10 +9,10 @@ import { addDays } from './trainingSummary';
 import { localDate } from './utils';
 import type { BlockKind, TrainingBlock, TrainingBlocks } from './types';
 import { blockKind, suggestedBlockName } from './blockKinds';
-import { BlockKindFields, TrainingBlockYearView } from './TrainingBlockYear';
+import { BlockColoursView, BlockKindFields, TrainingBlockYearView } from './TrainingBlockYear';
 import './trainingBlocks.css';
 
-type View = 'blocks' | 'form' | 'remove';
+type View = 'blocks' | 'form' | 'remove' | 'colours';
 /** Where the dialog opens: the blocks overview, or straight into a new block. */
 export type TrainingBlockDialogStart = 'blocks' | 'new';
 type StartPreset = 'today' | 'january' | 'custom';
@@ -179,7 +179,9 @@ export function TrainingBlockDialog({
         : 'New training block'
       : view === 'remove'
         ? 'Remove training block?'
-        : 'Training blocks';
+        : view === 'colours'
+          ? 'Block colours'
+          : 'Training blocks';
 
   return (
     <PopupDialog
@@ -205,8 +207,10 @@ export function TrainingBlockDialog({
           today={today}
           busy={busy}
           onEdit={(item) => startForm(item, 'blocks')}
+          onColours={() => setView('colours')}
         />
       )}
+      {view === 'colours' && <BlockColoursView onDone={() => setView('blocks')} />}
       {view === 'form' && (
         <form onSubmit={submit} className="training-block-form">
           <fieldset disabled={busy}>

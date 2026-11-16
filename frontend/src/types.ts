@@ -549,6 +549,8 @@ export interface TrainingBlockSummary {
 
 export interface TrainingBlocks {
   blocks: TrainingBlock[];
+  /** Hex colours chosen for block types; a missing type uses the app's default. */
+  kind_colors?: Partial<Record<string, string>>;
   /** Workouts dated before the first block. */
   earlier_workout_count?: number;
   /** Date of the earliest logged workout. */

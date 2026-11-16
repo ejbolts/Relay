@@ -21,6 +21,8 @@ from .training_metrics import get_setting, set_setting
 KEY = "training_blocks"
 
 BlockKind = Literal["strength", "hypertrophy", "recovery", "deload"]
+# Hex colours the account chose for block types; a missing type keeps the app's default.
+KindColors = dict[BlockKind, Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]]
 
 
 class BlockInput(BaseModel):
@@ -63,6 +65,11 @@ class TrainingBlock(BlockInput):
 
 class TrainingBlocks(BaseModel):
     blocks: list[TrainingBlock] = Field(default_factory=list)
+    kind_colors: KindColors = Field(default_factory=dict)
+
+
+class KindColorsInput(BaseModel):
+    kind_colors: KindColors
 
 
 class TrainingBlockRead(TrainingBlock):
@@ -73,6 +80,7 @@ class TrainingBlocksRead(BaseModel):
     """Response-only view: counts are derived on read and never saved with the boundaries."""
 
     blocks: list[TrainingBlockRead]
+    kind_colors: KindColors = Field(default_factory=dict)
     earlier_workout_count: int = 0
     history_start: date | None = None
 
@@ -84,7 +92,7 @@ def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
     blocks = sorted(config.blocks, key=lambda block: block.start_date)
     for index, block in enumerate(blocks):
         block.end_date = blocks[index + 1].start_date if index + 1 < len(blocks) else None
-    return TrainingBlocks(blocks=blocks)
+    return TrainingBlocks(blocks=blocks, kind_colors=config.kind_colors)
 
 
 def block_on(config: TrainingBlocks, day: date) -> TrainingBlock | None:
@@ -106,6 +114,7 @@ def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBl
             TrainingBlockRead(**block.model_dump(), workout_count=counts[index + 1])
             for index, block in enumerate(config.blocks)
         ],
+        kind_colors=config.kind_colors,
         earlier_workout_count=counts[0],
         history_start=min((day for day, _ in rows), default=None),
     )
@@ -144,6 +153,15 @@ def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> Train
     if payload.kind:
         block.deload = payload.kind == "deload"
     config.blocks.append(block)
+    return save_blocks(db, user.id, config)
+
+
+@router.put("/colors", response_model=TrainingBlocksRead)
+def update_kind_colors(
+    payload: KindColorsInput, db: DbSession, user: CurrentUser
+) -> TrainingBlocksRead:
+    config = training_blocks(db, user.id)
+    config.kind_colors = payload.kind_colors
     return save_blocks(db, user.id, config)
 
 
