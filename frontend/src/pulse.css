@@ -3284,9 +3284,9 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .logger-screen .add-exercise-button {
-  border: 1px dashed color-mix(in srgb, var(--p-accent) 45%, transparent);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 60%, transparent);
   border-radius: 16px;
-  background: var(--p-accent-soft);
+  background: transparent;
   color: var(--p-accent-text);
   font-weight: 600;
 }
@@ -3581,6 +3581,18 @@ html.edge-swipe-ready .edge-swipe-indicator {
   height: 2px;
   border-radius: 1px;
   background: var(--p-accent);
+}
+
+/* Body trend draws its line in the page ink (white in dark mode) rather than the accent. */
+.body-screen .pulse-chart-line,
+.body-screen .chart-legend .legend-line {
+  stroke: var(--p-ink);
+  background: var(--p-ink);
+}
+
+.body-screen .pulse-chart-marker,
+.body-screen .pulse-chart-cursor circle {
+  fill: var(--p-ink);
 }
 
 .chart-legend .legend-goal {
@@ -4433,7 +4445,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .add-set-button {
-  margin: 0.5rem 0.875rem 0;
+  margin: 0.5rem 0.875rem 0.375rem;
   border: 0;
   border-radius: 12px;
   background: var(--p-surface-2);
