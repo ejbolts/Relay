@@ -364,112 +364,12 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
   padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
 }
 
-.live-workout-resume {
-  position: fixed;
-  z-index: 79;
-  right: max(0.75rem, calc((100% - 696px) / 2));
-  bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  left: max(0.75rem, calc((100% - 696px) / 2));
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-height: 4rem;
-  border: 1px solid var(--p-accent);
-  border-radius: 1rem;
-  padding: 0.625rem 0.875rem;
-  background: color-mix(in srgb, var(--p-accent) 18%, var(--p-surface));
-  box-shadow: 0 6px 22px rgb(0 0 0 / 25%);
-  color: var(--p-ink);
-  text-align: left;
-  animation: live-workout-bar-in 180ms var(--ease-out);
-}
-
-.live-workout-resume.above-tab-bar {
-  bottom: calc(var(--p-tab-bar-height) + 0.5rem);
-}
-
-.live-workout-resume-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 0.75rem;
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.live-workout-resume-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.live-workout-resume-copy strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.875rem;
-  font-weight: 750;
-}
-
-.live-workout-resume-copy > span {
-  display: block;
-  margin-top: 0.3rem;
-  color: var(--p-accent-text);
-  font-size: 0.6875rem;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-}
-
-.live-workout-resume > .pulse-icon {
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  rotate: 180deg;
-  color: var(--p-accent-text);
-}
-
-.live-workout-resume.is-paused {
-  border-color: var(--p-gold);
-}
-
-.live-workout-resume.is-paused .live-workout-resume-icon {
-  background: var(--p-gold);
-  color: var(--p-on-gold);
-}
-
-.live-workout-resume.is-paused .live-workout-resume-copy > span {
-  color: var(--p-gold);
-}
-
-.tracker-app.has-live-workout-bar .tracker-content {
-  padding-bottom: 5rem;
-}
-
-.app-tab-navigation.has-workout-resume-bar {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-@keyframes live-workout-bar-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.5rem);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .live-workout-resume {
-    animation: none;
-  }
   .live-workout-header {
     transition: none;
   }
 }
 
-html[data-reduce-motion] .live-workout-resume {
-  animation: none;
-}
 html[data-reduce-motion] .live-workout-header {
   transition: none;
 }
