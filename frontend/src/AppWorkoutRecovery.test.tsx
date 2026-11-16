@@ -1152,6 +1152,10 @@ describe('rest time controls', () => {
   it('minimises to the live Start bubble without saving or losing sets, notes or the running rest', async () => {
     await startRest();
     const before = readActiveWorkoutDraft()!;
+    // Behind the open sheet the tab bar already shows the live Start bubble, so pulling the sheet
+    // down reveals it instead of it popping in; the bar stays inert until the sheet closes.
+    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+    expect(container.querySelector('.app-tab-bar')?.hasAttribute('inert')).toBe(true);
     const minimise = container.querySelector<HTMLButtonElement>('[aria-label="Minimise workout"]')!;
     minimise.focus();
     await act(async () => minimise.click());

@@ -364,11 +364,6 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
   padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
 }
 
-/* While the live workout sheet is open, the tab bar hides its centre Start tab. */
-.app-tab-navigation.hides-start {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
 @media (prefers-reduced-motion: reduce) {
   .live-workout-header {
     transition: none;

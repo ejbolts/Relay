@@ -26,7 +26,6 @@ export function AppTabBar({
   active,
   workoutStartedAt,
   restEndsAt = null,
-  hideStart = false,
   liveSummary = null,
   inert = false,
   workoutSaving = false,
@@ -39,8 +38,6 @@ export function AppTabBar({
   workoutStartedAt: number | null;
   /** While the live workout's rest runs, the button shows a timer counting it down. */
   restEndsAt?: number | null;
-  /** Hides the centre Start tab, while the live workout sheet covers the screen. */
-  hideStart?: boolean;
   /** Lets the live timer include time from before a workout was resumed. */
   liveSummary?: Pick<
     LiveWorkoutSummary,
@@ -64,7 +61,7 @@ export function AppTabBar({
   const [menuOpen, setMenuOpen] = useState(false);
   const open = menuOpen && menuAvailable && !editing;
   const startButton = useRef<HTMLButtonElement>(null);
-  const startVisible = live && !hideStart && !inert;
+  const startVisible = live && !inert;
 
   // Minimising the live workout hides the focused control in its sheet; Start takes over focus.
   useEffect(() => {
@@ -173,54 +170,48 @@ export function AppTabBar({
         className={`app-tab-bar${editing ? ' is-editing-home' : ''}`}
         aria-label={editing ? 'Home layout controls' : 'Main navigation'}
       >
-        <div
-          className={`app-tab-items app-tab-navigation${hideStart ? ' hides-start' : ''}`}
-          inert={editing}
-          aria-hidden={editing}
-        >
+        <div className="app-tab-items app-tab-navigation" inert={editing} aria-hidden={editing}>
           {TABS.slice(0, 2).map(renderTab)}
-          {!hideStart && (
-            <button
-              type="button"
-              ref={startButton}
-              className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${open ? ' menu-open' : ''}`}
-              data-guide-target="start"
-              aria-expanded={menuAvailable ? open : undefined}
-              aria-controls={menuAvailable ? 'start-menu' : undefined}
-              aria-label={
-                workoutSaving
-                  ? 'Saving workout'
-                  : resting
-                    ? `Resume active workout, rest ${formatSeconds(restLeft)} left`
-                    : live
-                      ? 'Resume active workout'
-                      : 'Start workout'
-              }
-              disabled={workoutSaving}
-              onClick={() => (menuAvailable ? setMenuOpen(!open) : onStart())}
-            >
-              <span className="app-tab-start-bubble">
-                {resting ? (
-                  <Icon name="timer" />
-                ) : live ? (
-                  <LiveDot startedAt={workoutStartedAt} />
-                ) : (
-                  <Icon name={workoutSaving ? 'check' : 'plus'} />
-                )}
-              </span>
-              <span>
-                {workoutSaving ? (
-                  'Saving'
-                ) : resting ? (
-                  <span className="num">{formatSeconds(restLeft)}</span>
-                ) : live ? (
-                  <LiveElapsed startedAt={workoutStartedAt} summary={liveSummary} />
-                ) : (
-                  'Start'
-                )}
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            ref={startButton}
+            className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${open ? ' menu-open' : ''}`}
+            data-guide-target="start"
+            aria-expanded={menuAvailable ? open : undefined}
+            aria-controls={menuAvailable ? 'start-menu' : undefined}
+            aria-label={
+              workoutSaving
+                ? 'Saving workout'
+                : resting
+                  ? `Resume active workout, rest ${formatSeconds(restLeft)} left`
+                  : live
+                    ? 'Resume active workout'
+                    : 'Start workout'
+            }
+            disabled={workoutSaving}
+            onClick={() => (menuAvailable ? setMenuOpen(!open) : onStart())}
+          >
+            <span className="app-tab-start-bubble">
+              {resting ? (
+                <Icon name="timer" />
+              ) : live ? (
+                <LiveDot startedAt={workoutStartedAt} />
+              ) : (
+                <Icon name={workoutSaving ? 'check' : 'plus'} />
+              )}
+            </span>
+            <span>
+              {workoutSaving ? (
+                'Saving'
+              ) : resting ? (
+                <span className="num">{formatSeconds(restLeft)}</span>
+              ) : live ? (
+                <LiveElapsed startedAt={workoutStartedAt} summary={liveSummary} />
+              ) : (
+                'Start'
+              )}
+            </span>
+          </button>
           {TABS.slice(2).map(renderTab)}
         </div>
         {homeLayout && (

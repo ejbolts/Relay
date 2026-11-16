@@ -2543,7 +2543,6 @@ function AppContent() {
 
         {showTabBar && (
           <AppTabBar
-            hideStart={liveSheetOpen}
             liveSummary={liveWorkoutSummary}
             inert={liveSheetOpen}
             homeLayout={home}
