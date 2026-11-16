@@ -212,6 +212,9 @@
   overflow: hidden;
   border-radius: 9px;
 }
+.training-block-bar {
+  min-width: 0;
+}
 .training-block-segment {
   min-width: 10px;
   overflow: hidden;
@@ -429,6 +432,8 @@
 /* Home indicator */
 button.pulse-card.training-block-home {
   display: grid;
+  /* Long names and timelines shrink to the card instead of widening it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
 }
 .training-block-home-top {
@@ -621,4 +626,10 @@ button.pulse-card.training-block-home {
 }
 .training-block-summary-body .training-block-actions {
   margin: 0;
+}
+
+/* However short it is against long history, the current block stays wide enough to read. */
+.training-block-segment.current {
+  flex-shrink: 0;
+  min-width: min(5.5rem, 34%);
 }
