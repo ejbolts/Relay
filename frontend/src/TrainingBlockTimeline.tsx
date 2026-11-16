@@ -1,4 +1,6 @@
+import { blockKind } from './blockKinds';
 import { MONTHS } from './trainingBlocks';
+import './trainingBlockYear.css';
 import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
 import type { TrainingBlocks } from './types';
 import { localDate } from './utils';
@@ -56,12 +58,17 @@ export function BlockTimeline({
       >
         {segments.map((item) => {
           const index = config.blocks.findIndex((block) => block.id === item.id);
+          // Typed blocks share the training blocks dialog's colours; untyped ones keep a tone.
+          const kind = index >= 0 ? blockKind(config.blocks[index]) : null;
           const tone =
             item.id === 'earlier'
               ? 'earlier'
-              : item.id === currentId
-                ? 'current'
-                : `tone-${index % TONES}`;
+              : [
+                  item.id === currentId ? 'current' : '',
+                  kind ? `kind-${kind}` : item.id === currentId ? '' : `tone-${index % TONES}`,
+                ]
+                  .filter(Boolean)
+                  .join(' ');
           return (
             <span
               key={item.id}

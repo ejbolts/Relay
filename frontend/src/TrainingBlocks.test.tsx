@@ -160,9 +160,11 @@ it('chooses a block from list options and shows ranges and workout counts on the
   await click('Training blocks');
   const year = new Date().getFullYear();
   if (year === 2026) {
-    expect(document.querySelector('.training-block-year-bar')?.getAttribute('aria-label')).toBe(
-      '2026: Base, Rebuild',
-    );
+    expect(
+      [...document.querySelectorAll('.training-block-year-bar button[aria-pressed]')].map(
+        (item) => item.getAttribute('aria-label')?.split(',')[0],
+      ),
+    ).toEqual(['Base', 'Rebuild']);
     const cards = document.querySelector('.training-block-cards')?.textContent;
     expect(cards).toContain('1 Jan – 31 May 2026');
     expect(cards).toContain('12 workouts');

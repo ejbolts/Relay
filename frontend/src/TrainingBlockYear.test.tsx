@@ -64,6 +64,12 @@ const cardNames = () =>
   [...document.querySelectorAll('.training-block-cards li strong')].map((item) =>
     item.firstChild?.textContent?.trim(),
   );
+const segments = () => [
+  ...document.querySelectorAll<HTMLButtonElement>('.training-block-year-bar button[aria-pressed]'),
+];
+const segmentNames = () => segments().map((item) => item.getAttribute('aria-label')?.split(',')[0]);
+const segment = (name: string) =>
+  segments().find((item) => item.getAttribute('aria-label')?.startsWith(`${name},`))!;
 async function type(input: HTMLInputElement, value: string) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
@@ -124,9 +130,14 @@ it('names, numbers and codes blocks by type within each year', () => {
 it('shows one year at a time and filters its blocks by type', async () => {
   await open();
   expect(document.querySelector('.training-block-years')?.textContent).toContain('20265 blocks');
-  expect(document.querySelector('.training-block-year-bar')?.getAttribute('aria-label')).toBe(
-    '2026: Recovery · Lower back, Strength 1 , Recovery · Left shoulder, Hypertrophy 1, Strength 2, Strength 3',
-  );
+  expect(segmentNames()).toEqual([
+    'Recovery · Lower back',
+    'Strength 1 ',
+    'Recovery · Left shoulder',
+    'Hypertrophy 1',
+    'Strength 2',
+    'Strength 3',
+  ]);
   expect(
     [...document.querySelectorAll('.training-block-year-segment:not(.planned)')].map(
       (item) => item.textContent,
@@ -228,4 +239,53 @@ it('keeps a block type and its name when editing', async () => {
     kind: 'strength',
     focus: null,
   });
+});
+
+it('highlights a block and its card when its part of the timeline is tapped', async () => {
+  await open();
+  await click(chip('Hypertrophy'));
+  await click(segment('Strength 2'));
+  expect(segment('Strength 2').getAttribute('aria-pressed')).toBe('true');
+  expect(chip('Hypertrophy').getAttribute('aria-pressed')).toBe('false');
+  expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
+    'Strength 2',
+  );
+  // The 2025 recovery block runs into January, and tapping it moves to its own year.
+  await click(segment('Recovery · Lower back'));
+  expect(document.querySelector('.training-block-years strong')?.textContent).toBe('2025');
+  expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
+    'Recovery · Lower back',
+  );
+  await click(segment('Recovery · Lower back'));
+  expect(document.querySelector('.training-block-cards li.selected')).toBeNull();
+});
+
+it('shows every year in a landscape full-screen timeline with week lines', async () => {
+  await open();
+  await click('View Training timeline full screen in landscape');
+  const viewer = document.querySelector<HTMLDialogElement>('dialog.landscape-chart-modal')!;
+  expect(viewer.open).toBe(true);
+  expect(
+    [...viewer.querySelectorAll('.training-block-full-year h4')].map((item) => item.textContent),
+  ).toEqual(['2026', '2025']);
+  expect(viewer.querySelectorAll('.training-block-year-week').length).toBeGreaterThan(80);
+  expect(
+    [...viewer.querySelectorAll('.training-block-year-segment')].some(
+      (item) => item.textContent === 'Hypertrophy 1',
+    ),
+  ).toBe(true);
+  await click(
+    [...viewer.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].find((item) =>
+      item.getAttribute('aria-label')?.startsWith('Strength 1,'),
+    )!,
+  );
+  expect(viewer.querySelector('.training-block-full-detail')?.textContent).toBe(
+    'Strength 1Strength · 17 Mar – 13 Jul 2025 · 10 workouts',
+  );
+  await click('Exit full-screen Training timeline');
+  expect(document.querySelector('dialog.landscape-chart-modal')).toBeNull();
+  expect(document.querySelector('.training-block-years strong')?.textContent).toBe('2025');
+  expect(document.querySelector('.training-block-cards li.selected strong')?.textContent).toBe(
+    'Strength 1',
+  );
 });
