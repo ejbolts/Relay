@@ -137,6 +137,27 @@ body,
   --sun-grain-opacity: 0.05;
 }
 
+/* Settings > App theme > Background: Dim and Strong scale the ray either side of Medium. */
+:root[data-sun-ray='dim'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 17%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 6%, transparent);
+}
+
+:root[data-sun-ray='strong'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 50%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 19%, transparent);
+}
+
+:root[data-colour-mode='light'][data-sun-ray='dim'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 11%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 4%, transparent);
+}
+
+:root[data-colour-mode='light'][data-sun-ray='strong'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 32%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 13%, transparent);
+}
+
 /* Blank: no ray and no grain, just the page colour. */
 :root[data-sun-ray='blank'] body::before,
 :root[data-sun-ray='blank'] body::after,

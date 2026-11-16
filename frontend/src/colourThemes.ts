@@ -43,7 +43,10 @@ export const DEFAULT_SET_TINT: SetTintId = 'medium';
 export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'subtle';
 /** The drifting light behind the app, in the accent colour, or none at all. */
 export const SUN_RAY_STYLES = [
-  { id: 'colour', name: 'Sun ray' },
+  { id: 'dim', name: 'Dim' },
+  // Keeps its original id, so a saved "Sun ray" choice carries over as Medium.
+  { id: 'colour', name: 'Medium' },
+  { id: 'strong', name: 'Strong' },
   { id: 'blank', name: 'Blank' },
 ] as const;
 export type SunRayStyleId = (typeof SUN_RAY_STYLES)[number]['id'];

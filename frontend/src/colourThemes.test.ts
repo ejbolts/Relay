@@ -142,7 +142,7 @@ it('keeps the frosted glass level for this visit when storage is unavailable', (
   expect(saveGlass('subtle')).toBe(false);
   expect(document.documentElement.dataset.glass).toBe('subtle');
 });
-it('defaults the background to Colour and ignores unknown saved styles', () => {
+it('defaults the background to the Medium ray and ignores unknown saved styles', () => {
   expect(sunRayPreference()).toBe('colour');
   localStorage.setItem('gym-logger-sun-ray', 'rainbow');
   expect(sunRayPreference()).toBe('colour');
@@ -153,6 +153,13 @@ it('saves the Blank background, and treats the retired Grey background as the su
   expect(document.documentElement.dataset.sunRay).toBe('blank');
   localStorage.setItem('gym-logger-sun-ray', 'grey');
   expect(sunRayPreference()).toBe('colour');
+});
+it('saves Dim and Strong rays and marks the page with them', () => {
+  expect(saveSunRay('dim')).toBe(true);
+  expect(document.documentElement.dataset.sunRay).toBe('dim');
+  saveSunRay('strong');
+  expect(sunRayPreference()).toBe('strong');
+  expect(document.documentElement.dataset.sunRay).toBe('strong');
 });
 it('offers a Neutral accent preset that applies its silver grey accent', () => {
   expect(COLOUR_THEMES.map((theme) => theme.id)).toContain('neutral');

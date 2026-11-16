@@ -46,11 +46,12 @@ it('shows the frosted glass levels in light mode and selects the saved one', () 
   );
 });
 
-it('offers Sun ray and Blank backgrounds with the saved one selected', () => {
+it('offers Dim, Medium, Strong and Blank backgrounds with the saved one selected', () => {
   localStorage.setItem('gym-logger-sun-ray', 'blank');
   const markup = renderToStaticMarkup(<ColourThemePanel />);
   expect(markup).toContain('<legend>Background</legend>');
-  for (const name of ['Sun ray', 'Blank']) expect(markup).toContain(`<strong>${name}</strong>`);
+  for (const name of ['Dim', 'Medium', 'Strong', 'Blank'])
+    expect(markup).toContain(`<strong>${name}</strong>`);
   expect(markup).not.toContain('<strong>Grey</strong>');
   expect(markup.match(/<input[^>]*name="sun-ray-style"[^>]*value="blank"[^>]*>/)?.[0]).toContain(
     'checked=""',
