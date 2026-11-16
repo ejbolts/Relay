@@ -6171,7 +6171,7 @@ html[data-reduce-motion] ::backdrop {
 }
 
 /* The sign-in and account creation card is frosted too, with its tabs, inputs and notes. */
-:where(:root:not([data-glass='off'])) .auth-card {
+:where(:root:not([data-glass='off'])) .auth-screen .auth-card {
   position: relative;
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
   --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
@@ -6187,7 +6187,7 @@ html[data-reduce-motion] ::backdrop {
   );
 }
 
-:where(:root:not([data-glass='off'])) .auth-card::before {
+:where(:root:not([data-glass='off'])) .auth-screen .auth-card::before {
   position: absolute;
   z-index: -1;
   inset: 0;
