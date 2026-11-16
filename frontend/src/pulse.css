@@ -6119,7 +6119,8 @@ html[data-reduce-motion] ::backdrop {
     .settings-profile-link,
     .home-section-stat .pulse-kpi,
     .body-screen .body-reference-stats,
-    .workout-details-disclosure
+    .workout-details-disclosure,
+    .exercise-list-rows
   ) {
   position: relative;
 }
@@ -6133,7 +6134,8 @@ html[data-reduce-motion] ::backdrop {
     .settings-profile-link,
     .home-section-stat .pulse-kpi,
     .body-screen .body-reference-stats,
-    .workout-details-disclosure
+    .workout-details-disclosure,
+    .exercise-list-rows
   ) {
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
 }
@@ -6147,7 +6149,8 @@ html[data-reduce-motion] ::backdrop {
     .settings-profile-link,
     .home-section-stat .pulse-kpi,
     .body-screen .body-reference-stats,
-    .workout-details-disclosure
+    .workout-details-disclosure,
+    .exercise-list-rows
   )::before {
   position: absolute;
   z-index: -1;
@@ -6274,4 +6277,11 @@ html[data-reduce-motion] ::backdrop {
   background: color-mix(in srgb, var(--p-surface-2-solid) var(--glass-control-alpha), transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* With glass on, the Exercises list sits on a frosted card like the other sections. */
+:where(:root:not([data-glass='off'])) .tracker-content .exercise-list-rows {
+  border: 1px solid var(--p-card-border, var(--p-line));
+  border-radius: var(--p-radius);
+  padding: 0 0.875rem;
 }
