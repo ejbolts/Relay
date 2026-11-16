@@ -12,11 +12,13 @@ import {
   applyColourTheme,
   applyDarkStyle,
   applyGlass,
+  applyLightStyle,
   applySunRay,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  lightStylePreference,
   sunRayPreference,
 } from './colourThemes';
 import './styles.css';
@@ -41,6 +43,7 @@ preventIosInputZoom();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());
 applyDarkStyle(darkStylePreference());
+applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());
 applySunRay(sunRayPreference());
 applyColourMode(colourModePreference());

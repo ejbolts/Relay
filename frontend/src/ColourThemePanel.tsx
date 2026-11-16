@@ -4,16 +4,19 @@ import {
   COLOUR_THEMES,
   DARK_STYLES,
   GLASS_LEVELS,
+  LIGHT_STYLES,
   SUN_RAY_STYLES,
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
   glassPreference,
+  lightStylePreference,
   sunRayPreference,
   saveColourMode,
   saveColourTheme,
   saveDarkStyle,
   saveGlass,
+  saveLightStyle,
   saveSunRay,
 } from './colourThemes';
 import { Icon } from './Icon';
@@ -24,6 +27,7 @@ export function ColourThemePanel() {
   const [mode, setMode] = useState(colourModePreference);
   const [darkStyle, setDarkStyle] = useState(darkStylePreference);
   const [glass, setGlass] = useState(glassPreference);
+  const [lightStyle, setLightStyle] = useState(lightStylePreference);
   const [sunRay, setSunRay] = useState(sunRayPreference);
   const [status, setStatus] = useState('');
   return (
@@ -81,6 +85,29 @@ export function ColourThemePanel() {
                 }}
               />
               <span className="dark-style-swatch" data-style={option.id} aria-hidden="true">
+                <span />
+              </span>
+              <strong>{option.name}</strong>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {mode === 'light' && (
+        <fieldset className="dark-style-options light-style-options">
+          <legend className="sr-only">Light style</legend>
+          {LIGHT_STYLES.map((option) => (
+            <label key={option.id} className={lightStyle === option.id ? 'is-selected' : ''}>
+              <input
+                type="radio"
+                name="light-style"
+                value={option.id}
+                checked={lightStyle === option.id}
+                onChange={() => {
+                  setLightStyle(option.id);
+                  saveLightStyle(option.id);
+                }}
+              />
+              <span className="light-style-swatch" data-style={option.id} aria-hidden="true">
                 <span />
               </span>
               <strong>{option.name}</strong>

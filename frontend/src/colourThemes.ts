@@ -3,6 +3,7 @@ const MODE_KEY = 'gym-logger-colour-mode';
 const DARK_STYLE_KEY = 'gym-logger-dark-style';
 const GLASS_KEY = 'gym-logger-glass';
 const SUN_RAY_KEY = 'gym-logger-sun-ray';
+const LIGHT_STYLE_KEY = 'gym-logger-light-style';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
@@ -14,6 +15,11 @@ export const DARK_STYLES = [
   { id: 'oled', name: 'OLED' },
 ] as const;
 export type DarkStyleId = (typeof DARK_STYLES)[number]['id'];
+export const LIGHT_STYLES = [
+  { id: 'default', name: 'Default' },
+  { id: 'stained', name: 'Stained' },
+] as const;
+export type LightStyleId = (typeof LIGHT_STYLES)[number]['id'];
 /** How see-through the frosted-glass cards and tab bar are; `off` keeps them solid. */
 export const GLASS_LEVELS = [
   { id: 'off', name: 'Off' },
@@ -123,13 +129,13 @@ export function browserThemeColour(
   mode: ColourModeId,
   style: DarkStyleId,
   themeId: ColourThemeId,
+  lightStyle: LightStyleId = 'default',
 ): string {
-  if (mode === 'light') return '#f3f5f7';
+  const theme = COLOUR_THEMES.find((entry) => entry.id === themeId) ?? COLOUR_THEMES[0];
+  if (mode === 'light')
+    return lightStyle === 'stained' ? mixHex(theme.accent, '#f3f5f7', 7) : '#f3f5f7';
   if (style === 'oled') return '#000000';
-  if (style === 'stained') {
-    const theme = COLOUR_THEMES.find((entry) => entry.id === themeId) ?? COLOUR_THEMES[0];
-    return mixHex(theme.accent, '#0a0d12', 7);
-  }
+  if (style === 'stained') return mixHex(theme.accent, '#0a0d12', 7);
   return '#0b0d0f';
 }
 
@@ -138,9 +144,11 @@ function updateBrowserThemeColour() {
   const mode: ColourModeId = root.dataset.colourMode === 'light' ? 'light' : 'dark';
   const style = DARK_STYLES.find((entry) => entry.id === root.dataset.darkStyle)?.id ?? 'default';
   const theme = COLOUR_THEMES.find((entry) => entry.id === root.dataset.colourTheme)?.id ?? 'blue';
+  const lightStyle =
+    LIGHT_STYLES.find((entry) => entry.id === root.dataset.lightStyle)?.id ?? 'default';
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', browserThemeColour(mode, style, theme));
+    ?.setAttribute('content', browserThemeColour(mode, style, theme, lightStyle));
 }
 
 export function darkStylePreference(): DarkStyleId {
@@ -242,6 +250,30 @@ export function saveSunRay(id: SunRayStyleId): boolean {
   applySunRay(id);
   try {
     localStorage.setItem(SUN_RAY_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function lightStylePreference(): LightStyleId {
+  try {
+    const saved = localStorage.getItem(LIGHT_STYLE_KEY);
+    return LIGHT_STYLES.find((style) => style.id === saved)?.id ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export function applyLightStyle(id: LightStyleId) {
+  document.documentElement.dataset.lightStyle = id;
+  updateBrowserThemeColour();
+}
+
+export function saveLightStyle(id: LightStyleId): boolean {
+  applyLightStyle(id);
+  try {
+    localStorage.setItem(LIGHT_STYLE_KEY, id);
     return true;
   } catch {
     return false;

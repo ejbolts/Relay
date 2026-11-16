@@ -6100,7 +6100,8 @@ html[data-reduce-motion] ::backdrop {
     .panel,
     .settings-category-card,
     .settings-profile-link,
-    .home-section-stat .pulse-kpi
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats
   ) {
   position: relative;
 }
@@ -6112,7 +6113,8 @@ html[data-reduce-motion] ::backdrop {
     .panel,
     .settings-category-card,
     .settings-profile-link,
-    .home-section-stat .pulse-kpi
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats
   ) {
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
 }
@@ -6124,7 +6126,8 @@ html[data-reduce-motion] ::backdrop {
     .panel,
     .settings-category-card,
     .settings-profile-link,
-    .home-section-stat .pulse-kpi
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats
   )::before {
   position: absolute;
   z-index: -1;
@@ -6144,4 +6147,26 @@ html[data-reduce-motion] ::backdrop {
 
 :root[data-colour-mode='light']:not([data-glass='off']) .app-tab-bar {
   background: rgb(255 255 255 / calc(var(--glass-bar-alpha) * 0.88));
+}
+
+/* The Body summary draws its dividers through 1px gaps over a line-coloured backing, which
+   tints see-through cells grey. With glass on, the grid itself is frosted and the cells draw
+   their own dividers. */
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats {
+  gap: 0;
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > div {
+  background: transparent;
+  box-shadow: inset -1px 0 0 var(--p-line);
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > div:nth-child(3) {
+  box-shadow: none;
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > .body-trend-stat {
+  margin-top: 0;
+  border-top: 1px solid var(--p-line);
+  box-shadow: none;
 }

@@ -10,6 +10,8 @@ import {
   saveDarkStyle,
   saveGlass,
   saveSunRay,
+  saveLightStyle,
+  lightStylePreference,
   sunRayPreference,
   colourModePreference,
   colourThemePreference,
@@ -24,6 +26,7 @@ afterEach(() => {
   delete document.documentElement.dataset.darkStyle;
   delete document.documentElement.dataset.glass;
   delete document.documentElement.dataset.sunRay;
+  delete document.documentElement.dataset.lightStyle;
   document.head.querySelector('meta[name="theme-color"]')?.remove();
   vi.restoreAllMocks();
 });
@@ -154,4 +157,20 @@ it('keeps the background for this visit when storage is unavailable', () => {
   });
   expect(saveSunRay('blank')).toBe(false);
   expect(document.documentElement.dataset.sunRay).toBe('blank');
+});
+it('saves a light style separately and tints the light browser bar when Stained', () => {
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  document.head.append(meta);
+  expect(lightStylePreference()).toBe('default');
+  saveColourTheme('emerald');
+  applyColourMode('light');
+  expect(meta.content).toBe('#f3f5f7');
+  expect(saveLightStyle('stained')).toBe(true);
+  expect(lightStylePreference()).toBe('stained');
+  expect(document.documentElement.dataset.lightStyle).toBe('stained');
+  expect(meta.content).toBe(browserThemeColour('light', 'default', 'emerald', 'stained'));
+  expect(meta.content).not.toBe('#f3f5f7');
+  localStorage.setItem('gym-logger-light-style', 'oled');
+  expect(lightStylePreference()).toBe('default');
 });

@@ -15,9 +15,16 @@ it('offers Default, Stained and OLED dark styles in dark mode with the saved one
   expect(stained).toContain('checked=""');
 });
 
-it('hides the dark styles in light mode', () => {
+it('swaps the dark styles for Default and Stained light styles in light mode', () => {
   localStorage.setItem('gym-logger-colour-mode', 'light');
-  expect(renderToStaticMarkup(<ColourThemePanel />)).not.toContain('dark-style-options');
+  localStorage.setItem('gym-logger-light-style', 'stained');
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).not.toContain('name="dark-style"');
+  expect(markup).toContain('light-style-options');
+  expect(markup).not.toContain('<strong>OLED</strong>');
+  expect(markup.match(/<input[^>]*name="light-style"[^>]*value="stained"[^>]*>/)?.[0]).toContain(
+    'checked=""',
+  );
 });
 
 it('offers Off, Subtle, Medium and Strong frosted glass with Medium selected by default', () => {
