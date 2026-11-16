@@ -1067,8 +1067,8 @@ button.metric-card:focus-visible {
 }
 
 .calendar-edit-workout {
-  width: calc(100% - 1.25rem);
-  margin: 0.75rem 0 0 1.25rem;
+  width: 100%;
+  margin: 0.75rem 0 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.65rem;
