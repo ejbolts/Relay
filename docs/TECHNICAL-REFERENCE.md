@@ -378,7 +378,11 @@ Both exercises must belong to the signed-in account, the source must be custom a
 kinds, equipment categories and complete configured muscle-group lists must match.
 Muscle matching includes partial credits even when weekly partial counting is disabled;
 credit factors and muscle order do not need to match. Equipment spelling aliases follow
-the library's categories (for example, DB and Dumbbell). The transaction transfers
+the library's categories (for example, DB and Dumbbell). The merge dialog lists exercises
+that do not yet match as **Needs changes** and shows the differences; **Change** sends
+`PATCH /api/exercises/{id}` with the destination's `equipment` and `muscle_set_credits`,
+which only a custom exercise accepts, after which the merge passes the same checks.
+Cardio exercises have no muscle credits to change. The transaction transfers
 movements, machine photos and saved routine
 references, retains the destination's muscle credits and existing defaults, and rebuilds
 records against the combined history. Photo-specific presets move with their photos;

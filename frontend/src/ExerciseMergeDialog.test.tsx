@@ -87,10 +87,18 @@ it('allows only custom sources, matching kinds, and reviews the chosen destinati
   await source('custom');
   expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain('My run');
   expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain('My bench');
-  expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain(
-    'Dumbbell press',
-  );
-  expect(document.querySelector('.exercise-merge-targets')?.textContent).not.toContain('Squat');
+  // Exercises that already match come first; the rest say they need changes.
+  expect(
+    [...document.querySelectorAll('.exercise-merge-targets label')].map((label) => [
+      label.querySelector('strong')?.textContent,
+      label.querySelector('.exercise-merge-tag')?.textContent ?? null,
+    ]),
+  ).toEqual([
+    ['Barbell Bench Press', null],
+    ['Custom press', null],
+    ['Dumbbell press', 'Needs changes'],
+    ['Squat', 'Needs changes'],
+  ]);
   expect(submit().disabled).toBe(true);
   await search('bench');
   await click(destination('Barbell Bench Press'));
@@ -110,12 +118,12 @@ it('resets the destination when changing source and supports another custom exer
   await source('cardio');
   expect(submit().disabled).toBe(true);
   expect(document.querySelector('.exercise-merge-targets')?.textContent).toContain(
-    'No exercises match these muscle groups and equipment',
+    'No other exercises of this kind.',
   );
   await source('custom');
   await search('nonsense');
   expect(document.querySelector('.exercise-merge-targets')?.textContent).toContain(
-    'No exercises match these muscle groups and equipment',
+    'No exercises match your search.',
   );
   await search('');
   await click(destination('Custom press'));
@@ -155,4 +163,88 @@ it('cancels without changing exercises', async () => {
   await click([...document.querySelectorAll('button')].find((x) => x.textContent === 'Cancel')!);
   expect(close).toHaveBeenCalledOnce();
   expect(merge).not.toHaveBeenCalled();
+});
+
+it('shows what a custom exercise must change, applies it, then allows the merge', async () => {
+  const dumbbell = {
+    ...official,
+    id: 'dumbbell',
+    name: 'Dumbbell press',
+    equipment: 'Dumbbell',
+    default_muscle_set_credits: [
+      { muscle_name: 'Pectorals', sets: 1 },
+      { muscle_name: 'Triceps', sets: 0.5 },
+    ],
+  };
+  const changed = vi.fn();
+  await act(async () =>
+    root.render(
+      <ExerciseMergeDialog
+        exercises={[custom, dumbbell]}
+        onMerged={merged}
+        onChanged={changed}
+        onClose={close}
+      />,
+    ),
+  );
+  const updated = {
+    ...custom,
+    equipment: 'Dumbbell',
+    muscle_group: 'Pectorals',
+    default_muscle_set_credits: dumbbell.default_muscle_set_credits,
+  };
+  const update = vi.spyOn(api, 'updateExercise').mockResolvedValue(updated);
+  const merge = vi.spyOn(api, 'mergeExercise').mockResolvedValue(dumbbell);
+
+  await source('custom');
+  await click(destination('Dumbbell press'));
+  const guide = document.querySelector('[aria-label="Changes needed to merge"]')!;
+  expect(guide.querySelector('h3')?.textContent).toBe('My bench must match Dumbbell press');
+  expect(
+    [...guide.querySelectorAll('dl > div')].map((row) => [
+      row.querySelector('dt')?.textContent,
+      row.querySelector('s')?.textContent,
+      row.querySelector('dd span')?.textContent,
+    ]),
+  ).toEqual([
+    ['Equipment', 'Barbell', 'Dumbbell'],
+    ['Muscles', 'Chest', 'Pectorals, Triceps ½'],
+  ]);
+  expect(document.querySelector('[aria-label="Merge review"]')).toBeNull();
+  expect(submit().disabled).toBe(true);
+
+  await click(
+    [...guide.querySelectorAll('button')].find((x) => x.textContent === 'Change My bench')!,
+  );
+  expect(update).toHaveBeenCalledExactlyOnceWith('custom', {
+    equipment: 'Dumbbell',
+    muscle_set_credits: [
+      { muscle_name: 'Pectorals', sets: 1 },
+      { muscle_name: 'Triceps', sets: 0.5 },
+    ],
+  });
+  expect(changed).toHaveBeenCalledWith(updated);
+  // The same destination is now ready, with the usual review before merging.
+  expect(document.querySelector('[aria-label="Changes needed to merge"]')).toBeNull();
+  expect(document.querySelector('.exercise-merge-tag')).toBeNull();
+  expect(document.querySelector('[aria-label="Merge review"]')?.textContent).toContain(
+    'cannot be undone',
+  );
+  expect(merge).not.toHaveBeenCalled();
+  await click(submit());
+  expect(merge).toHaveBeenCalledExactlyOnceWith('custom', 'dumbbell');
+});
+
+it('keeps the guidance and choices when the change fails', async () => {
+  vi.spyOn(api, 'updateExercise').mockRejectedValueOnce(new Error('Please try again'));
+  await source('custom');
+  await click(destination('Squat'));
+  const guide = () => document.querySelector('[aria-label="Changes needed to merge"]')!;
+  expect(guide().querySelector('dt')?.textContent).toBe('Muscles');
+  await click(
+    [...guide().querySelectorAll('button')].find((x) => x.textContent === 'Change My bench')!,
+  );
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('Please try again');
+  expect(guide()).not.toBeNull();
+  expect(submit().disabled).toBe(true);
 });

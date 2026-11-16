@@ -139,16 +139,36 @@ class ExerciseFavoriteUpdate(BaseModel):
 
 
 class ExerciseUpdate(BaseModel):
-    """Rename a custom exercise, or hide any exercise from lists. Omitted fields are unchanged."""
+    """Rename or re-describe a custom exercise, or hide any exercise from lists.
+
+    Omitted fields are unchanged. Equipment and muscle credits can only change on a custom
+    exercise, for example to match another exercise before merging into it.
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=160)
     hidden: bool | None = None
+    equipment: str | None = Field(default=None, max_length=100)
+    muscle_set_credits: list[MuscleSetCreditCreate] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
 
     @field_validator("name", mode="before")
     @classmethod
     def clean_name(cls, value: str | None) -> str | None:
         # A blank name is refused by the length check rather than read as "unchanged".
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("equipment", mode="before")
+    @classmethod
+    def clean_equipment(cls, value: str | None) -> str | None:
+        return value.strip() or None if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def unique_muscles(self) -> ExerciseUpdate:
+        names = [credit.muscle_name.casefold() for credit in self.muscle_set_credits or []]
+        if len(names) != len(set(names)):
+            raise ValueError("Choose each target muscle only once.")
+        return self
 
 
 class MachinePhotoCaptionUpdate(BaseModel):

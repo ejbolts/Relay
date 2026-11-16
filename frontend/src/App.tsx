@@ -8459,6 +8459,7 @@ export function ProgressScreen({
               () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
             );
           }}
+          onChanged={() => void onExercisesMerged?.()}
           onMerged={(_sourceId, target) => {
             setMergeRequest(null);
             setMergeNotice(true);
