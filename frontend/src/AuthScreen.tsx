@@ -6,6 +6,7 @@ import {
   type AuthFieldErrors,
   type AuthMode,
 } from './authForm';
+import { applyColourTheme, colourThemePreference } from './colourThemes';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
 import { pendingRegistrationInvite } from './friendInvite';
@@ -116,7 +117,27 @@ function describedBy(id: string, error?: string, hint?: string): string | undefi
   return hint ? `${id}-hint` : undefined;
 }
 
+// How many sign-in style screens are showing; the person's own theme returns when the last goes.
+let blueScreens = 0;
+
+/**
+ * Sign-in, create-account, password-change and connection screens always use the original Blue
+ * theme, whatever accent the device has saved. Only the page is recoloured; the saved choice is
+ * untouched and comes back as soon as the screen closes.
+ */
+function useBlueSignInTheme() {
+  useLayoutEffect(() => {
+    blueScreens += 1;
+    applyColourTheme('blue');
+    return () => {
+      blueScreens -= 1;
+      if (!blueScreens) applyColourTheme(colourThemePreference());
+    };
+  }, []);
+}
+
 export function AuthBrand() {
+  useBlueSignInTheme();
   return (
     <header className="auth-brand">
       <div className="auth-brand-mark">
