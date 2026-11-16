@@ -180,31 +180,25 @@ body::after,
   pointer-events: none;
 }
 
-/* One soft ray sweeps in one direction and loops seamlessly: the pattern repeats every 1300px
-   along its 118deg line (so a phone shows one ray at a time), and the image slides sideways by
-   the distance that moves it exactly one repeat (1300px / sin 118deg). The element itself stays
-   still, so the top fade below holds steady while the ray passes through it. */
+/* One broad, soft diagonal ray that glides slowly back and forth. The element is oversized so
+   the moving ray never shows an edge. */
 body::before,
 .auth-screen::before {
-  --sun-ray-shift: calc(1300px / 0.882948);
-  inset: 0;
-  background-image: repeating-linear-gradient(
+  inset: -50%;
+  background: linear-gradient(
     118deg,
-    transparent 0,
-    var(--sun-ray-soft) 110px,
-    var(--sun-ray) 210px,
-    var(--sun-ray-soft) 310px,
-    transparent 420px,
-    transparent 1300px
+    transparent 34%,
+    var(--sun-ray-soft) 43%,
+    var(--sun-ray) 50%,
+    var(--sun-ray-soft) 57%,
+    transparent 66%
   );
-  background-repeat: no-repeat;
-  background-size: calc(100% + 1500px) 100%;
-  background-position: calc(var(--sun-ray-shift) * -1) 0;
-  /* Viewport coordinates: transparent at the very top, which iOS paints behind the status bar,
-     and full strength about a third of the way down, so there is no hard line under it. */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
-  mask-image: linear-gradient(to bottom, transparent 4%, #000 34%);
-  animation: sun-ray-sweep 39s linear infinite;
+  /* Box coordinates: transparent at the viewport top, which iOS paints behind the status bar,
+     and full strength about a quarter of the way down, so there is no hard line under it. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  animation: sun-ray-drift 20s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
 /* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
@@ -218,12 +212,12 @@ body::after,
   opacity: var(--sun-grain-opacity);
 }
 
-@keyframes sun-ray-sweep {
+@keyframes sun-ray-drift {
   from {
-    background-position: calc(var(--sun-ray-shift) * -1) 0;
+    transform: translate3d(-14%, 6%, 0) rotate(-2deg);
   }
   to {
-    background-position: 0 0;
+    transform: translate3d(13%, -5%, 0) rotate(3deg);
   }
 }
 
