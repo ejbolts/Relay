@@ -49,7 +49,8 @@ export function AppUpdateBanner({
           strokeWidth="2.2"
           aria-hidden="true"
         >
-          <path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17" />
+          <path strokeLinecap="round" d="M18.36 9.03A7.5 7.5 0 1 1 11.5 5.52" />
+          <path fill="currentColor" strokeLinejoin="round" d="M10.8 2.6 15 5.5l-4.2 2.9Z" />
         </svg>
         <span>Update</span>
       </button>
