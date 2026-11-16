@@ -409,11 +409,12 @@ export function ExerciseLibraryList({
               <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
-                <b>
+                <b title={summary?.normalised ? 'In your reference machine’s weights' : undefined}>
                   {summary?.latest_estimated_1rm == null ? (
                     '—'
                   ) : (
                     <>
+                      {summary.normalised && <span aria-hidden="true">≈ </span>}
                       {formatWeightNumber(summary.latest_estimated_1rm, weightUnit, 1)}{' '}
                       <small>{weightUnit}</small>
                     </>

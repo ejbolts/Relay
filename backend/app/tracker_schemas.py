@@ -1020,6 +1020,9 @@ class ExerciseLibrarySummaryRead(BaseModel):
     change_kg: float | None
     change_percent: float | None
     trend: list[ExerciseTrendPointRead]
+    # True when the exercise's machine weights are normalised, so the estimates above are in the
+    # reference machine's weights. Older apps ignore it.
+    normalised: bool = False
 
 
 class CsvImportRead(BaseModel):

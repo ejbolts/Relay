@@ -267,3 +267,39 @@ it('keeps another account’s shared exercise credits read-only', async () => {
   expect(document.querySelector('[role="switch"]')).toBeNull();
   expect(save).not.toHaveBeenCalled();
 });
+
+it('marks estimates converted to a reference machine', async () => {
+  const library = {
+    ...emptyLibrary,
+    summaries: [
+      {
+        exercise_id: 'exercise-0',
+        session_count: 2,
+        last_date: '2026-11-10',
+        latest_estimated_1rm: 160,
+        change_kg: 4,
+        change_percent: 2.6,
+        trend: [],
+        normalised: true,
+      },
+      {
+        exercise_id: 'exercise-1',
+        session_count: 2,
+        last_date: '2026-11-09',
+        latest_estimated_1rm: 100,
+        change_kg: null,
+        change_percent: null,
+        trend: [],
+      },
+    ],
+  };
+  await act(async () =>
+    root.render(
+      <ExerciseLibraryList exercises={exercises.slice(0, 2)} library={library} onOpen={open} />,
+    ),
+  );
+  const values = [...host.querySelectorAll('.exercise-list-value b')];
+  expect(values.map((item) => item.textContent)).toEqual(['≈ 160 kg', '100 kg']);
+  expect(values[0].getAttribute('title')).toBe('In your reference machine’s weights');
+  expect(values[1].hasAttribute('title')).toBe(false);
+});
