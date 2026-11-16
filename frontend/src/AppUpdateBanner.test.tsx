@@ -17,3 +17,20 @@ describe('AppUpdateBanner', () => {
     expect(required).toContain('Refresh to update. Workouts in progress stay on this device.');
   });
 });
+
+describe('AppUpdateBanner pill', () => {
+  it('shows a visible Update button and marks a required update', () => {
+    const optional = renderToStaticMarkup(
+      <AppUpdateBanner version="1.3.0" refreshing={false} error={null} onRefresh={vi.fn()} />,
+    );
+    expect(optional).toContain('class="app-update-banner"');
+    expect(optional).toMatch(
+      /<button[^>]*class="app-update-refresh"[^>]*>.*<span>Update<\/span><\/button>/s,
+    );
+    const required = renderToStaticMarkup(
+      <AppUpdateBanner required refreshing error={null} onRefresh={vi.fn()} />,
+    );
+    expect(required).toContain('class="app-update-banner is-required"');
+    expect(required).toContain('aria-busy="true"');
+  });
+});

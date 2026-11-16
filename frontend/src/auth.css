@@ -8,9 +8,42 @@
   justify-items: center;
   padding: calc(env(safe-area-inset-top) + 1.5rem) max(1rem, env(safe-area-inset-right))
     calc(env(safe-area-inset-bottom) + 1.5rem) max(1rem, env(safe-area-inset-left));
+  /* Keeps its own sun ray and grain (pulse.css) behind the content but above this background. */
+  isolation: isolate;
+  /* The top fades to the page colour, which iOS also paints behind the status bar, so the
+     ray and glow never end in a hard line under it. */
   background:
-    radial-gradient(circle at 50% -10%, rgb(57 135 229 / 16%), transparent 24rem), var(--p-page);
+    linear-gradient(to bottom, var(--p-page) 0, transparent 9rem),
+    radial-gradient(
+      circle at 50% -10%,
+      color-mix(in srgb, var(--p-accent) 20%, transparent),
+      transparent 24rem
+    ),
+    radial-gradient(130% 90% at 50% 45%, transparent 45%, var(--auth-vignette) 100%), var(--p-page);
   color: var(--p-ink);
+  --auth-vignette: rgb(0 0 0 / 45%);
+}
+
+:root[data-colour-mode='light'] .auth-screen {
+  --auth-vignette: rgb(16 24 32 / 6%);
+}
+
+/* In dark mode the sign-in screens sit on near black with darker cards and a lighter grain, so the
+   blue beam carries the colour. The page behind the iOS status bar matches. */
+:root:not([data-colour-mode='light']) .auth-screen {
+  --p-page: #050607;
+  --p-page-solid: #050607;
+  --p-surface: #0c0e10;
+  --p-surface-solid: #0c0e10;
+  --p-surface-2: #121417;
+  --p-surface-2-solid: #121417;
+  --p-surface-3: #191c1f;
+  --p-surface-3-solid: #191c1f;
+  --sun-grain-opacity: 0.045;
+}
+
+html:not([data-colour-mode='light']):has(.auth-screen) {
+  background: #050607;
 }
 
 .auth-shell {

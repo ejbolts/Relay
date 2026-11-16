@@ -81,6 +81,11 @@
     body: 'Save your split so Up next follows your training days.',
     surface: 'home',
   },
+  appearance: {
+    title: 'Make Relay look your way',
+    body: 'Pick a colour theme, light or dark mode and a glass level in Settings › Appearance.',
+    surface: 'home',
+  },
 } as const;
 export type TipId = keyof typeof TIP_DEFINITIONS;
 export type TipState = {

@@ -6,6 +6,14 @@ import {
   type AuthFieldErrors,
   type AuthMode,
 } from './authForm';
+import {
+  applyColourTheme,
+  applyDarkStyle,
+  applyLightStyle,
+  colourThemePreference,
+  darkStylePreference,
+  lightStylePreference,
+} from './colourThemes';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
 import { pendingRegistrationInvite } from './friendInvite';
@@ -116,7 +124,33 @@ function describedBy(id: string, error?: string, hint?: string): string | undefi
   return hint ? `${id}-hint` : undefined;
 }
 
+// How many sign-in style screens are showing; the person's own theme returns when the last goes.
+let blueScreens = 0;
+
+/**
+ * Sign-in, create-account, password-change and connection screens always look the same: plain grey
+ * Default surfaces with the original Blue accent, whatever accent or Stained/OLED style the device
+ * has saved. Only the page is recoloured; the saved choices are untouched and come back as soon as
+ * the screen closes.
+ */
+function useBlueSignInTheme() {
+  useLayoutEffect(() => {
+    blueScreens += 1;
+    applyDarkStyle('default');
+    applyLightStyle('default');
+    applyColourTheme('blue');
+    return () => {
+      blueScreens -= 1;
+      if (blueScreens) return;
+      applyDarkStyle(darkStylePreference());
+      applyLightStyle(lightStylePreference());
+      applyColourTheme(colourThemePreference());
+    };
+  }, []);
+}
+
 export function AuthBrand() {
+  useBlueSignInTheme();
   return (
     <header className="auth-brand">
       <div className="auth-brand-mark">

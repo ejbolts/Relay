@@ -42,6 +42,23 @@
   --completed-set-line: #8fb798;
 }
 
+:root[data-colour-mode='light'][data-light-style='stained'] {
+  /* Surfaces take a faint tint of the accent theme, like the dark Stained style. */
+  --p-page: color-mix(in srgb, var(--p-accent) 7%, #f3f5f7);
+  --p-surface: color-mix(in srgb, var(--p-accent) 4%, #ffffff);
+  --p-surface-2: color-mix(in srgb, var(--p-accent) 9%, #eef1f3);
+  --p-surface-3: color-mix(in srgb, var(--p-accent) 14%, #e2e6ea);
+  --p-surface-raised: color-mix(in srgb, var(--p-accent) 4%, #ffffff);
+  --p-line: color-mix(in srgb, var(--p-accent) 16%, rgb(16 24 32 / 9%));
+  --p-line-strong: color-mix(in srgb, var(--p-accent) 26%, rgb(16 24 32 / 16%));
+  --p-ink-2: color-mix(in srgb, var(--p-accent) 14%, #48515a);
+  --p-muted: color-mix(in srgb, var(--p-accent) 14%, #69727a);
+  --p-grid: color-mix(in srgb, var(--p-accent) 12%, #e4e8eb);
+  --p-deemph: color-mix(in srgb, var(--p-accent) 18%, #cdd3d8);
+  --paper: var(--p-page);
+  --card: var(--p-surface);
+}
+
 :root[data-colour-mode='light'] .app-tab-bar {
   background: rgb(255 255 255 / 88%);
 }
