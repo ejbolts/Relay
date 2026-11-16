@@ -9539,6 +9539,20 @@ body.chart-fullscreen-open {
   background: var(--page);
 }
 
+/* The modal variant stacks above an open dialog; it drops the browser's dialog box styles. */
+.landscape-chart-viewer.landscape-chart-modal {
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: inherit;
+}
+
+.landscape-chart-modal::backdrop {
+  background: var(--page);
+}
+
 .landscape-chart-expanded {
   position: fixed;
   z-index: 1;

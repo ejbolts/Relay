@@ -29,6 +29,9 @@ class BlockInput(BaseModel):
     # A lighter recovery block. Its summary has no comparison and later blocks compare with the
     # last regular block instead. Older apps omit it, so updates keep the saved value.
     deload: bool = False
+    # The block's colour on timelines, as #rrggbb; none uses the app's palette. Older apps omit
+    # it, so updates keep the saved value.
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
 
     @field_validator("name")
     @classmethod
@@ -148,6 +151,8 @@ def update_block(
     block.planned_end_date = payload.planned_end_date
     if "deload" in payload.model_fields_set:
         block.deload = payload.deload
+    if "color" in payload.model_fields_set:
+        block.color = payload.color
     return save_blocks(db, user.id, config)
 
 

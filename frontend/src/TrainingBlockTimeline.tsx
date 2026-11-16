@@ -1,4 +1,6 @@
+import { validBlockColor } from './blockColors';
 import { MONTHS } from './trainingBlocks';
+import './trainingBlockYear.css';
 import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
 import type { TrainingBlocks } from './types';
 import { localDate } from './utils';
@@ -62,11 +64,16 @@ export function BlockTimeline({
               : item.id === currentId
                 ? 'current'
                 : `tone-${index % TONES}`;
+          // A block's chosen colour replaces its tone; the current block keeps an outline.
+          const color = index >= 0 ? validBlockColor(config.blocks[index].color) : null;
           return (
             <span
               key={item.id}
-              className={`training-block-segment ${tone}`}
-              style={{ flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0` }}
+              className={`training-block-segment ${tone}${color ? ' custom' : ''}`}
+              style={{
+                flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0`,
+                ...(color ? { background: color } : {}),
+              }}
               title={item.name}
             >
               {item.id === 'earlier' ? (hidden ? 'Earlier' : 'Before') : item.name}

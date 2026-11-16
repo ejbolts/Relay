@@ -158,13 +158,21 @@ it('chooses a block from list options and shows ranges and workout counts on the
   await chooseScope('base');
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'base');
   await click('Training blocks');
-  expect(document.querySelector('.training-block-bar')?.getAttribute('aria-label')).toBe(
-    'Timeline: Before blocks, Base, Rebuild',
+  const year = new Date().getFullYear();
+  if (year === 2026) {
+    expect(
+      [...document.querySelectorAll('.training-block-year-bar button[aria-pressed]')].map(
+        (item) => item.getAttribute('aria-label')?.split(',')[0],
+      ),
+    ).toEqual(['Base', 'Rebuild']);
+    const cards = document.querySelector('.training-block-cards')?.textContent;
+    expect(cards).toContain('1 Jan – 31 May 2026');
+    expect(cards).toContain('12 workouts');
+  }
+  for (let shown = year; shown > 2025; shown -= 1) await click('Previous year');
+  expect(document.querySelector('.training-block-cards')?.textContent).toBe(
+    'Before blocks1 Mar 2024 – 31 Dec 202540 workouts',
   );
-  const cards = document.querySelector('.training-block-cards')?.textContent;
-  expect(cards).toContain('1 Jan – 31 May 2026');
-  expect(cards).toContain('12 workouts');
-  expect(cards).toContain('Before blocks1 Mar 2024 – 31 Dec 202540 workouts');
 });
 
 it('formats ranges with the exclusive end date and the current year', () => {
@@ -195,13 +203,14 @@ it('creates a named custom block and shows an automatically dismissing toast', a
   await click('New');
   await input('Block name', 'Winter strength');
   expect(document.querySelector('input[type="date"]')).toBeNull();
-  await act(async () => radio('Pick date').click());
+  await act(async () => radio('Custom').click());
   await input('Start date', '2026-07-01');
   await submitForm();
   expect(api.trainingBlocks.create).toHaveBeenCalledWith({
     name: 'Winter strength',
     start_date: '2026-07-01',
     planned_end_date: null,
+    color: null,
   });
   expect(document.querySelector('[role="status"]')?.textContent).toContain(
     'Training block started',
@@ -229,6 +238,7 @@ it('starts the first block from the all-time view', async () => {
     name: 'Rebuild',
     start_date: `${new Date().getFullYear()}-01-01`,
     planned_end_date: addDays(`${new Date().getFullYear()}-01-01`, 83),
+    color: null,
   });
 });
 
@@ -240,7 +250,7 @@ it('keeps failed saves editable and supports renaming and removing only the boun
   await mount();
   await manageBlocks();
   await click('Edit Rebuild');
-  expect(radio('Pick date1 Jun 2026').getAttribute('aria-checked')).toBe('true');
+  expect(radio('Custom1 Jun 2026').getAttribute('aria-checked')).toBe('true');
   await submitForm();
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('already starts');
   expect(button('Save block').disabled).toBe(false);
@@ -249,6 +259,7 @@ it('keeps failed saves editable and supports renaming and removing only the boun
     name: 'Rebuild',
     start_date: '2026-06-01',
     planned_end_date: null,
+    color: null,
   });
   expect(document.querySelector('.training-block-cards')).not.toBeNull();
   await click('Edit Rebuild');
@@ -314,7 +325,7 @@ it('keeps a custom planned end when editing and validates it after the start', a
   await click('Edit Rebuild');
   const ends = [...document.querySelectorAll('[aria-label="Ends"] [role="radio"]')];
   expect(ends.find((item) => item.getAttribute('aria-checked') === 'true')?.textContent).toBe(
-    'Pick date30 Sep',
+    'Custom30 Sep',
   );
   expect(document.querySelector<HTMLInputElement>('input[min="2026-06-02"]')?.value).toBe(
     '2026-09-30',
@@ -324,6 +335,7 @@ it('keeps a custom planned end when editing and validates it after the start', a
     name: 'Rebuild',
     start_date: '2026-06-01',
     planned_end_date: '2026-09-30',
+    color: null,
   });
 });
 

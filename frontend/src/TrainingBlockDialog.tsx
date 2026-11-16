@@ -3,19 +3,13 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
-import {
-  blockDay,
-  blockOn,
-  blockProgress,
-  blockRange,
-  daysLeftLabel,
-  weeksEnd,
-} from './trainingBlocks';
+import { blockDay, blockOn, weeksEnd } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { addDays } from './trainingSummary';
 import { localDate } from './utils';
 import type { TrainingBlock, TrainingBlocks } from './types';
-import { BlockTimeline, TONES } from './TrainingBlockTimeline';
+import { blockColor, validBlockColor } from './blockColors';
+import { BlockColorField, TrainingBlockYearView } from './TrainingBlockYear';
 import './trainingBlocks.css';
 
 type View = 'blocks' | 'form' | 'remove';
@@ -29,10 +23,6 @@ function planFor(start: string, end: string | null | undefined): PlanPreset {
   if (end === weeksEnd(start, 8)) return '8';
   return end === weeksEnd(start, 12) ? '12' : 'custom';
 }
-
-const workouts = (count: number | undefined) =>
-  count === undefined ? '' : `${count.toLocaleString()} workout${count === 1 ? '' : 's'}`;
-const joined = (...parts: string[]) => parts.filter(Boolean).join(' · ');
 
 function presetFor(start: string): StartPreset {
   const today = localDate();
@@ -89,6 +79,8 @@ export function TrainingBlockDialog({
   const [formBack, setFormBack] = useState<View | null>(null);
   const [editing, setEditing] = useState<TrainingBlock | null>(null);
   const [name, setName] = useState('');
+  // Null uses the app's palette.
+  const [color, setColor] = useState<string | null>(null);
   const [start, setStart] = useState(localDate());
   const [preset, setPreset] = useState<StartPreset>('today');
   const [plan, setPlan] = useState<PlanPreset>('none');
@@ -96,17 +88,22 @@ export function TrainingBlockDialog({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const current = blockOn(config.blocks, localDate());
   const today = localDate();
   const january = `${today.slice(0, 4)}-01-01`;
 
+  // Closing a form or confirmation returns to the blocks it came from; the list closes the dialog.
   const close = () => {
-    if (!busyRef.current) onClose();
+    if (busyRef.current) return;
+    setError(null);
+    if (view === 'remove') setView('form');
+    else if (view === 'form' && formBack) setView(formBack);
+    else onClose();
   };
   const startForm = (item: TrainingBlock | null, back: View | null) => {
     setEditing(item);
-    setName(item?.name ?? '');
     const date = item?.start_date ?? today;
+    setName(item?.name ?? '');
+    setColor(validBlockColor(item?.color));
     setStart(date);
     setPreset(presetFor(date));
     setPlan(planFor(date, item?.planned_end_date));
@@ -139,7 +136,12 @@ export function TrainingBlockDialog({
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    const payload = { name: name.trim(), start_date: start, planned_end_date: plannedEnd };
+    const payload = {
+      name: name.trim(),
+      start_date: start,
+      planned_end_date: plannedEnd,
+      color,
+    };
     if (editing) {
       void save(
         () => api.trainingBlocks.update(editing.id, payload),
@@ -159,6 +161,10 @@ export function TrainingBlockDialog({
     );
   }
 
+  // The colour a block gets without a choice: its tone, or the accent for a new current block.
+  const automaticColor = editing
+    ? blockColor(config.blocks, { ...editing, color: null }, today)
+    : 'var(--p-accent-text)';
   const plannedEnd =
     plan === 'none' ? null : plan === 'custom' ? planEnd : weeksEnd(start, Number(plan));
   const dialogTitle =
@@ -189,61 +195,12 @@ export function TrainingBlockDialog({
       }
     >
       {view === 'blocks' && (
-        <div className="training-block-page">
-          <BlockTimeline config={config} currentId={current?.id} />
-          <ul className="training-block-cards">
-            {[...config.blocks].reverse().map((item) => {
-              const index = config.blocks.indexOf(item);
-              return (
-                <li key={item.id}>
-                  <span
-                    className={`training-block-swatch ${
-                      item.id === current?.id ? 'current' : `tone-${index % TONES}`
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <strong>
-                      {item.name}
-                      {item.id === current?.id && <span className="badge">Current</span>}
-                      {item.deload && <span className="badge deload">Deload</span>}
-                    </strong>
-                    <small>{blockRange(item.start_date, item.end_date)}</small>
-                    {item.id === current?.id && item.planned_end_date && (
-                      <small className="training-block-plan">
-                        {joined(
-                          daysLeftLabel(blockProgress(item, today).daysLeft!),
-                          `Planned end ${blockDay(item.planned_end_date, item.planned_end_date.slice(0, 4) !== today.slice(0, 4))}`,
-                        )}
-                      </small>
-                    )}
-                    {item.workout_count !== undefined && (
-                      <small>{workouts(item.workout_count)}</small>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={`Edit ${item.name}`}
-                    disabled={busy}
-                    onClick={() => startForm(item, 'blocks')}
-                  >
-                    Edit
-                  </button>
-                </li>
-              );
-            })}
-            {!!config.earlier_workout_count && config.history_start && (
-              <li className="earlier">
-                <span className="training-block-swatch earlier" aria-hidden="true" />
-                <div>
-                  <strong>Before blocks</strong>
-                  <small>{blockRange(config.history_start, config.blocks[0].start_date)}</small>
-                  <small>{workouts(config.earlier_workout_count)}</small>
-                </div>
-              </li>
-            )}
-          </ul>
-        </div>
+        <TrainingBlockYearView
+          config={config}
+          today={today}
+          busy={busy}
+          onEdit={(item) => startForm(item, 'blocks')}
+        />
       )}
       {view === 'form' && (
         <form onSubmit={submit} className="training-block-form">
@@ -258,13 +215,14 @@ export function TrainingBlockDialog({
                 placeholder="e.g. Winter strength"
               />
             </label>
+            <BlockColorField value={color} automatic={automaticColor} onChange={setColor} />
             <div className="training-block-starts" role="radiogroup" aria-label="Starts">
               <span aria-hidden="true">Starts</span>
               {(
                 [
                   ['today', 'Today', blockDay(today, false), today],
                   ['january', '1 January', january.slice(0, 4), january],
-                  ['custom', 'Pick date', preset === 'custom' ? blockDay(start, true) : '', start],
+                  ['custom', 'Custom', preset === 'custom' ? blockDay(start, true) : '', start],
                 ] as const
               ).map(([value, label, detail, date]) => (
                 <button
@@ -301,7 +259,7 @@ export function TrainingBlockDialog({
                   ['none', 'No end', ''],
                   ['8', '8 weeks', blockDay(weeksEnd(start, 8), false)],
                   ['12', '12 weeks', blockDay(weeksEnd(start, 12), false)],
-                  ['custom', 'Pick date', plan === 'custom' ? blockDay(planEnd, false) : ''],
+                  ['custom', 'Custom', plan === 'custom' ? blockDay(planEnd, false) : ''],
                 ] as const
               ).map(([value, label, detail]) => (
                 <button

@@ -108,7 +108,8 @@ it('opens the training blocks dialog in place while a block is still running', a
   card.focus();
   await act(async () => card.click());
   expect(onOpen).not.toHaveBeenCalled();
-  expect(api.trainingBlocks.summary).not.toHaveBeenCalled();
+  // The finished-block summary stays closed; the Now card may load totals for its comparison.
+  expect(document.querySelector('.training-block-summary')).toBeNull();
   const dialog = document.querySelector('dialog[open]')!;
   expect(dialog.textContent).toContain('Training blocks');
   expect(dialog.querySelector('.training-block-cards')?.textContent).toContain('Strength rebuild');

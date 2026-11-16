@@ -509,6 +509,8 @@ export interface TrainingBlock {
   planned_end_date?: string | null;
   /** A recovery block: its summary has no comparison and later blocks skip it. */
   deload?: boolean;
+  /** The block's #rrggbb colour on timelines; absent uses the app's palette. */
+  color?: string | null;
   /** Derived by the server on read. */
   workout_count?: number;
 }
@@ -519,6 +521,8 @@ export interface TrainingBlockInput {
   planned_end_date: string | null;
   /** Omit to keep the saved value when editing. */
   deload?: boolean;
+  /** Null uses the app's palette; omit to keep the saved colour when editing. */
+  color?: string | null;
 }
 
 export interface BlockStats {

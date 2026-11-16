@@ -11,15 +11,23 @@ type LockableScreenOrientation = ScreenOrientation & {
 export function LandscapeChartFrame({
   title,
   controls,
+  modal = false,
+  iconOnly = false,
+  className = '',
   children,
 }: {
   title: string;
   controls: ReactNode;
+  /** Open the viewer as a modal dialog, so it stays above a dialog the frame sits in. */
+  modal?: boolean;
+  /** Show only the icon on the compact toggle; its accessible name stays the same. */
+  iconOnly?: boolean;
+  className?: string;
   children: (expanded: boolean, close: () => void) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const expandedRef = useRef(false);
-  const viewerRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<HTMLElement | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
 
   const close = useCallback(() => {
@@ -45,6 +53,8 @@ export function LandscapeChartFrame({
     expandedRef.current = true;
     flushSync(() => setExpanded(true));
     const viewer = viewerRef.current;
+    // A modal viewer must be open before it can enter fullscreen.
+    if (viewer instanceof HTMLDialogElement && !viewer.open) viewer.showModal();
     try {
       if (viewer?.requestFullscreen && !document.fullscreenElement) {
         // Fullscreen browsers override the target's transform. Rotate its child instead.
@@ -70,6 +80,7 @@ export function LandscapeChartFrame({
   useEffect(() => {
     if (!expanded) return;
     const viewer = viewerRef.current;
+    if (viewer instanceof HTMLDialogElement && !viewer.open) viewer.showModal();
     document.body.classList.add('chart-fullscreen-open');
     focusToggle();
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -113,7 +124,9 @@ export function LandscapeChartFrame({
   }, [expanded, close, focusToggle]);
 
   const frame = (
-    <div className={`landscape-chart-frame ${expanded ? 'landscape-chart-expanded' : ''}`}>
+    <div
+      className={`landscape-chart-frame ${expanded ? 'landscape-chart-expanded' : ''} ${className}`}
+    >
       <div className="landscape-chart-toolbar">
         <strong className="landscape-chart-title">{title}</strong>
         <div className="landscape-chart-options">{controls}</div>
@@ -129,25 +142,42 @@ export function LandscapeChartFrame({
           <span aria-hidden="true">
             <Icon name={expanded ? 'close' : 'expand'} />
           </span>
-          {expanded ? 'Exit' : 'Landscape'}
+          {expanded ? 'Exit' : iconOnly ? null : 'Landscape'}
         </button>
       </div>
       <div className="landscape-chart-content">{children(expanded, close)}</div>
     </div>
   );
 
-  return expanded
-    ? createPortal(
-        <div
-          ref={viewerRef}
-          className="landscape-chart-viewer"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${title} full screen`}
-        >
-          {frame}
-        </div>,
-        document.body,
-      )
-    : frame;
+  if (!expanded) return frame;
+  return createPortal(
+    modal ? (
+      <dialog
+        ref={(node) => {
+          viewerRef.current = node;
+        }}
+        className="landscape-chart-viewer landscape-chart-modal"
+        aria-label={`${title} full screen`}
+        onCancel={(event) => {
+          event.preventDefault();
+          close();
+        }}
+      >
+        {frame}
+      </dialog>
+    ) : (
+      <div
+        ref={(node) => {
+          viewerRef.current = node;
+        }}
+        className="landscape-chart-viewer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${title} full screen`}
+      >
+        {frame}
+      </div>
+    ),
+    document.body,
+  );
 }
