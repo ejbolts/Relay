@@ -74,6 +74,17 @@ Friend QR codes hold an ordinary app link, `https://gym.example.com/#friend=<acc
 
 When upgrading an email-based account database, migration `0030_username_accounts` derives usernames from the old address's part before `@`, replaces unsupported characters with hyphens, and adds numeric suffixes for duplicates. Short or unusable names become `user`. Account IDs, passwords, sessions, preferences and workout ownership are preserved. Run `python -m app.manage list-users` after migration to see the assigned usernames. The account email column is removed; rolling back requires the pre-upgrade database backup and previous app version. Existing backup archives stay unchanged; new account snapshots use manifest format 2 with an owner username.
 
+Lift comparisons use what a member already shares. `GET /api/sharing/profiles/{id}/lifts` backs
+the **Head to head** card on another member's profile: for every strength lift both of you have
+logged, your best against theirs, heaviest first. `GET /api/sharing/lifts/{exercise_id}` backs the
+**Friends** card on an exercise's progress page: one of your exercises, ranked against the friends
+who have logged it too. Each account owns its own exercises, so lifts are matched by name, ignoring
+case and using the import aliases. A member's best is the completed working set with the highest
+estimated one-rep max (Epley, one to thirty reps); warm-ups, missed sets and sample workouts never
+count, and weights are compared as logged, without machine-weight normalisation. Both routes follow
+profile access: a private or blocked profile is not found, a friends-only profile needs an accepted
+friendship, and an account that shares with nobody gets no friends ranking.
+
 Blocking a member from their profile prevents shared-profile discovery and
 access in both directions, including profile and machine photos, workout filters, history,
 reactions and recent activity. It removes the friendship or request and reactions between those accounts.

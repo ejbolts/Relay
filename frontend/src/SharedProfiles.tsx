@@ -36,6 +36,7 @@ import { TrainingTimeCard } from './TrainingTimeStats';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { PopupDialog } from './PopupDialog';
 import { RoutinePanel } from './RoutinePanel';
+import { HeadToHeadCard } from './LiftComparison';
 import { formatMemberSince } from './profileDisplay';
 import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
@@ -1294,6 +1295,12 @@ export function SharedProfileScreen({
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
+  // Your own profile stays mounted beside a friend's, so the list is found by ref, not by id.
+  const workoutList = useRef<HTMLElement>(null);
+  function showWorkouts() {
+    setFiltersOpen(true);
+    workoutList.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   const [loadingWorkouts, setLoadingWorkouts] = useState(seed !== null && active);
   const linkedWorkoutId =
     targetWorkout &&
@@ -1705,6 +1712,24 @@ export function SharedProfileScreen({
               onOpenSplits={onOpenSplits}
             />
           )}
+          {!profile.is_you && (
+            <HeadToHeadCard
+              key={`lifts:${profile.id}`}
+              member={profile}
+              active={active}
+              revision={dataRevision}
+              onOpenLift={(exerciseId) => {
+                setFilters({
+                  category: '',
+                  exercise_id: exerciseId,
+                  machine_photo_id: '',
+                  start_date: '',
+                  end_date: '',
+                });
+                showWorkouts();
+              }}
+            />
+          )}
           {profile.consistency && (
             <SharedConsistencyCalendar
               key={profile.id}
@@ -1723,10 +1748,7 @@ export function SharedProfileScreen({
                   start_date: date,
                   end_date: date,
                 });
-                setFiltersOpen(true);
-                document
-                  .getElementById('shared-workouts-title')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                showWorkouts();
               }}
             />
           )}
@@ -1749,6 +1771,7 @@ export function SharedProfileScreen({
             />
           )}
           <section
+            ref={workoutList}
             className="history-screen shared-workouts"
             aria-labelledby="shared-workouts-title"
           >

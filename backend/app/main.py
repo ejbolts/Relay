@@ -12,7 +12,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from . import comments  # noqa: F401 -- registers discussion routes on sharing_router
+from . import (
+    comments,  # noqa: F401 -- registers discussion routes on sharing_router
+    lift_comparison,  # noqa: F401 -- registers lift comparison routes on sharing_router
+)
 from .account_archive import router as account_archive_router
 from .account_limits import SaveRateLimiter
 from .accounts import auth_router, profile_router

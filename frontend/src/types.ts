@@ -1093,6 +1093,30 @@ export interface FriendConnections {
   blocked: SharingConnection[];
 }
 
+/** A member's best set of one lift: the working set with their highest estimated one-rep max. */
+export interface LiftBest {
+  /** The member's own exercise. */
+  exercise_id: string;
+  weight_kg: number;
+  reps: number;
+  estimated_1rm: number;
+  achieved_date: string;
+}
+
+/** A lift both you and another member have logged. */
+export interface LiftComparison {
+  name: string;
+  muscle_group: string;
+  yours: LiftBest;
+  theirs: LiftBest;
+}
+
+export interface LiftRanking {
+  member: Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
+  is_you: boolean;
+  best: LiftBest;
+}
+
 export type WorkoutReactionKind = 'like' | 'love' | 'strong' | 'fire' | 'clap' | 'trophy' | 'run';
 
 export interface WorkoutReactions {
