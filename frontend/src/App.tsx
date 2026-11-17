@@ -319,7 +319,7 @@ import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
-import { SharedSetList, SharedWorkoutSummary } from './SharedWorkoutDetail';
+import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
 import { FriendsActivityCard } from './FriendsActivity';
 import { SocialScreen } from './SocialScreen';
@@ -2492,7 +2492,6 @@ function AppContent() {
             <CachedTabPanel active={tab === 'profile'}>
               <ProfileScreen
                 key={user.id}
-                onOpenMember={openSharedProfile}
                 onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
@@ -2513,7 +2512,6 @@ function AppContent() {
               <CachedTabPanel active={tab === 'shared-profile'}>
                 <SharedProfileScreen
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
-                  onOpenMember={openSharedProfile}
                   onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
                   targetWorkout={sharedProfile.workout}
@@ -10334,7 +10332,6 @@ function SharedWorkoutHistory({
   focusWorkoutId,
   personalRecords,
   onFilterMachine,
-  renderWorkoutAction,
   hasMore = false,
   loadingMore = false,
   loadMoreFailed = false,
@@ -10436,7 +10433,6 @@ function SharedWorkoutHistory({
                   onToggle={() =>
                     setOpenId((current) => (current === workout.id ? null : workout.id))
                   }
-                  reactionAction={renderWorkoutAction?.(workout)}
                 />
               ))}
             </div>
@@ -10498,7 +10494,6 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   onPhotosChange,
-  reactionAction,
 }: {
   bodyweight?: number | null;
   detailsOnly?: boolean;
@@ -10529,7 +10524,6 @@ function HistoryWorkoutCard({
   onDelete?: () => void;
   /** Given for your own saved workout: its photos were added to or removed. */
   onPhotosChange?: () => void;
-  reactionAction?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -10707,10 +10701,8 @@ function HistoryWorkoutCard({
           </span>
         </button>
       )}
-      {reactionAction && <div className="history-card-social">{reactionAction}</div>}
       {open && (
         <div className={`history-detail${shared ? ' shared-session' : ''}`}>
-          {!detailsOnly && shared && <SharedWorkoutSummary workout={workout} />}
           {onPhotosChange && !detailsOnly ? (
             <WorkoutPhotoEditor
               workoutId={workout.id}

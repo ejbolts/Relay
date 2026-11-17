@@ -1,47 +1,7 @@
-/* A profile's opened session: totals, the records it set, then each exercise's sets. */
+/* A profile's opened session: each exercise's sets, with records marked on their rows. */
 .history-screen .history-detail.shared-session {
   container-type: inline-size;
   padding: 0.875rem;
-}
-
-.shared-session-stats {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin: 0 0 0.875rem;
-}
-
-.shared-session-stats > div {
-  min-width: 0;
-}
-
-.shared-session-stats > div + div {
-  border-left: 1px solid var(--p-line);
-  padding-left: 0.75rem;
-}
-
-.shared-session-stats dt {
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.shared-session-stats dd {
-  margin: 0.125rem 0 0;
-  color: var(--p-ink);
-  font-size: 1.0625rem;
-  font-weight: 700;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
-.shared-session-stats small {
-  display: block;
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-  white-space: nowrap;
 }
 
 .shared-session-exercises {

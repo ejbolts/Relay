@@ -2,9 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { SharedSetList, SharedWorkoutSummary } from './SharedWorkoutDetail';
+import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
-import type { PersonalRecord, TrackedSet, TrackedWorkout } from './types';
+import type { PersonalRecord, TrackedSet } from './types';
 
 let root: Root;
 let host: HTMLDivElement;
@@ -117,23 +117,4 @@ it('labels a block record, and counts working sets apart from warm-ups', async (
   expect(sharedSetCount(sets)).toBe('3 sets');
   expect(sharedSetCount(sets.slice(0, 1))).toBe('1 warm-up set');
   expect(sharedSetCount(sets.slice(0, 2))).toBe('2 warm-up sets');
-});
-
-it('shows the session totals without a separate list of records', async () => {
-  const workout = {
-    id: 'w1',
-    name: 'Lower body',
-    duration_minutes: 95,
-    start_time: null,
-    end_time: null,
-    movements: [{ id: 'm1', exercise: { id: 'leg-press', name: 'Leg Press' }, sets }],
-  } as unknown as TrackedWorkout;
-  await act(async () => root.render(<SharedWorkoutSummary workout={workout} />));
-
-  const stats = [...host.querySelectorAll('.shared-session-stats > div')].map(
-    (item) => item.textContent,
-  );
-  expect(stats).toEqual(['Time1h 35min', 'Sets3+2 warm-up', 'Reps60', 'Volume5,820 kg']);
-  // Records are marked on their own sets, so the summary does not repeat them.
-  expect(host.querySelector('[aria-label="Personal records"]')).toBeNull();
 });

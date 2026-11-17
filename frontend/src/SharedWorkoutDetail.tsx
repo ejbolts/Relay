@@ -1,9 +1,6 @@
 import { setKindOf, setNumberLabels, type SetKind } from './setFieldValues';
-import { workingSets, workoutVolumeKg } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
-import type { MachinePhoto, PersonalRecord, TrackedSet, TrackedWorkout } from './types';
-import { formatMinutesDuration, formatWorkoutTimeRange } from './utils';
-import { formatWeight } from './weightUnits';
+import type { MachinePhoto, PersonalRecord, TrackedSet } from './types';
 import './sharedWorkout.css';
 import { bodyweightContext } from './relativeStrength';
 
@@ -20,47 +17,6 @@ const KIND_TAGS: Record<SetKind, string | null> = {
 function rpeColour(rpe: number): string {
   if (rpe <= 6) return 'var(--rpe-low)';
   return `var(--rpe-${String(Math.min(rpe, 10)).replace('.', '-')})`;
-}
-
-function completedSets(workout: TrackedWorkout): TrackedSet[] {
-  return workout.movements.flatMap((movement) => movement.sets).filter((item) => item.completed);
-}
-
-/** A shared workout's totals. Its records are marked on the sets that earned them. */
-export function SharedWorkoutSummary({ workout }: { workout: TrackedWorkout }) {
-  const weightUnit = useWeightUnit();
-  const completed = completedSets(workout);
-  const working = workingSets(workout).length;
-  const warmups = completed.filter((item) => setKindOf(item) === 'warmup').length;
-  const reps = completed.reduce((total, item) => total + (item.reps ?? 0), 0);
-  const volume = workoutVolumeKg(workout);
-  const when =
-    workout.start_time && workout.end_time
-      ? formatWorkoutTimeRange(workout.start_time, workout.end_time)
-      : null;
-
-  return (
-    <dl className="shared-session-stats" aria-label="Workout totals">
-      <div>
-        <dt>Time</dt>
-        <dd className="num">{formatMinutesDuration(workout.duration_minutes)}</dd>
-        {when && <small>{when}</small>}
-      </div>
-      <div>
-        <dt>Sets</dt>
-        <dd className="num">{working || completed.length}</dd>
-        {working > 0 && warmups > 0 && <small>+{warmups} warm-up</small>}
-      </div>
-      <div>
-        <dt>Reps</dt>
-        <dd className="num">{reps || '–'}</dd>
-      </div>
-      <div>
-        <dt>Volume</dt>
-        <dd className="num">{volume ? formatWeight(volume, weightUnit, 0) : '–'}</dd>
-      </div>
-    </dl>
-  );
 }
 
 /** One exercise's sets: warm-ups on one line, then numbered working sets with effort and records. */
