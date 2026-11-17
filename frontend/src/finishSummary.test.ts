@@ -151,6 +151,34 @@ describe('buildFinishSummary', () => {
     expect(summary.previous).toEqual({ workoutDate: '2026-11-13', sets: 3, volumeKg: 2160 });
   });
 
+  it('compares completed sets with completed sets', () => {
+    const last = saved('last', '2026-11-13', [
+      {
+        exercise: legPress,
+        sets: [
+          [90, 8],
+          [90, 8],
+          [90, 8],
+        ],
+      },
+    ]);
+    // A fourth set was planned last time and never done.
+    last.movements[0].sets.push({
+      ...last.movements[0].sets[0],
+      id: 'unticked',
+      order_index: 3,
+      completed: false,
+    });
+    const summary = buildFinishSummary(
+      finished([{ exercise: legPress, sets: [set(90, 8), set(90, 8), set(90, 8)] }]),
+      exercises,
+      [last],
+      1000,
+    );
+    expect(summary.sets).toBe(3);
+    expect(summary.previous?.sets).toBe(3);
+  });
+
   it('notices an exercise logged on a different machine from its last session', () => {
     const history = [
       saved('last', '2026-11-13', [

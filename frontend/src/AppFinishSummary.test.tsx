@@ -171,6 +171,23 @@ it('shows the finished workout on Home at once, before it has synced, and keeps 
   expect(card()?.querySelector('h2')?.textContent).toBe('Push workout');
 });
 
+it('takes the summary down once it is too old, without the app being reopened', async () => {
+  liveDraft();
+  await mount();
+  await finish();
+  expect(card()).not.toBeNull();
+  // The app stays open, or the phone sleeps, into the next day.
+  const later = Date.now() + 19 * 60 * 60 * 1000;
+  vi.spyOn(Date, 'now').mockReturnValue(later);
+  await act(async () => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(card()).toBeNull();
+  expect(
+    Object.keys(window.localStorage).some((key) => key.startsWith('relay:finished-workout')),
+  ).toBe(false);
+});
+
 it('lets the summary go when dismissed', async () => {
   liveDraft();
   await mount();

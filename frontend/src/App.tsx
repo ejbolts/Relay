@@ -360,6 +360,7 @@ import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
 import {
   buildFinishSummary,
+  finishSummaryTimeLeft,
   readFinishSummary,
   writeFinishSummary,
   type FinishSummary,
@@ -720,6 +721,26 @@ function AppContent() {
     setFinishRecords([]);
     writeFinishSummary(finishSummaryOwner, summary);
   }
+  // The card also goes when the app has stayed open, or been asleep, past its time.
+  useEffect(() => {
+    if (!finishSummary) return;
+    const expire = () => {
+      if (finishSummaryTimeLeft(finishSummary, Date.now()) >= 0) return;
+      setFinishSummary(null);
+      setFinishRecords([]);
+      writeFinishSummary(finishSummaryOwner, null);
+    };
+    const timer = window.setTimeout(
+      expire,
+      finishSummaryTimeLeft(finishSummary, Date.now()) + 1000,
+    );
+    // A sleeping phone does not run timers, so look again whenever the app comes back.
+    document.addEventListener('visibilitychange', expire);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', expire);
+    };
+  }, [finishSummary, finishSummaryOwner]);
   /** The exercise whose Machine weights should open when its progress page next shows. */
   const [machineWeightsFor, setMachineWeightsFor] = useState<string | null>(null);
   const announcement = useContext(ReleaseAnnouncementContext)!;

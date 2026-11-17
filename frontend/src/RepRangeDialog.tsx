@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import { REP_RANGE_PRESETS, repRangeKey, repRangeLabel } from './repProgression';
-import { suggestedRepRange, withRepRange } from './routineRepRange';
+import { activeRoutineWithout, suggestedRepRange, withRepRange } from './routineRepRange';
 import type { Routine } from './types';
 
 /** Gives a planned exercise a rep range without opening the split editor. */
@@ -34,7 +34,15 @@ export function RepRangeDialog({
     setSaving(true);
     setError(null);
     try {
-      onSaved(await api.routines.save(withRepRange(routine, exerciseId, range)));
+      // Saving replaces the whole split, and the copy this card loaded can be hours old.
+      // Read it again so the range lands on the split as it is now, edits included.
+      const current = (await api.routines.list()).find((item) => item.id === routine.id);
+      if (!current || !activeRoutineWithout(current, exerciseId)) {
+        setError('Your split has changed since this workout. Set the range in your split.');
+        setSaving(false);
+        return;
+      }
+      onSaved(await api.routines.save(withRepRange(current, exerciseId, range)));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the rep range.');
       setSaving(false);
