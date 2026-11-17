@@ -352,13 +352,13 @@ import {
   workoutsWithPreview,
 } from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
+import { AppNoticesContext, useAppNotices, useAppNoticesContext } from './appNotices';
+import { launchPromptAllowed, type LaunchPrompt } from './launchPrompts';
 import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
-import { AppNoticesContext, useAppNotices, useAppNoticesContext } from './appNotices';
-import { launchPromptAllowed, type LaunchPrompt } from './launchPrompts';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
@@ -700,12 +700,12 @@ function AppContent() {
   );
   const { user, signingIn = false } = useUserSession();
   usePresenceConnection(user?.id ?? null);
-  const appNotices = useAppNoticesContext();
-  /** The prompt that opened by itself this visit. Others then wait for the next app open. */
-  const [launchPrompt, setLaunchPrompt] = useState<LaunchPrompt | null>(null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const offlineNotice = useOfflineNotice();
+  const appNotices = useAppNoticesContext();
+  /** The prompt that opened by itself this visit. Others then wait for the next app open. */
+  const [launchPrompt, setLaunchPrompt] = useState<LaunchPrompt | null>(null);
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
   const [guideWaiting, setGuideWaiting] = useState(() => user !== null && appGuideWaiting(user.id));
   const [guideRequested, setGuideRequested] = useState(false);

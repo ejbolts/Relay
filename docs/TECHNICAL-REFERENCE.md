@@ -599,12 +599,6 @@ The arrows on **Sets per muscle** step back through `weekly_sets_history`: the e
 
 Each exercise row shows a right chevron and opens its source workout in the existing History view, focused on that movement. It does not enter the workout editor or replace an active workout. If the local snapshot is missing the source movement, the app refreshes that workout's day before navigating. Removed workouts or changed exercises leave the sheet open with an error. Dashboards cached by older releases without contribution entries show a refresh instruction rather than guessed exercise details.
 
-## Prompts when the app opens
-
-Four things can open by themselves when the app is opened: the first-run tour with its import step, **What's new**, the Home Screen guide and the weekly review. Only the first of them to open does so on a visit (`launchPrompts.ts`); the others keep their place and open on a later visit. Opening one on request, from Settings or the notifications inbox, is not limited.
-
-`GET` and `PUT /api/app-notices` hold what an account has already seen, in `user_settings.app_notices`: `release_seen` (the newest release whose What's new was dismissed) and `weekly_review_seen` (the first day of the latest week whose review was shown). A `PUT` may send either field and only ever moves a value forward, so a device on an older release cannot bring a notice back. The app reads it at sign-in and waits up to four seconds for the answer before going by this browser's own memory, which is also what it uses offline. What's new is skipped when `release_seen` covers the running release, and for an account created on or after the release's date.
-
 ## App guide and feedback
 
 New accounts see a guided feature tour before the release announcement. Use **Next**, **Back** or **Skip guide**, then optionally send private feedback from the thank-you screen. Ending or skipping the first tour opens an import step: **Import or export** opens **Settings > Data & connections > Import & export** with a one-page import popup. The same popup opens from **Show guide** directly below the section title. Select the source app, choose its original CSV and review before saving. During onboarding, **Skip for now** shows the release announcement. After choosing to import, the announcement waits until the person leaves Settings. The pending step is remembered per account in the browser, so a reload returns to it; replaying the guide later does not repeat it. Administrators read the latest 100 messages in **Settings > Help & about > Admin console > App feedback**; feedback is associated with the submitting username and deleted with that account. Messages are limited to 2,000 characters, 100 per account and the existing save-rate limit. A client submission ID prevents duplicates when a request is retried.
@@ -612,6 +606,12 @@ New accounts see a guided feature tour before the release announcement. Use **Ne
 Open **Settings > Help & about > Feedback & feature requests** to send feedback, report problems or suggest improvements at any time. Messages are stored in the app database with your username and appear for administrators in **Settings > Help & about > Admin console > App feedback**. No email or GitHub issue is created.
 
 Open **Settings > Help & about > App guide > Replay guide** to see the tour again, or **Add to Home Screen > Show steps** for the illustrated installation instructions. Both remain available from the installed app. Settings and the closing screen link to [contribution instructions](../CONTRIBUTING.md). Upgrade existing databases with `alembic upgrade head` for `0031_app_feedback` before serving this frontend.
+
+## Prompts when the app opens
+
+Four things can open by themselves when the app is opened: the first-run tour with its import step, **What's new**, the Home Screen guide and the weekly review. Only the first of them to open does so on a visit (`launchPrompts.ts`); the others keep their place and open on a later visit. Opening one on request, from Settings or the notifications inbox, is not limited.
+
+`GET` and `PUT /api/app-notices` hold what an account has already seen, in `user_settings.app_notices`: `release_seen` (the newest release whose What's new was dismissed) and `weekly_review_seen` (the first day of the latest week whose review was shown). A `PUT` may send either field and only ever moves a value forward, so a device on an older release cannot bring a notice back. The app reads it at sign-in and waits up to four seconds for the answer before going by this browser's own memory, which is also what it uses offline. What's new is skipped when `release_seen` covers the running release, and for an account created on or after the release's date.
 
 ## Exercise catalogue upgrades
 
