@@ -67,6 +67,7 @@ import {
 } from './weightUnits';
 import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
 import { TrainingBlockHome } from './TrainingBlockSummary';
+import { WEEKS_BEFORE_FIRST_BLOCK, trainedWeeks } from './trainingBlockSuggestion';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import {
@@ -272,6 +273,10 @@ export function TodayScreen({
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
+  const blockOfferReady = useMemo(
+    () => trainedWeeks(workouts, weekStartDay) >= WEEKS_BEFORE_FIRST_BLOCK,
+    [workouts, weekStartDay],
+  );
   const layout = home.editing ? home.draft : home.layout;
   const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
   const cardioWeeks = activityCardSettings(layout, 'cardio_sessions').weeks;
@@ -554,12 +559,14 @@ export function TodayScreen({
           </button>
         </section>
       ) : null,
-    // Before the first block, the card offers to start one; people who don't want it hide it.
+    // Before the first block, the card offers to start one once there are a few weeks of training
+    // to build on; people who don't want it hide it.
     'training-block':
       currentBlock ||
       (!trainingBlocks.loading &&
         !trainingBlocks.error &&
-        trainingBlocks.config.blocks.length === 0) ? (
+        trainingBlocks.config.blocks.length === 0 &&
+        blockOfferReady) ? (
         <TrainingBlockHome
           block={currentBlock}
           config={trainingBlocks.config}
