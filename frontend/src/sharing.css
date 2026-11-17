@@ -1537,11 +1537,6 @@
   border-radius: 3px;
 }
 
-.friend-card-latest .friend-react-button {
-  width: 2.25rem;
-  height: 2.25rem;
-}
-
 .friend-card-empty {
   margin: 0;
   color: var(--p-muted);
@@ -1568,46 +1563,55 @@
 .workout-discussion-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  /* The icons have no outline, so their tap areas hang past the edges to line the icons up. */
+  margin: -0.25rem -0.5rem;
 }
-/* Reactions and comments are separate pills: one opens the picker, the other the thread. */
+/* Reactions and comments are bare icons with a count: one opens the picker, the other the
+   thread. Each keeps a 44px tap area. */
 .workout-discussion .discussion-button {
   width: auto;
   height: auto;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 24px;
-  padding: 0.4rem 0.75rem;
-  background: var(--p-surface-2);
+  justify-content: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 0.5rem;
+  background: transparent;
   color: var(--p-ink-2);
   font: inherit;
   font-size: 0.8125rem;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
 .workout-discussion .discussion-button .pulse-icon {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.375rem;
+  height: 1.375rem;
 }
-.workout-discussion-actions > .friend-react-button {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  justify-content: center;
-  border-radius: 50%;
+.workout-discussion .discussion-button > span[aria-hidden='true'] {
+  font-size: 1.125rem;
+  line-height: 1;
 }
+.workout-discussion :is(.discussion-button, .discussion-reaction-count):focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: -2px;
+}
+@media (hover: hover) {
+  .workout-discussion button:is(.discussion-button, .discussion-reaction-count):hover {
+    color: var(--p-ink);
+  }
+}
+/* Your own reaction shows its emoji in place of the outline face, with the count in accent. */
 .workout-discussion .discussion-button.is-yours {
-  border-color: var(--p-accent);
-  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
 }
-/* The comments button stays lit while its thread is open: it is what closes the thread. */
+/* The comments icon stays lit while its thread is open: it is what closes the thread. */
 .workout-discussion .discussion-comments-button[aria-expanded='true'] {
-  border-color: var(--p-accent);
-  background: var(--p-accent-soft);
-  color: var(--p-ink);
+  color: var(--p-accent-text);
 }
 .workout-discussion .discussion-reaction-summary {
   cursor: pointer;
@@ -1624,20 +1628,20 @@
 }
 .workout-discussion .discussion-reaction-summary > .friend-react-button,
 .workout-discussion .discussion-reaction-count {
-  min-height: 40px;
+  min-width: 0;
+  min-height: 44px;
   border: 0;
+  border-radius: 12px;
   background: transparent;
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
 .workout-discussion .discussion-reaction-summary > .friend-react-button {
-  padding: 0.4rem 0.25rem 0.4rem 0.75rem;
-  border-radius: 24px 0 0 24px;
+  padding: 0 0.15rem 0 0.5rem;
 }
 .workout-discussion .discussion-reaction-count {
-  padding: 0.4rem 0.75rem 0.4rem 0.1rem;
-  border-radius: 0 24px 24px 0;
+  padding: 0 0.5rem 0 0.15rem;
 }
 :is(.friend-card-latest, .friend-activity-session-row) > .workout-discussion {
   display: contents;
@@ -1648,34 +1652,31 @@
   grid-row: 1;
   justify-content: flex-end;
   max-width: 55cqi;
-  gap: 0.25rem;
+  margin: 0 -0.5rem 0 0;
 }
 
+/* Beside a workout in a list the icons are a little smaller and closer together. */
 :is(.friend-card-latest, .friend-activity-session-row) .discussion-button {
-  padding: 0.35rem 0.4rem;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 0.4rem;
   gap: 0.2rem;
   font-size: 0.75rem;
-  background: transparent;
 }
 
 :is(.friend-card-latest, .friend-activity-session-row) .discussion-button .pulse-icon {
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 :is(.friend-card-latest, .friend-activity-session-row) .discussion-reaction-summary.is-yours {
   padding: 0;
-  background: var(--p-accent-soft);
 }
 
 :is(.friend-card-latest, .friend-activity-session-row)
-  .discussion-reaction-summary
-  > .friend-react-button {
-  padding: 0.35rem 0.15rem 0.35rem 0.5rem;
-}
-
-:is(.friend-card-latest, .friend-activity-session-row) .discussion-reaction-count {
-  padding: 0.35rem 0.5rem 0.35rem 0.1rem;
+  :is(.discussion-reaction-summary > .friend-react-button, .discussion-reaction-count) {
+  min-width: 0;
+  min-height: 40px;
 }
 
 :is(.friend-card-latest, .friend-activity-session-row)

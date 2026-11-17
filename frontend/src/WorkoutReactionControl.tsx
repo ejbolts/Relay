@@ -10,7 +10,7 @@ import { WorkoutReactionPeople } from './WorkoutReactionPeople';
 
 type Panel = 'reactions' | 'comments' | 'people';
 
-/** Separate reaction and comment buttons, shared by Home, Social and shared workouts. */
+/** Separate reaction and comment icons, shared by Home, Social and shared workouts. */
 export function WorkoutReactionControl({
   workoutId,
   subject,
@@ -201,7 +201,7 @@ export function WorkoutReactionControl({
           onClick={() => show(shown === 'comments' ? null : 'comments')}
         >
           <Icon name="comment" />
-          {comments}
+          {comments > 0 && comments}
         </button>
       </div>
       {shown === 'people' && (
