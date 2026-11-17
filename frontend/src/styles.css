@@ -6700,6 +6700,16 @@ body,
   margin-top: 0.15rem;
   color: var(--muted-ink);
 }
+.cardio-session-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.42rem;
+}
+.cardio-history .cardio-session-date-row .cardio-session-date {
+  margin-top: 0;
+}
 .cardio-history .cardio-session-date {
   margin-top: 0.42rem;
   color: #aeb9be;
@@ -8397,41 +8407,6 @@ body,
   border-color: #3c4346;
 }
 
-.history-workout-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  padding: 0.85rem 0;
-  border-bottom: 1px solid #3c4346;
-}
-
-.history-workout-stats > span {
-  display: inline-flex;
-  align-items: stretch;
-  overflow: hidden;
-  border-radius: 4px;
-  background: #16191a;
-}
-
-.history-workout-stats small,
-.history-workout-stats strong {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 0.65rem;
-}
-
-.history-workout-stats small {
-  color: #c7c4c1;
-  font-size: 0.65rem;
-}
-
-.history-workout-stats strong {
-  background: var(--accent);
-  color: #effaff;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
 .history-movement {
   border-color: #41474a;
 }
@@ -8494,15 +8469,6 @@ body,
     bottom: calc(5.6rem + env(safe-area-inset-bottom));
     left: 1rem;
     width: auto;
-  }
-
-  .history-workout-stats > span {
-    flex: 1 1 calc(50% - 0.55rem);
-  }
-
-  .history-workout-stats strong {
-    flex: 1;
-    justify-content: center;
   }
 }
 

@@ -9,6 +9,7 @@ import { WeightInput } from './WeightInput';
 import { formatWeight, weightFromKg, weightInputValue } from './weightUnits';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
 import { clipBodyWeightGoalPath, filterMeasurementsByRange } from './bodyTrend';
+import { useRangePinchZoom } from './rangePinchZoom';
 import type { BodyTrendRange } from './bodyTrend';
 import {
   bodyGoalKind,
@@ -359,7 +360,6 @@ export function BodyCompositionScreen({
         <section className="pulse-card body-trend-panel">
           <header className="pulse-card-header">
             <h2>Trend</h2>
-            <span>Tap or drag the chart to read a check-in</span>
           </header>
           <BodyTrendChart measurements={measurements} goals={goals} />
         </section>
@@ -809,12 +809,26 @@ function BodyTrendChart({
   const [displayRange, setDisplayRange] = useState<BodyTrendRange>('3m');
   // Weight and body fat use different units, so they are separate views rather than two y-axes.
   const [series, setSeries] = useState<'weight' | 'fat'>('weight');
-  const ordered = filterMeasurementsByRange(measurements, displayRange).slice().reverse();
-  const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
-  const selectedDateRange = dateRangeForDates(
-    measurements.map((item) => item.measurement_date),
-    displayRange,
+  const measurementDates = useMemo(
+    () => measurements.map((item) => item.measurement_date),
+    [measurements],
   );
+  const { pinchZoom, pinching, pinchStart, selectRange } = useRangePinchZoom(
+    measurementDates,
+    displayRange,
+    setDisplayRange,
+  );
+  const ordered = (
+    pinching
+      ? measurements.filter((item) => item.measurement_date >= pinchStart!)
+      : filterMeasurementsByRange(measurements, displayRange)
+  )
+    .slice()
+    .reverse();
+  const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
+  const selectedDateRange = pinching
+    ? { start_date: pinchStart }
+    : dateRangeForDates(measurementDates, displayRange);
   const activeGoal = goals.find((goal) => goal.active) ?? null;
   // Clip only the start: a future target date extends the chart so the goal line reaches it.
   const clippedGoal = activeGoal
@@ -839,7 +853,7 @@ function BodyTrendChart({
       }),
     // ordered is derived from measurements and the range.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
+    [measurements, displayRange, pinchStart, weightUnit],
   );
   const dailyPoints = useMemo<TrendPoint[]>(
     () =>
@@ -848,7 +862,7 @@ function BodyTrendChart({
         value: weightFromKg(item.weight_kg, weightUnit),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
+    [measurements, displayRange, pinchStart, weightUnit],
   );
   const fatPoints = useMemo<TrendPoint[]>(
     () =>
@@ -856,7 +870,7 @@ function BodyTrendChart({
         .filter((item) => item.body_fat_pct !== null)
         .map((item) => ({ date: item.measurement_date, value: item.body_fat_pct! })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
+    [measurements, displayRange, pinchStart, weightUnit],
   );
   const goalPath = useMemo<GoalPath | null>(
     () =>
@@ -908,7 +922,7 @@ function BodyTrendChart({
               aria-selected={displayRange === option.value}
               aria-label={option.label}
               className={displayRange === option.value ? 'active' : ''}
-              onClick={() => setDisplayRange(option.value)}
+              onClick={() => selectRange(option.value)}
             >
               {RANGE_LABELS[option.value]}
             </button>
@@ -952,6 +966,7 @@ function BodyTrendChart({
               unit="%"
               height={200}
               fillHeight={expanded}
+              pinchZoom={pinchZoom}
             />
           ) : (
             <TrendChart
@@ -964,6 +979,7 @@ function BodyTrendChart({
               goalPath={goalPath}
               height={200}
               fillHeight={expanded}
+              pinchZoom={pinchZoom}
             />
           )
         }

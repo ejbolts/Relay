@@ -63,6 +63,7 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
+import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
 import {
   formatWeight,
@@ -318,7 +319,8 @@ import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
-import { SharedSetList, SharedWorkoutSummary } from './SharedWorkoutDetail';
+import { LiftLeaderboardCard } from './LiftComparison';
+import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
 import { FriendsActivityCard } from './FriendsActivity';
 import { SocialScreen } from './SocialScreen';
@@ -416,7 +418,12 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
-import { bodyweightOn, bodyweightContext, sharedBodyweight } from './relativeStrength';
+import {
+  bodyweightOn,
+  bodyweightContext,
+  relativeStrength,
+  sharedBodyweight,
+} from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -435,6 +442,7 @@ import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { TIME_RANGE_OPTIONS } from './dateRanges';
+import { useRangePinchZoom } from './rangePinchZoom';
 import {
   captureFriendInvite,
   clearFriendInvite,
@@ -2397,6 +2405,7 @@ function AppContent() {
                 onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(sectionFromTab !== null)}
                 onOpenExercise={(exerciseId) => openHistorySection('progress', exerciseId)}
+                onOpenMember={openSharedProfile}
                 onOpenWorkout={openSavedWorkout}
                 initialExerciseId={historyExerciseId}
                 initialMovementId={historyMovementId}
@@ -2486,7 +2495,6 @@ function AppContent() {
             <CachedTabPanel active={tab === 'profile'}>
               <ProfileScreen
                 key={user.id}
-                onOpenMember={openSharedProfile}
                 onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
@@ -2507,7 +2515,6 @@ function AppContent() {
               <CachedTabPanel active={tab === 'shared-profile'}>
                 <SharedProfileScreen
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
-                  onOpenMember={openSharedProfile}
                   onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
                   targetWorkout={sharedProfile.workout}
@@ -8161,6 +8168,7 @@ export function ProgressScreen({
   onDetailChange,
   onCreateExercise,
   onExercisesMerged,
+  onOpenMember,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
@@ -8168,6 +8176,8 @@ export function ProgressScreen({
   measurements: BodyMeasurement[];
   personalRecords: PersonalRecord[];
   onOpenWorkout: (workoutId: string, exerciseId: string) => void;
+  /** Opens a friend's profile from the exercise's friends ranking. */
+  onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   embedded?: boolean;
   initialExerciseId?: string | null;
   defaultExerciseId?: string | null;
@@ -8378,10 +8388,18 @@ export function ProgressScreen({
     () => (progress ? progressViewPoints(progress, mapping, view) : []),
     [progress, mapping, view],
   );
+  const viewDates = useMemo(() => viewPoints.map((point) => point.workout_date), [viewPoints]);
+  const { pinchZoom, pinchStart, selectRange } = useRangePinchZoom(
+    viewDates,
+    displayRange,
+    setDisplayRange,
+  );
   const defaultView = view === 'all' && !normalised;
   const approx = normalised ? '≈ ' : '';
   const metricInfo = PROGRESS_METRICS.find((item) => item.value === metric)!;
-  const inRange = progress ? progressPointsForChart(viewPoints, metric, displayRange) : [];
+  const inRange = progress
+    ? progressPointsForChart(viewPoints, metric, displayRange, pinchStart)
+    : [];
   const weekly = !browseFirst && metric !== 'volume_kg' && displayRange !== '1m';
   const charted = weekly ? weeklyBestPoints(inRange, (point) => point[metric]) : inRange;
   const latestPoint = inRange.at(-1) ?? null;
@@ -8442,6 +8460,13 @@ export function ProgressScreen({
     detail: `${formatWeight(point.raw_best_weight_kg, weightUnit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
   }));
 
+  const friendsRanking = (
+    <LiftLeaderboardCard
+      exerciseId={exerciseId}
+      revision={dataRevision}
+      onOpenMember={onOpenMember}
+    />
+  );
   const rangeControls = (
     <div
       ref={rangeIndicatorRef}
@@ -8457,7 +8482,7 @@ export function ProgressScreen({
           aria-selected={displayRange === option.value}
           aria-label={option.label}
           className={displayRange === option.value ? 'active' : ''}
-          onClick={() => setDisplayRange(option.value)}
+          onClick={() => selectRange(option.value)}
         >
           {RANGE_LABELS[option.value]}
         </button>
@@ -8834,6 +8859,7 @@ export function ProgressScreen({
                         fillHeight={expanded}
                         markRecords={metric !== 'volume_kg'}
                         formatValue={formatMetric}
+                        pinchZoom={pinchZoom}
                         onSelect={
                           browseFirst
                             ? undefined
@@ -8899,6 +8925,7 @@ export function ProgressScreen({
                       </small>
                     </div>
                   </section>
+                  {friendsRanking}
                   <section
                     className="pulse-card progress-sessions"
                     aria-label="Exercise session history"
@@ -8983,10 +9010,13 @@ export function ProgressScreen({
                 </div>
               </>
             ) : (
-              <EmptyState
-                title="No data yet"
-                body="Complete this exercise in a workout to start its progress graph."
-              />
+              <>
+                <EmptyState
+                  title="No data yet"
+                  body="Complete this exercise in a workout to start its progress graph."
+                />
+                {friendsRanking}
+              </>
             )}
           </div>
         )}
@@ -9788,6 +9818,7 @@ function HistoryScreen({
   section,
   onSectionChange,
   onOpenExercise,
+  onOpenMember,
   onOpenWorkout,
   initialExerciseId,
   initialMovementId,
@@ -9821,6 +9852,7 @@ function HistoryScreen({
   section: HistorySection;
   onSectionChange: (section: HistorySection) => void;
   onOpenExercise: (exerciseId: string) => void;
+  onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   onOpenWorkout: (workoutId: string, exerciseId: string | null) => void;
   initialExerciseId: string | null;
   initialMovementId: string | null;
@@ -10170,6 +10202,7 @@ function HistoryScreen({
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
             onExercisesMerged={onDataChange}
+            onOpenMember={onOpenMember}
             initialExerciseId={initialExerciseId}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}
@@ -10328,7 +10361,6 @@ function SharedWorkoutHistory({
   focusWorkoutId,
   personalRecords,
   onFilterMachine,
-  renderWorkoutAction,
   hasMore = false,
   loadingMore = false,
   loadMoreFailed = false,
@@ -10430,7 +10462,6 @@ function SharedWorkoutHistory({
                   onToggle={() =>
                     setOpenId((current) => (current === workout.id ? null : workout.id))
                   }
-                  reactionAction={renderWorkoutAction?.(workout)}
                 />
               ))}
             </div>
@@ -10492,7 +10523,6 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   onPhotosChange,
-  reactionAction,
 }: {
   bodyweight?: number | null;
   detailsOnly?: boolean;
@@ -10523,7 +10553,6 @@ function HistoryWorkoutCard({
   onDelete?: () => void;
   /** Given for your own saved workout: its photos were added to or removed. */
   onPhotosChange?: () => void;
-  reactionAction?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -10533,12 +10562,23 @@ function HistoryWorkoutCard({
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
   const workingSetCount = workingSets(workout).length;
-  const totalReps = completedWorkoutSets.reduce((total, item) => total + (item.reps ?? 0), 0);
   const totalVolume = workoutVolumeKg(workout);
   const totalDistance = completedWorkoutSets.reduce(
     (total, item) => total + (item.distance_km ?? 0),
     0,
   );
+  // One exercise with a bodyweight ratio or a record gives every exercise that column, so the
+  // tables of a workout line up.
+  const ratioColumn =
+    open &&
+    completedWorkoutSets.some(
+      (item) => relativeStrength(item.weight_kg, item.bodyweight_kg ?? bodyweight) !== null,
+    );
+  const recordColumn =
+    open &&
+    completedWorkoutSets.some((item) =>
+      personalRecords.some((record) => record.set_id === item.id),
+    );
   const meta = [
     showYear
       ? `${shortDate(workout.workout_date)} ${workout.workout_date.slice(0, 4)}`
@@ -10630,14 +10670,19 @@ function HistoryWorkoutCard({
               />
             ) : (
               <>
-                <HistorySetFlow
+                <HistorySetTable
                   bodyweight={bodyweight}
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}
                   machinePhotos={movement.machine_photos}
+                  ratioColumn={ratioColumn}
+                  recordColumn={recordColumn}
+                  formatSet={(item) => setResult(item, weightUnit)}
+                  recordLabel={recordTypeLabel}
                 />
+                {/* A completed set's note sits under its row in the table. */}
                 {movement.sets
-                  .filter((item) => item.notes)
+                  .filter((item) => item.notes && !item.completed)
                   .map((item) => (
                     <small key={item.id}>
                       Set {item.order_index + 1}: {item.notes}
@@ -10685,54 +10730,19 @@ function HistoryWorkoutCard({
           </span>
         </button>
       )}
-      {reactionAction && <div className="history-card-social">{reactionAction}</div>}
       {open && (
         <div className={`history-detail${shared ? ' shared-session' : ''}`}>
-          {!detailsOnly && shared && (
-            <SharedWorkoutSummary
-              workout={workout}
-              personalRecords={personalRecords}
-              formatSet={(item) => setResult(item, weightUnit)}
-            />
-          )}
-          {!detailsOnly && !shared && (
-            <div className="history-workout-stats" aria-label="Workout totals">
-              {workout.start_time && workout.end_time && (
-                <span>
-                  <small>When</small>
-                  <strong>{formatWorkoutTimeRange(workout.start_time, workout.end_time)}</strong>
-                </span>
-              )}
-              <span>
-                <small>Time</small>
-                <strong>{formatMinutesDuration(workout.duration_minutes)}</strong>
-              </span>
-              <span>
-                <small>Sets</small>
-                <strong>{completedWorkoutSets.length}</strong>
-              </span>
-              <span>
-                <small>Reps</small>
-                <strong>{totalReps || '–'}</strong>
-              </span>
-              <span>
-                <small>Volume</small>
-                <strong>{totalVolume ? formatWeight(totalVolume, weightUnit, 0) : '–'}</strong>
-              </span>
-            </div>
-          )}
           {onPhotosChange && !detailsOnly ? (
-            <div className="history-workout-photos">
-              <WorkoutPhotoEditor
-                workoutId={workout.id}
-                photos={photos}
-                subject={photoSubject}
-                onChange={(next) => {
-                  setPhotos(next);
-                  onPhotosChange();
-                }}
-              />
-            </div>
+            <WorkoutPhotoEditor
+              workoutId={workout.id}
+              photos={photos}
+              subject={photoSubject}
+              canAdd={false}
+              onChange={(next) => {
+                setPhotos(next);
+                onPhotosChange();
+              }}
+            />
           ) : (
             photos.length > 0 && (
               <div className="history-workout-photos">

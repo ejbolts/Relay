@@ -3,7 +3,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
-import { blockChange, blockFinished, nextBlockName } from './trainingBlocks';
+import { blockChange, blockFinished, blockOn, nextBlockName } from './trainingBlocks';
+import { useTrainingBlocks } from './trainingBlocksContext';
+import { localDate } from './utils';
 import { TrainingBlockHome } from './TrainingBlockSummary';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { BlockStats, TrainingBlock, TrainingBlockSummary, TrainingBlocks } from './types';
@@ -117,6 +119,69 @@ it('opens the training blocks dialog in place while a block is still running', a
   await act(async () => new Promise(requestAnimationFrame));
   expect(document.querySelector('dialog[open]')).toBeNull();
   expect(document.activeElement).toBe(card);
+});
+
+// Home passes the block covering today, like TodayScreen.
+function HomeCard() {
+  const { config: blocks } = useTrainingBlocks();
+  const today = localDate();
+  return (
+    <TrainingBlockHome
+      block={blockOn(blocks.blocks, today)}
+      config={blocks}
+      today={today}
+      onOpen={() => {}}
+    />
+  );
+}
+
+it('starts the first block from the empty home card', async () => {
+  const today = localDate();
+  const first: TrainingBlocks = {
+    blocks: [{ id: 'first', name: 'Winter strength', start_date: today, end_date: null }],
+  };
+  vi.mocked(api.trainingBlocks.get).mockResolvedValue({ blocks: [] });
+  vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(first);
+  await act(async () =>
+    root.render(
+      <TrainingBlocksProvider>
+        <HomeCard />
+      </TrainingBlocksProvider>,
+    ),
+  );
+  expect(host.textContent).toBe('Training blockNo block running Start a block');
+  const card = host.querySelector('button')!;
+  card.focus();
+  await act(async () => card.click());
+  const dialog = document.querySelector('dialog[open]')!;
+  expect(dialog.textContent).toContain('New training block');
+  const name = dialog.querySelector<HTMLInputElement>('.training-block-form input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      name,
+      'Winter strength',
+    );
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () =>
+    dialog
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  expect(api.trainingBlocks.create).toHaveBeenCalledWith({
+    name: 'Winter strength',
+    start_date: today,
+    planned_end_date: null,
+    color: null,
+  });
+  await act(async () => new Promise(requestAnimationFrame));
+  expect(document.querySelector('dialog[open]')).toBeNull();
+  expect(host.textContent).toContain('Winter strength');
+  expect(host.textContent).not.toContain('No block running');
+  expect(document.activeElement).toBe(host.querySelector('.training-block-home'));
+  expect(document.querySelector('[role="status"]')?.textContent).toContain(
+    'Training block started',
+  );
 });
 
 it('shows the summary of a finished block against the previous block', async () => {

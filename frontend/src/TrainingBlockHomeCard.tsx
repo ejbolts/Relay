@@ -1,8 +1,36 @@
+import type { Ref } from 'react';
 import type { TrainingBlockCardSettings, TrainingBlockCardStyle } from './homeLayout';
 import { Icon } from './Icon';
 import { blockDay, blockProgress, daysLeftLabel } from './trainingBlocks';
 import { BlockTimeline } from './TrainingBlockTimeline';
 import type { TrainingBlock, TrainingBlocks } from './types';
+
+/** Home's training block card before the first block, so starting one is a tap away. */
+export function TrainingBlockStartCard({
+  onStart,
+  buttonRef,
+}: {
+  onStart: () => void;
+  buttonRef?: Ref<HTMLButtonElement>;
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className="pulse-card training-block-home is-empty"
+      aria-haspopup="dialog"
+      onClick={onStart}
+    >
+      <span className="training-block-home-top">
+        <span>Training block</span>
+      </span>
+      <strong>No block running</strong>
+      <span className="training-block-home-cta">
+        <Icon name="plus" /> Start a block
+      </span>
+    </button>
+  );
+}
 
 /** Home indicator for the block covering today, with days left when a planned end is set. */
 export function TrainingBlockHomeCard({
@@ -12,6 +40,7 @@ export function TrainingBlockHomeCard({
   style = 'both',
   onOpen,
   onSummary,
+  buttonRef,
 }: {
   block: TrainingBlock;
   config: TrainingBlocks;
@@ -20,6 +49,7 @@ export function TrainingBlockHomeCard({
   onOpen: () => void;
   /** Once the planned end has passed, the card opens the block's summary instead. */
   onSummary?: () => void;
+  buttonRef?: Ref<HTMLButtonElement>;
 }) {
   const { week, weeks, daysLeft, progress } = blockProgress(block, today);
   const since = blockDay(block.start_date, block.start_date.slice(0, 4) !== today.slice(0, 4));
@@ -36,6 +66,7 @@ export function TrainingBlockHomeCard({
     );
     return (
       <button
+        ref={buttonRef}
         type="button"
         className="pulse-card training-block-home is-finished"
         onClick={onSummary}
@@ -56,7 +87,12 @@ export function TrainingBlockHomeCard({
     );
   }
   return (
-    <button type="button" className="pulse-card training-block-home" onClick={onOpen}>
+    <button
+      ref={buttonRef}
+      type="button"
+      className="pulse-card training-block-home"
+      onClick={onOpen}
+    >
       <span className="training-block-home-top">
         <span>Training block</span>
         {daysLeft !== null && (

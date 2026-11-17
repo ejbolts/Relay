@@ -964,24 +964,37 @@ describe('filtering History by machine', () => {
     ]);
     await act(async () => root.render(<App />));
     await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
-    const pills = [...container.querySelectorAll('.history-set-pill')];
-    expect(pills.map((item) => item.getAttribute('data-set-type'))).toEqual([
+    const table = container.querySelector('.history-set-table table')!;
+    expect([...table.querySelectorAll('thead th')].map((item) => item.textContent)).toEqual([
+      'Set',
+      'Weight',
+      'Reps',
+      'RPE',
+    ]);
+    const rows = [...table.querySelectorAll<HTMLTableRowElement>('tbody tr')];
+    expect(rows.map((item) => item.getAttribute('data-set-type'))).toEqual([
       'warmup',
       'warmup',
       'normal',
       'drop',
       'failure',
     ]);
-    expect(pills.map((item) => item.querySelector('em')?.textContent)).toEqual([
+    // Set types take the place of the number, as they do while logging; working sets count from 1.
+    expect(
+      rows.map((item) => item.querySelector('.history-set-number')?.firstChild?.textContent),
+    ).toEqual(['W', 'W', '1', 'D', 'A']);
+    expect(rows.map((item) => item.querySelector('.sr-only')?.textContent ?? null)).toEqual([
       'Warm-up',
       'Warm-up',
-      '',
-      'Drop',
+      null,
+      'Drop set',
       'Attempted',
     ]);
-    expect(pills.every((item) => item.querySelector('span')?.textContent === '140 kg × 10')).toBe(
-      true,
-    );
+    expect(
+      rows.every(
+        (item) => item.cells[1].textContent === '140 kg' && item.cells[2].textContent === '10',
+      ),
+    ).toBe(true);
   });
 
   it('replaces the Training header with an exercise back header and restores the searched list', async () => {
@@ -1020,6 +1033,15 @@ describe('filtering History by machine', () => {
     await click(button('Training'));
     expect(container.querySelector('.history-card.open')).not.toBeNull();
     expect(container.querySelector('[aria-label="Workout calendar"]')).not.toBeNull();
+  });
+
+  it('opens a session straight onto its exercises, without a totals grid or an add-photo tile', async () => {
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
+    const detail = container.querySelector('.history-card.open .history-detail')!;
+    expect(detail.querySelector('[aria-label="Workout totals"]')).toBeNull();
+    expect(detail.querySelector('.workout-photo-add')).toBeNull();
+    expect(detail.firstElementChild?.classList.contains('history-movement')).toBe(true);
   });
 
   it('finds the last session on one machine among later sessions at other gyms', async () => {

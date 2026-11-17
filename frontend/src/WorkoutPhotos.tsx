@@ -174,12 +174,15 @@ export function WorkoutPhotoEditor({
   photos,
   subject,
   layout = 'strip',
+  canAdd = true,
   onChange,
 }: {
   workoutId: string;
   photos: WorkoutPhoto[];
   subject: string;
   layout?: Layout;
+  /** False where photos can be viewed and removed but not added, such as History. */
+  canAdd?: boolean;
   onChange: (photos: WorkoutPhoto[]) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -213,7 +216,31 @@ export function WorkoutPhotoEditor({
     }
   }
 
-  const full = photos.length >= MAX_WORKOUT_PHOTOS;
+  const full = !canAdd || photos.length >= MAX_WORKOUT_PHOTOS;
+  const toast =
+    notice &&
+    createPortal(
+      <div
+        key={notice.serial}
+        className="undo-toast top-toast"
+        role="status"
+        aria-atomic="true"
+        style={{ '--undo-toast-duration': `${NOTICE_MS}ms` } as CSSProperties}
+      >
+        <span>{notice.message}</span>
+        <button
+          type="button"
+          className="undo-toast-close"
+          aria-label="Dismiss photo notification"
+          onClick={() => setNotice(null)}
+        >
+          <Icon name="close" />
+        </button>
+      </div>,
+      document.body,
+    );
+  // With nothing to show or add, only the "Photo removed" confirmation is left to render.
+  if (!canAdd && !photos.length) return toast;
   return (
     <div className={`workout-photo-editor workout-photo-editor-${layout}`}>
       <WorkoutPhotos
@@ -234,50 +261,32 @@ export function WorkoutPhotoEditor({
           aria-label={layout === 'feed' ? (adding ? 'Adding photo…' : 'Add photo') : undefined}
           onClick={() => input.current?.click()}
         >
-          <Icon name="camera" />
-          {/* In the feed the button is a bare camera beside the workout's other icons. */}
+          <Icon name="photos" />
+          {/* In the feed the button is a bare photo icon beside the workout's other icons. */}
           {layout !== 'feed' && (adding ? 'Adding…' : 'Add photo')}
         </button>
       )}
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        hidden
-        aria-label={`Add a photo to ${subject}`}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          // Cleared so choosing the same photo again still counts as a change.
-          event.target.value = '';
-          if (file) void add(file);
-        }}
-      />
+      {canAdd && (
+        <input
+          ref={input}
+          type="file"
+          accept="image/*"
+          hidden
+          aria-label={`Add a photo to ${subject}`}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // Cleared so choosing the same photo again still counts as a change.
+            event.target.value = '';
+            if (file) void add(file);
+          }}
+        />
+      )}
       {error && (
         <p className="inline-error workout-photo-error" role="alert">
           {error}
         </p>
       )}
-      {notice &&
-        createPortal(
-          <div
-            key={notice.serial}
-            className="undo-toast top-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${NOTICE_MS}ms` } as CSSProperties}
-          >
-            <span>{notice.message}</span>
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss photo notification"
-              onClick={() => setNotice(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {toast}
     </div>
   );
 }
