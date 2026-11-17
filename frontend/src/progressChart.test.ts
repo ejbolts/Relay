@@ -35,6 +35,15 @@ describe('exercise progress chart points', () => {
     ).toEqual(['2026-08-19', '2026-09-01', '2026-09-20']);
   });
 
+  it('starts from a pinch window instead of the range when one is given', () => {
+    const points = [point('2026-08-19', 100), point('2026-09-01', 105), point('2026-09-20', 110)];
+    expect(
+      progressPointsForChart(points, 'estimated_1rm', 'all', '2026-09-10').map(
+        (progressPoint) => progressPoint.workout_date,
+      ),
+    ).toEqual(['2026-09-20']);
+  });
+
   it('finds the workout date for each personal best and uses the latest tied result', () => {
     const points = [point('2026-08-19', 80), point('2026-09-01', 100), point('2026-09-20', 100)];
     points[0].best_weight_kg = 120;
