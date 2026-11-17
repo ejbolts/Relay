@@ -2217,6 +2217,13 @@ function AppContent() {
                       />
                     ) : undefined
                   }
+                  exerciseSummaries={exerciseLibrary.summaries}
+                  exercises={exercises}
+                  dataRevision={dataRevision}
+                  active={tab === 'dashboard'}
+                  onOpenFriend={openSharedProfile}
+                  onOpenSocial={() => setTab('social')}
+                  onChooseSharing={openSharingSettings}
                   calendar={
                     <InteractiveWorkoutCalendar
                       entries={shownDashboard?.heatmap ?? []}

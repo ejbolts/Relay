@@ -1,0 +1,333 @@
+/* Body goal, Exercise spotlight, Muscle freshness, Cardio distance and Friends this week. */
+.insight-card {
+  --distance-1: var(--p-accent);
+  --distance-2: var(--p-good);
+  --distance-3: var(--p-gold);
+  --distance-4: #a78bfa;
+  --distance-5: var(--p-danger);
+}
+.insight-compact-only {
+  display: none;
+}
+.insight-label {
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.insight-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+}
+.insight-value {
+  font-size: 1.625rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.insight-value small {
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.insight-chip {
+  border-radius: 999px;
+  padding: 0.1875rem 0.5rem;
+  background: var(--p-surface-3);
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.insight-chip.is-good {
+  color: var(--p-good);
+}
+.insight-chip.is-warn {
+  color: var(--p-gold);
+}
+.insight-change {
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+.insight-change.is-up {
+  color: var(--p-good);
+}
+.insight-change.is-down {
+  color: var(--p-danger);
+}
+.insight-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  margin: 0.375rem 0 0;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+.insight-foot {
+  display: block;
+  margin: 0.5rem 0 0;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+.spotlight-card .pulse-sparkline {
+  margin-top: 0.625rem;
+}
+
+/* Body goal */
+.body-goal-track {
+  position: relative;
+  height: 0.625rem;
+  margin-top: 0.875rem;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+.body-goal-track i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--p-accent);
+}
+/* Where the straight line to the target date says you should be today. */
+.body-goal-track b {
+  position: absolute;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: var(--p-ink);
+}
+.body-goal-ring {
+  width: 6rem;
+  height: 6rem;
+  margin: 0.625rem auto 0;
+}
+.body-goal-ring circle {
+  fill: none;
+  stroke-width: 10;
+}
+.body-goal-ring .ring-track {
+  stroke: var(--p-surface-3);
+}
+.body-goal-ring .ring-fill {
+  stroke: var(--p-accent);
+  stroke-linecap: round;
+}
+.body-goal-ring text {
+  fill: var(--p-ink);
+  font-family: inherit;
+  text-anchor: middle;
+}
+.body-goal-ring .ring-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.body-goal-ring .ring-of {
+  fill: var(--p-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+/* Muscle freshness */
+.freshness-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.freshness-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  border-radius: 12px;
+  padding: 0.4375rem 0.625rem;
+  background: var(--p-surface-2);
+  font-size: 0.75rem;
+}
+.freshness-list li > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--p-ink-2);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.freshness-list b {
+  flex: none;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.freshness-list .is-fresh b {
+  color: var(--p-good);
+}
+.freshness-list .is-recovering b {
+  color: var(--p-gold);
+}
+.freshness-list .is-recent b {
+  color: var(--p-muted);
+}
+
+/* Cardio distance */
+.distance-card .insight-label {
+  margin: -0.375rem 0 0.625rem;
+}
+.distance-list {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.distance-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.125rem 0.5rem;
+}
+.distance-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.distance-name i {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--distance-color);
+}
+.distance-list b {
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+.distance-list b small {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+.distance-sessions {
+  grid-row: 2;
+  padding-left: 1rem;
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+}
+.distance-bar {
+  grid-column: 1 / -1;
+  height: 0.375rem;
+  min-width: 0.375rem;
+  border-radius: 999px;
+  background: var(--distance-color);
+}
+
+/* Friends this week */
+.week-board {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.week-board li + li {
+  border-top: 1px solid var(--p-line);
+}
+.week-board :is(button, div) {
+  display: grid;
+  grid-template-columns: 1.25rem auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: 3rem;
+  border: 0;
+  padding: 0.25rem 0;
+  background: none;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+}
+.week-board button {
+  cursor: pointer;
+}
+.week-board .shared-profile-avatar.small {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.8125rem;
+}
+.week-board .presence-dot {
+  border-color: var(--p-surface);
+}
+.week-board-rank {
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+}
+.week-board-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.week-board .is-you .week-board-name {
+  color: var(--p-accent-text);
+  font-weight: 650;
+}
+.week-board b {
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+.week-board-summary {
+  margin: 0 0 0.5rem;
+}
+.week-board-summary .insight-foot {
+  margin-top: 0.125rem;
+}
+
+/* Compact: the card shares its row with another. */
+@container (max-width: 290px) {
+  .insight-full-only {
+    display: none;
+  }
+  .insight-compact-only {
+    display: block;
+  }
+  .insight-value {
+    font-size: 1.375rem;
+  }
+  .freshness-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .freshness-list li:nth-child(n + 4) {
+    display: none;
+  }
+  .distance-list li:nth-child(n + 3),
+  .distance-sessions {
+    display: none;
+  }
+  .week-board li:nth-child(n + 4),
+  .week-board-name {
+    display: none;
+  }
+  .week-board :is(button, div) {
+    grid-template-columns: 1rem auto minmax(0, 1fr);
+    gap: 0.5rem;
+    min-height: 2.5rem;
+  }
+  .week-board b {
+    text-align: right;
+  }
+}

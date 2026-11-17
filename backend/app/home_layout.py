@@ -28,9 +28,24 @@ HomeSection = Literal[
     "combined-check-in",
     "records",
     "friends",
+    "body-goal",
+    "exercise-spotlight",
+    "muscle-freshness",
+    "cardio-distance",
+    "friends-week",
 ]
 SECTION_IDS = list(get_args(HomeSection))
-OPTIONAL_CHECK_INS: list[str] = []
+# Opt-in sections start hidden, both in the default layout and when a saved layout first meets
+# them, so a release adding one does not change anyone's Home until they add it.
+OPTIONAL_SECTIONS: list[str] = [
+    "body-goal",
+    "exercise-spotlight",
+    "muscle-freshness",
+    "cardio-distance",
+    "friends-week",
+]
+# The earlier name, kept for callers that predate the opt-in sections.
+OPTIONAL_CHECK_INS = OPTIONAL_SECTIONS
 LAYOUT_KEY = "home_layout"
 
 
@@ -52,6 +67,15 @@ class ActivityCardSettings(BaseModel):
     weeks: Literal[4, 8, 12] = 8
 
 
+class ExerciseSpotlightSettings(BaseModel):
+    # None follows the most-trained exercise.
+    exercise_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class CardioDistanceSettings(BaseModel):
+    period: Literal["week", "month"] = "month"
+
+
 class HomeSectionSettings(BaseModel):
     """Per-section display options. Add a field here when a section becomes configurable."""
 
@@ -60,6 +84,8 @@ class HomeSectionSettings(BaseModel):
     training_block: TrainingBlockCardSettings = Field(default_factory=TrainingBlockCardSettings)
     workouts: ActivityCardSettings = Field(default_factory=ActivityCardSettings)
     cardio_sessions: ActivityCardSettings = Field(default_factory=ActivityCardSettings)
+    exercise_spotlight: ExerciseSpotlightSettings = Field(default_factory=ExerciseSpotlightSettings)
+    cardio_distance: CardioDistanceSettings = Field(default_factory=CardioDistanceSettings)
 
 
 class HomeLayout(BaseModel):
@@ -67,7 +93,7 @@ class HomeLayout(BaseModel):
         default_factory=lambda: SECTION_IDS.copy(), max_length=len(SECTION_IDS)
     )
     hidden: list[HomeSection] = Field(
-        default_factory=lambda: OPTIONAL_CHECK_INS.copy(), max_length=len(SECTION_IDS)
+        default_factory=lambda: OPTIONAL_SECTIONS.copy(), max_length=len(SECTION_IDS)
     )
     widths: dict[HomeSection, Literal["compact", "full", "third"]] = Field(
         default_factory=dict, max_length=len(SECTION_IDS)
@@ -104,9 +130,15 @@ class HomeLayout(BaseModel):
                 for item in order
                 if item not in legacy_modes or item == chosen
             ]
-            result["hidden"] = [item for item in hidden if item not in legacy_modes]
-            if all(item in hidden for item in candidates):
-                result["hidden"].append("combined-check-in")
+            # The combined card takes the first hidden check-in's place, so saving a migrated
+            # layout again leaves the hidden list unchanged.
+            all_hidden = all(item in hidden for item in candidates)
+            result["hidden"] = []
+            for item in hidden:
+                if item not in legacy_modes:
+                    result["hidden"].append(item)
+                elif all_hidden and "combined-check-in" not in result["hidden"]:
+                    result["hidden"].append("combined-check-in")
             settings = result.get("settings", {})
             if isinstance(settings, dict):
                 result["settings"] = {"check_in": {"mode": legacy_modes[chosen]}, **settings}
@@ -141,8 +173,18 @@ class HomeLayout(BaseModel):
             self.order.insert(self.order.index("consistency"), "this-week")
             if "consistency" in self.hidden and "this-week" not in self.hidden:
                 self.hidden.append("this-week")
-        # Append newly introduced sections without changing existing saved positions.
+        # Append newly introduced sections without changing existing saved positions. Opt-in
+        # sections arrive hidden; once in the order, their hidden state is the account's choice.
+        # A layout without an order predates every opt-in section, so it starts without them.
+        unseen = [section for section in SECTION_IDS if section not in self.order]
+        if "order" not in self.model_fields_set:
+            unseen = OPTIONAL_SECTIONS
         self.order.extend(section for section in SECTION_IDS if section not in self.order)
+        self.hidden.extend(
+            section
+            for section in OPTIONAL_SECTIONS
+            if section in unseen and section not in self.hidden
+        )
         return self
 
 
