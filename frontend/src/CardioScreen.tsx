@@ -487,6 +487,7 @@ export function CardioScreen({
           </button>
           <button
             type="button"
+            className="pulse-button secondary cardio-form-cancel"
             disabled={saving}
             onClick={() => {
               setEditingId(null);

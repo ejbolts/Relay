@@ -9,6 +9,7 @@ export function ExerciseEquipmentFilter({
   onChange,
   customOnly,
   onCustomOnlyChange,
+  allLabel = 'Equipment',
 }: {
   exercises: { equipment: string | null }[];
   value: string;
@@ -16,6 +17,8 @@ export function ExerciseEquipmentFilter({
   /** When given, the menu also offers Custom, which shows only the person's own exercises. */
   customOnly?: boolean;
   onCustomOnlyChange?: (customOnly: boolean) => void;
+  /** The option that shows every exercise; a field with its own label says "All equipment". */
+  allLabel?: string;
 }) {
   const offersCustom = onCustomOnlyChange !== undefined;
   return (
@@ -34,7 +37,7 @@ export function ExerciseEquipmentFilter({
         onChange(next);
       }}
     >
-      <option value="">Equipment</option>
+      <option value="">{allLabel}</option>
       {offersCustom && <option value={CUSTOM_OPTION}>Custom</option>}
       {exerciseEquipmentOptions(exercises).map((equipment) => (
         <option key={equipment} value={equipment}>

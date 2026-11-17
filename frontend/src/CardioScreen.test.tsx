@@ -308,6 +308,7 @@ describe('cardio weekly trend screen', () => {
     expect(field('Minutes').value).toBe('45');
     expect(field('Calories burned (kcal)').value).toBe('410');
     expect(save).not.toHaveBeenCalled();
+    expect(named('Cancel').className).toContain('pulse-button secondary');
     await click(named('Cancel'));
     expect(named('Log session')).toBeTruthy();
     await click(named('Log session'));

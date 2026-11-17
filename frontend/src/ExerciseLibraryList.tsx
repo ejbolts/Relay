@@ -263,6 +263,7 @@ export function ExerciseLibraryList({
                 setEquipment(value);
                 setPage(1);
               }}
+              allLabel="All equipment"
             />
           </label>
           <label className="exercise-page-size">

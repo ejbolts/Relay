@@ -143,6 +143,8 @@ it('filters equipment from list options and marks the filter button', async () =
   await click(button('Exercise list options'));
   expect(document.querySelector('[aria-label="Training block"]')).toBeNull();
   const equipment = document.querySelector<HTMLSelectElement>('dialog [aria-label="Equipment"]')!;
+  // Under its own Equipment label, the unfiltered choice reads "All equipment".
+  expect(equipment.options[0].textContent).toBe('All equipment');
   await act(async () => {
     equipment.value = 'Cable';
     equipment.dispatchEvent(new Event('change', { bubbles: true }));

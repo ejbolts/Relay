@@ -284,11 +284,15 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
 export function searchSettings(query: string, includeProfile = true): SettingsDestination[] {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
-  return SETTINGS_DESTINATIONS.filter(
+  const inTitle = (entry: SettingsDestination) =>
+    words.every((word) => entry.title.toLocaleLowerCase().includes(word));
+  const matches = SETTINGS_DESTINATIONS.filter(
     (entry) =>
       (includeProfile || (entry.page !== 'profile' && !entry.requiresAccount)) &&
       words.every((word) => `${entry.title} ${entry.keywords}`.toLocaleLowerCase().includes(word)),
   );
+  // "rest" should lead with Rest timer, not a section that only mentions rest days.
+  return [...matches.filter(inTitle), ...matches.filter((entry) => !inTitle(entry))];
 }
 
 export interface SettingsJump {

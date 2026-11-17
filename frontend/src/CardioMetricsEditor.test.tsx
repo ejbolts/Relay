@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
 import type { CardioSession } from './types';
+import { prettyDate } from './appShared';
 
 vi.mock('react-dom', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-dom')>()),
@@ -39,6 +40,9 @@ describe('cardio metrics editor', () => {
     );
 
     expect(markup).toContain('Cardio metrics');
+    // The session's date reads like the rest of the app, not as 2026-09-07.
+    expect(markup).toContain(`· ${prettyDate('2026-09-07')} ·`);
+    expect(markup).not.toContain('2026-09-07');
     expect(markup).toContain('Calories (kcal)');
     expect(markup).toContain('Average HR (bpm)');
     expect(markup).toContain('Distance (km)');
