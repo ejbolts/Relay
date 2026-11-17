@@ -354,10 +354,10 @@ import {
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
+import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './loggerSession';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
-import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './loggerSession';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
