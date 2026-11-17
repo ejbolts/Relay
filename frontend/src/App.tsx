@@ -354,6 +354,7 @@ import {
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
 import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
+import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './loggerSession';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
@@ -1025,6 +1026,14 @@ function AppContent() {
     ? (workouts.find((workout) => workout.id === resumingWorkoutId) ?? null)
     : null;
   const activeDraft = editingWorkout ? null : readActiveWorkoutDraft();
+  const liveLoggerSession = useRef<LoggerSession | null>(null);
+  if (activeWorkoutStartedAt === null) liveLoggerSession.current = null;
+  else if (!editingWorkout)
+    liveLoggerSession.current = nextLoggerSession(
+      liveLoggerSession.current,
+      String(activeWorkoutStartedAt),
+      activeDraft?.clientSessionId,
+    );
   const restoredDraftMovements = activeDraft
     ? restoreWorkoutDraftMovements(activeDraft.movements, exercises)
     : [];
@@ -2272,7 +2281,9 @@ function AppContent() {
                     key={
                       editingWorkout
                         ? `edit-${editingWorkout.id}`
-                        : `active-${activeWorkoutStartedAt ?? workoutStartDate}-${activeDraft?.clientSessionId ?? ''}`
+                        : liveLoggerSession.current
+                          ? loggerSessionKey(liveLoggerSession.current)
+                          : `active-${workoutStartDate}`
                     }
                     workouts={workouts}
                     initialWorkout={editingWorkout}
