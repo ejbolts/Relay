@@ -93,7 +93,8 @@ describe('Home layout edits', () => {
     expect(new Set(reordered.order).size).toBe(HOME_SECTIONS.length);
     expect(reordered.hidden).toEqual(['records']);
     expect(saved.order[0]).toBe('profile');
-    expect(moveHomeSection(reordered, 'consistency', 'friends').order.at(-1)).toBe('consistency');
+    const last = HOME_SECTIONS.at(-1)!.id;
+    expect(moveHomeSection(reordered, 'consistency', last).order.at(-1)).toBe('consistency');
     expect(moveHomeSection(saved, 'records', 'records')).toBe(saved);
   });
 

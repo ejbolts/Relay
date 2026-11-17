@@ -43,7 +43,12 @@ FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
         "maintenance_min_kg": "1.2.1",
         "maintenance_max_kg": "1.2.1",
     },
-    "home_section_settings": {"workouts": "1.3.0", "cardio_sessions": "1.3.0"},
+    "home_section_settings": {
+        "workouts": "1.3.0",
+        "cardio_sessions": "1.3.0",
+        "exercise_spotlight": "1.3.0",
+        "cardio_distance": "1.3.0",
+    },
     "routine_movement": {"rep_range": "1.3.0"},
     # update_cardio_session keeps every optional metric the saving app leaves out.
     "cardio_session": {"elevation_gain_m": "1.3.0"},

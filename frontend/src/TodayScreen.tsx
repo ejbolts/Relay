@@ -41,6 +41,9 @@ import {
 import type {
   BodyMeasurement,
   DashboardData,
+  Exercise,
+  ExerciseLibrarySummary,
+  FriendFeedItem,
   PersonalRecord,
   TrackedWorkout,
   User,
@@ -65,6 +68,16 @@ import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
 import { TrainingBlockHome } from './TrainingBlockSummary';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
+import {
+  BodyGoalCard,
+  CardioDistanceCard,
+  CardioDistanceSettingsForm,
+  ExerciseSpotlightCard,
+  ExerciseSpotlightSettingsForm,
+  FriendsWeekCard,
+  MuscleFreshnessCard,
+} from './HomeInsightCards';
+import { muscleFreshness } from './homeInsights';
 
 export function PageHeader({
   eyebrow,
@@ -185,6 +198,16 @@ export interface TodayScreenProps {
   thisWeek?: ReactNode;
   /** The Friends card with friends' latest sessions; omitted outside the signed-in app. */
   friendsActivity?: ReactNode;
+  /** Estimated 1RM trends for Exercise spotlight; null while they load. */
+  exerciseSummaries?: ExerciseLibrarySummary[] | null;
+  exercises?: Exercise[];
+  /** Changes whenever saved data changes, so cards with their own data read it again. */
+  dataRevision?: string | null;
+  /** Whether Home is the screen on show; Friends this week reads only while it is. */
+  active?: boolean;
+  onOpenFriend?: (friend: FriendFeedItem['friend']) => void;
+  onOpenSocial?: () => void;
+  onChooseSharing?: () => void;
   today?: string;
 }
 
@@ -224,6 +247,13 @@ export function TodayScreen({
   calendar,
   thisWeek,
   friendsActivity,
+  exerciseSummaries = null,
+  exercises,
+  dataRevision = null,
+  active = true,
+  onOpenFriend,
+  onOpenSocial,
+  onChooseSharing,
   today = localDate(),
 }: TodayScreenProps) {
   const weightUnit = useWeightUnit();
@@ -294,6 +324,28 @@ export function TodayScreen({
     [measurements, today, weekStartDay],
   );
   const records = recentStrengthRecords(personalRecords, 3);
+  const exerciseNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const workout of workouts)
+      for (const movement of workout.movements)
+        names.set(movement.exercise.id, movement.exercise.name);
+    for (const exercise of exercises ?? []) names.set(exercise.id, exercise.name);
+    return names;
+  }, [workouts, exercises]);
+  const spotlightOptions = useMemo(
+    () =>
+      (exerciseSummaries ?? [])
+        .filter((item) => item.latest_estimated_1rm != null && exerciseNames.has(item.exercise_id))
+        .sort((a, b) => b.session_count - a.session_count)
+        .map((item) => ({ id: item.exercise_id, name: exerciseNames.get(item.exercise_id)! })),
+    [exerciseSummaries, exerciseNames],
+  );
+  const thisWeekSets = muscleSets?.weeklySets ?? data?.weekly_sets;
+  const earlierWeekSets = muscleSets?.history ?? data?.weekly_sets_history;
+  const freshMuscles = useMemo(
+    () => muscleFreshness([thisWeekSets, ...(earlierWeekSets ?? [])], today),
+    [thisWeekSets, earlierWeekSets, today],
+  );
   const strengthRecordCount = useMemo(
     () =>
       personalRecords.filter((record) => record.value > 0 && record.record_type in RECORD_LABELS)
@@ -644,6 +696,47 @@ export function TodayScreen({
       </section>
     ),
     friends: friendsActivity ?? null,
+    'body-goal': (
+      <BodyGoalCard
+        measurements={measurements}
+        today={today}
+        weightUnit={weightUnit}
+        revision={dataRevision}
+        onOpenBody={onOpenBody}
+      />
+    ),
+    'exercise-spotlight': (
+      <ExerciseSpotlightCard
+        summaries={exerciseSummaries}
+        names={exerciseNames}
+        settings={homeSectionSettings(layout, 'exercise_spotlight')}
+        weightUnit={weightUnit}
+        onOpenProgress={onOpenProgress}
+      />
+    ),
+    'muscle-freshness': <MuscleFreshnessCard muscles={freshMuscles} />,
+    'cardio-distance': (
+      <CardioDistanceCard
+        settings={homeSectionSettings(layout, 'cardio_distance')}
+        today={today}
+        weekStartDay={weekStartDay}
+        revision={dataRevision}
+        onOpenCardio={onOpenCardio}
+      />
+    ),
+    'friends-week': profile ? (
+      <FriendsWeekCard
+        active={active}
+        you={profile}
+        workouts={workouts}
+        today={today}
+        weekStartDay={weekStartDay}
+        revision={dataRevision}
+        onOpenFriend={onOpenFriend}
+        onOpenSocial={onOpenSocial}
+        onChooseSharing={onChooseSharing}
+      />
+    ) : null,
   };
 
   return (
@@ -758,6 +851,23 @@ export function TodayScreen({
               value={homeSectionSettings(home.draft, 'training_block')}
               onChange={(change) =>
                 home.change(updateHomeSectionSettings(home.draft, 'training_block', change))
+              }
+            />
+          ),
+          'exercise-spotlight': (
+            <ExerciseSpotlightSettingsForm
+              options={spotlightOptions}
+              value={homeSectionSettings(home.draft, 'exercise_spotlight')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'exercise_spotlight', change))
+              }
+            />
+          ),
+          'cardio-distance': (
+            <CardioDistanceSettingsForm
+              value={homeSectionSettings(home.draft, 'cardio_distance')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'cardio_distance', change))
               }
             />
           ),

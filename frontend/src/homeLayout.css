@@ -24,6 +24,12 @@
 .home-section-half {
   grid-column: span 3;
 }
+/* A compact Recent records card lists two records, so it does not tower over its neighbour. */
+.home-section[data-home-section='records']:not([data-home-span='6'])
+  .record-list
+  > li:nth-child(n + 3) {
+  display: none;
+}
 .home-edit-card,
 .home-section-content {
   height: 100%;

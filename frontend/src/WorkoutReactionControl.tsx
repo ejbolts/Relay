@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, isConnectionFailure } from './api';
 import { authErrorMessage } from './authForm';
 import { nextReaction, reactionSummary, REACTIONS } from './friendFeedData';
 import { Icon } from './Icon';
+import { useHeightAnimation } from './motionHooks';
 import { queueReaction, usePendingReaction } from './pendingReactions';
 import type { WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
@@ -48,6 +49,7 @@ export function WorkoutReactionControl({
   // Whether the open panel came from `focus`; opening it yourself shows it without a highlight.
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contentLayout, setContentLayout] = useState('');
   const picker = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const reactTrigger = useRef<HTMLButtonElement>(null);
@@ -57,6 +59,17 @@ export function WorkoutReactionControl({
   const closeRef = useRef(onOpenChange);
   closeRef.current = onOpenChange;
   const shown = open ? panel : null;
+  const layout = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    // Home and feed place the buttons and panels in a parent grid with display: contents.
+    // Animate the first real layout box so the card and everything below it glide together.
+    let element: HTMLElement | null = container.current;
+    while (element && getComputedStyle(element).display === 'contents') {
+      element = element.parentElement;
+    }
+    layout.current = element;
+  });
+  useHeightAnimation(layout, JSON.stringify([shown, contentLayout]));
   const yours = reactions.yours;
   const pending = usePendingReaction(workoutId, onChange);
   const waiting = !ownWorkout && pending !== undefined;
@@ -313,6 +326,7 @@ export function WorkoutReactionControl({
           className="workout-discussion-thread"
         >
           <WorkoutComments
+            onLayoutChange={setContentLayout}
             active={shown === 'comments'}
             workoutId={workoutId}
             focusComment={focused && focus?.panel === 'comments' ? focus.commentId : undefined}
