@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { friendSession, relativeDay } from './friendFeedData';
 import { Icon } from './Icon';
+import { motionReduced } from './motion';
+import { PopupDialog } from './PopupDialog';
 import { PresenceAvatar } from './PresenceAvatar';
 import { presenceStatus, useNow, workoutElapsed } from './presence';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -20,11 +22,18 @@ import type {
 import { useUserSession } from './userContext';
 import { formatMinutesDuration, localDate } from './utils';
 import { WorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
+import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
+import { WorkoutReactionPeople } from './WorkoutReactionPeople';
+import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
 import './socialFeed.css';
 
 /** Exercises listed on a card before the rest are counted. */
 const SHOWN_EXERCISES = 3;
+/** Older pages loaded while looking for a workout opened from a notification. */
+const FOCUS_SEARCH_PAGES = 5;
+/** How long a revealed card stays highlighted. */
+const FOCUS_HIGHLIGHT_MS = 2400;
 
 function completedSets(movement: TrackedMovement) {
   return movement.sets.filter((item) => item.completed);
@@ -64,6 +73,7 @@ function FeedCard({
   item,
   today,
   picking,
+  focus,
   onPickingChange,
   onOpenMember,
   onOpenWorkout,
@@ -74,6 +84,8 @@ function FeedCard({
   item: TimelineItem;
   today: string;
   picking: boolean;
+  /** A notification's request to reveal this card and open its reactions or comments. */
+  focus: WorkoutFocus | null;
   onPickingChange: (open: boolean) => void;
   /** Opens whoever logged the workout: a friend's profile, or your own. */
   onOpenMember: () => void;
@@ -98,6 +110,26 @@ function FeedCard({
   const [showAll, setShowAll] = useState(false);
   const exercisesId = `feed-exercises-${workout.id}`;
   const listed = showAll ? movements : movements.slice(0, SHOWN_EXERCISES);
+  const card = useRef<HTMLLIElement>(null);
+  const [highlighted, setHighlighted] = useState(false);
+  const focusKey = focus?.key;
+
+  useEffect(() => {
+    if (focusKey === undefined) return;
+    setHighlighted(true);
+    // After the app's own scroll to the top of a newly opened screen.
+    const frame = requestAnimationFrame(() =>
+      card.current?.scrollIntoView?.({
+        block: 'center',
+        behavior: motionReduced() ? 'auto' : 'smooth',
+      }),
+    );
+    const timer = window.setTimeout(() => setHighlighted(false), FOCUS_HIGHLIGHT_MS);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusKey]);
   const reactionControl = (
     <div className="feed-card-social">
       <WorkoutReactionControl
@@ -108,6 +140,7 @@ function FeedCard({
         subject={subject}
         reactions={item.reactions}
         open={picking}
+        focus={focus}
         onOpenChange={onPickingChange}
         onChange={onReactionsChange}
       />
@@ -115,7 +148,10 @@ function FeedCard({
   );
 
   return (
-    <li className={`feed-card${picking ? ' is-picking' : ''}`}>
+    <li
+      ref={card}
+      className={`feed-card${picking ? ' is-picking' : ''}${highlighted ? ' is-focused' : ''}`}
+    >
       <article aria-label={subject}>
         <header className="feed-card-header">
           {/* The name beside it opens the same profile, so the avatar stays out of the tab order. */}
@@ -293,6 +329,30 @@ export function SocialFeed({
     useTimeline(active);
   const [picking, setPicking] = useState<string | null>(null);
   const viewerId = useUserSession().user?.id ?? null;
+  const request = useWorkoutFocus();
+  const [focus, setFocus] = useState<WorkoutFocus | null>(null);
+  // A workout beyond the pages searched opens its reactions or comments over the feed instead.
+  const [detached, setDetached] = useState<WorkoutFocus | null>(null);
+  const searched = useRef({ key: 0, pages: 0 });
+
+  useEffect(() => {
+    if (!active || !request || loadingMore) return;
+    if (state === 'locked') return clearWorkoutFocus(request.key);
+    if (!items) return;
+    if (items.some((item) => item.workout.id === request.workoutId)) {
+      setFocus(request);
+      clearWorkoutFocus(request.key);
+      return;
+    }
+    if (searched.current.key !== request.key) searched.current = { key: request.key, pages: 0 };
+    if (hasMore && searched.current.pages < FOCUS_SEARCH_PAGES) {
+      searched.current.pages += 1;
+      void loadMore();
+      return;
+    }
+    setDetached(request);
+    clearWorkoutFocus(request.key);
+  }, [active, request, items, state, hasMore, loadingMore, loadMore]);
 
   if (state === 'locked') return <SharingLocked onChooseSharing={onChooseSharing} />;
   if (!items) {
@@ -328,6 +388,7 @@ export function SocialFeed({
                 item={item}
                 today={today}
                 picking={picking === workout.id}
+                focus={focus?.workoutId === workout.id ? focus : null}
                 onPickingChange={(open) =>
                   setPicking((current) =>
                     open ? workout.id : current === workout.id ? null : current,
@@ -355,6 +416,26 @@ export function SocialFeed({
         <p className="inline-error" role="alert">
           {error}
         </p>
+      )}
+      {detached?.panel === 'people' && (
+        <WorkoutReactionPeople
+          workoutId={detached.workoutId}
+          highlightPersonId={detached.personId}
+          onClose={() => setDetached(null)}
+        />
+      )}
+      {detached?.panel === 'comments' && (
+        <PopupDialog
+          title={detached.workoutName}
+          className="follow-notification-thread"
+          onClose={() => setDetached(null)}
+        >
+          <WorkoutComments
+            workoutId={detached.workoutId}
+            focusComment={detached.commentId}
+            onCountChange={() => {}}
+          />
+        </PopupDialog>
       )}
       {hasMore && (
         <button

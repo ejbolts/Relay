@@ -1723,6 +1723,10 @@
   background: var(--p-surface);
   border: 1px solid var(--p-line);
 }
+.workout-comment.is-highlighted .comment-bubble {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+}
 .comment-bubble p {
   margin: 0.2rem 0 0;
   font-size: 0.875rem;

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { SocialFeed } from './SocialFeed';
+import { requestWorkoutFocus } from './workoutFocus';
 import type {
   FriendActivity,
   Timeline,
@@ -440,4 +441,149 @@ it('does not load the feed while it is hidden', async () => {
   await render([friend], false);
   expect(timeline).not.toHaveBeenCalled();
   expect(host.querySelector('[aria-label="Loading the feed"]')).not.toBeNull();
+});
+
+describe('opening a workout from a notification', () => {
+  const sam = { id: 'sam', display_name: 'Sam Sample', profile_photo_url: null };
+  const scrolled: Element[] = [];
+
+  beforeEach(() => {
+    scrolled.length = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      setTimeout(callback, 0),
+    );
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.open = false;
+    };
+    vi.spyOn(api.sharing, 'reactionPeople').mockResolvedValue({
+      items: [
+        { ...friend, id: 'alex', reaction: 'fire' },
+        { ...sam, reaction: 'strong' },
+      ],
+      total: 2,
+      next_offset: null,
+    });
+  });
+
+  const own = (id: string) =>
+    item(
+      workout(id, { name: `Session ${id}` }),
+      { id: 'me', display_name: 'Me', is_you: true },
+      {
+        reactions: { counts: [{ reaction: 'strong', count: 2 }], yours: null, comment_count: 1 },
+      },
+    );
+
+  async function settle() {
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  }
+
+  it('scrolls to the card, outlines it and opens its reactions with the person highlighted', async () => {
+    vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
+      items: [own('w1'), own('w2')],
+      has_more: false,
+    });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'w2',
+        workoutName: 'Session w2',
+        panel: 'people',
+        personId: 'sam',
+      }),
+    );
+    await settle();
+
+    const card = host.querySelectorAll('.feed-card')[1];
+    expect(card.classList.contains('is-focused')).toBe(true);
+    expect(scrolled).toContain(card);
+    expect(api.sharing.reactionPeople).toHaveBeenCalledWith('w2');
+    const highlighted = document.querySelector('.reaction-people-list li.is-highlighted');
+    expect(highlighted?.textContent).toContain('Sam Sample');
+    expect(document.querySelectorAll('.reaction-people-list li.is-highlighted')).toHaveLength(1);
+  });
+
+  it('loads older pages until the workout appears', async () => {
+    const timeline = vi
+      .spyOn(api.sharing, 'timeline')
+      .mockResolvedValueOnce({ items: [own('w1')], has_more: true })
+      .mockResolvedValueOnce({ items: [own('w2')], has_more: true })
+      .mockResolvedValueOnce({ items: [own('w3')], has_more: false });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'w3',
+        workoutName: 'Session w3',
+        panel: 'people',
+        personId: 'sam',
+      }),
+    );
+    await settle();
+
+    expect(timeline).toHaveBeenCalledTimes(3);
+    expect(host.querySelectorAll('.feed-card')[2].classList.contains('is-focused')).toBe(true);
+    expect(document.querySelector('.reaction-people-list li.is-highlighted')).not.toBeNull();
+  });
+
+  it('opens the reactions over the feed when the workout is not in it', async () => {
+    vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [own('w1')], has_more: false });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'gone',
+        workoutName: 'Old session',
+        panel: 'people',
+        personId: 'sam',
+      }),
+    );
+    await settle();
+
+    expect(host.querySelector('.feed-card.is-focused')).toBeNull();
+    expect(api.sharing.reactionPeople).toHaveBeenCalledWith('gone');
+    expect(
+      document.querySelector('.reaction-people-list li.is-highlighted')?.textContent,
+    ).toContain('Sam Sample');
+  });
+
+  it('opens the comment thread with the comment highlighted', async () => {
+    vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [own('w1')], has_more: false });
+    const comment = {
+      id: 'c9',
+      author: sam,
+      body: 'Solid session!',
+      parent_id: null,
+      reply_to: null,
+      created_at: '2026-11-15T11:00:00Z',
+      edited_at: null,
+      can_edit: false,
+      can_delete: false,
+      reactions: { counts: [], yours: null },
+    };
+    vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+      items: [{ ...comment, id: 'c8', body: 'Earlier' }, comment],
+      next_offset: null,
+      total: 2,
+    });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'w1',
+        workoutName: 'Session w1',
+        panel: 'comments',
+        commentId: 'c9',
+      }),
+    );
+    await settle();
+
+    const highlighted = host.querySelectorAll('.workout-comment.is-highlighted');
+    expect(highlighted).toHaveLength(1);
+    expect(highlighted[0].textContent).toContain('Solid session!');
+    expect(scrolled).toContain(highlighted[0]);
+  });
 });

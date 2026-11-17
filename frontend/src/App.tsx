@@ -446,6 +446,7 @@ import { LoadingState } from './LoadingState';
 import { BodyCompositionScreen } from './BodyCompositionScreen';
 import { CardioScreen } from './CardioScreen';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
+import { onWorkoutFocusRequested } from './workoutFocus';
 
 // Screens that live in their own files; re-exported for existing imports of './App'.
 export { BodyCompositionScreen, CardioScreen };
@@ -1053,6 +1054,8 @@ function AppContent() {
       window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
     };
   }, []);
+  // A notification opens the reacted or commented workout in Social's feed.
+  useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;

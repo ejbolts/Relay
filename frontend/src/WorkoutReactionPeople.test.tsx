@@ -144,3 +144,54 @@ it('loads additional people without duplicates and keeps existing rows on a page
   expect(api.sharing.reactionPeople).toHaveBeenLastCalledWith('w1', 1);
   expect(document.querySelectorAll('.reaction-people-list li')).toHaveLength(2);
 });
+it('loads pages until a highlighted person appears, and opening it yourself drops the highlight', async () => {
+  const sam = { ...person, id: 'sam', display_name: 'Sam Preview', reaction: 'fire' as const };
+  vi.mocked(api.sharing.reactionPeople)
+    .mockResolvedValueOnce({ items: [person], total: 2, next_offset: 1 })
+    .mockResolvedValueOnce({ items: [sam], total: 2, next_offset: null });
+  function Focused() {
+    const [open, setOpen] = useState(false);
+    return (
+      <WorkoutReactionControl
+        workoutId="w1"
+        subject="Leg day"
+        ownWorkout
+        reactions={{ counts: [{ reaction: 'love', count: 2 }], yours: null }}
+        open={open}
+        focus={{
+          workoutId: 'w1',
+          workoutName: 'Leg day',
+          panel: 'people',
+          personId: 'sam',
+          key: 1,
+        }}
+        onOpenChange={setOpen}
+        onChange={vi.fn()}
+      />
+    );
+  }
+  await act(async () => root.render(<Focused />));
+  expect(api.sharing.reactionPeople).toHaveBeenNthCalledWith(2, 'w1', 1);
+  const rows = [...document.querySelectorAll('.reaction-people-list li')];
+  expect(rows.map((row) => row.classList.contains('is-highlighted'))).toEqual([false, true]);
+  expect(document.querySelector('.reaction-people-sheet .show-more-button')).toBeNull();
+
+  document.documentElement.setAttribute('data-reduce-motion', '');
+  try {
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Close Reactions"]')!.click(),
+    );
+    vi.mocked(api.sharing.reactionPeople).mockResolvedValue({
+      items: [person, sam],
+      total: 2,
+      next_offset: null,
+    });
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('.discussion-reaction-summary')!.click(),
+    );
+    expect(document.querySelectorAll('.reaction-people-list li')).toHaveLength(2);
+    expect(document.querySelector('.reaction-people-list li.is-highlighted')).toBeNull();
+  } finally {
+    document.documentElement.removeAttribute('data-reduce-motion');
+  }
+});

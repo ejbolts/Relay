@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS, reactionEmoji } from './friendFeedData';
+import { motionReduced } from './motion';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import type { WorkoutComment, WorkoutReactions } from './types';
@@ -12,10 +13,13 @@ export function WorkoutComments({
   onCountChange,
   active = true,
   replyTo,
+  focusComment,
 }: {
   workoutId: string;
   /** A comment to reply to once it loads, such as one opened from a notification. */
   replyTo?: string;
+  /** A comment to find, scroll to and highlight, such as one opened from a notification. */
+  focusComment?: string;
   onOpenMember?: (person: WorkoutComment['author']) => void;
   onCountChange: (count: number, summary?: WorkoutReactions) => void;
   active?: boolean;
@@ -31,6 +35,8 @@ export function WorkoutComments({
   const [picker, setPicker] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<WorkoutComment | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const focused = useRef<HTMLElement>(null);
+  const wanted = replyTo ?? focusComment;
   const countRef = useRef(onCountChange);
   countRef.current = onCountChange;
 
@@ -40,8 +46,8 @@ export function WorkoutComments({
     (async () => {
       let page = await api.sharing.comments(workoutId);
       const rows = [...page.items];
-      // Load further pages only until the comment being replied to appears.
-      while (replyTo && page.next_offset !== null && !rows.some((row) => row.id === replyTo)) {
+      // Load further pages only until the comment being replied to or opened appears.
+      while (wanted && page.next_offset !== null && !rows.some((row) => row.id === wanted)) {
         page = await api.sharing.comments(workoutId, page.next_offset);
         rows.push(...page.items);
       }
@@ -64,11 +70,23 @@ export function WorkoutComments({
     return () => {
       cancelled = true;
     };
-  }, [workoutId, active, replyTo]);
+  }, [workoutId, active, replyTo, wanted]);
 
   useEffect(() => {
     if (!loading && reply && reply.id === replyTo) input.current?.focus();
   }, [loading, reply, replyTo]);
+
+  useEffect(() => {
+    if (loading || !focusComment) return;
+    // After the card that holds the thread has scrolled into view.
+    const frame = requestAnimationFrame(() =>
+      focused.current?.scrollIntoView?.({
+        block: 'center',
+        behavior: motionReduced() ? 'auto' : 'smooth',
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [loading, focusComment]);
 
   async function refresh() {
     // Retain all loaded roots after mutations.
@@ -110,7 +128,11 @@ export function WorkoutComments({
   }
   function renderComment(item: WorkoutComment) {
     return (
-      <article key={item.id} className="workout-comment">
+      <article
+        key={item.id}
+        ref={item.id === focusComment ? focused : undefined}
+        className={`workout-comment${item.id === focusComment ? ' is-highlighted' : ''}`}
+      >
         <ProfileAvatar
           className="shared-profile-avatar small"
           user={{ ...item.author, username: '' }}
