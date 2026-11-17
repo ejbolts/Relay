@@ -6,7 +6,7 @@ _Relay was called Gym Logger before version 1.0._
 
 17 November 2026
 
-### Training blocks, stronger PRs and workout photos
+### Training blocks, redesigned tracking and a new feed
 
 ![Training blocks with a coloured timeline, current block progress and comparisons with the previous block. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8cdac512b7e5fb53f32e9c74eca1255dea9fe8f3/square-timeline-colour-boxes/after.png)
 
@@ -14,11 +14,11 @@ _Relay was called Gym Logger before version 1.0._
 
 ![Live workout with rep targets, suggested weights and a completed Hack Squat set showing 1.64 times bodyweight at 82.5 kg. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/bd56c0d9b6d1ee46d3ef761c2c0c1569d6e46fc6/ux-logging-polish/logger-header.png)
 
-**Targets and stronger PRs** — Follow rep targets and track strength at your bodyweight.
+**Redesigned tracking** — A cleaner workout screen with rep targets and live progress.
 
-![Compact Social feed cards with workout names, summary lines, photos, expanded exercises and reaction and comment icons. Isolated sample accounts and generated images.](https://raw.githubusercontent.com/ejbolts/Relay/a9395f2bbd0370d332afefb2b45d5dd583416af5/compact-feed-cards/feed.png)
+![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/f6b1beebaadc2c268168ebbe08330884a10a2924/release-1.3-notes/feed.png)
 
-**Your workouts, in the feed** — Share up to three photos on compact workout cards.
+**Workout feed** — Catch up on workouts, comments and reactions.
 
 - **Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.
 - **Workout saves:** Finish instantly and keep logging while sessions sync, even offline.
@@ -40,7 +40,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.
 - **History:** Page sessions and profiles by fortnight, group exercises by year or export one workout.
 - **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
-- **Social:** Compact feed cards, expandable exercise lists, workout photos and animated reactions.
+- **Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.
 - **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
 - **Full backup:** Download and restore your account, with a preview before replacing data.
 - **Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.

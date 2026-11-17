@@ -1,8 +1,8 @@
 {
   "version": "1.3.0",
   "date": "2026-11-17",
-  "title": "Training blocks, stronger PRs and workout photos",
-  "summary": "Track each training block, celebrate strength at your bodyweight and share your sessions.",
+  "title": "Training blocks, redesigned tracking and a new feed",
+  "summary": "Plan your training blocks, log in a redesigned tracker and catch up in the feed.",
   "changes": [
     "**Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.",
     "**Workout saves:** Finish instantly and keep logging while sessions sync, even offline.",
@@ -24,7 +24,7 @@
     "**Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.",
     "**History:** Page sessions and profiles by fortnight, group exercises by year or export one workout.",
     "**Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.",
-    "**Social:** Compact feed cards, expandable exercise lists, workout photos and animated reactions.",
+    "**Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.",
     "**Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.",
     "**Full backup:** Download and restore your account, with a preview before replacing data.",
     "**Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.",
@@ -49,19 +49,19 @@
       }
     },
     {
-      "title": "Targets and stronger PRs",
-      "description": "Follow rep targets and track strength at your bodyweight.",
+      "title": "Redesigned tracking",
+      "description": "A cleaner workout screen with rep targets and live progress.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/bd56c0d9b6d1ee46d3ef761c2c0c1569d6e46fc6/ux-logging-polish/logger-header.png",
         "alt": "Live workout with rep targets, suggested weights and a completed Hack Squat set showing 1.64 times bodyweight at 82.5 kg. Isolated sample data."
       }
     },
     {
-      "title": "Your workouts, in the feed",
-      "description": "Share up to three photos on compact workout cards.",
+      "title": "Workout feed",
+      "description": "Catch up on workouts, comments and reactions.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/a9395f2bbd0370d332afefb2b45d5dd583416af5/compact-feed-cards/feed.png",
-        "alt": "Compact Social feed cards with workout names, summary lines, photos, expanded exercises and reaction and comment icons. Isolated sample accounts and generated images."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/f6b1beebaadc2c268168ebbe08330884a10a2924/release-1.3-notes/feed.png",
+        "alt": "Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts."
       }
     }
   ]
