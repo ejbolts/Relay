@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   BODY_TREND_DURATION_OPTIONS,
   bodyTrendCutoffDate,
+  bodyTrendRangeSpans,
+  bodyTrendSpanStart,
   clipBodyWeightGoalPath,
   filterMeasurementsByRange,
+  nearestBodyTrendRange,
   nearestChartPointIndex,
+  pinchedBodyTrendSpan,
   summarizeBodyWeightTrend,
 } from './bodyTrend';
 
@@ -110,5 +114,41 @@ describe('bodyweight trend summary', () => {
     expect(bodyTrendCutoffDate('2026-08-31', '6m')).toBe('2026-02-28');
     expect(bodyTrendCutoffDate('2024-08-31', '6m')).toBe('2024-02-29');
     expect(bodyTrendCutoffDate('2026-09-02', '1y')).toBe('2025-09-02');
+  });
+});
+
+describe('pinch zooming the body trend', () => {
+  const dates = ['2025-01-10', '2026-05-15', '2026-11-16'];
+  const spans = bodyTrendRangeSpans(dates);
+
+  it('measures each chip back from the latest check-in', () => {
+    expect(spans['1m']).toBe(31);
+    expect(spans['3m']).toBe(92);
+    expect(spans['1y']).toBe(365);
+    expect(spans.all).toBe(675);
+  });
+
+  it('gives "All" room beyond a year when the history is short', () => {
+    expect(bodyTrendRangeSpans(['2026-11-13', '2026-11-16']).all).toBe(365 * 1.5);
+  });
+
+  it('highlights the chip nearest the pinched span', () => {
+    expect(nearestBodyTrendRange(25, spans)).toBe('1m');
+    expect(nearestBodyTrendRange(60, spans)).toBe('3m');
+    expect(nearestBodyTrendRange(200, spans)).toBe('9m');
+    expect(nearestBodyTrendRange(330, spans)).toBe('1y');
+    expect(nearestBodyTrendRange(600, spans)).toBe('all');
+  });
+
+  it('zooms in when the fingers spread and out when they close', () => {
+    expect(pinchedBodyTrendSpan(92, 2, spans)).toBeCloseTo(32.5, 1);
+    expect(pinchedBodyTrendSpan(92, 0.5, spans)).toBeCloseTo(260.2, 1);
+    expect(pinchedBodyTrendSpan(92, 20, spans)).toBeCloseTo(31 * 0.7);
+    expect(pinchedBodyTrendSpan(92, 0.01, spans)).toBe(675);
+  });
+
+  it('starts the live window the pinched number of days before the latest check-in', () => {
+    expect(bodyTrendSpanStart(dates, 46)).toBe('2026-10-01');
+    expect(bodyTrendSpanStart([], 46)).toBeUndefined();
   });
 });

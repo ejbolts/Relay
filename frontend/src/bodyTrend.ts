@@ -1,4 +1,4 @@
-import { dateRangeForDates, type TimeRange } from './dateRanges';
+import { dateRangeForDates, TIME_RANGE_OPTIONS, type TimeRange } from './dateRanges';
 
 export type BodyTrendRange = TimeRange;
 
@@ -138,4 +138,63 @@ export function nearestChartPointIndex(
   if (pointCount <= 1) return 0;
   const ratio = Math.min(1, Math.max(0, (chartX - chartStart) / (chartEnd - chartStart)));
   return Math.round(ratio * (pointCount - 1));
+}
+
+const DAY_MS = 86_400_000;
+
+function daysBetween(start: string, end: string): number {
+  return Math.round((dateOnlyUtc(end).getTime() - dateOnlyUtc(start).getTime()) / DAY_MS);
+}
+
+/**
+ * How many days each range chip shows, measured back from the latest check-in. "All" is at
+ * least half again as long as a year, so pinching out past a year still reaches it.
+ */
+export function bodyTrendRangeSpans(dates: string[]): Record<BodyTrendRange, number> {
+  const latest = dates.reduce((max, date) => (date > max ? date : max), dates[0] ?? '');
+  const spans = {} as Record<BodyTrendRange, number>;
+  for (const option of TIME_RANGE_OPTIONS) {
+    if (option.months === null) continue;
+    const { start_date: start } = dateRangeForDates(latest ? [latest] : [], option.value);
+    spans[option.value] = start ? daysBetween(start, latest) : option.months * 30.4;
+  }
+  const earliest = dates.reduce((min, date) => (date < min ? date : min), latest);
+  spans.all = Math.max(latest ? daysBetween(earliest, latest) : 0, spans['1y'] * 1.5);
+  return spans;
+}
+
+/** The chip whose span is closest on a log scale, so each chip owns an equal zoom band. */
+export function nearestBodyTrendRange(
+  spanDays: number,
+  spans: Record<BodyTrendRange, number>,
+): BodyTrendRange {
+  let nearest: BodyTrendRange = TIME_RANGE_OPTIONS[0].value;
+  for (const option of TIME_RANGE_OPTIONS) {
+    const distance = Math.abs(Math.log(spanDays / spans[option.value]));
+    if (distance < Math.abs(Math.log(spanDays / spans[nearest]))) nearest = option.value;
+  }
+  return nearest;
+}
+
+/**
+ * Shrinking or widening a span by a pinch factor, kept between a few weeks and "All". The
+ * span changes faster than the finger distance, so one pinch can cross from a month to "All".
+ */
+export function pinchedBodyTrendSpan(
+  baseSpanDays: number,
+  scale: number,
+  spans: Record<BodyTrendRange, number>,
+): number {
+  const minimum = spans['1m'] * 0.7;
+  const span = baseSpanDays / Math.max(scale, 0.01) ** 1.5;
+  return Math.min(spans.all, Math.max(minimum, span));
+}
+
+/** The first date inside a window of `spanDays` ending on the latest check-in. */
+export function bodyTrendSpanStart(dates: string[], spanDays: number): string | undefined {
+  if (dates.length === 0) return undefined;
+  const latest = dates.reduce((max, date) => (date > max ? date : max));
+  const start = dateOnlyUtc(latest);
+  start.setUTCDate(start.getUTCDate() - Math.round(spanDays));
+  return start.toISOString().slice(0, 10);
 }
