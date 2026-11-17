@@ -147,6 +147,16 @@ export function exerciseSearchScore(exercise: SearchableExercise, query: string)
   );
 }
 
+/**
+ * Whether every searched word, other than equipment, appears in the exercise's own name, such as
+ * "chest press". Equipment words are already checked against the exercise's equipment.
+ */
+function nameContainsQuery(name: string, query: string): boolean {
+  const nameText = searchTokens(name).join(' ');
+  const tokens = searchTokens(query).filter((token) => !equipmentSearchTerms[token]);
+  return tokens.length > 0 && tokens.every((token) => nameText.includes(token));
+}
+
 export function rankExerciseSearchMatches<T extends SearchableExercise>(
   exercises: T[],
   query: string,
@@ -158,6 +168,7 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
     .map((exercise, originalIndex) => ({
       exercise,
       originalIndex,
+      named: nameContainsQuery(exercise.name, query),
       recency: recencyById.get(exercise.id),
       score: exerciseSearchScore(exercise, query),
     }))
@@ -169,6 +180,9 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
       } => match.score !== null,
     )
     .sort((first, second) => {
+      // Name matches come first, so "chest press" lists Machine Chest Press before a recently
+      // used Bench Press that only matches through its muscle group.
+      if (first.named !== second.named) return first.named ? -1 : 1;
       const firstWasUsed = first.recency !== undefined;
       const secondWasUsed = second.recency !== undefined;
       if (firstWasUsed !== secondWasUsed) return firstWasUsed ? -1 : 1;
