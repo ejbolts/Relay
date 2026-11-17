@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS, reactionEmoji } from './friendFeedData';
 import { motionReduced } from './motion';
+import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import type { WorkoutComment, WorkoutReactions } from './types';
@@ -14,6 +15,7 @@ export function WorkoutComments({
   active = true,
   replyTo,
   focusComment,
+  onLayoutChange,
 }: {
   workoutId: string;
   /** A comment to reply to once it loads, such as one opened from a notification. */
@@ -23,6 +25,8 @@ export function WorkoutComments({
   onOpenMember?: (person: WorkoutComment['author']) => void;
   onCountChange: (count: number, summary?: WorkoutReactions) => void;
   active?: boolean;
+  /** Let an enclosing card own the height glide, including asynchronous comment loads. */
+  onLayoutChange?: (key: string) => void;
 }) {
   const [items, setItems] = useState<WorkoutComment[]>([]);
   const [next, setNext] = useState<number | null>(null);
@@ -37,6 +41,19 @@ export function WorkoutComments({
   const input = useRef<HTMLTextAreaElement>(null);
   const focused = useRef<HTMLElement>(null);
   const wanted = replyTo ?? focusComment;
+  const section = useRef<HTMLElement>(null);
+  const layoutKey = JSON.stringify([
+    active,
+    loading,
+    items.map((item) => [item.id, item.body, item.reactions.counts]),
+    picker,
+    reply?.id,
+    editing?.id,
+    next,
+    error,
+  ]);
+  useHeightAnimation(section, onLayoutChange ? '' : layoutKey);
+  useLayoutEffect(() => onLayoutChange?.(layoutKey), [layoutKey, onLayoutChange]);
   const countRef = useRef(onCountChange);
   countRef.current = onCountChange;
 
@@ -253,7 +270,7 @@ export function WorkoutComments({
     );
   }
   return (
-    <section className="workout-comments" aria-label="Workout comments">
+    <section ref={section} className="workout-comments" aria-label="Workout comments">
       {deleting && (
         <PopupDialog title="Delete comment?" onClose={() => !busy && setDeleting(null)}>
           <p>
