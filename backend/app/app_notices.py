@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from .account_limits import limit_save_rate
 from .auth import CurrentUser
+from .client_versions import ClientVersion, parse_version
 from .database import get_db
 from .training_metrics import get_setting, set_setting
 
 NOTICES_KEY = "app_notices"
+# A reviewed week starts on or before the device's own today. Two days covers every time
+# zone, and refuses a device whose clock is set well ahead: values only move forward, so a
+# date far in the future would hide the weekly review on every device until then.
+CLOCK_TOLERANCE = timedelta(days=2)
 _VERSION = re.compile(r"^\d{1,4}\.\d{1,4}\.\d{1,4}$")
 
 
@@ -60,7 +65,22 @@ def get_app_notices(db: DbSession, user: CurrentUser) -> AppNotices:
 
 
 @router.put("", response_model=AppNotices, dependencies=[Depends(limit_save_rate)])
-def save_app_notices(payload: AppNotices, db: DbSession, user: CurrentUser) -> AppNotices:
+def save_app_notices(
+    payload: AppNotices,
+    db: DbSession,
+    user: CurrentUser,
+    client_version: ClientVersion = None,
+) -> AppNotices:
+    week = payload.weekly_review_seen
+    if week is not None and week > date.today() + CLOCK_TOLERANCE:
+        raise HTTPException(422, "That week has not started yet.")
+    # An app cannot have shown the notes of a release newer than itself.
+    running = parse_version(client_version)
+    if payload.release_seen and running and _version_key(payload.release_seen) > running:
+        raise HTTPException(422, "That release is newer than this app.")
+    # Take the write lock before reading, so two devices recording at once are merged one
+    # after the other instead of the second overwriting what the first just saved.
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     merged = merge_notices(get_app_notices(db, user), payload)
     set_setting(db, user.id, NOTICES_KEY, merged.model_dump_json())
     db.commit()
