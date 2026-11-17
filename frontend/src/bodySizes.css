@@ -124,8 +124,24 @@
 .body-sizes-date-input {
   display: grid;
   gap: 6px;
+  min-width: 0;
   font-size: 12px;
   color: var(--p-muted);
+}
+/* iOS sizes native date fields to their content, which pushed this one past the dialog's
+   right edge; fill the field instead, as the training block form does. */
+.body-sizes-date-input input[type='date'] {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-inline-size: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+.body-sizes-date-input input[type='date']::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
 }
 .body-sizes-delete > p {
   margin: 16px;

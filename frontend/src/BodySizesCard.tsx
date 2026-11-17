@@ -141,8 +141,8 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
           <h2>Body measurements</h2>
           <HelpPopup title="Body measurements">
             <p>
-              Measure circumferences with a relaxed tape, using the same position each time. All
-              fields are optional; enter at least one.
+              Flex each muscle and measure around it with a relaxed tape, using the same position
+              each time. All fields are optional; enter at least one.
             </p>
           </HelpPopup>
         </div>
@@ -293,7 +293,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     disabled={saving}
                     step="any"
                     inputMode="decimal"
-                    placeholder="Optional"
                     value={draft[key] ?? ''}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, [key]: event.target.value }))
