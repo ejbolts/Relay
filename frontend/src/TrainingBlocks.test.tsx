@@ -133,6 +133,17 @@ it('reuses the exercise chart for the current block and all-time view', async ()
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
 });
 
+it('shows the block an exercise chart covers and returns to all time from it', async () => {
+  await mount();
+  const chip = host.querySelector<HTMLButtonElement>('.progress-block-scope')!;
+  expect(chip.textContent).toBe('Rebuild');
+  expect(chip.getAttribute('aria-label')).toBe('Showing the Rebuild block only. Show all time');
+  await act(async () => chip.click());
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', undefined);
+  expect(host.querySelector('.progress-hero-value')?.textContent).toContain('120');
+  expect(host.querySelector('.progress-block-scope')).toBeNull();
+});
+
 it('chooses a block from list options and shows ranges and workout counts on the blocks page', async () => {
   vi.mocked(api.trainingBlocks.get).mockResolvedValue({
     earlier_workout_count: 40,

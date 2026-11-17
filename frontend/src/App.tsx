@@ -310,6 +310,7 @@ import {
   workoutDurationMinutes,
   workoutTimeInputValue,
 } from './utils';
+import { blockColor } from './blockColors';
 import { VideoUpload } from './VideoUpload';
 import { YouTubeConnectionPanel } from './YouTubeConnectionPanel';
 import { ProfileScreen } from './ProfileScreen';
@@ -8156,7 +8157,7 @@ export function ProgressScreen({
   onCreateExercise?: () => void;
   onExercisesMerged?: () => Promise<void>;
 }) {
-  const { block } = useTrainingBlocks();
+  const { block, config: blockConfig, select: selectBlock } = useTrainingBlocks();
   const blockId = block?.id;
   const weightUnit = useWeightUnit();
   const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
@@ -8768,6 +8769,25 @@ export function ProgressScreen({
                             ` (${change >= 0 ? '+' : '−'}${Math.abs(changePercent).toFixed(1)}%)`}{' '}
                           since {dayMonth(firstPoint.workout_date)}
                         </p>
+                      )}
+                      {block && (
+                        // The chart, bests and sessions only cover this block; say so, and let
+                        // the whole history return in one tap.
+                        <button
+                          type="button"
+                          className="progress-block-scope"
+                          aria-label={`Showing the ${block.name} block only. Show all time`}
+                          onClick={() => selectBlock('all')}
+                        >
+                          <i
+                            aria-hidden="true"
+                            style={{
+                              background: blockColor(blockConfig.blocks, block, localDate()),
+                            }}
+                          />
+                          {block.name}
+                          <Icon name="close" />
+                        </button>
                       )}
                     </div>
                     {!browseFirst && selectedExercise && (
