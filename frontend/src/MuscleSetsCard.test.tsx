@@ -179,7 +179,7 @@ it('can reveal untrained muscles before the first workout of the week', async ()
   expect(host.textContent).toContain('No working sets logged yet');
   await act(async () => host.querySelector<HTMLButtonElement>('.muscle-sets-expand')!.click());
   expect(host.querySelectorAll('.muscle-bars > li')).toHaveLength(1);
-  expect(host.querySelector('.num')?.textContent).toBe('0/ 10');
+  expect(host.querySelector('.muscle-set-count')?.textContent).toBe('0 / 10');
 });
 
 function week(start: string, sets: Record<string, number>): WeeklySets {
@@ -199,7 +199,7 @@ function week(start: string, sets: Record<string, number>): WeeklySets {
 const rows = () =>
   [...host.querySelectorAll('.muscle-bars > li')].map((row) => [
     row.querySelector('.muscle-name-button')?.textContent,
-    row.querySelector('.num')?.childNodes[0]?.textContent,
+    row.querySelector('.muscle-set-count')?.childNodes[0]?.textContent,
     row.querySelector('.muscle-set-change')?.textContent ?? null,
     row.querySelector('.muscle-bar-previous') !== null,
   ]);
