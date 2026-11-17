@@ -156,6 +156,8 @@ const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
+  /** The summary of the workout just finished, shown above the sections. */
+  finished?: ReactNode;
   data: DashboardData | null;
   muscleSets?: { weeklySets?: MuscleSetsWeek; history?: MuscleSetsWeek[] };
   workouts: TrackedWorkout[];
@@ -213,6 +215,7 @@ export interface TodayScreenProps {
 
 export function TodayScreen({
   home,
+  finished,
   data,
   muscleSets,
   workouts,
@@ -815,6 +818,7 @@ export function TodayScreen({
       <p className="sr-only" role="status">
         {home.message}
       </p>
+      {!home.editing && finished}
       <HomeLayoutSections
         layout={home.editing ? home.draft : home.layout}
         sections={sections}
