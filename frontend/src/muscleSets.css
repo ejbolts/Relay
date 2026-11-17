@@ -105,6 +105,9 @@
   justify-items: end;
   line-height: 1.15;
 }
+.muscle-set-count {
+  white-space: nowrap;
+}
 .muscle-set-change {
   font-size: 0.6875rem;
   font-weight: 700;

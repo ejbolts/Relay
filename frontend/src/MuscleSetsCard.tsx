@@ -168,8 +168,10 @@ export function MuscleSetsCard({
                 />
               </span>
               <b className="num">
-                {credits(item.raw_sets)}
-                <small className="muscle-row-target">/ {target}</small>
+                <span className="muscle-set-count">
+                  {credits(item.raw_sets)}
+                  <small className="muscle-row-target"> / {target}</small>
+                </span>
                 {change !== null && (
                   <small
                     className={`muscle-set-change ${
