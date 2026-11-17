@@ -1058,27 +1058,6 @@
   margin: 0.5rem 0 0;
 }
 
-.history-card:has(.history-card-social) {
-  overflow: visible;
-}
-.shared-workouts .history-week-list:has(.friend-react-picker) {
-  overflow: visible;
-}
-.history-card-social {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0 0.875rem 0.625rem;
-}
-.shared-workout-reaction-summary {
-  color: var(--p-muted);
-  font-size: 0.75rem;
-}
-.shared-workout-reaction-summary > span {
-  font-size: 0.9375rem;
-}
 .friend-block-dialog > p {
   margin: 0;
   padding: 1rem;
@@ -1094,12 +1073,6 @@
   width: auto;
   min-height: 2.5rem;
   padding: 0.45rem 1rem;
-}
-.history-card-social .friend-react-picker {
-  right: 0.625rem;
-  bottom: calc(100% + 0.25rem);
-  width: max-content;
-  max-width: calc(100% - 1.25rem);
 }
 .friend-react-error {
   width: 100%;

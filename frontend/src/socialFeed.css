@@ -350,6 +350,7 @@ html[data-reduce-motion] .feed-card.is-focused {
 }
 
 /* Photos in a workout's details, in History and on profiles. */
-.history-workout-photos {
+.history-workout-photos,
+.history-detail > .workout-photo-editor {
   margin: 0 0 0.75rem;
 }

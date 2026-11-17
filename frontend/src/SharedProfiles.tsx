@@ -33,7 +33,6 @@ import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { TrainingTimeCard } from './TrainingTimeStats';
-import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { PopupDialog } from './PopupDialog';
 import { RoutinePanel } from './RoutinePanel';
 import { HeadToHeadCard } from './LiftComparison';
@@ -52,7 +51,6 @@ import {
   forgetSharedProfile,
   pendingSharedProfile,
   storeSharedProfile,
-  updateCachedReactions,
   workoutsFromCache,
   type SharedProfileData,
 } from './sharedProfileCache';
@@ -72,7 +70,6 @@ import type {
   SharedWorkoutPage,
   SharingConnection,
   TrackedWorkout,
-  WorkoutReactions,
   User,
 } from './types';
 
@@ -1129,7 +1126,6 @@ export interface SharedWorkoutListProps {
   focusWorkoutId?: string;
   personalRecords: PersonalRecord[];
   onFilterMachine?: (photo: MachinePhoto) => void;
-  renderWorkoutAction?: (workout: TrackedWorkout) => ReactNode;
   /** The server holds older workouts than `workouts`. */
   hasMore?: boolean;
   /** Older workouts are being read, or the list is refreshing. */
@@ -1232,7 +1228,6 @@ function ProfileSkeleton() {
 }
 
 export function SharedProfileScreen({
-  onOpenMember,
   onOpenSplits,
   dataRevision = null,
   profileId,
@@ -1244,7 +1239,6 @@ export function SharedProfileScreen({
   invite = false,
   onLoaded,
 }: {
-  onOpenMember?: (person: { id: string; display_name: string }) => void;
   onOpenSplits?: (routineId?: string) => void;
   dataRevision?: string | null;
   profileId: string;
@@ -1273,10 +1267,6 @@ export function SharedProfileScreen({
   const [profile, setProfile] = useState<SharedProfile | null>(seed?.profile ?? null);
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>(seed?.page?.workouts ?? []);
   const [records, setRecords] = useState<PersonalRecord[]>(seed?.page?.personal_records ?? []);
-  const [reactions, setReactions] = useState<Record<string, WorkoutReactions>>(
-    seed?.page?.reactions ?? {},
-  );
-  const [picking, setPicking] = useState<string | null>(null);
   const [total, setTotal] = useState(seed?.page?.total ?? 0);
   const [state, setState] = useState<LoadState>(seed ? 'ready' : 'loading');
   const [error, setError] = useState<string | null>(null);
@@ -1435,11 +1425,6 @@ export function SharedProfileScreen({
       onLoadedRef.current?.(nextProfile);
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
-      setReactions('reactions' in page ? (page.reactions ?? {}) : {});
-      // An open comment thread or picker stays open while its workout is still listed.
-      setPicking((current) =>
-        current && page.workouts.some((workout) => workout.id === current) ? current : null,
-      );
       setTotal(page.total);
       setFilterOptions(options);
       setState('ready');
@@ -1494,7 +1479,6 @@ export function SharedProfileScreen({
         ...page.workouts.filter((item) => !current.some((existing) => existing.id === item.id)),
       ]);
       setRecords((current) => [...current, ...page.personal_records]);
-      setReactions((current) => ({ ...current, ...page.reactions }));
       // Pages read on demand stop once the server has nothing new, even if its total disagrees.
       setTotal(added.length ? page.total : workouts.length);
     } catch (reason) {
@@ -1823,27 +1807,6 @@ export function SharedProfileScreen({
                   onLoadMore: () => void loadMore(),
                   focusWorkoutId: linkedWorkoutId,
                   personalRecords: records,
-                  renderWorkoutAction: (workout) => (
-                    <WorkoutReactionControl
-                      ownWorkout={profile.is_you}
-                      onOpenMember={onOpenMember}
-                      workoutId={workout.id}
-                      subject={`${profile.display_name}’s ${workout.name}`}
-                      reactions={reactions[workout.id] ?? { counts: [], yours: null }}
-                      open={picking === workout.id}
-                      showSummary
-                      onOpenChange={(value) =>
-                        setPicking((current) =>
-                          value ? workout.id : current === workout.id ? null : current,
-                        )
-                      }
-                      onChange={(value) => {
-                        if (cacheable)
-                          updateCachedReactions(viewerId, profileId, workout.id, value);
-                        setReactions((current) => ({ ...current, [workout.id]: value }));
-                      }}
-                    />
-                  ),
                   onFilterMachine: (photo) => {
                     setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
                     setFiltersOpen(true);
