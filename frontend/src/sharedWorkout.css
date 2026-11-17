@@ -84,7 +84,6 @@
 
 .shared-set-list li[data-set-type='warmup'] {
   --shared-set-rgb: 240 140 40;
-  background: rgb(var(--shared-set-rgb) / 12%);
 }
 
 .shared-set-list li[data-set-type='drop'] {
