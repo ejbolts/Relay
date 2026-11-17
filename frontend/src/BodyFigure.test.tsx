@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BodyFigure } from './BodyFigure';
-import { spreadLabels } from './bodyFigureLayout';
+import { LABEL_GAP, spreadLabels } from './bodyFigureLayout';
 import { BODY_FIGURES, bodyFigurePath } from './bodyFigureShapes';
 
 let root: Root;
@@ -28,6 +28,7 @@ describe('BodyFigure', () => {
           kind="male"
           unit="cm"
           values={{ waist_cm: '84', left_arm_cm: '37.5', right_arm_cm: '38' }}
+          onPick={() => undefined}
         />,
       ),
     );
@@ -47,12 +48,82 @@ describe('BodyFigure', () => {
   });
 
   it('draws a different outline for each figure', async () => {
-    await act(async () => root.render(<BodyFigure kind="male" unit="cm" values={{}} />));
+    const figure = (kind: 'male' | 'female') => (
+      <BodyFigure kind={kind} unit="cm" values={{}} onPick={() => undefined} />
+    );
+    await act(async () => root.render(figure('male')));
     const male = host.querySelector('.body-figure-outline')!.getAttribute('d');
-    await act(async () => root.render(<BodyFigure kind="female" unit="cm" values={{}} />));
+    await act(async () => root.render(figure('female')));
     const female = host.querySelector('.body-figure-outline')!.getAttribute('d');
     expect(host.querySelector('svg')?.getAttribute('data-figure')).toBe('female');
     expect(female).not.toBe(male);
+  });
+});
+
+describe('BodyFigure labels', () => {
+  it('makes each label a button that picks its measurement by tap or keyboard', async () => {
+    const picked: string[] = [];
+    await act(async () =>
+      root.render(
+        <BodyFigure
+          kind="female"
+          unit="in"
+          values={{ waist_cm: '30', hips_cm: '38.5' }}
+          onPick={(field) => picked.push(field)}
+        />,
+      ),
+    );
+    const waist = host.querySelector<SVGGElement>('[data-field="waist_cm"]')!;
+    expect(waist.getAttribute('role')).toBe('button');
+    expect(waist.getAttribute('aria-label')).toBe('Update waist, 30 in');
+    await act(async () => waist.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const hips = host.querySelector<SVGGElement>('[data-field="hips_cm"]')!;
+    await act(async () =>
+      hips.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+    );
+    await act(async () =>
+      hips.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })),
+    );
+    expect(picked).toEqual(['waist_cm', 'hips_cm']);
+  });
+
+  it.each(['male', 'female'] as const)('gives every %s label its own tap area', async (kind) => {
+    const all = Object.fromEntries(
+      [
+        'neck_cm',
+        'shoulders_cm',
+        'chest_cm',
+        'waist_cm',
+        'hips_cm',
+        'left_arm_cm',
+        'right_arm_cm',
+        'left_thigh_cm',
+        'right_thigh_cm',
+        'left_calf_cm',
+        'right_calf_cm',
+        'wrist_cm',
+        'ankle_cm',
+      ].map((field) => [field, '50']),
+    );
+    await act(async () =>
+      root.render(<BodyFigure kind={kind} unit="cm" values={all} onPick={() => undefined} />),
+    );
+    const areas = [...host.querySelectorAll('.body-figure-hit')].map((rect) => ({
+      left: Number(rect.getAttribute('x')) < 0,
+      top: Number(rect.getAttribute('y')),
+      height: Number(rect.getAttribute('height')),
+    }));
+    expect(areas).toHaveLength(13);
+    for (const left of [true, false]) {
+      const column = areas.filter((area) => area.left === left).sort((a, b) => a.top - b.top);
+      for (let i = 1; i < column.length; i += 1) {
+        expect(column[i].top).toBeGreaterThanOrEqual(column[i - 1].top + column[i - 1].height);
+      }
+      // Nothing runs off the top or bottom of the picture.
+      expect(column[0].top).toBeGreaterThanOrEqual(-16);
+      const last = column[column.length - 1];
+      expect(last.top + last.height).toBeLessThanOrEqual(826);
+    }
   });
 });
 
@@ -92,7 +163,7 @@ describe('spreadLabels', () => {
     const wanted = [255, 315, 404, 445];
     const placed = spreadLabels(wanted);
     for (let i = 1; i < placed.length; i += 1) {
-      expect(placed[i] - placed[i - 1]).toBeGreaterThanOrEqual(76);
+      expect(placed[i] - placed[i - 1]).toBeGreaterThanOrEqual(LABEL_GAP);
     }
     // Shared out, not all pushed downwards: the first moves up and the last moves down.
     expect(placed[0]).toBeLessThan(255);
@@ -104,10 +175,10 @@ describe('spreadLabels', () => {
   it('keeps labels inside the picture at both ends', () => {
     const low = spreadLabels([700, 760, 790]);
     expect(low[2]).toBeLessThanOrEqual(790);
-    expect(low[1] - low[0]).toBeGreaterThanOrEqual(76);
+    expect(low[1] - low[0]).toBeGreaterThanOrEqual(LABEL_GAP);
     const high = spreadLabels([0, 10, 400]);
     expect(high[0]).toBeGreaterThanOrEqual(26);
-    expect(high[1] - high[0]).toBeGreaterThanOrEqual(76);
+    expect(high[1] - high[0]).toBeGreaterThanOrEqual(LABEL_GAP);
     expect(high[2]).toBe(400);
   });
 });

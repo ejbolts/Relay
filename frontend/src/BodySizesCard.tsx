@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { BodyFigure } from './BodyFigure';
 import { loadBodyFigure, saveBodyFigure } from './bodyFigurePreference';
@@ -43,6 +43,18 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const [shownDate, setShownDate] = useState<string | null>(null);
   const userId = useUserSession().user?.id ?? null;
   const [figure, setFigure] = useState<BodyFigureKind>(() => loadBodyFigure(userId));
+  // The measurement tapped on the figure, so the form opens on that field.
+  const [focusField, setFocusField] = useState<BodySizeField | null>(null);
+  const form = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (!editing || !focusField) return;
+    const field = form.current?.elements.namedItem(focusField);
+    if (field instanceof HTMLInputElement) {
+      field.focus();
+      field.select();
+    }
+  }, [editing, focusField]);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,8 +163,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     const change = Number((display(shown[key]) - display(previous[key])).toFixed(1));
     return change === 0 ? [] : [{ key, label, change }];
   });
-  const open = (day: string) => {
+  const open = (day: string, field: BodySizeField | null = null) => {
     chooseDate(day);
+    setFocusField(field);
     setEditing(true);
   };
 
@@ -219,6 +232,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
           <BodyFigure
             kind={figure}
             unit={unit}
+            onPick={(field) => open(shown.measurement_date, field)}
             values={Object.fromEntries(
               BODY_SIZE_FIELDS.filter(([key]) => shown[key] !== null).map(([key]) => [
                 key,
@@ -226,15 +240,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               ]),
             )}
           />
-          {/* The figure is a picture; this is the same entry as a list for screen readers. */}
-          <dl className="sr-only">
-            {BODY_SIZE_FIELDS.filter(([key]) => shown[key] !== null).map(([key, label]) => (
-              <div key={key}>
-                <dt>{label}</dt>
-                <dd>{format(shown[key]!)}</dd>
-              </div>
-            ))}
-          </dl>
           <div
             className="segmented-control compact body-sizes-figure-kind"
             role="radiogroup"
@@ -380,6 +385,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
           }}
         >
           <form
+            ref={form}
             className="body-entry-form"
             onSubmit={(event) => {
               event.preventDefault();
@@ -402,6 +408,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                   {label} ({unit})
                   <input
                     type="number"
+                    name={key}
                     disabled={saving}
                     step="any"
                     inputMode="decimal"

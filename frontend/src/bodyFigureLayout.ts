@@ -1,5 +1,8 @@
-/** Labels are two lines of text, so neighbours in a column stay at least this far apart. */
-const LABEL_GAP = 76;
+/**
+ * How far apart neighbouring labels in a column stay. Each label is a button, so this is also its
+ * height: about 46px on a 390px-wide phone.
+ */
+export const LABEL_GAP = 100;
 const LABEL_TOP = 26;
 const LABEL_BOTTOM = 790;
 

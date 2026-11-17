@@ -68,6 +68,24 @@
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
+.body-figure-label {
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.body-figure-hit {
+  fill: transparent;
+}
+.body-figure-label:hover .body-figure-hit,
+.body-figure-label:active .body-figure-hit {
+  fill: var(--p-surface-2);
+}
+.body-figure-label:focus-visible .body-figure-hit {
+  fill: var(--p-surface-2);
+  stroke: var(--p-accent);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
 .body-figure-leader {
   stroke: var(--p-line-strong);
   stroke-width: 1px;

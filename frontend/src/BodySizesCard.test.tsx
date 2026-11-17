@@ -223,6 +223,35 @@ describe('BodySizesCard', () => {
     expect(api.deleteBodySizes).toHaveBeenCalledWith('2026-10-11');
     expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-25');
   });
+  it('opens the form on a measurement tapped on the figure and saves it for the shown date', async () => {
+    await render([
+      row('2026-10-25', { waist_cm: 81, chest_cm: 103 }),
+      row('2026-10-18', { waist_cm: 82, chest_cm: 102 }),
+    ]);
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[aria-label="Earlier measurements"]')!.click(),
+    );
+    const waist = host.querySelector('[data-field="waist_cm"]')!;
+    expect(waist.getAttribute('aria-label')).toBe('Update waist, 82 cm');
+    await act(async () => waist.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const field = document.querySelector<HTMLInputElement>('dialog input[name="waist_cm"]')!;
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe('82');
+    expect(document.querySelector<HTMLInputElement>('dialog input[type=date]')?.value).toBe(
+      '2026-10-18',
+    );
+    await act(async () => input('Waist', '81.5'));
+    await act(async () => button('Update measurements').click());
+    expect(api.saveBodySizes).toHaveBeenCalledWith(
+      expect.objectContaining({ measurement_date: '2026-10-18', waist_cm: 81.5, chest_cm: 102 }),
+    );
+    expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist81.5 cm');
+    // Opening the form another way does not jump to the last tapped field.
+    await act(async () => button('Edit').click());
+    expect(document.activeElement).not.toBe(
+      document.querySelector('dialog input[name="waist_cm"]'),
+    );
+  });
   it('hides the stepper arrows for a single entry and shows a newly saved date', async () => {
     await render([row('2026-10-20', { waist_cm: 82 })]);
     expect(host.querySelectorAll('.body-sizes-stepper button')).toHaveLength(0);

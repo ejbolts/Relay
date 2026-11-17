@@ -5,7 +5,7 @@ import {
   type BodyFigureBand,
   type BodyFigureKind,
 } from './bodyFigureShapes';
-import { spreadLabels } from './bodyFigureLayout';
+import { LABEL_GAP, spreadLabels } from './bodyFigureLayout';
 import type { BodySizeField } from './bodySizes';
 
 /**
@@ -38,17 +38,24 @@ const HALF_WIDTH = 350;
 const TOP = -16;
 const HEIGHT = 842;
 const LEADER_START = 214;
+/** A label's tap area: from the edge of the picture to where its leader starts. */
+const LABEL_WIDTH = HALF_WIDTH - LEADER_START + 4;
 
-/** A body outline with each measurement drawn across the part it measures and labelled beside it. */
+/**
+ * A body outline with each measurement drawn across the part it measures and labelled beside it.
+ * Each label is a button that asks to update that measurement.
+ */
 export function BodyFigure({
   kind,
   values,
   unit,
+  onPick,
 }: {
   kind: BodyFigureKind;
   /** Display values by field; a field left out is not drawn. */
   values: Partial<Record<BodySizeField, string>>;
   unit: string;
+  onPick: (field: BodySizeField) => void;
 }) {
   const shape = BODY_FIGURES[kind];
   const outline = useMemo(() => bodyFigurePath(shape.half), [shape]);
@@ -68,8 +75,8 @@ export function BodyFigure({
       className="body-figure"
       data-figure={kind}
       viewBox={`${-HALF_WIDTH} ${TOP} ${HALF_WIDTH * 2} ${HEIGHT}`}
-      aria-hidden="true"
-      focusable="false"
+      role="group"
+      aria-label="Measurements on the body"
     >
       {/* Leaders sit under the outline, so one reaching the torso passes behind the arm. */}
       {callouts.map((item) => (
@@ -84,11 +91,32 @@ export function BodyFigure({
       ))}
       <path className="body-figure-outline" d={outline} />
       {callouts.map((item) => (
-        <g key={item.field} data-field={item.field}>
+        <g
+          key={item.field}
+          className="body-figure-label"
+          data-field={item.field}
+          role="button"
+          tabIndex={0}
+          aria-label={`Update ${item.name.toLowerCase()}, ${values[item.field]} ${unit}`}
+          onClick={() => onPick(item.field)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            onPick(item.field);
+          }}
+        >
+          <rect
+            className="body-figure-hit"
+            x={item.column < 0 ? -HALF_WIDTH : HALF_WIDTH - LABEL_WIDTH}
+            y={item.labelY + 2 - (LABEL_GAP - 6) / 2}
+            width={LABEL_WIDTH}
+            height={LABEL_GAP - 6}
+            rx={16}
+          />
           <line className="body-figure-band" x1={item.from} x2={item.to} y1={item.y} y2={item.y} />
           <text
             className="body-figure-name"
-            x={item.column * (HALF_WIDTH - 4)}
+            x={item.column * (HALF_WIDTH - 12)}
             y={item.labelY - 8}
             textAnchor={item.column < 0 ? 'start' : 'end'}
           >
@@ -96,7 +124,7 @@ export function BodyFigure({
           </text>
           <text
             className="body-figure-value"
-            x={item.column * (HALF_WIDTH - 4)}
+            x={item.column * (HALF_WIDTH - 12)}
             y={item.labelY + 25}
             textAnchor={item.column < 0 ? 'start' : 'end'}
           >
