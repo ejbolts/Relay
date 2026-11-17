@@ -776,6 +776,8 @@ export interface ExerciseLibrarySummary {
   change_kg: number | null;
   change_percent: number | null;
   trend: { date: string; estimated_1rm: number }[];
+  /** Estimates are in the reference machine's weights; missing from older servers. */
+  normalised?: boolean;
 }
 
 export interface ArchiveCounts {

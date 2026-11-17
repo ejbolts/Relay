@@ -192,6 +192,7 @@ from .training_split import (
     validate_split_types,
 )
 from .training_time import training_time_totals
+from .weight_factors import normalising_factors
 from .workout_photos import (
     MAX_PHOTOS_PER_WORKOUT,
     delete_workout_photo_files,
@@ -3475,6 +3476,9 @@ def exercise_library_progress(
         block = next((b for b in training_blocks(db, user.id).blocks if b.id == block_id), None)
         if block is None:
             raise HTTPException(404, "Training block was not found.")
+    # Exercises with machine weights normalised report every machine in the reference machine's
+    # weights, as the progress chart's "All machines" view does.
+    factors = normalising_factors(db, user.id)
     sessions: dict[str, dict[tuple[date, str], float]] = defaultdict(dict)
     for item, exercise_id, workout_date, workout_id in rows:
         if block and (
@@ -3489,6 +3493,8 @@ def exercise_library_progress(
             if is_pr_eligible(item)
             else 0.0
         )
+        if exercise_id in factors and item.machine_photo_id:
+            estimate *= factors[exercise_id].get(item.machine_photo_id, 1.0)
         sessions[exercise_id][key] = max(sessions[exercise_id].get(key, 0), estimate)
     summaries = []
     for exercise_id, values in sessions.items():
@@ -3522,6 +3528,7 @@ def exercise_library_progress(
                 if change is not None
                 else None,
                 trend=trend,
+                normalised=exercise_id in factors,
             )
         )
     return summaries

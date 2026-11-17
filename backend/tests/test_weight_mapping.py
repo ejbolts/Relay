@@ -3,6 +3,8 @@ from datetime import date, timedelta
 from test_machine_photo_merge import merge
 from test_tracker import upload_machine_photo, workout_payload
 
+from app.training_metrics import estimated_one_rep_max
+
 
 def leg_press(client) -> str:
     return next(
@@ -147,3 +149,71 @@ def test_progress_lists_each_machines_sessions_separately(client):
         # Several machines on one movement can't be attributed to either.
         (both["id"], None, 80),
     ]
+
+
+def test_exercise_list_summary_follows_normalised_machine_weights(client):
+    exercise = leg_press(client)
+    home = upload_machine_photo(client, exercise, "Home Hammer", "#e86f35")
+    travel = upload_machine_photo(client, exercise, "Travel Cybex", "#293d6b")
+    log(client, exercise, 2, [travel["id"]], 150)
+    log(client, exercise, 1, [home["id"]], 100)
+    path = f"/api/exercises/{exercise}/weight-mapping"
+
+    def summary() -> dict:
+        return next(
+            item for item in client.get("/api/progress").json() if item["exercise_id"] == exercise
+        )
+
+    raw = summary()
+    assert raw["normalised"] is False
+    assert [point["estimated_1rm"] for point in raw["trend"]] == [
+        round(estimated_one_rep_max(150, 5), 1),
+        round(estimated_one_rep_max(100, 5), 1),
+    ]
+
+    mapping = {
+        "enabled": True,
+        "reference_machine_id": home["id"],
+        "machines": [{"id": travel["id"], "machine_kg": 150, "reference_kg": 120}],
+    }
+    assert client.put(path, json=mapping).status_code == 200
+    normalised = summary()
+    # The Cybex session now reads in Hammer weights, as the progress chart's All machines view does.
+    assert normalised["normalised"] is True
+    assert [point["estimated_1rm"] for point in normalised["trend"]] == [
+        round(estimated_one_rep_max(120, 5), 1),
+        round(estimated_one_rep_max(100, 5), 1),
+    ]
+    assert normalised["latest_estimated_1rm"] == round(estimated_one_rep_max(100, 5), 1)
+    assert normalised["change_kg"] == round(
+        round(estimated_one_rep_max(100, 5), 1) - round(estimated_one_rep_max(120, 5), 1), 1
+    )
+
+    assert client.put(path, json={**mapping, "enabled": False}).status_code == 200
+    assert summary() == raw
+
+
+def test_exercise_list_summary_converts_merged_machine_sets(client):
+    exercise = leg_press(client)
+    home = upload_machine_photo(client, exercise, "Home Hammer", "#e86f35")
+    travel = upload_machine_photo(client, exercise, "Travel Cybex", "#293d6b")
+    angle = upload_machine_photo(client, exercise, "Travel Cybex side", "#334455")
+    log(client, exercise, 1, [angle["id"]], 150)
+    path = f"/api/exercises/{exercise}/weight-mapping"
+    assert (
+        client.put(
+            path,
+            json={
+                "enabled": True,
+                "reference_machine_id": home["id"],
+                "machines": [{"id": travel["id"], "machine_kg": 150, "reference_kg": 120}],
+            },
+        ).status_code
+        == 200
+    )
+    assert merge(client, exercise, travel, angle).status_code == 200
+
+    summary = next(
+        item for item in client.get("/api/progress").json() if item["exercise_id"] == exercise
+    )
+    assert summary["latest_estimated_1rm"] == round(estimated_one_rep_max(120, 5), 1)
