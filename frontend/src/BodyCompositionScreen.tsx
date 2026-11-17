@@ -1,6 +1,6 @@
 import { BodyWeightTip } from './FeatureDiscoveryTips';
 import { BodySizesCard } from './BodySizesCard';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from './api';
@@ -47,6 +47,7 @@ export function BodyCompositionScreen({
   onDelete,
   onDataChange,
   entryRequest = 0,
+  goalRequest = 0,
   trendPreference = DEFAULT_BODY_TREND_PREFERENCE,
   onOpenSettings,
   accountActions,
@@ -62,6 +63,8 @@ export function BodyCompositionScreen({
   onDelete: (id: string) => Promise<void>;
   onDataChange: () => Promise<void>;
   entryRequest?: number;
+  /** Counts requests from elsewhere to open the goal form on Maintain. */
+  goalRequest?: number;
   trendPreference?: BodyTrendPreference;
   onOpenSettings?: () => void;
   accountActions?: ReactNode;
@@ -140,6 +143,25 @@ export function BodyCompositionScreen({
   useEffect(() => {
     setCheckInPage((page) => Math.min(page, checkInPageCount));
   }, [checkInPageCount]);
+
+  // Reaching a loss or gain goal is the moment a maintenance range becomes the next step.
+  const activeGoalKind = activeGoal ? bodyGoalKind(activeGoal) : null;
+  const goalReached =
+    !!activeGoal &&
+    !!latest &&
+    ((activeGoalKind === 'loss' && latest.weight_kg <= activeGoal.target_weight_kg) ||
+      (activeGoalKind === 'gain' && latest.weight_kg >= activeGoal.target_weight_kg));
+  const openMaintenanceGoal = useCallback(() => {
+    setError(null);
+    setGoalKind('maintain');
+    setGoalMinimum(null);
+    setGoalMaximum(null);
+    setGoalOpen(true);
+    setEntryOpen(false);
+  }, []);
+  useEffect(() => {
+    if (goalRequest > 0) openMaintenanceGoal();
+  }, [goalRequest, openMaintenanceGoal]);
 
   useEffect(() => {
     if (entryRequest === 0) return;
@@ -331,7 +353,12 @@ export function BodyCompositionScreen({
         onOpenSettings={onOpenSettings}
         accountActions={accountActions}
       />
-      <BodyWeightTip measurementCount={measurements.length} goals={goals} ready={goalsReady} />
+      <BodyWeightTip
+        goalReached={goalReached}
+        goals={goals}
+        ready={goalsReady}
+        onSetGoal={openMaintenanceGoal}
+      />
       <div className="body-reference-stats" aria-label="Bodyweight summary">
         <div>
           <span>Bodyweight</span>

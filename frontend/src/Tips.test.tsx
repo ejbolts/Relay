@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
+import { onTipTarget, type TipAction } from './tipActions';
 import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
 
 let root: Root, container: HTMLDivElement;
@@ -138,7 +139,9 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('Swipe a set left');
     await advance(12500);
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
-    expect(loadTips('alice').seen.swipe).toBe('seen');
+    // It went by untouched, so it is not seen yet and may return another day.
+    expect(loadTips('alice').seen.swipe).toBeUndefined();
+    expect(loadTips('alice').shows?.swipe).toBe(1);
   });
   it('shows the set type nudge on a first workout and inside the daily cooldown', async () => {
     workoutCount = 0;
@@ -154,8 +157,9 @@ describe('shared tip presentation', () => {
     });
     await advance();
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('Tap W beside a set');
-    expect(loadTips('alice').seen.setType).toBe('seen');
+    expect(loadTips('alice').seen.setType).toBeUndefined();
     await act(async () => button('Dismiss tip').click());
+    expect(loadTips('alice').seen.setType).toBe('dismissed');
     await advance();
     // Ordinary nudges still wait for a saved workout.
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
@@ -185,18 +189,89 @@ describe('shared tip presentation', () => {
     await advance();
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
   });
-  it('does not repeat tips after reload or spend another surface’s daily allowance', async () => {
+  it('does not repeat a dismissed tip after reload, and lets a nudge follow a quiet dot the same day', async () => {
     await render();
     await advance();
     await act(async () => controller.dismiss());
+    // The dot interrupted nothing, so today's nudge is still available.
+    expect(loadTips('alice').lastShown).toBe(0);
     await act(async () => controller.event('re-add-set', 'reorder'));
     await advance();
-    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
     await render('other');
     await render('alice');
     vi.setSystemTime(Date.now() + TIP_COOLDOWN);
     await advance();
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
+  });
+  it('lets one nudge a day through, and brings back one that went by untouched', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    await advance(12500);
+    // A second nudge the same day waits.
+    await act(async () => controller.event('replace-exercise', 'swap'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    // Tomorrow the untouched one may show again when its moment recurs.
+    vi.setSystemTime(Date.now() + TIP_COOLDOWN);
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    expect(loadTips('alice').shows?.reorder).toBe(2);
+  });
+  it('brings a dot back on later visits until it has been shown three times', async () => {
+    await render();
+    for (const visit of [1, 2, 3]) {
+      await advance();
+      expect(document.querySelectorAll('.relay-tip-dot')).toHaveLength(1);
+      expect(loadTips('alice').shows?.plates).toBe(visit);
+      // Leaving the screen takes the dot away; in the app its control is gone with the screen.
+      await act(async () =>
+        controller.configure({ page: 'settings', ready: true, resting: false, workoutCount: 5 }),
+      );
+      expect(document.querySelector('.relay-tip-dot')).toBeNull();
+      await act(async () =>
+        controller.configure({ page: 'log', ready: true, resting: true, workoutCount: 5 }),
+      );
+    }
+    await advance();
+    expect(document.querySelector('.relay-tip-dot')).toBeNull();
+    expect(loadTips('alice').seen.plates).toBe('seen');
+  });
+  it('counts opening a dot as seeing it', async () => {
+    await render();
+    await advance();
+    await act(async () => button('Tip: Let Relay count the plates').click());
+    expect(loadTips('alice').seen.plates).toBe('seen');
+    await act(async () => button('Got it').click());
+    expect(loadTips('alice').seen.plates).toBe('dismissed');
+    expect(document.querySelector('.relay-tip-dot')).toBeNull();
+  });
+  it('runs an anchored tip’s action in place and retires the tip', async () => {
+    const open = vi.fn();
+    function Anchored() {
+      controller = useTips();
+      const { configure } = controller;
+      useEffect(() => {
+        configure({ page: 'progress', ready: true, resting: false, workoutCount: 5 });
+      }, [configure]);
+      return (
+        <TipSlot id="normalise" eligible onAction={open}>
+          <button>Normalise</button>
+        </TipSlot>
+      );
+    }
+    await render('alice', <Anchored />);
+    await advance();
+    await act(async () => button('Tip: Different machines, one progress chart').click());
+    await act(async () => button('Open Machine weights').click());
+    expect(open).toHaveBeenCalledOnce();
+    expect(loadTips('alice').seen.normalise).toBe('dismissed');
+    expect(document.querySelector('.relay-tip-dot')).toBeNull();
+    expect(document.querySelector('.relay-tip-popover')).toBeNull();
   });
   it('supports a quiet completed-set moment when the rest timer is disabled', async () => {
     saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
@@ -254,13 +329,13 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-home')).toBeNull();
     expect(popover()).toBeNull();
     expect(bulb()?.classList.contains('is-unread')).toBe(true);
-    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 4 new');
-    expect(bulb()?.textContent).toBe('4');
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 2 new');
+    expect(bulb()?.textContent).toBe('2');
     await act(async () => bulb()!.click());
     expect(bulb()?.getAttribute('aria-expanded')).toBe('true');
-    expect(popover()?.textContent).toContain('Put sets in order');
-    expect(loadTips('alice').homeRead).toEqual(['reorder']);
-    expect(loadTips('alice').seen.reorder).toBeUndefined();
+    expect(popover()?.textContent).toContain('Train alongside a friend');
+    expect(loadTips('alice').homeRead).toEqual(['friends']);
+    expect(loadTips('alice').seen.friends).toBeUndefined();
     expect(loadTips('alice').lastShown).toBe(Date.now() - 2500);
     await advance();
     expect(popover()).not.toBeNull();
@@ -268,35 +343,32 @@ describe('shared tip presentation', () => {
   it('turns grey once every tip is read and opens on the next unread tip', async () => {
     await homeBulb();
     await act(async () => bulb()!.click());
-    await act(async () => button('Next').click());
-    expect(popover()?.textContent).toContain('One less tap');
+    expect(popover()?.textContent).toContain('Train alongside a friend');
     await act(async () => bulb()!.click());
     expect(popover()).toBeNull();
     expect(bulb()?.classList.contains('is-unread')).toBe(true);
-    // The next unread tips follow on in order.
+    // The next unread tip follows on.
     await act(async () => bulb()!.click());
-    expect(popover()?.textContent).toContain('Train alongside a friend');
-    await act(async () => button('Next').click());
     expect(popover()?.textContent).toContain('Make Relay look your way');
     await act(async () => bulb()!.click());
     expect(bulb()?.classList.contains('is-unread')).toBe(false);
     expect(bulb()?.getAttribute('aria-label')).toBe('Tips');
     expect(bulb()?.textContent).toBe('Tips');
+    // Read tips stay browsable, from the first.
     await act(async () => bulb()!.click());
-    const seenInOrder = [popover()?.textContent ?? ''];
+    expect(popover()?.textContent).toContain('Train alongside a friend');
     await act(async () => button('Next').click());
-    seenInOrder.push(popover()?.textContent ?? '');
-    expect(seenInOrder.join(' ')).toContain('Put sets in order');
+    expect(popover()?.textContent).toContain('Make Relay look your way');
   });
-  it('retires a tip with Got it and stays as a caught-up bulb when none are left', async () => {
+  it('puts a tip away with Got it without retiring its hint elsewhere, and stays as a caught-up bulb', async () => {
     await homeBulb();
-    for (const id of ['reorder', 'swipe', 'appearance'] as const)
-      await act(async () => controller.learn(id));
+    await act(async () => controller.learn('appearance'));
     await act(async () => bulb()!.click());
     expect(popover()?.textContent).toContain('Train alongside a friend');
     expect(button('Next')).toBeUndefined();
     await act(async () => button('Got it').click());
-    expect(loadTips('alice').seen.friends).toBe('dismissed');
+    expect(loadTips('alice').homeDone).toEqual(['friends']);
+    expect(loadTips('alice').seen.friends).toBeUndefined();
     expect(popover()).toBeNull();
     expect(bulb()?.classList.contains('is-unread')).toBe(false);
     await act(async () => bulb()!.click());
@@ -326,34 +398,62 @@ describe('shared tip presentation', () => {
     await act(async () => button('Show tips on this device').click());
     expect(bulb()).toBeNull();
   });
-  it('includes relevant machine and maintenance tips', async () => {
-    await homeBulb(
-      <HomeTips
-        measurementCount={3}
-        hasSplit
-        workouts={
-          [
-            {
-              is_sample: false,
-              workout_date: '2026-11-09',
-              movements: [{ exercise: { equipment: 'Machine', kind: 'strength' } }],
-            },
-          ] as never[]
-        }
-      />,
-    );
+  const machineWorkout = (id: string, date: string, machine: string) => ({
+    id,
+    is_sample: false,
+    workout_date: date,
+    movements: [
+      {
+        exercise: { id: 'chest-press', equipment: 'Machine', kind: 'strength' },
+        machine_photos: [{ id: machine }],
+        sets: [],
+      },
+    ],
+  });
+  const twoMachines = [
+    machineWorkout('a', '2026-11-02', 'technogym'),
+    machineWorkout('b', '2026-11-05', 'life-fitness'),
+    machineWorkout('c', '2026-11-09', 'technogym'),
+  ] as never[];
+  it('lists features, most useful first, and leaves gesture hints to their controls', async () => {
+    await homeBulb(<HomeTips measurementCount={3} hasSplit={false} workouts={twoMachines} />);
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 5 new');
+    // More than three new tips are not counted out one by one.
+    expect(bulb()?.textContent).toBe('3+');
     await act(async () => bulb()!.click());
-    for (const title of [
-      'One less tap',
-      'Different machines, one progress chart',
-      'Saved the same machine twice?',
-      'Remember your machine',
-      'Maintain a range, not a single number',
-    ]) {
+    const titles = [popover()?.querySelector('strong')?.textContent];
+    for (let step = 0; step < 4; step += 1) {
       await act(async () => button('Next').click());
-      expect(popover()?.textContent).toContain(title);
-      expect(document.querySelector('.relay-tip-dot')).toBeNull();
-      expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+      titles.push(popover()?.querySelector('strong')?.textContent);
     }
+    expect(titles).toEqual([
+      'Different machines, one progress chart',
+      'Have a regular rotation?',
+      'Maintain a range, not a single number',
+      'Train alongside a friend',
+      'Make Relay look your way',
+    ]);
+    expect(document.querySelector('.relay-tip-dot')).toBeNull();
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+  });
+  it('leaves comparing machines out until one exercise has used two of them', async () => {
+    await homeBulb(<HomeTips hasSplit workouts={twoMachines.slice(0, 1)} />);
+    await act(async () => bulb()!.click());
+    expect(popover()?.textContent).toContain('Train alongside a friend');
+  });
+  it('opens the feature from the tip, naming the exercise to compare machines on', async () => {
+    const opened: TipAction[] = [];
+    const stop = onTipTarget((action) => opened.push(action));
+    await homeBulb(<HomeTips hasSplit workouts={twoMachines} />);
+    await act(async () => bulb()!.click());
+    // Home's wording says what the feature is for, not where its button is.
+    expect(popover()?.querySelector('p')?.textContent).toBe(
+      'Compare different machines on one chart with Machine weights.',
+    );
+    await act(async () => button('Open Machine weights').click());
+    expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'chest-press' }]);
+    expect(popover()).toBeNull();
+    expect(loadTips('alice').seen.normalise).toBe('seen');
+    stop();
   });
 });

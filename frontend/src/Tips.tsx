@@ -11,13 +11,17 @@
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
+import { openTipTarget } from './tipActions';
 import {
   canShowTip,
   countTipEvent,
   freshTips,
   isPriorityTip,
+  isQuietTip,
   loadTips,
   saveTips,
+  tipAction,
+  tipShown,
   tipStorageKey,
   TIP_DEFINITIONS,
   type TipId,
@@ -42,6 +46,12 @@ interface TipsApi {
   dismissTip: (id: TipId) => void;
   /** Records a Home tip as opened without spending contextual discovery. */
   readHome: (id: TipId) => void;
+  /** Puts a Home tip away. It leaves the bulb, but can still appear where it applies. */
+  doneHome: (id: TipId) => void;
+  /** The tip was opened or acted on, so it has been seen and need not appear by itself again. */
+  engage: (id: TipId) => void;
+  /** Runs a tip's button: the tip is seen and the app opens the place it names. */
+  act: (id: TipId, exerciseId?: string) => void;
   enable: (value: boolean) => void;
   library: () => void;
 }
@@ -57,6 +67,9 @@ const TipsContext = createContext<TipsApi>({
   dismiss: noop,
   dismissTip: noop,
   readHome: noop,
+  doneHome: noop,
+  engage: noop,
+  act: noop,
   enable: noop,
   library: noop,
 });
@@ -162,6 +175,25 @@ export function TipsProvider({
         const read = stateRef.current.homeRead ?? [];
         if (!read.includes(id)) write({ ...stateRef.current, homeRead: [...read, id] });
       },
+      doneHome(id: TipId) {
+        const done = stateRef.current.homeDone ?? [];
+        if (!done.includes(id)) write({ ...stateRef.current, homeDone: [...done, id] });
+      },
+      engage(id: TipId) {
+        if (stateRef.current.seen[id]) return;
+        write({ ...stateRef.current, seen: { ...stateRef.current.seen, [id]: 'seen' } });
+        pending.current.delete(id);
+      },
+      act(id: TipId, exerciseId?: string) {
+        const action = tipAction(id);
+        if (!action) return;
+        if (!stateRef.current.seen[id])
+          write({ ...stateRef.current, seen: { ...stateRef.current.seen, [id]: 'seen' } });
+        pending.current.delete(id);
+        setLibraryOpen(false);
+        if (activeRef.current === id) close();
+        openTipTarget({ target: action.target, ...(exerciseId && { exerciseId }) });
+      },
       enable(enabled: boolean) {
         write({ ...stateRef.current, enabled });
         if (!enabled) close();
@@ -233,16 +265,12 @@ export function TipsProvider({
       if (!id) return;
       // Read again before claiming: another tab may have spent today's shared allowance.
       const stored = loadTips(account!);
-      if (stored.lastShown > stateRef.current.lastShown) {
+      if (!isQuietTip(id) && stored.lastShown > stateRef.current.lastShown) {
         stateRef.current = stored;
         setState(stored);
         return;
       }
-      const next = {
-        ...stateRef.current,
-        lastShown: now,
-        seen: { ...stateRef.current.seen, [id]: 'seen' as const },
-      };
+      const next = tipShown(stateRef.current, id, now);
       stateRef.current = next;
       setState(next);
       saveTips(account!, next);
@@ -288,6 +316,11 @@ export function TipsProvider({
             <div role="status">
               <strong>{nudge.title}</strong>
               <p>{nudge.body}</p>
+              {active && tipAction(active) && (
+                <button type="button" className="relay-tip-link" onClick={() => api.act(active)}>
+                  {tipAction(active)!.label} <Icon name="chevron-right" />
+                </button>
+              )}
             </div>
             <button
               type="button"
@@ -310,6 +343,15 @@ export function TipsProvider({
                   {state.seen[id as TipId] === 'learned' && <Icon name="check" />}
                 </h3>
                 <p>{tip.body}</p>
+                {tipAction(id as TipId) && (
+                  <button
+                    type="button"
+                    className="relay-tip-link"
+                    onClick={() => api.act(id as TipId)}
+                  >
+                    {tipAction(id as TipId)!.label} <Icon name="chevron-right" />
+                  </button>
+                )}
               </article>
             ))}
           </div>
@@ -322,10 +364,16 @@ export function TipsProvider({
 export function TipSlot({
   id,
   eligible,
+  onAction,
   children,
 }: {
   id: TipId;
   eligible: boolean;
+  /**
+   * Runs the tip's button right here, for a tip anchored to the control it describes. Without
+   * it the button asks the app to open the tip's target.
+   */
+  onAction?: () => void;
   children?: ReactNode;
 }) {
   const tips = useTips();
@@ -343,6 +391,14 @@ export function TipSlot({
   }, [eligible, id, key, register]);
   const active = eligible && tips.active === id && tips.slot === key && tips.environment.ready;
   const tip = TIP_DEFINITIONS[id];
+  const action = tipAction(id);
+  const runAction = () => {
+    setOpen(false);
+    if (onAction) {
+      tips.dismissTip(id);
+      onAction();
+    } else tips.act(id);
+  };
   useLayoutEffect(() => {
     if (!open || !active) return;
     const measure = () => {
@@ -387,9 +443,11 @@ export function TipSlot({
             <div>
               <strong>{tip.title}</strong>
               <p>{tip.body}</p>
-              <button className="relay-tip-link" type="button" onClick={tips.library}>
-                All tips <Icon name="chevron-right" />
-              </button>
+              {action && (
+                <button className="relay-tip-link" type="button" onClick={runAction}>
+                  {action.label} <Icon name="chevron-right" />
+                </button>
+              )}
             </div>
             <button
               type="button"
@@ -408,7 +466,10 @@ export function TipSlot({
               aria-label={`Tip: ${tip.title}`}
               aria-expanded={open}
               aria-controls={popId}
-              onClick={() => setOpen(!open)}
+              onClick={() => {
+                if (!open) tips.engage(id);
+                setOpen(!open);
+              }}
             >
               <span />
             </button>
@@ -423,9 +484,16 @@ export function TipSlot({
                 >
                   <strong>{tip.title}</strong>
                   <p>{tip.body}</p>
-                  <button type="button" className="relay-tip-link" onClick={tips.dismiss}>
-                    Got it
-                  </button>
+                  <span className="relay-tip-popover-actions">
+                    {action && (
+                      <button type="button" className="relay-tip-action" onClick={runAction}>
+                        {action.label}
+                      </button>
+                    )}
+                    <button type="button" className="relay-tip-link" onClick={tips.dismiss}>
+                      Got it
+                    </button>
+                  </span>
                 </aside>,
                 document.body,
               )}

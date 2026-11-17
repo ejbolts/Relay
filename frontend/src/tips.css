@@ -293,13 +293,52 @@ button.home-tip-button.is-unread {
 .home-tip-actions button.relay-tip-link {
   padding: 0 4px;
 }
-button.home-tip-done {
-  min-height: 36px;
+/* Opening the feature is the point of a tip, so that is its filled button; Got it steps back. */
+button.home-tip-action,
+button.relay-tip-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 40px;
   padding: 0 14px;
   border: 0;
   border-radius: 10px;
   background: var(--p-accent);
   color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+button.home-tip-action {
+  width: 100%;
+  margin-top: 12px;
+}
+.home-tip-action svg {
+  width: 14px;
+  height: 14px;
+}
+.relay-tip-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.relay-tip-popover-actions button.relay-tip-link {
+  padding-top: 0;
+}
+button.home-tip-done {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
   font-size: 0.8rem;
   font-weight: 650;
+}
+.home-tip-action:focus-visible,
+.relay-tip-action:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
 }
