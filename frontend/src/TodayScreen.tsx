@@ -2,6 +2,7 @@ import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import './startChooser.css';
 import { createPortal } from 'react-dom';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
@@ -66,6 +67,7 @@ import {
 } from './weightUnits';
 import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
 import { TrainingBlockHome } from './TrainingBlockSummary';
+import { WEEKS_BEFORE_FIRST_BLOCK, trainedWeeks } from './trainingBlockSuggestion';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import {
@@ -156,6 +158,8 @@ const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
+  /** The summary of the workout just finished, shown above the sections. */
+  finished?: ReactNode;
   data: DashboardData | null;
   muscleSets?: { weeklySets?: MuscleSetsWeek; history?: MuscleSetsWeek[] };
   workouts: TrackedWorkout[];
@@ -163,6 +167,9 @@ export interface TodayScreenProps {
   personalRecords: PersonalRecord[];
   categoryColors: WorkoutTypeColors;
   workoutStartedAt: number | null;
+  /** The running workout's name, shown where Up next sits while it is minimised. */
+  liveWorkoutName?: string | null;
+  onResumeWorkout?: () => void;
   workoutSaving?: boolean;
   todayBodyweight: number | null;
   todayBodyFat?: number | null;
@@ -213,6 +220,7 @@ export interface TodayScreenProps {
 
 export function TodayScreen({
   home,
+  finished,
   data,
   muscleSets,
   workouts,
@@ -220,6 +228,8 @@ export function TodayScreen({
   personalRecords,
   categoryColors,
   workoutStartedAt,
+  liveWorkoutName = null,
+  onResumeWorkout,
   workoutSaving = false,
   todayBodyweight,
   todayBodyFat = null,
@@ -263,6 +273,10 @@ export function TodayScreen({
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
+  const blockOfferReady = useMemo(
+    () => trainedWeeks(workouts, weekStartDay) >= WEEKS_BEFORE_FIRST_BLOCK,
+    [workouts, weekStartDay],
+  );
   const layout = home.editing ? home.draft : home.layout;
   const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
   const cardioWeeks = activityCardSettings(layout, 'cardio_sessions').weeks;
@@ -426,7 +440,7 @@ export function TodayScreen({
             </p>
             {onEditSplit && (
               <button className="text-button" type="button" onClick={onEditSplit}>
-                Edit split
+                {recommendation?.split_name ? 'Edit split' : 'Set up split'}
               </button>
             )}
           </div>
@@ -527,13 +541,32 @@ export function TodayScreen({
             )}
           </div>
         </section>
+      ) : onResumeWorkout ? (
+        <section
+          className="pulse-card next-session live-session"
+          aria-labelledby="live-session-title"
+        >
+          <div className="live-session-copy">
+            <p className="next-session-tag">
+              <i aria-hidden="true" />
+              In progress
+            </p>
+            <h2 id="live-session-title">{liveWorkoutName?.trim() || 'Workout'}</h2>
+          </div>
+          <button className="pulse-button primary" type="button" onClick={onResumeWorkout}>
+            <Icon name="play" filled />
+            Resume
+          </button>
+        </section>
       ) : null,
-    // Before the first block, the card offers to start one; people who don't want it hide it.
+    // Before the first block, the card offers to start one once there are a few weeks of training
+    // to build on; people who don't want it hide it.
     'training-block':
       currentBlock ||
       (!trainingBlocks.loading &&
         !trainingBlocks.error &&
-        trainingBlocks.config.blocks.length === 0) ? (
+        trainingBlocks.config.blocks.length === 0 &&
+        blockOfferReady) ? (
         <TrainingBlockHome
           block={currentBlock}
           config={trainingBlocks.config}
@@ -753,7 +786,7 @@ export function TodayScreen({
             workouts={workouts}
             createdAt={profile?.created_at}
             hasSplit={!!data?.recommendation?.split_name}
-            measurementCount={measurements.length}
+            latestWeightKg={measurements[0]?.weight_kg ?? null}
           />
         }
         title="Home"
@@ -815,6 +848,7 @@ export function TodayScreen({
       <p className="sr-only" role="status">
         {home.message}
       </p>
+      {!home.editing && finished}
       <HomeLayoutSections
         layout={home.editing ? home.draft : home.layout}
         sections={sections}

@@ -625,7 +625,9 @@ describe('saving and pinning a machine photo while logging', () => {
       ),
     ).toEqual([homeGym.thumbnail_url, travelGym.thumbnail_url]);
     expect(summary.querySelector(':scope > img')).toBeNull();
-    expect(summary.querySelector('small')?.textContent).toBe('Home gym Hammer press +1 more');
+    // The latest machine is named in the row's title; the line under it counts the rest.
+    expect(summary.querySelector('strong')?.textContent).toBe('Home gym Hammer press');
+    expect(summary.querySelector('small')?.textContent).toBe('+1 more');
     expect(summary.textContent).toContain('2 pinned');
   });
 
@@ -744,7 +746,9 @@ describe('saving and pinning a machine photo while logging', () => {
       ],
     });
     await act(async () => root.render(<App />));
-    await click(button(`Muscle set credits for ${legPress.name}`));
+    // Credits open from the exercise menu, not from a button beside the name.
+    expect(container.querySelector('.movement-card .exercise-muscle-help-button')).toBeNull();
+    await click(button('Muscle credits'));
     const dialog = document.querySelector<HTMLDialogElement>('.exercise-muscle-dialog')!;
     expect(dialog.open).toBe(true);
     expect(dialog.textContent).not.toContain('For each completed working set');
@@ -784,10 +788,12 @@ describe('saving and pinning a machine photo while logging', () => {
       'Travel gym Cybex press',
     ]);
     expect(pinned[0].querySelector('.machine-last-used')?.textContent).toBe('Not used yet');
-    expect(picker.querySelector('.machine-photo-summary')?.textContent).toContain('1 pinned');
-    expect(picker.querySelector('.machine-photo-summary small')?.textContent).toBe(
+    // One chosen machine is simply named: no count, no second line.
+    expect(picker.querySelector('.machine-photo-summary strong')?.textContent).toBe(
       'Travel gym Cybex press',
     );
+    expect(picker.querySelector('.machine-photo-summary')?.textContent).not.toContain('pinned');
+    expect(picker.querySelector('.machine-photo-summary small')).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([created.id]);
   });
 
@@ -1047,6 +1053,9 @@ describe('filtering History by machine', () => {
   it('finds the last session on one machine among later sessions at other gyms', async () => {
     await act(async () => root.render(<App />));
     expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+    // Beside the calendar's title it is an icon; its name is the accessible label.
+    expect(button('Filter by machine').textContent).toBe('');
+    expect(container.querySelector('.page-eyebrow')?.textContent).toBe('4 workouts logged');
 
     await click(button('Filter by machine'));
     const dialog = document.querySelector<HTMLElement>('.machine-filter-dialog')!;

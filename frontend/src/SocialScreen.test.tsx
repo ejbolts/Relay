@@ -127,6 +127,12 @@ function labelled(label: string) {
   return host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
 }
 
+it('counts friends above the title', async () => {
+  await render();
+  expect(host.querySelector('.page-eyebrow')?.textContent).toBe('2 friends');
+  expect(host.textContent).not.toContain('reactions');
+});
+
 it('opens your own profile from the avatar separately from sharing settings', async () => {
   await render();
   await click(host.querySelector<HTMLButtonElement>('.account-header-actions .profile-button')!);

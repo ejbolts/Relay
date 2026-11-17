@@ -209,8 +209,7 @@
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
 }
-:root[data-colour-mode='light'] .set-details.previous-set-details > .completed-set-summary,
-:root[data-colour-mode='light'] .set-details.previous-set-details .completed-set-menu {
+:root[data-colour-mode='light'] .set-details.previous-set-details > .completed-set-summary {
   color: var(--p-ink-2);
 }
 :root[data-colour-mode='light'] .movement-overflow-menu {

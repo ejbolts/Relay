@@ -19,6 +19,8 @@ export interface StartMenuActions {
   upNextLabel: string | null;
   onCardio: () => void;
   onUpNext: () => void;
+  /** Opens the list of split days and past workouts. Left out when there is nothing to list. */
+  onChoose?: () => void;
   onEmpty: () => void;
 }
 
@@ -120,7 +122,7 @@ export function AppTabBar({
           />
           <div
             id="start-menu"
-            className={`start-menu${open ? ' open' : ''}`}
+            className={`start-menu${open ? ' open' : ''}${startMenu.onChoose ? ' has-four' : ''}`}
             role="group"
             aria-label="Start a workout"
             aria-hidden={!open}
@@ -150,6 +152,19 @@ export function AppTabBar({
                 <small className="start-menu-detail">{startMenu.upNextLabel}</small>
               )}
             </button>
+            {startMenu.onChoose && (
+              <button
+                type="button"
+                className="start-menu-option"
+                aria-label="Choose a workout"
+                onClick={() => choose(startMenu.onChoose!)}
+              >
+                <span className="start-menu-icon">
+                  <Icon name="calendar" />
+                </span>
+                <span className="start-menu-label">Choose</span>
+              </button>
+            )}
             <button
               type="button"
               className="start-menu-option"

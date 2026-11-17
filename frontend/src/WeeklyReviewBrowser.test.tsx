@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { api } from './api';
 import { WeeklyReviewBrowser } from './WeeklyReviewBrowser';
 import { reviewCardioWeek, reviewRecord, reviewSet, reviewWorkout } from './weeklyReviewFixtures';
 
@@ -85,6 +86,7 @@ beforeEach(() => {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
+  vi.spyOn(api, 'listBodyWeightGoals').mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -118,6 +120,28 @@ it('marks the running week as so far and stepping back shows the earlier week', 
   expect(button('Next week').disabled).toBe(false);
   await act(async () => button('Next week').click());
   expect(text()).toContain('This week');
+});
+
+it('offers a training block beside the two latest weeks only', async () => {
+  const value = props();
+  await render({
+    workouts: [
+      ...value.workouts,
+      reviewWorkout('third', '2026-10-21', [reviewSet(90, 5)]),
+      reviewWorkout('fourth', '2026-10-14', [reviewSet(90, 5)]),
+    ],
+    muscleWeeks: [
+      ...value.muscleWeeks,
+      week('2026-10-19', '2026-10-25', [['Chest', 6]]),
+      week('2026-10-12', '2026-10-18', [['Chest', 6]]),
+    ],
+  });
+  expect(text()).toContain('4 weeks trained, no block yet');
+  await act(async () => button('Previous week').click());
+  expect(button('Start a block')).toBeDefined();
+  await act(async () => button('Previous week').click());
+  expect(text()).toContain('2 weeks ago');
+  expect(text()).not.toContain('Training block');
 });
 
 it('opens the exercise behind a record and the cardio and body screens', async () => {

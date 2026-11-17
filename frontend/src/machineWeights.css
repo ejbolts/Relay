@@ -583,17 +583,25 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   color: var(--p-ink);
 }
 
+/* Named, so comparing machines is found without a tip; filled once weights are normalised. */
 .progress-machine-settings {
-  display: inline-grid;
   flex: none;
-  place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  min-height: 2.2rem;
   margin-left: auto;
   border: 1px solid var(--p-line-strong);
-  border-radius: 50%;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
   background: transparent;
-  color: var(--p-muted);
+  color: var(--p-accent-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.progress-machine-settings.is-on {
+  border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
+  background: var(--p-accent-soft);
 }
 
 .machine-weights-recommended {

@@ -85,14 +85,18 @@ describe('Home layout edits', () => {
     ]);
     expect(homeSectionSpans(['zone2', 'records', 'bodyweight-trend'])).toEqual([6, 6, 6]);
   });
+  it('leads the default layout with the next workout, then the profile', () => {
+    expect(defaultHomeLayout().order.slice(0, 2)).toEqual(['next-workout', 'profile']);
+  });
   it('moves in either direction while retaining hidden sections and not mutating the saved layout', () => {
     const saved = { ...defaultHomeLayout(), hidden: ['records' as const] };
-    const reordered = moveHomeSection(saved, 'consistency', 'profile');
+    const first = HOME_SECTIONS[0].id;
+    const reordered = moveHomeSection(saved, 'consistency', first);
     expect(reordered.order[0]).toBe('consistency');
     expect(reordered.order).toHaveLength(HOME_SECTIONS.length);
     expect(new Set(reordered.order).size).toBe(HOME_SECTIONS.length);
     expect(reordered.hidden).toEqual(['records']);
-    expect(saved.order[0]).toBe('profile');
+    expect(saved.order[0]).toBe(first);
     const last = HOME_SECTIONS.at(-1)!.id;
     expect(moveHomeSection(reordered, 'consistency', last).order.at(-1)).toBe('consistency');
     expect(moveHomeSection(saved, 'records', 'records')).toBe(saved);

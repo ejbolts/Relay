@@ -8,81 +8,107 @@
   type CSSProperties,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { api } from './api';
+import { weightGoalReached } from './bodyMeasurementHistory';
 import { Icon } from './Icon';
 import { useTips } from './Tips';
+import { multiMachineExerciseId } from './machineUsage';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { daysBetween } from './trainingSummary';
 import { localDate } from './utils';
-import { runningAsInstalledApp } from './homeScreenGuideState';
-import { TIP_DEFINITIONS, type TipId } from './tipsState';
-import type { TrackedWorkout } from './types';
+import { tipAction, TIP_DEFINITIONS, type TipId } from './tipsState';
+import type { BodyWeightGoal, TrackedWorkout } from './types';
 
-/** Tips at the end of Home's date line: amber with a count while tips are unread, grey once read. */
+/** The most new tips the bulb counts out loud; beyond it, it says "3+". */
+const COUNTED_TIPS = 3;
+
+/**
+ * Tips at the end of Home's date line: amber with a count while tips are unread, grey once read.
+ * Home lists features worth opening, each with a button that opens it. How-to hints for a
+ * control (dragging a set, swiping to delete) appear beside that control instead.
+ */
 export function HomeTips({
   workouts,
   createdAt,
   hasSplit,
-  measurementCount = 0,
+  latestWeightKg = null,
 }: {
   workouts: TrackedWorkout[];
   createdAt?: string;
   hasSplit: boolean;
-  measurementCount?: number;
+  /** The latest weigh-in, which decides whether the weight goal has been reached. */
+  latestWeightKg?: number | null;
 }) {
   const tips = useTips();
   const { learn, readHome } = tips;
   const blocks = useTrainingBlocks();
-  const weeks = new Set(
-    workouts
-      .filter((workout) => !workout.is_sample)
-      .map((workout) => {
-        const date = new Date(`${workout.workout_date}T12:00:00`);
-        date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-        return date.toISOString().slice(0, 10);
-      }),
-  ).size;
+  const real = useMemo(() => workouts.filter((workout) => !workout.is_sample), [workouts]);
+  const weeks = useMemo(
+    () =>
+      new Set(
+        real.map((workout) => {
+          const date = new Date(`${workout.workout_date}T12:00:00`);
+          date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+          return date.toISOString().slice(0, 10);
+        }),
+      ).size,
+    [real],
+  );
   useEffect(() => {
     if (blocks.config.blocks.length) learn('blocks');
   }, [blocks.config.blocks.length, learn]);
   useEffect(() => {
     if (hasSplit) learn('split');
   }, [hasSplit, learn]);
-  const experienced = workouts.filter((workout) => !workout.is_sample).length >= 3;
+  const experienced = real.length >= 3;
   const oldEnough = !!createdAt && daysBetween(createdAt.slice(0, 10), localDate()) >= 7;
-  const real = workouts.filter((workout) => !workout.is_sample);
-  const exercises = real
-    .flatMap((workout) => workout.movements ?? [])
-    .map((movement) => movement.exercise);
-  const hasMachines = exercises.some((exercise) => /machine|cable/i.test(exercise.equipment ?? ''));
-  const hasBarbell = exercises.some((exercise) => /barbell/i.test(exercise.equipment ?? ''));
-  const hasCardio = exercises.some((exercise) => exercise.kind === 'cardio');
+  // Comparing machines only helps once one exercise has been logged on two of them.
+  const machineExerciseId = useMemo(() => multiMachineExerciseId(real), [real]);
+  // A maintenance range is worth raising once a loss or gain goal is reached, as on Body.
+  const hasWeighIn = latestWeightKg !== null;
+  const [goals, setGoals] = useState<BodyWeightGoal[] | null>(null);
+  useEffect(() => {
+    if (!hasWeighIn) return;
+    let cancelled = false;
+    void api
+      .listBodyWeightGoals()
+      .then((loaded) => {
+        if (!cancelled) setGoals(loaded);
+      })
+      // Without the goals the tip simply stays out of the list.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasWeighIn]);
+  const goalReached = weightGoalReached(
+    goals?.find((goal) => goal.active),
+    latestWeightKg,
+  );
   const eligible = useMemo(() => {
+    // Most useful first: features that change what the app can tell you, then personal touches.
     const pool: TipId[] = [
-      'reorder',
-      'swipe',
-      ...(hasBarbell ? ['plates' as const] : []),
-      ...(hasMachines ? ['normalise' as const, 'mergeMachines' as const, 'machine' as const] : []),
-      ...(measurementCount >= 3 ? ['maintenance' as const] : []),
-      ...(hasCardio ? ['cardio' as const] : []),
-      ...(real.length >= 5 ? ['swap' as const] : []),
+      ...(machineExerciseId ? ['normalise' as const] : []),
       ...(weeks >= 4 && !blocks.loading && !blocks.error && blocks.config.blocks.length === 0
         ? ['blocks' as const]
         : []),
-      ...(oldEnough ? ['home' as const] : []),
       ...(experienced && !hasSplit ? ['split' as const] : []),
+      ...(hasSplit && weeks >= 3 ? ['repRange' as const] : []),
+      ...(goalReached ? ['maintenance' as const] : []),
+      ...(oldEnough ? ['home' as const] : []),
       'friends',
       'appearance',
-      ...(typeof window !== 'undefined' && runningAsInstalledApp() ? ['back' as const] : []),
     ];
+    const done = tips.state.homeDone ?? [];
     return pool.filter(
-      (id) => tips.state.seen[id] !== 'learned' && tips.state.seen[id] !== 'dismissed',
+      (id) =>
+        tips.state.seen[id] !== 'learned' &&
+        tips.state.seen[id] !== 'dismissed' &&
+        !done.includes(id),
     );
   }, [
-    hasBarbell,
-    hasMachines,
-    hasCardio,
-    measurementCount,
-    real.length,
+    machineExerciseId,
+    goalReached,
     weeks,
     blocks.loading,
     blocks.error,
@@ -91,6 +117,7 @@ export function HomeTips({
     experienced,
     hasSplit,
     tips.state.seen,
+    tips.state.homeDone,
   ]);
   const read = tips.state.homeRead ?? [];
   const unread = eligible.filter((id) => !read.includes(id));
@@ -145,19 +172,26 @@ export function HomeTips({
     };
   }, [showing]);
   if (!shown) return null;
-  const tip = current
-    ? TIP_DEFINITIONS[current]
+  const definition = current ? TIP_DEFINITIONS[current] : null;
+  const tip = definition
+    ? {
+        title: definition.title,
+        body: 'homeBody' in definition ? definition.homeBody : definition.body,
+      }
     : { title: "You're all caught up", body: 'New tips appear here as you use more of Relay.' };
+  const action = current ? tipAction(current) : null;
   const toggle = () => {
     // Open on the first unread tip, or the first tip once everything has been read.
     if (!showing) setIndex(Math.max(0, eligible.indexOf(unread[0])));
     setOpen(!showing);
   };
   const gotIt = () => {
-    if (current) tips.dismissTip(current);
+    // Put away here only: the same tip can still appear beside the control it describes.
+    if (current) tips.doneHome(current);
     setOpen(false);
     button.current?.focus();
   };
+  const count = unread.length > COUNTED_TIPS ? `${COUNTED_TIPS}+` : String(unread.length);
   return (
     <>
       <button
@@ -170,7 +204,7 @@ export function HomeTips({
         onClick={toggle}
       >
         <Icon name="bulb" />
-        <span aria-hidden="true">{unread.length || 'Tips'}</span>
+        <span aria-hidden="true">{unread.length ? count : 'Tips'}</span>
       </button>
       {showing &&
         createPortal(
@@ -190,6 +224,22 @@ export function HomeTips({
           >
             <strong id={titleId}>{tip.title}</strong>
             <p>{tip.body}</p>
+            {current && action && (
+              <button
+                type="button"
+                className="home-tip-action"
+                onClick={() => {
+                  setOpen(false);
+                  tips.act(
+                    current,
+                    current === 'normalise' ? (machineExerciseId ?? undefined) : undefined,
+                  );
+                }}
+              >
+                {action.label}
+                <Icon name="chevron-right" />
+              </button>
+            )}
             <footer>
               {current && eligible.length > 1 && (
                 <span

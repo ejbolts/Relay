@@ -28,6 +28,7 @@ from .active_workouts import (
     snapshot,
 )
 from .admin import admin_router
+from .app_notices import router as app_notices_router
 from .auth import (
     CsrfOriginMiddleware,
     CurrentUser,
@@ -724,6 +725,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(account_archive_router)
     app.include_router(workout_type_exercises_router)
     app.include_router(home_layout_router)
+    app.include_router(app_notices_router)
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)

@@ -8,6 +8,8 @@ export function useHomeScreenGuide(userId: string | null, releaseChecked: boolea
 
   return {
     open: requested || (waiting && releaseChecked),
+    /** Asked for from Settings, so it opens whatever else has already been shown. */
+    requested,
     show: () => setRequested(true),
     dismiss: () => {
       if (userId) finishHomeScreenGuide(userId);

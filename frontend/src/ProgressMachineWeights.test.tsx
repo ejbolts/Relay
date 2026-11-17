@@ -126,7 +126,9 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(hero()).toBe('69kg');
   expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(2);
 
-  await click(button('Machine weights'));
+  // Named for what it does, and filled in once weights are normalised.
+  expect(button('Normalise').getAttribute('aria-label')).toBe('Normalise machine weights');
+  await click(button('Normalise'));
   await click(document.querySelector('[role="switch"][aria-label="Normalise weights"]')!);
   // The most used machine becomes the reference and leads the tree, with an arrow to Life Fitness.
   const items = [...document.querySelectorAll('.machine-weights-list.is-tree > li')];

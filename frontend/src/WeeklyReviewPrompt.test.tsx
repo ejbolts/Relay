@@ -197,3 +197,29 @@ it('has no notice when last week had nothing logged', async () => {
   await act(async () => requestWeeklyReview());
   expect(popup()).toBeNull();
 });
+
+it('stays quiet when another device already showed this week, and reports its own showing', async () => {
+  account += 1;
+  const onShown = vi.fn();
+  await render({ shownElsewhere: '2026-11-09', onShown });
+  expect(document.querySelector('.weekly-review-popup')).toBeNull();
+  expect(onShown).not.toHaveBeenCalled();
+
+  // An earlier week shown elsewhere does not cover this one.
+  account += 1;
+  await render({ shownElsewhere: '2026-11-02', onShown });
+  expect(document.querySelector('.weekly-review-popup')).not.toBeNull();
+  expect(onShown).toHaveBeenCalledExactlyOnceWith('2026-11-09');
+});
+
+it('stays open after its own showing is recorded for the account', async () => {
+  account += 1;
+  const userId = `user-${account}`;
+  const onShown = vi.fn();
+  await render({ userId, onShown });
+  expect(document.querySelector('.weekly-review-popup')).not.toBeNull();
+  // The app records the week on the account, which then comes back as shown elsewhere.
+  await render({ userId, onShown, shownElsewhere: '2026-11-09' });
+  expect(document.querySelector('.weekly-review-popup')).not.toBeNull();
+  expect(onShown).toHaveBeenCalledOnce();
+});

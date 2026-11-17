@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
 import { ExerciseCustomFilter } from './ExerciseCustomFilter';
-import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { exerciseEquipment } from './exerciseEquipment';
@@ -22,6 +21,24 @@ import type { ExerciseLibraryState } from './useExerciseLibrary';
 
 const sorts = ['Recent first', 'A–Z', 'Most improved'] as const;
 const PAGE_SIZES = [5, 10, 20, 50];
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_KEY = 'relay-exercise-list-page-size';
+/** The page size last chosen on this device. */
+function savedPageSize(): number {
+  try {
+    const saved = Number(window.localStorage.getItem(PAGE_SIZE_KEY));
+    return PAGE_SIZES.includes(saved) ? saved : DEFAULT_PAGE_SIZE;
+  } catch {
+    return DEFAULT_PAGE_SIZE;
+  }
+}
+function savePageSize(size: number) {
+  try {
+    window.localStorage.setItem(PAGE_SIZE_KEY, String(size));
+  } catch {
+    // The choice still applies until the list is closed.
+  }
+}
 function exerciseMuscles(exercise: Exercise) {
   return (
     exercise.muscle_set_credits
@@ -78,7 +95,7 @@ export function ExerciseLibraryList({
   const [hiddenOnly, setHiddenOnly] = useState(false);
   const [sort, setSort] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  const [pageSize, setPageSize] = useState(savedPageSize);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<TrainingBlockDialogStart | null>(null);
   const [blockNotice, setBlockNotice] = useState('');
@@ -290,6 +307,7 @@ export function ExerciseLibraryList({
               value={pageSize}
               onChange={(event) => {
                 setPageSize(Number(event.target.value));
+                savePageSize(Number(event.target.value));
                 setPage(1);
               }}
             >
@@ -407,7 +425,6 @@ export function ExerciseLibraryList({
                     .join(' · ')}
                 </small>
               </div>
-              <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
                 <b title={summary?.normalised ? 'In your reference machine’s weights' : undefined}>

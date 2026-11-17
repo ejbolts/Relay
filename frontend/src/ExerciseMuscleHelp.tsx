@@ -1,4 +1,4 @@
-import { useContext, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { PopupDialog } from './PopupDialog';
 import { Icon } from './Icon';
@@ -9,11 +9,22 @@ import { localDate } from './utils';
 import type { Exercise } from './types';
 import './exerciseMuscleHelp.css';
 
-export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
+export function ExerciseMuscleHelp({
+  exercise,
+  open: openedElsewhere,
+  onClose,
+}: {
+  exercise: Exercise;
+  /** Opened from a menu instead of its own "?" button, which is then left out. */
+  open?: boolean;
+  onClose?: () => void;
+}) {
   const context = useContext(ExerciseCreditsContext);
   const ownedExercise = context?.exercises.find((item) => item.id === exercise.id);
   exercise = ownedExercise ?? exercise;
-  const [open, setOpen] = useState(false);
+  const controlled = openedElsewhere !== undefined;
+  const [ownOpen, setOpen] = useState(false);
+  const open = controlled ? openedElsewhere : ownOpen;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { preferences } = useTrainingPreferences();
@@ -23,6 +34,11 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
   const currentWeek = weekStartFor(today, weekStartDay);
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!controlled || !openedElsewhere) return;
+    setSelectedWeek(weekStartFor(localDate(), weekStartDay));
+    setError(null);
+  }, [controlled, openedElsewhere, weekStartDay]);
   const cardio = exercise.kind === 'cardio' || exercise.category === 'cardio';
   const credits = exercise.default_muscle_set_credits ?? exercise.muscle_set_credits ?? [];
   const direct = credits.filter((credit) => credit.sets >= 1);
@@ -42,6 +58,8 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
     }
   }
 
+  if (controlled && !open) return null;
+
   return (
     <span
       className="exercise-muscle-help"
@@ -50,25 +68,27 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
         if (open && event.key === 'Escape') event.stopPropagation();
       }}
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        className="exercise-muscle-help-button"
-        aria-label={`Muscle set credits for ${exercise.name}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => {
-          setSelectedWeek(weekStartFor(localDate(), weekStartDay));
-          setError(null);
-          setOpen(true);
-        }}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4" />
-          <path d="M12 16.5h.01" />
-        </svg>
-      </button>
+      {!controlled && (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="exercise-muscle-help-button"
+          aria-label={`Muscle set credits for ${exercise.name}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => {
+            setSelectedWeek(weekStartFor(localDate(), weekStartDay));
+            setError(null);
+            setOpen(true);
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4" />
+            <path d="M12 16.5h.01" />
+          </svg>
+        </button>
+      )}
       {open && (
         <PopupDialog
           title={exercise.name}
@@ -76,6 +96,7 @@ export function ExerciseMuscleHelp({ exercise }: { exercise: Exercise }) {
           className="exercise-muscle-dialog"
           onClose={() => {
             setOpen(false);
+            onClose?.();
             requestAnimationFrame(() => triggerRef.current?.focus());
           }}
         >

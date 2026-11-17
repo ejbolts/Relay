@@ -3704,17 +3704,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
   min-width: 0;
 }
 
-.logger-screen .movement-title-help .exercise-muscle-help-button {
-  width: 1.9rem;
-  height: 1.9rem;
-  margin: -0.35rem 0;
-}
-
-.logger-screen .movement-title-help .exercise-muscle-help-button svg {
-  width: 1.05rem;
-  height: 1.05rem;
-}
-
 .segmented-control button {
   white-space: nowrap;
 }
@@ -4078,10 +4067,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: #8c9692;
 }
 
-.logger-screen .set-details.is-open .completed-set-menu {
-  color: #5598e7;
-}
-
 .logger-screen .set-grid .set-editor {
   row-gap: 0.5rem;
   padding-top: 0.5rem;
@@ -4325,6 +4310,34 @@ html.edge-swipe-ready .edge-swipe-indicator {
   gap: 0.5rem;
   color: var(--p-muted);
   font-size: 0.6875rem;
+}
+
+/* Rest on the left, Delete on the right: the open set carries its own actions. */
+.logger-screen .set-editor-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.logger-screen .set-editor-delete {
+  min-height: 2.75rem;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  color: var(--p-danger);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.logger-screen .set-editor-delete .pulse-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .logger-screen .set-editor-rest select {
@@ -4807,7 +4820,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .calendar-create-dialog,
 .calendar-day-detail,
 .superset-picker,
-.workout-close-dialog,
 .set-entry-confirmation {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
@@ -4826,7 +4838,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
     .calendar-create-dialog,
     .calendar-day-detail,
     .superset-picker,
-    .workout-close-dialog,
     .set-entry-confirmation,
     .relay-tip-popover,
     .relay-tip-nudge
@@ -4849,7 +4860,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .popup-dialog h2,
 .notification-dialog h2,
-.workout-close-dialog h2,
 .calendar-create-dialog h2,
 .calendar-day-detail h2,
 .superset-picker h2,
@@ -5090,42 +5100,16 @@ small.custom-exercise-label,
   letter-spacing: 0.06em;
 }
 
-.workout-close-actions .discard-workout-button {
-  border: 0;
-  background: var(--p-danger);
-  color: #fff;
-}
-
-.workout-close-actions button {
-  min-height: 3rem;
-  border-radius: 14px;
-  font-weight: 650;
-}
-
-.workout-close-actions button:not(.discard-workout-button) {
-  border: 1px solid var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
-
-.workout-close-warning {
-  border-color: rgb(230 103 103 / 40%);
-  background: rgb(230 103 103 / 12%);
-  color: var(--p-danger);
-}
-
 @media (max-width: 480px) {
   /* Stacked actions keep labels on one line; the primary action sits on top. */
-  .popup-dialog-actions,
-  .workout-close-actions {
+  .popup-dialog-actions {
     display: flex;
     flex-direction: column-reverse;
     align-items: stretch;
     gap: 0.5rem;
   }
 
-  .popup-dialog-actions > button,
-  .workout-close-actions > button {
+  .popup-dialog-actions > button {
     width: 100%;
     white-space: nowrap;
   }
@@ -5133,6 +5117,10 @@ small.custom-exercise-label,
 
 .popup-dialog-actions {
   padding-top: 0.875rem;
+}
+
+.workout-discard-dialog .popup-dialog-actions .discard-workout-button {
+  background: var(--p-danger);
 }
 
 .inactive-workout-dialog > p {
@@ -5335,13 +5323,8 @@ html {
   }
 }
 
-.logger-screen .set-type-menu,
-.logger-screen .set-actions-menu-popover {
+.logger-screen .set-type-menu {
   animation: menu-pop 180ms var(--ease-out) backwards;
-}
-
-.logger-screen .set-actions-menu-popover {
-  transform-origin: top right;
 }
 
 /* Press feedback */
@@ -5672,6 +5655,13 @@ html[data-reduce-motion] ::backdrop {
   font-weight: 600;
 }
 
+/* On the calendar it is an icon beside the title, like the Exercises list's filter. */
+.history-machine-filter {
+  justify-content: center;
+  width: 2.5rem;
+  padding: 0;
+}
+
 .history-machine-filter:hover,
 .machine-filter-actions button:hover {
   border-color: var(--p-accent);
@@ -5913,7 +5903,6 @@ html[data-reduce-motion] ::backdrop {
 .logger-screen .completed-set-summary .set-number-cell,
 .logger-screen .completed-set-summary > .row-complete-button,
 .logger-screen .completed-summary-actions > .set-drag-handle,
-.logger-screen .completed-summary-actions > .completed-set-menu,
 .logger-screen .movement-header-actions > .movement-expand-toggle,
 .logger-screen .movement-header-actions .plate-calculator-button,
 .logger-screen .movement-header-actions > .exercise-complete-button,
@@ -5926,7 +5915,6 @@ html[data-reduce-motion] ::backdrop {
 .logger-screen .completed-set-summary .set-number-cell::before,
 .logger-screen .completed-set-summary > .row-complete-button::before,
 .logger-screen .completed-summary-actions > .set-drag-handle::before,
-.logger-screen .completed-summary-actions > .completed-set-menu::before,
 .logger-screen .movement-header-actions > .movement-expand-toggle::before,
 .logger-screen .movement-header-actions .plate-calculator-button::before,
 .logger-screen .movement-header-actions > .exercise-complete-button::before,
@@ -5943,8 +5931,7 @@ html[data-reduce-motion] ::backdrop {
 /* A set row is 48px tall: its controls take the whole height and share the gaps between them. */
 .logger-screen .completed-set-summary .set-number-cell,
 .logger-screen .completed-set-summary > .row-complete-button,
-.logger-screen .completed-summary-actions > .set-drag-handle,
-.logger-screen .completed-summary-actions > .completed-set-menu {
+.logger-screen .completed-summary-actions > .set-drag-handle {
   --touch-height: 48px;
 }
 
@@ -5958,12 +5945,11 @@ html[data-reduce-motion] ::backdrop {
   --touch-right: -3px;
 }
 
+/* The handle is the only control after the tick, so it takes the whole column. */
 .logger-screen .completed-summary-actions > .set-drag-handle {
   --touch-left: -4px;
-}
-
-.logger-screen .completed-summary-actions > .completed-set-menu {
   --touch-right: -10px;
+  width: 100%;
 }
 
 .logger-screen .movement-header-actions > .movement-expand-toggle,

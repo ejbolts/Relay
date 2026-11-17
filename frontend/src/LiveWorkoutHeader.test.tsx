@@ -12,6 +12,8 @@ const actions = {
   onAdjustTime: vi.fn(),
   onAddNote: vi.fn(),
   onTogglePause: vi.fn(),
+  onAddExercise: vi.fn(),
+  onDiscard: vi.fn(),
   onFinish: vi.fn(),
 };
 const menuButtonRef = createRef<HTMLButtonElement>();
@@ -64,7 +66,13 @@ it('shows a compact title, live time and set count with secondary actions in the
   await click('Workout options');
   expect(
     [...container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-  ).toEqual(['Rename workout', 'Adjust workout time', 'Add note', 'Pause workout']);
+  ).toEqual([
+    'Rename workout',
+    'Adjust workout time',
+    'Add note',
+    'Pause workout',
+    'Discard workout',
+  ]);
 });
 
 it.each([
@@ -72,6 +80,7 @@ it.each([
   ['Adjust workout time', 'onAdjustTime'],
   ['Add note', 'onAddNote'],
   ['Pause workout', 'onTogglePause'],
+  ['Discard workout', 'onDiscard'],
 ] as const)('runs %s and dismisses the menu', async (label, action) => {
   await click('Workout options');
   await click(label);
@@ -110,8 +119,8 @@ it('supports keyboard menu navigation, Escape and outside dismissal', async () =
   await key(button('Rename workout'), 'ArrowDown');
   expect(document.activeElement).toBe(button('Adjust workout time'));
   await key(button('Adjust workout time'), 'End');
-  expect(document.activeElement).toBe(button('Pause workout'));
-  await key(button('Pause workout'), 'Escape');
+  expect(document.activeElement).toBe(button('Discard workout'));
+  await key(button('Discard workout'), 'Escape');
   expect(menuButtonRef.current?.getAttribute('aria-expanded')).toBe('false');
   expect(document.activeElement).toBe(menuButtonRef.current);
   await click('Workout options');
@@ -119,10 +128,15 @@ it('supports keyboard menu navigation, Escape and outside dismissal', async () =
   expect(container.querySelector('[role="menu"]')).toBeNull();
 });
 
-it('finishes from the green tick and minimises from the accessible handle', async () => {
+it('finishes from a labelled button, adds an exercise and minimises from the handle', async () => {
   expect(container.querySelector('.live-workout-minimise')).toBeNull();
+  // A word, so it cannot be mistaken for the ticks on sets and exercises.
+  expect(button('Finish workout').querySelector('svg')).toBeNull();
+  expect(button('Finish workout').firstChild?.textContent).toBe('Finish');
   await click('Finish workout');
   expect(actions.onFinish).toHaveBeenCalledOnce();
+  await click('Add exercise');
+  expect(actions.onAddExercise).toHaveBeenCalledOnce();
   await click('Minimise workout');
   expect(actions.onMinimise).toHaveBeenCalledOnce();
 });

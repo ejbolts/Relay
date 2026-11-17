@@ -64,28 +64,32 @@ it('retires normalisation when an existing or newly saved mapping is enabled', a
   expect(eligible()).toBe('false');
   expect(learn).toHaveBeenCalledWith('normalise');
 });
-it('waits for goal history and three weigh-ins before suggesting a maintenance band', async () => {
-  await render(<BodyWeightTip measurementCount={3} goals={[]} ready={false} />);
+it('suggests a maintenance band once the goal is reached, not just for having weigh-ins', async () => {
+  const setGoal = () => undefined;
+  await render(<BodyWeightTip goalReached goals={[]} ready={false} onSetGoal={setGoal} />);
   expect(eligible()).toBe('false');
-  await render(<BodyWeightTip measurementCount={2} goals={[]} ready />);
+  await render(<BodyWeightTip goalReached={false} goals={[]} ready onSetGoal={setGoal} />);
   expect(eligible()).toBe('false');
-  await render(<BodyWeightTip measurementCount={3} goals={[]} ready />);
+  await render(<BodyWeightTip goalReached goals={[]} ready onSetGoal={setGoal} />);
   expect(eligible()).toBe('true');
 });
 it('recognises maintenance ranges in historical goals and ignores invalid ranges', async () => {
+  const setGoal = () => undefined;
   await render(
     <BodyWeightTip
-      measurementCount={3}
+      goalReached
       ready
       goals={[{ maintenance_min_kg: 82, maintenance_max_kg: 80 } as BodyWeightGoal]}
+      onSetGoal={setGoal}
     />,
   );
   expect(eligible()).toBe('true');
   await render(
     <BodyWeightTip
-      measurementCount={3}
+      goalReached
       ready
       goals={[{ maintenance_min_kg: 80, maintenance_max_kg: 82 } as BodyWeightGoal]}
+      onSetGoal={setGoal}
     />,
   );
   expect(eligible()).toBe('false');
