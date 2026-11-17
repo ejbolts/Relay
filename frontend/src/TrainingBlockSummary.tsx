@@ -11,8 +11,12 @@ import {
   nextBlockName,
   weeksEnd,
 } from './trainingBlocks';
-import { TrainingBlockDialog, TrainingBlockToast } from './TrainingBlockDialog';
-import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
+import {
+  TrainingBlockDialog,
+  TrainingBlockToast,
+  type TrainingBlockDialogStart,
+} from './TrainingBlockDialog';
+import { TrainingBlockHomeCard, TrainingBlockStartCard } from './TrainingBlockHomeCard';
 import type { TrainingBlockCardStyle } from './homeLayout';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { formatVolume, addDays } from './trainingSummary';
@@ -309,7 +313,7 @@ export function TrainingBlockSummaryDialog({
 
 /**
  * Home's training block card: it opens the training blocks dialog in place, or the block summary
- * once the planned end has passed.
+ * once the planned end has passed. Without a block it starts the first one.
  */
 export function TrainingBlockHome({
   block,
@@ -318,7 +322,7 @@ export function TrainingBlockHome({
   style,
   onOpen,
 }: {
-  block: TrainingBlock;
+  block: TrainingBlock | null;
   config: TrainingBlocks;
   today: string;
   style?: TrainingBlockCardStyle;
@@ -326,29 +330,36 @@ export function TrainingBlockHome({
   onOpen: () => void;
 }) {
   const [summarised, setSummarised] = useState<TrainingBlock | null>(null);
-  const [managing, setManaging] = useState(false);
+  const [managing, setManaging] = useState<TrainingBlockDialogStart | null>(null);
   const [notice, setNotice] = useState('');
   const trigger = useRef<HTMLElement | null>(null);
-  const remember = () => {
+  const card = useRef<HTMLButtonElement>(null);
+  const manage = (start: TrainingBlockDialogStart) => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setManaging(start);
   };
   const closeManaging = () => {
-    setManaging(false);
-    requestAnimationFrame(() => trigger.current?.isConnected && trigger.current.focus());
+    setManaging(null);
+    // Starting the first block swaps the empty card for the new block's card.
+    requestAnimationFrame(() =>
+      (trigger.current?.isConnected ? trigger.current : card.current)?.focus(),
+    );
   };
   return (
     <>
-      <TrainingBlockHomeCard
-        block={block}
-        config={config}
-        today={today}
-        style={style}
-        onOpen={() => {
-          remember();
-          setManaging(true);
-        }}
-        onSummary={blockFinished(block, today) ? () => setSummarised(block) : undefined}
-      />
+      {block ? (
+        <TrainingBlockHomeCard
+          block={block}
+          config={config}
+          today={today}
+          style={style}
+          buttonRef={card}
+          onOpen={() => manage('blocks')}
+          onSummary={blockFinished(block, today) ? () => setSummarised(block) : undefined}
+        />
+      ) : (
+        <TrainingBlockStartCard buttonRef={card} onStart={() => manage('new')} />
+      )}
       {summarised && (
         <TrainingBlockSummaryDialog
           block={summarised}
@@ -360,7 +371,7 @@ export function TrainingBlockHome({
         />
       )}
       {managing && (
-        <TrainingBlockDialog start="blocks" onClose={closeManaging} onNotice={setNotice} />
+        <TrainingBlockDialog start={managing} onClose={closeManaging} onNotice={setNotice} />
       )}
       <TrainingBlockToast notice={notice} onDismiss={() => setNotice('')} />
     </>
