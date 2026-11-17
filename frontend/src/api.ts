@@ -1,3 +1,4 @@
+import type { AppNotices } from './appNotices';
 import type { BodySizeLog } from './bodySizes';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { NotificationReadReference } from './types';
@@ -816,6 +817,13 @@ export const api = {
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
       DASHBOARD_CACHE_KEY,
     ),
+  getAppNotices: () => accountRead<AppNotices>('/api/app-notices'),
+  saveAppNotices: (notices: Partial<AppNotices>) =>
+    request<AppNotices>('/api/app-notices', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify(notices),
+    }),
   getTrainingSplit: () =>
     accountRead<TrainingSplit | null>(
       `/api/training-split?${new URLSearchParams({ on_date: localDate() })}`,

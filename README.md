@@ -12,6 +12,8 @@ Use it in your browser or add it to your phone's Home Screen for an app-like exp
 
 **Home** brings together your weekly activity, training calendar, muscle-group set totals, cardio goal, body-weight trend and recent personal records. It also suggests a next workout based on previous sessions and lets you resume one already in progress.
 
+Opening the app shows at most one prompt: **What's new**, the weekly review and the Home Screen guide take turns on later visits instead of queueing up. What's new is remembered on your account, so a second device does not repeat it, and a new account is not shown release notes for a release it started on.
+
 Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashboard by rearranging cards, hiding sections you do not need and restoring them later. Your layout is saved to your account.
 
 The bulb beside Home's date lists features worth trying, most useful first, and each tip has a button that opens the feature. How-to hints for a control, such as dragging a set, appear beside that control instead. A tip you ignore comes back a couple of times; opening it, using its button or **Got it** puts it away. Turn tips off in **Settings > Help & about**.

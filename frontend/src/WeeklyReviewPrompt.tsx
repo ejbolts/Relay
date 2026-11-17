@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WeeklyReviewData } from './WeeklyReviewBrowser';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
@@ -20,6 +20,8 @@ const NO_CARDIO_WEEKS: NonNullable<DashboardData['cardio_weeks']> = [];
 export function WeeklyReviewPrompt({
   userId,
   enabled,
+  shownElsewhere = null,
+  onShown,
   dashboard,
   muscleWeeks,
   workouts,
@@ -31,6 +33,10 @@ export function WeeklyReviewPrompt({
   onOpenBody,
 }: {
   userId: string;
+  /** The latest week another of the account's devices has already shown. */
+  shownElsewhere?: string | null;
+  /** Called when the review opens by itself, with the week it was shown in. */
+  onShown?: (weekStart: string) => void;
   /** False while another dialog, onboarding step or screen should keep the person's attention. */
   enabled: boolean;
   dashboard: DashboardData | null;
@@ -97,16 +103,32 @@ export function WeeklyReviewPrompt({
         workout.workout_date <= lastWeekEnd,
     );
   const available = review !== null && loggedItself && reviewHasActivity(review);
-  const autoOpen =
-    enabled && available && shownBefore !== currentStart && dismissedWeek !== currentStart;
-  const open = available && (requested || autoOpen);
+  const shownThisWeek =
+    shownBefore === currentStart || (shownElsewhere !== null && shownElsewhere >= currentStart);
+  const autoOpen = enabled && available && !shownThisWeek && dismissedWeek !== currentStart;
+  // Once it has opened by itself it stays until closed: recording that it was shown makes the
+  // account report this week as seen, which must not shut the review that reported it.
+  const [openedWeek, setOpenedWeek] = useState<string | null>(null);
+  const stillOpen = openedWeek === currentStart && dismissedWeek !== currentStart;
+  const open = available && (requested || autoOpen || stillOpen);
 
-  useEffect(() => setSeenWeek(shownBefore), [shownBefore]);
+  useEffect(
+    () => setSeenWeek(shownThisWeek ? currentStart : shownBefore),
+    [shownBefore, shownThisWeek, currentStart],
+  );
 
+  const onShownRef = useRef(onShown);
+  onShownRef.current = onShown;
   useEffect(() => {
     if (!open) return;
     markWeeklyReviewShown(userId, currentStart);
     setSeenWeek(currentStart);
+    if (autoOpen) {
+      setOpenedWeek(currentStart);
+      onShownRef.current?.(currentStart);
+    }
+    // Only the opening matters: closing it clears `autoOpen` without another report.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId, currentStart]);
 
   useEffect(() => onWeeklyReviewRequested(() => setRequested(true)), []);
