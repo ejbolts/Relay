@@ -7,6 +7,7 @@ import { queueReaction, usePendingReaction } from './pendingReactions';
 import type { WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionPeople } from './WorkoutReactionPeople';
+import type { WorkoutFocus } from './workoutFocus';
 
 type Panel = 'reactions' | 'comments' | 'people';
 
@@ -19,6 +20,7 @@ export function WorkoutReactionControl({
   subject,
   reactions,
   open,
+  focus,
   onOpenChange,
   onChange,
   onOpenMember,
@@ -30,6 +32,8 @@ export function WorkoutReactionControl({
   reactions: WorkoutReactions;
   /** Whether this workout's picker or comments are open; the parent closes it when another opens. */
   open: boolean;
+  /** Opens the reactions sheet or comments at a notification's reaction or comment. */
+  focus?: WorkoutFocus | null;
   onOpenChange: (open: boolean) => void;
   onChange: (value: WorkoutReactions) => void;
   showSummary?: boolean;
@@ -41,6 +45,8 @@ export function WorkoutReactionControl({
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [visited, setVisited] = useState(false);
+  // Whether the open panel came from `focus`; opening it yourself shows it without a highlight.
+  const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const picker = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
@@ -63,10 +69,22 @@ export function WorkoutReactionControl({
 
   function show(next: Panel | null) {
     setPanel(next);
+    setFocused(false);
     setError(null);
     if (next === 'comments') setVisited(true);
     onOpenChange(next !== null);
   }
+
+  const focusKey = focus?.key;
+  useEffect(() => {
+    if (!focus) return;
+    // Closing the sheet returns focus to the reaction total, as if it had been tapped.
+    peopleTrigger.current =
+      container.current?.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]') ?? null;
+    show(focus.panel);
+    setFocused(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per request
+  }, [focusKey]);
 
   useEffect(() => {
     if (!shown && restoreReactFocus.current) {
@@ -252,6 +270,7 @@ export function WorkoutReactionControl({
       {shown === 'people' && (
         <WorkoutReactionPeople
           workoutId={workoutId}
+          highlightPersonId={focused && focus?.panel === 'people' ? focus.personId : undefined}
           onClose={() => {
             show(null);
             requestAnimationFrame(() => peopleTrigger.current?.focus());
@@ -296,6 +315,7 @@ export function WorkoutReactionControl({
           <WorkoutComments
             active={shown === 'comments'}
             workoutId={workoutId}
+            focusComment={focused && focus?.panel === 'comments' ? focus.commentId : undefined}
             onOpenMember={onOpenMember}
             onCountChange={(count, summary) =>
               onChange(summary ?? { ...reactions, comment_count: count })

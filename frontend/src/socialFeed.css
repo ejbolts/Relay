@@ -28,6 +28,29 @@
  * and comment icons at the far right. Below it: one summary line, any photos, the exercises in a
  * sentence, then an open comment thread. Rows are placed by number so an absent one leaves no gap.
  */
+/* A card opened from a notification is outlined briefly. */
+.feed-card.is-focused {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+  animation: feed-card-focus 2.4s ease-in both;
+}
+@keyframes feed-card-focus {
+  0%,
+  60% {
+    outline-color: var(--p-accent);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed-card.is-focused {
+    animation: none;
+  }
+}
+html[data-reduce-motion] .feed-card.is-focused {
+  animation: none;
+}
 .feed-card > article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

@@ -74,6 +74,13 @@
   min-height: 4.25rem;
   border-bottom: 1px solid var(--p-line);
 }
+.reaction-people-list li.is-highlighted {
+  margin: 0 -0.625rem;
+  padding: 0 0.625rem;
+  border-bottom-color: transparent;
+  border-radius: 14px;
+  background: var(--p-accent-soft);
+}
 .reaction-people-list li:last-child {
   border-bottom: 0;
 }

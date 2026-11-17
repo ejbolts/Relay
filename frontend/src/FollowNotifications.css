@@ -85,6 +85,47 @@
   color: var(--p-muted);
   cursor: pointer;
 }
+/* Reaction and comment rows open their workout: the workout's name stretches over the row. */
+.follow-notification-list li.is-openable {
+  position: relative;
+}
+.follow-notification-open {
+  display: inline;
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 550;
+  text-align: inherit;
+}
+.follow-notification-open::after {
+  content: '';
+  position: absolute;
+  inset: 0.125rem -0.5rem;
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
+}
+.follow-notification-open:focus-visible {
+  outline: none;
+}
+.follow-notification-open:focus-visible::after {
+  outline: 2px solid var(--p-accent);
+}
+.follow-notification-open:active::after {
+  background: color-mix(in srgb, var(--p-ink) 7%, transparent);
+}
+@media (hover: hover) {
+  .follow-notification-open:hover::after {
+    background: color-mix(in srgb, var(--p-ink) 5%, transparent);
+  }
+}
+.follow-notification-reply {
+  position: relative;
+  z-index: 1;
+}
 .follow-notification-reply:hover,
 .follow-notification-reply:focus-visible {
   background: var(--p-accent-soft);

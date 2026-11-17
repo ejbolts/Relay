@@ -1,5 +1,5 @@
 import { TipSlot } from './Tips';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CachedTabPanel } from './CachedTabPanel';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { useFriendConnections } from './friendConnections';
@@ -8,6 +8,7 @@ import { FindPanel } from './SharedProfiles';
 import { SocialFeed } from './SocialFeed';
 import { PageHeader } from './TodayScreen';
 import { useSlidingIndicator } from './motionHooks';
+import { useWorkoutFocus } from './workoutFocus';
 import type { SharedProfileSummary, TrackedWorkout, User } from './types';
 
 export function SocialScreen({
@@ -34,6 +35,12 @@ export function SocialScreen({
   const indicator = useSlidingIndicator<HTMLDivElement>(section);
   const { connections, state, error, refresh, updateReactions } = useFriendConnections(active);
   const requests = connections?.requests.length ?? 0;
+  const focusKey = useWorkoutFocus()?.key;
+
+  useEffect(() => {
+    // A workout opened from a notification is shown in the feed.
+    if (focusKey !== undefined) setSection('feed');
+  }, [focusKey]);
 
   return (
     <section className="social-screen content-page">

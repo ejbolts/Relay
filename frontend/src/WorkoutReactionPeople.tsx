@@ -13,9 +13,12 @@ const CLOSE_MS = 240;
 
 export function WorkoutReactionPeople({
   workoutId,
+  highlightPersonId,
   onClose,
 }: {
   workoutId: string;
+  /** Someone whose reaction to find and highlight, such as one opened from a notification. */
+  highlightPersonId?: string;
   onClose: () => void;
 }) {
   const [page, setPage] = useState<WorkoutReactionPage | null>(null);
@@ -24,6 +27,7 @@ export function WorkoutReactionPeople({
   const [loadingMore, setLoadingMore] = useState(false);
   const [closing, setClosing] = useState(false);
   const closeTimer = useRef<number | null>(null);
+  const highlighted = useRef<HTMLLIElement>(null);
 
   useEffect(
     () => () => {
@@ -43,7 +47,20 @@ export function WorkoutReactionPeople({
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    void api.sharing.reactionPeople(workoutId).then(
+    (async () => {
+      let result = await api.sharing.reactionPeople(workoutId);
+      const items = [...result.items];
+      // Load further pages only until the highlighted person appears.
+      while (
+        highlightPersonId &&
+        result.next_offset != null &&
+        !items.some((person) => person.id === highlightPersonId)
+      ) {
+        result = await api.sharing.reactionPeople(workoutId, result.next_offset);
+        items.push(...result.items.filter((item) => !items.some((row) => row.id === item.id)));
+      }
+      return { ...result, items };
+    })().then(
       (result) => {
         if (!cancelled) setPage(result);
       },
@@ -54,7 +71,11 @@ export function WorkoutReactionPeople({
     return () => {
       cancelled = true;
     };
-  }, [workoutId, attempt]);
+  }, [workoutId, attempt, highlightPersonId]);
+
+  useEffect(() => {
+    if (page) highlighted.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [page]);
 
   async function loadMore() {
     if (loadingMore || page?.next_offset == null) return;
@@ -91,7 +112,11 @@ export function WorkoutReactionPeople({
             {page.items.map((person) => {
               const reaction = REACTIONS.find((entry) => entry.kind === person.reaction)!;
               return (
-                <li key={person.id}>
+                <li
+                  key={person.id}
+                  ref={person.id === highlightPersonId ? highlighted : undefined}
+                  className={person.id === highlightPersonId ? 'is-highlighted' : undefined}
+                >
                   <ProfileAvatar user={{ ...person, username: '' }} className="profile-avatar" />
                   <strong>{person.display_name}</strong>
                   <span className="reaction-person-emoji" role="img" aria-label={reaction.label}>
