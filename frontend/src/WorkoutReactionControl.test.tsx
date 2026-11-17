@@ -21,9 +21,11 @@ const others: WorkoutReactions = {
 function Harness({
   initial = others,
   ownWorkout = false,
+  compact = false,
 }: {
   initial?: WorkoutReactions;
   ownWorkout?: boolean;
+  compact?: boolean;
 }) {
   const [reactions, setReactions] = useState(initial);
   const [open, setOpen] = useState(false);
@@ -36,6 +38,7 @@ function Harness({
       onOpenChange={setOpen}
       onChange={setReactions}
       ownWorkout={ownWorkout}
+      compact={compact}
     />
   );
 }
@@ -236,6 +239,21 @@ it('shows counts without an add button or personal highlight on your own workout
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);
   expect(host.querySelector('.friend-react-button')).toBeNull();
   expect(host.querySelector('.is-yours')).toBeNull();
+});
+
+it('stacks only the two most common emojis beside the total in a card header', async () => {
+  const counts: WorkoutReactions['counts'] = [
+    { reaction: 'like', count: 1 },
+    { reaction: 'fire', count: 3 },
+    { reaction: 'strong', count: 2 },
+    { reaction: 'clap', count: 1 },
+  ];
+  await act(async () =>
+    root.render(<Harness ownWorkout compact initial={{ counts, yours: null }} />),
+  );
+  const total = button('View 7 reactions on Upper body');
+  expect(total.querySelector('.discussion-reaction-emojis')?.textContent).toBe('🔥💪');
+  expect(total.textContent).toBe('🔥💪 7');
 });
 
 it('opens the people list from your combined count without opening the picker', async () => {

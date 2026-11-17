@@ -77,9 +77,25 @@ it('opens names and each reaction from your workout count, then restores focus o
   await touch(header, 'touchmove', 400);
   expect((dialog as HTMLElement).style.getPropertyValue('--sheet-offset')).toBe('100px');
   await touch(header, 'touchend', 400);
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  // It slides back down before it unmounts.
+  expect(dialog.classList).toContain('is-closing');
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
   expect(document.querySelector('dialog')).toBeNull();
   expect(document.activeElement).toBe(trigger);
+});
+it('closes straight away when motion is reduced', async () => {
+  document.documentElement.setAttribute('data-reduce-motion', '');
+  try {
+    const trigger = await openPeople();
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Close Reactions"]')!.click(),
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(document.activeElement).toBe(trigger);
+  } finally {
+    document.documentElement.removeAttribute('data-reduce-motion');
+  }
 });
 it('keeps reacting separate from viewing people on someone else’s workout', async () => {
   await openPeople(false);
