@@ -476,18 +476,25 @@ export function TodayScreen({
           </div>
         </section>
       ) : null,
-    'training-block': currentBlock ? (
-      <TrainingBlockHome
-        block={currentBlock}
-        config={trainingBlocks.config}
-        today={today}
-        style={homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style}
-        onOpen={() => {
-          trainingBlocks.select('current');
-          onOpenProgress();
-        }}
-      />
-    ) : null,
+    // Before the first block, the card offers to start one; people who don't want it hide it.
+    'training-block':
+      currentBlock ||
+      (!trainingBlocks.loading &&
+        !trainingBlocks.error &&
+        trainingBlocks.config.blocks.length === 0) ? (
+        <TrainingBlockHome
+          block={currentBlock}
+          config={trainingBlocks.config}
+          today={today}
+          style={
+            homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style
+          }
+          onOpen={() => {
+            trainingBlocks.select('current');
+            onOpenProgress();
+          }}
+        />
+      ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
