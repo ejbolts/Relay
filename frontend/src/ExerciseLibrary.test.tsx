@@ -140,6 +140,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  localStorage.removeItem('relay-exercise-list-page-size');
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -579,6 +580,7 @@ it('retries a failed session read and keeps the workout action unavailable until
 });
 
 it('preserves the library page when returning from a lift and resets it for a new search', async () => {
+  localStorage.setItem('relay-exercise-list-page-size', '5');
   const many = Array.from({ length: 23 }, (_, index) => ({
     ...pec,
     id: `lift-${index}`,

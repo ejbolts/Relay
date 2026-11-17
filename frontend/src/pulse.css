@@ -5655,6 +5655,13 @@ html[data-reduce-motion] ::backdrop {
   font-weight: 600;
 }
 
+/* On the calendar it is an icon beside the title, like the Exercises list's filter. */
+.history-machine-filter {
+  justify-content: center;
+  width: 2.5rem;
+  padding: 0;
+}
+
 .history-machine-filter:hover,
 .machine-filter-actions button:hover {
   border-color: var(--p-accent);

@@ -46,7 +46,11 @@ export function SocialScreen({
     <section className="social-screen content-page">
       <PageHeader
         title="Social"
-        eyebrow="Feed · friends · reactions"
+        eyebrow={
+          connections
+            ? `${connections.friends.length} ${connections.friends.length === 1 ? 'friend' : 'friends'}`
+            : '\u00a0'
+        }
         onOpenSettings={onOpenSettings}
         accountActions={
           <AccountHeaderActions

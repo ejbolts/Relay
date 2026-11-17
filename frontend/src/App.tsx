@@ -1873,7 +1873,7 @@ function AppContent() {
       : tab === 'settings'
         ? settingsGroup
           ? { title: 'All settings', subtitle: null }
-          : { title: 'Settings', subtitle: 'Preferences • privacy • data' }
+          : { title: 'Settings', subtitle: null }
         : tab === 'videos' && videosAllowed
           ? { title: 'Videos', subtitle: 'Workout clips • uploads' }
           : tab === 'profile'
@@ -10337,13 +10337,7 @@ function HistoryScreen({
       ) : (
         <>
           <PageHeader
-            eyebrow={
-              section === 'progress'
-                ? 'Charts · records · sessions'
-                : section === 'cardio'
-                  ? 'Zones · energy · sessions'
-                  : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
-            }
+            eyebrow={`${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`}
             title="Training"
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
@@ -10472,10 +10466,12 @@ function HistoryScreen({
                     <button
                       type="button"
                       className="history-machine-filter"
+                      aria-label="Filter by machine"
+                      title="Filter by machine"
+                      aria-haspopup="dialog"
                       onClick={() => setMachinePickerOpen(true)}
                     >
                       <Icon name="filter" />
-                      Filter by machine
                     </button>
                   )}
                 </header>

@@ -1053,6 +1053,9 @@ describe('filtering History by machine', () => {
   it('finds the last session on one machine among later sessions at other gyms', async () => {
     await act(async () => root.render(<App />));
     expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+    // Beside the calendar's title it is an icon; its name is the accessible label.
+    expect(button('Filter by machine').textContent).toBe('');
+    expect(container.querySelector('.page-eyebrow')?.textContent).toBe('4 workouts logged');
 
     await click(button('Filter by machine'));
     const dialog = document.querySelector<HTMLElement>('.machine-filter-dialog')!;

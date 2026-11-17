@@ -379,15 +379,6 @@ export function BodyCompositionScreen({
         </div>
       </div>
 
-      {measurements.length > 1 && (
-        <section className="pulse-card body-trend-panel">
-          <header className="pulse-card-header">
-            <h2>Trend</h2>
-          </header>
-          <BodyTrendChart measurements={measurements} goals={goals} />
-        </section>
-      )}
-
       <div className="body-reference-actions">
         <button
           className={entryOpen ? 'active' : ''}
@@ -415,6 +406,15 @@ export function BodyCompositionScreen({
           {activeGoal ? 'New goal' : 'Set a goal'}
         </button>
       </div>
+
+      {measurements.length > 1 && (
+        <section className="pulse-card body-trend-panel">
+          <header className="pulse-card-header">
+            <h2>Trend</h2>
+          </header>
+          <BodyTrendChart measurements={measurements} goals={goals} />
+        </section>
+      )}
 
       <BodySizesCard dataRevision={dataRevision} />
 

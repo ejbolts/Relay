@@ -144,6 +144,25 @@ async function search(query: string) {
   await click('.settings-search-results button');
 }
 
+it('starts with the profile link, search and sections, with no introduction', async () => {
+  await act(async () => root.render(<Harness />));
+  expect(container.querySelector('.settings-hub > :first-child')?.className).toBe(
+    'settings-profile-link',
+  );
+  expect(container.querySelector('.settings-profile-link')?.textContent).toBe(
+    'Sam SampleEdit your profile',
+  );
+  expect(container.querySelector('.settings-overview-heading')?.textContent).toBe(
+    'Browse settings',
+  );
+  // Without an account the hub starts at search.
+  await act(async () => root.render(<Harness account={false} />));
+  expect(container.querySelector('.settings-profile-link')).toBeNull();
+  expect(container.querySelector('.settings-hub > :first-child')?.className).toContain(
+    'settings-search',
+  );
+});
+
 it('opens focused sections, returns focus to the overview and retains unfinished forms', async () => {
   await act(async () => root.render(<Harness />));
   expect(container.querySelector('.settings-overview')?.hasAttribute('hidden')).toBe(false);

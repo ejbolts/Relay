@@ -6,36 +6,13 @@
   display: none !important;
 }
 
-.settings-hub-intro {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin: 1.1rem 0 1.5rem;
-}
-
-.settings-hub-intro h2 {
-  margin: 0.35rem 0 0.6rem;
-  font-size: clamp(1.35rem, 4vw, 1.85rem);
-  font-weight: 650;
-  letter-spacing: -0.04em;
-  color: var(--p-ink);
-}
-
-.settings-hub-intro p:last-child {
-  max-width: 33rem;
-  margin: 0;
-  color: var(--p-ink-2);
-  font-size: 0.8125rem;
-  line-height: 1.65;
-}
-
 .settings-profile-link {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  flex-shrink: 0;
-  max-width: 18rem;
+  width: 100%;
+  max-width: 22rem;
+  margin: 1.1rem 0 1.5rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 14px;
   padding: 0.75rem;
@@ -77,22 +54,9 @@
 }
 
 .settings-overview-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.8rem;
-}
-
-.settings-overview-heading h3 {
-  margin: 0;
+  margin: 0 0 0.8rem;
   font-size: 0.875rem;
   font-weight: 650;
-}
-
-.settings-overview-heading > span {
-  color: var(--p-muted);
-  font-size: 0.75rem;
 }
 
 .settings-category-grid {
@@ -337,17 +301,9 @@
 }
 
 @media (max-width: 699px) {
-  .settings-hub-intro {
-    display: block;
-    margin: 0.7rem 0 1.3rem;
-  }
-  .settings-hub-intro > div > p:last-child {
-    display: none;
-  }
   .settings-profile-link {
-    margin-top: 1rem;
-    width: 100%;
     max-width: none;
+    margin: 0.7rem 0 1.3rem;
   }
   .settings-profile-link span {
     flex: 1;
