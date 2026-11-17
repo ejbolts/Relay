@@ -1,4 +1,3 @@
-import { Icon } from './Icon';
 import { setKindOf, setNumberLabels, type SetKind } from './setFieldValues';
 import { workingSets, workoutVolumeKg } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -27,85 +26,40 @@ function completedSets(workout: TrackedWorkout): TrackedSet[] {
   return workout.movements.flatMap((movement) => movement.sets).filter((item) => item.completed);
 }
 
-/** Sets that earned a weight or reps record, in the order they were lifted. */
-function recordSets(workout: TrackedWorkout, personalRecords: PersonalRecord[]) {
-  const earned = new Set(
-    personalRecords
-      .filter(
-        (record) =>
-          record.workout_id === workout.id &&
-          ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
-      )
-      .map((record) => record.set_id),
-  );
-  return workout.movements.flatMap((movement) =>
-    movement.sets
-      .filter((item) => earned.has(item.id))
-      .map((item) => ({ item, exercise: movement.exercise.name })),
-  );
-}
-
-/** A shared workout's totals, with the records it set called out above the exercises. */
-export function SharedWorkoutSummary({
-  workout,
-  personalRecords,
-  formatSet,
-}: {
-  workout: TrackedWorkout;
-  personalRecords: PersonalRecord[];
-  formatSet: FormatSet;
-}) {
+/** A shared workout's totals. Its records are marked on the sets that earned them. */
+export function SharedWorkoutSummary({ workout }: { workout: TrackedWorkout }) {
   const weightUnit = useWeightUnit();
   const completed = completedSets(workout);
   const working = workingSets(workout).length;
   const warmups = completed.filter((item) => setKindOf(item) === 'warmup').length;
   const reps = completed.reduce((total, item) => total + (item.reps ?? 0), 0);
   const volume = workoutVolumeKg(workout);
-  const records = recordSets(workout, personalRecords);
   const when =
     workout.start_time && workout.end_time
       ? formatWorkoutTimeRange(workout.start_time, workout.end_time)
       : null;
 
   return (
-    <>
-      <dl className="shared-session-stats" aria-label="Workout totals">
-        <div>
-          <dt>Time</dt>
-          <dd className="num">{formatMinutesDuration(workout.duration_minutes)}</dd>
-          {when && <small>{when}</small>}
-        </div>
-        <div>
-          <dt>Sets</dt>
-          <dd className="num">{working || completed.length}</dd>
-          {working > 0 && warmups > 0 && <small>+{warmups} warm-up</small>}
-        </div>
-        <div>
-          <dt>Reps</dt>
-          <dd className="num">{reps || '–'}</dd>
-        </div>
-        <div>
-          <dt>Volume</dt>
-          <dd className="num">{volume ? formatWeight(volume, weightUnit, 0) : '–'}</dd>
-        </div>
-      </dl>
-      {records.length > 0 && (
-        <section className="shared-session-records" aria-label="Personal records">
-          <h3>
-            <Icon name="trophy" />
-            {records.length} {records.length === 1 ? 'personal record' : 'personal records'}
-          </h3>
-          <ul>
-            {records.map(({ item, exercise }) => (
-              <li key={item.id}>
-                <span>{exercise}</span>
-                <b className="num">{formatSet(item)}</b>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </>
+    <dl className="shared-session-stats" aria-label="Workout totals">
+      <div>
+        <dt>Time</dt>
+        <dd className="num">{formatMinutesDuration(workout.duration_minutes)}</dd>
+        {when && <small>{when}</small>}
+      </div>
+      <div>
+        <dt>Sets</dt>
+        <dd className="num">{working || completed.length}</dd>
+        {working > 0 && warmups > 0 && <small>+{warmups} warm-up</small>}
+      </div>
+      <div>
+        <dt>Reps</dt>
+        <dd className="num">{reps || '–'}</dd>
+      </div>
+      <div>
+        <dt>Volume</dt>
+        <dd className="num">{volume ? formatWeight(volume, weightUnit, 0) : '–'}</dd>
+      </div>
+    </dl>
   );
 }
 

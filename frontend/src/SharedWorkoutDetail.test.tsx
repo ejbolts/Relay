@@ -119,7 +119,7 @@ it('labels a block record, and counts working sets apart from warm-ups', async (
   expect(sharedSetCount(sets.slice(0, 2))).toBe('2 warm-up sets');
 });
 
-it('shows the session totals and lists the sets that earned a record', async () => {
+it('shows the session totals without a separate list of records', async () => {
   const workout = {
     id: 'w1',
     name: 'Lower body',
@@ -128,35 +128,12 @@ it('shows the session totals and lists the sets that earned a record', async () 
     end_time: null,
     movements: [{ id: 'm1', exercise: { id: 'leg-press', name: 'Leg Press' }, sets }],
   } as unknown as TrackedWorkout;
-  await act(async () =>
-    root.render(
-      <SharedWorkoutSummary
-        workout={workout}
-        personalRecords={[
-          record('work-2'),
-          { ...record('work-2'), id: 'second', record_type: 'reps_at_weight' },
-          { ...record('work-1'), id: 'estimate', record_type: 'estimated_1rm' },
-          { ...record('work-1'), id: 'other-workout', workout_id: 'w0' },
-        ]}
-        formatSet={formatSet}
-      />,
-    ),
-  );
+  await act(async () => root.render(<SharedWorkoutSummary workout={workout} />));
 
   const stats = [...host.querySelectorAll('.shared-session-stats > div')].map(
     (item) => item.textContent,
   );
   expect(stats).toEqual(['Time1h 35min', 'Sets3+2 warm-up', 'Reps60', 'Volume5,820 kg']);
-  const records = host.querySelector('.shared-session-records')!;
-  expect(records.querySelector('h3')?.textContent).toBe('1 personal record');
-  expect([...records.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
-    'Leg Press210 kg × 12',
-  ]);
-
-  await act(async () =>
-    root.render(
-      <SharedWorkoutSummary workout={workout} personalRecords={[]} formatSet={formatSet} />,
-    ),
-  );
-  expect(host.querySelector('.shared-session-records')).toBeNull();
+  // Records are marked on their own sets, so the summary does not repeat them.
+  expect(host.querySelector('[aria-label="Personal records"]')).toBeNull();
 });

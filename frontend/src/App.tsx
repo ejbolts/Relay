@@ -10710,13 +10710,7 @@ function HistoryWorkoutCard({
       {reactionAction && <div className="history-card-social">{reactionAction}</div>}
       {open && (
         <div className={`history-detail${shared ? ' shared-session' : ''}`}>
-          {!detailsOnly && shared && (
-            <SharedWorkoutSummary
-              workout={workout}
-              personalRecords={personalRecords}
-              formatSet={(item) => setResult(item, weightUnit)}
-            />
-          )}
+          {!detailsOnly && shared && <SharedWorkoutSummary workout={workout} />}
           {onPhotosChange && !detailsOnly ? (
             <WorkoutPhotoEditor
               workoutId={workout.id}
