@@ -108,6 +108,11 @@
 .weekly-review-block .text-link {
   margin-top: 0.5rem;
 }
+.weekly-review-block-name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
 
 .weekly-review-records,
 .weekly-review-movers,

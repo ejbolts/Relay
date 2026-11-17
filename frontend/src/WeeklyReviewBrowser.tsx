@@ -5,6 +5,7 @@ import type { MuscleSetsWeek } from './liveMuscleSets';
 import type { BodyMeasurement, CardioWeek, PersonalRecord, TrackedWorkout } from './types';
 import type { WeightUnit } from './weightUnits';
 import { weeklyReview } from './weeklyReview';
+import { WeeklyReviewBlock } from './WeeklyReviewBlock';
 import { WeeklyReviewSummary } from './WeeklyReviewSummary';
 import './muscleSets.css';
 
@@ -110,6 +111,8 @@ export function WeeklyReviewBrowser({
         onOpenCardio={onOpenCardio}
         onOpenBody={onOpenBody}
       />
+      {/* About today rather than the week on show, so it stays with the two latest weeks. */}
+      {weeksAgo <= 1 && <WeeklyReviewBlock workouts={workouts} records={records} today={today} />}
     </>
   );
 }
