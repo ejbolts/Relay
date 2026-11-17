@@ -651,6 +651,7 @@ export interface CardioSessionInput {
   incline_percent?: number | null;
   average_power_watts?: number | null;
   average_mets?: number | null;
+  elevation_gain_m?: number | null;
   intensity: string | null;
   zone: string | null;
   qualifies_zone2: boolean;
@@ -663,6 +664,9 @@ export interface CardioSession extends CardioSessionInput {
   workout_context?: 'pure_cardio' | 'workout_plus_cardio';
   performed_after_strength?: boolean;
   source_workout_name?: string | null;
+  /** Calculated by the server for when the logged value is blank. */
+  estimated_mets?: number | null;
+  estimated_elevation_gain_m?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -675,6 +679,7 @@ export interface CardioScreenshotScan {
   average_heart_rate_bpm: number | null;
   distance_km: number | null;
   average_speed_kph: number | null;
+  elevation_gain_m?: number | null;
   fields_found: string[];
   warning: string | null;
 }
@@ -709,13 +714,14 @@ export interface CardioEnergyPeriod {
   previous_average_incline_percent: number | null;
   average_mets: number | null;
   previous_average_mets: number | null;
-  met_minutes: number;
-  previous_met_minutes: number | null;
+  elevation_gain_m?: number;
+  previous_elevation_gain_m?: number | null;
   heart_rate_sessions: number;
   distance_sessions: number;
   speed_sessions: number;
   incline_sessions: number;
   mets_sessions: number;
+  elevation_sessions?: number;
 }
 
 export interface CardioMetricsInput {
@@ -726,6 +732,7 @@ export interface CardioMetricsInput {
   incline_percent: number | null;
   average_power_watts?: number | null;
   average_mets?: number | null;
+  elevation_gain_m?: number | null;
 }
 
 export interface BodyWeightGoalInput {

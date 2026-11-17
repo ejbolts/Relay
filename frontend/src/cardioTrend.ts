@@ -1,28 +1,34 @@
 import type { CardioSession } from './types';
 import { addDays, weekStartFor } from './trainingSummary';
 
+type SessionEstimates = Pick<
+  CardioSession,
+  'average_mets' | 'estimated_mets' | 'elevation_gain_m' | 'estimated_elevation_gain_m'
+>;
+
+/** The logged average MET, or the server's estimate when it was left blank. */
+export const sessionMets = (session: SessionEstimates) =>
+  session.average_mets ?? session.estimated_mets ?? null;
+
+/** The logged elevation gain, or the estimate from incline and distance. */
+export const sessionElevation = (session: SessionEstimates) =>
+  session.elevation_gain_m ?? session.estimated_elevation_gain_m ?? null;
+
 export function cardioWeekTotals(sessions: CardioSession[], start: string, today: string) {
   const end = addDays(start, 6);
   const selected = sessions.filter(
     (s) => start <= s.session_date && s.session_date <= end && s.session_date <= today,
   );
-  function total(field: 'distance_km' | 'calories_kcal' | 'average_mets') {
-    const logged = selected.filter((s) => s[field] != null);
-    return logged.length
-      ? logged.reduce(
-          (n, s) => n + s[field]! * (field === 'average_mets' ? s.duration_minutes : 1),
-          0,
-        )
-      : null;
+  function total(read: (session: CardioSession) => number | null | undefined) {
+    const logged = selected.filter((s) => read(s) != null);
+    return logged.length ? logged.reduce((n, s) => n + read(s)!, 0) : null;
   }
-  function average(field: 'average_mets' | 'average_heart_rate_bpm') {
-    const logged = selected.filter((s) => s[field] != null);
+  function average(read: (session: CardioSession) => number | null | undefined) {
+    const logged = selected.filter((s) => read(s) != null);
     const minutes = logged.reduce((n, s) => n + s.duration_minutes, 0);
     // The API rounds duration-weighted averages to one decimal before display.
     return minutes > 0
-      ? Number(
-          (logged.reduce((n, s) => n + s[field]! * s.duration_minutes, 0) / minutes).toFixed(1),
-        )
+      ? Number((logged.reduce((n, s) => n + read(s)! * s.duration_minutes, 0) / minutes).toFixed(1))
       : null;
   }
   return {
@@ -30,11 +36,11 @@ export function cardioWeekTotals(sessions: CardioSession[], start: string, today
     end,
     sessions: selected.length,
     time: selected.reduce((n, s) => n + s.duration_minutes, 0),
-    distance: total('distance_km'),
-    calories: total('calories_kcal'),
-    metMinutes: total('average_mets'),
-    heartRate: average('average_heart_rate_bpm'),
-    mets: average('average_mets'),
+    distance: total((s) => s.distance_km),
+    calories: total((s) => s.calories_kcal),
+    elevation: total(sessionElevation),
+    heartRate: average((s) => s.average_heart_rate_bpm),
+    mets: average(sessionMets),
   };
 }
 

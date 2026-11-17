@@ -63,6 +63,7 @@ SESSION_METRICS = {
     "Cardio session incline (%)": ("incline_percent", float, 0, 100),
     "Average power (W)": ("average_power_watts", int, 1, 3_000),
     "Average METs": ("average_mets", float, 0, 50),
+    "Elevation gain (m)": ("elevation_gain_m", float, 0, 30_000),
 }
 CARDIO_HEADERS = ("Exercise kind", *SET_METRICS, *SESSION_METRICS)
 # Exports always write every column; hand-made files need only these.

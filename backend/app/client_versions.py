@@ -45,6 +45,8 @@ FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
     },
     "home_section_settings": {"workouts": "1.3.0", "cardio_sessions": "1.3.0"},
     "routine_movement": {"rep_range": "1.3.0"},
+    # update_cardio_session keeps every optional metric the saving app leaves out.
+    "cardio_session": {"elevation_gain_m": "1.3.0"},
 }
 
 # Sign-in and sign-out keep working so an old app can always reach the update.

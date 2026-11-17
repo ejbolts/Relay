@@ -49,6 +49,7 @@ def create_cardio(client, **overrides):
             "incline_percent": 0,
             "average_power_watts": 175,
             "average_mets": 6.75,
+            "elevation_gain_m": 84.5,
             **overrides,
         },
     )
@@ -66,6 +67,7 @@ def assert_metrics(actual, expected):
         "incline_percent",
         "average_power_watts",
         "average_mets",
+        "elevation_gain_m",
     ):
         assert actual[field] == expected[field], field
 

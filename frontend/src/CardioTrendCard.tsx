@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 const metrics = [
   { key: 'time', label: 'Time', unit: 'min' },
   { key: 'distance', label: 'Distance', unit: 'km' },
-  { key: 'metMinutes', label: 'MET-min', unit: 'MET-min' },
+  { key: 'elevation', label: 'Elevation', unit: 'm' },
   { key: 'calories', label: 'Calories', unit: 'kcal', suffix: 'burnt' },
 ] as const;
 const format = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -144,7 +144,7 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
           </dd>
         </div>
         <div>
-          <dt>Avg METs</dt>
+          <dt>Avg MET</dt>
           <dd>{selected.mets === null ? '—' : selected.mets.toFixed(1)}</dd>
         </div>
         <div>
