@@ -2,6 +2,62 @@
 
 _Relay was called Gym Logger before version 1.0._
 
+## 1.3.0
+
+17 November 2026
+
+### Head-to-head, body measurements and your feed
+
+![Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png)
+
+**Head-to-head** — Compare your best lifts with friends and see who leads.
+
+![Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png)
+
+**Body measurements** — See measurements on a body outline and tap to update.
+
+![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png)
+
+**Workout feed** — Catch up on workouts, comments and reactions.
+
+![Two-finger pinch on the Body trend chart zooms from 3M to 1M and out through 3M, 9M and 1Y to All, with range chips and dates following the gesture. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8a3724e75c9b8b689904164646630dfe2927ed86/body-chart-pinch-zoom/pinch-zoom.gif)
+
+**Pinch to zoom** — Zoom Body and exercise charts with two fingers.
+
+- **Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.
+- **Start:** Pick any split day or repeat a past workout, and resume from Up next on Home.
+- **Workout saves:** Finish instantly and keep logging while sessions sync, even offline.
+- **Safer edits:** Choose which version to keep when another device has changed a workout.
+- **Unfinished workouts:** Save, resume or discard; opt into auto-save and receive idle phone reminders.
+- **Workout controls:** Finish and add exercises from the header, correct live time and use larger iPhone touch targets.
+- **Set groups:** Log tri-sets with clearer set counts, superset borders and custom rest times.
+- **Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.
+- **Workout summary:** After finishing, Home shows time, sets, volume, new records and a suggested next step.
+- **Rep targets:** Plan rep ranges and see when to add weight.
+- **Workout plans:** Follow logged splits, save exercises by type and preview suggested weights.
+- **Exercises:** Rename, hide or swap lifts, with exact-name search, new icons and simpler filters.
+- **Merge exercises:** Relay guides custom lifts through the changes needed to combine duplicates.
+- **Muscle goals:** Set targets per muscle, see combined exercise gains and track neck training.
+- **Machine weights:** Machine-specific suggestions, per-set assignments, normalised trends and your last machine on planned days.
+- **Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.
+- **Weekly review:** Open last week's training review from a weekly popup or Notifications.
+- **Training blocks:** Plan coloured blocks on a zoomable timeline, compare results and get suggestions in your weekly review.
+- **Home layout:** Add five opt-in sections and customise weekly charts, check-ins and set totals.
+- **Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.
+- **History:** Log-style set tables, fortnight pages and single-workout exports.
+- **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
+- **Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.
+- **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
+- **Full backup:** Download and restore your account, with a preview before replacing data.
+- **Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.
+- **Screen layouts:** Common actions come first on Training, Body, Social and Settings.
+- **Tips and setup:** Tips appear when they apply and open the feature; QR invites and smarter Settings search.
+- **Launch prompts:** One popup per visit, and dismissed notices stay dismissed on every device.
+- **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
+- **Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.
+- **Account recovery:** Admin-issued temporary passwords require a new password at sign-in.
+- **Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout.
+
 ## 1.2.0
 
 7 November 2026

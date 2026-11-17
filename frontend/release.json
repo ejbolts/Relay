@@ -1,60 +1,79 @@
 {
-  "version": "1.2.0",
-  "date": "2026-11-07",
-  "title": "Weekly volume and machine weights",
-  "summary": "Plan by weekly volume, compare progress across machines and pick the machine with each exercise.",
+  "version": "1.3.0",
+  "date": "2026-11-17",
+  "title": "Head-to-head, body measurements and your feed",
+  "summary": "Compare lifts with friends, track your measurements and zoom into your progress.",
   "changes": [
-    "**Merge exercises:** Combine duplicate custom exercises and keep their history.",
-    "**Every set counts:** See each set's weekly muscle gains above the rest timer.",
-    "**Sets per muscle:** Compare earlier weeks; totals update as you train.",
-    "**Split days:** A coloured block for each planned set.",
-    "**Attempted sets:** Failure sets are now Attempted, marked A.",
-    "**High-rep warnings:** Skip repeat warnings for one workout.",
-    "**Paste screenshot:** Paste a copied screenshot into a cardio set.",
-    "**Cardio distance:** Distance split by activity type.",
-    "**Cardio saves:** No more zone confirmation popups.",
-    "**Rest times:** Each set suggests its previous rest.",
-    "**Logging sets:** Hold to reorder, wrapping notes and synced ticks.",
-    "**Workout errors:** Clearer steps and an X to close.",
-    "**Exercise list:** Themed filters, aligned help and steadier search.",
-    "**Open a workout:** Tap a friend's workout name to open it.",
-    "**Social:** Compact friend rows and one emoji per reaction.",
-    "**Profile photos:** Pinch and drag to crop your photo.",
-    "**Offline check-ins:** Weight and body fat save offline.",
-    "**Offline notice:** A dismissible strip on every screen.",
-    "**Body goals:** Swipe goals away and see a line to your target date.",
-    "**Sync:** Other devices' workouts appear without reloading.",
-    "**CSV exports:** Cardio metrics survive export and reimport.",
-    "**iPhone:** Fields no longer zoom in when tapped."
+    "**Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.",
+    "**Start:** Pick any split day or repeat a past workout, and resume from Up next on Home.",
+    "**Workout saves:** Finish instantly and keep logging while sessions sync, even offline.",
+    "**Safer edits:** Choose which version to keep when another device has changed a workout.",
+    "**Unfinished workouts:** Save, resume or discard; opt into auto-save and receive idle phone reminders.",
+    "**Workout controls:** Finish and add exercises from the header, correct live time and use larger iPhone touch targets.",
+    "**Set groups:** Log tri-sets with clearer set counts, superset borders and custom rest times.",
+    "**Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.",
+    "**Workout summary:** After finishing, Home shows time, sets, volume, new records and a suggested next step.",
+    "**Rep targets:** Plan rep ranges and see when to add weight.",
+    "**Workout plans:** Follow logged splits, save exercises by type and preview suggested weights.",
+    "**Exercises:** Rename, hide or swap lifts, with exact-name search, new icons and simpler filters.",
+    "**Merge exercises:** Relay guides custom lifts through the changes needed to combine duplicates.",
+    "**Muscle goals:** Set targets per muscle, see combined exercise gains and track neck training.",
+    "**Machine weights:** Machine-specific suggestions, per-set assignments, normalised trends and your last machine on planned days.",
+    "**Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.",
+    "**Weekly review:** Open last week's training review from a weekly popup or Notifications.",
+    "**Training blocks:** Plan coloured blocks on a zoomable timeline, compare results and get suggestions in your weekly review.",
+    "**Home layout:** Add five opt-in sections and customise weekly charts, check-ins and set totals.",
+    "**Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.",
+    "**History:** Log-style set tables, fortnight pages and single-workout exports.",
+    "**Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.",
+    "**Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.",
+    "**Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.",
+    "**Full backup:** Download and restore your account, with a preview before replacing data.",
+    "**Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.",
+    "**Screen layouts:** Common actions come first on Training, Body, Social and Settings.",
+    "**Tips and setup:** Tips appear when they apply and open the feature; QR invites and smarter Settings search.",
+    "**Launch prompts:** One popup per visit, and dismissed notices stay dismissed on every device.",
+    "**Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.",
+    "**Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.",
+    "**Account recovery:** Admin-issued temporary passwords require a new password at sign-in.",
+    "**Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout."
   ],
-  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
   "image": {
-    "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
-    "alt": "Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data."
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png",
+    "alt": "Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts."
   },
   "highlights": [
     {
-      "title": "Weekly volume while you build",
-      "description": "Plan splits against your weekly goals.",
+      "title": "Head-to-head",
+      "description": "Compare your best lifts with friends and see who leads.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
-        "alt": "Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png",
+        "alt": "Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts."
       }
     },
     {
-      "title": "Machine with the exercise",
-      "description": "Your last-used machine is ready; swipe for another.",
+      "title": "Body measurements",
+      "description": "See measurements on a body outline and tap to update.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c042835a715042f5b33773b348f885bba6915bc8/docs/screenshots/releases/1.2.0-inline-machine-picker.gif",
-        "alt": "Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png",
+        "alt": "Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image."
       }
     },
     {
-      "title": "Machine weights",
-      "description": "Compare progress across machines on one trend.",
+      "title": "Workout feed",
+      "description": "Catch up on workouts, comments and reactions.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3d52efdb54429173af6a4135d22317a857607474/docs/screenshots/releases/1.2.0-machine-weights-slider.gif",
-        "alt": "Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png",
+        "alt": "Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts."
+      }
+    },
+    {
+      "title": "Pinch to zoom",
+      "description": "Zoom Body and exercise charts with two fingers.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/8a3724e75c9b8b689904164646630dfe2927ed86/body-chart-pinch-zoom/pinch-zoom.gif",
+        "alt": "Two-finger pinch on the Body trend chart zooms from 3M to 1M and out through 3M, 9M and 1Y to All, with range chips and dates following the gesture. Isolated sample data."
       }
     }
   ]

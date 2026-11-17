@@ -468,7 +468,11 @@ it('orders all notification types newest first before paginating', async () => {
     Date.parse(time.getAttribute('datetime')!),
   );
   expect(dates).toEqual([...dates].sort((a, b) => b - a));
-  expect(document.querySelector('.follow-notification-list li')?.textContent).toContain('Leg day');
+  // The release row sorts by its own date, so check the social rows around it.
+  expect(
+    document.querySelector('.follow-notification-list > li:not(.release-notification-row)')
+      ?.textContent,
+  ).toContain('Leg day');
   expect(document.querySelector('.follow-notification-list li:last-child')?.textContent).toContain(
     'Sample comment',
   );
