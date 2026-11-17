@@ -261,8 +261,8 @@ export function WorkoutPhotoEditor({
           aria-label={layout === 'feed' ? (adding ? 'Adding photo…' : 'Add photo') : undefined}
           onClick={() => input.current?.click()}
         >
-          <Icon name="camera" />
-          {/* In the feed the button is a bare camera beside the workout's other icons. */}
+          <Icon name="photos" />
+          {/* In the feed the button is a bare photo icon beside the workout's other icons. */}
           {layout !== 'feed' && (adding ? 'Adding…' : 'Add photo')}
         </button>
       )}
