@@ -1596,6 +1596,13 @@
   font-size: 1.125rem;
   line-height: 1;
 }
+/* The top reactions on your own workout tuck together so they take less of the header. */
+.workout-discussion .discussion-reaction-emojis {
+  display: inline-flex;
+}
+.workout-discussion .discussion-reaction-emojis > span + span {
+  margin-left: -0.125em;
+}
 .workout-discussion :is(.discussion-button, .discussion-reaction-count):focus-visible {
   outline: 2px solid var(--p-accent);
   outline-offset: -2px;

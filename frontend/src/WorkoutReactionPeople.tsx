@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS } from './friendFeedData';
+import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import type { WorkoutReactionPage } from './types';
 import './workoutReactionPeople.css';
+
+/** Matches the slide-down in workoutReactionPeople.css. */
+const CLOSE_MS = 240;
 
 export function WorkoutReactionPeople({
   workoutId,
@@ -18,6 +22,23 @@ export function WorkoutReactionPeople({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
+  /** Slides the sheet back down before it unmounts. */
+  function dismiss() {
+    if (closeTimer.current !== null) return;
+    if (motionReduced()) return onClose();
+    setClosing(true);
+    closeTimer.current = window.setTimeout(onClose, CLOSE_MS);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -58,9 +79,9 @@ export function WorkoutReactionPeople({
   return (
     <PopupDialog
       title="Reactions"
-      className="reaction-people-sheet"
+      className={`reaction-people-sheet${closing ? ' is-closing' : ''}`}
       swipeToDismiss
-      onClose={onClose}
+      onClose={dismiss}
     >
       <div className="reaction-people-body" aria-busy={!page && !error}>
         {!page && !error && <p role="status">Loading reactions…</p>}

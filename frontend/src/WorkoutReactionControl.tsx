@@ -10,6 +10,9 @@ import { WorkoutReactionPeople } from './WorkoutReactionPeople';
 
 type Panel = 'reactions' | 'comments' | 'people';
 
+/** Emojis stacked beside the total in a card header, so a long workout name keeps its room. */
+const HEADER_EMOJIS = 2;
+
 /** Separate reaction and comment icons, shared by Home, Social and shared workouts. */
 export function WorkoutReactionControl({
   workoutId,
@@ -171,7 +174,14 @@ export function WorkoutReactionControl({
         show(shown === 'people' ? null : 'people');
       }}
     >
-      {withEmojis && <span aria-hidden="true">{summary.emojis.join('')}</span>} {summary.total}
+      {withEmojis && (
+        <span className="discussion-reaction-emojis" aria-hidden="true">
+          {summary.emojis.slice(0, HEADER_EMOJIS).map((emoji) => (
+            <span key={emoji}>{emoji}</span>
+          ))}
+        </span>
+      )}{' '}
+      {summary.total}
     </button>
   );
   const compactReactions = ownWorkout ? (
