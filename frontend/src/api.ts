@@ -536,11 +536,18 @@ export const api = {
       request<SharedCardioPage>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
       ),
-    /** Your best against a member's, for each lift you have both logged. */
+    /** Your exercises with your best and a member's, and the ones your head to heads show. */
     lifts: (userId: string) =>
-      request<{ lifts: import('./types').LiftComparison[] }>(
+      request<import('./types').LiftComparisons>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/lifts`,
       ),
+    /** Saves the exercises your head to heads show, for every member you compare with. */
+    chooseLifts: (exercise_ids: string[]) =>
+      request<{ exercise_ids: string[] }>('/api/sharing/lifts', {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ exercise_ids }),
+      }),
     /** One of your lifts, ranked against the friends who have logged it. */
     liftLeaderboard: (exerciseId: string) =>
       request<{ entries: import('./types').LiftRanking[] }>(

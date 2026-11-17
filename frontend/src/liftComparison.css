@@ -125,7 +125,9 @@
   font-weight: 700;
 }
 
-[data-leader='level'] .head-to-head-values b {
+/* Level, or logged by one side only: nobody leads, so nothing is highlighted. */
+[data-leader='level'] .head-to-head-values b,
+[data-leader='none'] .head-to-head-values b {
   color: var(--p-ink);
 }
 
@@ -244,4 +246,255 @@
   width: 1rem;
   height: 1rem;
   color: var(--p-muted);
+}
+
+/* Lifts to compare: the bottom sheet that chooses which lifts a head to head shows. Its search
+   stays in place and only the list scrolls. */
+
+.popup-dialog.lift-picker[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(32rem, calc(100% - 1.5rem));
+  height: min(44rem, calc(100dvh - 2rem));
+  margin: auto auto max(0.75rem, env(safe-area-inset-bottom));
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 24px;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  /* The shared pop-in animation would restart whenever a drag snaps back. */
+  animation: none;
+  transform: translateY(var(--sheet-offset, 0px));
+  transition: transform 180ms ease-out;
+}
+
+.popup-dialog.lift-picker.sheet-dragging {
+  transition: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup-dialog.lift-picker[open] {
+    transition: none;
+  }
+}
+
+.popup-dialog.lift-picker > header {
+  flex: none;
+  border-bottom: 0;
+  padding: 1.5rem 1.25rem 0.625rem;
+  background: var(--p-surface);
+  touch-action: none;
+}
+
+.popup-dialog.lift-picker > header::before {
+  content: '';
+  position: absolute;
+  top: 0.625rem;
+  left: calc(50% - 1.125rem);
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: 8px;
+  background: var(--p-muted);
+}
+
+.popup-dialog.lift-picker .popup-dialog-close {
+  width: auto;
+  min-height: 2.75rem;
+  border: 0;
+  padding: 0 0 0 0.75rem;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.lift-picker-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 1rem;
+}
+
+.lift-picker-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.875rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 13px;
+  padding: 0 0.8rem;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+}
+
+.lift-picker-search:focus-within {
+  border-color: var(--p-accent);
+}
+
+.lift-picker-search > .pulse-icon {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.lift-picker-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  color: var(--p-ink);
+  font: inherit;
+  /* Sixteen pixels keeps iPhone from zooming the page when the field takes focus. */
+  font-size: 1rem;
+  outline: none;
+}
+
+.lift-picker-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.lift-picker-search button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: none;
+  color: var(--p-muted);
+}
+
+.lift-picker-search button .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.lift-picker-body > .inline-error,
+.lift-picker-limit {
+  flex: none;
+  margin: 0.625rem 0.25rem 0;
+  font-size: 0.8125rem;
+}
+
+.lift-picker-limit {
+  color: var(--p-muted);
+}
+
+.lift-picker-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0.5rem -1rem 0;
+  padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.lift-picker-list li + li {
+  border-top: 1px solid var(--p-line);
+}
+
+.lift-picker-list button {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.5rem;
+  border: 0;
+  padding: 0.5rem 0.25rem;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.lift-picker-list button:disabled {
+  opacity: 0.45;
+}
+
+.lift-picker-check {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1.5px solid var(--p-line-strong);
+  border-radius: 50%;
+  color: var(--p-on-accent, #fff);
+}
+
+[aria-pressed='true'] > .lift-picker-check {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+}
+
+.lift-picker-check .pulse-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.lift-picker-copy {
+  display: grid;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.lift-picker-copy strong {
+  font-size: 0.9375rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.lift-picker-copy .exercise-search-match {
+  color: var(--p-accent-text);
+  font-weight: 750;
+}
+
+.lift-picker-copy small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+/* The member's best for a lift they have logged too, beside their photo. */
+.lift-picker-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lift-picker-preview .profile-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.6875rem;
+}
+
+.lift-picker-preview > .num {
+  display: grid;
+  justify-items: end;
+  white-space: nowrap;
+}
+
+.lift-picker-preview b {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.lift-picker-preview small {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+}
+
+.lift-picker-empty {
+  margin: 1.25rem 0;
+  color: var(--p-muted);
+  font-size: 0.875rem;
+  text-align: center;
 }

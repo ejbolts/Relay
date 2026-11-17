@@ -1101,14 +1101,25 @@ export interface LiftBest {
   reps: number;
   estimated_1rm: number;
   achieved_date: string;
+  /** The member normalises this exercise's machines, so the weights are its reference machine's. */
+  normalised: boolean;
 }
 
-/** A lift both you and another member have logged. */
+/** One of your strength exercises, with each member's best when they have logged it. */
 export interface LiftComparison {
+  exercise_id: string;
   name: string;
   muscle_group: string;
-  yours: LiftBest;
-  theirs: LiftBest;
+  equipment: string | null;
+  yours: LiftBest | null;
+  theirs: LiftBest | null;
+}
+
+export interface LiftComparisons {
+  /** The exercises your head to heads show, in the order you added them. */
+  selected: string[];
+  /** Every exercise you can choose, by name. */
+  lifts: LiftComparison[];
 }
 
 export interface LiftRanking {
