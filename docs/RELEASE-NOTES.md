@@ -4,50 +4,51 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.3.0
 
-16 November 2026
+17 November 2026
 
 ### Training blocks, stronger PRs and workout photos
 
-![Training blocks timeline with a current Strength rebuild block, earlier blocks, dates and workout counts. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/978e10d8358f7b4197236692b01ce6f1f69f9db9/training-blocks/blocks-page.png)
+![Training blocks with a coloured timeline, current block progress and comparisons with the previous block. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8cdac512b7e5fb53f32e9c74eca1255dea9fe8f3/square-timeline-colour-boxes/after.png)
 
-**Training blocks** — Track a fresh block while keeping your all-time records.
+**Training blocks** — Scroll and zoom through coloured blocks, with all-time records kept.
 
-![A completed 100 kg bench press at 75 kg bodyweight earns a 1.33 times bodyweight relative-strength PR in the updated workout screen. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/6ec8ad8721e2254c5bd9fba42feb5855b100a27b/bodyweight-adjusted-pr/relative-strength-pr.png)
+![Live workout with rep targets, suggested weights and a completed Hack Squat set showing 1.64 times bodyweight at 82.5 kg. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/bd56c0d9b6d1ee46d3ef761c2c0c1569d6e46fc6/ux-logging-polish/logger-header.png)
 
-**PRs at your bodyweight** — Celebrate a stronger lift-to-bodyweight ratio.
+**Targets and stronger PRs** — Follow rep targets and track strength at your bodyweight.
 
-![Social Feed with a friend's workout photos, session totals and reaction, followed by your own workout. Isolated sample accounts and generated images.](https://raw.githubusercontent.com/ejbolts/Relay/053cce055d2d8af46d5fe1e55b0f98a17c09f9ad/social-feed-workout-photos/social-feed.png)
+![Compact Social feed cards with workout names, summary lines, photos, expanded exercises and reaction and comment icons. Isolated sample accounts and generated images.](https://raw.githubusercontent.com/ejbolts/Relay/a9395f2bbd0370d332afefb2b45d5dd583416af5/compact-feed-cards/feed.png)
 
-**Your workouts, in the feed** — Share up to three photos with each workout.
+**Your workouts, in the feed** — Share up to three photos on compact workout cards.
 
-- **Live workouts:** Minimise to a resume bar and continue the same session on desktop or phone.
+- **Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.
 - **Workout saves:** Finish instantly and keep logging while sessions sync, even offline.
 - **Safer edits:** Choose which version to keep when another device has changed a workout.
-- **Unfinished workouts:** Resume, save or discard; opt into timed auto-save and idle phone alerts.
-- **Workout controls:** Correct live time, honour logged cardio time and use larger iPhone touch targets.
+- **Unfinished workouts:** Save, resume or discard; opt into auto-save and receive idle phone reminders.
+- **Workout controls:** Correct live time, honour cardio duration and use larger iPhone touch targets.
 - **Set groups:** Log tri-sets with clearer set counts, superset borders and custom rest times.
-- **Set checks:** Catch warm-up-only exercises and see popups explaining blocked finishes.
+- **Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.
 - **Rep targets:** Plan rep ranges and see when to add weight.
-- **Splits:** Follow logged workouts, search exercises and save exercises to any workout type.
-- **Exercise library:** Rename, hide or swap movements; see last-used dates and change list sorting.
+- **Workout plans:** Follow logged splits, save exercises by type and preview suggested weights.
+- **Exercises:** Rename, hide or swap lifts, with exact-name search, new icons and simpler filters.
+- **Merge exercises:** Relay guides custom lifts through the changes needed to combine duplicates.
 - **Muscle goals:** Set targets per muscle, see combined exercise gains and track neck training.
-- **Machine history:** Get machine-specific suggestions and assign sets to each machine.
+- **Machine weights:** Use machine-specific suggestions, per-set assignments and normalised list trends.
 - **Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.
 - **Weekly review:** Open last week's training review from a weekly popup or Notifications.
-- **Block summaries:** Compare finished blocks and start your next block or a deload.
+- **Block progress:** Charts name their block; summaries compare blocks and offer a next block or deload.
 - **Home layout:** Customise weekly charts, This week and one-button weight/body-fat check-ins.
-- **Body goals:** Set maintenance weight ranges; the FFMI calculator has been removed.
-- **History:** Page sessions, group cardio by day and exercises by year, or export one workout.
-- **Sharing:** Copy or download custom workout cards and view profile photos full screen.
-- **Social:** Faster profiles, persistent comments, inline friend requests and offline reactions.
-- **Notifications:** Newest first, ten per page, quick replies and badges for unanswered requests.
+- **Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.
+- **History:** Page sessions and profiles by fortnight, group exercises by year or export one workout.
+- **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
+- **Social:** Compact feed cards, expandable exercise lists, workout photos and animated reactions.
+- **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
 - **Full backup:** Download and restore your account, with a preview before replacing data.
-- **Appearance:** Default, Stained or OLED dark styles, with cleaner spacing and calendars.
-- **Tips and setup:** Read tips from Home's Tip chip; install and join friends through QR links.
-- **Phone alerts:** Enabled by default, with reminders to allow rest notifications.
-- **Offline and updates:** A compact delayed notice and safer updates that protect unsynced work.
+- **Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.
+- **Tips and setup:** A web beta badge, persistent tips, QR invites and smarter Settings search.
+- **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
+- **Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.
 - **Account recovery:** Admin-issued temporary passwords require a new password at sign-in.
-- **Sign-in:** A subtle light ray and metal texture behind account screens.
+- **Cardio:** Automatic MET estimates and elevation tracking replace MET-minutes.
 
 ## 1.2.0
 
