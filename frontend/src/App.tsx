@@ -357,6 +357,8 @@ import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
+import { AppNoticesContext, useAppNotices, useAppNoticesContext } from './appNotices';
+import { launchPromptAllowed, type LaunchPrompt } from './launchPrompts';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
@@ -649,17 +651,20 @@ let backupRestoredNotice = typeof window !== 'undefined' && takeBackupRestoredFl
 export function App() {
   const { user } = useUserSession();
   useWorkoutAutoSaveAccount(user?.id ?? null);
-  const announcement = useReleaseAnnouncement(user?.id ?? null);
+  const notices = useAppNotices(user?.id ?? null);
+  const announcement = useReleaseAnnouncement(user?.id ?? null, user?.created_at ?? null, notices);
   return (
     <TrainingPreferencesProvider>
       <WorkoutTypesProvider>
-        <ReleaseAnnouncementContext.Provider value={announcement}>
-          <TrainingBlocksProvider key={user?.id}>
-            <TipsProvider key={user?.id} account={user?.id ?? null}>
-              <AppContent />
-            </TipsProvider>
-          </TrainingBlocksProvider>
-        </ReleaseAnnouncementContext.Provider>
+        <AppNoticesContext.Provider value={notices}>
+          <ReleaseAnnouncementContext.Provider value={announcement}>
+            <TrainingBlocksProvider key={user?.id}>
+              <TipsProvider key={user?.id} account={user?.id ?? null}>
+                <AppContent />
+              </TipsProvider>
+            </TrainingBlocksProvider>
+          </ReleaseAnnouncementContext.Provider>
+        </AppNoticesContext.Provider>
       </WorkoutTypesProvider>
     </TrainingPreferencesProvider>
   );
@@ -695,6 +700,9 @@ function AppContent() {
   );
   const { user, signingIn = false } = useUserSession();
   usePresenceConnection(user?.id ?? null);
+  const appNotices = useAppNoticesContext();
+  /** The prompt that opened by itself this visit. Others then wait for the next app open. */
+  const [launchPrompt, setLaunchPrompt] = useState<LaunchPrompt | null>(null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const offlineNotice = useOfflineNotice();
@@ -1789,10 +1797,30 @@ function AppContent() {
     ? nextOnboardingPrompt({
         tour: guideRequested || (guideWaiting && announcement.checked),
         importStep: importStepPending,
-        release: announcement.open,
+        release: announcement.open && launchPromptAllowed(launchPrompt, 'release'),
         releaseHeld: csvGuideOpen || (releaseAfterImport && tab === 'settings'),
       })
     : null;
+  const homeGuideShown =
+    homeScreenGuide.open &&
+    (homeScreenGuide.requested || launchPromptAllowed(launchPrompt, 'home-guide')) &&
+    !guideRequested &&
+    !guideWaiting &&
+    !importStepPending &&
+    !announcement.open &&
+    canShowPrompts;
+  // The first prompt to open by itself is the only one this visit; the rest wait for the next.
+  const openedPrompt: LaunchPrompt | null =
+    prompt === 'release'
+      ? 'release'
+      : prompt
+        ? 'onboarding'
+        : homeGuideShown && !homeScreenGuide.requested
+          ? 'home-guide'
+          : null;
+  useEffect(() => {
+    if (openedPrompt) setLaunchPrompt((current) => current ?? openedPrompt);
+  }, [openedPrompt]);
 
   useEffect(() => {
     configureTips({
@@ -2002,12 +2030,7 @@ function AppContent() {
             }}
           />
         )}
-        {homeScreenGuide.open &&
-          !guideRequested &&
-          !guideWaiting &&
-          !importStepPending &&
-          !announcement.open &&
-          canShowPrompts && <HomeScreenGuide onClose={homeScreenGuide.dismiss} />}
+        {homeGuideShown && <HomeScreenGuide onClose={homeScreenGuide.dismiss} />}
         {user && (
           <WeeklyReviewPrompt
             userId={user.id}
@@ -2017,8 +2040,14 @@ function AppContent() {
               !announcement.open &&
               !homeScreenGuide.open &&
               !guideWaiting &&
-              !importStepPending
+              !importStepPending &&
+              launchPromptAllowed(launchPrompt, 'weekly-review')
             }
+            shownElsewhere={appNotices.notices?.weekly_review_seen ?? null}
+            onShown={(weekStart) => {
+              setLaunchPrompt((current) => current ?? 'weekly-review');
+              appNotices.record({ weekly_review_seen: weekStart });
+            }}
             dashboard={dashboard}
             muscleWeeks={reviewMuscleWeeks}
             workouts={workouts}
