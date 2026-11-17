@@ -99,6 +99,41 @@ export const HOME_SECTIONS = [
     icon: 'user',
     size: 'full',
   },
+  {
+    id: 'body-goal',
+    title: 'Body goal',
+    description: 'Progress to your body-weight goal',
+    icon: 'level',
+    size: 'full',
+  },
+  {
+    id: 'exercise-spotlight',
+    title: 'Exercise spotlight',
+    description: 'One lift and its estimated 1RM trend',
+    icon: 'sparkle',
+    size: 'full',
+  },
+  {
+    id: 'muscle-freshness',
+    title: 'Muscle freshness',
+    description: 'Days since each muscle was trained',
+    icon: 'pulse',
+    size: 'full',
+  },
+  {
+    id: 'cardio-distance',
+    title: 'Cardio distance',
+    description: 'Distance by activity this week or month',
+    icon: 'next',
+    size: 'full',
+  },
+  {
+    id: 'friends-week',
+    title: 'Friends this week',
+    description: 'Training days this week, you and your friends',
+    icon: 'people',
+    size: 'full',
+  },
 ] as const satisfies ReadonlyArray<{
   id: string;
   title: string;
@@ -108,6 +143,15 @@ export const HOME_SECTIONS = [
 }>;
 
 export type HomeSectionId = (typeof HOME_SECTIONS)[number]['id'];
+
+/** Opt-in sections start hidden, so a release adding one leaves everyone's Home as it was. */
+export const OPTIONAL_HOME_SECTIONS: readonly HomeSectionId[] = [
+  'body-goal',
+  'exercise-spotlight',
+  'muscle-freshness',
+  'cardio-distance',
+  'friends-week',
+];
 
 /**
  * Saved layouts can still name sections this release no longer shows, such as the weekly review
@@ -136,6 +180,14 @@ export interface BodyCheckInSettings {
 export interface ActivityCardSettings {
   weeks: 4 | 8 | 12;
 }
+export interface ExerciseSpotlightSettings {
+  /** null follows the most-trained exercise. */
+  exercise_id: string | null;
+}
+export type CardioDistancePeriod = 'week' | 'month';
+export interface CardioDistanceSettings {
+  period: CardioDistancePeriod;
+}
 /** Display options for configurable sections, keyed by section. */
 export interface HomeSectionSettings {
   check_in: BodyCheckInSettings;
@@ -143,6 +195,8 @@ export interface HomeSectionSettings {
   training_block: TrainingBlockCardSettings;
   workouts: ActivityCardSettings;
   cardio_sessions: ActivityCardSettings;
+  exercise_spotlight: ExerciseSpotlightSettings;
+  cardio_distance: CardioDistanceSettings;
 }
 export interface HomeLayout {
   order: HomeSectionId[];
@@ -158,6 +212,8 @@ export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
   training_block: { style: 'both' },
   workouts: { weeks: 8 },
   cardio_sessions: { weeks: 8 },
+  exercise_spotlight: { exercise_id: null },
+  cardio_distance: { period: 'month' },
 };
 
 export function homeSectionSettings<Id extends keyof HomeSectionSettings>(
@@ -193,7 +249,7 @@ export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
 export function defaultHomeLayout(): HomeLayout {
   return {
     order: HOME_SECTIONS.map((section) => section.id),
-    hidden: [],
+    hidden: [...OPTIONAL_HOME_SECTIONS],
     widths: {},
     settings: DEFAULT_HOME_SECTION_SETTINGS,
   };

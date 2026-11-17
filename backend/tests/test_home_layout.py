@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.database import SessionLocal
-from app.home_layout import OPTIONAL_CHECK_INS, SECTION_IDS
+from app.home_layout import OPTIONAL_CHECK_INS, OPTIONAL_SECTIONS, SECTION_IDS
 from app.training_metrics import set_setting
 
 DEFAULT_SETTINGS = {
@@ -12,6 +12,8 @@ DEFAULT_SETTINGS = {
     "training_block": {"style": "both"},
     "workouts": {"weeks": 8},
     "cardio_sessions": {"weeks": 8},
+    "exercise_spotlight": {"exercise_id": None},
+    "cardio_distance": {"period": "month"},
 }
 
 
@@ -33,6 +35,8 @@ def test_layout_defaults_and_round_trip_are_account_scoped(client, other_client)
             "training_block": {"style": "timeline"},
             "workouts": {"weeks": 4},
             "cardio_sessions": {"weeks": 12},
+            "exercise_spotlight": {"exercise_id": "exercise-1"},
+            "cardio_distance": {"period": "week"},
         },
     }
     response = client.put("/api/home-layout", json=layout)
@@ -73,6 +77,9 @@ def test_invalid_layout_does_not_overwrite_saved_layout(client):
         {"settings": {"cardio_sessions": {"weeks": 16}}},
         {"settings": {"workouts": {"weeks": "8"}}},
         {"settings": {"cardio_sessions": {"weeks": None}}},
+        {"settings": {"cardio_distance": {"period": "year"}}},
+        {"settings": {"exercise_spotlight": {"exercise_id": ""}}},
+        {"settings": {"exercise_spotlight": {"exercise_id": "x" * 65}}},
     ):
         assert client.put("/api/home-layout", json=invalid).status_code == 422
         assert client.get("/api/home-layout").json() == saved
@@ -207,7 +214,7 @@ def test_legacy_check_ins_collapse_to_first_visible_with_its_preferences(client)
     assert response.status_code == 200
     result = response.json()
     assert result["order"][:3] == ["profile", "records", "combined-check-in"]
-    assert result["hidden"] == []
+    assert result["hidden"] == OPTIONAL_SECTIONS
     assert result["widths"] == {"combined-check-in": "compact"}
     assert result["settings"]["check_in"] == {"mode": "fat"}
     assert client.put("/api/home-layout", json=result).json() == result
@@ -245,7 +252,7 @@ def test_section_settings_default_for_older_layouts_and_update_independently(cli
         db.commit()
     layout = client.get("/api/home-layout").json()
     assert layout["settings"] == DEFAULT_SETTINGS
-    assert layout["hidden"] == ["records"]
+    assert layout["hidden"] == ["records", *OPTIONAL_SECTIONS]
     layout["settings"]["zone2"] = {"zone": 2, "style": "list"}
     assert client.put("/api/home-layout", json=layout).json() == layout
     partial = client.put("/api/home-layout", json={"settings": {"zone2": {"style": "ring"}}})
@@ -262,7 +269,7 @@ def test_all_hidden_legacy_check_ins_stay_hidden_and_preserve_first_width(client
     assert response.status_code == 200
     layout = response.json()
     assert layout["order"].count("combined-check-in") == 1
-    assert layout["hidden"] == ["combined-check-in"]
+    assert layout["hidden"] == ["combined-check-in", *OPTIONAL_SECTIONS]
     assert layout["widths"] == {"combined-check-in": "third"}
     assert layout["settings"]["check_in"] == {"mode": "weight"}
 
@@ -317,3 +324,38 @@ def test_newer_layout_clients_can_reset_activity_settings_to_defaults(client):
     reset = client.put("/api/home-layout", json={}, headers={"X-Relay-Version": "1.3.0"})
     assert reset.status_code == 200
     assert reset.json()["settings"] == DEFAULT_SETTINGS
+
+
+def test_opt_in_sections_arrive_hidden_and_then_follow_the_account(client):
+    old_order = [section for section in SECTION_IDS if section not in OPTIONAL_SECTIONS]
+    with SessionLocal() as db:
+        set_setting(
+            db,
+            client.user["id"],
+            "home_layout",
+            json.dumps({"order": old_order, "hidden": ["records"]}),
+        )
+        db.commit()
+    layout = client.get("/api/home-layout").json()
+    assert layout["order"] == [*old_order, *OPTIONAL_SECTIONS]
+    assert layout["hidden"] == ["records", *OPTIONAL_SECTIONS]
+
+    # Shown sections stay shown, and one moved up keeps its place.
+    layout["hidden"] = ["records", "cardio-distance"]
+    layout["order"].remove("body-goal")
+    layout["order"].insert(1, "body-goal")
+    saved = client.put("/api/home-layout", json=layout).json()
+    assert saved["hidden"] == ["records", "cardio-distance"]
+    assert saved["order"][1] == "body-goal"
+    assert client.get("/api/home-layout").json() == saved
+
+
+def test_older_clients_keep_spotlight_and_distance_choices(client):
+    layout = client.get("/api/home-layout").json()
+    layout["settings"]["exercise_spotlight"] = {"exercise_id": "exercise-1"}
+    layout["settings"]["cardio_distance"] = {"period": "week"}
+    client.put("/api/home-layout", json=layout)
+    older = {**layout, "settings": {"zone2": {"zone": 2, "style": "ring"}}}
+    saved = client.put("/api/home-layout", json=older, headers={"X-Relay-Version": "1.2.0"}).json()
+    assert saved["settings"]["exercise_spotlight"] == {"exercise_id": "exercise-1"}
+    assert saved["settings"]["cardio_distance"] == {"period": "week"}
