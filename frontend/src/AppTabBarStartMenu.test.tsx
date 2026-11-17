@@ -104,4 +104,23 @@ describe('Start menu', () => {
     expect(option('Up next').getAttribute('aria-label')).toBe('Up next');
     expect(container.querySelector('.start-menu-detail')).toBeNull();
   });
+
+  it('adds Choose only when there is a split day or a past workout to pick', async () => {
+    expect(option('Choose')).toBeUndefined();
+    expect(menu().classList.contains('has-four')).toBe(false);
+
+    const onChoose = vi.fn();
+    startMenu = { ...startMenu, onChoose };
+    await act(async () => render());
+    await act(async () => start().click());
+    expect(menu().classList.contains('has-four')).toBe(true);
+    expect(
+      [...container.querySelectorAll('.start-menu-option')].map(
+        (item) => item.getAttribute('aria-label') ?? item.textContent,
+      ),
+    ).toEqual(['Cardio', 'Up next: Pull day', 'Choose a workout', 'Empty workout']);
+    await act(async () => option('Choose').click());
+    expect(onChoose).toHaveBeenCalledOnce();
+    expect(start().getAttribute('aria-expanded')).toBe('false');
+  });
 });

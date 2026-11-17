@@ -346,6 +346,8 @@ saving produces an update-split state rather than substituting a different worko
 recommendations carry the account-owned type metadata, and previous-session templates match
 the custom type ID as well as the compatibility category.
 
+**Start > Choose** (`StartChooser.tsx`) lists the active split's training days and the latest saved workout of each name. A day starts from the same sources as Up next, in the same order: its own planned exercises, then the exercises saved to its workout type, then the last session of that type. A past workout starts from `sessionTemplateFromWorkout`. The option is left out when there is neither a split nor a saved workout. Home's default section order (`HOME_SECTIONS`, and `HomeSection` on the server) leads with the next workout, then the profile; a saved layout keeps its own order.
+
 ## Body measurements
 
 `GET /api/body-sizes` returns private dated circumference logs, newest first. `PUT /api/body-sizes` replaces the entry for `measurement_date`; omitted fields clear to null, and at least one finite circumference above 0 and up to 300 cm is required. `DELETE /api/body-sizes/{YYYY-MM-DD}` deletes only the signed-in account's entry. Each date is stored in its own `user_settings` row under `body_sizes:YYYY-MM-DD`, included in existing account backups and deletion. Writes change the training revision so other devices refresh Body. No schema migration is required. The UI converts inches to canonical cm and does not require a bodyweight record. These logs are excluded from shared profiles.

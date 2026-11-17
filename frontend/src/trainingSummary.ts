@@ -388,8 +388,16 @@ export function sessionTemplateFor(
         right.created_at.localeCompare(left.created_at),
     )[0];
   if (!source) return null;
+  return { ...sessionTemplateFromWorkout(source, unit), category };
+}
+
+/** Pre-fills a workout from one saved workout: its exercises, in order, with their top sets. */
+export function sessionTemplateFromWorkout(
+  source: TrackedWorkout,
+  unit: WeightUnit = 'kg',
+): SessionTemplate {
   return {
-    category,
+    category: source.category,
     sourceWorkout: source,
     exercises: [...source.movements]
       .sort((left, right) => left.order_index - right.order_index)

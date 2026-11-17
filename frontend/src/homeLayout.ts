@@ -1,18 +1,19 @@
 import type { IconName } from './Icon';
 
+// In default order. The next workout leads, so starting it needs no scrolling.
 export const HOME_SECTIONS = [
-  {
-    id: 'profile',
-    title: 'Profile',
-    description: 'Your photo and all-time totals',
-    icon: 'user',
-    size: 'full',
-  },
   {
     id: 'next-workout',
     title: 'Next workout',
     description: 'Your suggested session',
     icon: 'plus',
+    size: 'full',
+  },
+  {
+    id: 'profile',
+    title: 'Profile',
+    description: 'Your photo and all-time totals',
+    icon: 'user',
     size: 'full',
   },
   {

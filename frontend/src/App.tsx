@@ -357,6 +357,8 @@ import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
+import { StartChooser } from './StartChooser';
+import { recentDistinctWorkouts } from './startChoices';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
@@ -695,6 +697,7 @@ function AppContent() {
   );
   const { user, signingIn = false } = useUserSession();
   usePresenceConnection(user?.id ?? null);
+  const [startChooserOpen, setStartChooserOpen] = useState(false);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const offlineNotice = useOfflineNotice();
@@ -2048,6 +2051,17 @@ function AppContent() {
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
+        {startChooserOpen && (
+          <StartChooser
+            workouts={workouts}
+            today={localDate()}
+            onClose={() => setStartChooserOpen(false)}
+            onStart={({ template, category, type }) => {
+              setStartChooserOpen(false);
+              startWorkout(localDate(), false, template, category, type);
+            }}
+          />
+        )}
         {conflictPrompt.dialog}
 
         {nestedHeader && (
@@ -2145,6 +2159,8 @@ function AppContent() {
                   personalRecords={personalRecords}
                   categoryColors={workoutTypeColors}
                   workoutStartedAt={activeWorkoutStartedAt}
+                  liveWorkoutName={liveWorkoutSummary?.name || activeDraft?.name || null}
+                  onResumeWorkout={resumeLiveWorkout}
                   workoutSaving={workoutSaveBlocked}
                   todayBodyweight={todayMeasurement?.weight_kg ?? null}
                   todayBodyFat={todayMeasurement?.body_fat_pct ?? null}
@@ -2596,6 +2612,10 @@ function AppContent() {
                   upNext.recommendation?.category ?? null,
                   upNext.type ?? null,
                 ),
+              onChoose:
+                upNext.recommendation?.split_name || recentDistinctWorkouts(workouts, 1).length
+                  ? () => setStartChooserOpen(true)
+                  : undefined,
               onEmpty: () => startWorkout(),
             }}
           />

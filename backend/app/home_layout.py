@@ -12,9 +12,10 @@ from .client_versions import ClientVersion, fields_unknown_to, preserve_fields
 from .database import get_db
 from .training_metrics import get_setting, set_setting
 
+# The default order for an account that has not arranged Home: the next workout leads.
 HomeSection = Literal[
-    "profile",
     "next-workout",
+    "profile",
     "training-block",
     "workouts",
     "cardio-sessions",
