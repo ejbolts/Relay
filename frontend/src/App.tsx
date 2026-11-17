@@ -10523,7 +10523,7 @@ function HistoryWorkoutCard({
       ? `${shortDate(workout.workout_date)} ${workout.workout_date.slice(0, 4)}`
       : shortDate(workout.workout_date),
     workout.duration_minutes ? formatMinutesDuration(workout.duration_minutes) : null,
-    workingSetCount ? `${workingSetCount} sets` : null,
+    workingSetCount ? `${workingSetCount} ${workingSetCount === 1 ? 'set' : 'sets'}` : null,
   ].filter(Boolean);
   const movements = open
     ? workout.movements.map((movement) => {

@@ -263,7 +263,7 @@ export function WorkoutCalendar({
                               : inProgress
                                 ? `${prettyDate(key)}: workout in progress`
                                 : entry
-                                  ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} sets`
+                                  ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} ${entry.set_count === 1 ? 'set' : 'sets'}`
                                   : prettyDate(key)
                           }
                         >
