@@ -99,6 +99,8 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () {
     this.open = false;
   };
+  // Most tests close the sheet at once; the slide-down has its own test.
+  document.documentElement.setAttribute('data-reduce-motion', '');
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -107,6 +109,8 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  document.documentElement.removeAttribute('data-reduce-motion');
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -224,7 +228,7 @@ it('lists your exercises with the member’s best beside the ones they have logg
   expect(sheet.querySelector('[role="status"]')?.textContent).toBe('No exercises match “zzz”.');
 });
 
-it('saves each lift you tick or untick and shows it in the head to head', async () => {
+it('saves each lift you tick or untick and shows the change when the sheet closes', async () => {
   vi.spyOn(api.sharing, 'lifts').mockResolvedValue(comparisons('Row'));
   const save = vi
     .spyOn(api.sharing, 'chooseLifts')
@@ -235,17 +239,31 @@ it('saves each lift you tick or untick and shows it in the head to head', async 
   await click(option(sheet, 'Bench'));
   expect(save).toHaveBeenLastCalledWith(['mine-Row', 'mine-Bench']);
   expect(option(sheet, 'Bench').getAttribute('aria-pressed')).toBe('true');
-  expect(text('.head-to-head-values > span', host)).toEqual(['Row', 'Bench']);
   // Ticking does not move the lift while the sheet is open.
   expect(text('.lift-picker-copy strong', sheet).slice(0, 2)).toEqual(['Row', 'Bench']);
 
   await click(option(sheet, 'Row'));
   expect(save).toHaveBeenLastCalledWith(['mine-Bench']);
-  expect(text('.head-to-head-values > span', host)).toEqual(['Bench']);
+  await click(option(sheet, 'Squat'));
+  expect(save).toHaveBeenLastCalledWith(['mine-Bench', 'mine-Squat']);
+  // The card behind keeps what it showed until the sheet closes.
+  expect(text('.head-to-head-values > span', host)).toEqual(['Row']);
 
   await click(sheet.querySelector('.popup-dialog-close'));
   expect(document.querySelector('dialog.lift-picker')).toBeNull();
+  expect(text('.head-to-head-values > span', host)).toEqual(['Bench', 'Squat']);
+  // The lifts that were added arrive one after another.
+  const rows = [...host.querySelectorAll<HTMLElement>('.head-to-head-lifts li')];
+  expect(rows.map((row) => row.className)).toEqual(['is-new', 'is-new']);
+  expect(rows.map((row) => row.style.getPropertyValue('--enter-delay'))).toEqual(['0ms', '80ms']);
   expect(text('.show-more-button', host)).toEqual(['Edit lifts']);
+
+  // A lift that stays is not treated as new the next time.
+  const again = await openPicker();
+  await click(option(again, 'Squat'));
+  await click(again.querySelector('.popup-dialog-close'));
+  expect(text('.head-to-head-values > span', host)).toEqual(['Bench']);
+  expect(host.querySelector('.head-to-head-lifts li.is-new')).toBeNull();
 });
 
 it('puts a lift back when it could not be saved', async () => {
@@ -259,7 +277,30 @@ it('puts a lift back when it could not be saved', async () => {
     'Your lifts could not be saved. Try again.',
   );
   expect(option(sheet, 'Bench').getAttribute('aria-pressed')).toBe('false');
+  await click(sheet.querySelector('.popup-dialog-close'));
   expect(text('.head-to-head-values > span', host)).toEqual(['Row']);
+  expect(host.querySelector('.head-to-head-lifts li.is-new')).toBeNull();
+});
+
+it('slides the sheet down before it closes, unless motion is reduced', async () => {
+  document.documentElement.removeAttribute('data-reduce-motion');
+  vi.useFakeTimers();
+  vi.spyOn(api.sharing, 'lifts').mockResolvedValue(comparisons('Row'));
+  vi.spyOn(api.sharing, 'chooseLifts').mockImplementation(async (exercise_ids) => ({
+    exercise_ids,
+  }));
+  await render(<HeadToHeadCard member={sam} active />);
+  const sheet = await openPicker();
+  await click(option(sheet, 'Bench'));
+
+  await click(sheet.querySelector('.popup-dialog-close'));
+  expect(sheet.classList.contains('is-closing')).toBe(true);
+  expect(document.querySelector('dialog.lift-picker')).not.toBeNull();
+  expect(text('.head-to-head-values > span', host)).toEqual(['Row']);
+
+  await act(async () => vi.advanceTimersByTime(240));
+  expect(document.querySelector('dialog.lift-picker')).toBeNull();
+  expect(text('.head-to-head-values > span', host)).toEqual(['Row', 'Bench']);
 });
 
 it('shows no head to head while inactive or when it cannot load', async () => {

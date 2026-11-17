@@ -1,8 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { api } from './api';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
 import { Icon } from './Icon';
+import { motionReduced } from './motion';
+import { useFlipAnimation, useHeightAnimation } from './motionHooks';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -19,6 +21,10 @@ import './liftComparison.css';
 
 /** The most lifts a head to head can show, as the server allows. */
 const MAX_LIFTS = 20;
+/** Matches the sheet's slide-down in liftComparison.css. */
+const CLOSE_MS = 240;
+/** The gap between one new lift rising into the card and the next, as useFlipAnimation spaces them. */
+const ENTER_STAGGER_MS = 80;
 
 type Member = Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
 type Leader = 'you' | 'them' | 'level';
@@ -69,7 +75,16 @@ export function HeadToHeadCard({
   const [data, setData] = useState<LiftComparisons | null>(null);
   const [picking, setPicking] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // While the sheet is open the card keeps the lifts it had, then takes the new choice as the
+  // sheet closes, so the lifts you added are seen arriving instead of changing behind it.
+  const [held, setHeld] = useState<string[] | null>(null);
+  const [fresh, setFresh] = useState<string[]>([]);
+  const card = useRef<HTMLElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  const shownIds = held ?? data?.selected ?? [];
+  const shownKey = shownIds.join('|');
+  const announceAdded = useFlipAnimation(card, shownKey);
+  useHeightAnimation(card, shownKey);
   // Choices save one at a time, newest only, so quick taps cannot land out of order.
   const saved = useRef<string[]>([]);
   const latest = useRef(0);
@@ -114,7 +129,7 @@ export function HeadToHeadCard({
 
   if (!data) return null;
   const byId = new Map(data.lifts.map((lift) => [lift.exercise_id, lift]));
-  const chosen = data.selected.flatMap((id) => byId.get(id) ?? []);
+  const chosen = shownIds.flatMap((id) => byId.get(id) ?? []);
   const leaders = chosen.map(leaderOf);
   const yours = leaders.filter((leader) => leader === 'you').length;
   const theirs = leaders.filter((leader) => leader === 'them').length;
@@ -128,13 +143,13 @@ export function HeadToHeadCard({
     .join(', ');
 
   return (
-    <section className="pulse-card shared-card head-to-head" aria-labelledby={titleId}>
+    <section ref={card} className="pulse-card shared-card head-to-head" aria-labelledby={titleId}>
       <header className="pulse-card-header">
         <h2 id={titleId}>Head to head</h2>
         {chosen.length > 0 && <span>All-time est. 1RM</span>}
       </header>
       {yours + theirs + level > 0 && (
-        <p className="head-to-head-score" aria-label={score}>
+        <p className="head-to-head-score" aria-label={score} data-flip-key="score">
           <span className={`head-to-head-side${yours > theirs ? ' ahead' : ''}`} aria-hidden="true">
             {user && <ProfileAvatar className="profile-avatar" user={user} />}
             <b>You</b>
@@ -181,8 +196,21 @@ export function HeadToHeadCard({
             );
             const summary = `${lift.name}: you ${lift.yours ? estimate(lift.yours, unit) : 'no sets yet'}, ${member.display_name} ${lift.theirs ? estimate(lift.theirs, unit) : 'no sets yet'}`;
             const theirExercise = lift.theirs?.exercise_id;
+            const arrival = fresh.indexOf(lift.exercise_id);
             return (
-              <li key={lift.exercise_id} data-leader={leaderOf(lift) ?? 'none'}>
+              <li
+                key={lift.exercise_id}
+                data-leader={leaderOf(lift) ?? 'none'}
+                data-flip-key={lift.exercise_id}
+                className={arrival >= 0 ? 'is-new' : undefined}
+                style={
+                  arrival >= 0
+                    ? ({
+                        '--enter-delay': `${Math.min(arrival, 5) * ENTER_STAGGER_MS}ms`,
+                      } as CSSProperties)
+                    : undefined
+                }
+              >
                 {onOpenLift && theirExercise ? (
                   <button
                     type="button"
@@ -204,7 +232,11 @@ export function HeadToHeadCard({
         type="button"
         className="show-more-button"
         aria-haspopup="dialog"
-        onClick={() => setPicking(true)}
+        data-flip-key="choose"
+        onClick={() => {
+          setHeld(data.selected);
+          setPicking(true);
+        }}
       >
         {chosen.length ? 'Edit lifts' : 'Choose lifts'}
       </button>
@@ -216,6 +248,10 @@ export function HeadToHeadCard({
           saveFailed={saveFailed}
           onChange={choose}
           onClose={() => {
+            const before = held ?? [];
+            announceAdded();
+            setFresh(data.selected.filter((id) => !before.includes(id)));
+            setHeld(null);
             setPicking(false);
             requestAnimationFrame(() => opener.current?.focus());
           }}
@@ -244,6 +280,22 @@ function LiftPicker({
   const unit = useWeightUnit();
   const [query, setQuery] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
+  /** Slides the sheet back down before it unmounts. */
+  function dismiss() {
+    if (closeTimer.current !== null) return;
+    if (motionReduced()) return onClose();
+    setClosing(true);
+    closeTimer.current = window.setTimeout(onClose, CLOSE_MS);
+  }
   // Chosen lifts lead, then the ones the member has logged. The order is fixed while the sheet is
   // open, so a lift stays under your finger when you tick it.
   const [ordered] = useState(() => {
@@ -262,10 +314,10 @@ function LiftPicker({
   return (
     <PopupDialog
       title="Lifts to compare"
-      className="lift-picker"
+      className={`lift-picker${closing ? ' is-closing' : ''}`}
       closeLabel="Done"
       swipeToDismiss
-      onClose={onClose}
+      onClose={dismiss}
     >
       <div className="lift-picker-body">
         <label className="lift-picker-search">
@@ -321,7 +373,7 @@ function LiftPicker({
                   }
                 >
                   <span className="lift-picker-check" aria-hidden="true">
-                    {chosen && <Icon name="check" />}
+                    <Icon name="check" />
                   </span>
                   <span className="lift-picker-copy">
                     <strong>

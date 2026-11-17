@@ -160,6 +160,41 @@
   font-size: 0.75rem;
 }
 
+/* A lift that has just been added rises into the card (useFlipAnimation), and its bars then grow
+   in from the outside edges, each after its own row has arrived. */
+.head-to-head-lifts li.is-new .head-to-head-bar i {
+  animation: head-to-head-bar-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--enter-delay, 0ms) + 160ms);
+  transform-origin: left center;
+}
+
+.head-to-head-lifts li.is-new .head-to-head-bar i:last-child {
+  transform-origin: right center;
+}
+
+@keyframes head-to-head-bar-in {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* The card itself fades up when it first appears on the profile. */
+.head-to-head {
+  animation: rise-in 280ms var(--ease-out, ease-out) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head-to-head,
+  .head-to-head-lifts li.is-new .head-to-head-bar i {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .head-to-head,
+html[data-reduce-motion] .head-to-head-lifts li.is-new .head-to-head-bar i {
+  animation: none;
+}
+
 /* Friends: one of your lifts, ranked against the friends who have logged it. */
 
 .lift-leaderboard ol {
@@ -262,10 +297,47 @@
   border-radius: 24px;
   background: var(--p-surface);
   color: var(--p-ink);
-  /* The shared pop-in animation would restart whenever a drag snaps back. */
-  animation: none;
+  /* It slides up when it opens and back down when it closes. The slide moves the separate
+     translate property, so a drag (which moves transform) neither restarts nor fights it. */
+  animation: lift-picker-in 360ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
   transform: translateY(var(--sheet-offset, 0px));
   transition: transform 180ms ease-out;
+}
+
+.popup-dialog.lift-picker.is-closing[open] {
+  animation: lift-picker-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.popup-dialog.lift-picker[open]::backdrop {
+  animation: fade-in 240ms ease both;
+}
+
+.popup-dialog.lift-picker.is-closing[open]::backdrop {
+  animation: lift-picker-backdrop-out 240ms ease both;
+}
+
+@keyframes lift-picker-in {
+  from {
+    translate: 0 calc(100% + 1.5rem);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+@keyframes lift-picker-out {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(100% + 1.5rem);
+  }
+}
+
+@keyframes lift-picker-backdrop-out {
+  to {
+    opacity: 0;
+  }
 }
 
 .popup-dialog.lift-picker.sheet-dragging {
@@ -277,6 +349,16 @@
   .popup-dialog.lift-picker[open] {
     transition: none;
   }
+
+  .popup-dialog.lift-picker[open],
+  .popup-dialog.lift-picker[open]::backdrop {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .popup-dialog.lift-picker[open],
+html[data-reduce-motion] .popup-dialog.lift-picker[open]::backdrop {
+  animation: none;
 }
 
 .popup-dialog.lift-picker > header {
@@ -417,6 +499,10 @@
   text-align: left;
 }
 
+.lift-picker-list button:active {
+  background: var(--p-surface-2);
+}
+
 .lift-picker-list button:disabled {
   opacity: 0.45;
 }
@@ -429,6 +515,9 @@
   border: 1.5px solid var(--p-line-strong);
   border-radius: 50%;
   color: var(--p-on-accent, #fff);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
 }
 
 [aria-pressed='true'] > .lift-picker-check {
@@ -436,9 +525,33 @@
   background: var(--p-accent);
 }
 
+/* The tick pops in when a lift is chosen and shrinks away when it is removed. Lifts already
+   chosen when the sheet opens start ticked, without the pop. */
 .lift-picker-check .pulse-icon {
   width: 0.9375rem;
   height: 0.9375rem;
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 120ms ease,
+    transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+
+[aria-pressed='true'] > .lift-picker-check .pulse-icon {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lift-picker-check,
+  .lift-picker-check .pulse-icon {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .lift-picker-check,
+html[data-reduce-motion] .lift-picker-check .pulse-icon {
+  transition: none;
 }
 
 .lift-picker-copy {

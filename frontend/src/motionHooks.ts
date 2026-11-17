@@ -211,6 +211,63 @@ export function useExpandAnimation(containerRef: RefObject<HTMLElement | null>) 
   });
 }
 
+const HEIGHT_ANIMATION_ID = 'height';
+
+/**
+ * Glides an element to its new height whenever `key` changes, so a card that gains or loses rows
+ * grows or shrinks and what follows it slides instead of jumping.
+ */
+export function useHeightAnimation(ref: RefObject<HTMLElement | null>, key: string) {
+  const height = useRef<number | null>(null);
+  const previousKey = useRef(key);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const changed = previousKey.current !== key;
+    previousKey.current = key;
+    if (!element || element.offsetWidth === 0) {
+      // Hidden or unmounted elements measure as zero; start fresh once visible.
+      height.current = null;
+      return;
+    }
+    const running = element
+      .getAnimations?.()
+      .find((animation) => animation.id === HEIGHT_ANIMATION_ID);
+    if (!changed) {
+      // Mid-animation sizes are transient; keep where a running resize is heading.
+      if (!running) height.current = element.offsetHeight;
+      return;
+    }
+
+    const from = running ? element.getBoundingClientRect().height : height.current;
+    running?.cancel();
+    const to = element.offsetHeight;
+    height.current = to;
+    if (
+      from === null ||
+      Math.abs(from - to) < 1 ||
+      motionReduced() ||
+      typeof element.animate !== 'function'
+    ) {
+      return;
+    }
+
+    element.style.overflow = 'clip';
+    const resize = element.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 340,
+      easing: EXPAND_EASING,
+      id: HEIGHT_ANIMATION_ID,
+    });
+    const release = () => {
+      if (!element.getAnimations().some((animation) => animation.id === HEIGHT_ANIMATION_ID)) {
+        element.style.overflow = '';
+      }
+    };
+    resize.onfinish = release;
+    resize.oncancel = release;
+  });
+}
+
 const COLLAPSE_ANIMATION_ID = 'collapse';
 
 /**
