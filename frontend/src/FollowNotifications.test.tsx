@@ -17,6 +17,7 @@ import {
 } from './notificationReadState';
 import type { SharingNotifications } from './types';
 import { onWeeklyReviewRequested, publishWeeklyReviewNotice } from './weeklyReviewNotice';
+import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
 const person = {
   id: 'sample',
   display_name: 'Sam Preview',
@@ -574,4 +575,54 @@ it('leaves the review out once no review is available', async () => {
   await render();
   await click('Notifications');
   expect(document.querySelector('.weekly-review-notification-row')).toBeNull();
+});
+
+it('opens a reaction or comment notice at that workout in Social, keeping Reply separate', async () => {
+  let latest: WorkoutFocus | null = null;
+  function Probe() {
+    latest = useWorkoutFocus();
+    return null;
+  }
+  const probeHost = document.createElement('div');
+  const probe = createRoot(probeHost);
+  await act(async () => probe.render(<Probe />));
+  snapshot = {
+    requests: [],
+    accepted: [person],
+    reactions: [reaction],
+    comments: [
+      {
+        ...person,
+        notice_id: 'n1',
+        comment_id: 'c-sam',
+        workout_id: 'w9',
+        workout_name: 'Upper body workout',
+        kind: 'reply',
+        body: 'Nice one',
+        reaction: null,
+      },
+    ],
+  };
+  try {
+    await render();
+    await click('Notifications, 3 unread');
+    // A friend request row has nothing to open.
+    expect(document.querySelectorAll('.follow-notification-open')).toHaveLength(2);
+    await click('Open Alex Preview’s reaction on Leg day');
+    expect(document.querySelector('dialog.follow-notifications')).toBeNull();
+    expect(latest).toMatchObject({
+      workoutId: 'w1',
+      workoutName: 'Leg day',
+      panel: 'people',
+      personId: 'alex',
+    });
+    clearWorkoutFocus(latest!.key);
+
+    await click('Notifications');
+    await click('Open Sam Preview’s reply on Upper body workout');
+    expect(latest).toMatchObject({ workoutId: 'w9', panel: 'comments', commentId: 'c-sam' });
+    clearWorkoutFocus(latest!.key);
+  } finally {
+    await act(async () => probe.unmount());
+  }
 });

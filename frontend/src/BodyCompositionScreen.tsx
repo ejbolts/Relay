@@ -8,13 +8,8 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
 import { formatWeight, weightFromKg, weightInputValue } from './weightUnits';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
-import {
-  BODY_TREND_DURATION_OPTIONS,
-  clipBodyWeightGoalPath,
-  filterMeasurementsByRange,
-  summarizeBodyWeightTrend,
-} from './bodyTrend';
-import type { BodyTrendDuration, BodyTrendRange, BodyTrendStatistic } from './bodyTrend';
+import { clipBodyWeightGoalPath, filterMeasurementsByRange } from './bodyTrend';
+import type { BodyTrendRange } from './bodyTrend';
 import {
   bodyGoalKind,
   bodyGoalName,
@@ -36,7 +31,7 @@ import { PaginationControls } from './PaginationControls';
 import { Icon } from './Icon';
 import { TrendChart, type GoalPath, type TrendPoint } from './PulseCharts';
 import { PageHeader } from './TodayScreen';
-import { shortDate } from './trainingSummary';
+import { dayMonth } from './trainingSummary';
 import { localDate } from './utils';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import { HISTORY_PAGE_SIZE, RANGE_LABELS, prettyDate } from './appShared';
@@ -96,10 +91,7 @@ export function BodyCompositionScreen({
   const [checkInPage, setCheckInPage] = useState(1);
   const [historyView, setHistoryView] = useState<'daily' | BodyHistoryPeriod>('daily');
   const historyViewIndicatorRef = useSlidingIndicator<HTMLDivElement>(historyView);
-  const [trendDuration, setTrendDuration] = useState<BodyTrendDuration>(trendPreference.duration);
-  const [trendStatistic, setTrendStatistic] = useState<BodyTrendStatistic>(
-    trendPreference.statistic,
-  );
+  const trendStatistic = trendPreference.statistic;
   const goalRemoval = useGoalRemoval<BodyWeightGoal>({
     remove: (id) => api.deleteBodyWeightGoal(id),
     onRemoved: () => void onDataChange(),
@@ -143,8 +135,6 @@ export function BodyCompositionScreen({
     Number.isFinite(targetWeight) &&
     targetWeight > 0 &&
     targetWeight <= 500;
-  const trendSummary = summarizeBodyWeightTrend(measurements, trendDuration);
-  const trendValue = trendSummary[trendStatistic];
 
   useEffect(() => {
     setCheckInPage((page) => Math.min(page, checkInPageCount));
@@ -156,10 +146,6 @@ export function BodyCompositionScreen({
     setGoalOpen(false);
   }, [entryRequest]);
 
-  useEffect(() => {
-    setTrendDuration(trendPreference.duration);
-    setTrendStatistic(trendPreference.statistic);
-  }, [trendPreference]);
   useEffect(() => {
     let cancelled = false;
     setGoalsReady(false);
@@ -339,7 +325,7 @@ export function BodyCompositionScreen({
   return (
     <section className="body-screen content-page">
       <PageHeader
-        eyebrow={`${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${shortDate(latest.measurement_date)}` : ''}`}
+        eyebrow={`${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${dayMonth(latest.measurement_date)}` : ''}`}
         title="Body"
         onOpenSettings={onOpenSettings}
         accountActions={accountActions}
@@ -366,43 +352,6 @@ export function BodyCompositionScreen({
           <strong>
             {latest && latest.body_fat_pct !== null ? `${latest.body_fat_pct}%` : '–'}
           </strong>
-        </div>
-        <div className="body-trend-stat">
-          <div className="body-trend-stat-controls">
-            <label>
-              <span className="sr-only">Bodyweight trend statistic</span>
-              <select
-                aria-label="Bodyweight trend statistic"
-                value={trendStatistic}
-                onChange={(event) => setTrendStatistic(event.target.value as BodyTrendStatistic)}
-              >
-                <option value="average">Average</option>
-                <option value="median">Median</option>
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Bodyweight trend duration</span>
-              <select
-                aria-label="Bodyweight trend duration"
-                value={trendDuration}
-                onChange={(event) => setTrendDuration(event.target.value as BodyTrendDuration)}
-              >
-                {BODY_TREND_DURATION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <strong>
-            {trendValue === null
-              ? '–'
-              : `${weightFromKg(trendValue, weightUnit).toFixed(1)} ${weightUnit}`}
-          </strong>
-          <small>
-            {trendSummary.count} {trendSummary.count === 1 ? 'check-in' : 'check-ins'}
-          </small>
         </div>
       </div>
 
@@ -551,7 +500,7 @@ export function BodyCompositionScreen({
 
       {entryOpen && (
         <PopupDialog
-          title="Log measurement"
+          title="Log weigh-in"
           kicker="CHECK-IN"
           className="body-entry-popup"
           onClose={() => setEntryOpen(false)}

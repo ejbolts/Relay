@@ -139,16 +139,36 @@ class ExerciseFavoriteUpdate(BaseModel):
 
 
 class ExerciseUpdate(BaseModel):
-    """Rename a custom exercise, or hide any exercise from lists. Omitted fields are unchanged."""
+    """Rename or re-describe a custom exercise, or hide any exercise from lists.
+
+    Omitted fields are unchanged. Equipment and muscle credits can only change on a custom
+    exercise, for example to match another exercise before merging into it.
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=160)
     hidden: bool | None = None
+    equipment: str | None = Field(default=None, max_length=100)
+    muscle_set_credits: list[MuscleSetCreditCreate] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
 
     @field_validator("name", mode="before")
     @classmethod
     def clean_name(cls, value: str | None) -> str | None:
         # A blank name is refused by the length check rather than read as "unchanged".
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("equipment", mode="before")
+    @classmethod
+    def clean_equipment(cls, value: str | None) -> str | None:
+        return value.strip() or None if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def unique_muscles(self) -> ExerciseUpdate:
+        names = [credit.muscle_name.casefold() for credit in self.muscle_set_credits or []]
+        if len(names) != len(set(names)):
+            raise ValueError("Choose each target muscle only once.")
+        return self
 
 
 class MachinePhotoCaptionUpdate(BaseModel):
@@ -770,6 +790,7 @@ class CardioSessionFields(BaseModel):
     incline_percent: float | None = Field(default=None, ge=0, le=100)
     average_power_watts: int | None = Field(default=None, ge=1, le=3_000)
     average_mets: float | None = Field(default=None, gt=0, le=50)
+    elevation_gain_m: float | None = Field(default=None, ge=0, le=30_000)
     intensity: str | None = Field(default=None, max_length=100)
     zone: str | None = Field(default=None, max_length=30)
     qualifies_zone2: bool = False
@@ -793,6 +814,7 @@ class CardioScreenshotRead(BaseModel):
     average_heart_rate_bpm: int | None
     distance_km: float | None
     average_speed_kph: float | None
+    elevation_gain_m: float | None = None
     fields_found: list[str]
     warning: str | None
 
@@ -813,6 +835,7 @@ class CardioMetricsUpdate(BaseModel):
     incline_percent: float | None = Field(default=None, ge=0, le=100)
     average_power_watts: int | None = Field(default=None, ge=1, le=3_000)
     average_mets: float | None = Field(default=None, gt=0, le=50)
+    elevation_gain_m: float | None = Field(default=None, ge=0, le=30_000)
 
 
 class CardioEnergyPeriodRead(BaseModel):
@@ -835,13 +858,17 @@ class CardioEnergyPeriodRead(BaseModel):
     previous_average_incline_percent: float | None
     average_mets: float | None
     previous_average_mets: float | None
+    # Kept for app releases that still chart MET-minutes.
     met_minutes: float
     previous_met_minutes: float | None
+    elevation_gain_m: float
+    previous_elevation_gain_m: float | None
     heart_rate_sessions: int
     distance_sessions: int
     speed_sessions: int
     incline_sessions: int
     mets_sessions: int
+    elevation_sessions: int
 
 
 class CardioSessionRead(CardioSessionFields):
@@ -852,6 +879,9 @@ class CardioSessionRead(CardioSessionFields):
     workout_context: Literal["pure_cardio", "workout_plus_cardio"] = "pure_cardio"
     performed_after_strength: bool = False
     source_workout_name: str | None = None
+    # Calculated when the matching logged value is blank; the logged value wins.
+    estimated_mets: float | None = None
+    estimated_elevation_gain_m: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -1020,6 +1050,9 @@ class ExerciseLibrarySummaryRead(BaseModel):
     change_kg: float | None
     change_percent: float | None
     trend: list[ExerciseTrendPointRead]
+    # True when the exercise's machine weights are normalised, so the estimates above are in the
+    # reference machine's weights. Older apps ignore it.
+    normalised: bool = False
 
 
 class CsvImportRead(BaseModel):

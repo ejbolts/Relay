@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { SocialFeed } from './SocialFeed';
+import { requestWorkoutFocus } from './workoutFocus';
 import type {
   FriendActivity,
   Timeline,
@@ -179,10 +180,16 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(friendCard.getAttribute('aria-label')).toBe('Alex Sample’s Upper body');
   expect(friendCard.querySelector('.feed-card-name small')?.textContent).toBe('Yesterday');
   expect(button(friendCard, 'Add photo')).toBeUndefined();
-  const stats = [...friendCard.querySelectorAll('.feed-stats > div')].map((entry) =>
+  // The workout name leads; who and when sit beneath it.
+  expect(friendCard.querySelector('.feed-card-heading')?.textContent).toBe(
+    'Upper bodyAlex SampleYesterday',
+  );
+  expect(friendCard.querySelector('.friend-activity-kind')).toBeNull();
+  // One summary line, each value with its own unit.
+  const stats = [...friendCard.querySelectorAll('.feed-stats > li')].map((entry) =>
     entry.textContent?.trim(),
   );
-  expect(stats).toEqual(['Time52min', 'Sets12', 'Volume5,760 kg', 'Records2 PRs']);
+  expect(stats).toEqual(['52min', '12 sets', '5,760 kg', '2 PRs']);
   const collage = friendCard.querySelector('.workout-photos-feed')!;
   expect(collage.getAttribute('data-count')).toBe('2');
   expect(collage.querySelectorAll('img')).toHaveLength(2);
@@ -192,7 +199,19 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   // Three exercises are listed; the rest are counted.
   expect(
     [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent),
-  ).toEqual(['Bench press3 sets', 'Row3 sets', 'Curl2 sets', '+2 more exercises']);
+  ).toEqual(['Bench press, ', 'Row, ', 'Curl ', '+2 more']);
+  // Tapping the count lists them all, and tapping again folds them away.
+  const rows = () =>
+    [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent);
+  const more = button(friendCard, 'Show 2 more exercises')!;
+  expect(more.getAttribute('aria-expanded')).toBe('false');
+  await click(more);
+  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip ', 'Show fewer']);
+  expect(button(friendCard, 'Show fewer exercises')?.getAttribute('aria-expanded')).toBe('true');
+  await click(button(friendCard, 'Show fewer exercises'));
+  expect(rows()).toHaveLength(4);
+  // Your one-exercise workout still names its exercise, as it differs from the workout's name.
+  expect(own.querySelector('.feed-exercises')?.textContent).toBe('Bench press');
   expect(button(friendCard, 'React to Alex Sample’s Upper body')).toBeDefined();
   expect(button(own, 'React to Your Leg day')).toBeUndefined();
 
@@ -202,6 +221,53 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(openProfile).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'alex' }));
   await click(button(own, 'Open your profile'));
   expect(openOwnProfile).toHaveBeenCalledOnce();
+});
+
+it('shows one reaction total in the card header, and no exercise line that repeats the name', async () => {
+  const mine = workout('mine', { name: 'Bench press' });
+  const theirs = workout('theirs', { workout_date: '2026-11-14' });
+  vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
+    items: [
+      item(
+        mine,
+        { id: 'me', display_name: 'Me', is_you: true },
+        {
+          reactions: {
+            counts: [
+              { reaction: 'strong', count: 2 },
+              { reaction: 'fire', count: 1 },
+            ],
+            yours: null,
+            comment_count: 0,
+          },
+        },
+      ),
+      item(
+        theirs,
+        {},
+        {
+          reactions: { counts: [{ reaction: 'fire', count: 2 }], yours: 'fire', comment_count: 3 },
+        },
+      ),
+    ],
+    has_more: false,
+  });
+  await render();
+
+  const [own, friendCard] = cards();
+  // Your own workout: the emojis people chose and one total, which opens who reacted.
+  const total = button(own, 'View 3 reactions on Your Bench press')!;
+  expect(total.textContent).toBe('💪🔥 3');
+  expect(own.querySelectorAll('.discussion-reaction-summary')).toHaveLength(1);
+  expect(button(own, '0 comments on Your Bench press')?.textContent).toBe('');
+  // The workout is one exercise with the same name, so it is not repeated underneath.
+  expect(own.querySelector('.feed-exercises')).toBeNull();
+
+  // A friend's workout: your reaction and the total side by side, then the comment count.
+  const yours = friendCard.querySelector('.discussion-reaction-summary.is-yours')!;
+  expect(yours.textContent).toBe('🔥 2');
+  expect(button(friendCard, 'View 2 reactions on Alex Sample’s Upper body')).toBeDefined();
+  expect(button(friendCard, '3 comments on Alex Sample’s Upper body')?.textContent).toBe('3');
 });
 
 it('adds a photo to your own workout and confirms it in a popup', async () => {
@@ -375,4 +441,149 @@ it('does not load the feed while it is hidden', async () => {
   await render([friend], false);
   expect(timeline).not.toHaveBeenCalled();
   expect(host.querySelector('[aria-label="Loading the feed"]')).not.toBeNull();
+});
+
+describe('opening a workout from a notification', () => {
+  const sam = { id: 'sam', display_name: 'Sam Sample', profile_photo_url: null };
+  const scrolled: Element[] = [];
+
+  beforeEach(() => {
+    scrolled.length = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      setTimeout(callback, 0),
+    );
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.open = false;
+    };
+    vi.spyOn(api.sharing, 'reactionPeople').mockResolvedValue({
+      items: [
+        { ...friend, id: 'alex', reaction: 'fire' },
+        { ...sam, reaction: 'strong' },
+      ],
+      total: 2,
+      next_offset: null,
+    });
+  });
+
+  const own = (id: string) =>
+    item(
+      workout(id, { name: `Session ${id}` }),
+      { id: 'me', display_name: 'Me', is_you: true },
+      {
+        reactions: { counts: [{ reaction: 'strong', count: 2 }], yours: null, comment_count: 1 },
+      },
+    );
+
+  async function settle() {
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  }
+
+  it('scrolls to the card, outlines it and opens its reactions with the person highlighted', async () => {
+    vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
+      items: [own('w1'), own('w2')],
+      has_more: false,
+    });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'w2',
+        workoutName: 'Session w2',
+        panel: 'people',
+        personId: 'sam',
+      }),
+    );
+    await settle();
+
+    const card = host.querySelectorAll('.feed-card')[1];
+    expect(card.classList.contains('is-focused')).toBe(true);
+    expect(scrolled).toContain(card);
+    expect(api.sharing.reactionPeople).toHaveBeenCalledWith('w2');
+    const highlighted = document.querySelector('.reaction-people-list li.is-highlighted');
+    expect(highlighted?.textContent).toContain('Sam Sample');
+    expect(document.querySelectorAll('.reaction-people-list li.is-highlighted')).toHaveLength(1);
+  });
+
+  it('loads older pages until the workout appears', async () => {
+    const timeline = vi
+      .spyOn(api.sharing, 'timeline')
+      .mockResolvedValueOnce({ items: [own('w1')], has_more: true })
+      .mockResolvedValueOnce({ items: [own('w2')], has_more: true })
+      .mockResolvedValueOnce({ items: [own('w3')], has_more: false });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'w3',
+        workoutName: 'Session w3',
+        panel: 'people',
+        personId: 'sam',
+      }),
+    );
+    await settle();
+
+    expect(timeline).toHaveBeenCalledTimes(3);
+    expect(host.querySelectorAll('.feed-card')[2].classList.contains('is-focused')).toBe(true);
+    expect(document.querySelector('.reaction-people-list li.is-highlighted')).not.toBeNull();
+  });
+
+  it('opens the reactions over the feed when the workout is not in it', async () => {
+    vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [own('w1')], has_more: false });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'gone',
+        workoutName: 'Old session',
+        panel: 'people',
+        personId: 'sam',
+      }),
+    );
+    await settle();
+
+    expect(host.querySelector('.feed-card.is-focused')).toBeNull();
+    expect(api.sharing.reactionPeople).toHaveBeenCalledWith('gone');
+    expect(
+      document.querySelector('.reaction-people-list li.is-highlighted')?.textContent,
+    ).toContain('Sam Sample');
+  });
+
+  it('opens the comment thread with the comment highlighted', async () => {
+    vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [own('w1')], has_more: false });
+    const comment = {
+      id: 'c9',
+      author: sam,
+      body: 'Solid session!',
+      parent_id: null,
+      reply_to: null,
+      created_at: '2026-11-15T11:00:00Z',
+      edited_at: null,
+      can_edit: false,
+      can_delete: false,
+      reactions: { counts: [], yours: null },
+    };
+    vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+      items: [{ ...comment, id: 'c8', body: 'Earlier' }, comment],
+      next_offset: null,
+      total: 2,
+    });
+    await render();
+    await act(async () =>
+      requestWorkoutFocus({
+        workoutId: 'w1',
+        workoutName: 'Session w1',
+        panel: 'comments',
+        commentId: 'c9',
+      }),
+    );
+    await settle();
+
+    const highlighted = host.querySelectorAll('.workout-comment.is-highlighted');
+    expect(highlighted).toHaveLength(1);
+    expect(highlighted[0].textContent).toContain('Solid session!');
+    expect(scrolled).toContain(highlighted[0]);
+  });
 });

@@ -299,3 +299,34 @@ def test_summary_is_private_and_needs_an_existing_block(client, other_client):
     current = block(client)
     assert client.get("/api/training-blocks/missing/summary").status_code == 404
     assert other_client.get(f"/api/training-blocks/{current['id']}/summary").status_code == 404
+
+
+def test_block_colour_is_optional_validated_and_kept_by_older_apps(client):
+    created = client.post(
+        "/api/training-blocks",
+        json={"name": "Winter strength", "start_date": "2026-05-04", "color": "#F0A07F"},
+    )
+    assert created.status_code == 201, created.text
+    saved = created.json()["blocks"][0]
+    assert saved["color"] == "#F0A07F"
+    assert block(client, "Rebuild", "2026-06-01")["color"] is None
+
+    # An older app's edit omits the colour, so the saved colour stays.
+    older = client.put(
+        f"/api/training-blocks/{saved['id']}",
+        json={"name": "Winter block", "start_date": "2026-05-04"},
+    ).json()["blocks"]
+    assert next(b for b in older if b["id"] == saved["id"])["color"] == "#F0A07F"
+
+    cleared = client.put(
+        f"/api/training-blocks/{saved['id']}",
+        json={"name": "Winter block", "start_date": "2026-05-04", "color": None},
+    ).json()["blocks"]
+    assert next(b for b in cleared if b["id"] == saved["id"])["color"] is None
+
+    for bad in ("red", "#fff", "#12345g"):
+        response = client.post(
+            "/api/training-blocks",
+            json={"name": "Peak", "start_date": "2026-07-01", "color": bad},
+        )
+        assert response.status_code == 422, bad

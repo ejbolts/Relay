@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EDGE_SWIPE_START_PX } from './edgeSwipe';
-import { chartPointerX } from './chartLayout';
+import { chartPointerX, goalLabelY } from './chartLayout';
 import { Icon } from './Icon';
 import type {
   CSSProperties,
@@ -376,7 +376,7 @@ export function TrendChart({
               y={
                 goalPath?.maxValue != null
                   ? y(goalPath.maxValue) - 6
-                  : goalLine.y2 + (goalLine.y2 > goalLine.y1 ? 14 : -6)
+                  : goalLabelY(goalLine, height - pad.bottom)
               }
               textAnchor="end"
             >

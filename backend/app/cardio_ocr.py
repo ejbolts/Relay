@@ -318,6 +318,14 @@ def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[st
             re.compile(r"\b\d{2,3}\s*(?:bpm)?\b", re.I),
         )
     )
+    elevation_raw = _value_below(
+        lines,
+        ("elevation gain", "elev gain", "elevation", "total ascent"),
+        re.compile(r"\b\d[\d,]*(?:\.\d+)?\s*(?:m|ft|feet)\b", re.I),
+    )
+    elevation = _number(elevation_raw.replace(",", "") if elevation_raw else None)
+    if elevation is not None and re.search(r"(?:ft|feet)\b", elevation_raw, re.I):
+        elevation *= 0.3048
     parsed = {
         "session_date": _workout_date(lines, today or date.today()),
         "activity_type": _activity_type(lines),
@@ -326,6 +334,7 @@ def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[st
         "average_heart_rate_bpm": int(round(heart_rate)) if heart_rate is not None else None,
         "distance_km": round(distance, 3) if distance is not None else None,
         "average_speed_kph": _pace_to_speed(lines),
+        "elevation_gain_m": round(elevation, 1) if elevation is not None else None,
     }
     field_labels = {
         "session_date": "date",
@@ -335,6 +344,7 @@ def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[st
         "average_heart_rate_bpm": "average heart rate",
         "distance_km": "distance",
         "average_speed_kph": "average speed",
+        "elevation_gain_m": "elevation gain",
     }
     parsed["fields_found"] = [
         label for key, label in field_labels.items() if parsed[key] is not None

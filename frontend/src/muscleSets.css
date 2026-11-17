@@ -115,7 +115,8 @@
 .muscle-set-change.is-down {
   color: var(--p-danger);
 }
-.muscle-set-change.is-same {
+.muscle-set-change.is-same,
+.muscle-set-change.is-pending {
   color: var(--p-muted);
 }
 @container (max-width: 290px) {

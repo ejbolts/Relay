@@ -383,6 +383,14 @@ async function keepWorkingOut() {
   expect(document.querySelector('.workout-finish-dialog')).toBeNull();
 }
 
+async function closeFinishConfirmation() {
+  const keep = [
+    ...document.querySelectorAll<HTMLButtonElement>('.workout-finish-dialog button'),
+  ].find((button) => button.textContent === 'Keep working out')!;
+  await act(async () => keep.click());
+  expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+}
+
 function restoreOldLoggerLocation() {
   const state = createAppHistoryState('log', 0);
   window.history.replaceState(state, '', '#log');
@@ -466,6 +474,8 @@ describe('cross-device live workout updates', () => {
       },
     ]);
     await mount();
+    // A set still to lift shows no ratio yet.
+    expect(container.querySelector('.completed-set-bodyweight')).toBeNull();
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
     );
@@ -592,8 +602,21 @@ describe('mixed-session timelines', () => {
       'Bench press',
     ]);
     const move = [...cards()[0].querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent?.includes('Move Later'),
+      button.textContent?.includes('Move later'),
     )!;
+    // The exercise menu reads in sentence case, and removing names what it removes.
+    expect(
+      [...cards()[0].querySelectorAll('.movement-overflow-menu button')].map((button) =>
+        button.textContent?.replace('⇄', '').trim(),
+      ),
+    ).toEqual([
+      'Recent history',
+      'Group as superset',
+      'Swap exercise',
+      'Move earlier',
+      'Move later',
+      'Remove exercise',
+    ]);
     await act(async () => move.click());
     expect(heading()).toBe('Upper body + Cardio workout');
     expect(cards().map((card) => card.querySelector('h2')?.textContent)).toEqual([
@@ -976,6 +999,9 @@ describe('saved training splits on Home', () => {
     await mount();
     expect(container.querySelector('#next-session-title')?.textContent).toBe('Rest day');
     expect(container.querySelector('.next-session-exercises')).toBeNull();
+    // Start workout already starts an empty workout, so there is no second Empty button.
+    expect(container.querySelector('.next-session-empty')).toBeNull();
+    expect(container.querySelector('.next-session-actions')?.textContent).toBe('Start workout');
     const start = container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!;
     await act(async () => start.click());
     expect(container.querySelector('.start-menu')?.textContent).not.toContain('Rest day');
@@ -1904,6 +1930,38 @@ describe('phantom workout prevention', () => {
 });
 
 describe('finishing workouts in the background', () => {
+  it('says how many sets are ticked before finishing a workout with unticked sets', async () => {
+    const draft = storedDraft();
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-unticked',
+      completed: false,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    expect(
+      document.querySelector('.workout-finish-dialog .workout-finish-summary')?.textContent,
+    ).toBe("2 of 3 sets ticked. Unticked sets won't count.");
+    await closeFinishConfirmation();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('keeps the finish confirmation short when every set is ticked', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    expect(document.querySelector('.workout-finish-dialog')).not.toBeNull();
+    expect(document.querySelector('.workout-finish-summary')).toBeNull();
+    await closeFinishConfirmation();
+  });
+
   it('explains how to finish an empty workout without discarding it', async () => {
     const draft = storedDraft({ movements: [] });
     writeActiveWorkoutDraft(draft);
@@ -3936,7 +3994,7 @@ describe('live muscle totals while logging', () => {
     expect(document.querySelector('.notification-toast-action')).toBeNull();
   });
 
-  it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
+  it('updates Home immediately, opens the live source, and reverses unticking', async () => {
     await mount();
     await navigateTo('Home');
     await navigateTo('Training');
@@ -3946,7 +4004,7 @@ describe('live muscle totals while logging', () => {
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
     );
-    expect(chestTotals()).toEqual(['1', '1']);
+    expect(chestTotals()).toEqual(['1']);
     expect(api.dashboard).toHaveBeenCalledOnce();
     expect(api.createWorkout).not.toHaveBeenCalled();
     await act(async () => {

@@ -1,0 +1,386 @@
+/* Block colours: each element sets --block-color inline. */
+.training-block-swatch[style],
+.training-block-dot {
+  background: var(--block-color);
+}
+.training-block-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.training-block-now .training-block-dot {
+  background: var(--block-color);
+}
+.training-block-bar .training-block-segment.current.custom {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--p-ink) 85%, transparent);
+}
+
+/* Year view */
+.training-block-years {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.training-block-years strong {
+  display: block;
+  font-size: 1rem;
+}
+.training-block-years small {
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.training-block-dialog .training-block-years button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+.training-block-dialog .training-block-years button:disabled {
+  opacity: 0.35;
+}
+.training-block-years .pulse-icon {
+  width: 18px;
+  height: 18px;
+}
+.training-block-year-bar {
+  position: relative;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--p-page, var(--p-surface));
+}
+.training-block-year-segment {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  display: block;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  line-height: 30px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0 3px;
+  background: var(--block-color);
+  color: #0b0d0f;
+  font-family: inherit;
+  font-size: 0.66rem;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+button.training-block-year-segment {
+  min-height: 0;
+  cursor: pointer;
+}
+.training-block-year-segment.selected {
+  z-index: 1;
+  box-shadow:
+    0 0 0 2px var(--p-surface),
+    0 0 0 4px var(--p-ink);
+}
+.training-block-year-segment:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+.training-block-year-segment.earlier {
+  background: repeating-linear-gradient(135deg, var(--p-surface-3) 0 5px, var(--p-deemph) 5px 10px);
+}
+.training-block-year-segment.planned {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--block-color) 70%, transparent) 0 5px,
+    color-mix(in srgb, var(--block-color) 25%, transparent) 5px 10px
+  );
+}
+/* Scrollable, zoomable timeline: native sideways scrolling, pinches handled in code. */
+.training-block-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 9px;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.training-block-scroll::-webkit-scrollbar {
+  display: none;
+}
+.training-block-scroll:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+.training-block-scroll-track {
+  position: relative;
+  min-width: 100%;
+}
+.training-block-scroll .training-block-year-bar {
+  border-radius: 9px;
+}
+.training-block-scroll-line {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px dotted color-mix(in srgb, var(--p-ink) 45%, transparent);
+  pointer-events: none;
+}
+.training-block-scroll-line.week {
+  border-left-width: 1px;
+  border-left-color: color-mix(in srgb, var(--p-ink) 22%, transparent);
+}
+.training-block-scroll-line.year {
+  border-left: 1.5px dashed color-mix(in srgb, var(--p-ink) 75%, transparent);
+}
+.training-block-scroll-axis {
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
+  color: var(--p-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.training-block-scroll-axis span {
+  position: absolute;
+  top: 0;
+  padding-left: 3px;
+}
+.training-block-scroll-axis span.year {
+  color: var(--p-ink);
+  font-weight: 800;
+}
+.training-block-scroll.detail .training-block-year-bar {
+  height: 72px;
+}
+.training-block-scroll.detail .training-block-year-segment {
+  padding: 0 8px;
+  font-size: 0.78rem;
+  line-height: 68px;
+  text-align: left;
+}
+.training-block-scroll.detail .training-block-scroll-axis {
+  font-size: 0.72rem;
+}
+.training-block-year-today {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--p-danger);
+  pointer-events: none;
+}
+.training-block-now-section h3 {
+  margin: 16px 0 8px;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.training-block-now {
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--p-surface-2);
+}
+.training-block-now header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 10px;
+}
+.training-block-now header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+.training-block-now header em {
+  color: var(--p-accent-text);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 700;
+}
+.training-block-weeks {
+  display: grid;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--p-page, var(--p-surface));
+}
+.training-block-weeks span {
+  display: grid;
+  place-items: center;
+  border-left: 1.5px dotted color-mix(in srgb, var(--p-ink) 35%, transparent);
+  color: var(--p-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+.training-block-weeks span:first-child {
+  border-left: 0;
+}
+.training-block-weeks span.done {
+  background: color-mix(in srgb, var(--block-color) 60%, transparent);
+  color: #0b0d0f;
+}
+.training-block-weeks span.now {
+  background: color-mix(in srgb, var(--block-color) 28%, transparent);
+  color: var(--p-ink);
+}
+.training-block-vs {
+  margin: 10px 0 0;
+  color: var(--p-muted);
+  font-size: 0.76rem;
+}
+.training-block-vs b.up {
+  color: var(--p-good);
+}
+.training-block-vs b.down {
+  color: var(--p-danger);
+}
+.training-block-now-section + .training-block-cards,
+.training-block-year-frame + .training-block-cards {
+  margin-top: 16px;
+}
+.training-block-cards li.empty {
+  justify-content: center;
+  color: var(--p-muted);
+  font-size: 0.85rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .training-block-year-segment {
+    transition: none;
+  }
+}
+
+.training-block-cards li.selected {
+  border-color: var(--p-ink-2);
+  box-shadow: inset 0 0 0 1px var(--p-ink-2);
+}
+
+/* Landscape timeline: the year switcher shares the toolbar with the full-screen button. */
+.training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toolbar {
+  align-items: center;
+  margin-bottom: 10px;
+}
+.training-block-dialog .training-block-year-frame .landscape-chart-options {
+  display: flex;
+  align-items: center;
+}
+.training-block-year-frame .training-block-years {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.training-block-years small {
+  white-space: nowrap;
+}
+.training-block-dialog
+  .training-block-year-frame:not(.landscape-chart-expanded)
+  .landscape-chart-toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+.training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toggle > span {
+  display: grid;
+  place-items: center;
+  color: inherit;
+  line-height: 0;
+}
+.training-block-year-frame:not(.landscape-chart-expanded) .landscape-chart-toggle .pulse-icon {
+  width: 18px;
+  height: 18px;
+}
+.training-block-years > div {
+  flex: 1;
+}
+/* Colour field in the block form: Auto plus the palette. */
+.training-block-colours {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.training-block-colours > span {
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+}
+.training-block-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.training-block-dialog .training-block-swatches button {
+  aspect-ratio: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: var(--block-color);
+}
+.training-block-dialog .training-block-swatches button.automatic {
+  color: #0b0d0f;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.training-block-dialog .training-block-swatches button[aria-checked='true'] {
+  box-shadow:
+    0 0 0 2px var(--p-surface),
+    0 0 0 4px var(--p-ink);
+}
+.landscape-chart-expanded .training-block-years {
+  display: none;
+}
+.training-block-full {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+}
+.training-block-full-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 1.5rem;
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 0.8rem;
+}
+.training-block-full-detail strong {
+  color: var(--p-ink);
+}

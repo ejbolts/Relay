@@ -5,7 +5,7 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import type { CardioOverview, CardioSession, CardioSessionInput, Exercise } from './types';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { CardioTrendCard } from './CardioTrendCard';
-import { groupCardioHistory } from './cardioTrend';
+import { groupCardioHistory, sessionElevation, sessionMets } from './cardioTrend';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
 import { CardioZoneSettings } from './CardioZoneSettings';
 import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
@@ -20,6 +20,14 @@ import { numberOrNull, prettyDate } from './appShared';
 import { LoadingState } from './LoadingState';
 
 const CARDIO_HISTORY_PAGE_SIZE = 5;
+
+/** A history value, marked with ≈ when it was calculated rather than logged. */
+function estimatedMetric(value: number | null, estimated: boolean, unit: string) {
+  if (value === null) return null;
+  // Non-breaking spaces keep the sign, number and unit on one line.
+  const amount = value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return `${estimated ? '≈\u00A0' : ''}${amount}\u00A0${unit}`;
+}
 
 function ScanningLabel() {
   return (
@@ -62,6 +70,7 @@ export function CardioScreen({
     incline_percent: null,
     average_power_watts: null,
     average_mets: null,
+    elevation_gain_m: null,
     intensity: null,
     zone: null,
     qualifies_zone2: false,
@@ -154,6 +163,7 @@ export function CardioScreen({
         incline_percent: null,
         average_power_watts: null,
         average_mets: null,
+        elevation_gain_m: scan.elevation_gain_m ?? null,
       }));
       const scanned = scan.fields_found.join(', ');
       const activityWarning =
@@ -458,7 +468,22 @@ export function CardioScreen({
               </label>
             )}
             <label>
-              Average METs
+              Elevation gain (m)
+              <input
+                type="number"
+                min="0"
+                max="30000"
+                step="0.1"
+                inputMode="decimal"
+                value={draft.elevation_gain_m ?? ''}
+                onChange={(event) =>
+                  setDraft({ ...draft, elevation_gain_m: numberOrNull(event.target.value) })
+                }
+                placeholder="Auto from incline"
+              />
+            </label>
+            <label>
+              Average MET
               <input
                 type="number"
                 min="0.1"
@@ -469,13 +494,13 @@ export function CardioScreen({
                 onChange={(event) =>
                   setDraft({ ...draft, average_mets: numberOrNull(event.target.value) })
                 }
-                placeholder="e.g. 7.5"
+                placeholder="Auto"
               />
             </label>
           </div>
           <p className="cardio-calorie-hint">
             Performance metrics are optional. For calories, prefer your watch or machine’s active
-            calorie estimate. MET-minutes are calculated as average METs × session minutes.
+            calorie estimate.
           </p>
           <textarea
             value={draft.notes ?? ''}
@@ -487,6 +512,7 @@ export function CardioScreen({
           </button>
           <button
             type="button"
+            className="pulse-button secondary cardio-form-cancel"
             disabled={saving}
             onClick={() => {
               setEditingId(null);
@@ -618,13 +644,16 @@ export function CardioScreen({
                         session.average_power_watts == null
                           ? null
                           : `${session.average_power_watts} W avg`,
-                        session.average_mets == null ? null : `${session.average_mets} METs avg`,
-                        session.average_mets == null
-                          ? null
-                          : `${(session.average_mets * session.duration_minutes).toLocaleString(
-                              undefined,
-                              { maximumFractionDigits: 1 },
-                            )} MET-min`,
+                        estimatedMetric(
+                          sessionElevation(session),
+                          session.elevation_gain_m == null,
+                          'm elevation',
+                        ),
+                        estimatedMetric(
+                          sessionMets(session),
+                          session.average_mets == null,
+                          'MET avg',
+                        ),
                       ]
                         .filter((value): value is string => value !== null)
                         .join(' · ') || 'Performance metrics not logged'}
@@ -650,6 +679,7 @@ export function CardioScreen({
                         session.incline_percent,
                         session.average_power_watts,
                         session.average_mets,
+                        session.elevation_gain_m,
                       ].some((value) => value != null)
                         ? 'Edit metrics'
                         : 'Log metrics'}

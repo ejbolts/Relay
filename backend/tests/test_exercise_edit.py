@@ -111,3 +111,79 @@ def test_other_accounts_cannot_edit_an_exercise(client, other_client):
         assert other_client.patch(f"/api/exercises/{custom['id']}", json=change).status_code == 404
     assert exercise(client, custom["id"])["name"] == "Cable hip abduction"
     assert exercise(client, custom["id"])["hidden"] is False
+
+
+def by_name(test_client, name: str) -> dict:
+    return next(item for item in test_client.get("/api/exercises").json() if item["name"] == name)
+
+
+def test_custom_exercise_can_match_another_exercise_and_then_merge_into_it(client):
+    custom = create_custom(client, "DB Bench")
+    target = by_name(client, "Dumbbell Bench Press")
+    merge_path = f"/api/exercises/{custom['id']}/merge"
+    assert client.post(merge_path, json={"target_exercise_id": target["id"]}).status_code == 422
+
+    revision = client.get("/api/workouts/revision").json()
+    response = client.patch(
+        f"/api/exercises/{custom['id']}",
+        json={
+            "equipment": target["equipment"],
+            "muscle_set_credits": target["default_muscle_set_credits"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    changed = response.json()
+    assert changed["name"] == "DB Bench"
+    assert changed["equipment"] == target["equipment"]
+    assert changed["default_muscle_set_credits"] == target["default_muscle_set_credits"]
+    assert changed["muscle_group"] == target["default_muscle_set_credits"][0]["muscle_name"]
+    assert client.get("/api/workouts/revision").json() != revision
+
+    merged = client.post(merge_path, json={"target_exercise_id": target["id"]})
+    assert merged.status_code == 200, merged.text
+    assert merged.json()["id"] == target["id"]
+
+
+def test_equipment_and_muscles_change_only_on_valid_custom_exercises(client, other_client):
+    custom = create_custom(client)
+    official = by_name(client, "Barbell Bench Press")
+    path = f"/api/exercises/{custom['id']}"
+    credits = [{"muscle_name": "Glutes", "sets": 1}, {"muscle_name": "Adductors", "sets": 0.5}]
+
+    official_path = f"/api/exercises/{official['id']}"
+    assert client.patch(official_path, json={"equipment": "Cable"}).status_code == 422
+    assert client.patch(official_path, json={"muscle_set_credits": credits}).status_code == 422
+    assert exercise(client, official["id"])["equipment"] == "Barbell"
+    # Hiding an official exercise still works without touching its details.
+    assert client.patch(official_path, json={"hidden": True}).status_code == 200
+
+    duplicate = [{"muscle_name": "Glutes", "sets": 1}, {"muscle_name": "glutes", "sets": 0.5}]
+    assert client.patch(path, json={"muscle_set_credits": duplicate}).status_code == 422
+    assert client.patch(path, json={"muscle_set_credits": []}).status_code == 422
+    assert other_client.patch(path, json={"equipment": "Machine"}).status_code == 404
+
+    # A rename alone leaves equipment and muscles as they were; clearing equipment is explicit.
+    assert client.patch(path, json={"name": "Cable abduction"}).status_code == 200
+    assert exercise(client, custom["id"])["equipment"] == "Cable"
+    assert client.patch(path, json={"muscle_set_credits": credits}).status_code == 200
+    saved = exercise(client, custom["id"])
+    assert sorted(saved["default_muscle_set_credits"], key=lambda item: item["muscle_name"]) == [
+        {"muscle_name": "Adductors", "sets": 0.5},
+        {"muscle_name": "Glutes", "sets": 1.0},
+    ]
+    assert saved["muscle_group"] == "Glutes"
+    assert client.patch(path, json={"equipment": None}).status_code == 200
+    assert exercise(client, custom["id"])["equipment"] is None
+
+
+def test_cardio_exercises_refuse_muscle_credits(client):
+    made = client.post(
+        "/api/exercises",
+        json={"name": "Ski erg", "category": "cardio", "kind": "cardio", "muscle_group": "Cardio"},
+    )
+    assert made.status_code == 201, made.text
+    response = client.patch(
+        f"/api/exercises/{made.json()['id']}",
+        json={"muscle_set_credits": [{"muscle_name": "Quads", "sets": 1}]},
+    )
+    assert response.status_code == 422

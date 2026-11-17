@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { bodyweightContext, bodyweightOn, relativeStrength } from './relativeStrength';
+import {
+  bodyweightContext,
+  bodyweightOn,
+  relativeStrength,
+  sharedBodyweight,
+} from './relativeStrength';
 import { recordDisplayValue } from './weightUnits';
 
 describe('dated relative strength', () => {
@@ -30,4 +35,16 @@ describe('dated relative strength', () => {
       expect(bodyweightContext(100, weight, 'kg')).toBe('');
     },
   );
+});
+
+describe('sharedBodyweight', () => {
+  const at = (bodyweight_kg: number | null) => ({ bodyweight_kg });
+  it('returns the single bodyweight a list was logged at', () => {
+    expect(sharedBodyweight([at(82.5), at(82.5), at(null)])).toBe(82.5);
+  });
+  it('returns null when bodyweights differ or none was recorded', () => {
+    expect(sharedBodyweight([at(82.5), at(83)])).toBeNull();
+    expect(sharedBodyweight([at(null), at(null)])).toBeNull();
+    expect(sharedBodyweight([])).toBeNull();
+  });
 });

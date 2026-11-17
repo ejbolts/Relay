@@ -25,7 +25,7 @@ function prettyDate(value: string): string {
 function comparison(current: number | null, previous: number | null, unit = ''): string {
   if (current === null || previous === null) return 'No prior comparison';
   const difference = current - previous;
-  const decimals = ['bpm', 'g', 'kcal'].includes(unit) ? 0 : unit === 'lb' ? 2 : 1;
+  const decimals = ['bpm', 'g', 'kcal', 'm'].includes(unit) ? 0 : unit === 'lb' ? 2 : 1;
   const unchangedThreshold = 0.5 / 10 ** decimals;
   if (Math.abs(difference) < unchangedThreshold) return 'No change vs prior';
   const prefix = difference > 0 ? '↑' : '↓';
@@ -67,8 +67,8 @@ export function CardioEnergyCard({
   const incline = summary.average_incline_percent ?? null;
   const averageMets = summary.average_mets ?? null;
   const metsSessions = summary.mets_sessions ?? 0;
-  const metMinutes = summary.met_minutes ?? 0;
-  const metsRecorded = metsSessions > 0;
+  const elevation = summary.elevation_gain_m ?? 0;
+  const elevationSessions = summary.elevation_sessions ?? 0;
 
   return (
     <section className="panel cardio-energy-card cardio-progress-card" aria-label="Cardio progress">
@@ -77,9 +77,14 @@ export function CardioEnergyCard({
           Progress{' '}
           <HelpPopup title="Cardio progress">
             <p>
-              MET-minutes are average METs × session minutes. Average METs describes
-              duration-weighted intensity. Only sessions through {prettyDate(summary.end_date)}{' '}
-              count; future sessions are excluded.
+              Average MET describes duration-weighted intensity. A session with no MET logged is
+              estimated from its speed and incline, cycling power and body weight, or calories and
+              body weight, otherwise from a typical value for the activity. Elevation gain left
+              blank is calculated from incline and distance.
+            </p>
+            <p>
+              Only sessions through {prettyDate(summary.end_date)} count; future sessions are
+              excluded.
             </p>
             <p>
               Each metric uses the sessions where it was logged. Comparisons use the preceding
@@ -90,7 +95,7 @@ export function CardioEnergyCard({
             <p>
               {summary.logged_sessions} of {summary.total_sessions}{' '}
               {summary.total_sessions === 1 ? 'session has' : 'sessions have'} calories logged.{' '}
-              {metsSessions} {metsSessions === 1 ? 'session has' : 'sessions have'} METs logged.
+              {metsSessions} {metsSessions === 1 ? 'session has' : 'sessions have'} a MET value.
             </p>
           </HelpPopup>
         </h2>
@@ -120,32 +125,36 @@ export function CardioEnergyCard({
         </div>
         <div className="cardio-progress-grid" aria-live="polite" aria-atomic="true">
           <article>
-            <span>MET-minutes</span>
-            <strong>
-              {metsRecorded ? (
-                <>
-                  {metMinutes.toLocaleString()} <small className="cardio-stat-unit">MET-min</small>
-                </>
-              ) : (
-                '—'
-              )}
-            </strong>
+            <span>Average MET</span>
+            <strong>{averageMets === null ? '—' : averageMets.toFixed(1)}</strong>
             <small>
-              {metsSessions} {metsSessions === 1 ? 'session' : 'sessions'} logged
+              {metsSessions} {metsSessions === 1 ? 'session' : 'sessions'}
             </small>
             <small className="cardio-progress-comparison">
-              {metsRecorded
-                ? comparison(metMinutes, summary.previous_met_minutes ?? null, 'MET-min')
-                : 'No METs logged'}
+              {averageMets === null
+                ? 'No MET available'
+                : comparison(averageMets, summary.previous_average_mets ?? null, 'MET')}
             </small>
           </article>
           <article>
-            <span>Average METs</span>
-            <strong>{averageMets === null ? '—' : averageMets.toFixed(1)}</strong>
+            <span>Elevation gain</span>
+            <strong>
+              {elevationSessions === 0 ? (
+                '—'
+              ) : (
+                <>
+                  {Math.round(elevation).toLocaleString()}{' '}
+                  <small className="cardio-stat-unit">m</small>
+                </>
+              )}
+            </strong>
+            <small>
+              {elevationSessions} {elevationSessions === 1 ? 'session' : 'sessions'}
+            </small>
             <small className="cardio-progress-comparison">
-              {averageMets === null
-                ? 'No METs logged'
-                : comparison(averageMets, summary.previous_average_mets ?? null, 'METs')}
+              {elevationSessions === 0
+                ? 'No elevation available'
+                : comparison(elevation, summary.previous_elevation_gain_m ?? null, 'm')}
             </small>
           </article>
           <article>

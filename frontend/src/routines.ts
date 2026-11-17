@@ -81,7 +81,7 @@ function plannedSessionTemplate(
       summary:
         sets[0]?.weight_kg != null
           ? `${formatWeight(sets[0].weight_kg, unit)} × ${sets[0].reps ?? '–'}`
-          : `${sets.length} sets`,
+          : `${sets.length} ${sets.length === 1 ? 'set' : 'sets'}`,
     })),
   };
 }

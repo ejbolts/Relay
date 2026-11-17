@@ -766,7 +766,7 @@ def test_csv_import_and_export_use_supplied_column_format(client):
         "Distance (km),Calories (kcal),Average heart rate (bpm),Speed (km/h),Incline (%),"
         "Cardio session calories (kcal),Cardio session average heart rate (bpm),"
         "Cardio session distance (km),Average speed (km/h),Cardio session incline (%),"
-        "Average power (W),Average METs"
+        "Average power (W),Average METs,Elevation gain (m)"
     )
     assert "2026-07-17,Machine Reverse Fly,45,99.2,10,83.6,184.3,38,1" in decoded
 

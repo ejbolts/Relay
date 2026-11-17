@@ -1,3 +1,4 @@
+import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -26,6 +27,7 @@ import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
   daysBetween,
+  latestTopSets,
   parseLocalDate,
   recentStrengthRecords,
   shortDate,
@@ -33,6 +35,7 @@ import {
   weekStartDayFrom,
   weeklyBodyweightAverages,
   weeklyTrainingTotals,
+  upNextSetLabel,
   type SessionTemplate,
 } from './trainingSummary';
 import type {
@@ -52,7 +55,6 @@ import { ProfileButton } from './AccountHeaderActions';
 import { useUpNextSession } from './upNext';
 import {
   formatWeight,
-  formatWeightNumber,
   recordDisplayValue,
   weightFromKg,
   weightToKg,
@@ -66,6 +68,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 
 export function PageHeader({
   eyebrow,
+  eyebrowLead,
   eyebrowAction,
   title,
   titleAction,
@@ -75,6 +78,8 @@ export function PageHeader({
   headingLevel = 1,
 }: {
   eyebrow?: string;
+  /** Leads the eyebrow line, before the eyebrow text. */
+  eyebrowLead?: ReactNode;
   /** Sits beside the eyebrow; the row keeps its height whether or not it renders. */
   eyebrowAction?: ReactNode;
   title: string;
@@ -89,8 +94,9 @@ export function PageHeader({
     <header className="page-header">
       <div>
         {eyebrow &&
-          (eyebrowAction ? (
+          (eyebrowAction || eyebrowLead ? (
             <div className="page-eyebrow-row">
+              {eyebrowLead}
               <p className="page-eyebrow">{eyebrow}</p>
               {eyebrowAction}
             </div>
@@ -246,6 +252,7 @@ export function TodayScreen({
     isRestDay,
     needsSplitUpdate,
   } = useUpNextSession(data?.recommendation, workouts, today);
+  const latestSets = useMemo(() => latestTopSets(workouts, today), [workouts, today]);
   const currentWeek = weeks.at(-1);
   const haveWorkouts = workouts.length > 0;
   const workoutsThisWeek = haveWorkouts ? (currentWeek?.workouts ?? 0) : data?.workouts_this_week;
@@ -396,16 +403,17 @@ export function TodayScreen({
           {template ? (
             <>
               <ul className="next-session-exercises">
-                {template.exercises.slice(0, 6).map(({ exercise, topSet, summary }) => (
-                  <li key={exercise.id}>
-                    <span title={exercise.name}>{exercise.name}</span>
-                    <b className="num" title={summary}>
-                      {exercise.kind !== 'cardio' && topSet
-                        ? `${formatWeightNumber(topSet.weight_kg ?? 0, weightUnit)}×${topSet.reps ?? '–'}`
-                        : summary}
-                    </b>
-                  </li>
-                ))}
+                {template.exercises.slice(0, 6).map((item) => {
+                  const label = upNextSetLabel(item, latestSets.get(item.exercise.id), weightUnit);
+                  return (
+                    <li key={item.exercise.id}>
+                      <span title={item.exercise.name}>{item.exercise.name}</span>
+                      <b className="num" title={label.title}>
+                        {label.text}
+                      </b>
+                    </li>
+                  );
+                })}
               </ul>
               {template.exercises.length > 6 && (
                 <p className="next-session-more">
@@ -452,15 +460,19 @@ export function TodayScreen({
                 Start workout
               </button>
             )}
-            <button
-              className="pulse-button primary next-session-empty"
-              type="button"
-              onClick={onStartEmpty}
-              aria-label="Start empty workout"
-              disabled={workoutSaving}
-            >
-              Empty
-            </button>
+            {/* On a rest day, or while the split needs updating, Start workout already starts
+                empty, so a second Empty button would do the same thing. */}
+            {(template || !(isRestDay || needsSplitUpdate)) && (
+              <button
+                className="pulse-button primary next-session-empty"
+                type="button"
+                onClick={onStartEmpty}
+                aria-label="Start empty workout"
+                disabled={workoutSaving}
+              >
+                Empty
+              </button>
+            )}
           </div>
         </section>
       ) : null,
@@ -635,6 +647,7 @@ export function TodayScreen({
           day: 'numeric',
           month: 'long',
         })}
+        eyebrowLead={<AppEditionBadge />}
         eyebrowAction={
           <HomeTips
             workouts={workouts}

@@ -85,11 +85,16 @@ def cardio_energy_periods(
                 previous_met_minutes=(
                     previous_metrics["met_minutes"] if previous_start is not None else None
                 ),
+                elevation_gain_m=metrics["elevation_gain_m"],
+                previous_elevation_gain_m=(
+                    previous_metrics["elevation_gain_m"] if previous_start is not None else None
+                ),
                 heart_rate_sessions=metrics["heart_rate_sessions"],
                 distance_sessions=metrics["distance_sessions"],
                 speed_sessions=metrics["speed_sessions"],
                 incline_sessions=metrics["incline_sessions"],
                 mets_sessions=metrics["mets_sessions"],
+                elevation_sessions=metrics["elevation_sessions"],
             )
         )
     return summaries
@@ -125,14 +130,18 @@ def cardio_performance_metrics(sessions: list[CardioSession]) -> dict[str, float
         "distance_km": round(sum(session.distance_km or 0 for session in sessions), 2),
         "average_speed_kph": weighted_average(sessions, "average_speed_kph"),
         "average_incline_percent": weighted_average(sessions, "incline_percent"),
-        "average_mets": weighted_average(sessions, "average_mets"),
+        # MET and elevation gain count the logged value, or the estimate when blank.
+        "average_mets": weighted_average(sessions, "effective_mets"),
         "met_minutes": round(
             sum(
-                session.average_mets * session.duration_minutes
+                session.effective_mets * session.duration_minutes
                 for session in sessions
-                if session.average_mets is not None
+                if session.effective_mets is not None
             ),
             1,
+        ),
+        "elevation_gain_m": round(
+            sum(session.effective_elevation_gain_m or 0 for session in sessions), 1
         ),
         "heart_rate_sessions": sum(
             session.average_heart_rate_bpm is not None for session in sessions
@@ -140,5 +149,8 @@ def cardio_performance_metrics(sessions: list[CardioSession]) -> dict[str, float
         "distance_sessions": sum(session.distance_km is not None for session in sessions),
         "speed_sessions": sum(session.average_speed_kph is not None for session in sessions),
         "incline_sessions": sum(session.incline_percent is not None for session in sessions),
-        "mets_sessions": sum(session.average_mets is not None for session in sessions),
+        "mets_sessions": sum(session.effective_mets is not None for session in sessions),
+        "elevation_sessions": sum(
+            session.effective_elevation_gain_m is not None for session in sessions
+        ),
     }

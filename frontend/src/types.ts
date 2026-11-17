@@ -509,6 +509,8 @@ export interface TrainingBlock {
   planned_end_date?: string | null;
   /** A recovery block: its summary has no comparison and later blocks skip it. */
   deload?: boolean;
+  /** The block's #rrggbb colour on timelines; absent uses the app's palette. */
+  color?: string | null;
   /** Derived by the server on read. */
   workout_count?: number;
 }
@@ -519,6 +521,8 @@ export interface TrainingBlockInput {
   planned_end_date: string | null;
   /** Omit to keep the saved value when editing. */
   deload?: boolean;
+  /** Null uses the app's palette; omit to keep the saved colour when editing. */
+  color?: string | null;
 }
 
 export interface BlockStats {
@@ -647,6 +651,7 @@ export interface CardioSessionInput {
   incline_percent?: number | null;
   average_power_watts?: number | null;
   average_mets?: number | null;
+  elevation_gain_m?: number | null;
   intensity: string | null;
   zone: string | null;
   qualifies_zone2: boolean;
@@ -659,6 +664,9 @@ export interface CardioSession extends CardioSessionInput {
   workout_context?: 'pure_cardio' | 'workout_plus_cardio';
   performed_after_strength?: boolean;
   source_workout_name?: string | null;
+  /** Calculated by the server for when the logged value is blank. */
+  estimated_mets?: number | null;
+  estimated_elevation_gain_m?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -671,6 +679,7 @@ export interface CardioScreenshotScan {
   average_heart_rate_bpm: number | null;
   distance_km: number | null;
   average_speed_kph: number | null;
+  elevation_gain_m?: number | null;
   fields_found: string[];
   warning: string | null;
 }
@@ -705,13 +714,14 @@ export interface CardioEnergyPeriod {
   previous_average_incline_percent: number | null;
   average_mets: number | null;
   previous_average_mets: number | null;
-  met_minutes: number;
-  previous_met_minutes: number | null;
+  elevation_gain_m?: number;
+  previous_elevation_gain_m?: number | null;
   heart_rate_sessions: number;
   distance_sessions: number;
   speed_sessions: number;
   incline_sessions: number;
   mets_sessions: number;
+  elevation_sessions?: number;
 }
 
 export interface CardioMetricsInput {
@@ -722,6 +732,7 @@ export interface CardioMetricsInput {
   incline_percent: number | null;
   average_power_watts?: number | null;
   average_mets?: number | null;
+  elevation_gain_m?: number | null;
 }
 
 export interface BodyWeightGoalInput {
@@ -772,6 +783,8 @@ export interface ExerciseLibrarySummary {
   change_kg: number | null;
   change_percent: number | null;
   trend: { date: string; estimated_1rm: number }[];
+  /** Estimates are in the reference machine's weights; missing from older servers. */
+  normalised?: boolean;
 }
 
 export interface ArchiveCounts {

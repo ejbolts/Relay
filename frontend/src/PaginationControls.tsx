@@ -59,7 +59,11 @@ export function PaginationControls({
           aria-haspopup="true"
           aria-expanded={pickerOpen}
         >
-          …
+          {/* The page itself, so the button says where you are and that it picks a page. */}
+          <span className="pagination-current num" aria-hidden="true">
+            {currentPage}
+            <span className="pagination-total"> / {totalPages}</span>
+          </span>
         </button>
         {pickerOpen && (
           <div className="pagination-page-menu" role="group" aria-label={`${label} pages`}>
@@ -87,7 +91,7 @@ export function PaginationControls({
       >
         <span aria-hidden="true">→</span>
       </button>
-      <small className="pagination-status" aria-live="polite">
+      <small className="pagination-status sr-only" aria-live="polite">
         Page {currentPage} of {totalPages}
       </small>
     </nav>

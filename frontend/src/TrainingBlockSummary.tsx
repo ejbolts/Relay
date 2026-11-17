@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
@@ -12,6 +11,7 @@ import {
   nextBlockName,
   weeksEnd,
 } from './trainingBlocks';
+import { TrainingBlockDialog, TrainingBlockToast } from './TrainingBlockDialog';
 import { TrainingBlockHomeCard } from './TrainingBlockHomeCard';
 import type { TrainingBlockCardStyle } from './homeLayout';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -307,7 +307,10 @@ export function TrainingBlockSummaryDialog({
   );
 }
 
-/** Home's training block card: after the planned end it opens the block summary. */
+/**
+ * Home's training block card: it opens the training blocks dialog in place, or the block summary
+ * once the planned end has passed.
+ */
 export function TrainingBlockHome({
   block,
   config,
@@ -319,15 +322,20 @@ export function TrainingBlockHome({
   config: TrainingBlocks;
   today: string;
   style?: TrainingBlockCardStyle;
+  /** Opens the block's exercise progress, from the summary. */
   onOpen: () => void;
 }) {
   const [summarised, setSummarised] = useState<TrainingBlock | null>(null);
+  const [managing, setManaging] = useState(false);
   const [notice, setNotice] = useState('');
-  useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(''), 4000);
-    return () => clearTimeout(timer);
-  }, [notice]);
+  const trigger = useRef<HTMLElement | null>(null);
+  const remember = () => {
+    trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  };
+  const closeManaging = () => {
+    setManaging(false);
+    requestAnimationFrame(() => trigger.current?.isConnected && trigger.current.focus());
+  };
   return (
     <>
       <TrainingBlockHomeCard
@@ -335,7 +343,10 @@ export function TrainingBlockHome({
         config={config}
         today={today}
         style={style}
-        onOpen={onOpen}
+        onOpen={() => {
+          remember();
+          setManaging(true);
+        }}
         onSummary={blockFinished(block, today) ? () => setSummarised(block) : undefined}
       />
       {summarised && (
@@ -348,21 +359,10 @@ export function TrainingBlockHome({
           onStarted={setNotice}
         />
       )}
-      {notice &&
-        createPortal(
-          <div className="undo-toast top-toast" role="status">
-            <span>{notice}</span>
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss training block notification"
-              onClick={() => setNotice('')}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {managing && (
+        <TrainingBlockDialog start="blocks" onClose={closeManaging} onNotice={setNotice} />
+      )}
+      <TrainingBlockToast notice={notice} onDismiss={() => setNotice('')} />
     </>
   );
 }

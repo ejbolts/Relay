@@ -1067,8 +1067,8 @@ button.metric-card:focus-visible {
 }
 
 .calendar-edit-workout {
-  width: calc(100% - 1.25rem);
-  margin: 0.75rem 0 0 1.25rem;
+  width: 100%;
+  margin: 0.75rem 0 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.65rem;
@@ -4419,6 +4419,15 @@ body:has(.popup-dialog[open]) {
   padding: 0 1rem 1rem;
 }
 
+.workout-finish-dialog > p.workout-finish-summary {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.workout-finish-dialog > p.workout-finish-summary + p {
+  padding-top: 0.35rem;
+}
+
 .workout-finish-dialog > p.workout-finish-blocker {
   margin: 1rem 1rem 0;
   padding: 0.7rem 0.8rem;
@@ -4426,25 +4435,6 @@ body:has(.popup-dialog[open]) {
   font-size: 0.85rem;
 }
 
-.body-reference-stats .body-trend-stat {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  margin-top: 0.45rem;
-  border-top: 1px solid #383e40;
-  padding: 0.85rem 0.35rem 0;
-  text-align: left;
-}
-
-.body-trend-stat-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.body-trend-stat-controls select,
 .body-trend-default-fields select {
   min-height: 2.2rem;
   border: 1px solid #42494b;
@@ -4454,17 +4444,6 @@ body:has(.popup-dialog[open]) {
   color: #d8d5d1;
   font-size: 0.68rem;
   font-weight: 750;
-}
-
-.body-reference-stats .body-trend-stat > strong {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  margin: 0;
-}
-
-.body-reference-stats .body-trend-stat > small {
-  color: var(--muted-ink);
-  font-size: 0.62rem;
 }
 
 .body-trend-default-fields {
@@ -4490,10 +4469,6 @@ body:has(.popup-dialog[open]) {
   .body-goal-form .goal-entry-fields,
   .body-trend-default-fields {
     grid-template-columns: 1fr;
-  }
-
-  .body-trend-stat-controls {
-    flex-wrap: wrap;
   }
 }
 
@@ -5186,9 +5161,15 @@ html.edge-swipe-active .edge-swipe-indicator {
   font-size: 0.875rem;
 }
 
+/* The fields start clear of the title bar. */
+.create-exercise-dialog > form {
+  padding-top: 0.75rem;
+}
+
 .create-exercise-muscle-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
+  /* The muscle name needs more room than the credit, so "Choose muscle" is not cut short. */
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 2.75rem;
   align-items: end;
   gap: 0.5rem;
 }
@@ -5545,10 +5526,15 @@ html.edge-swipe-active .edge-swipe-indicator {
 }
 
 .body-row-menu > summary {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: grid;
+  place-items: center;
   color: #5598e7;
   font-size: 1.25rem;
   list-style: none;
   text-align: center;
+  cursor: pointer;
 }
 
 .body-row-menu > summary::-webkit-details-marker {
@@ -5562,15 +5548,26 @@ html.edge-swipe-active .edge-swipe-indicator {
   right: 0;
   width: 9rem;
   display: grid;
+  overflow: hidden;
   border: 1px solid #454b4e;
+  border-radius: 12px;
   background: #202325;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
 }
 
 .body-row-menu .body-history-actions button {
+  min-height: 2.75rem;
   border: 0;
   border-bottom: 1px solid #454b4e;
   border-radius: 0;
+  padding: 0.6rem 0.85rem;
   background: transparent;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.body-row-menu .body-history-actions button:last-child {
+  border-bottom: 0;
 }
 
 /* Workout history reference. */
@@ -6394,6 +6391,11 @@ body,
   color: var(--muted-ink);
 }
 
+.cardio-form > .cardio-form-cancel {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
 .cardio-screenshot-import {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -6808,16 +6810,17 @@ body,
   margin: 0.3rem 0 1rem;
 }
 .pr-summary > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  /* The exercise above its record, so neither is squeezed into a narrow column on a phone. */
+  display: grid;
+  gap: 0.2rem;
   border-top: 1px solid var(--line);
   padding: 0.65rem 0;
   text-align: left;
 }
 .pr-summary > div span {
   color: var(--muted-ink);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 .pr-summary > .pr-summary-done {
   width: 100%;
@@ -7561,7 +7564,7 @@ body:has(.notification-dialog[open]) {
 .pagination-controls {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 2.75rem);
+  grid-template-columns: 2.75rem auto 2.75rem;
   justify-content: center;
   gap: 0.55rem;
   margin-top: 0.8rem;
@@ -7581,6 +7584,26 @@ body:has(.notification-dialog[open]) {
   color: var(--ink);
   font-size: 1.05rem;
   font-weight: 900;
+}
+
+/* The page picker shows the current page, so it grows with "12 / 30". */
+.pagination-more {
+  width: auto;
+  min-width: 4.5rem;
+  padding: 0 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+/* A span, not <small>: some lists style every <small> inside them as a block. */
+.pagination-current {
+  white-space: nowrap;
+}
+
+.pagination-total {
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .pagination-arrow:not(:disabled):hover,
@@ -7824,7 +7847,9 @@ body,
   box-shadow: none;
 }
 
-.movement-card:has(.movement-overflow[open]) {
+/* An open exercise or set menu hangs below its card, so that card sits above the next one. */
+.movement-card:has(.movement-overflow[open]),
+.movement-card:has(.set-swipe-shell.has-open-overlay) {
   z-index: 25;
 }
 
@@ -7927,6 +7952,10 @@ body,
   display: block;
   width: 1.1rem;
   height: 1.1rem;
+  margin: 0 auto;
+}
+
+.movement-overflow-menu button > span > .trash-can-icon {
   margin: 0 auto;
 }
 
@@ -9570,6 +9599,20 @@ body.chart-fullscreen-open {
   width: 100dvw;
   height: 100dvh;
   overflow: hidden;
+  background: var(--page);
+}
+
+/* The modal variant stacks above an open dialog; it drops the browser's dialog box styles. */
+.landscape-chart-viewer.landscape-chart-modal {
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: inherit;
+}
+
+.landscape-chart-modal::backdrop {
   background: var(--page);
 }
 

@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import type { CardioMetricsInput, CardioSession } from './types';
 import { PopupDialog } from './PopupDialog';
+import { prettyDate } from './appShared';
 
 function optionalNumber(value: string): number | null {
   return value.trim() === '' ? null : Number(value);
+}
+
+/** What a blank field falls back to: the calculated value when there is one. */
+function autoPlaceholder(estimate: number | null | undefined): string {
+  return estimate == null ? 'Optional' : `Auto · ${estimate.toLocaleString()}`;
 }
 
 export function CardioMetricsEditor({
@@ -22,6 +28,7 @@ export function CardioMetricsEditor({
   const [incline, setIncline] = useState(session.incline_percent?.toString() ?? '');
   const [power, setPower] = useState(session.average_power_watts?.toString() ?? '');
   const [mets, setMets] = useState(session.average_mets?.toString() ?? '');
+  const [elevation, setElevation] = useState(session.elevation_gain_m?.toString() ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +49,7 @@ export function CardioMetricsEditor({
               incline_percent: optionalNumber(incline),
               average_power_watts: optionalNumber(power),
               average_mets: optionalNumber(mets),
+              elevation_gain_m: optionalNumber(elevation),
             });
             onClose();
           } catch (reason) {
@@ -52,7 +60,8 @@ export function CardioMetricsEditor({
         }}
       >
         <p>
-          {session.activity_type} · {session.session_date} · {session.duration_minutes} min
+          {session.activity_type} · {prettyDate(session.session_date)} · {session.duration_minutes}{' '}
+          min
         </p>
         <div className="cardio-metric-fields">
           <label>
@@ -131,7 +140,20 @@ export function CardioMetricsEditor({
             </label>
           )}
           <label>
-            Average METs
+            Elevation gain (m)
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="30000"
+              step="0.1"
+              value={elevation}
+              onChange={(event) => setElevation(event.target.value)}
+              placeholder={autoPlaceholder(session.estimated_elevation_gain_m)}
+            />
+          </label>
+          <label>
+            Average MET
             <input
               type="number"
               inputMode="decimal"
@@ -140,14 +162,11 @@ export function CardioMetricsEditor({
               step="0.1"
               value={mets}
               onChange={(event) => setMets(event.target.value)}
-              placeholder="e.g. 7.5"
+              placeholder={autoPlaceholder(session.estimated_mets)}
             />
           </label>
         </div>
-        <p className="cardio-metric-hint">
-          All performance fields are optional. MET-minutes are calculated as average METs × session
-          minutes.
-        </p>
+        <p className="cardio-metric-hint">All performance fields are optional.</p>
         {error && <p className="inline-error">{error}</p>}
         <footer className="popup-dialog-actions">
           <button type="button" disabled={saving} onClick={onClose}>

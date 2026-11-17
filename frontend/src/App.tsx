@@ -142,7 +142,6 @@ import {
   type ExerciseMachineChoices,
 } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
-import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
@@ -311,6 +310,7 @@ import {
   workoutDurationMinutes,
   workoutTimeInputValue,
 } from './utils';
+import { blockColor } from './blockColors';
 import { VideoUpload } from './VideoUpload';
 import { YouTubeConnectionPanel } from './YouTubeConnectionPanel';
 import { ProfileScreen } from './ProfileScreen';
@@ -416,10 +416,9 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
-import { bodyweightOn, bodyweightContext } from './relativeStrength';
+import { bodyweightOn, bodyweightContext, sharedBodyweight } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
-import { TrainingBlockControls } from './TrainingBlockControls';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import {
@@ -447,6 +446,7 @@ import { LoadingState } from './LoadingState';
 import { BodyCompositionScreen } from './BodyCompositionScreen';
 import { CardioScreen } from './CardioScreen';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
+import { onWorkoutFocusRequested } from './workoutFocus';
 
 // Screens that live in their own files; re-exported for existing imports of './App'.
 export { BodyCompositionScreen, CardioScreen };
@@ -1054,6 +1054,8 @@ function AppContent() {
       window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
     };
   }, []);
+  // A notification opens the reacted or commented workout in Social's feed.
+  useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;
@@ -2400,9 +2402,6 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
-                weeklySets={muscleSets.weeklySets}
-                weeklySetsHistory={muscleSets.history}
-                onOpenMuscleWorkout={openMuscleWorkout}
                 historySummary={shownDashboard?.history ?? null}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -2943,6 +2942,8 @@ function CalendarDayDetail({
                   <small>
                     {effectiveWorkoutType(workout, types).name} ·{' '}
                     {formatMinutesDuration(workout.duration_minutes)}
+                    {sharedBodyweight(workout.exercises) !== null &&
+                      ` · at ${formatWeight(sharedBodyweight(workout.exercises)!, weightUnit)} BW`}
                   </small>
                 </span>
                 <svg className="disclosure-chevron" viewBox="0 0 20 20" aria-hidden="true">
@@ -2954,9 +2955,12 @@ function CalendarDayDetail({
                   <span>
                     {exercise.exercise_name}
                     {exercise.bodyweight_kg !== null &&
-                      ` @ ${formatWeight(exercise.bodyweight_kg, weightUnit)}`}
+                      sharedBodyweight(workout.exercises) === null &&
+                      ` · at ${formatWeight(exercise.bodyweight_kg, weightUnit)} BW`}
                   </span>
-                  <b>{exercise.set_count} sets</b>
+                  <b>
+                    {exercise.set_count} {exercise.set_count === 1 ? 'set' : 'sets'}
+                  </b>
                 </p>
               ))}
               <button
@@ -3307,7 +3311,10 @@ function WorkoutLogger({
   }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
-  useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));
+  const animateAddedMovements = useFlipAnimation(
+    movementStackRef,
+    movements.map((movement) => movement.key).join('|'),
+  );
   const [switchingMovementKey, setSwitchingMovementKey] = useState<string | null>(null);
   const [swapSheetMovementKey, setSwapSheetMovementKey] = useState<string | null>(null);
   const [swapUndo, setSwapUndo] = useState<{
@@ -3786,6 +3793,7 @@ function WorkoutLogger({
     createSuperset = false,
     machineChoices: ExerciseMachineChoices = {},
   ) {
+    animateAddedMovements();
     setMovements((current) => {
       const merged = mergeUniqueById(
         current.map((item) => item.exercise),
@@ -4231,6 +4239,15 @@ function WorkoutLogger({
       iconUrl: exerciseIconFor(movement.exercise),
       sets: movement.sets,
     }));
+
+  const tickedSetCount = movements.reduce(
+    (total, movement) => total + movement.sets.filter((item) => item.completed).length,
+    0,
+  );
+  const untickedSetCount = movements.reduce(
+    (total, movement) => total + movement.sets.filter((item) => !item.completed).length,
+    0,
+  );
 
   function toggleSet(movement: DraftMovement, item: DraftSet) {
     updateSet(movement.key, item.key, { completed: !item.completed });
@@ -5299,7 +5316,19 @@ function WorkoutLogger({
               {finishBlocker}
             </p>
           ) : (
-            <p>This saves your workout and stops the live timer. You can resume it from History.</p>
+            <>
+              {untickedSetCount > 0 && (
+                <p className="workout-finish-summary">
+                  <strong>
+                    {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked.
+                  </strong>{' '}
+                  Unticked sets won't count.
+                </p>
+              )}
+              <p>
+                This saves your workout and stops the live timer. You can resume it from History.
+              </p>
+            </>
           )}
           <div className="popup-dialog-actions workout-finish-actions">
             <button
@@ -5550,7 +5579,9 @@ function SupersetPicker({
         aria-describedby="superset-picker-description"
       >
         <header>
-          <h2 id="superset-picker-title">Add Group</h2>
+          <h2 id="superset-picker-title">
+            {movement.supersetKey ? 'Edit superset' : 'Group as superset'}
+          </h2>
           <button
             ref={closeButtonRef}
             type="button"
@@ -5560,7 +5591,9 @@ function SupersetPicker({
             ×
           </button>
         </header>
-        <p id="superset-picker-description">Alternate exercises in a superset/circuit.</p>
+        <p id="superset-picker-description">
+          Alternate {movement.exercise.name} with the exercises you choose.
+        </p>
 
         <div className="superset-options" aria-label="Exercises in this workout">
           {candidates.length === 0 ? (
@@ -5602,7 +5635,7 @@ function SupersetPicker({
         <footer>
           {movement.supersetKey && (
             <button className="remove-superset-button" type="button" onClick={onRemove}>
-              Remove group
+              Remove superset
             </button>
           )}
           <div className="superset-picker-actions">
@@ -5613,10 +5646,12 @@ function SupersetPicker({
               onClick={() => onSave(selectedKeys)}
             >
               {movement.supersetKey ? 'Update' : 'Add'}{' '}
-              {selectedKeys.length ? supersetGroupName(selectedKeys.length + 1) : 'Group'}
+              {selectedKeys.length
+                ? supersetGroupName(selectedKeys.length + 1).toLowerCase()
+                : 'superset'}
             </button>
             <button type="button" onClick={onClose}>
-              Close
+              Cancel
             </button>
           </div>
         </footer>
@@ -6290,7 +6325,8 @@ function MovementCard({
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
-        {!cardio && (item.bodyweight_kg ?? bodyweight) != null && (
+        {/* Only a logged set has a ratio to show; suggestions would repeat it on every row. */}
+        {!cardio && item.completed && (item.bodyweight_kg ?? bodyweight) != null && (
           <small className="completed-set-bodyweight num">
             {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
           </small>
@@ -6518,19 +6554,25 @@ function MovementCard({
           warning={onlyWarmupsLogged && movement.isComplete}
         />
         <div>
-          <h2>
-            <button
-              type="button"
-              className="movement-history-link"
-              onClick={(event) => {
-                event.stopPropagation();
-                onExerciseHistory();
-              }}
-              aria-label={`View full history for ${movement.exercise.name}`}
-            >
-              {movement.exercise.name}
-            </button>
-          </h2>
+          <div className="movement-title-row">
+            <h2>
+              <button
+                type="button"
+                className="movement-history-link"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onExerciseHistory();
+                }}
+                aria-label={`View full history for ${movement.exercise.name}`}
+              >
+                {movement.exercise.name}
+              </button>
+            </h2>
+            {/* Beside the name, so the name keeps the width the header actions leave. */}
+            <span className="movement-title-help" onClick={(event) => event.stopPropagation()}>
+              <ExerciseMuscleHelp exercise={movement.exercise} />
+            </span>
+          </div>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
             {[movement.exercise.muscle_group, movement.exercise.equipment]
@@ -6554,7 +6596,6 @@ function MovementCard({
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
-          <ExerciseMuscleHelp exercise={movement.exercise} />
           <button
             type="button"
             className="movement-expand-toggle"
@@ -6624,7 +6665,7 @@ function MovementCard({
                 <span aria-hidden="true">
                   <Icon name="history" />
                 </span>
-                {historyOpen ? 'Hide Recent History' : 'Recent History'}
+                {historyOpen ? 'Hide recent history' : 'Recent history'}
               </button>
               <button
                 type="button"
@@ -6638,7 +6679,7 @@ function MovementCard({
                 <span aria-hidden="true">
                   <Icon name="link" />
                 </span>
-                {supersetLabel ? 'Edit Group' : 'Group Superset'}
+                {supersetLabel ? 'Edit superset' : 'Group as superset'}
               </button>
               <button
                 type="button"
@@ -6648,7 +6689,7 @@ function MovementCard({
                 }}
               >
                 <span aria-hidden="true">⇄</span>
-                Swap Exercise
+                Swap exercise
               </button>
               <button
                 type="button"
@@ -6658,8 +6699,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">↑</span>
-                Move Earlier
+                <span aria-hidden="true">
+                  <Icon name="up" />
+                </span>
+                Move earlier
               </button>
               <button
                 type="button"
@@ -6669,8 +6712,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">↓</span>
-                Move Later
+                <span aria-hidden="true">
+                  <Icon name="down" />
+                </span>
+                Move later
               </button>
               <button
                 type="button"
@@ -6680,8 +6725,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">■</span>
-                Delete
+                <span aria-hidden="true">
+                  <i className="trash-can-icon" />
+                </span>
+                Remove exercise
               </button>
             </div>
           </details>
@@ -8130,7 +8177,7 @@ export function ProgressScreen({
   onCreateExercise?: () => void;
   onExercisesMerged?: () => Promise<void>;
 }) {
-  const { block } = useTrainingBlocks();
+  const { block, config: blockConfig, select: selectBlock } = useTrainingBlocks();
   const blockId = block?.id;
   const weightUnit = useWeightUnit();
   const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
@@ -8422,7 +8469,6 @@ export function ProgressScreen({
     <section
       className={`progress-screen ${embedded ? '' : 'content-page'}${browseFirst ? ' exercise-list-detail' : ''}`}
     >
-      <TrainingBlockControls />
       {browseFirst && fullProgress && !onDetailChange && (
         <button type="button" className="training-back text-link" onClick={backToExercises}>
           <Icon name="chevron-left" /> Exercises
@@ -8461,6 +8507,7 @@ export function ProgressScreen({
               () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
             );
           }}
+          onChanged={() => void onExercisesMerged?.()}
           onMerged={(_sourceId, target) => {
             setMergeRequest(null);
             setMergeNotice(true);
@@ -8743,6 +8790,25 @@ export function ProgressScreen({
                             ` (${change >= 0 ? '+' : '−'}${Math.abs(changePercent).toFixed(1)}%)`}{' '}
                           since {dayMonth(firstPoint.workout_date)}
                         </p>
+                      )}
+                      {block && (
+                        // The chart, bests and sessions only cover this block; say so, and let
+                        // the whole history return in one tap.
+                        <button
+                          type="button"
+                          className="progress-block-scope"
+                          aria-label={`Showing the ${block.name} block only. Show all time`}
+                          onClick={() => selectBlock('all')}
+                        >
+                          <i
+                            aria-hidden="true"
+                            style={{
+                              background: blockColor(blockConfig.blocks, block, localDate()),
+                            }}
+                          />
+                          {block.name}
+                          <Icon name="close" />
+                        </button>
                       )}
                     </div>
                     {!browseFirst && selectedExercise && (
@@ -9727,9 +9793,6 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
-  weeklySets,
-  weeklySetsHistory,
-  onOpenMuscleWorkout,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -9763,9 +9826,6 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
-  weeklySets: MuscleSetsWeek | undefined;
-  weeklySetsHistory: MuscleSetsWeek[] | undefined;
-  onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -9784,9 +9844,6 @@ function HistoryScreen({
     setCreatedExerciseName(null);
     setCreateExerciseOpen(true);
   };
-  const musclePreferences = useTrainingPreferences().preferences;
-  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
-  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [chosenHistoryPage, setChosenHistoryPage] = useState<number | null>(null);
@@ -10034,7 +10091,7 @@ function HistoryScreen({
           <PageHeader
             eyebrow={
               section === 'progress'
-                ? 'Exercise charts · records · sessions'
+                ? 'Charts · records · sessions'
                 : section === 'cardio'
                   ? 'Zones · energy · sessions'
                   : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
@@ -10257,15 +10314,6 @@ function HistoryScreen({
             />
           )}
         </CachedTabPanel>
-      )}
-      {!exerciseHeader && (
-        <MuscleSetsCard
-          weeklySets={weeklySets}
-          history={weeklySetsHistory}
-          goal={muscleSetGoal}
-          goals={muscleGoals}
-          onOpenWorkout={onOpenMuscleWorkout}
-        />
       )}
     </section>
   );
@@ -10496,7 +10544,7 @@ function HistoryWorkoutCard({
       ? `${shortDate(workout.workout_date)} ${workout.workout_date.slice(0, 4)}`
       : shortDate(workout.workout_date),
     workout.duration_minutes ? formatMinutesDuration(workout.duration_minutes) : null,
-    workingSetCount ? `${workingSetCount} sets` : null,
+    workingSetCount ? `${workingSetCount} ${workingSetCount === 1 ? 'set' : 'sets'}` : null,
   ].filter(Boolean);
   const movements = open
     ? workout.movements.map((movement) => {
@@ -10805,6 +10853,8 @@ function HistorySetFlow({
 }
 
 function setResult(item: TrackedSet, weightUnit: WeightUnit): string {
+  // A bodyweight set is saved at 0 kg; its reps are what matter.
+  if (item.weight_kg === 0 && item.reps !== null) return `${item.reps} reps`;
   if (item.weight_kg !== null)
     return `${formatWeight(item.weight_kg, weightUnit)} × ${item.reps ?? '–'}`;
   const cardioValues = [

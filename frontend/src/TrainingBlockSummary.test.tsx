@@ -100,13 +100,23 @@ it('describes the change from the previous block', () => {
   expect(blockChange(3, 0, true)).toEqual({ direction: 'up', text: 'New' });
 });
 
-it('keeps opening progress while a block is still running', async () => {
+it('opens the training blocks dialog in place while a block is still running', async () => {
   const onOpen = vi.fn();
   await mount({ ...rebuild, planned_end_date: '2026-12-20' }, onOpen);
   expect(host.textContent).not.toContain('Finished');
-  await act(async () => host.querySelector('button')!.click());
-  expect(onOpen).toHaveBeenCalled();
-  expect(api.trainingBlocks.summary).not.toHaveBeenCalled();
+  const card = host.querySelector('button')!;
+  card.focus();
+  await act(async () => card.click());
+  expect(onOpen).not.toHaveBeenCalled();
+  // The finished-block summary stays closed; the Now card may load totals for its comparison.
+  expect(document.querySelector('.training-block-summary')).toBeNull();
+  const dialog = document.querySelector('dialog[open]')!;
+  expect(dialog.textContent).toContain('Training blocks');
+  expect(dialog.querySelector('.training-block-cards')?.textContent).toContain('Strength rebuild');
+  await click('Close Training blocks');
+  await act(async () => new Promise(requestAnimationFrame));
+  expect(document.querySelector('dialog[open]')).toBeNull();
+  expect(document.activeElement).toBe(card);
 });
 
 it('shows the summary of a finished block against the previous block', async () => {

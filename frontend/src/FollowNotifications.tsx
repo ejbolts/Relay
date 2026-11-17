@@ -16,6 +16,7 @@ import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { WorkoutComments } from './WorkoutComments';
 import { formatReleaseDate, type Release } from './releaseMetadata';
 import { dayMonth } from './trainingSummary';
+import { requestWorkoutFocus } from './workoutFocus';
 import {
   requestWeeklyReview,
   useWeeklyReviewNotice,
@@ -97,6 +98,23 @@ function displayedNotifications(
     else if (row.kind === 'comment') visible.comments!.push(row.item);
   }
   return visible;
+}
+
+/** The workout's name, as a button that covers the row and opens the workout in Social. */
+function OpenWorkoutButton({
+  name,
+  label,
+  onOpen,
+}: {
+  name: string;
+  label: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button type="button" className="follow-notification-open" aria-label={label} onClick={onOpen}>
+      {name}
+    </button>
+  );
 }
 
 function NotificationDate({ since }: { since: string }) {
@@ -341,7 +359,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </button>
                 </li>
               ) : row.kind === 'comment' ? (
-                <li key={`comment-${row.item.notice_id}`}>
+                <li key={`comment-${row.item.notice_id}`} className="is-openable">
                   <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
                   <div className="follow-notification-copy">
                     <p>
@@ -351,7 +369,25 @@ export function FollowNotifications({ active }: { active: boolean }) {
                         : row.item.kind === 'reply'
                           ? ' replied on '
                           : ' commented on '}
-                      <b>{row.item.workout_name}</b>
+                      <OpenWorkoutButton
+                        name={row.item.workout_name}
+                        label={`Open ${row.item.display_name}’s ${
+                          row.item.kind === 'comment_reaction'
+                            ? 'reaction to your comment'
+                            : row.item.kind === 'reply'
+                              ? 'reply'
+                              : 'comment'
+                        } on ${row.item.workout_name}`}
+                        onOpen={() => {
+                          setOpen(false);
+                          requestWorkoutFocus({
+                            workoutId: row.item.workout_id,
+                            workoutName: row.item.workout_name,
+                            panel: 'comments',
+                            commentId: row.item.comment_id,
+                          });
+                        }}
+                      />
                       <NotificationDate since={row.item.since} />
                     </p>
                     <p>{row.item.body}</p>
@@ -407,12 +443,24 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </div>
                 </li>
               ) : row.kind === 'reaction' ? (
-                <li key={`reaction-${row.item.workout_id}-${row.item.id}`}>
+                <li key={`reaction-${row.item.workout_id}-${row.item.id}`} className="is-openable">
                   <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
                   <div className="follow-notification-copy">
                     <p>
                       <strong>{row.item.display_name}</strong> reacted to{' '}
-                      <b>{row.item.workout_name}</b>
+                      <OpenWorkoutButton
+                        name={row.item.workout_name}
+                        label={`Open ${row.item.display_name}’s reaction on ${row.item.workout_name}`}
+                        onOpen={() => {
+                          setOpen(false);
+                          requestWorkoutFocus({
+                            workoutId: row.item.workout_id,
+                            workoutName: row.item.workout_name,
+                            panel: 'people',
+                            personId: row.item.id,
+                          });
+                        }}
+                      />
                       <NotificationDate since={row.item.since} />
                     </p>
                   </div>

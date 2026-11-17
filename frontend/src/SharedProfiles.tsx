@@ -45,6 +45,7 @@ import {
   sinceMonthLabel,
 } from './sharedProfileDisplay';
 import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
+import { localDateOf } from './utils';
 import {
   cachedSharedProfile,
   forgetSharedProfile,
@@ -802,7 +803,7 @@ export function FindPanel({
           <FriendRow
             key={person.id}
             person={person}
-            detail={`Blocked ${longDate(person.since.slice(0, 10))}`}
+            detail={`Blocked ${longDate(localDateOf(person.since))}`}
             actions={
               <button
                 type="button"
@@ -886,7 +887,7 @@ export function FindPanel({
             <FriendRow
               key={person.id}
               person={person}
-              detail={`Asked ${longDate(person.since.slice(0, 10))}`}
+              detail={`Asked ${longDate(localDateOf(person.since))}`}
               onOpen={open(person)}
               actions={
                 <>
@@ -933,7 +934,7 @@ export function FindPanel({
             <FriendRow
               key={person.id}
               person={person}
-              detail={`Sent ${longDate(person.since.slice(0, 10))}`}
+              detail={`Sent ${longDate(localDateOf(person.since))}`}
               onOpen={open(person)}
               actions={
                 <button

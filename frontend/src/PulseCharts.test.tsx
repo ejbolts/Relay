@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goalLabelY } from './chartLayout';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 
 describe('TrendChart goal path', () => {
@@ -128,5 +129,25 @@ describe('TrendChart day popup', () => {
       tooltip()!.querySelector<HTMLButtonElement>('.pulse-chart-tooltip-open')!.click(),
     );
     expect(onSelect).toHaveBeenCalledWith(points[1]);
+  });
+});
+
+describe('goalLabelY', () => {
+  const line = { x1: 40, y1: 40, x2: 330, y2: 120, label: 'Goal 80 kg' };
+
+  it('keeps a falling goal label under the line end when there is room', () => {
+    expect(goalLabelY(line, 180)).toBe(134);
+  });
+
+  it('moves the label above the line, clear of the dates, when the end meets the axis', () => {
+    const y = goalLabelY({ ...line, y2: 174 }, 180);
+    expect(y).toBeLessThan(174 - 14);
+    // Where the label starts (64px left of its end), the line is lower than the text.
+    const lineYAtLabelStart = 174 - (174 - 40) * (64 / 290);
+    expect(y).toBeLessThan(lineYAtLabelStart);
+  });
+
+  it('places a rising goal label above its end', () => {
+    expect(goalLabelY({ ...line, y1: 120, y2: 40 }, 180)).toBe(34);
   });
 });

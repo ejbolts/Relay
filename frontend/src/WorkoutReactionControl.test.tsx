@@ -21,9 +21,11 @@ const others: WorkoutReactions = {
 function Harness({
   initial = others,
   ownWorkout = false,
+  compact = false,
 }: {
   initial?: WorkoutReactions;
   ownWorkout?: boolean;
+  compact?: boolean;
 }) {
   const [reactions, setReactions] = useState(initial);
   const [open, setOpen] = useState(false);
@@ -36,6 +38,7 @@ function Harness({
       onOpenChange={setOpen}
       onChange={setReactions}
       ownWorkout={ownWorkout}
+      compact={compact}
     />
   );
 }
@@ -67,7 +70,8 @@ it('shows a smiley-plus and unselected counts before reacting, with no default c
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);
   expect(host.querySelector('.is-yours')).toBeNull();
   const comments = button('0 comments on Upper body');
-  expect(comments.textContent).toBe('0');
+  // No comments yet: the icon alone, with the count kept in its label.
+  expect(comments.textContent).toBe('');
   expect(comments.querySelector('svg')).not.toBeNull();
   await act(async () => button('React to Upper body').click());
   expect(host.querySelector('[aria-pressed="true"]')).toBeNull();
@@ -235,6 +239,21 @@ it('shows counts without an add button or personal highlight on your own workout
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);
   expect(host.querySelector('.friend-react-button')).toBeNull();
   expect(host.querySelector('.is-yours')).toBeNull();
+});
+
+it('stacks only the two most common emojis beside the total in a card header', async () => {
+  const counts: WorkoutReactions['counts'] = [
+    { reaction: 'like', count: 1 },
+    { reaction: 'fire', count: 3 },
+    { reaction: 'strong', count: 2 },
+    { reaction: 'clap', count: 1 },
+  ];
+  await act(async () =>
+    root.render(<Harness ownWorkout compact initial={{ counts, yours: null }} />),
+  );
+  const total = button('View 7 reactions on Upper body');
+  expect(total.querySelector('.discussion-reaction-emojis')?.textContent).toBe('🔥💪');
+  expect(total.textContent).toBe('🔥💪 7');
 });
 
 it('opens the people list from your combined count without opening the picker', async () => {

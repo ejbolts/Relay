@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProgressScreen } from './App';
+import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { blockProgress, blockRange, daysLeftLabel } from './trainingBlocks';
 import { TrainingBlockCardSettingsForm, TrainingBlockHomeCard } from './TrainingBlockHomeCard';
 import { addDays } from './trainingSummary';
@@ -25,6 +26,7 @@ const config: TrainingBlocks = {
   blocks: [{ id: 'rebuild', name: 'Rebuild', start_date: '2026-06-01', end_date: null }],
 };
 let host: HTMLDivElement, root: Root;
+const emptyLibrary = { summaries: [], loading: false, error: false, retry: () => {} };
 const button = (label: string) =>
   [...document.querySelectorAll('button')].find(
     (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,
@@ -43,8 +45,9 @@ async function mount(records: PersonalRecord[] = []) {
   await act(async () =>
     root.render(
       <TrainingBlocksProvider>
+        <ExerciseLibraryList exercises={[bench]} library={emptyLibrary} onOpen={() => {}} />
         <ProgressScreen
-          exerciseLibrary={{ summaries: [], loading: false, error: false, retry: () => {} }}
+          exerciseLibrary={emptyLibrary}
           exercises={[bench]}
           measurements={[]}
           personalRecords={records}
@@ -99,6 +102,18 @@ const submitForm = () =>
       .querySelector('form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
+const openOptions = () => click('Exercise list options');
+const scope = () => document.querySelector<HTMLSelectElement>('[aria-label="Training block"]');
+async function chooseScope(value: string) {
+  await act(async () => {
+    scope()!.value = value;
+    scope()!.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+async function manageBlocks() {
+  await openOptions();
+  await click('Training blocks');
+}
 const radio = (label: string) =>
   [...document.querySelectorAll('[role="radio"]')].find(
     (item) => item.textContent?.trim() === label,
@@ -108,16 +123,28 @@ it('reuses the exercise chart for the current block and all-time view', async ()
   await mount();
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
   expect(host.querySelector('.progress-hero-value')?.textContent).toContain('90');
-  expect(radio('This block').getAttribute('aria-checked')).toBe('true');
-  await act(async () => radio('All time').click());
+  expect(document.querySelector('.training-block-scope')).toBeNull();
+  await openOptions();
+  expect(scope()?.value).toBe('current');
+  await chooseScope('all');
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', undefined);
   expect(host.querySelector('.progress-hero-value')?.textContent).toContain('120');
-  expect(button('Training block: Rebuild')).toBeUndefined();
-  await act(async () => radio('This block').click());
+  await chooseScope('current');
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'rebuild');
 });
 
-it('shows block ranges and workout counts in the picker and blocks page', async () => {
+it('shows the block an exercise chart covers and returns to all time from it', async () => {
+  await mount();
+  const chip = host.querySelector<HTMLButtonElement>('.progress-block-scope')!;
+  expect(chip.textContent).toBe('Rebuild');
+  expect(chip.getAttribute('aria-label')).toBe('Showing the Rebuild block only. Show all time');
+  await act(async () => chip.click());
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', undefined);
+  expect(host.querySelector('.progress-hero-value')?.textContent).toContain('120');
+  expect(host.querySelector('.progress-block-scope')).toBeNull();
+});
+
+it('chooses a block from list options and shows ranges and workout counts on the blocks page', async () => {
   vi.mocked(api.trainingBlocks.get).mockResolvedValue({
     earlier_workout_count: 40,
     history_start: '2024-03-01',
@@ -133,22 +160,28 @@ it('shows block ranges and workout counts in the picker and blocks page', async 
     ],
   });
   await mount();
-  expect(button('Training block: Rebuild').textContent).toContain('12 workouts');
-  await click('Training block: Rebuild');
-  expect(
-    document.querySelector('[role="radiogroup"][aria-label="Training block"]')?.textContent,
-  ).toContain('1 Jan – 31 May 2026 · 30 workouts');
-  await act(async () => radio('Base1 Jan – 31 May 2026 · 30 workouts').click());
+  await openOptions();
+  expect([...scope()!.options].map((option) => option.textContent)).toEqual([
+    'All time',
+    'Rebuild (current)',
+    'Base',
+  ]);
+  await chooseScope('base');
   expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'base');
-  await act(async () => radio('All time').click());
-  await act(async () => radio('This block').click());
-  expect(api.exerciseProgress).toHaveBeenLastCalledWith('bench', 'base');
-  await click('Training block: Base');
-  await click('Edit blocks');
-  expect(document.querySelector('.training-block-bar')?.getAttribute('aria-label')).toBe(
-    'Timeline: Before blocks, Base, Rebuild',
-  );
-  expect(document.querySelector('.training-block-cards')?.textContent).toContain(
+  await click('Training blocks');
+  const year = new Date().getFullYear();
+  if (year === 2026) {
+    expect(
+      [...document.querySelectorAll('.training-block-year-bar button[aria-pressed]')].map(
+        (item) => item.getAttribute('aria-label')?.split(',')[0],
+      ),
+    ).toEqual(['Base', 'Rebuild']);
+    const cards = document.querySelector('.training-block-cards')?.textContent;
+    expect(cards).toContain('1 Jan – 31 May 2026');
+    expect(cards).toContain('12 workouts');
+  }
+  for (let shown = year; shown > 2025; shown -= 1) await click('Previous year');
+  expect(document.querySelector('.training-block-cards')?.textContent).toBe(
     'Before blocks1 Mar 2024 – 31 Dec 202540 workouts',
   );
 });
@@ -177,17 +210,18 @@ it('creates a named custom block and shows an automatically dismissing toast', a
   };
   vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(next);
   await mount();
-  await click('Training block: Rebuild');
-  await click('New block');
+  await manageBlocks();
+  await click('New');
   await input('Block name', 'Winter strength');
   expect(document.querySelector('input[type="date"]')).toBeNull();
-  await act(async () => radio('Pick date').click());
+  await act(async () => radio('Custom').click());
   await input('Start date', '2026-07-01');
   await submitForm();
   expect(api.trainingBlocks.create).toHaveBeenCalledWith({
     name: 'Winter strength',
     start_date: '2026-07-01',
     planned_end_date: null,
+    color: null,
   });
   expect(document.querySelector('[role="status"]')?.textContent).toContain(
     'Training block started',
@@ -200,7 +234,8 @@ it('starts the first block from the all-time view', async () => {
   vi.mocked(api.trainingBlocks.get).mockResolvedValue({ blocks: [] });
   vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(structuredClone(config));
   await mount();
-  expect(radio('This block')).toBeUndefined();
+  await openOptions();
+  expect(scope()).toBeNull();
   await click('Start a block');
   await input('Block name', 'Rebuild');
   await act(async () => radio(`1 January${new Date().getFullYear()}`).click());
@@ -214,6 +249,7 @@ it('starts the first block from the all-time view', async () => {
     name: 'Rebuild',
     start_date: `${new Date().getFullYear()}-01-01`,
     planned_end_date: addDays(`${new Date().getFullYear()}-01-01`, 83),
+    color: null,
   });
 });
 
@@ -223,10 +259,9 @@ it('keeps failed saves editable and supports renaming and removing only the boun
     .mockResolvedValueOnce(config);
   vi.spyOn(api.trainingBlocks, 'remove').mockResolvedValue({ blocks: [] });
   await mount();
-  await click('Training block: Rebuild');
-  await click('Edit blocks');
+  await manageBlocks();
   await click('Edit Rebuild');
-  expect(radio('Pick date1 Jun 2026').getAttribute('aria-checked')).toBe('true');
+  expect(radio('Custom1 Jun 2026').getAttribute('aria-checked')).toBe('true');
   await submitForm();
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('already starts');
   expect(button('Save block').disabled).toBe(false);
@@ -235,6 +270,7 @@ it('keeps failed saves editable and supports renaming and removing only the boun
     name: 'Rebuild',
     start_date: '2026-06-01',
     planned_end_date: null,
+    color: null,
   });
   expect(document.querySelector('.training-block-cards')).not.toBeNull();
   await click('Edit Rebuild');
@@ -243,28 +279,16 @@ it('keeps failed saves editable and supports renaming and removing only the boun
   await click('Remove block');
   expect(api.trainingBlocks.remove).toHaveBeenCalledWith('rebuild');
   expect(document.querySelector('dialog[open]')).toBeNull();
+  await openOptions();
   expect(button('Start a block')).toBeDefined();
 });
 
 it('only lists user-created blocks with no automatic rollover option', async () => {
   await mount();
-  await click('Training block: Rebuild');
-  await click('Edit blocks');
+  await manageBlocks();
   expect(document.querySelectorAll('.training-block-cards li')).toHaveLength(1);
   expect(document.querySelector('dialog[open] [role="switch"]')).toBeNull();
   expect(document.querySelector('dialog[open]')?.textContent).not.toContain('January');
-});
-
-it('explains block and all-time records in a dismissable popover', async () => {
-  await mount();
-  await click('How training blocks work');
-  const help = document.querySelector('[role="region"][aria-label="How training blocks work"]');
-  expect(help?.textContent).toContain('Block PR');
-  expect(help?.textContent).toContain('All-time PR');
-  await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
-  expect(
-    document.querySelector('[role="region"][aria-label="How training blocks work"]'),
-  ).toBeNull();
 });
 
 it('keeps record scope specific to the viewed exercise in mixed workouts', async () => {
@@ -290,15 +314,15 @@ it('keeps record scope specific to the viewed exercise in mixed workouts', async
 
 it('refreshes synced boundaries without changing an explicitly selected all-time view', async () => {
   await mount();
-  await act(async () => radio('All time').click());
+  await openOptions();
+  await chooseScope('all');
   vi.mocked(api.trainingBlocks.get).mockResolvedValue({
     ...config,
     blocks: [{ ...config.blocks[0], name: 'Renamed block', start_date: '2026-05-01' }],
   });
   await act(async () => window.dispatchEvent(new Event('training-data-refreshed')));
-  expect(radio('All time').getAttribute('aria-checked')).toBe('true');
-  await act(async () => radio('This block').click());
-  expect(button('Training block: Renamed block')).toBeDefined();
+  expect(scope()?.value).toBe('all');
+  expect(scope()?.textContent).toContain('Renamed block (current)');
 });
 
 it('keeps a custom planned end when editing and validates it after the start', async () => {
@@ -308,12 +332,11 @@ it('keeps a custom planned end when editing and validates it after the start', a
   });
   vi.spyOn(api.trainingBlocks, 'update').mockResolvedValue(config);
   await mount();
-  await click('Training block: Rebuild');
-  await click('Edit blocks');
+  await manageBlocks();
   await click('Edit Rebuild');
   const ends = [...document.querySelectorAll('[aria-label="Ends"] [role="radio"]')];
   expect(ends.find((item) => item.getAttribute('aria-checked') === 'true')?.textContent).toBe(
-    'Pick date30 Sep',
+    'Custom30 Sep',
   );
   expect(document.querySelector<HTMLInputElement>('input[min="2026-06-02"]')?.value).toBe(
     '2026-09-30',
@@ -323,6 +346,7 @@ it('keeps a custom planned end when editing and validates it after the start', a
     name: 'Rebuild',
     start_date: '2026-06-01',
     planned_end_date: '2026-09-30',
+    color: null,
   });
 });
 

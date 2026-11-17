@@ -33,6 +33,7 @@ from .body_measurement_csv import export_body_measurements, import_body_measurem
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
 from .body_sizes import BodySizeLog
 from .cardio_energy import cardio_energy_periods
+from .cardio_estimates import attach_body_weights
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
 from .cardio_zones import (
     CardioPreferences,
@@ -192,6 +193,7 @@ from .training_split import (
     validate_split_types,
 )
 from .training_time import training_time_totals
+from .weight_factors import normalising_factors
 from .workout_photos import (
     MAX_PHOTOS_PER_WORKOUT,
     delete_workout_photo_files,
@@ -807,6 +809,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             "average_heart_rate_bpm": session.average_heart_rate_bpm,
             "average_power_watts": session.average_power_watts,
             "average_mets": session.average_mets,
+            "elevation_gain_m": session.elevation_gain_m,
         }
         for session in existing.values()
     }
@@ -867,6 +870,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
         )
         session.average_power_watts = manual_metrics.get("average_power_watts")
         session.average_mets = manual_metrics.get("average_mets")
+        session.elevation_gain_m = manual_metrics.get("elevation_gain_m")
         distances = [item.distance_km for item in completed_sets if item.distance_km is not None]
         speed_sets = [item for item in completed_sets if item.speed_kph is not None]
         incline_sets = [item for item in completed_sets if item.incline_percent is not None]
@@ -1135,7 +1139,7 @@ def merge_custom_exercise(
 def update_exercise(
     exercise_id: str, payload: ExerciseUpdate, db: DbSession, user: CurrentUser
 ) -> ExerciseRead:
-    """Rename a custom exercise or hide one from lists, keeping all of its history."""
+    """Rename or re-describe a custom exercise, or hide one from lists, keeping its history."""
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
@@ -1153,6 +1157,29 @@ def update_exercise(
                 status_code=409, detail="An exercise with that name already exists."
             )
         exercise.name = name
+    changes_equipment = "equipment" in payload.model_fields_set
+    if changes_equipment or payload.muscle_set_credits is not None:
+        if not exercise.is_custom:
+            raise HTTPException(status_code=422, detail="Only your own exercises can be changed.")
+        if changes_equipment:
+            exercise.equipment = payload.equipment
+        if payload.muscle_set_credits is not None:
+            if exercise.kind == ExerciseKind.CARDIO or exercise.category == WorkoutCategory.CARDIO:
+                raise HTTPException(
+                    status_code=422, detail="Cardio exercises have no muscle credits."
+                )
+            # History is credited from the exercise's current muscles, so past weeks follow.
+            exercise.muscle_contributions.clear()
+            db.flush()
+            exercise.muscle_contributions = [
+                ExerciseMuscleContribution(
+                    muscle_name=credit.muscle_name,
+                    role=MuscleRole.PRIMARY if credit.sets == 1 else MuscleRole.SECONDARY,
+                    contribution_factor=credit.sets,
+                )
+                for credit in payload.muscle_set_credits
+            ]
+            exercise.muscle_group = payload.muscle_set_credits[0].muscle_name
     if payload.hidden is not None:
         hidden = hidden_exercise_ids(db, user.id)
         hidden = hidden | {exercise.id} if payload.hidden else hidden - {exercise.id}
@@ -1891,6 +1918,7 @@ def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
     personal = cardio_preferences(db, user.id)
     for session in sessions:
         classify_session(session, personal)
+    attach_body_weights(db, user.id, sessions)
     return CardioOverviewRead(
         cardio_preferences=personal,
         goal_weeks=cardio_goal_weeks(sessions, current_start, personal, date.today()),
@@ -1987,6 +2015,7 @@ def create_cardio_session(
             incline_percent=payload.incline_percent,
             average_power_watts=payload.average_power_watts,
             average_mets=payload.average_mets,
+            elevation_gain_m=payload.elevation_gain_m,
             source_exercise_id=exercise.id,
             intensity=None,
             zone=payload.zone,
@@ -2001,6 +2030,7 @@ def create_cardio_session(
         bump_workout_cache_revision(db, user.id)
         db.commit()
         db.refresh(session)
+        attach_body_weights(db, user.id, [session])
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
@@ -2009,6 +2039,7 @@ def create_cardio_session(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -2029,6 +2060,7 @@ def update_cardio_session(
         "incline_percent",
         "average_power_watts",
         "average_mets",
+        "elevation_gain_m",
     }
     for key, value in payload.model_dump(exclude={"exercise_id"}).items():
         if key in optional_metrics and key not in payload.model_fields_set:
@@ -2041,6 +2073,7 @@ def update_cardio_session(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -2057,6 +2090,7 @@ def update_cardio_calories(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -2145,6 +2179,7 @@ def update_cardio_metrics(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -3389,6 +3424,7 @@ def dashboard(
     cardio_sessions = list(
         db.scalars(select(CardioSession).where(CardioSession.user_id == user.id))
     )
+    attach_body_weights(db, user.id, cardio_sessions)
     cardio_week_start = start_of_week(today, preferences.week_start)
     cardio_minutes_this_week = sum(
         session.duration_minutes
@@ -3475,6 +3511,9 @@ def exercise_library_progress(
         block = next((b for b in training_blocks(db, user.id).blocks if b.id == block_id), None)
         if block is None:
             raise HTTPException(404, "Training block was not found.")
+    # Exercises with machine weights normalised report every machine in the reference machine's
+    # weights, as the progress chart's "All machines" view does.
+    factors = normalising_factors(db, user.id)
     sessions: dict[str, dict[tuple[date, str], float]] = defaultdict(dict)
     for item, exercise_id, workout_date, workout_id in rows:
         if block and (
@@ -3489,6 +3528,8 @@ def exercise_library_progress(
             if is_pr_eligible(item)
             else 0.0
         )
+        if exercise_id in factors and item.machine_photo_id:
+            estimate *= factors[exercise_id].get(item.machine_photo_id, 1.0)
         sessions[exercise_id][key] = max(sessions[exercise_id].get(key, 0), estimate)
     summaries = []
     for exercise_id, values in sessions.items():
@@ -3522,6 +3563,7 @@ def exercise_library_progress(
                 if change is not None
                 else None,
                 trend=trend,
+                normalised=exercise_id in factors,
             )
         )
     return summaries

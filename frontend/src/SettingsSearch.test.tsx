@@ -97,6 +97,10 @@ async function jump(query: string) {
 }
 it('matches cross-page terms and synonyms and does not list anything for an empty query', () => {
   expect(searchSettings('  REST TIMER  ').map((entry) => entry.id)).toEqual(['rest']);
+  // Titles containing the word lead; sections that only mention it in keywords follow.
+  const rest = searchSettings('rest').map((entry) => entry.title);
+  expect(rest.slice(0, 2)).toEqual(['Rest timer', 'Show rest times']);
+  expect(rest).toContain('Your split');
   expect(searchSettings('username')[0].page).toBe('profile');
   expect(searchSettings('color').map((entry) => entry.id)).toContain('appearance');
   expect(searchSettings('password', false)).toEqual([]);

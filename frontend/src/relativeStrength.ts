@@ -43,3 +43,14 @@ export function bodyweightContext(
   const ratio = relativeStrength(weight, bodyweight);
   return `${ratio !== null ? `${ratio.toFixed(2)}× BW · ` : ''}at ${formatWeight(bodyweight, unit)} BW`;
 }
+
+/**
+ * The one bodyweight every item was logged at, or null when they differ or none recorded one.
+ * Lets a list say it once instead of repeating it on every row.
+ */
+export function sharedBodyweight(items: { bodyweight_kg: number | null }[]): number | null {
+  const recorded = [
+    ...new Set(items.map((item) => item.bodyweight_kg).filter((kg) => kg !== null)),
+  ];
+  return recorded.length === 1 ? recorded[0] : null;
+}
