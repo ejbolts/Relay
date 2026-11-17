@@ -195,6 +195,32 @@ it('offers the latest workout of each name to do again', async () => {
   ]);
 });
 
+it('says the split could not be loaded, keeps past workouts and loads it on Retry', async () => {
+  vi.mocked(api.routines.list).mockRejectedValueOnce(new Error('offline'));
+  await render();
+  const alert = document.querySelector('.start-chooser-body [role="alert"]')!;
+  expect(alert.textContent).toBe('Could not load your split. Retry');
+  expect(rows('Upper / Lower')).toBeUndefined();
+  expect(rows('Do again')).toHaveLength(2);
+  await act(async () => alert.querySelector('button')!.click());
+  expect(document.querySelector('.start-chooser-body [role="alert"]')).toBeNull();
+  expect(rows('Upper / Lower')).toHaveLength(2);
+});
+
+it('shows a loading line, not half the choices, until the split has answered', async () => {
+  let answer: (value: TrainingSplit) => void = () => {};
+  vi.mocked(api.getTrainingSplit).mockReturnValue(
+    new Promise((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await render();
+  expect(document.querySelector('.start-chooser-body')?.textContent).toBe('Loading…');
+  await act(async () => answer({ routine_id: 'routine' } as TrainingSplit));
+  expect(rows('Upper / Lower')).toHaveLength(2);
+  expect(rows('Do again')).toHaveLength(2);
+});
+
 it('still offers past workouts when there is no split', async () => {
   vi.mocked(api.getTrainingSplit).mockResolvedValue(null);
   await render();

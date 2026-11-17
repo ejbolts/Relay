@@ -42,19 +42,27 @@ export function StartChooser({
   const unit = useWeightUnit();
   const { savedExercises } = useWorkoutTypes();
   const [routine, setRoutine] = useState<Routine | null>(null);
+  // The choices wait for the split, so the rows do not move under a finger once it arrives.
+  const [split, setSplit] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [attempt, setAttempt] = useState(0);
   const recent = useMemo(() => recentDistinctWorkouts(workouts), [workouts]);
 
   useEffect(() => {
     let cancelled = false;
+    setSplit('loading');
     void Promise.all([api.getTrainingSplit(), api.routines.list()])
-      .then(([split, routines]) => {
-        if (!cancelled) setRoutine(routines.find((item) => item.id === split?.routine_id) ?? null);
+      .then(([active, routines]) => {
+        if (cancelled) return;
+        setRoutine(routines.find((item) => item.id === active?.routine_id) ?? null);
+        setSplit('ready');
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setSplit('failed');
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
   const days = (routine?.days ?? []).flatMap((day, index) =>
     day.workout_type ? [{ day, number: index + 1, type: day.workout_type }] : [],
@@ -77,6 +85,22 @@ export function StartChooser({
   return (
     <PopupDialog title="Choose a workout" className="start-chooser" onClose={onClose}>
       <div className="start-chooser-body">
+        {split === 'loading' && (
+          <p className="start-chooser-status" role="status">
+            Loading…
+          </p>
+        )}
+        {split === 'failed' && (
+          <p className="start-chooser-status" role="alert">
+            Could not load your split.{' '}
+            <button type="button" className="text-link" onClick={() => setAttempt(attempt + 1)}>
+              Retry
+            </button>
+          </p>
+        )}
+        {split === 'ready' && days.length === 0 && recent.length === 0 && (
+          <p className="start-chooser-status">No split days or saved workouts yet.</p>
+        )}
         {days.length > 0 && (
           <section aria-labelledby="start-chooser-split">
             <h3 id="start-chooser-split">{routine?.name}</h3>
@@ -104,7 +128,7 @@ export function StartChooser({
             </ul>
           </section>
         )}
-        {recent.length > 0 && (
+        {split !== 'loading' && recent.length > 0 && (
           <section aria-labelledby="start-chooser-recent">
             <h3 id="start-chooser-recent">Do again</h3>
             <ul>

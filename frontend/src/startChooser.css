@@ -14,6 +14,12 @@
   text-transform: uppercase;
 }
 
+.start-chooser-status {
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 0.875rem;
+}
+
 .start-chooser-body ul {
   display: grid;
   gap: 0.5rem;
