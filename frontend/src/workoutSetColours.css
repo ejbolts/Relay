@@ -53,39 +53,49 @@
 }
 
 .logger-screen [data-rpe='5'],
-.logger-screen [data-rpe='6'] {
+.history-set-table [data-rpe='5'],
+.logger-screen [data-rpe='6'],
+.history-set-table [data-rpe='6'] {
   --rpe-colour: var(--rpe-low);
 }
 
-.logger-screen [data-rpe='6.5'] {
+.logger-screen [data-rpe='6.5'],
+.history-set-table [data-rpe='6.5'] {
   --rpe-colour: var(--rpe-6-5);
 }
 
-.logger-screen [data-rpe='7'] {
+.logger-screen [data-rpe='7'],
+.history-set-table [data-rpe='7'] {
   --rpe-colour: var(--rpe-7);
 }
 
-.logger-screen [data-rpe='7.5'] {
+.logger-screen [data-rpe='7.5'],
+.history-set-table [data-rpe='7.5'] {
   --rpe-colour: var(--rpe-7-5);
 }
 
-.logger-screen [data-rpe='8'] {
+.logger-screen [data-rpe='8'],
+.history-set-table [data-rpe='8'] {
   --rpe-colour: var(--rpe-8);
 }
 
-.logger-screen [data-rpe='8.5'] {
+.logger-screen [data-rpe='8.5'],
+.history-set-table [data-rpe='8.5'] {
   --rpe-colour: var(--rpe-8-5);
 }
 
-.logger-screen [data-rpe='9'] {
+.logger-screen [data-rpe='9'],
+.history-set-table [data-rpe='9'] {
   --rpe-colour: var(--rpe-9);
 }
 
-.logger-screen [data-rpe='9.5'] {
+.logger-screen [data-rpe='9.5'],
+.history-set-table [data-rpe='9.5'] {
   --rpe-colour: var(--rpe-9-5);
 }
 
-.logger-screen [data-rpe='10'] {
+.logger-screen [data-rpe='10'],
+.history-set-table [data-rpe='10'] {
   --rpe-colour: var(--rpe-10);
 }
 

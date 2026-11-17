@@ -2287,22 +2287,26 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   white-space: nowrap;
 }
 
-.history-set-pill[data-set-type='normal'] {
+.history-set-pill[data-set-type='normal'],
+.history-set-table [data-set-type='normal'] {
   --history-set-rgb: 35 166 62;
   --history-set-ink: #7fdc92;
 }
 
-.history-set-pill[data-set-type='warmup'] {
+.history-set-pill[data-set-type='warmup'],
+.history-set-table [data-set-type='warmup'] {
   --history-set-rgb: 240 140 40;
   --history-set-ink: #f59a3c;
 }
 
-.history-set-pill[data-set-type='drop'] {
+.history-set-pill[data-set-type='drop'],
+.history-set-table [data-set-type='drop'] {
   --history-set-rgb: 150 110 240;
   --history-set-ink: #b597ff;
 }
 
-.history-set-pill[data-set-type='failure'] {
+.history-set-pill[data-set-type='failure'],
+.history-set-table [data-set-type='failure'] {
   --history-set-rgb: 230 103 103;
   --history-set-ink: #ff7a7a;
 }
@@ -2312,19 +2316,23 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   background: rgb(var(--history-set-rgb) / 12%);
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='normal'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='normal'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='normal'] {
   --history-set-ink: #256b39;
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='warmup'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='warmup'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='warmup'] {
   --history-set-ink: #955013;
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='drop'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='drop'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='drop'] {
   --history-set-ink: #6940ae;
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='failure'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='failure'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='failure'] {
   --history-set-ink: #a62736;
 }
 

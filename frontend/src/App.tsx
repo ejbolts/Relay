@@ -63,6 +63,7 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
+import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
 import {
   formatWeight,
@@ -416,7 +417,12 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
-import { bodyweightOn, bodyweightContext, sharedBodyweight } from './relativeStrength';
+import {
+  bodyweightOn,
+  bodyweightContext,
+  relativeStrength,
+  sharedBodyweight,
+} from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -10538,6 +10544,18 @@ function HistoryWorkoutCard({
     (total, item) => total + (item.distance_km ?? 0),
     0,
   );
+  // One exercise with a bodyweight ratio or a record gives every exercise that column, so the
+  // tables of a workout line up.
+  const ratioColumn =
+    open &&
+    completedWorkoutSets.some(
+      (item) => relativeStrength(item.weight_kg, item.bodyweight_kg ?? bodyweight) !== null,
+    );
+  const recordColumn =
+    open &&
+    completedWorkoutSets.some((item) =>
+      personalRecords.some((record) => record.set_id === item.id),
+    );
   const meta = [
     showYear
       ? `${shortDate(workout.workout_date)} ${workout.workout_date.slice(0, 4)}`
@@ -10629,14 +10647,19 @@ function HistoryWorkoutCard({
               />
             ) : (
               <>
-                <HistorySetFlow
+                <HistorySetTable
                   bodyweight={bodyweight}
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}
                   machinePhotos={movement.machine_photos}
+                  ratioColumn={ratioColumn}
+                  recordColumn={recordColumn}
+                  formatSet={(item) => setResult(item, weightUnit)}
+                  recordLabel={recordTypeLabel}
                 />
+                {/* A completed set's note sits under its row in the table. */}
                 {movement.sets
-                  .filter((item) => item.notes)
+                  .filter((item) => item.notes && !item.completed)
                   .map((item) => (
                     <small key={item.id}>
                       Set {item.order_index + 1}: {item.notes}
