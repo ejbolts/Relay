@@ -8,6 +8,8 @@
   type CSSProperties,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { api } from './api';
+import { weightGoalReached } from './bodyMeasurementHistory';
 import { Icon } from './Icon';
 import { useTips } from './Tips';
 import { multiMachineExerciseId } from './machineUsage';
@@ -15,7 +17,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 import { daysBetween } from './trainingSummary';
 import { localDate } from './utils';
 import { tipAction, TIP_DEFINITIONS, type TipId } from './tipsState';
-import type { TrackedWorkout } from './types';
+import type { BodyWeightGoal, TrackedWorkout } from './types';
 
 /** The most new tips the bulb counts out loud; beyond it, it says "3+". */
 const COUNTED_TIPS = 3;
@@ -29,12 +31,13 @@ export function HomeTips({
   workouts,
   createdAt,
   hasSplit,
-  measurementCount = 0,
+  latestWeightKg = null,
 }: {
   workouts: TrackedWorkout[];
   createdAt?: string;
   hasSplit: boolean;
-  measurementCount?: number;
+  /** The latest weigh-in, which decides whether the weight goal has been reached. */
+  latestWeightKg?: number | null;
 }) {
   const tips = useTips();
   const { learn, readHome } = tips;
@@ -61,6 +64,27 @@ export function HomeTips({
   const oldEnough = !!createdAt && daysBetween(createdAt.slice(0, 10), localDate()) >= 7;
   // Comparing machines only helps once one exercise has been logged on two of them.
   const machineExerciseId = useMemo(() => multiMachineExerciseId(real), [real]);
+  // A maintenance range is worth raising once a loss or gain goal is reached, as on Body.
+  const hasWeighIn = latestWeightKg !== null;
+  const [goals, setGoals] = useState<BodyWeightGoal[] | null>(null);
+  useEffect(() => {
+    if (!hasWeighIn) return;
+    let cancelled = false;
+    void api
+      .listBodyWeightGoals()
+      .then((loaded) => {
+        if (!cancelled) setGoals(loaded);
+      })
+      // Without the goals the tip simply stays out of the list.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasWeighIn]);
+  const goalReached = weightGoalReached(
+    goals?.find((goal) => goal.active),
+    latestWeightKg,
+  );
   const eligible = useMemo(() => {
     // Most useful first: features that change what the app can tell you, then personal touches.
     const pool: TipId[] = [
@@ -70,7 +94,7 @@ export function HomeTips({
         : []),
       ...(experienced && !hasSplit ? ['split' as const] : []),
       ...(hasSplit && weeks >= 3 ? ['repRange' as const] : []),
-      ...(measurementCount >= 3 ? ['maintenance' as const] : []),
+      ...(goalReached ? ['maintenance' as const] : []),
       ...(oldEnough ? ['home' as const] : []),
       'friends',
       'appearance',
@@ -84,7 +108,7 @@ export function HomeTips({
     );
   }, [
     machineExerciseId,
-    measurementCount,
+    goalReached,
     weeks,
     blocks.loading,
     blocks.error,

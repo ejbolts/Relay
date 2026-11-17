@@ -2,6 +2,7 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from './api';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
 import { onTipTarget, type TipAction } from './tipActions';
@@ -415,8 +416,23 @@ describe('shared tip presentation', () => {
     machineWorkout('b', '2026-11-05', 'life-fitness'),
     machineWorkout('c', '2026-11-09', 'technogym'),
   ] as never[];
+  const cutTo = (target: number) =>
+    vi.spyOn(api, 'listBodyWeightGoals').mockResolvedValue([
+      {
+        id: 'cut',
+        created_at: '2026-09-01T08:00:00Z',
+        start_date: '2026-09-01',
+        target_date: '2026-12-01',
+        start_weight_kg: 86,
+        target_weight_kg: target,
+        maintenance_min_kg: null,
+        maintenance_max_kg: null,
+        active: true,
+      },
+    ]);
   it('lists features, most useful first, and leaves gesture hints to their controls', async () => {
-    await homeBulb(<HomeTips measurementCount={3} hasSplit={false} workouts={twoMachines} />);
+    cutTo(80);
+    await homeBulb(<HomeTips latestWeightKg={79.8} hasSplit={false} workouts={twoMachines} />);
     expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 5 new');
     // More than three new tips are not counted out one by one.
     expect(bulb()?.textContent).toBe('3+');
@@ -435,6 +451,17 @@ describe('shared tip presentation', () => {
     ]);
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+  });
+  it('leaves the maintenance range out while the weight goal is still ahead', async () => {
+    // Three weigh-ins in, 2.4 kg short of the goal: nothing to maintain yet.
+    cutTo(80);
+    await homeBulb(<HomeTips latestWeightKg={82.4} hasSplit workouts={[]} />);
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 2 new');
+    await act(async () => bulb()!.click());
+    const titles = [popover()?.querySelector('strong')?.textContent];
+    await act(async () => button('Next').click());
+    titles.push(popover()?.querySelector('strong')?.textContent);
+    expect(titles).toEqual(['Train alongside a friend', 'Make Relay look your way']);
   });
   it('leaves comparing machines out until one exercise has used two of them', async () => {
     await homeBulb(<HomeTips hasSplit workouts={twoMachines.slice(0, 1)} />);

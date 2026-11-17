@@ -17,6 +17,7 @@ import {
   bodyGoalTarget,
   maintenanceRange,
   maintenanceStatus,
+  weightGoalReached,
   bodyHistoryWithWeightChanges,
   summarizeBodyHistory,
 } from './bodyMeasurementHistory';
@@ -145,12 +146,7 @@ export function BodyCompositionScreen({
   }, [checkInPageCount]);
 
   // Reaching a loss or gain goal is the moment a maintenance range becomes the next step.
-  const activeGoalKind = activeGoal ? bodyGoalKind(activeGoal) : null;
-  const goalReached =
-    !!activeGoal &&
-    !!latest &&
-    ((activeGoalKind === 'loss' && latest.weight_kg <= activeGoal.target_weight_kg) ||
-      (activeGoalKind === 'gain' && latest.weight_kg >= activeGoal.target_weight_kg));
+  const goalReached = weightGoalReached(activeGoal, latest?.weight_kg);
   const openMaintenanceGoal = useCallback(() => {
     setError(null);
     setGoalKind('maintain');
