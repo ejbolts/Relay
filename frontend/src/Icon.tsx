@@ -44,6 +44,7 @@ const PATHS = {
   down: 'M12 5v13.5M6.5 13l5.5 5.5 5.5-5.5',
   expand: 'M8 3.5H3.5V8M16 3.5h4.5V8M8 20.5H3.5V16M16 20.5h4.5V16',
   close: 'M6 6l12 12M18 6 6 18',
+  trash: 'M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5',
   filter: 'M4 6.5h16M7 12h10M10 17.5h4',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20.5a7.5 7.5 0 0 1 15 0',
   people:

@@ -92,7 +92,7 @@ export function SwipeToDeleteSetRow({
       deleting ||
       !event.isPrimary ||
       event.pointerType === 'mouse' ||
-      target.closest('.set-drag-handle, .set-actions-menu-popover')
+      target.closest('.set-drag-handle')
     ) {
       return;
     }

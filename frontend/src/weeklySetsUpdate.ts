@@ -43,3 +43,28 @@ export function weeklySetGains(
     .sort((left, right) => right.gain - left.gain || left.muscle.localeCompare(right.muscle))
     .slice(0, limit);
 }
+
+/**
+ * The same totals for a whole exercise, shown once when its last set is ticked. The gain covers
+ * every working set the exercise has in this workout: `week` already counts the `earlier` ones,
+ * so they come back off the starting total, and `newly` are the sets being ticked now.
+ */
+export function exerciseSetGains(
+  exercise: Exercise,
+  week: MuscleSetsWeek | null | undefined,
+  workoutDate: string,
+  today: string,
+  earlier: number,
+  newly: number,
+  limit = WEEKLY_SET_GAIN_LIMIT,
+): WeeklySetGain[] {
+  if (earlier + newly <= 0) return [];
+  return weeklySetGains(exercise, week, workoutDate, today, 1, limit).map(
+    ({ muscle, before, gain }) => ({
+      muscle,
+      before: Math.max(0, before - gain * earlier),
+      gain: gain * (earlier + newly),
+      after: Math.max(0, before - gain * earlier) + gain * (earlier + newly),
+    }),
+  );
+}

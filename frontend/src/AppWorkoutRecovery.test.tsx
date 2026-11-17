@@ -611,6 +611,7 @@ describe('mixed-session timelines', () => {
       ),
     ).toEqual([
       'Recent history',
+      'Muscle credits',
       'Group as superset',
       'Swap exercise',
       'Move earlier',
@@ -1110,12 +1111,7 @@ describe('rest time controls', () => {
     set.restRevealed = false;
     writeActiveWorkoutDraft(draft);
     await mount();
-    await click('Options for set 1');
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
-        .find((button) => button.textContent?.includes('Edit set'))!
-        .click(),
-    );
+    await click('Edit weight for set 1');
     const input = container.querySelector<HTMLInputElement>('[data-set-key="set-0"] input')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '85');
@@ -1200,23 +1196,30 @@ describe('rest time controls', () => {
     expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
   });
 
-  it('places Add exercise and Cancel workout after the last movement, and finishes from the header', async () => {
+  it('keeps Add exercise after the last movement and in the header, with Discard in the menu', async () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     const actions = container.querySelector('.live-workout-actions')!;
     const last = [...container.querySelectorAll('.movement-card')].at(-1)!;
     expect(last.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(actions.querySelector('.finish-workout-bottom')).toBeNull();
-    expect(actions.querySelector('.cancel-live-workout-button')?.textContent).toBe(
-      'Cancel workout',
+    // Throwing the workout away is no longer one slip below Add exercise.
+    expect([...actions.querySelectorAll('button')].map((item) => item.textContent?.trim())).toEqual(
+      ['＋ Add exercise'],
     );
+    expect(
+      container.querySelector('.live-workout-header [aria-label="Add exercise"]'),
+    ).not.toBeNull();
     expect(
       container.querySelector('.live-workout-header [aria-label="Finish workout"]'),
     ).not.toBeNull();
-    await act(async () =>
-      actions.querySelector<HTMLButtonElement>('.cancel-live-workout-button')!.click(),
-    );
-    expect(document.querySelector('.workout-close-dialog')).not.toBeNull();
+    await click('Workout options');
+    await click('Discard workout');
+    const confirm = document.querySelector('.workout-discard-dialog')!;
+    expect(confirm.querySelector('h2')?.textContent).toBe('Discard this workout?');
+    expect(
+      [...confirm.querySelectorAll('.popup-dialog-actions button')].map((item) => item.textContent),
+    ).toEqual(['Keep workout', 'Discard workout']);
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
@@ -1445,9 +1448,7 @@ describe('rest time controls', () => {
     draft.movements[0].sets[0].completed = false;
     writeActiveWorkoutDraft(draft);
     await mount();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Options for set 1"]')!.click(),
-    );
+    // An unticked set is open, with Delete set among its own actions.
     const remove = [...container.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Delete set'),
     )!;
@@ -1487,34 +1488,20 @@ describe('rest time controls', () => {
     root = createRoot(container);
     await mount();
     expect(restControl()).toBeNull();
-    await click('Options for set 1');
-    const edit = [
-      ...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button'),
-    ].find((button) => button.textContent?.includes('Edit set'))!;
-    await act(async () => edit.click());
+    await click('Edit weight for set 1');
     expect(
       container.querySelector<HTMLSelectElement>('[aria-label="Rest time for set 1"]')?.value,
     ).toBe('0');
     await click('Done editing set 1');
     expect(restControl()).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].sets[0].rest_seconds).toBeNull();
-    await click('Options for set 1');
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
-        .find((button) => button.textContent?.includes('Edit set'))!
-        .click(),
-    );
+    await click('Edit weight for set 1');
     await choose('Rest time for set 1', '30');
     expect(restControl()).toBeNull();
     await click('Done editing set 1');
     expect(restControl()?.value).toBe('30');
     expect(container.querySelector('[role="timer"]')).toBeNull();
-    await click('Options for set 1');
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
-        .find((button) => button.textContent?.includes('Edit set'))!
-        .click(),
-    );
+    await click('Edit weight for set 1');
     await choose('Rest time for set 1', '0');
     await click('Done editing set 1');
     expect(restControl()).toBeNull();
@@ -2910,12 +2897,8 @@ describe('exercise completion stays consistent with its sets', () => {
   it('clears completion when Undo brings back an unfinished set', async () => {
     writeActiveWorkoutDraft(completionDraft());
     await mount();
-    await click(container.querySelector<HTMLButtonElement>('[aria-label="Options for set 1"]')!);
-    await click(
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')].find(
-        (button) => button.textContent?.includes('Delete set'),
-      )!,
-    );
+    // The unticked first set is open, so its Delete set is the first one on screen.
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Delete set 1"]')!);
     expect(savedMovement().sets).toHaveLength(2);
     await click(exerciseTick());
     expect(savedMovement().isComplete).toBe(true);
@@ -3611,7 +3594,11 @@ describe('inactive workout suggestions', () => {
     await mount();
     await chooseInactive('Discard');
     expect(inactivePrompt()).toBeNull();
-    const keep = [...document.querySelectorAll<HTMLButtonElement>('.workout-close-actions button')];
+    const keep = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '.workout-discard-dialog .popup-dialog-actions button',
+      ),
+    ];
     await act(async () => keep.find((button) => button.textContent === 'Keep workout')!.click());
     expectPreserved(draft);
     expect(inactivePrompt()).not.toBeNull();
@@ -3865,7 +3852,7 @@ describe('live muscle totals while logging', () => {
       .filter((item) => item.textContent?.includes('Chest'))
       .map((item) => item.querySelector('.muscle-set-count')?.firstChild?.textContent);
 
-  it('shows combined gains for exercise completion without recounting logged sets or warmups', async () => {
+  it('shows the whole exercise once on completion, counting each set once and no warm-ups', async () => {
     const draft = readActiveWorkoutDraft()!;
     const base = draft.movements[0].sets[0];
     draft.movements[0].sets = [
@@ -3889,13 +3876,14 @@ describe('live muscle totals while logging', () => {
       'Chest',
       'Triceps',
     ]);
+    // Four working sets in all: the one ticked earlier was never announced, so it counts here.
     expect(cells.map((cell) => cell.querySelector('.weekly-shelf-gain')?.textContent)).toEqual([
-      '+3',
-      '+1.5',
+      '+4',
+      '+2',
     ]);
     expect(cells.map((cell) => cell.querySelector('.weekly-shelf-roll')?.textContent)).toEqual([
-      '14',
-      '0.52',
+      '04',
+      '02',
     ]);
     expect(chestTotals()).toEqual(['4']);
     expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.completed)).toEqual([
