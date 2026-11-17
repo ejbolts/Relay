@@ -172,11 +172,22 @@ export function MuscleSetsCard({
                 <small className="muscle-row-target">/ {target}</small>
                 {change !== null && (
                   <small
-                    className={`muscle-set-change ${change > 0 ? 'is-up' : change < 0 ? 'is-down' : 'is-same'}`}
+                    className={`muscle-set-change ${
+                      change > 0
+                        ? 'is-up'
+                        : change < 0
+                          ? // This week is still going, so a shortfall is not a drop yet.
+                            weeksAgo === 0
+                            ? 'is-pending'
+                            : 'is-down'
+                          : 'is-same'
+                    }`}
                     aria-label={
                       change === 0
                         ? 'same as the week before'
-                        : `${change > 0 ? 'up' : 'down'} ${credits(Math.abs(change))} on the week before`
+                        : change < 0 && weeksAgo === 0
+                          ? `${credits(-change)} to match the week before`
+                          : `${change > 0 ? 'up' : 'down'} ${credits(Math.abs(change))} on the week before`
                     }
                   >
                     {signedChange(change)}

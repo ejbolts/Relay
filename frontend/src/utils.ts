@@ -11,6 +11,14 @@ export function localDate(): string {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
 
+/** The local calendar date (YYYY-MM-DD) of a timestamp, so 01:00 here is not yesterday in UTC. */
+export function localDateOf(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp.slice(0, 10);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
 export function formatSeconds(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);

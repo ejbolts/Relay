@@ -31,7 +31,7 @@ import { PaginationControls } from './PaginationControls';
 import { Icon } from './Icon';
 import { TrendChart, type GoalPath, type TrendPoint } from './PulseCharts';
 import { PageHeader } from './TodayScreen';
-import { shortDate } from './trainingSummary';
+import { dayMonth } from './trainingSummary';
 import { localDate } from './utils';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import { HISTORY_PAGE_SIZE, RANGE_LABELS, prettyDate } from './appShared';
@@ -325,7 +325,7 @@ export function BodyCompositionScreen({
   return (
     <section className="body-screen content-page">
       <PageHeader
-        eyebrow={`${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${shortDate(latest.measurement_date)}` : ''}`}
+        eyebrow={`${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${dayMonth(latest.measurement_date)}` : ''}`}
         title="Body"
         onOpenSettings={onOpenSettings}
         accountActions={accountActions}
