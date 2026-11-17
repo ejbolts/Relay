@@ -123,54 +123,56 @@ const workout = (
   }) as unknown as TrackedWorkout;
 
 describe('muscleFreshness', () => {
-  it('lists days since each muscle was last trained, most rested first', () => {
-    const workouts = [
-      workout('2026-11-16', { bench: ['Pectorals', 'Triceps'] }),
-      workout('2026-11-13', { squat: ['Quadriceps', 'Glutes'], bench: ['Pectorals', 'Triceps'] }),
-      workout('2026-11-15', { row: ['Lats'] }),
-      // Older than the four-week window, so Calves is left out.
-      workout('2026-10-01', { raise: ['Calves'] }),
-    ];
+  const contribution = (date: string, credits = 1) => ({
+    workout_id: `w-${date}`,
+    workout_name: 'Workout',
+    workout_date: date,
+    movement_id: `m-${date}`,
+    exercise_id: 'e',
+    exercise_name: 'Exercise',
+    working_sets: 3,
+    credit_per_set: credits,
+    set_credits: 3 * credits,
+  });
+  const week = (start: string, groups: Record<string, ReturnType<typeof contribution>[]>) => ({
+    week_start: start,
+    week_end: start,
+    muscle_groups: Object.entries(groups).map(([muscle_group, contributions]) => ({
+      muscle_group,
+      raw_sets: contributions.reduce((sum, item) => sum + item.set_credits, 0),
+      contributions,
+    })),
+  });
+
+  it('lists days since each muscle last got set credit, most rested first', () => {
+    const thisWeek = week('2026-11-16', {
+      Pectorals: [contribution('2026-11-16')],
+      Triceps: [contribution('2026-11-16', 0.5)],
+      // Listed with no sets this week; its date comes from the week before.
+      Quadriceps: [],
+      // The workout in progress has today's date.
+      Hamstrings: [contribution('2026-11-17')],
+    });
+    const lastWeek = week('2026-11-09', {
+      Quadriceps: [contribution('2026-11-13')],
+      Pectorals: [contribution('2026-11-13')],
+      Lats: [contribution('2026-11-15'), contribution('2026-11-11')],
+      Calves: [contribution('2026-10-01')],
+      Biceps: [contribution('2026-11-12', 0)],
+    });
     expect(
-      muscleFreshness(workouts, '2026-11-17', 1).map((item) => [item.muscle, item.days]),
+      muscleFreshness([thisWeek, null, lastWeek], '2026-11-17').map((item) => [
+        item.muscle,
+        item.days,
+      ]),
     ).toEqual([
-      ['Glutes', 4],
       ['Quadriceps', 4],
       ['Lats', 2],
       ['Pectorals', 1],
       ['Triceps', 1],
+      ['Hamstrings', 0],
     ]);
-  });
-
-  it('skips incomplete and warm-up sets and counts the workout in progress', () => {
-    const skipped = workout('2026-11-16', { squat: ['Quadriceps'] });
-    skipped.movements[0].sets = [set({ completed: false }), set({ warmup: true })] as never;
-    const live = {
-      week_start: '2026-11-16',
-      week_end: '2026-11-22',
-      muscle_groups: [
-        {
-          muscle_group: 'Hamstrings',
-          raw_sets: 3,
-          contributions: [
-            {
-              workout_id: 'active-workout',
-              workout_name: 'Today',
-              workout_date: '2026-11-17',
-              movement_id: 'm',
-              exercise_id: 'rdl',
-              exercise_name: 'RDL',
-              working_sets: 3,
-              credit_per_set: 1,
-              set_credits: 3,
-            },
-          ],
-        },
-      ],
-    };
-    expect(muscleFreshness([skipped], '2026-11-17', 1, { liveWeek: live })).toEqual([
-      { muscle: 'Hamstrings', last_date: '2026-11-17', days: 0 },
-    ]);
+    expect(muscleFreshness([undefined], '2026-11-17')).toEqual([]);
   });
 
   it('labels and grades the days', () => {

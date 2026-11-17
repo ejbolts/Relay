@@ -1,14 +1,12 @@
 import { bodyGoalKind, maintenanceRange, type BodyGoalKind } from './bodyMeasurementHistory';
-import { creditsForWeek, type MuscleSetsWeek } from './liveMuscleSets';
+import type { MuscleSetsWeek } from './liveMuscleSets';
 import { addDays, daysBetween, weekStartFor } from './trainingSummary';
 import type {
   BodyWeightGoal,
-  Exercise,
   ExerciseLibrarySummary,
   FriendActivity,
   TrackedWorkout,
 } from './types';
-import { isCompletedWorkingSet } from './workoutSets';
 
 /** Within this many kg of the line to the target date counts as on track. */
 const ON_TRACK_KG = 0.1;
@@ -98,41 +96,24 @@ export interface MuscleFreshness {
 export const FRESH_AFTER_DAYS = 3;
 
 /**
- * Days since each muscle last got a completed working set, most rested first. Muscles not
- * trained in the last `lookbackDays` are left out, so ones you never train do not crowd it.
+ * Days since each muscle last got working-set credit, most rested first, from the same weekly
+ * set counts as Sets per muscle, so the muscle names match. Pass this week (with the workout in
+ * progress) and the earlier weeks. Muscles not trained in the last `lookbackDays` are left out.
  */
 export function muscleFreshness(
-  workouts: TrackedWorkout[],
+  weeks: (MuscleSetsWeek | null | undefined)[],
   today: string,
-  weekStartDay: number,
-  {
-    exercises = [],
-    liveWeek,
-    lookbackDays = 28,
-  }: { exercises?: Exercise[]; liveWeek?: MuscleSetsWeek; lookbackDays?: number } = {},
+  lookbackDays = 28,
 ): MuscleFreshness[] {
   const cutoff = addDays(today, -lookbackDays);
   const latest = new Map<string, string>();
-  const note = (muscle: string, date: string) => {
-    if (date < cutoff || date > today) return;
-    if ((latest.get(muscle) ?? '') < date) latest.set(muscle, date);
-  };
-  const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
-  for (const workout of workouts) {
-    if (workout.workout_date < cutoff || workout.workout_date > today) continue;
-    const weekStart = weekStartFor(workout.workout_date, weekStartDay);
-    for (const movement of workout.movements) {
-      if (!movement.sets.some(isCompletedWorkingSet)) continue;
-      const exercise = byId.get(movement.exercise.id) ?? movement.exercise;
-      for (const credit of creditsForWeek(exercise, weekStart)) {
-        note(credit.muscle_name, workout.workout_date);
+  for (const week of weeks) {
+    for (const group of week?.muscle_groups ?? []) {
+      for (const contribution of group.contributions ?? []) {
+        const date = contribution.workout_date;
+        if (contribution.set_credits <= 0 || date < cutoff || date > today) continue;
+        if ((latest.get(group.muscle_group) ?? '') < date) latest.set(group.muscle_group, date);
       }
-    }
-  }
-  // The workout in progress counts too, through this week's live set credits.
-  for (const group of liveWeek?.muscle_groups ?? []) {
-    for (const contribution of group.contributions ?? []) {
-      if (contribution.set_credits > 0) note(group.muscle_group, contribution.workout_date);
     }
   }
   return [...latest]

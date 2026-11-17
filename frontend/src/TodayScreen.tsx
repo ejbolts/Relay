@@ -340,13 +340,11 @@ export function TodayScreen({
         .map((item) => ({ id: item.exercise_id, name: exerciseNames.get(item.exercise_id)! })),
     [exerciseSummaries, exerciseNames],
   );
+  const thisWeekSets = muscleSets?.weeklySets ?? data?.weekly_sets;
+  const earlierWeekSets = muscleSets?.history ?? data?.weekly_sets_history;
   const freshMuscles = useMemo(
-    () =>
-      muscleFreshness(workouts, today, weekStartDay, {
-        exercises,
-        liveWeek: muscleSets?.weeklySets,
-      }),
-    [workouts, today, weekStartDay, exercises, muscleSets?.weeklySets],
+    () => muscleFreshness([thisWeekSets, ...(earlierWeekSets ?? [])], today),
+    [thisWeekSets, earlierWeekSets, today],
   );
   const strengthRecordCount = useMemo(
     () =>

@@ -305,9 +305,11 @@ export function ExerciseSpotlightSettingsForm({
   );
 }
 
+const FULL_FRESHNESS = 10;
+const COMPACT_FRESHNESS = 3;
+
 export function MuscleFreshnessCard({ muscles }: { muscles: MuscleFreshness[] }) {
   const titleId = useId();
-  const ready = muscles.filter((item) => freshnessLevel(item.days) === 'fresh').length;
   return (
     <section className="pulse-card insight-card freshness-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
@@ -317,6 +319,7 @@ export function MuscleFreshnessCard({ muscles }: { muscles: MuscleFreshness[] })
         <p className="pulse-empty-line">Log a workout to see which muscles are fresh.</p>
       ) : (
         <>
+          {/* Most rested first; the full card lists ten and the compact card three. */}
           <ul className="freshness-list">
             {muscles.map((item) => (
               <li key={item.muscle} className={`is-${freshnessLevel(item.days)}`}>
@@ -328,9 +331,14 @@ export function MuscleFreshnessCard({ muscles }: { muscles: MuscleFreshness[] })
               </li>
             ))}
           </ul>
-          {muscles.length > 3 && (
+          {muscles.length > FULL_FRESHNESS && (
+            <p className="insight-foot insight-full-only">
+              +{muscles.length - FULL_FRESHNESS} trained more recently
+            </p>
+          )}
+          {muscles.length > COMPACT_FRESHNESS && (
             <p className="insight-foot insight-compact-only">
-              {ready > 3 ? `+${ready - 3} more fresh` : `+${muscles.length - 3} more`}
+              +{muscles.length - COMPACT_FRESHNESS} more
             </p>
           )}
         </>

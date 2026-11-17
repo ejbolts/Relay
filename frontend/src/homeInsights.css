@@ -6,9 +6,6 @@
   --distance-4: #a78bfa;
   --distance-5: var(--p-danger);
 }
-.insight-compact-only {
-  display: none;
-}
 .insight-label {
   margin: 0;
   color: var(--p-muted);
@@ -76,6 +73,7 @@
   font-size: 0.75rem;
 }
 .spotlight-card .pulse-sparkline {
+  height: 3rem;
   margin-top: 0.625rem;
 }
 
@@ -175,6 +173,9 @@
 }
 .freshness-list .is-recent b {
   color: var(--p-muted);
+}
+.freshness-list li:nth-child(n + 11) {
+  display: none;
 }
 
 /* Cardio distance */
@@ -293,16 +294,25 @@
 .week-board-summary {
   margin: 0 0 0.5rem;
 }
+.week-board-summary > * {
+  display: block;
+}
 .week-board-summary .insight-foot {
   margin-top: 0.125rem;
 }
 
+/* Each card shows either its full or its compact version of these; the card qualifier keeps
+   this ahead of the elements' own display rules. */
+.insight-card .insight-compact-only {
+  display: none;
+}
+
 /* Compact: the card shares its row with another. */
 @container (max-width: 290px) {
-  .insight-full-only {
+  .insight-card .insight-full-only {
     display: none;
   }
-  .insight-compact-only {
+  .insight-card .insight-compact-only {
     display: block;
   }
   .insight-value {
