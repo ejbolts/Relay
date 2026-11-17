@@ -599,11 +599,6 @@ export function CardioScreen({
                   </summary>
                   <div className="cardio-history-row-content">
                     <div className="cardio-session-title-row">
-                      {workoutContext === 'workout_plus_cardio' && (
-                        <span className="cardio-context-badge workout-plus-cardio">
-                          With workout
-                        </span>
-                      )}
                       {session.source_workout_id ? (
                         <button
                           type="button"
@@ -616,9 +611,16 @@ export function CardioScreen({
                         <strong>{session.activity_type}</strong>
                       )}
                     </div>
-                    <small className="cardio-session-date">
-                      {prettyDate(session.session_date)}
-                    </small>
+                    <div className="cardio-session-date-row">
+                      <small className="cardio-session-date">
+                        {prettyDate(session.session_date)}
+                      </small>
+                      {workoutContext === 'workout_plus_cardio' && (
+                        <span className="cardio-context-badge workout-plus-cardio">
+                          With workout
+                        </span>
+                      )}
+                    </div>
                     <small className="cardio-session-summary">
                       {session.duration_minutes} min ·{' '}
                       {session.zone ?? session.intensity ?? 'Unspecified'}
