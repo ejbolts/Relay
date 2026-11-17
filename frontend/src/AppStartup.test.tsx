@@ -460,6 +460,21 @@ describe('App startup', () => {
     expect(markup).not.toContain('next-session-title');
   });
 
+  it('offers to resume the running workout where Up next sits', () => {
+    const markup = renderToday({
+      workoutStartedAt: Date.now() - 65_000,
+      liveWorkoutName: 'Lower body workout',
+      onResumeWorkout: vi.fn(),
+    });
+
+    expect(markup).toContain('live-session-title');
+    expect(markup).toContain('Lower body workout');
+    expect(markup).toContain('Resume');
+    // No second way to start a workout while one is running.
+    expect(markup).not.toContain('next-session-title');
+    expect(markup).not.toContain('Start workout');
+  });
+
   it('shows the last check-in before today, independently finding the prior body-fat value', () => {
     const measurements = [
       { measurement_date: '2026-10-08', weight_kg: 90, body_fat_pct: 20 },

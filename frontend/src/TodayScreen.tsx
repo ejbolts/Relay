@@ -2,6 +2,7 @@ import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import './startChooser.css';
 import { createPortal } from 'react-dom';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
@@ -165,6 +166,9 @@ export interface TodayScreenProps {
   personalRecords: PersonalRecord[];
   categoryColors: WorkoutTypeColors;
   workoutStartedAt: number | null;
+  /** The running workout's name, shown where Up next sits while it is minimised. */
+  liveWorkoutName?: string | null;
+  onResumeWorkout?: () => void;
   workoutSaving?: boolean;
   todayBodyweight: number | null;
   todayBodyFat?: number | null;
@@ -223,6 +227,8 @@ export function TodayScreen({
   personalRecords,
   categoryColors,
   workoutStartedAt,
+  liveWorkoutName = null,
+  onResumeWorkout,
   workoutSaving = false,
   todayBodyweight,
   todayBodyFat = null,
@@ -429,7 +435,7 @@ export function TodayScreen({
             </p>
             {onEditSplit && (
               <button className="text-button" type="button" onClick={onEditSplit}>
-                Edit split
+                {recommendation?.split_name ? 'Edit split' : 'Set up split'}
               </button>
             )}
           </div>
@@ -529,6 +535,23 @@ export function TodayScreen({
               </button>
             )}
           </div>
+        </section>
+      ) : onResumeWorkout ? (
+        <section
+          className="pulse-card next-session live-session"
+          aria-labelledby="live-session-title"
+        >
+          <div className="live-session-copy">
+            <p className="next-session-tag">
+              <i aria-hidden="true" />
+              In progress
+            </p>
+            <h2 id="live-session-title">{liveWorkoutName?.trim() || 'Workout'}</h2>
+          </div>
+          <button className="pulse-button primary" type="button" onClick={onResumeWorkout}>
+            <Icon name="play" filled />
+            Resume
+          </button>
         </section>
       ) : null,
     // Before the first block, the card offers to start one; people who don't want it hide it.
