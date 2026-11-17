@@ -149,6 +149,44 @@ it('sets a rep range on the split from the card, suggesting one with room above 
   expect(steps()).toEqual([]);
 });
 
+it('saves the range onto the split as it is now, not the copy the card loaded', async () => {
+  await render({ ...summary, machineChanges: [] });
+  await click(container.querySelector<HTMLButtonElement>('.finished-workout-steps button')!);
+  // The split is edited elsewhere while the card sits on Home.
+  const edited = {
+    ...routine,
+    name: 'Upper / Lower, edited',
+    days: [
+      {
+        ...routine.days[0],
+        movements: [
+          ...routine.days[0].movements,
+          { exercise_id: 'curl', exercise: { id: 'curl' }, sets: [] },
+        ],
+      },
+    ],
+  } as unknown as Routine;
+  vi.mocked(api.routines.list).mockResolvedValue([edited]);
+  await click(byText('Save', document.querySelector('.rep-range-dialog')!));
+  const sent = vi.mocked(api.routines.save).mock.calls[0][0];
+  expect(sent.name).toBe('Upper / Lower, edited');
+  expect(sent.days[0].movements.map((item) => [item.exercise_id, item.rep_range])).toEqual([
+    ['extension', { min: 10, max: 15 }],
+    ['curl', undefined],
+  ]);
+});
+
+it('saves nothing when the split no longer needs the range, and says so', async () => {
+  await render({ ...summary, machineChanges: [] });
+  await click(container.querySelector<HTMLButtonElement>('.finished-workout-steps button')!);
+  vi.mocked(api.routines.list).mockResolvedValue([{ ...routine, days: [] }]);
+  const dialog = document.querySelector('.rep-range-dialog')!;
+  await click(byText('Save', dialog));
+  expect(api.routines.save).not.toHaveBeenCalled();
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('Your split has changed');
+  expect(actions.onNotice).not.toHaveBeenCalled();
+});
+
 it('offers no rep range when the split does not plan the exercise, or already has a range', async () => {
   vi.mocked(api.routines.list).mockResolvedValue([
     {

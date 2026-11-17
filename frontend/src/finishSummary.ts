@@ -22,6 +22,10 @@ export interface FinishSummary {
 /** A finished workout stays on Home for the rest of the day, not into the next session. */
 export const FINISH_SUMMARY_MAX_AGE_MS = 18 * 60 * 60 * 1000;
 
+/** Milliseconds until the summary is too old to show; below zero once it is. */
+export const finishSummaryTimeLeft = (summary: Pick<FinishSummary, 'finishedAt'>, now: number) =>
+  summary.finishedAt + FINISH_SUMMARY_MAX_AGE_MS - now;
+
 type SetLike = Pick<
   WorkoutSetInput,
   'reps' | 'weight_kg' | 'completed' | 'set_type' | 'warmup' | 'failed'
@@ -116,7 +120,11 @@ export function buildFinishSummary(
     previous: sameName
       ? {
           workoutDate: sameName.workout_date,
-          sets: sameName.movements.reduce((total, movement) => total + movement.sets.length, 0),
+          // Completed sets on both sides: a set left unticked last time is not work done.
+          sets: sameName.movements.reduce(
+            (total, movement) => total + movement.sets.filter((item) => item.completed).length,
+            0,
+          ),
           volumeKg: sameName.movements
             .filter((movement) => movement.exercise.kind !== 'cardio')
             .reduce((total, movement) => total + volumeOf(movement.sets), 0),
@@ -146,7 +154,7 @@ function isSummary(value: unknown): value is FinishSummary {
 export function readFinishSummary(userId: string, now: number): FinishSummary | null {
   try {
     const value: unknown = JSON.parse(window.localStorage.getItem(storageKey(userId)) ?? 'null');
-    if (!isSummary(value) || now - value.finishedAt > FINISH_SUMMARY_MAX_AGE_MS) return null;
+    if (!isSummary(value) || finishSummaryTimeLeft(value, now) < 0) return null;
     return value;
   } catch {
     return null;
