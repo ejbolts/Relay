@@ -1,5 +1,5 @@
-/* Head to head: your best lifts against another member's, on their profile. You are the accent
-   colour and they are gold, in the score, the bars and the leading figures alike. */
+/* Head to head: your best lifts against another member's, on their profile. Whoever leads takes
+   the theme's accent colour, in the score, the bars and the figures alike; the other side is grey. */
 
 .head-to-head-score {
   display: grid;
@@ -36,12 +36,12 @@
 .head-to-head-side .profile-avatar {
   width: 2.25rem;
   height: 2.25rem;
-  box-shadow: 0 0 0 2px var(--p-accent);
+  box-shadow: 0 0 0 2px var(--p-deemph);
   font-size: 0.9375rem;
 }
 
-.head-to-head-side.them .profile-avatar {
-  box-shadow: 0 0 0 2px var(--p-gold);
+.head-to-head-side.ahead .profile-avatar {
+  box-shadow: 0 0 0 2px var(--p-accent);
 }
 
 .head-to-head-score strong {
@@ -54,12 +54,8 @@
   line-height: 1;
 }
 
-.head-to-head-score strong span:first-child {
+.head-to-head-score strong span.ahead {
   color: var(--p-accent-text);
-}
-
-.head-to-head-score strong span:last-child {
-  color: var(--p-gold);
 }
 
 .head-to-head-score strong i {
@@ -123,13 +119,9 @@
   text-align: right;
 }
 
-[data-leader='you'] .head-to-head-values b:first-child {
-  color: var(--p-accent-text);
-  font-weight: 700;
-}
-
+[data-leader='you'] .head-to-head-values b:first-child,
 [data-leader='them'] .head-to-head-values b:last-child {
-  color: var(--p-gold);
+  color: var(--p-accent-text);
   font-weight: 700;
 }
 
@@ -153,12 +145,9 @@
   flex: 1;
 }
 
-[data-leader='you'] .head-to-head-bar i:first-child {
-  background: var(--p-accent);
-}
-
+[data-leader='you'] .head-to-head-bar i:first-child,
 [data-leader='them'] .head-to-head-bar i:last-child {
-  background: var(--p-gold);
+  background: var(--p-accent);
 }
 
 .head-to-head-sets {

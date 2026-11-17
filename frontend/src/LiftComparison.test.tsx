@@ -95,6 +95,8 @@ it('shows five lifts until the rest are asked for', async () => {
   expect(host.querySelectorAll('.head-to-head-lifts li')).toHaveLength(5);
   // The score still counts every lift.
   expect(host.querySelector('.head-to-head-score strong')?.textContent).toBe('7–0');
+  // Only the side that leads overall is highlighted.
+  expect(text('.head-to-head-score .ahead')).toEqual(['You', '7']);
   const more = host.querySelector<HTMLButtonElement>('.show-more-button');
   expect(more?.textContent).toBe('Show all 7 lifts');
   await act(async () => more?.click());

@@ -93,9 +93,9 @@ export function HeadToHeadCard({
           <b>You</b>
         </span>
         <strong className="num" aria-hidden="true">
-          <span>{yours}</span>
+          <span className={yours > theirs ? 'ahead' : undefined}>{yours}</span>
           <i>–</i>
-          <span>{theirs}</span>
+          <span className={theirs > yours ? 'ahead' : undefined}>{theirs}</span>
         </strong>
         <span
           className={`head-to-head-side them${theirs > yours ? ' ahead' : ''}`}
