@@ -1622,7 +1622,7 @@
   filter: grayscale(1);
   cursor: default;
 }
-.workout-discussion .discussion-reaction-summary.is-yours {
+.workout-discussion .discussion-reaction-summary:is(.is-yours, .is-joined) {
   gap: 0;
   padding: 0;
 }
