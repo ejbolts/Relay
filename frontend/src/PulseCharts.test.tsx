@@ -130,6 +130,44 @@ describe('TrendChart day popup', () => {
     );
     expect(onSelect).toHaveBeenCalledWith(points[1]);
   });
+
+  it('reports a two-finger pinch as a scale and closes the popup', async () => {
+    const onChange = vi.fn();
+    const onEnd = vi.fn();
+    await act(async () =>
+      root.render(
+        <TrendChart
+          points={points}
+          unit="kg"
+          label="Bodyweight"
+          seriesLabel="7-day average"
+          pinchZoom={{ onChange, onEnd }}
+        />,
+      ),
+    );
+    await press('ArrowLeft');
+    expect(tooltip()).not.toBeNull();
+    const touch = async (type: string, xs: number[]) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'touches', {
+        value: xs.map((clientX) => ({ clientX, clientY: 80 })),
+      });
+      await act(async () => {
+        chart().dispatchEvent(event);
+      });
+      return event;
+    };
+
+    expect((await touch('touchstart', [100, 200])).defaultPrevented).toBe(true);
+    expect(tooltip()).toBeNull();
+    expect((await touch('touchmove', [50, 250])).defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenLastCalledWith(2);
+    await touch('touchmove', [125, 175]);
+    expect(onChange).toHaveBeenLastCalledWith(0.5);
+    expect(onEnd).not.toHaveBeenCalled();
+    await touch('touchend', [125]);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('goalLabelY', () => {

@@ -68,6 +68,11 @@ export interface TrendChartProps {
   backgroundPoints?: TrendPoint[];
   formatValue?: (value: number) => string;
   onSelect?: (point: TrendPoint) => void;
+  /**
+   * Two-finger pinches (and trackpad pinches) report their scale from the gesture start:
+   * above 1 means the fingers spread. `onEnd` runs when the gesture finishes.
+   */
+  pinchZoom?: { onChange: (scale: number) => void; onEnd: () => void };
 }
 
 export interface GoalPath {
@@ -98,12 +103,27 @@ export function TrendChart({
   backgroundPoints = [],
   formatValue = defaultFormat,
   onSelect,
+  pinchZoom,
 }: TrendChartProps) {
   const { ref, width, height: measuredHeight } = useElementSize<HTMLDivElement>(340, compactHeight);
   const height = fillHeight ? measuredHeight : compactHeight;
   const [active, setActive] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const pad = { left: 40, right: 12, top: 12, bottom: 26 };
+  const pinchZoomRef = useRef(pinchZoom);
+  pinchZoomRef.current = pinchZoom;
+  const pinchEnabled = Boolean(pinchZoom);
+  // While fingers from a pinch stay down, they must not scrub the chart.
+  const pinchTouchRef = useRef(false);
+  // The draw-in animation is keyed on the data. A pinch changes the data on every move, so it
+  // keeps the key from the gesture start until the first change after the pinch settles.
+  const [pinchDrawKey, setPinchDrawKey] = useState<string | null>(null);
+  const pinchActiveRef = useRef(false);
+  const pinchSettlingRef = useRef(false);
+  // Changing data (range, metric, exercise) re-runs the draw-in animation; hover does not.
+  const dataKey = `${points.length}:${points[0]?.date}:${points.at(-1)?.date}:${points.at(-1)?.value}`;
+  const dataKeyRef = useRef(dataKey);
+  dataKeyRef.current = dataKey;
 
   const model = useMemo(() => {
     if (!points.length) return null;
@@ -214,6 +234,93 @@ export function TrendChart({
     setActive(null);
   }, [points]);
 
+  useEffect(() => {
+    if (!pinchActiveRef.current && !pinchSettlingRef.current) setPinchDrawKey(null);
+  }, [dataKey]);
+
+  const hasModel = model !== null;
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !pinchEnabled) return;
+    let startDistance: number | null = null;
+    let wheelScale = 1;
+    let wheelTimer: number | undefined;
+    const distance = (touches: TouchList) =>
+      Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+    const begin = () => {
+      pinchActiveRef.current = true;
+      setActive(null);
+      setPinchDrawKey((current) => current ?? dataKeyRef.current);
+    };
+    const finish = () => {
+      pinchActiveRef.current = false;
+      pinchSettlingRef.current = true;
+      pinchZoomRef.current?.onEnd();
+      // The snapped view renders in this same event, so stop holding the key after it.
+      requestAnimationFrame(() => {
+        pinchSettlingRef.current = false;
+      });
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 2) return;
+      event.preventDefault();
+      startDistance = distance(event.touches);
+      pinchTouchRef.current = true;
+      begin();
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (startDistance === null || event.touches.length < 2) return;
+      event.preventDefault();
+      if (startDistance > 0)
+        pinchZoomRef.current?.onChange(distance(event.touches) / startDistance);
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (startDistance !== null && event.touches.length < 2) {
+        startDistance = null;
+        finish();
+      }
+      if (event.touches.length === 0) pinchTouchRef.current = false;
+    };
+    // Trackpads report a pinch as a wheel event with ctrlKey set.
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      if (wheelTimer === undefined) begin();
+      else window.clearTimeout(wheelTimer);
+      wheelScale *= Math.exp(-event.deltaY / 100);
+      pinchZoomRef.current?.onChange(wheelScale);
+      wheelTimer = window.setTimeout(() => {
+        wheelTimer = undefined;
+        wheelScale = 1;
+        finish();
+      }, 250);
+    };
+    // Safari's own pinch gesture would zoom the page instead of the chart.
+    const onGesture = (event: Event) => event.preventDefault();
+    svg.addEventListener('touchstart', onTouchStart, { passive: false });
+    svg.addEventListener('touchmove', onTouchMove, { passive: false });
+    svg.addEventListener('touchend', onTouchEnd);
+    svg.addEventListener('touchcancel', onTouchEnd);
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    svg.addEventListener('gesturestart', onGesture);
+    svg.addEventListener('gesturechange', onGesture);
+    return () => {
+      svg.removeEventListener('touchstart', onTouchStart);
+      svg.removeEventListener('touchmove', onTouchMove);
+      svg.removeEventListener('touchend', onTouchEnd);
+      svg.removeEventListener('touchcancel', onTouchEnd);
+      svg.removeEventListener('wheel', onWheel);
+      svg.removeEventListener('gesturestart', onGesture);
+      svg.removeEventListener('gesturechange', onGesture);
+      if (wheelTimer !== undefined) {
+        window.clearTimeout(wheelTimer);
+        pinchZoomRef.current?.onEnd();
+      }
+      pinchTouchRef.current = false;
+      pinchActiveRef.current = false;
+    };
+  }, [hasModel, pinchEnabled]);
+
   if (!model) {
     return (
       <div className="pulse-chart pulse-chart-empty" ref={ref}>
@@ -230,12 +337,12 @@ export function TrendChart({
     coords.length > 1
       ? `${line}L${coords.at(-1)!.x.toFixed(1)},${baseline}L${coords[0].x.toFixed(1)},${baseline}Z`
       : '';
-  // Changing data (range, metric, exercise) re-runs the draw-in animation; hover does not.
-  const drawKey = `${points.length}:${points[0]?.date}:${points.at(-1)?.date}:${points.at(-1)?.value}`;
+  const drawKey = pinchDrawKey ?? dataKey;
   const activePoint = active === null ? null : points[active];
   const activeCoord = active === null ? null : coords[active];
 
   function selectAt(event: ReactPointerEvent<SVGSVGElement>) {
+    if (pinchTouchRef.current) return;
     const transform = event.currentTarget.getScreenCTM();
     if (!transform) return;
     const chartX = chartPointerX(event.clientX, event.clientY, transform);

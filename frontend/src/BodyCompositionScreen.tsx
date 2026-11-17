@@ -1,6 +1,6 @@
 import { BodyWeightTip } from './FeatureDiscoveryTips';
 import { BodySizesCard } from './BodySizesCard';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from './api';
@@ -8,7 +8,14 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
 import { formatWeight, weightFromKg, weightInputValue } from './weightUnits';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
-import { clipBodyWeightGoalPath, filterMeasurementsByRange } from './bodyTrend';
+import {
+  bodyTrendRangeSpans,
+  bodyTrendSpanStart,
+  clipBodyWeightGoalPath,
+  filterMeasurementsByRange,
+  nearestBodyTrendRange,
+  pinchedBodyTrendSpan,
+} from './bodyTrend';
 import type { BodyTrendRange } from './bodyTrend';
 import {
   bodyGoalKind,
@@ -359,7 +366,6 @@ export function BodyCompositionScreen({
         <section className="pulse-card body-trend-panel">
           <header className="pulse-card-header">
             <h2>Trend</h2>
-            <span>Tap or drag the chart to read a check-in</span>
           </header>
           <BodyTrendChart measurements={measurements} goals={goals} />
         </section>
@@ -809,12 +815,28 @@ function BodyTrendChart({
   const [displayRange, setDisplayRange] = useState<BodyTrendRange>('3m');
   // Weight and body fat use different units, so they are separate views rather than two y-axes.
   const [series, setSeries] = useState<'weight' | 'fat'>('weight');
-  const ordered = filterMeasurementsByRange(measurements, displayRange).slice().reverse();
-  const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
-  const selectedDateRange = dateRangeForDates(
-    measurements.map((item) => item.measurement_date),
-    displayRange,
+  // While a pinch is in progress the chart shows this many days; releasing snaps to the chip.
+  const [pinchSpanDays, setPinchSpanDays] = useState<number | null>(null);
+  const pinchBaseSpanRef = useRef<number | null>(null);
+  const measurementDates = useMemo(
+    () => measurements.map((item) => item.measurement_date),
+    [measurements],
   );
+  const rangeSpans = useMemo(() => bodyTrendRangeSpans(measurementDates), [measurementDates]);
+  const pinchStart =
+    pinchSpanDays === null ? undefined : bodyTrendSpanStart(measurementDates, pinchSpanDays);
+  const ordered = (
+    pinchSpanDays === null
+      ? filterMeasurementsByRange(measurements, displayRange)
+      : measurements.filter((item) => !pinchStart || item.measurement_date >= pinchStart)
+  )
+    .slice()
+    .reverse();
+  const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
+  const selectedDateRange =
+    pinchSpanDays === null
+      ? dateRangeForDates(measurementDates, displayRange)
+      : { start_date: pinchStart };
   const activeGoal = goals.find((goal) => goal.active) ?? null;
   // Clip only the start: a future target date extends the chart so the goal line reaches it.
   const clippedGoal = activeGoal
@@ -839,7 +861,7 @@ function BodyTrendChart({
       }),
     // ordered is derived from measurements and the range.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
+    [measurements, displayRange, pinchStart, weightUnit],
   );
   const dailyPoints = useMemo<TrendPoint[]>(
     () =>
@@ -848,7 +870,7 @@ function BodyTrendChart({
         value: weightFromKg(item.weight_kg, weightUnit),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
+    [measurements, displayRange, pinchStart, weightUnit],
   );
   const fatPoints = useMemo<TrendPoint[]>(
     () =>
@@ -856,7 +878,7 @@ function BodyTrendChart({
         .filter((item) => item.body_fat_pct !== null)
         .map((item) => ({ date: item.measurement_date, value: item.body_fat_pct! })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
+    [measurements, displayRange, pinchStart, weightUnit],
   );
   const goalPath = useMemo<GoalPath | null>(
     () =>
@@ -888,6 +910,21 @@ function BodyTrendChart({
     ],
   );
   const showFat = series === 'fat' && hasBodyFat;
+  const pinchZoom = useMemo(
+    () => ({
+      onChange: (scale: number) => {
+        pinchBaseSpanRef.current ??= rangeSpans[displayRange];
+        const span = pinchedBodyTrendSpan(pinchBaseSpanRef.current, scale, rangeSpans);
+        setPinchSpanDays(span);
+        setDisplayRange(nearestBodyTrendRange(span, rangeSpans));
+      },
+      onEnd: () => {
+        pinchBaseSpanRef.current = null;
+        setPinchSpanDays(null);
+      },
+    }),
+    [displayRange, rangeSpans],
+  );
   const bodyRangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const bodySeriesIndicatorRef = useSlidingIndicator<HTMLDivElement>(showFat);
 
@@ -908,7 +945,11 @@ function BodyTrendChart({
               aria-selected={displayRange === option.value}
               aria-label={option.label}
               className={displayRange === option.value ? 'active' : ''}
-              onClick={() => setDisplayRange(option.value)}
+              onClick={() => {
+                pinchBaseSpanRef.current = null;
+                setPinchSpanDays(null);
+                setDisplayRange(option.value);
+              }}
             >
               {RANGE_LABELS[option.value]}
             </button>
@@ -952,6 +993,7 @@ function BodyTrendChart({
               unit="%"
               height={200}
               fillHeight={expanded}
+              pinchZoom={pinchZoom}
             />
           ) : (
             <TrendChart
@@ -964,6 +1006,7 @@ function BodyTrendChart({
               goalPath={goalPath}
               height={200}
               fillHeight={expanded}
+              pinchZoom={pinchZoom}
             />
           )
         }
