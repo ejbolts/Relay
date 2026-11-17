@@ -174,8 +174,16 @@
 .freshness-list .is-recent b {
   color: var(--p-muted);
 }
-.freshness-list li:nth-child(n + 11) {
+.freshness-list:not(.is-expanded) li:nth-child(n + 11) {
   display: none;
+}
+.freshness-toggle {
+  display: block;
+  min-height: 2.75rem;
+  margin-top: 0.25rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 /* Cardio distance */
@@ -321,7 +329,7 @@
   .freshness-list {
     grid-template-columns: minmax(0, 1fr);
   }
-  .freshness-list li:nth-child(n + 4) {
+  .freshness-list:not(.is-expanded) li:nth-child(n + 4) {
     display: none;
   }
   .distance-list li:nth-child(n + 3),

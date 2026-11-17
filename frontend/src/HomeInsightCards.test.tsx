@@ -233,6 +233,52 @@ it('shows muscle freshness with full and short labels', async () => {
   expect(text()).toContain('Log a workout to see which muscles are fresh.');
 });
 
+it('expands and collapses the remaining muscles from either card width', async () => {
+  const muscles = Array.from({ length: 12 }, (_, index) => ({
+    muscle: `Muscle ${index + 1}`,
+    last_date: '2026-11-13',
+    days: 12 - index,
+  }));
+  await render(<MuscleFreshnessCard muscles={muscles} />);
+  const list = host.querySelector('.freshness-list')!;
+  const full = button('+2 trained more recently');
+  const compact = button('+9 more');
+  for (const toggle of [full, compact]) {
+    expect(toggle.getAttribute('aria-controls')).toBe(list.id);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  }
+  await act(async () => full.click());
+  expect(list.classList.contains('is-expanded')).toBe(true);
+  expect(list.querySelectorAll('li')).toHaveLength(12);
+  for (const toggle of [full, compact]) {
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.textContent).toBe('Show less');
+  }
+  await act(async () => compact.click());
+  expect(list.classList.contains('is-expanded')).toBe(false);
+  expect(full.textContent).toBe('+2 trained more recently');
+  expect(compact.textContent).toBe('+9 more');
+  await act(async () => compact.click());
+  expect(list.classList.contains('is-expanded')).toBe(true);
+  await act(async () => full.click());
+  expect(list.classList.contains('is-expanded')).toBe(false);
+});
+
+it('only offers expansion when that width has hidden muscles', async () => {
+  const muscles = Array.from({ length: 10 }, (_, index) => ({
+    muscle: `Muscle ${index + 1}`,
+    last_date: '2026-11-13',
+    days: 10 - index,
+  }));
+  await render(<MuscleFreshnessCard muscles={muscles} />);
+  expect(host.querySelector('.freshness-toggle.insight-full-only')).toBeNull();
+  expect(button('+7 more')).toBeTruthy();
+  await render(<MuscleFreshnessCard muscles={muscles.slice(0, 3)} />);
+  expect(host.querySelectorAll('button')).toHaveLength(0);
+  await render(<MuscleFreshnessCard muscles={[]} />);
+  expect(host.querySelectorAll('button')).toHaveLength(0);
+});
+
 describe('Cardio distance', () => {
   const session = (date: string, activity: string, km: number | null) =>
     ({ session_date: date, activity_type: activity, distance_km: km }) as CardioSession;

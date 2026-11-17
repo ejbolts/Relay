@@ -310,6 +310,8 @@ const COMPACT_FRESHNESS = 3;
 
 export function MuscleFreshnessCard({ muscles }: { muscles: MuscleFreshness[] }) {
   const titleId = useId();
+  const listId = useId();
+  const [expanded, setExpanded] = useState(false);
   return (
     <section className="pulse-card insight-card freshness-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
@@ -319,8 +321,8 @@ export function MuscleFreshnessCard({ muscles }: { muscles: MuscleFreshness[] })
         <p className="pulse-empty-line">Log a workout to see which muscles are fresh.</p>
       ) : (
         <>
-          {/* Most rested first; the full card lists ten and the compact card three. */}
-          <ul className="freshness-list">
+          {/* Most rested first; collapsed cards show ten muscles, or three at compact width. */}
+          <ul id={listId} className={`freshness-list${expanded ? ' is-expanded' : ''}`}>
             {muscles.map((item) => (
               <li key={item.muscle} className={`is-${freshnessLevel(item.days)}`}>
                 <span>{item.muscle}</span>
@@ -332,14 +334,26 @@ export function MuscleFreshnessCard({ muscles }: { muscles: MuscleFreshness[] })
             ))}
           </ul>
           {muscles.length > FULL_FRESHNESS && (
-            <p className="insight-foot insight-full-only">
-              +{muscles.length - FULL_FRESHNESS} trained more recently
-            </p>
+            <button
+              type="button"
+              className="text-link freshness-toggle insight-full-only"
+              aria-expanded={expanded}
+              aria-controls={listId}
+              onClick={() => setExpanded((current) => !current)}
+            >
+              {expanded ? 'Show less' : `+${muscles.length - FULL_FRESHNESS} trained more recently`}
+            </button>
           )}
           {muscles.length > COMPACT_FRESHNESS && (
-            <p className="insight-foot insight-compact-only">
-              +{muscles.length - COMPACT_FRESHNESS} more
-            </p>
+            <button
+              type="button"
+              className="text-link freshness-toggle insight-compact-only"
+              aria-expanded={expanded}
+              aria-controls={listId}
+              onClick={() => setExpanded((current) => !current)}
+            >
+              {expanded ? 'Show less' : `+${muscles.length - COMPACT_FRESHNESS} more`}
+            </button>
           )}
         </>
       )}
