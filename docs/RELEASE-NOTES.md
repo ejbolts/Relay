@@ -6,19 +6,23 @@ _Relay was called Gym Logger before version 1.0._
 
 17 November 2026
 
-### Training blocks, redesigned tracking and a new feed
+### Head-to-head, body measurements and your feed
 
-![Training blocks with a coloured timeline, current block progress and comparisons with the previous block. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8cdac512b7e5fb53f32e9c74eca1255dea9fe8f3/square-timeline-colour-boxes/after.png)
+![Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png)
 
-**Training blocks** — Scroll and zoom through coloured blocks, with all-time records kept.
+**Head-to-head** — Compare your best lifts with friends and see who leads.
 
-![Live workout with rep targets, suggested weights and a completed Hack Squat set showing 1.64 times bodyweight at 82.5 kg. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/bd56c0d9b6d1ee46d3ef761c2c0c1569d6e46fc6/ux-logging-polish/logger-header.png)
+![Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png)
 
-**Redesigned tracking** — A cleaner workout screen with rep targets and live progress.
+**Body measurements** — See measurements on a body outline and tap to update.
 
-![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/f6b1beebaadc2c268168ebbe08330884a10a2924/release-1.3-notes/feed.png)
+![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png)
 
 **Workout feed** — Catch up on workouts, comments and reactions.
+
+![Two-finger pinch on the Body trend chart zooms from 3M to 1M and out through 3M, 9M and 1Y to All, with range chips and dates following the gesture. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8a3724e75c9b8b689904164646630dfe2927ed86/body-chart-pinch-zoom/pinch-zoom.gif)
+
+**Pinch to zoom** — Zoom Body and exercise charts with two fingers.
 
 - **Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.
 - **Workout saves:** Finish instantly and keep logging while sessions sync, even offline.
@@ -35,10 +39,10 @@ _Relay was called Gym Logger before version 1.0._
 - **Machine weights:** Use machine-specific suggestions, per-set assignments and normalised list trends.
 - **Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.
 - **Weekly review:** Open last week's training review from a weekly popup or Notifications.
-- **Block progress:** Charts name their block; summaries compare blocks and offer a next block or deload.
-- **Home layout:** Customise weekly charts, This week and one-button weight/body-fat check-ins.
+- **Training blocks:** Plan coloured blocks on a zoomable timeline, compare results and start a deload.
+- **Home layout:** Customise weekly charts and check-ins, with tidier set totals and compact records.
 - **Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.
-- **History:** Page sessions and profiles by fortnight, group exercises by year or export one workout.
+- **History:** Log-style set tables, fortnight pages and single-workout exports.
 - **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
 - **Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.
 - **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
@@ -48,7 +52,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
 - **Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.
 - **Account recovery:** Admin-issued temporary passwords require a new password at sign-in.
-- **Cardio:** Automatic MET estimates and elevation tracking replace MET-minutes.
+- **Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout.
 
 ## 1.2.0
 
