@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { BodyFigure } from './BodyFigure';
+import { loadBodyFigure, saveBodyFigure } from './bodyFigurePreference';
+import type { BodyFigureKind } from './bodyFigureShapes';
 import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySizes';
+import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { HelpPopup } from './HelpPopup';
 import { useWeightUnit } from './trainingPreferencesContext';
+import { useUserSession } from './userContext';
 import { localDate } from './utils';
 import './bodySizes.css';
 
@@ -15,6 +20,10 @@ const shortDate = (date: string) =>
     month: 'short',
     year: 'numeric',
   }).format(new Date(`${date}T12:00:00`));
+const dayAndMonth = (date: string) =>
+  new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(
+    new Date(`${date}T12:00:00`),
+  );
 
 export function BodySizesCard({ dataRevision = null }: { dataRevision?: string | null }) {
   const weightUnit = useWeightUnit();
@@ -30,6 +39,10 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const [visible, setVisible] = useState(5);
   const [historyPart, setHistoryPart] = useState<BodySizeField | 'all'>('all');
   const [retry, setRetry] = useState(0);
+  // The entry drawn on the figure: the latest one until another is stepped to or saved.
+  const [shownDate, setShownDate] = useState<string | null>(null);
+  const userId = useUserSession().user?.id ?? null;
+  const [figure, setFigure] = useState<BodyFigureKind>(() => loadBodyFigure(userId));
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +108,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
           b.measurement_date.localeCompare(a.measurement_date),
         ),
       );
+      setShownDate(saved.measurement_date);
       setEditing(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save measurements.');
@@ -118,7 +132,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     }
   }
 
-  const latest = logs?.[0];
+  const shownIndex = Math.max(0, logs?.findIndex((row) => row.measurement_date === shownDate) ?? 0);
+  const shown = logs?.[shownIndex];
+  const previous = logs?.[shownIndex + 1];
   const history = (logs ?? []).filter((row) => historyPart === 'all' || row[historyPart] !== null);
   const partLabel = BODY_SIZE_FIELDS.find(([key]) => key === historyPart)?.[1];
   const format = (cm: number) => `${Number((cm / factor).toFixed(1))} ${unit}`;
@@ -129,6 +145,12 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     const change = Number((current - previous).toFixed(1));
     return change === 0 ? 'No change' : `${change > 0 ? '+' : '−'}${Math.abs(change)} ${unit}`;
   }
+  const display = (cm: number) => Number((cm / factor).toFixed(1));
+  const changes = BODY_SIZE_FIELDS.flatMap(([key, label]) => {
+    if (shown?.[key] == null || previous?.[key] == null) return [];
+    const change = Number((display(shown[key]) - display(previous[key])).toFixed(1));
+    return change === 0 ? [] : [{ key, label, change }];
+  });
   const open = (day: string) => {
     chooseDate(day);
     setEditing(true);
@@ -167,21 +189,111 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         <p className="body-sizes-empty">
           {error ? 'Measurements unavailable' : 'Loading measurements…'}
         </p>
-      ) : !latest ? (
+      ) : !shown ? (
         <p className="body-sizes-empty">No body measurements yet</p>
       ) : (
         <>
-          <time className="body-sizes-date" dateTime={latest.measurement_date}>
-            {shortDate(latest.measurement_date)}
-          </time>
-          <dl className="body-sizes-grid">
-            {BODY_SIZE_FIELDS.filter(([key]) => latest[key] !== null).map(([key, label]) => (
+          <div className="body-sizes-stepper">
+            {logs.length > 1 && (
+              <button
+                type="button"
+                aria-label="Earlier measurements"
+                disabled={!previous}
+                onClick={() => previous && setShownDate(previous.measurement_date)}
+              >
+                <Icon name="chevron-left" />
+              </button>
+            )}
+            <time dateTime={shown.measurement_date}>{shortDate(shown.measurement_date)}</time>
+            {logs.length > 1 && (
+              <button
+                type="button"
+                aria-label="Later measurements"
+                disabled={shownIndex === 0}
+                onClick={() => setShownDate(logs[shownIndex - 1].measurement_date)}
+              >
+                <Icon name="chevron-right" />
+              </button>
+            )}
+          </div>
+          <BodyFigure
+            kind={figure}
+            unit={unit}
+            values={Object.fromEntries(
+              BODY_SIZE_FIELDS.filter(([key]) => shown[key] !== null).map(([key]) => [
+                key,
+                String(display(shown[key]!)),
+              ]),
+            )}
+          />
+          {/* The figure is a picture; this is the same entry as a list for screen readers. */}
+          <dl className="sr-only">
+            {BODY_SIZE_FIELDS.filter(([key]) => shown[key] !== null).map(([key, label]) => (
               <div key={key}>
                 <dt>{label}</dt>
-                <dd>{format(latest[key]!)}</dd>
+                <dd>{format(shown[key]!)}</dd>
               </div>
             ))}
           </dl>
+          <div
+            className="segmented-control compact body-sizes-figure-kind"
+            role="radiogroup"
+            aria-label="Body outline"
+          >
+            {(
+              [
+                ['male', 'Male'],
+                ['female', 'Female'],
+              ] as const
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                role="radio"
+                aria-checked={figure === kind}
+                className={figure === kind ? 'active' : ''}
+                onClick={() => {
+                  setFigure(kind);
+                  saveBodyFigure(userId, kind);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {changes.length > 0 && previous && (
+            <div className="body-sizes-changes">
+              <h3>Changed since {dayAndMonth(previous.measurement_date)}</h3>
+              <ul>
+                {changes.map(({ key, label, change }) => (
+                  <li
+                    key={key}
+                    aria-label={`${label} ${change > 0 ? 'up' : 'down'} ${Math.abs(change)} ${unit}`}
+                  >
+                    {label}
+                    <b>
+                      {change > 0 ? '↑' : '↓'} {Math.abs(change)}
+                    </b>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="body-sizes-entry-actions">
+            <button type="button" onClick={() => open(shown.measurement_date)}>
+              Edit
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                setError(null);
+                setDeleting(shown.measurement_date);
+              }}
+            >
+              Delete
+            </button>
+          </div>
           <details className="body-sizes-history">
             <summary>
               Measurement history <span>{history.length}</span>

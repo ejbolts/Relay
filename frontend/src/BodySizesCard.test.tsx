@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { BodySizesCard } from './BodySizesCard';
 import { BODY_SIZE_FIELDS, type BodySizeLog } from './bodySizes';
+import type { User } from './types';
+import { UserContext } from './userContext';
 
 let unit = 'kg';
 vi.mock('./trainingPreferencesContext', () => ({ useWeightUnit: () => unit }));
@@ -190,6 +192,82 @@ describe('BodySizesCard', () => {
     expect(host.textContent).toContain('82 cm');
     await act(async () => button('Update measurements').click());
     expect(host.textContent).toContain('81 cm');
+  });
+  it('steps back through earlier entries and lists what changed since the one before', async () => {
+    await render([
+      row('2026-10-25', { waist_cm: 81, chest_cm: 103, neck_cm: 38 }),
+      row('2026-10-18', { waist_cm: 82, chest_cm: 102.5, neck_cm: 38 }),
+      row('2026-10-11', { waist_cm: 82 }),
+    ]);
+    const stepper = host.querySelector('.body-sizes-stepper')!;
+    const [earlier, later] = [...stepper.querySelectorAll('button')];
+    const changes = () =>
+      [...host.querySelectorAll('.body-sizes-changes li')].map((item) => item.textContent);
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-25');
+    expect(later.disabled).toBe(true);
+    expect(host.querySelector('.body-sizes-changes h3')?.textContent).toContain('18');
+    // Neck did not change, so it is left out.
+    expect(changes()).toEqual(['Chest↑ 0.5', 'Waist↓ 1']);
+    expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist81 cm');
+    await act(async () => earlier.click());
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-18');
+    expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist82 cm');
+    // Only waist was measured on both days, and it is unchanged.
+    expect(host.querySelector('.body-sizes-changes')).toBeNull();
+    await act(async () => earlier.click());
+    expect(earlier.disabled).toBe(true);
+    expect(host.querySelector('[data-field="chest_cm"]')).toBeNull();
+    // Edit and Delete act on the entry being shown.
+    await act(async () => button('Delete').click());
+    await act(async () => button('Delete measurements').click());
+    expect(api.deleteBodySizes).toHaveBeenCalledWith('2026-10-11');
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-25');
+  });
+  it('hides the stepper arrows for a single entry and shows a newly saved date', async () => {
+    await render([row('2026-10-20', { waist_cm: 82 })]);
+    expect(host.querySelectorAll('.body-sizes-stepper button')).toHaveLength(0);
+    await act(async () => button('Log measurements').click());
+    await act(async () => {
+      input('Date', '2026-10-01');
+      input('Hips', '95');
+    });
+    await act(async () => button('Save measurements').click());
+    const stepper = host.querySelector('.body-sizes-stepper')!;
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-01');
+    expect(stepper.querySelectorAll('button')).toHaveLength(2);
+    expect(host.querySelector('[data-field="hips_cm"]')?.textContent).toBe('Hips95 cm');
+  });
+  it('switches the body outline and remembers it for the account on this device', async () => {
+    const session = {
+      user: { id: 'figure-test-user' } as User,
+      updateUser: () => undefined,
+      signOut: async () => undefined,
+      accountDeleted: async () => undefined,
+    };
+    const card = (
+      <UserContext.Provider value={session}>
+        <BodySizesCard />
+      </UserContext.Provider>
+    );
+    vi.mocked(api.listBodySizes).mockResolvedValue([row('2026-10-20', { waist_cm: 82 })]);
+    await act(async () => root.render(card));
+    const outline = () => host.querySelector('.body-figure')?.getAttribute('data-figure');
+    const choice = (name: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role=radio]')].find(
+        (item) => item.textContent === name,
+      )!;
+    expect(outline()).toBe('male');
+    expect(choice('Male').getAttribute('aria-checked')).toBe('true');
+    await act(async () => choice('Female').click());
+    expect(outline()).toBe('female');
+    expect(choice('Female').getAttribute('aria-checked')).toBe('true');
+    expect(window.localStorage.getItem('gym-logger-body-figure:figure-test-user')).toBe('female');
+    // A fresh card for the same account starts on the saved outline.
+    act(() => root.unmount());
+    root = createRoot(host);
+    await act(async () => root.render(card));
+    expect(outline()).toBe('female');
+    window.localStorage.removeItem('gym-logger-body-figure:figure-test-user');
   });
   it('changing the date loads that dates measurements instead of overwriting from another day', async () => {
     await render([row('2026-10-20', { waist_cm: 82 }), row('2026-10-19', { chest_cm: 100 })]);
