@@ -24,6 +24,7 @@ _Home: your next workout and training dashboard. Select the screenshot to view i
 
 - Choose from the exercise library, save favourites or create your own exercises.
 - Record sets, reps, weight and effort (RPE), with warmups, supersets and notes.
+- In a live workout, **Finish**, **+** (add an exercise) and the **⋯** menu sit in the header, and **Discard workout** is in that menu. Tap a set to edit or delete it, and drag its handle to reorder. Ticking the last set of a planned exercise folds it away and shows its weekly muscle totals once, for all of its sets.
 - Add your own workout types and colours in Settings; remove or restore types while keeping saved history. Save exercises to any workout type, even without a split, and starting that type fills them in.
 - Build your own repeating training split in **Settings > Training > Your split**, with Upper / Lower, PPL, full body every other day and Cardio templates, custom workout types and rest days. **Edit split** on Home and **My splits** beside your profile's **Last 12 weeks** open one page with saved plans and templates. The blue-bordered active card contains its seven-day/calendar preview. Saved template cycles are disabled until their days change or the copy is deleted; sharing lives in each split's options. Up next follows your saved cycle.
 - Use previous-session suggestions to pick up where you left off.

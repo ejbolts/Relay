@@ -362,7 +362,7 @@ import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
-import { weeklySetGains } from './weeklySetsUpdate';
+import { exerciseSetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
   clockOffsetMsAt,
@@ -3361,7 +3361,6 @@ function WorkoutLogger({
   const [error, setError] = useState<string | null>(null);
   const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
-  const cancelWorkoutButtonRef = useRef<HTMLButtonElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(Boolean(initialWorkout));
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
@@ -4116,6 +4115,8 @@ function WorkoutLogger({
   const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const [weeklySetsUpdate, setWeeklySetsUpdate] = useState<WeeklySetsUpdate | null>(null);
   const weeklySetsUpdateId = useRef(0);
+  // Sets added with Add set in this session: ticking one never folds its exercise away.
+  const addedSetKeys = useRef(new Set<string>());
 
   function completeExercise(movement: DraftMovement, isComplete: boolean) {
     const sets = isComplete
@@ -4129,11 +4130,12 @@ function WorkoutLogger({
       (set, index) => !movement.sets[index].completed && isCompletedWorkingSet(set),
     ).length;
     if (newlyCompletedWorkingSets && !initialWorkout) {
-      const gains = weeklySetGains(
+      const gains = exerciseSetGains(
         movement.exercise,
         weeklySets,
         workoutDate,
         localDate(),
+        movement.sets.filter(isCompletedWorkingSet).length,
         newlyCompletedWorkingSets,
       );
       if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
@@ -4198,10 +4200,22 @@ function WorkoutLogger({
     if (loggingSet && movement?.exercise.kind === 'cardio')
       tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
-    if (loggingSet && movement && currentSet && !initialWorkout) {
-      const gains = isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update))
-        ? weeklySetGains(movement.exercise, weeklySets, workoutDate, localDate())
-        : [];
+    // Ticking the last open set finishes the exercise: its weekly totals show once, for all of
+    // its sets, and a planned exercise folds away. A set added by hand keeps the card open.
+    const finishesExercise =
+      loggingSet &&
+      !!movement &&
+      !initialWorkout &&
+      movement.sets.every((item) => item.key === setKey || item.completed);
+    if (finishesExercise && movement && currentSet) {
+      const gains = exerciseSetGains(
+        movement.exercise,
+        weeklySets,
+        workoutDate,
+        localDate(),
+        movement.sets.filter(isCompletedWorkingSet).length,
+        isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update)) ? 1 : 0,
+      );
       if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
     } else if (update.completed === false && currentSet?.completed) {
       setWeeklySetsUpdate(null);
@@ -4232,7 +4246,8 @@ function WorkoutLogger({
         return {
           ...movement,
           isComplete:
-            movement.isComplete &&
+            (movement.isComplete ||
+              (finishesExercise && sets.length > 1 && !addedSetKeys.current.has(setKey))) &&
             sets.every((set) => set.completed) &&
             !hasUnassignedMachineSets(movement.machinePhotoIds, sets),
           sets:
@@ -4291,6 +4306,7 @@ function WorkoutLogger({
         if (item.key !== movement.key) return item;
         const added = emptySet(item.exercise.kind, item.sets.at(-1));
         markSetAdded(added.key);
+        addedSetKeys.current.add(added.key);
         return { ...item, isComplete: false, sets: [...item.sets, added] };
       }),
     );
@@ -4703,6 +4719,9 @@ function WorkoutLogger({
           onAdjustTime={() => setTimeEditorOpen(true)}
           onAddNote={() => revealDetails('.workout-notes textarea')}
           onTogglePause={toggleWorkoutPause}
+          onAddExercise={openExercisePicker}
+          onDiscard={() => setDeleteConfirmationOpen(true)}
+          discardLabel={resumedWorkoutId ? 'Discard session' : 'Discard workout'}
           saving={saving}
           onFinish={openFinishConfirmation}
         />
@@ -5210,23 +5229,13 @@ function WorkoutLogger({
           <button className="add-exercise-button" type="button" onClick={openExercisePicker}>
             ＋ Add exercise
           </button>
-          {initialWorkout ? (
+          {initialWorkout && (
             <button
               className="primary-action finish-workout-bottom"
               disabled={saving}
               onClick={() => void finishWorkout()}
             >
               {saving ? 'Saving…' : 'Save workout'}
-            </button>
-          ) : (
-            <button
-              ref={cancelWorkoutButtonRef}
-              className="cancel-live-workout-button"
-              type="button"
-              disabled={saving}
-              onClick={() => setDeleteConfirmationOpen(true)}
-            >
-              Cancel workout
             </button>
           )}
         </div>
@@ -5262,9 +5271,7 @@ function WorkoutLogger({
           resuming={Boolean(resumedWorkoutId)}
           onCancel={() => {
             setDeleteConfirmationOpen(false);
-            window.requestAnimationFrame(() =>
-              (cancelWorkoutButtonRef.current ?? deleteButtonRef.current)?.focus(),
-            );
+            window.requestAnimationFrame(() => deleteButtonRef.current?.focus());
           }}
           onConfirm={() => {
             cancelRestTimer();
@@ -5719,71 +5726,39 @@ function WorkoutCloseDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const safeButtonRef = useRef<HTMLButtonElement>(null);
-  const onCancelRef = useRef(onCancel);
-  const backdropDismiss = useBackdropDismiss(onCancel);
-
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  useEffect(() => {
-    const root = document.getElementById('root');
-    const rootWasInert = root?.hasAttribute('inert') ?? false;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    root?.setAttribute('inert', '');
-    safeButtonRef.current?.focus();
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancelRef.current();
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      if (!rootWasInert) root?.removeAttribute('inert');
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
-
-  return createPortal(
-    <div className="modal-backdrop workout-close-backdrop" {...backdropDismiss}>
-      <section
-        className="workout-close-dialog panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="workout-close-title"
-        aria-describedby="workout-close-description"
-      >
-        <div className="workout-close-warning" aria-hidden="true">
-          !
-        </div>
-        <p className="section-kicker">PLEASE CONFIRM</p>
-        <h2 id="workout-close-title">
-          {editing
-            ? 'Delete this saved workout?'
-            : resuming
-              ? 'Discard this resumed session?'
-              : 'Delete this workout?'}
-        </h2>
-        <p id="workout-close-description">
-          {editing
-            ? 'This workout will be permanently removed from your history. This cannot be undone.'
-            : resuming
-              ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
-              : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
-        </p>
-        <div className="workout-close-actions">
-          <button ref={safeButtonRef} type="button" onClick={onCancel}>
-            Keep workout
-          </button>
-          <button className="discard-workout-button" type="button" onClick={onConfirm}>
-            {resuming ? 'Discard session' : 'Delete workout'}
-          </button>
-        </div>
-      </section>
-    </div>,
-    document.body,
+  return (
+    <PopupDialog
+      title={
+        editing
+          ? 'Delete this saved workout?'
+          : resuming
+            ? 'Discard this resumed session?'
+            : 'Discard this workout?'
+      }
+      kicker="PLEASE CONFIRM"
+      className="workout-finish-dialog workout-discard-dialog"
+      onClose={onCancel}
+    >
+      <p>
+        {editing
+          ? 'This workout will be permanently removed from your history. This cannot be undone.'
+          : resuming
+            ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
+            : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
+      </p>
+      <div className="popup-dialog-actions workout-finish-actions">
+        <button type="button" autoFocus onClick={onCancel}>
+          Keep workout
+        </button>
+        <button
+          type="button"
+          className="popup-primary-action discard-workout-button"
+          onClick={onConfirm}
+        >
+          {editing ? 'Delete workout' : resuming ? 'Discard session' : 'Discard workout'}
+        </button>
+      </div>
+    </PopupDialog>
   );
 }
 
@@ -5881,12 +5856,20 @@ function MovementCard({
     : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  // Free weights and bodyweight exercises show the equipment row only once it is in use.
+  const [machineRowRequested, setMachineRowRequested] = useState(false);
   const photoPanelId = useId();
   const pinnedMachinePhotoId = movement.machinePhotoIds.at(-1);
   const [savedMachinePhotos, setSavedMachinePhotos] = useState<MachinePhoto[]>([]);
   const [savedMachineAliases, setSavedMachineAliases] = useState<ReadonlyMap<string, string>>(
     () => new Map(),
   );
+  const machineRowShown =
+    machineRowRequested ||
+    savedMachinePhotos.length > 0 ||
+    movement.machinePhotoIds.length > 0 ||
+    /machine|cable|smith/i.test(movement.exercise.equipment ?? '');
   // With a machine pinned, its own sessions supply the last date, history and rests.
   const history = useMemo(() => {
     const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
@@ -5913,7 +5896,6 @@ function MovementCard({
       cancelled = true;
     };
   }, [cardio, movement.exercise.id, pinnedMachinePhotoId, machineSettingsUnloaded]);
-  const [openSetActionsKey, setOpenSetActionsKey] = useState<string | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
   const [typeMenuSetKey, setTypeMenuSetKey] = useState<string | null>(null);
@@ -5933,6 +5915,16 @@ function MovementCard({
   const setGridRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const setNumbers = setNumberLabels(movement.sets);
+  // The bodyweight ratio is said once per exercise, on its heaviest logged set.
+  const ratioSetKey = cardio
+    ? null
+    : (movement.sets.reduce<DraftSet | null>(
+        (best, item) =>
+          item.completed && (best === null || (item.weight_kg ?? 0) > (best.weight_kg ?? 0))
+            ? item
+            : best,
+        null,
+      )?.key ?? null);
 
   useEffect(() => {
     setExpanded(!movement.isComplete);
@@ -5943,17 +5935,11 @@ function MovementCard({
   }, [supersetUpNext]);
 
   useEffect(() => {
-    if (!openSetActionsKey && !typeMenuSetKey) return;
+    if (!typeMenuSetKey) return;
 
-    const closeMenus = () => {
-      setOpenSetActionsKey(null);
-      setTypeMenuSetKey(null);
-    };
+    const closeMenus = () => setTypeMenuSetKey(null);
     const closeOutside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Element &&
-        event.target.closest('.set-actions-menu, .set-type-picker')
-      ) {
+      if (event.target instanceof Element && event.target.closest('.set-type-picker')) {
         return;
       }
       closeMenus();
@@ -5968,7 +5954,7 @@ function MovementCard({
       document.removeEventListener('pointerdown', closeOutside);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [openSetActionsKey, typeMenuSetKey]);
+  }, [typeMenuSetKey]);
 
   function closeMovementMenu() {
     if (movementMenuRef.current) movementMenuRef.current.open = false;
@@ -6085,7 +6071,6 @@ function MovementCard({
     dragTargetSetKeyRef.current = setKey;
     setDraggingSetKey(setKey);
     setDragTargetSetKey(setKey);
-    setOpenSetActionsKey(null);
   }
 
   function moveSetDrag(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -6170,75 +6155,13 @@ function MovementCard({
   function renderCompletedSetActions(item: DraftSet, index: number) {
     return (
       <span
-        className={`set-actions-menu completed-summary-actions ${openSetActionsKey === item.key ? 'is-open' : ''}`}
+        className="set-actions-menu completed-summary-actions"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
         }}
       >
         {renderSetDragHandle(item, index)}
-        <button
-          type="button"
-          className="completed-set-menu"
-          aria-label={`Options for set ${index + 1}`}
-          aria-expanded={openSetActionsKey === item.key}
-          onClick={() => {
-            setTypeMenuSetKey(null);
-            setOpenSetActionsKey((current) => (current === item.key ? null : item.key));
-          }}
-        >
-          ⋮
-        </button>
-        {openSetActionsKey === item.key && (
-          <span className="set-actions-menu-popover">
-            {!isSetOpen(item) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenSetActionsKey(null);
-                  openSet(item.key);
-                }}
-              >
-                <span aria-hidden="true">✎</span>
-                Edit set
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={index === 0}
-              onClick={() => {
-                onMoveSet(index, index - 1);
-                setOpenSetActionsKey(null);
-              }}
-            >
-              <span aria-hidden="true">↑</span>
-              Move earlier
-            </button>
-            <button
-              type="button"
-              disabled={index === movement.sets.length - 1}
-              onClick={() => {
-                onMoveSet(index, index + 1);
-                setOpenSetActionsKey(null);
-              }}
-            >
-              <span aria-hidden="true">↓</span>
-              Move later
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                if (movement.sets.length > 1) tips.event('menu-delete', 'swipe', 3);
-                onDeleteSet(index);
-                setOpenSetActionsKey(null);
-              }}
-            >
-              <span aria-hidden="true">■</span>
-              Delete set
-            </button>
-          </span>
-        )}
       </span>
     );
   }
@@ -6260,10 +6183,7 @@ function MovementCard({
           aria-label={`Set ${index + 1} type: ${setTypeTitle(item)}`}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          onClick={() => {
-            setOpenSetActionsKey(null);
-            setTypeMenuSetKey(menuOpen ? null : item.key);
-          }}
+          onClick={() => setTypeMenuSetKey(menuOpen ? null : item.key)}
         >
           {setNumbers[index]}
         </button>
@@ -6350,8 +6270,7 @@ function MovementCard({
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
-        {/* Only a logged set has a ratio to show; suggestions would repeat it on every row. */}
-        {!cardio && item.completed && (item.bodyweight_kg ?? bodyweight) != null && (
+        {item.key === ratioSetKey && (item.bodyweight_kg ?? bodyweight) != null && (
           <small className="completed-set-bodyweight num">
             {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
           </small>
@@ -6451,18 +6370,32 @@ function MovementCard({
         {renderRowCompleteButton(item, index)}
         {renderCompletedSetActions(item, index)}
         <div className="set-editor-extras">
-          {!cardio && (
-            <label className="set-editor-rest">
-              Rest after set
-              <RestTimeSelect
-                seconds={restEdits[item.key] ?? item.rest_seconds ?? 0}
-                label={`Rest time for set ${index + 1}`}
-                onChange={(seconds) =>
-                  setRestEdits((current) => ({ ...current, [item.key]: seconds }))
-                }
-              />
-            </label>
-          )}
+          <div className="set-editor-tools">
+            {!cardio && (
+              <label className="set-editor-rest">
+                Rest after set
+                <RestTimeSelect
+                  seconds={restEdits[item.key] ?? item.rest_seconds ?? 0}
+                  label={`Rest time for set ${index + 1}`}
+                  onChange={(seconds) =>
+                    setRestEdits((current) => ({ ...current, [item.key]: seconds }))
+                  }
+                />
+              </label>
+            )}
+            <button
+              type="button"
+              className="set-editor-delete"
+              aria-label={`Delete set ${index + 1}`}
+              onClick={() => {
+                if (movement.sets.length > 1) tips.event('menu-delete', 'swipe', 3);
+                onDeleteSet(index);
+              }}
+            >
+              <Icon name="trash" />
+              Delete set
+            </button>
+          </div>
           {cardio && (
             <div className="set-editor-metrics">
               <label>
@@ -6593,10 +6526,6 @@ function MovementCard({
                 {movement.exercise.name}
               </button>
             </h2>
-            {/* Beside the name, so the name keeps the width the header actions leave. */}
-            <span className="movement-title-help" onClick={(event) => event.stopPropagation()}>
-              <ExerciseMuscleHelp exercise={movement.exercise} />
-            </span>
           </div>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
@@ -6694,6 +6623,33 @@ function MovementCard({
               </button>
               <button
                 type="button"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCreditsOpen(true);
+                  closeMovementMenu();
+                }}
+              >
+                <span aria-hidden="true">
+                  <Icon name="help" />
+                </span>
+                Muscle credits
+              </button>
+              {!cardio && !machineRowShown && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMachineRowRequested(true);
+                    closeMovementMenu();
+                  }}
+                >
+                  <span aria-hidden="true">
+                    <Icon name="camera" />
+                  </span>
+                  Equipment photo
+                </button>
+              )}
+              <button
+                type="button"
                 className={supersetLabel ? 'active' : ''}
                 onClick={(event) => {
                   closeMovementMenu();
@@ -6760,6 +6716,11 @@ function MovementCard({
         </div>
       </header>
 
+      <ExerciseMuscleHelp
+        exercise={movement.exercise}
+        open={creditsOpen}
+        onClose={() => setCreditsOpen(false)}
+      />
       {expanded && !cardio && movement.repRange && (
         <p className="movement-rep-target">
           {progressionHint(
@@ -6816,6 +6777,8 @@ function MovementCard({
             selectedIds={movement.machinePhotoIds}
             settings={movement.machineSettings}
             autoPinLastUsed={!movement.machinePhotosInitialized}
+            hidden={!machineRowShown}
+            openRequested={machineRowRequested}
             onChange={(photoIds, settings, chosen) => {
               onMachinePhotos(photoIds, settings, chosen);
               const pinned = photoIds.at(-1);
@@ -6872,7 +6835,7 @@ function MovementCard({
                 flipKey={item.key}
                 label={`set ${index + 1}`}
                 disabled={movement.sets.length < 2}
-                overlayOpen={openSetActionsKey === item.key || typeMenuSetKey === item.key}
+                overlayOpen={typeMenuSetKey === item.key}
                 onDelete={() => {
                   tips.learn('swipe');
                   onDeleteSet(index);
@@ -7059,6 +7022,8 @@ function MachinePhotoChooser({
   selectedIds,
   settings,
   autoPinLastUsed,
+  hidden = false,
+  openRequested = false,
   onChange,
   onPhotosLoaded,
 }: {
@@ -7067,6 +7032,10 @@ function MachinePhotoChooser({
   selectedIds: string[];
   settings?: MachineSetting[];
   autoPinLastUsed: boolean;
+  /** Still loads saved machines and restores the last one used, but draws nothing. */
+  hidden?: boolean;
+  /** Asked for from the exercise menu: the panel opens once it appears. */
+  openRequested?: boolean;
   /** `chosen` marks a pin the user picked, rather than a restored or automatic one. */
   onChange: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
   onPhotosLoaded?: (photos: MachinePhoto[]) => void;
@@ -7078,6 +7047,9 @@ function MachinePhotoChooser({
   const [expanded, setExpanded] = useState<MachinePhoto | null>(null);
   const tips = useTips();
   const [photoPanelOpen, setPhotoPanelOpen] = useState(false);
+  useEffect(() => {
+    if (openRequested) setPhotoPanelOpen(true);
+  }, [openRequested]);
   const [choosingReplacement, setChoosingReplacement] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -7242,11 +7214,19 @@ function MachinePhotoChooser({
     .reverse()
     .flatMap((photoId) => photos.find((photo) => photo.id === photoId) ?? []);
   const primaryPinnedPhoto = pinnedPhotos[0] ?? null;
+  // A chosen machine is named in the row's title; the line under it says only what the name can't.
+  const photoTitle = primaryPinnedPhoto?.caption || 'Equipment photo';
   const photoSummary = primaryPinnedPhoto
-    ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
+    ? pinnedPhotos.length > 1
+      ? `+${pinnedPhotos.length - 1} more`
+      : primaryPinnedPhoto.caption
+        ? ''
+        : 'Pinned'
     : photos.length > 0
       ? `${photos.length} saved · none pinned`
       : '';
+
+  if (hidden) return null;
 
   return (
     <details
@@ -7280,10 +7260,10 @@ function MachinePhotoChooser({
           </span>
         )}
         <span className="machine-photo-summary-copy">
-          <strong>Equipment photo</strong>
+          <strong>{photoTitle}</strong>
           {photoSummary && <small>{photoSummary}</small>}
         </span>
-        {selectedIds.length > 0 && <b>{selectedIds.length} pinned</b>}
+        {selectedIds.length > 1 && <b>{selectedIds.length} pinned</b>}
         <span className="machine-photo-chevron" aria-hidden="true">
           <Icon name="chevron-down" />
         </span>

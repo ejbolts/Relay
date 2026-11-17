@@ -16,6 +16,9 @@ export function LiveWorkoutHeader({
   onAdjustTime,
   onAddNote,
   onTogglePause,
+  onAddExercise,
+  onDiscard,
+  discardLabel = 'Discard workout',
   onFinish,
   saving = false,
 }: {
@@ -29,6 +32,10 @@ export function LiveWorkoutHeader({
   onAdjustTime?: () => void;
   onAddNote: () => void;
   onTogglePause: () => void;
+  onAddExercise: () => void;
+  /** Throwing the workout away sits last in the menu, away from the everyday actions. */
+  onDiscard: () => void;
+  discardLabel?: string;
   onFinish: () => void;
   saving?: boolean;
 }) {
@@ -64,6 +71,7 @@ export function LiveWorkoutHeader({
       icon: paused ? 'play' : 'pause',
       run: onTogglePause,
     },
+    { label: discardLabel, icon: 'trash', run: onDiscard, danger: true },
   ];
 
   return (
@@ -105,6 +113,15 @@ export function LiveWorkoutHeader({
           </div>
         </div>
         <button
+          type="button"
+          className="live-workout-add"
+          aria-label="Add exercise"
+          title="Add exercise"
+          onClick={onAddExercise}
+        >
+          <Icon name="plus" />
+        </button>
+        <button
           ref={menuButtonRef}
           type="button"
           className="live-workout-options"
@@ -131,8 +148,7 @@ export function LiveWorkoutHeader({
           aria-busy={saving}
           onClick={onFinish}
         >
-          <Icon name="check" />
-          <span className="sr-only">Finish workout</span>
+          Finish<span className="sr-only"> workout</span>
         </button>
       </div>
       {open && (

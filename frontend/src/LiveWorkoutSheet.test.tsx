@@ -30,6 +30,8 @@ async function render(active = true) {
           onRename={noop}
           onAddNote={noop}
           onTogglePause={noop}
+          onAddExercise={noop}
+          onDiscard={noop}
           onFinish={noop}
         />
         <div data-test="content">Exercise rows</div>

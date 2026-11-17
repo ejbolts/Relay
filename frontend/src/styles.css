@@ -1877,67 +1877,6 @@ button.metric-card:focus-visible {
   background: var(--ink);
 }
 
-.workout-close-backdrop {
-  z-index: 220;
-  place-items: center;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
-}
-
-.workout-close-dialog {
-  width: min(100%, 390px);
-  padding: 1.35rem;
-  border: 1px solid var(--line);
-  background: var(--card);
-  text-align: center;
-}
-
-.workout-close-warning {
-  width: 2.8rem;
-  height: 2.8rem;
-  display: grid;
-  place-items: center;
-  margin: 0 auto 0.8rem;
-  border: 1px solid rgb(225 74 59 / 55%);
-  border-radius: 50%;
-  background: rgb(225 74 59 / 12%);
-  color: var(--accent);
-  font-size: 1.4rem;
-  font-weight: 900;
-}
-
-.workout-close-dialog h2 {
-  margin: 0.3rem 0 0.6rem;
-}
-
-.workout-close-dialog > p:last-of-type {
-  margin: 0;
-  color: var(--muted-ink);
-  line-height: 1.55;
-}
-
-.workout-close-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
-  margin-top: 1.2rem;
-}
-
-.workout-close-actions > button {
-  min-height: 2.8rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.7rem 0.8rem;
-  background: transparent;
-  color: var(--ink);
-  font-weight: 850;
-}
-
-.workout-close-actions > .discard-workout-button {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: white;
-}
-
 .workout-recommendation {
   margin-bottom: 0.75rem;
   padding: 0.9rem;
@@ -4794,23 +4733,6 @@ html.edge-swipe-active .edge-swipe-indicator {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-}
-
-.completed-set-menu {
-  width: 1.55rem;
-  min-height: 2.2rem;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: #5598e7;
-  font-size: 1.45rem;
-  line-height: 1;
-  text-align: center;
-}
-
-.completed-summary-actions .set-actions-menu-popover {
-  bottom: auto;
-  top: calc(100% + 0.3rem);
 }
 
 .set-details.completed {
@@ -8274,7 +8196,6 @@ body,
 
 .exercise-picker,
 .superset-picker,
-.workout-close-dialog,
 .calendar-create-dialog {
   border-color: #3c4346;
   border-radius: 7px;
@@ -8604,10 +8525,6 @@ body,
   color: inherit;
 }
 
-.set-details.completed .completed-set-menu {
-  color: #245a34;
-}
-
 .set-details.completed[open] > .set-row,
 .set-details.completed:last-of-type[open] > .set-row,
 .set-row.completed {
@@ -8868,56 +8785,6 @@ body,
   background: #202623;
   color: #f0eeeb;
   outline: none;
-}
-
-.set-actions-menu-popover {
-  position: absolute;
-  z-index: 95;
-  right: 0;
-  bottom: calc(100% + 0.3rem);
-  width: 10.5rem;
-  overflow: hidden;
-  border: 1px solid #3b4340;
-  border-radius: 5px;
-  background: #202422;
-  box-shadow: 0 14px 36px rgb(0 0 0 / 55%);
-}
-
-.set-actions-menu-popover button {
-  width: 100%;
-  min-height: 2.6rem;
-  display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-  border: 0;
-  border-bottom: 1px solid #373e3b;
-  border-radius: 0;
-  padding: 0.55rem 0.7rem;
-  background: transparent;
-  color: #dedbd8;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-align: left;
-}
-
-.set-actions-menu-popover button:last-child {
-  border-bottom: 0;
-}
-
-.set-actions-menu-popover button:hover,
-.set-actions-menu-popover button:focus-visible {
-  background: #2a302d;
-  outline: none;
-}
-
-.set-actions-menu-popover button:disabled {
-  color: #686f6b;
-}
-
-.set-actions-menu-popover .danger,
-.set-actions-menu-popover .danger > span {
-  color: #ff7f82;
 }
 
 .set-grid-strength .treadmill-set-fields,
@@ -9904,10 +9771,6 @@ body.chart-fullscreen-open {
 .set-details.previous-set-details .completed-set-summary > strong,
 .set-details.previous-set-details .completed-set-summary > span {
   color: inherit;
-}
-
-.set-details.previous-set-details .completed-set-menu {
-  color: #8d9695;
 }
 
 .add-set-fields textarea {
