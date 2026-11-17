@@ -37,9 +37,13 @@ export function clearWorkoutFocus(key: number): void {
   listeners.forEach((listener) => listener());
 }
 
+const snapshot = () => current;
+/** No request can be waiting while the page is first rendered on the server. */
+const serverSnapshot = () => null;
+
 /** The waiting request, if any. */
 export function useWorkoutFocus(): WorkoutFocus | null {
-  return useSyncExternalStore(subscribe, () => current);
+  return useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 }
 
 /** Runs when a request arrives, for the app to switch to Social. */
