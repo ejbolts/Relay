@@ -1093,6 +1093,41 @@ export interface FriendConnections {
   blocked: SharingConnection[];
 }
 
+/** A member's best set of one lift: the working set with their highest estimated one-rep max. */
+export interface LiftBest {
+  /** The member's own exercise. */
+  exercise_id: string;
+  weight_kg: number;
+  reps: number;
+  estimated_1rm: number;
+  achieved_date: string;
+  /** The member normalises this exercise's machines, so the weights are its reference machine's. */
+  normalised: boolean;
+}
+
+/** One of your strength exercises, with each member's best when they have logged it. */
+export interface LiftComparison {
+  exercise_id: string;
+  name: string;
+  muscle_group: string;
+  equipment: string | null;
+  yours: LiftBest | null;
+  theirs: LiftBest | null;
+}
+
+export interface LiftComparisons {
+  /** The exercises your head to heads show, in the order you added them. */
+  selected: string[];
+  /** Every exercise you can choose, by name. */
+  lifts: LiftComparison[];
+}
+
+export interface LiftRanking {
+  member: Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
+  is_you: boolean;
+  best: LiftBest;
+}
+
 export type WorkoutReactionKind = 'like' | 'love' | 'strong' | 'fire' | 'clap' | 'trophy' | 'run';
 
 export interface WorkoutReactions {

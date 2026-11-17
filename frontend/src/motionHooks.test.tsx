@@ -2,7 +2,7 @@
 import { act, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useFlipAnimation } from './motionHooks';
+import { useFlipAnimation, useHeightAnimation } from './motionHooks';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -91,5 +91,47 @@ describe('useFlipAnimation entrance', () => {
 
     expect(animate).not.toHaveBeenCalled();
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' });
+  });
+});
+
+describe('useHeightAnimation', () => {
+  let setRows: (rows: number) => void;
+  let height = 0;
+
+  function Card() {
+    const [rows, update] = useState(1);
+    const ref = useRef<HTMLDivElement>(null);
+    setRows = update;
+    height = rows * 50;
+    useHeightAnimation(ref, String(rows));
+    return <div ref={ref}>{rows}</div>;
+  }
+
+  beforeEach(async () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => height);
+    animate.mockReturnValue({});
+    Object.assign(HTMLElement.prototype, { getAnimations: () => [] });
+    await act(async () => root.render(<Card />));
+  });
+
+  afterEach(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).getAnimations;
+  });
+
+  it('glides to the new height when its key changes', async () => {
+    expect(animate).not.toHaveBeenCalled();
+    await act(async () => setRows(3));
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(animate.mock.calls[0][0]).toEqual([{ height: '50px' }, { height: '150px' }]);
+    expect(container.querySelector('div')?.style.overflow).toBe('clip');
+    await act(async () => setRows(2));
+    expect(animate.mock.calls[1][0]).toEqual([{ height: '150px' }, { height: '100px' }]);
+  });
+
+  it('resizes at once when motion is reduced', async () => {
+    document.documentElement.setAttribute('data-reduce-motion', '');
+    await act(async () => setRows(3));
+    document.documentElement.removeAttribute('data-reduce-motion');
+    expect(animate).not.toHaveBeenCalled();
   });
 });

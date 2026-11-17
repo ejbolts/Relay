@@ -319,6 +319,7 @@ import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
+import { LiftLeaderboardCard } from './LiftComparison';
 import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
 import { FriendsActivityCard } from './FriendsActivity';
@@ -2404,6 +2405,7 @@ function AppContent() {
                 onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(sectionFromTab !== null)}
                 onOpenExercise={(exerciseId) => openHistorySection('progress', exerciseId)}
+                onOpenMember={openSharedProfile}
                 onOpenWorkout={openSavedWorkout}
                 initialExerciseId={historyExerciseId}
                 initialMovementId={historyMovementId}
@@ -8166,6 +8168,7 @@ export function ProgressScreen({
   onDetailChange,
   onCreateExercise,
   onExercisesMerged,
+  onOpenMember,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
@@ -8173,6 +8176,8 @@ export function ProgressScreen({
   measurements: BodyMeasurement[];
   personalRecords: PersonalRecord[];
   onOpenWorkout: (workoutId: string, exerciseId: string) => void;
+  /** Opens a friend's profile from the exercise's friends ranking. */
+  onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   embedded?: boolean;
   initialExerciseId?: string | null;
   defaultExerciseId?: string | null;
@@ -8455,6 +8460,13 @@ export function ProgressScreen({
     detail: `${formatWeight(point.raw_best_weight_kg, weightUnit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
   }));
 
+  const friendsRanking = (
+    <LiftLeaderboardCard
+      exerciseId={exerciseId}
+      revision={dataRevision}
+      onOpenMember={onOpenMember}
+    />
+  );
   const rangeControls = (
     <div
       ref={rangeIndicatorRef}
@@ -8913,6 +8925,7 @@ export function ProgressScreen({
                       </small>
                     </div>
                   </section>
+                  {friendsRanking}
                   <section
                     className="pulse-card progress-sessions"
                     aria-label="Exercise session history"
@@ -8997,10 +9010,13 @@ export function ProgressScreen({
                 </div>
               </>
             ) : (
-              <EmptyState
-                title="No data yet"
-                body="Complete this exercise in a workout to start its progress graph."
-              />
+              <>
+                <EmptyState
+                  title="No data yet"
+                  body="Complete this exercise in a workout to start its progress graph."
+                />
+                {friendsRanking}
+              </>
             )}
           </div>
         )}
@@ -9802,6 +9818,7 @@ function HistoryScreen({
   section,
   onSectionChange,
   onOpenExercise,
+  onOpenMember,
   onOpenWorkout,
   initialExerciseId,
   initialMovementId,
@@ -9835,6 +9852,7 @@ function HistoryScreen({
   section: HistorySection;
   onSectionChange: (section: HistorySection) => void;
   onOpenExercise: (exerciseId: string) => void;
+  onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   onOpenWorkout: (workoutId: string, exerciseId: string | null) => void;
   initialExerciseId: string | null;
   initialMovementId: string | null;
@@ -10184,6 +10202,7 @@ function HistoryScreen({
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
             onExercisesMerged={onDataChange}
+            onOpenMember={onOpenMember}
             initialExerciseId={initialExerciseId}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}

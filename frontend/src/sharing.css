@@ -442,6 +442,8 @@
 .history-screen.shared-workouts {
   width: auto;
   padding-top: 0;
+  /* Clears the profile's fixed header when a lift or calendar day scrolls here. */
+  scroll-margin-top: var(--overlay-header-height);
 }
 
 .shared-workouts-header {
