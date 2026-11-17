@@ -373,8 +373,6 @@ import {
 } from './finishSummary';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
-import { StartChooser } from './StartChooser';
-import { recentDistinctWorkouts } from './startChoices';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { exerciseSetGains } from './weeklySetsUpdate';
@@ -770,7 +768,6 @@ function AppContent() {
     () => user !== null && importStepWaiting(user.id),
   );
   const [csvGuideOpen, setCsvGuideOpen] = useState(false);
-  const [startChooserOpen, setStartChooserOpen] = useState(false);
   // Choosing to import keeps What's new until the person leaves Settings.
   const [releaseAfterImport, setReleaseAfterImport] = useState(false);
   const guideReturnTab = useRef<AppTab | null>(null);
@@ -2170,17 +2167,6 @@ function AppContent() {
             onOpenBody={() => setTab('body')}
           />
         )}
-        {startChooserOpen && (
-          <StartChooser
-            workouts={workouts}
-            today={localDate()}
-            onClose={() => setStartChooserOpen(false)}
-            onStart={({ template, category, type }) => {
-              setStartChooserOpen(false);
-              startWorkout(localDate(), false, template, category, type);
-            }}
-          />
-        )}
         <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (
@@ -2791,10 +2777,6 @@ function AppContent() {
                   upNext.recommendation?.category ?? null,
                   upNext.type ?? null,
                 ),
-              onChoose:
-                upNext.recommendation?.split_name || recentDistinctWorkouts(workouts, 1).length
-                  ? () => setStartChooserOpen(true)
-                  : undefined,
               onEmpty: () => startWorkout(),
             }}
           />
