@@ -1,6 +1,6 @@
 import { BodyWeightTip } from './FeatureDiscoveryTips';
 import { BodySizesCard } from './BodySizesCard';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from './api';
@@ -8,14 +8,8 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
 import { formatWeight, weightFromKg, weightInputValue } from './weightUnits';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
-import {
-  bodyTrendRangeSpans,
-  bodyTrendSpanStart,
-  clipBodyWeightGoalPath,
-  filterMeasurementsByRange,
-  nearestBodyTrendRange,
-  pinchedBodyTrendSpan,
-} from './bodyTrend';
+import { clipBodyWeightGoalPath, filterMeasurementsByRange } from './bodyTrend';
+import { useRangePinchZoom } from './rangePinchZoom';
 import type { BodyTrendRange } from './bodyTrend';
 import {
   bodyGoalKind,
@@ -815,28 +809,26 @@ function BodyTrendChart({
   const [displayRange, setDisplayRange] = useState<BodyTrendRange>('3m');
   // Weight and body fat use different units, so they are separate views rather than two y-axes.
   const [series, setSeries] = useState<'weight' | 'fat'>('weight');
-  // While a pinch is in progress the chart shows this many days; releasing snaps to the chip.
-  const [pinchSpanDays, setPinchSpanDays] = useState<number | null>(null);
-  const pinchBaseSpanRef = useRef<number | null>(null);
   const measurementDates = useMemo(
     () => measurements.map((item) => item.measurement_date),
     [measurements],
   );
-  const rangeSpans = useMemo(() => bodyTrendRangeSpans(measurementDates), [measurementDates]);
-  const pinchStart =
-    pinchSpanDays === null ? undefined : bodyTrendSpanStart(measurementDates, pinchSpanDays);
+  const { pinchZoom, pinching, pinchStart, selectRange } = useRangePinchZoom(
+    measurementDates,
+    displayRange,
+    setDisplayRange,
+  );
   const ordered = (
-    pinchSpanDays === null
-      ? filterMeasurementsByRange(measurements, displayRange)
-      : measurements.filter((item) => !pinchStart || item.measurement_date >= pinchStart)
+    pinching
+      ? measurements.filter((item) => item.measurement_date >= pinchStart!)
+      : filterMeasurementsByRange(measurements, displayRange)
   )
     .slice()
     .reverse();
   const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
-  const selectedDateRange =
-    pinchSpanDays === null
-      ? dateRangeForDates(measurementDates, displayRange)
-      : { start_date: pinchStart };
+  const selectedDateRange = pinching
+    ? { start_date: pinchStart }
+    : dateRangeForDates(measurementDates, displayRange);
   const activeGoal = goals.find((goal) => goal.active) ?? null;
   // Clip only the start: a future target date extends the chart so the goal line reaches it.
   const clippedGoal = activeGoal
@@ -910,21 +902,6 @@ function BodyTrendChart({
     ],
   );
   const showFat = series === 'fat' && hasBodyFat;
-  const pinchZoom = useMemo(
-    () => ({
-      onChange: (scale: number) => {
-        pinchBaseSpanRef.current ??= rangeSpans[displayRange];
-        const span = pinchedBodyTrendSpan(pinchBaseSpanRef.current, scale, rangeSpans);
-        setPinchSpanDays(span);
-        setDisplayRange(nearestBodyTrendRange(span, rangeSpans));
-      },
-      onEnd: () => {
-        pinchBaseSpanRef.current = null;
-        setPinchSpanDays(null);
-      },
-    }),
-    [displayRange, rangeSpans],
-  );
   const bodyRangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const bodySeriesIndicatorRef = useSlidingIndicator<HTMLDivElement>(showFat);
 
@@ -945,11 +922,7 @@ function BodyTrendChart({
               aria-selected={displayRange === option.value}
               aria-label={option.label}
               className={displayRange === option.value ? 'active' : ''}
-              onClick={() => {
-                pinchBaseSpanRef.current = null;
-                setPinchSpanDays(null);
-                setDisplayRange(option.value);
-              }}
+              onClick={() => selectRange(option.value)}
             >
               {RANGE_LABELS[option.value]}
             </button>

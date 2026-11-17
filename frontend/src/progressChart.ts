@@ -20,6 +20,8 @@ export function progressPointsForChart<T extends ProgressPoint>(
   points: T[],
   metric: ProgressMetric,
   range: TimeRange,
+  /** Overrides the range's first date, e.g. while a pinch is zooming the chart. */
+  startDate?: string,
 ): T[] {
   const ordered = points
     .filter((point) => Number.isFinite(point[metric]) && point[metric] > 0)
@@ -29,9 +31,11 @@ export function progressPointsForChart<T extends ProgressPoint>(
         first.workout_date.localeCompare(second.workout_date) ||
         first.workout_id.localeCompare(second.workout_id),
     );
-  const { start_date: cutoff } = dateRangeForDates(
-    ordered.map((point) => point.workout_date),
-    range,
-  );
+  const cutoff =
+    startDate ??
+    dateRangeForDates(
+      ordered.map((point) => point.workout_date),
+      range,
+    ).start_date;
   return cutoff ? ordered.filter((point) => point.workout_date >= cutoff) : ordered;
 }

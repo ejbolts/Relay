@@ -441,6 +441,7 @@ import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { TIME_RANGE_OPTIONS } from './dateRanges';
+import { useRangePinchZoom } from './rangePinchZoom';
 import {
   captureFriendInvite,
   clearFriendInvite,
@@ -8382,10 +8383,18 @@ export function ProgressScreen({
     () => (progress ? progressViewPoints(progress, mapping, view) : []),
     [progress, mapping, view],
   );
+  const viewDates = useMemo(() => viewPoints.map((point) => point.workout_date), [viewPoints]);
+  const { pinchZoom, pinchStart, selectRange } = useRangePinchZoom(
+    viewDates,
+    displayRange,
+    setDisplayRange,
+  );
   const defaultView = view === 'all' && !normalised;
   const approx = normalised ? '≈ ' : '';
   const metricInfo = PROGRESS_METRICS.find((item) => item.value === metric)!;
-  const inRange = progress ? progressPointsForChart(viewPoints, metric, displayRange) : [];
+  const inRange = progress
+    ? progressPointsForChart(viewPoints, metric, displayRange, pinchStart)
+    : [];
   const weekly = !browseFirst && metric !== 'volume_kg' && displayRange !== '1m';
   const charted = weekly ? weeklyBestPoints(inRange, (point) => point[metric]) : inRange;
   const latestPoint = inRange.at(-1) ?? null;
@@ -8461,7 +8470,7 @@ export function ProgressScreen({
           aria-selected={displayRange === option.value}
           aria-label={option.label}
           className={displayRange === option.value ? 'active' : ''}
-          onClick={() => setDisplayRange(option.value)}
+          onClick={() => selectRange(option.value)}
         >
           {RANGE_LABELS[option.value]}
         </button>
@@ -8838,6 +8847,7 @@ export function ProgressScreen({
                         fillHeight={expanded}
                         markRecords={metric !== 'volume_kg'}
                         formatValue={formatMetric}
+                        pinchZoom={pinchZoom}
                         onSelect={
                           browseFirst
                             ? undefined
