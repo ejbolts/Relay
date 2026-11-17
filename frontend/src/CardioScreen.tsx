@@ -538,7 +538,7 @@ export function CardioScreen({
             {[
               ['all', 'All'],
               ['pure_cardio', 'Cardio only'],
-              ['workout_plus_cardio', 'After workout'],
+              ['workout_plus_cardio', 'With workout'],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -588,7 +588,7 @@ export function CardioScreen({
                       <small>
                         {prettyDate(session.session_date)} ·{' '}
                         {workoutContext === 'workout_plus_cardio'
-                          ? 'After workout'
+                          ? 'With workout'
                           : (session.zone ?? 'Cardio only')}
                       </small>
                     </span>
@@ -601,7 +601,7 @@ export function CardioScreen({
                     <div className="cardio-session-title-row">
                       {workoutContext === 'workout_plus_cardio' && (
                         <span className="cardio-context-badge workout-plus-cardio">
-                          After workout
+                          With workout
                         </span>
                       )}
                       {session.source_workout_id ? (
