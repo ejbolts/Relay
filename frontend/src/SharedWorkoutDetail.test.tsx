@@ -62,7 +62,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it('puts warm-ups on one line and gives each working set a numbered row with its result', async () => {
+it('lists every set in order, with W and D in the circle instead of a word', async () => {
   await act(async () =>
     root.render(
       <SharedSetList
@@ -74,32 +74,38 @@ it('puts warm-ups on one line and gives each working set a numbered row with its
     ),
   );
 
-  expect(host.querySelector('.shared-set-warmups')?.textContent).toBe(
-    'Warm-up50 kg × 12 · 90 kg × 12',
-  );
   const rows = [...host.querySelectorAll('ol > li')];
-  expect(rows.map((row) => row.querySelector('.shared-set-number')?.textContent)).toEqual([
-    '1',
-    '2',
-    'D',
+  const numbers = rows.map((row) => row.querySelector('.shared-set-number'));
+  expect(numbers.map((item) => item?.textContent)).toEqual(['W', 'W', '1', '2', 'D']);
+  expect(numbers.map((item) => item?.getAttribute('aria-label'))).toEqual([
+    'Warm-up',
+    'Warm-up',
+    'Set 1',
+    'Set 2',
+    'Drop set',
   ]);
   expect(rows.map((row) => row.getAttribute('data-set-type'))).toEqual([
+    'warmup',
+    'warmup',
     'normal',
     'normal',
     'drop',
   ]);
   expect(rows.map((row) => row.querySelector('.shared-set-result')?.textContent)).toEqual([
+    '50 kg × 12',
+    '90 kg × 12',
     '170 kg × 12',
     '210 kg × 12',
     '105 kg × 12',
   ]);
-  expect(rows[0].textContent).toContain('RPE 6.5');
-  expect(rows[1].classList).toContain('is-record');
-  expect(rows[1].querySelector('.pr-badge')?.textContent).toBe('PR');
-  expect(rows[1].querySelector('.pr-badge')?.getAttribute('title')).toBe('All-time Weight PR');
-  expect(rows[1].querySelector('.shared-set-detail')?.textContent).toBe('Slow last rep');
-  expect(rows[2].querySelector('em')?.textContent).toBe('Drop');
-  expect(host.textContent).toContain('Warm-up: Felt stiff');
+  expect(rows[2].textContent).toContain('RPE 6.5');
+  expect(rows[3].classList).toContain('is-record');
+  expect(rows[3].querySelector('.pr-badge')?.textContent).toBe('PR');
+  expect(rows[3].querySelector('.pr-badge')?.getAttribute('title')).toBe('All-time Weight PR');
+  expect(rows[3].querySelector('.shared-set-detail')?.textContent).toBe('Slow last rep');
+  expect(rows[1].querySelector('.shared-set-detail')?.textContent).toBe('Felt stiff');
+  // The type is in the circle only; no Warm-up, Drop or Attempted word beside the result.
+  expect(host.textContent).not.toMatch(/Warm-up|Drop|Attempted/);
   expect(host.textContent).not.toContain('skipped');
 });
 
