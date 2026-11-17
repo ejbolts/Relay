@@ -90,14 +90,11 @@ function renderProfile(
         active={active}
         onOpenSplits={onOpenSplits}
         onChooseSharing={() => {}}
-        renderWorkouts={({ workouts, renderWorkoutAction, hasMore, onLoadMore }) => (
+        renderWorkouts={({ workouts, hasMore, onLoadMore }) => (
           <>
             <ul>
               {workouts.map((item) => (
-                <li key={item.id}>
-                  {item.name}
-                  {renderWorkoutAction?.(item)}
-                </li>
+                <li key={item.id}>{item.name}</li>
               ))}
             </ul>
             {hasMore && (
@@ -307,10 +304,8 @@ describe('own profile', () => {
     expect(container.textContent).not.toContain('Change password');
     expect(container.textContent).not.toContain('Profile sharing');
     expect(container.querySelector('.profile-account-id')).toBeNull();
-    // Your own workouts offer comments but no reaction picker.
-    expect(
-      container.querySelector('.discussion-comments-button')?.getAttribute('aria-label'),
-    ).toContain('comments on');
+    // Workouts on a profile carry no reaction or comment controls; those live in the feed.
+    expect(container.querySelector('.discussion-comments-button')).toBeNull();
     expect(container.querySelector('.friend-react-button')).toBeNull();
     expect(container.querySelector('.profile-friend-actions')).toBeNull();
     await act(async () => button('Edit profile').click());
@@ -414,24 +409,6 @@ describe('opening a profile loaded in the background', () => {
     await reopen();
     expect(container.textContent).toContain('as a friend to see their training');
     expect(container.textContent).not.toContain('First workout');
-  });
-
-  it('keeps an open comment thread open when the workouts refresh', async () => {
-    vi.spyOn(api.sharing, 'comments').mockResolvedValue({
-      items: [],
-      total: 0,
-      next_offset: null,
-    });
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('.discussion-comments-button')!.click(),
-    );
-    await renderProfile('friend', undefined, true, 'next-revision');
-    expect(
-      container.querySelector('.discussion-comments-button')?.getAttribute('aria-expanded'),
-    ).toBe('true');
-    expect(container.querySelector('.workout-discussion-thread')?.hasAttribute('hidden')).toBe(
-      false,
-    );
   });
 });
 
@@ -640,39 +617,11 @@ it('hides the Time trained range when the server sends only lifetime totals', as
   expect(card.textContent).toContain('4h 33min');
 });
 
-it('shows lifetime time separately from history filters and reacts on a shared workout', async () => {
+it('shows lifetime time separately from history filters, with no reaction controls', async () => {
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('3h 33min');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('1h 20min');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('4h 33min');
-  const react = vi
-    .spyOn(api.sharing, 'react')
-    .mockResolvedValue({ counts: [{ reaction: 'love', count: 1 }], yours: 'love' });
-  const remove = vi
-    .spyOn(api.sharing, 'removeReaction')
-    .mockResolvedValue({ counts: [], yours: null });
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('.friend-react-button')!.click(),
-  );
-  await act(async () =>
-    [...container.querySelectorAll<HTMLButtonElement>('.friend-react-picker button')]
-      .find((b) => b.getAttribute('aria-label') === 'Love')!
-      .click(),
-  );
-  expect(react).toHaveBeenCalledWith('first', 'love');
-  expect(container.querySelector('.friend-react-button')?.textContent).toBe('❤️');
-  expect(container.querySelector('.discussion-reaction-summary')?.textContent).toBe('❤️ 1');
-  expect(container.querySelector('.friend-react-button')?.getAttribute('aria-label')).toContain(
-    'Love',
-  );
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('.friend-react-button')!.click(),
-  );
-  await act(async () =>
-    [...container.querySelectorAll<HTMLButtonElement>('.friend-react-picker button')]
-      .find((b) => b.getAttribute('aria-label') === 'Love')!
-      .click(),
-  );
-  expect(remove).toHaveBeenCalledWith('first');
+  expect(container.querySelector('.friend-react-button')).toBeNull();
   await chooseType('push');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('4h 33min');
   expect(container.querySelector('.workout-discussion')).toBeNull();

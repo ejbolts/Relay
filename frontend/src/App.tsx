@@ -63,6 +63,7 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
+import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
 import {
   formatWeight,
@@ -318,7 +319,7 @@ import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
-import { SharedSetList, SharedWorkoutSummary } from './SharedWorkoutDetail';
+import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
 import { FriendsActivityCard } from './FriendsActivity';
 import { SocialScreen } from './SocialScreen';
@@ -416,7 +417,12 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs } from './workoutPr';
-import { bodyweightOn, bodyweightContext, sharedBodyweight } from './relativeStrength';
+import {
+  bodyweightOn,
+  bodyweightContext,
+  relativeStrength,
+  sharedBodyweight,
+} from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -2486,7 +2492,6 @@ function AppContent() {
             <CachedTabPanel active={tab === 'profile'}>
               <ProfileScreen
                 key={user.id}
-                onOpenMember={openSharedProfile}
                 onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
@@ -2507,7 +2512,6 @@ function AppContent() {
               <CachedTabPanel active={tab === 'shared-profile'}>
                 <SharedProfileScreen
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
-                  onOpenMember={openSharedProfile}
                   onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
                   targetWorkout={sharedProfile.workout}
@@ -10328,7 +10332,6 @@ function SharedWorkoutHistory({
   focusWorkoutId,
   personalRecords,
   onFilterMachine,
-  renderWorkoutAction,
   hasMore = false,
   loadingMore = false,
   loadMoreFailed = false,
@@ -10430,7 +10433,6 @@ function SharedWorkoutHistory({
                   onToggle={() =>
                     setOpenId((current) => (current === workout.id ? null : workout.id))
                   }
-                  reactionAction={renderWorkoutAction?.(workout)}
                 />
               ))}
             </div>
@@ -10492,7 +10494,6 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   onPhotosChange,
-  reactionAction,
 }: {
   bodyweight?: number | null;
   detailsOnly?: boolean;
@@ -10523,7 +10524,6 @@ function HistoryWorkoutCard({
   onDelete?: () => void;
   /** Given for your own saved workout: its photos were added to or removed. */
   onPhotosChange?: () => void;
-  reactionAction?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -10533,12 +10533,23 @@ function HistoryWorkoutCard({
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
   const workingSetCount = workingSets(workout).length;
-  const totalReps = completedWorkoutSets.reduce((total, item) => total + (item.reps ?? 0), 0);
   const totalVolume = workoutVolumeKg(workout);
   const totalDistance = completedWorkoutSets.reduce(
     (total, item) => total + (item.distance_km ?? 0),
     0,
   );
+  // One exercise with a bodyweight ratio or a record gives every exercise that column, so the
+  // tables of a workout line up.
+  const ratioColumn =
+    open &&
+    completedWorkoutSets.some(
+      (item) => relativeStrength(item.weight_kg, item.bodyweight_kg ?? bodyweight) !== null,
+    );
+  const recordColumn =
+    open &&
+    completedWorkoutSets.some((item) =>
+      personalRecords.some((record) => record.set_id === item.id),
+    );
   const meta = [
     showYear
       ? `${shortDate(workout.workout_date)} ${workout.workout_date.slice(0, 4)}`
@@ -10630,14 +10641,19 @@ function HistoryWorkoutCard({
               />
             ) : (
               <>
-                <HistorySetFlow
+                <HistorySetTable
                   bodyweight={bodyweight}
                   sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}
                   machinePhotos={movement.machine_photos}
+                  ratioColumn={ratioColumn}
+                  recordColumn={recordColumn}
+                  formatSet={(item) => setResult(item, weightUnit)}
+                  recordLabel={recordTypeLabel}
                 />
+                {/* A completed set's note sits under its row in the table. */}
                 {movement.sets
-                  .filter((item) => item.notes)
+                  .filter((item) => item.notes && !item.completed)
                   .map((item) => (
                     <small key={item.id}>
                       Set {item.order_index + 1}: {item.notes}
@@ -10685,54 +10701,19 @@ function HistoryWorkoutCard({
           </span>
         </button>
       )}
-      {reactionAction && <div className="history-card-social">{reactionAction}</div>}
       {open && (
         <div className={`history-detail${shared ? ' shared-session' : ''}`}>
-          {!detailsOnly && shared && (
-            <SharedWorkoutSummary
-              workout={workout}
-              personalRecords={personalRecords}
-              formatSet={(item) => setResult(item, weightUnit)}
-            />
-          )}
-          {!detailsOnly && !shared && (
-            <div className="history-workout-stats" aria-label="Workout totals">
-              {workout.start_time && workout.end_time && (
-                <span>
-                  <small>When</small>
-                  <strong>{formatWorkoutTimeRange(workout.start_time, workout.end_time)}</strong>
-                </span>
-              )}
-              <span>
-                <small>Time</small>
-                <strong>{formatMinutesDuration(workout.duration_minutes)}</strong>
-              </span>
-              <span>
-                <small>Sets</small>
-                <strong>{completedWorkoutSets.length}</strong>
-              </span>
-              <span>
-                <small>Reps</small>
-                <strong>{totalReps || '–'}</strong>
-              </span>
-              <span>
-                <small>Volume</small>
-                <strong>{totalVolume ? formatWeight(totalVolume, weightUnit, 0) : '–'}</strong>
-              </span>
-            </div>
-          )}
           {onPhotosChange && !detailsOnly ? (
-            <div className="history-workout-photos">
-              <WorkoutPhotoEditor
-                workoutId={workout.id}
-                photos={photos}
-                subject={photoSubject}
-                onChange={(next) => {
-                  setPhotos(next);
-                  onPhotosChange();
-                }}
-              />
-            </div>
+            <WorkoutPhotoEditor
+              workoutId={workout.id}
+              photos={photos}
+              subject={photoSubject}
+              canAdd={false}
+              onChange={(next) => {
+                setPhotos(next);
+                onPhotosChange();
+              }}
+            />
           ) : (
             photos.length > 0 && (
               <div className="history-workout-photos">
