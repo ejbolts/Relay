@@ -1136,7 +1136,7 @@ def merge_custom_exercise(
 def update_exercise(
     exercise_id: str, payload: ExerciseUpdate, db: DbSession, user: CurrentUser
 ) -> ExerciseRead:
-    """Rename a custom exercise or hide one from lists, keeping all of its history."""
+    """Rename or re-describe a custom exercise, or hide one from lists, keeping its history."""
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
@@ -1154,6 +1154,29 @@ def update_exercise(
                 status_code=409, detail="An exercise with that name already exists."
             )
         exercise.name = name
+    changes_equipment = "equipment" in payload.model_fields_set
+    if changes_equipment or payload.muscle_set_credits is not None:
+        if not exercise.is_custom:
+            raise HTTPException(status_code=422, detail="Only your own exercises can be changed.")
+        if changes_equipment:
+            exercise.equipment = payload.equipment
+        if payload.muscle_set_credits is not None:
+            if exercise.kind == ExerciseKind.CARDIO or exercise.category == WorkoutCategory.CARDIO:
+                raise HTTPException(
+                    status_code=422, detail="Cardio exercises have no muscle credits."
+                )
+            # History is credited from the exercise's current muscles, so past weeks follow.
+            exercise.muscle_contributions.clear()
+            db.flush()
+            exercise.muscle_contributions = [
+                ExerciseMuscleContribution(
+                    muscle_name=credit.muscle_name,
+                    role=MuscleRole.PRIMARY if credit.sets == 1 else MuscleRole.SECONDARY,
+                    contribution_factor=credit.sets,
+                )
+                for credit in payload.muscle_set_credits
+            ]
+            exercise.muscle_group = payload.muscle_set_credits[0].muscle_name
     if payload.hidden is not None:
         hidden = hidden_exercise_ids(db, user.id)
         hidden = hidden | {exercise.id} if payload.hidden else hidden - {exercise.id}

@@ -40,6 +40,7 @@ import type {
   MachinePhotoUsage,
   MachineSetting,
   MuscleVolume,
+  MuscleSetCreditInput,
   PersonalRecord,
   TrainingBlockInput,
   TrainingBlockSummary,
@@ -692,7 +693,16 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
-  updateExercise: (exerciseId: string, changes: { name?: string; hidden?: boolean }) =>
+  updateExercise: (
+    exerciseId: string,
+    changes: {
+      name?: string;
+      hidden?: boolean;
+      /** Custom exercises only. */
+      equipment?: string | null;
+      muscle_set_credits?: MuscleSetCreditInput[];
+    },
+  ) =>
     request<Exercise>(`/api/exercises/${exerciseId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
