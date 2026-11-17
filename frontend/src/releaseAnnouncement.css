@@ -525,6 +525,19 @@ html[data-reduce-motion] .release-confetti {
   padding-top: calc(var(--app-banner-height) + 0.55rem + env(safe-area-inset-top));
 }
 
+/* The taller header must still fade only below its title row. Percentage stops would stretch the
+   fade up across the title, letting scrolled content show through it, so the fade is measured
+   from the bottom edge instead. */
+.has-app-update .overlay-screen-header:not(.live-workout-header)::before {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--p-page) 97%, transparent) 0%,
+    color-mix(in srgb, var(--p-page) 90%, transparent) calc(100% - 2.4rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(180deg, black 0 calc(100% - 1.75rem), transparent 100%);
+}
+
 .has-app-update .background-activity-bar {
   top: calc(var(--app-banner-height) + 0.4rem);
 }
