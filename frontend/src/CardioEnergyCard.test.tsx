@@ -23,13 +23,14 @@ const week: CardioEnergyPeriod = {
   previous_average_incline_percent: 6,
   average_mets: 7.2,
   previous_average_mets: 6.5,
-  met_minutes: 864,
-  previous_met_minutes: 650,
+  elevation_gain_m: 864,
+  previous_elevation_gain_m: 650,
   heart_rate_sessions: 3,
   distance_sessions: 3,
   speed_sessions: 2,
   incline_sessions: 2,
   mets_sessions: 3,
+  elevation_sessions: 2,
 };
 
 describe('cardio energy card', () => {
@@ -37,10 +38,14 @@ describe('cardio energy card', () => {
     const markup = renderToStaticMarkup(
       <CardioEnergyCard summaries={[week]} weekEnd="2026-09-06" />,
     );
+    expect(markup).toContain('Elevation gain');
     expect(markup).toContain('864');
+    expect(markup).toContain('↑ 214 m vs prior');
     expect(markup).toContain('1,540');
     expect(markup).toContain('cardio-stat-unit');
-    expect(markup).toContain('Average METs');
+    expect(markup).toContain('Average MET');
+    expect(markup).toContain('↑ 0.7 MET vs prior');
+    expect(markup).not.toMatch(/METs|MET-min/);
     expect(markup).toContain('Fat energy equivalent');
     expect(markup).toContain('About cardio progress');
     expect(markup).toContain('Cardio progress period');
@@ -59,6 +64,7 @@ describe('cardio energy card', () => {
             distance_sessions: 0,
             speed_sessions: 0,
             incline_sessions: 0,
+            elevation_sessions: 0,
           },
         ]}
       />,
@@ -66,6 +72,15 @@ describe('cardio energy card', () => {
     expect(markup).toContain('1 session logged');
     expect(markup).not.toContain('1 sessions');
     expect(markup).toContain('No distance logged');
+    expect(markup).toContain('No elevation available');
+  });
+  it('leaves elevation empty for a server that does not report it yet', () => {
+    const older = { ...week };
+    delete older.elevation_gain_m;
+    delete older.previous_elevation_gain_m;
+    delete older.elevation_sessions;
+    const markup = renderToStaticMarkup(<CardioEnergyCard summaries={[older]} />);
+    expect(markup).toContain('No elevation available');
   });
   it('tolerates a cached dashboard from before calorie tracking', () => {
     expect(renderToStaticMarkup(<CardioEnergyCard summaries={undefined} />)).toBe('');

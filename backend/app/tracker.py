@@ -33,6 +33,7 @@ from .body_measurement_csv import export_body_measurements, import_body_measurem
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
 from .body_sizes import BodySizeLog
 from .cardio_energy import cardio_energy_periods
+from .cardio_estimates import attach_body_weights
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
 from .cardio_zones import (
     CardioPreferences,
@@ -808,6 +809,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             "average_heart_rate_bpm": session.average_heart_rate_bpm,
             "average_power_watts": session.average_power_watts,
             "average_mets": session.average_mets,
+            "elevation_gain_m": session.elevation_gain_m,
         }
         for session in existing.values()
     }
@@ -868,6 +870,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
         )
         session.average_power_watts = manual_metrics.get("average_power_watts")
         session.average_mets = manual_metrics.get("average_mets")
+        session.elevation_gain_m = manual_metrics.get("elevation_gain_m")
         distances = [item.distance_km for item in completed_sets if item.distance_km is not None]
         speed_sets = [item for item in completed_sets if item.speed_kph is not None]
         incline_sets = [item for item in completed_sets if item.incline_percent is not None]
@@ -1915,6 +1918,7 @@ def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
     personal = cardio_preferences(db, user.id)
     for session in sessions:
         classify_session(session, personal)
+    attach_body_weights(db, user.id, sessions)
     return CardioOverviewRead(
         cardio_preferences=personal,
         goal_weeks=cardio_goal_weeks(sessions, current_start, personal, date.today()),
@@ -2011,6 +2015,7 @@ def create_cardio_session(
             incline_percent=payload.incline_percent,
             average_power_watts=payload.average_power_watts,
             average_mets=payload.average_mets,
+            elevation_gain_m=payload.elevation_gain_m,
             source_exercise_id=exercise.id,
             intensity=None,
             zone=payload.zone,
@@ -2025,6 +2030,7 @@ def create_cardio_session(
         bump_workout_cache_revision(db, user.id)
         db.commit()
         db.refresh(session)
+        attach_body_weights(db, user.id, [session])
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
@@ -2033,6 +2039,7 @@ def create_cardio_session(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -2053,6 +2060,7 @@ def update_cardio_session(
         "incline_percent",
         "average_power_watts",
         "average_mets",
+        "elevation_gain_m",
     }
     for key, value in payload.model_dump(exclude={"exercise_id"}).items():
         if key in optional_metrics and key not in payload.model_fields_set:
@@ -2065,6 +2073,7 @@ def update_cardio_session(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -2081,6 +2090,7 @@ def update_cardio_calories(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -2169,6 +2179,7 @@ def update_cardio_metrics(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -3413,6 +3424,7 @@ def dashboard(
     cardio_sessions = list(
         db.scalars(select(CardioSession).where(CardioSession.user_id == user.id))
     )
+    attach_body_weights(db, user.id, cardio_sessions)
     cardio_week_start = start_of_week(today, preferences.week_start)
     cardio_minutes_this_week = sum(
         session.duration_minutes

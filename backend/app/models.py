@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
+from .cardio_estimates import estimate_elevation_gain_m, estimate_mets
 from .database import Base
 
 
@@ -1094,6 +1095,7 @@ class CardioSession(Base):
     incline_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     average_power_watts: Mapped[int | None] = mapped_column(Integer, nullable=True)
     average_mets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     source_exercise_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     intensity: Mapped[str | None] = mapped_column(String(100), nullable=True)
     zone: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -1136,6 +1138,45 @@ class CardioSession(Base):
     def source_workout_name(self) -> str | None:
         return self.source_workout.name if self.source_workout else None
 
+    # Not stored: the body weight near the session date, set by attach_body_weights so
+    # the estimates below can use it. Without it they fall back to weight-free methods.
+    body_weight_kg = None
+
+    @property
+    def estimated_elevation_gain_m(self) -> float | None:
+        return estimate_elevation_gain_m(
+            duration_minutes=self.duration_minutes,
+            distance_km=self.distance_km,
+            speed_kph=self.average_speed_kph,
+            incline_percent=self.incline_percent,
+        )
+
+    @property
+    def effective_elevation_gain_m(self) -> float | None:
+        """The logged elevation gain, or the estimate when it was left blank."""
+        if self.elevation_gain_m is not None:
+            return self.elevation_gain_m
+        return self.estimated_elevation_gain_m
+
+    @property
+    def estimated_mets(self) -> float | None:
+        return estimate_mets(
+            activity=self.activity_type or "",
+            duration_minutes=self.duration_minutes,
+            distance_km=self.distance_km,
+            speed_kph=self.average_speed_kph,
+            incline_percent=self.incline_percent,
+            elevation_gain_m=self.elevation_gain_m,
+            power_watts=self.average_power_watts,
+            calories_kcal=self.calories_kcal,
+            body_weight_kg=self.body_weight_kg,
+        )
+
+    @property
+    def effective_mets(self) -> float | None:
+        """The logged average MET, or the estimate when it was left blank."""
+        return self.average_mets if self.average_mets is not None else self.estimated_mets
+
     __table_args__ = (
         CheckConstraint(
             "calories_kcal IS NULL OR (calories_kcal >= 0 AND calories_kcal <= 100000)",
@@ -1166,6 +1207,10 @@ class CardioSession(Base):
         CheckConstraint(
             "average_mets IS NULL OR (average_mets > 0 AND average_mets <= 50)",
             name="cardio_average_mets_range",
+        ),
+        CheckConstraint(
+            "elevation_gain_m IS NULL OR (elevation_gain_m >= 0 AND elevation_gain_m <= 30000)",
+            name="cardio_elevation_gain_range",
         ),
         CheckConstraint(
             "duration_minutes > 0 AND duration_minutes <= 1440", name="cardio_duration_range"
