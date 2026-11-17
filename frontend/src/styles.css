@@ -6700,6 +6700,16 @@ body,
   margin-top: 0.15rem;
   color: var(--muted-ink);
 }
+.cardio-session-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.42rem;
+}
+.cardio-history .cardio-session-date-row .cardio-session-date {
+  margin-top: 0;
+}
 .cardio-history .cardio-session-date {
   margin-top: 0.42rem;
   color: #aeb9be;

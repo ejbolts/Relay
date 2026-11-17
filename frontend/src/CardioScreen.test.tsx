@@ -259,7 +259,7 @@ describe('cardio weekly trend screen', () => {
 
   it('groups filtered history by week and keeps session editing inside expandable rows', async () => {
     expect(container.querySelectorAll('.cardio-history-week')).toHaveLength(2);
-    await click(named('After workout'));
+    await click(named('With workout'));
     expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(1);
     expect(container.querySelector('.cardio-history-week h3')!.textContent).toContain('20 min');
     await click(container.querySelector('.cardio-history-row > summary')!);
