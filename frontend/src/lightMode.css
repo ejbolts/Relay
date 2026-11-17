@@ -1,0 +1,334 @@
+/*
+ * Light mode: loaded after pulse.css. Swaps the shared design tokens, then overrides the few
+ * components that hard-code dark surfaces or light text.
+ */
+
+:root[data-colour-mode='light'] {
+  color-scheme: light;
+  --p-page: #f3f5f7;
+  --p-surface: #ffffff;
+  --p-surface-2: #eef1f3;
+  --p-surface-3: #e2e6ea;
+  --p-surface-raised: #ffffff;
+  --p-card-shadow: none;
+  --p-card-border: var(--p-line);
+  --p-line: rgb(16 24 32 / 9%);
+  --p-line-strong: rgb(16 24 32 / 16%);
+  --p-ink: #14181c;
+  --p-ink-2: #48515a;
+  --p-muted: #69727a;
+  --p-good: #1d8534;
+  --p-gold: #a36800;
+  --p-gold-soft: rgb(201 133 0 / 14%);
+  --p-on-gold: #ffffff;
+  --p-danger: #c53b3b;
+  --p-grid: #e4e8eb;
+  --p-axis: #c3cad0;
+  --p-deemph: #cdd3d8;
+  --ink: #14181c;
+  --muted-ink: #69727a;
+  --paper: #f3f5f7;
+  --page: #f3f5f7;
+  --card: #ffffff;
+  --line: #d9dee2;
+  --accent-dark: var(--p-accent-text);
+  --surface: var(--p-surface);
+  --border: var(--p-line-strong);
+  --gold: #a36800;
+  --gold-row: #fff2c2;
+  --completed-set: #2f6b3a;
+  --completed-set-open: #edf6ef;
+  --completed-set-ink: #f3faf4;
+  --completed-set-line: #8fb798;
+}
+
+:root[data-colour-mode='light'][data-light-style='stained'] {
+  /* Surfaces take a faint tint of the accent theme, like the dark Stained style. */
+  --p-page: color-mix(in srgb, var(--p-accent) 7%, #f3f5f7);
+  --p-surface: color-mix(in srgb, var(--p-accent) 4%, #ffffff);
+  --p-surface-2: color-mix(in srgb, var(--p-accent) 9%, #eef1f3);
+  --p-surface-3: color-mix(in srgb, var(--p-accent) 14%, #e2e6ea);
+  --p-surface-raised: color-mix(in srgb, var(--p-accent) 4%, #ffffff);
+  --p-line: color-mix(in srgb, var(--p-accent) 16%, rgb(16 24 32 / 9%));
+  --p-line-strong: color-mix(in srgb, var(--p-accent) 26%, rgb(16 24 32 / 16%));
+  --p-ink-2: color-mix(in srgb, var(--p-accent) 14%, #48515a);
+  --p-muted: color-mix(in srgb, var(--p-accent) 14%, #69727a);
+  --p-grid: color-mix(in srgb, var(--p-accent) 12%, #e4e8eb);
+  --p-deemph: color-mix(in srgb, var(--p-accent) 18%, #cdd3d8);
+  --paper: var(--p-page);
+  --card: var(--p-surface);
+}
+
+:root[data-colour-mode='light'] .app-tab-bar {
+  background: rgb(255 255 255 / 88%);
+}
+:root[data-colour-mode='light'] .start-menu-scrim {
+  background: rgb(243 245 247 / 72%);
+}
+:root[data-colour-mode='light'] .app-tab-start.menu-open .app-tab-start-bubble {
+  color: var(--p-ink);
+}
+:root[data-colour-mode='light'] .overlay-screen-header::before {
+  background: linear-gradient(
+    180deg,
+    rgb(243 245 247 / 97%) 0%,
+    rgb(243 245 247 / 90%) 62%,
+    transparent 100%
+  );
+}
+:root[data-colour-mode='light'] .pulse-meter {
+  background: var(--p-accent-soft);
+}
+:root[data-colour-mode='light'] .popup-dialog {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface);
+  box-shadow: 0 24px 80px rgb(16 24 32 / 22%);
+}
+:root[data-colour-mode='light'] .popup-dialog > header {
+  border-bottom-color: var(--p-line-strong);
+  background: rgb(255 255 255 / 97%);
+}
+:root[data-colour-mode='light'] .edge-swipe-indicator,
+:root[data-colour-mode='light'] .undo-toast {
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 14px 36px rgb(16 24 32 / 18%);
+}
+:root[data-colour-mode='light'] .modal-backdrop,
+:root[data-colour-mode='light'] .popup-dialog::backdrop,
+:root[data-colour-mode='light'] .notification-dialog::backdrop {
+  background: rgb(16 24 32 / 38%);
+}
+:root[data-colour-mode='light'] .pulse-chart-bg-dot {
+  fill: var(--p-axis);
+}
+:root[data-colour-mode='light'] .chart-legend .legend-dot {
+  background: var(--p-axis);
+}
+:root[data-colour-mode='light'] .logger-screen .set-editor-note,
+:root[data-colour-mode='light'] .logger-screen .set-editor-metrics input {
+  background: var(--p-surface-2);
+}
+:root[data-colour-mode='light']
+  .logger-screen
+  .movement-card
+  header
+  h2
+  .movement-history-link:hover,
+:root[data-colour-mode='light']
+  .logger-screen
+  .movement-card
+  header
+  h2
+  .movement-history-link:focus-visible,
+:root[data-colour-mode='light']
+  .logger-screen
+  .movement-card
+  header
+  h2
+  .movement-history-link:active {
+  color: var(--p-accent-text);
+}
+:root[data-colour-mode='light'] .logger-screen .set-details.is-open .set-drag-handle {
+  color: var(--p-muted);
+}
+
+/* Legacy settings, body and cardio styles with fixed dark-theme colours. */
+:root[data-colour-mode='light'] :is(.settings-panel h2, .history-calendar-panel h2),
+:root[data-colour-mode='light'] .notification-setting-row strong,
+:root[data-colour-mode='light'] .body-history-panel article strong {
+  color: var(--p-ink);
+}
+:root[data-colour-mode='light'] .body-history-table-head {
+  border-bottom-color: var(--p-line-strong);
+  color: var(--p-ink-2);
+}
+:root[data-colour-mode='light'] .body-history-panel article small,
+:root[data-colour-mode='light'] .cardio-met-summary span,
+:root[data-colour-mode='light'] .cardio-met-summary strong small,
+:root[data-colour-mode='light'] .cardio-history .cardio-session-date,
+:root[data-colour-mode='light'] .cardio-history .cardio-session-performance,
+:root[data-colour-mode='light'] :is(.youtube-connection-status, .youtube-connection small),
+:root[data-colour-mode='light'] .youtube-connection p {
+  color: var(--p-ink-2);
+}
+:root[data-colour-mode='light'] .cardio-met-summary strong,
+:root[data-colour-mode='light'] .cardio-energy-estimate,
+:root[data-colour-mode='light'] .cardio-history .cardio-session-energy,
+:root[data-colour-mode='light']
+  .cardio-history
+  .cardio-history-filters
+  button[aria-pressed='true'] {
+  color: var(--p-accent-text);
+}
+:root[data-colour-mode='light'] .cardio-history .cardio-history-filters button {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+}
+:root[data-colour-mode='light']
+  .cardio-history
+  .cardio-history-filters
+  button[aria-pressed='true'] {
+  border-color: var(--p-accent-text);
+  background: var(--p-accent-soft);
+}
+:root[data-colour-mode='light'] .body-row-menu .body-history-actions {
+  background: var(--p-surface);
+  box-shadow: 0 12px 30px rgb(16 24 32 / 16%);
+}
+:root[data-colour-mode='light'] .notification-setting-row > button,
+:root[data-colour-mode='light'] .settings-actions > button,
+:root[data-colour-mode='light'] .settings-actions .inline-confirmation > button {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+}
+:root[data-colour-mode='light'] .settings-actions > button,
+:root[data-colour-mode='light'] .settings-actions .inline-confirmation > button {
+  color: var(--p-ink);
+}
+:root[data-colour-mode='light'] .notification-setting-row + .notification-setting-row {
+  border-top-color: var(--p-line-strong);
+}
+:root[data-colour-mode='light'] .training-preferences-grid :is(input, select, button),
+:root[data-colour-mode='light'] .workout-type-color-row input[type='color'],
+:root[data-colour-mode='light'] .workout-type-color-actions .color-reset-button {
+  background: var(--p-surface-2);
+}
+:root[data-colour-mode='light'] .body-row-menu > summary,
+:root[data-colour-mode='light'] .cardio-history .cardio-history-workout-link,
+:root[data-colour-mode='light'] .video-content .picker,
+:root[data-colour-mode='light'] .video-content .picker span {
+  color: var(--p-accent-text);
+}
+
+/* Workout logger. */
+:root[data-colour-mode='light'] .overlay-header-copy span {
+  color: var(--p-muted);
+}
+:root[data-colour-mode='light'] .set-grid .set-details.previous-set-details {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+}
+:root[data-colour-mode='light'] .set-details.previous-set-details > .completed-set-summary,
+:root[data-colour-mode='light'] .set-details.previous-set-details .completed-set-menu {
+  color: var(--p-ink-2);
+}
+:root[data-colour-mode='light'] .movement-overflow-menu {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface);
+  box-shadow: 0 18px 50px rgb(16 24 32 / 18%);
+}
+/* :where keeps the original specificity so active and danger items keep their colours. */
+:where(:root[data-colour-mode='light']) .movement-overflow-menu button {
+  border-bottom-color: var(--p-line);
+  color: var(--p-ink);
+}
+:where(:root[data-colour-mode='light']) .movement-overflow-menu button > span {
+  color: var(--p-ink-2);
+}
+:root[data-colour-mode='light'] .movement-overflow-menu button:hover,
+:root[data-colour-mode='light'] .movement-overflow-menu button:focus-visible {
+  background: var(--p-surface-2);
+}
+:root[data-colour-mode='light'] .movement-overflow-menu button:disabled {
+  color: var(--p-muted);
+}
+:root[data-colour-mode='light'] .add-set-fields textarea {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+
+:root[data-colour-mode='light']
+  .logger-screen
+  .set-details.completed:not(.is-open)
+  :is(.set-type-picker, .completed-set-summary)
+  > .set-number-normal {
+  color: #1b7330;
+}
+:root[data-colour-mode='light'] .logger-screen .set-number-cell.set-number-warmup {
+  color: #9a520c;
+}
+:root[data-colour-mode='light'] .logger-screen .set-number-cell.set-number-drop {
+  color: #6440b8;
+}
+:root[data-colour-mode='light']
+  :is(.movement-overflow[open] > summary, .movement-overflow > summary:hover) {
+  background: var(--p-surface-2);
+}
+
+/* Exercise picker. Exercise icon tiles stay dark because the artwork uses light line drawings. */
+:root[data-colour-mode='light'] .exercise-list {
+  background: var(--p-surface);
+}
+:root[data-colour-mode='light'] .exercise-option {
+  border-bottom-color: var(--p-line-strong);
+}
+:root[data-colour-mode='light'] .exercise-option-tags em {
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+}
+:root[data-colour-mode='light'] .exercise-search-wrap > span {
+  color: var(--p-muted);
+}
+:root[data-colour-mode='light'] .exercise-filter-selects {
+  border-bottom-color: var(--p-line-strong);
+}
+:root[data-colour-mode='light'] .body-history-panel > article,
+:root[data-colour-mode='light'] .body-row-menu .body-history-actions,
+:root[data-colour-mode='light'] .body-row-menu .body-history-actions button {
+  border-color: var(--p-line-strong);
+}
+:root[data-colour-mode='light'] .app-tab-start.live .app-tab-start-bubble {
+  background: var(--p-accent-soft);
+}
+
+/* Popups and the CSV guide. */
+:root[data-colour-mode='light'] .popup-dialog > header h2 {
+  color: var(--p-ink);
+}
+:root[data-colour-mode='light'] .workout-csv-guide-lists section,
+:root[data-colour-mode='light'] .workout-csv-guide-example {
+  border-color: var(--p-line-strong);
+}
+:root[data-colour-mode='light'] .workout-csv-guide-example {
+  background: var(--p-surface-2);
+}
+:root[data-colour-mode='light'] .workout-csv-guide-example tbody tr {
+  border-top-color: var(--p-line-strong);
+}
+:root[data-colour-mode='light'] .workout-csv-guide-template {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+:root[data-colour-mode='light'] .workout-csv-guide .workout-csv-guide-actions {
+  border-top-color: var(--p-line-strong);
+  background: var(--p-surface);
+}
+
+/* Add to Home Screen guide: show the light iOS share sheet. */
+:root[data-colour-mode='light'] .home-guide {
+  --home-guide-glass: #ffffff;
+  --home-guide-glass-line: rgb(16 24 32 / 10%);
+}
+:root[data-colour-mode='light'] .home-guide-shot {
+  background: linear-gradient(180deg, #e6e9ee, var(--p-page));
+  color: #1c1c1e;
+}
+:root[data-colour-mode='light'] .home-guide-sheet-title small,
+:root[data-colour-mode='light'] .home-guide-add-bar > span:first-child {
+  color: #6c6c70;
+}
+:root[data-colour-mode='light'] .home-guide-action {
+  color: #3a3a3c;
+}
+:root[data-colour-mode='light'] .home-guide-action-button {
+  color: #1c1c1e;
+}
+:root[data-colour-mode='light'] .body-history-goal-name {
+  color: #2565b5;
+}
+:root[data-colour-mode='light'] .body-history-goal-dots {
+  color: rgb(37 101 181 / 45%);
+}

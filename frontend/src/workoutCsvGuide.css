@@ -1,0 +1,112 @@
+﻿.workout-csv-guide-body {
+  padding: 1rem 1.25rem;
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.workout-csv-guide-body > p {
+  margin: 0 0 0.85rem;
+}
+
+.workout-csv-guide-body .workout-csv-guide-note {
+  margin: 0.85rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+}
+
+.workout-csv-guide-note strong {
+  color: var(--ink);
+}
+
+.workout-csv-guide-template {
+  min-height: 2.75rem;
+  margin-top: 0.5rem;
+  text-align: left;
+  font-size: 0.8rem;
+}
+
+/* Keep Close and Choose CSV file visible together on phones. */
+.workout-csv-guide .workout-csv-guide-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex-direction: row;
+  align-items: center;
+  margin: 0;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--p-line-strong);
+  background: var(--p-surface-2);
+}
+
+.workout-csv-guide .workout-csv-guide-actions > button {
+  width: auto;
+}
+
+.workout-csv-guide-actions .workout-csv-guide-close {
+  margin-right: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--p-ink-2);
+  font-weight: 500;
+}
+
+.workout-data-panel {
+  scroll-margin-top: var(--overlay-header-content-offset);
+}
+
+.workout-data-guide-button {
+  min-height: 2.75rem;
+  margin: 0.25rem 0 0.85rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 7px;
+  background: var(--p-surface-2);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.csv-guide-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-accent-text);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* Import and Export stay side by side; error guidance wraps below them. */
+.workout-data-panel .settings-actions {
+  grid-auto-flow: row dense;
+  align-items: start;
+}
+
+.settings-actions > .inline-error {
+  grid-column: 1 / -1;
+}
+
+.settings-actions > .csv-guide-link {
+  grid-column: 1 / -1;
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-accent-text);
+  min-height: 2.75rem;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 360px) {
+  .workout-csv-guide .workout-csv-guide-actions {
+    gap: 0.35rem;
+    padding-inline: 0.75rem;
+  }
+
+  .workout-csv-guide .workout-csv-guide-actions > button {
+    padding-inline: 0.65rem;
+    font-size: 0.8rem;
+  }
+}

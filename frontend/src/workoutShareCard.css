@@ -1,0 +1,118 @@
+.popup-dialog.workout-share-dialog {
+  width: min(850px, calc(100vw - 24px));
+  max-width: 850px;
+}
+
+.workout-share-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(245px, 0.85fr);
+  gap: 28px;
+  align-items: start;
+  padding: 20px;
+}
+
+.workout-share-dialog > .inline-error {
+  margin-inline: 20px;
+}
+
+.workout-share-dialog > .popup-dialog-actions {
+  margin-top: 0;
+  padding: 16px 20px 20px;
+}
+
+.workout-share-preview {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 30px #0002;
+}
+
+.workout-share-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.workout-share-controls {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.workout-share-controls fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.workout-share-controls legend {
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.workout-share-styles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--p-line-strong);
+  cursor: pointer;
+}
+
+.workout-share-styles label:has(:checked) {
+  border-color: var(--accent);
+  background: var(--p-accent-soft);
+}
+
+.workout-share-stats label,
+.workout-share-date {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  cursor: pointer;
+}
+
+.workout-share-controls input {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.workout-share-stats small {
+  margin-left: auto;
+  color: var(--p-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 620px) {
+  .workout-share-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .workout-share-preview {
+    width: min(100%, 300px);
+    margin-inline: auto;
+  }
+
+  .workout-share-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+
+  .workout-share-stats label {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-block: 4px;
+  }
+
+  .workout-share-stats small {
+    width: 100%;
+    padding-left: 23px;
+  }
+}

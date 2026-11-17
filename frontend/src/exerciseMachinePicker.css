@@ -1,0 +1,360 @@
+/* Inline machine choice beneath an exercise in the exercise picker. */
+
+.exercise-picker .exercise-option.has-machines {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.exercise-picker .exercise-option-copy small.exercise-option-machine {
+  margin-top: 0.3rem;
+  overflow: hidden;
+  color: var(--p-accent-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exercise-machine-toggle {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--p-ink-2);
+  cursor: pointer;
+}
+
+.exercise-machine-toggle:hover,
+.exercise-machine-toggle:focus-visible {
+  background: var(--p-surface-2);
+  color: var(--p-accent-text);
+}
+
+.exercise-machine-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -3px;
+}
+
+.exercise-machine-toggle .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 360ms var(--ease-ios);
+}
+
+.exercise-option.machines-open .exercise-machine-toggle .pulse-icon {
+  transform: rotate(180deg);
+}
+
+/* Animating the row track keeps the strip's natural height without measuring it. */
+.exercise-machine-accordion {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 360ms var(--ease-ios);
+}
+
+.exercise-option.machines-open .exercise-machine-accordion {
+  grid-template-rows: 1fr;
+}
+
+.exercise-machine-clip {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.exercise-machine-body {
+  padding: 0 0.5rem 0.625rem 0.85rem;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 220ms ease,
+    transform 360ms var(--ease-ios);
+}
+
+.exercise-option.machines-open .exercise-machine-body {
+  opacity: 1;
+  transform: none;
+}
+
+.exercise-machine-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.exercise-picker .exercise-machine-heading strong {
+  color: var(--p-ink-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.exercise-machine-heading strong span {
+  margin-left: 0.3rem;
+  color: var(--p-muted);
+  font-weight: 400;
+}
+
+.exercise-machine-arrows {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.exercise-machine-arrows button {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--p-ink-2);
+  cursor: pointer;
+}
+
+.exercise-machine-arrows button:hover:not(:disabled) {
+  background: var(--p-surface-3);
+}
+
+.exercise-machine-arrows button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.exercise-machine-arrows .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.exercise-machine-rail {
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-color: var(--p-axis) transparent;
+  scrollbar-width: thin;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.exercise-machine-rail:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 0;
+}
+
+.exercise-picker .exercise-machine-card {
+  position: relative;
+  display: flex;
+  flex: 0 0 6.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  width: 6.5rem;
+  min-height: 7rem;
+  padding: 0.3125rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.exercise-picker .exercise-machine-card:hover {
+  border-color: var(--p-axis);
+}
+
+.exercise-picker .exercise-machine-card[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--p-accent);
+}
+
+.exercise-picker .exercise-machine-card:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+
+.exercise-machine-thumb {
+  position: relative;
+  display: block;
+  height: 3rem;
+  margin-bottom: 0.375rem;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--p-surface-3);
+}
+
+.exercise-machine-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.exercise-picker .exercise-machine-card strong {
+  display: -webkit-box;
+  min-height: 2.6em;
+  overflow: hidden;
+  color: var(--p-ink);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.exercise-picker .exercise-machine-card small {
+  display: block;
+  margin-top: 0.1875rem;
+  color: var(--p-muted);
+  font-size: 0.625rem;
+  line-height: 1.3;
+}
+
+.exercise-machine-badge {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 4px;
+  background: rgb(10 14 18 / 78%);
+  color: #e6eef6;
+  font-size: 0.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.exercise-machine-check {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--p-accent);
+  color: #fff;
+  animation: exercise-machine-check-in 200ms var(--ease-out);
+}
+
+.exercise-machine-check .pulse-icon {
+  width: 0.7rem;
+  height: 0.7rem;
+  stroke-width: 3;
+}
+
+.exercise-picker .exercise-machine-add {
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-style: dashed;
+  background: transparent;
+  color: var(--p-ink-2);
+  text-align: center;
+}
+
+.exercise-picker .exercise-machine-add strong {
+  min-height: 0;
+  color: var(--p-ink-2);
+  font-weight: 500;
+}
+
+.exercise-picker .exercise-machine-add:has(input:focus-visible) {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+
+.exercise-machine-add-icon .pulse-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.exercise-machine-add-form {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.exercise-machine-add-form > img {
+  width: 100%;
+  max-height: 12rem;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.exercise-machine-add-form label {
+  display: grid;
+  gap: 0.375rem;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+
+.exercise-machine-add-form input {
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 1rem;
+}
+
+.exercise-machine-add-form .inline-error {
+  margin: 0;
+}
+
+@keyframes exercise-machine-check-in {
+  from {
+    transform: scale(0.6);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+html[data-reduce-motion] :is(.exercise-machine-accordion, .exercise-machine-body),
+html[data-reduce-motion] .exercise-machine-toggle .pulse-icon,
+html[data-reduce-motion] .exercise-picker .exercise-machine-card {
+  transition: none;
+}
+
+html[data-reduce-motion] .exercise-machine-check {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exercise-machine-accordion,
+  .exercise-machine-body,
+  .exercise-machine-toggle .pulse-icon,
+  .exercise-picker .exercise-machine-card {
+    transition: none;
+  }
+
+  .exercise-machine-check {
+    animation: none;
+  }
+}

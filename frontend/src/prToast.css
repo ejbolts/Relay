@@ -1,0 +1,89 @@
+.pr-toast {
+  position: fixed;
+  z-index: 120;
+  top: max(16px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid #a18132;
+  border-radius: 18px;
+  background: #242015;
+  color: #fff;
+  box-shadow: 0 8px 32px #0008;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.pr-toast-icon {
+  font-size: 26px;
+}
+.pr-toast-copy {
+  flex: 1;
+  min-width: 0;
+}
+.pr-toast strong,
+.pr-toast-copy span,
+.pr-toast small {
+  display: block;
+}
+.pr-toast strong {
+  color: #f4d477;
+  font-size: 16px;
+}
+.pr-toast-copy span {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.pr-toast small {
+  margin-top: 3px;
+  color: #d6caa9;
+  font-size: 12px;
+}
+.pr-toast button {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: #d6caa9;
+  font-size: 24px;
+  padding: 0 4px;
+  min-width: 28px;
+}
+
+.pr-toast-countdown {
+  position: absolute;
+  inset: auto 0 0;
+  height: 4px;
+  background: #3b82f633;
+}
+
+.pr-toast-countdown-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--p-accent, #3b82f6);
+  transform-origin: left;
+  animation: pr-toast-countdown var(--pr-toast-duration) linear forwards;
+}
+
+@keyframes pr-toast-countdown {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-toast-countdown-fill {
+    animation-duration: var(--pr-toast-duration) !important;
+    animation-timing-function: steps(5, end);
+  }
+}
+
+html[data-reduce-motion] .pr-toast-countdown-fill {
+  animation-duration: var(--pr-toast-duration) !important;
+  animation-timing-function: steps(5, end);
+}

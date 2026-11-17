@@ -1,0 +1,20 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.py[cod]
+data/
+backend/data/
+node_modules/
+frontend/dist/
+artifacts/cardio-preview-build/
+frontend/coverage/
+backend/tests/.test-data/
+*.log
+youtube-token*.json
+client_secret*.json
+secrets/
+# The administrator's YouTube setup guide is kept locally, not in the repository.
+docs/YOUTUBE-SETUP.md

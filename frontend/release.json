@@ -1,0 +1,61 @@
+{
+  "version": "1.2.0",
+  "date": "2026-11-07",
+  "title": "Weekly volume and machine weights",
+  "summary": "Plan by weekly volume, compare progress across machines and pick the machine with each exercise.",
+  "changes": [
+    "**Merge exercises:** Combine duplicate custom exercises and keep their history.",
+    "**Every set counts:** See each set's weekly muscle gains above the rest timer.",
+    "**Sets per muscle:** Compare earlier weeks; totals update as you train.",
+    "**Split days:** A coloured block for each planned set.",
+    "**Attempted sets:** Failure sets are now Attempted, marked A.",
+    "**High-rep warnings:** Skip repeat warnings for one workout.",
+    "**Paste screenshot:** Paste a copied screenshot into a cardio set.",
+    "**Cardio distance:** Distance split by activity type.",
+    "**Cardio saves:** No more zone confirmation popups.",
+    "**Rest times:** Each set suggests its previous rest.",
+    "**Logging sets:** Hold to reorder, wrapping notes and synced ticks.",
+    "**Workout errors:** Clearer steps and an X to close.",
+    "**Exercise list:** Themed filters, aligned help and steadier search.",
+    "**Open a workout:** Tap a friend's workout name to open it.",
+    "**Social:** Compact friend rows and one emoji per reaction.",
+    "**Profile photos:** Pinch and drag to crop your photo.",
+    "**Offline check-ins:** Weight and body fat save offline.",
+    "**Offline notice:** A dismissible strip on every screen.",
+    "**Body goals:** Swipe goals away and see a line to your target date.",
+    "**Sync:** Other devices' workouts appear without reloading.",
+    "**CSV exports:** Cardio metrics survive export and reimport.",
+    "**iPhone:** Fields no longer zoom in when tapped."
+  ],
+  "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#120",
+  "image": {
+    "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
+    "alt": "Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data."
+  },
+  "highlights": [
+    {
+      "title": "Weekly volume while you build",
+      "description": "Plan splits against your weekly goals.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c351be5bf28cd51f89ed7cc36b775fa08d0257d5/docs/screenshots/releases/1.2.0-split-editor.png",
+        "alt": "Split editor with a Weekly volume chart of planned sets per muscle against the goal, and Day 1 open with set steppers. Isolated sample data."
+      }
+    },
+    {
+      "title": "Machine with the exercise",
+      "description": "Your last-used machine is ready; swipe for another.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/c042835a715042f5b33773b348f885bba6915bc8/docs/screenshots/releases/1.2.0-inline-machine-picker.gif",
+        "alt": "Selecting Machine Chest Press opens a swipeable machine strip with the last-used machine chosen, then switching machines and tapping again to return to the baseline exercise. Isolated sample data."
+      }
+    },
+    {
+      "title": "Machine weights",
+      "description": "Compare progress across machines on one trend.",
+      "image": {
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/3d52efdb54429173af6a4135d22317a857607474/docs/screenshots/releases/1.2.0-machine-weights-slider.gif",
+        "alt": "Machine weights reference tree with gold arrows and ratios from the reference machine; dragging a slider redraws the preview trend and Use restores the suggestion. Isolated synthetic sample data."
+      }
+    }
+  ]
+}

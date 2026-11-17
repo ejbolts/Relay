@@ -1,0 +1,42 @@
+.feedback-form {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1.25rem;
+}
+.feedback-form label {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+.feedback-form label span {
+  font-weight: 400;
+  color: var(--p-muted);
+}
+.feedback-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  min-height: 5rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 0.6rem;
+  background: var(--p-page);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.8rem;
+}
+.feedback-form small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.feedback-form .profile-secondary {
+  justify-self: start;
+}
+.feedback-form-success {
+  color: #8be0b0;
+}
+
+.feedback-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,0 +1,91 @@
+.settings-search {
+  margin-bottom: 1rem;
+}
+.settings-search > label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--p-ink-2);
+}
+.settings-search-input {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  background: var(--p-surface);
+}
+.settings-search-input:focus-within {
+  border-color: var(--p-accent);
+}
+.settings-search-input > .pulse-icon {
+  width: 1.125rem;
+  color: var(--p-muted);
+}
+.settings-screen .settings-search-input input[type='search'] {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0.875rem 0;
+  box-shadow: none;
+  color: var(--p-ink);
+}
+.settings-screen .settings-search-input input[type='search']:focus {
+  outline: none;
+  box-shadow: none;
+}
+.settings-search-results {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+}
+.settings-search-results p {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--p-muted);
+}
+.settings-search-results ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.settings-search-results li + li {
+  border-top: 1px solid var(--p-line);
+}
+.settings-search-results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--p-ink);
+  padding: 0.75rem 0.25rem;
+}
+.settings-search-results button > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.settings-search-results strong,
+.settings-search-results small {
+  display: block;
+}
+.settings-search-results small {
+  color: var(--p-muted);
+  margin-top: 0.25rem;
+}
+[data-settings-page] h2:focus,
+[data-settings-page] section:focus,
+[data-settings-page] code:focus {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}

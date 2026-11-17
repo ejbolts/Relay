@@ -1,0 +1,226 @@
+.app-guide {
+  position: fixed;
+  width: min(30rem, calc(100% - 2rem));
+  max-height: var(--guide-max-height, calc(100dvh - 2rem));
+  overflow: auto;
+  border-color: var(--p-line-strong);
+  background: var(--p-surface);
+  color: var(--p-ink);
+}
+
+.popup-dialog.app-guide[open] {
+  animation: none;
+}
+
+.app-guide::backdrop {
+  background: rgb(4 7 7 / 58%);
+  backdrop-filter: none;
+}
+
+/* Keep annotations aligned while the tour switches between cached screens. */
+body:has(.app-guide[open]) .tracker-content > .cached-tab-panel:not([hidden]) > * {
+  animation: none;
+}
+
+.app-guide > header {
+  border-radius: 14px 14px 0 0;
+}
+
+.app-guide-top {
+  margin: 1rem auto auto;
+  top: env(safe-area-inset-top);
+}
+
+.app-guide-bottom {
+  margin: auto auto 1rem;
+  bottom: env(safe-area-inset-bottom);
+}
+
+.app-guide-spotlight {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid #89baff;
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px rgb(57 135 229 / 22%);
+}
+
+.app-guide-body {
+  padding: 1.25rem;
+}
+
+.app-guide-step h3 {
+  margin: 0.85rem 0 0.5rem;
+  font-size: 1.2rem;
+  letter-spacing: -0.03em;
+}
+
+.app-guide-step h3:focus {
+  outline: none;
+}
+
+.app-guide-step p,
+.guide-contribute p {
+  margin: 0;
+  color: var(--p-ink-2);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.app-guide-glyph {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid rgb(109 167 236 / 30%);
+  border-radius: 0.8rem;
+  background: rgb(57 135 229 / 15%);
+  color: #89baff;
+}
+
+.app-guide-glyph svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.app-guide-progress {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 1.2rem;
+}
+.app-guide-progress span {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--p-surface-3);
+}
+.app-guide-progress .complete {
+  background: var(--p-accent);
+}
+
+.app-guide .popup-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--p-surface);
+  flex-direction: row;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--p-line-strong);
+}
+
+.app-guide .popup-dialog-actions > button {
+  width: auto;
+}
+
+.app-guide .guide-skip {
+  margin-right: auto;
+  padding-inline: 0.6rem;
+  background: transparent;
+  border-color: transparent;
+  font-weight: 500;
+  color: var(--p-ink-2);
+}
+.app-guide .popup-primary-action {
+  background: var(--p-accent);
+}
+.app-guide button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.app-guide-finish {
+  overflow: auto;
+}
+.app-guide-step .import-history-later {
+  margin-top: 0.75rem;
+  color: var(--p-muted);
+  font-size: 0.8rem;
+}
+.guide-contribute {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--p-line-strong);
+  padding-top: 1rem;
+}
+.guide-contribute summary {
+  cursor: pointer;
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+.guide-contribute p {
+  margin: 0.75rem 0;
+  font-size: 0.8rem;
+}
+.guide-contribute a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  min-height: 2.75rem;
+  color: var(--p-accent-text);
+  font-size: 0.85rem;
+}
+.guide-contribute svg {
+  width: 1rem;
+  height: 1rem;
+}
+.admin-feedback-list {
+  padding: 0;
+  list-style: none;
+}
+.admin-feedback-list li {
+  border-top: 1px solid var(--p-line);
+  padding: 1rem 0;
+}
+.admin-feedback-list p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--p-ink-2);
+}
+.admin-feedback-list time {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+.admin-feedback-list li.is-resolved > strong,
+.admin-feedback-list li.is-resolved > p {
+  opacity: 0.7;
+}
+.admin-feedback-list .admin-feedback-resolution {
+  display: block;
+  margin-bottom: 0.65rem;
+  color: var(--p-good);
+  font-size: 0.75rem;
+}
+.admin-feedback-resolution time {
+  display: inline;
+  margin: 0;
+  color: inherit;
+}
+.admin-feedback-list li > button {
+  width: auto;
+  min-width: 7rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.875rem;
+}
+
+@media (max-height: 600px) {
+  .app-guide {
+    overflow: auto;
+  }
+  .app-guide-glyph {
+    display: none;
+  }
+}
+
+@media (max-width: 350px) {
+  .app-guide .popup-dialog-actions {
+    padding-inline: 0.75rem;
+    gap: 0.35rem;
+  }
+  .app-guide .popup-dialog-actions > button {
+    padding-inline: 0.65rem;
+    font-size: 0.8rem;
+  }
+}

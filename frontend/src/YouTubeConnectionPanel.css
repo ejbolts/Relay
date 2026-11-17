@@ -1,0 +1,136 @@
+.youtube-connection.card {
+  padding: 20px;
+  margin: 0 0 20px;
+  border: 1px solid var(--border, #29313b);
+  border-radius: 18px;
+  background: var(--surface, #14191f);
+}
+
+.youtube-connection-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.youtube-connection-heading h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.youtube-connection-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border-radius: 12px;
+  background: #ff43431a;
+}
+
+.youtube-connection-icon svg {
+  width: 28px;
+  fill: #ff5555;
+}
+
+.youtube-connection-icon path {
+  fill: #fff;
+}
+
+.youtube-connection-status,
+.youtube-connection small {
+  font-size: 12px;
+  color: #a7b5c7;
+}
+
+.youtube-connection-status.connected {
+  color: #74dcaf;
+}
+
+.youtube-channel-name {
+  display: inline-block;
+  max-width: 100%;
+  color: #a5cfff;
+  font-size: 18px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.youtube-connection p {
+  margin: 10px 0;
+  color: #c1ccda;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.youtube-connection p.youtube-privacy-copy {
+  padding: 12px 14px;
+  border: 1px solid #354760;
+  border-radius: 12px;
+  background: #1b2635;
+  color: #c8d8ec;
+  font-size: 13px;
+}
+
+.youtube-privacy-copy strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #e6efff;
+  font-size: 14px;
+}
+
+.youtube-connection p.youtube-retention-copy {
+  color: #a7b5c7;
+  font-size: 12px;
+}
+
+.youtube-connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.youtube-connection-actions > button,
+.youtube-connection-actions .inline-confirmation button {
+  min-height: 42px;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.youtube-connection-actions .primary {
+  background: #427cff;
+  border: 1px solid #427cff;
+  color: #fff;
+}
+
+.youtube-connection-actions .secondary {
+  background: #202b3d;
+  border: 1px solid #36455c;
+  color: #dbe9ff;
+}
+
+.youtube-connection-actions .danger-link {
+  background: transparent;
+  border: 1px solid #54343b;
+  color: #ffabab;
+}
+
+.youtube-connection button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.youtube-connection button:focus-visible,
+.youtube-channel-name:focus-visible {
+  outline: 2px solid #8db7ff;
+  outline-offset: 3px;
+}
+
+.youtube-connection small {
+  display: block;
+  line-height: 1.5;
+}

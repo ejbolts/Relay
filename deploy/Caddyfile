@@ -1,0 +1,54 @@
+# Caddy reverse proxy for Gym Logger (automatic HTTPS via Let's Encrypt).
+# Installed to /etc/caddy/Caddyfile by deploy/setup-ubuntu.sh, which replaces the
+# placeholder hostname below with the domain you pass on the command line.
+# To edit by hand later: change the hostname below (or in /etc/caddy/Caddyfile), then run
+#   sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#
+# Ports 80 and 443 must be reachable from the internet: Let's Encrypt uses port 80
+# for HTTP-01 validation and HTTPS is served on 443.
+
+{
+	# Optional: an address for Let's Encrypt expiry notices.
+	# email you@example.com
+
+	servers {
+		timeouts {
+			read_header 30s
+			# Video uploads are single files of up to ~20 GiB sent over mobile networks, so
+			# allow a long time for the request body to arrive.
+			read_body 12h
+			write 12h
+			idle 5m
+		}
+	}
+}
+
+gym.example.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		# Blocks embedding the app in other sites. This is deliberately not a script CSP,
+		# which could break the Vite/PWA service worker and inline bootstrap code.
+		Content-Security-Policy "frame-ancestors 'none'"
+		-Server
+	}
+
+	# Largest accepted request body. Each video file is one request and is capped at
+	# GYM_MAX_FILE_SIZE_BYTES (20 GiB in .env.example). Keep this above that value.
+	request_body {
+		max_size 25GB
+	}
+
+	reverse_proxy 127.0.0.1:8000 {
+		transport http {
+			dial_timeout 10s
+			# Time to send the upload to the app and wait for its responses.
+			write_timeout 12h
+			read_timeout 12h
+		}
+	}
+}

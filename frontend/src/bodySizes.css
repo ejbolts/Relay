@@ -1,0 +1,142 @@
+.body-sizes-card .pulse-card-header {
+  align-items: center;
+  gap: 12px;
+}
+.body-sizes-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.body-sizes-title h2 {
+  margin: 0;
+}
+.body-sizes-add {
+  flex-shrink: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.body-sizes-empty,
+.body-sizes-date {
+  color: var(--p-muted);
+  font-size: 13px;
+}
+.body-sizes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 12px;
+  margin: 16px 0 20px;
+}
+.body-sizes-grid dt {
+  font-size: 12px;
+  color: var(--p-muted);
+  margin-bottom: 5px;
+}
+.body-sizes-grid dd {
+  margin: 0;
+  color: var(--p-ink);
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.body-sizes-history {
+  border-top: 1px solid var(--p-line);
+  padding-top: 14px;
+}
+.body-sizes-history summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.body-sizes-history summary span {
+  color: var(--p-muted);
+  margin-left: 6px;
+}
+.body-sizes-history article {
+  padding-top: 16px;
+}
+.body-sizes-history-filter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--p-muted);
+  font-size: 12px;
+}
+.body-sizes-history-filter select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+}
+.body-sizes-part-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0 14px;
+  border-bottom: 1px solid var(--p-line);
+}
+.body-sizes-part-value strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.body-sizes-part-value span {
+  color: var(--p-muted);
+  font-size: 12px;
+}
+.body-sizes-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.body-sizes-history button {
+  color: var(--p-accent-text);
+  border: 0;
+  background: transparent;
+  padding: 8px;
+  font-size: 12px;
+}
+.body-sizes-history p {
+  margin: 2px 0 0;
+  color: var(--p-muted);
+  line-height: 1.6;
+  font-size: 12px;
+}
+.body-sizes-popup form {
+  display: grid;
+  gap: 16px;
+}
+.body-sizes-popup .body-entry-form .body-entry-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.body-sizes-date-input {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--p-muted);
+}
+.body-sizes-delete > p {
+  margin: 16px;
+}
+.body-sizes-delete > .popup-dialog-actions {
+  margin: 0;
+  padding: 16px;
+}
+@media (max-width: 450px) {
+  .body-sizes-card .pulse-card-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}

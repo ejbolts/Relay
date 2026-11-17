@@ -1,0 +1,77 @@
+.collapsible-section > header {
+  cursor: pointer;
+}
+
+.collapsible-section > header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.collapsible-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.collapsible-toggle-end {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.collapsible-toggle:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 3px;
+}
+
+.collapsible-heading-with-help {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.collapsible-heading-with-help > .collapsible-toggle {
+  width: auto;
+}
+
+.collapsible-heading-with-help > .collapsible-toggle-end {
+  margin-left: auto;
+}
+
+.collapsible-toggle-end > .pulse-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--p-muted);
+  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.collapsible-section:not(.is-collapsed) > header .collapsible-toggle-end > .pulse-icon {
+  transform: rotate(180deg);
+}
+
+/* While closing, `data-collapsing` keeps the body painted so it slides away. */
+.collapsible-section.is-collapsed:not([data-collapsing]) > :not(header) {
+  display: none;
+}
+
+html[data-reduce-motion] .collapsible-toggle-end > .pulse-icon {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-toggle-end > .pulse-icon {
+    transition: none;
+  }
+}

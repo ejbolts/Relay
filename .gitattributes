@@ -1,0 +1,6 @@
+# Server-side deploy files must keep LF endings: bash and systemd/Caddy/EnvironmentFile
+# parsing break on CRLF (a stray \r becomes part of values or command names).
+deploy/*.sh text eol=lf
+deploy/*.service text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/*.example text eol=lf

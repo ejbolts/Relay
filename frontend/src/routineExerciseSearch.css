@@ -1,0 +1,99 @@
+.routine-editor .routine-day-body button.routine-add-exercise {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.routine-exercise-search {
+  margin-top: 6px;
+  scroll-margin-top: 84px;
+  overflow: hidden;
+  border: 1px solid var(--p-accent-text);
+  border-radius: 10px;
+  background: var(--p-surface-2);
+}
+.routine-exercise-search-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  border-bottom: 1px solid var(--p-line-strong);
+  color: var(--p-ink-2);
+}
+.routine-exercise-search-box > .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.routine-editor .routine-exercise-search-box input {
+  min-height: 42px;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 0;
+  background: transparent;
+  font-size: 16px;
+}
+.routine-editor .routine-exercise-search-box input:focus-visible {
+  outline: 0;
+}
+.routine-editor .routine-exercise-search-box input::-webkit-search-cancel-button {
+  display: none;
+}
+.routine-editor .routine-exercise-search-close {
+  width: 42px;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-ink-2);
+}
+.routine-exercise-search-results {
+  max-height: min(17rem, 42dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.routine-editor .routine-exercise-search-results > button {
+  width: 100%;
+  min-height: 0;
+  display: block;
+  border: 0;
+  border-bottom: 1px solid var(--p-line);
+  border-radius: 0;
+  padding: 9px 12px;
+  background: transparent;
+  text-align: left;
+}
+.routine-editor .routine-exercise-search-results > button:last-child {
+  border-bottom: 0;
+}
+.routine-editor .routine-exercise-search-results > button.active {
+  background: var(--p-accent-soft);
+}
+.routine-exercise-search-results strong,
+.routine-exercise-search-results small {
+  display: block;
+}
+.routine-exercise-search-results strong {
+  color: var(--p-ink);
+  font-size: 14px;
+  font-weight: 550;
+}
+.routine-exercise-search-results .exercise-search-match {
+  color: var(--p-accent-text);
+  font-weight: 750;
+}
+.routine-exercise-search-results small {
+  margin-top: 1px;
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 450;
+}
+.routine-exercise-search-results > p {
+  margin: 0;
+  padding: 12px;
+  color: var(--p-ink-2);
+  font-size: 13px;
+}
