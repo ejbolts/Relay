@@ -33,7 +33,10 @@ let root: Root, host: HTMLDivElement;
 const open = vi.fn();
 const click = async (element: Element) => act(async () => (element as HTMLElement).click());
 const button = (label: string) => host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+const PAGE_SIZE_KEY = 'relay-exercise-list-page-size';
 beforeEach(() => {
+  // Five a page keeps the paging tests short; the default has its own test.
+  localStorage.setItem(PAGE_SIZE_KEY, '5');
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.spyOn(api, 'exerciseLibrary').mockResolvedValue([]);
   HTMLDialogElement.prototype.showModal = function () {
@@ -50,6 +53,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -80,7 +84,31 @@ async function render(items = exercises) {
     root.render(<ExerciseLibraryList exercises={items} library={emptyLibrary} onOpen={open} />),
   );
 }
-it('defaults to five, paginates without duplicates, and resets when page size or filters change', async () => {
+it('shows ten a page until another size is chosen, and remembers the choice', async () => {
+  localStorage.clear();
+  await render();
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(10);
+  expect(host.textContent).toContain('Page 1 of 3');
+  await click(button('Exercise list options'));
+  const select = document.querySelector<HTMLSelectElement>('[aria-label="Exercises per page"]')!;
+  expect(select.value).toBe('10');
+  await act(async () => {
+    select.value = '20';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(20);
+  expect(localStorage.getItem(PAGE_SIZE_KEY)).toBe('20');
+  // Opening the list again starts from the remembered size.
+  await act(async () => root.render(<div />));
+  await render();
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(20);
+  // A stored value that is not one of the sizes falls back to the default.
+  localStorage.setItem(PAGE_SIZE_KEY, '7');
+  await act(async () => root.render(<div />));
+  await render();
+  expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(10);
+});
+it('paginates without duplicates, and resets when page size or filters change', async () => {
   await render();
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(5);
   expect(host.textContent).toContain('Page 1 of 5');
@@ -106,7 +134,7 @@ it('defaults to five, paginates without duplicates, and resets when page size or
   await click(button('Next exercises page'));
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(3);
 });
-it('filters by actual direct and half-set credits instead of compound labels, and opens help separately', async () => {
+it('filters by actual direct and half-set credits instead of compound labels', async () => {
   const curl = {
     ...bench,
     id: 'curl',
@@ -126,10 +154,8 @@ it('filters by actual direct and half-set credits instead of compound labels, an
   ]);
   await click(filters.find((item) => item.textContent === 'Triceps')!);
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(1);
-  await click(button('Muscle set credits for Bench Press'));
-  expect(open).not.toHaveBeenCalled();
-  expect(document.querySelector('dialog')?.textContent).toContain('0.5 sets');
-  await click(document.querySelector('[aria-label="Close Bench Press"]')!);
+  // The row is one control: the credits are on the lift's own page.
+  expect(host.querySelectorAll('.exercise-list-rows button')).toHaveLength(1);
   await click(host.querySelector('[data-exercise-id="bench"]')!);
   expect(open).toHaveBeenCalledExactlyOnceWith('bench');
 });
@@ -236,7 +262,7 @@ it('saves partial credits, shows failure without changing the switch, and retrie
           },
         }}
       >
-        <ExerciseLibraryList exercises={items} library={emptyLibrary} onOpen={open} />
+        <ExerciseMuscleHelp exercise={items[0]} />
       </ExerciseCreditsContext.Provider>
     );
   }

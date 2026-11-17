@@ -46,6 +46,8 @@ describe('BodyCompositionScreen', () => {
     expect(markup).toContain('Set a goal');
     expect(markup).not.toContain('aria-label="Add bodyweight"');
     expect(markup).toContain('Log weigh-in');
+    // Logging comes before the chart, so it needs no scrolling.
+    expect(markup.indexOf('Log weigh-in')).toBeLessThan(markup.indexOf('body-trend-panel'));
     expect(markup).toContain('<h1>Body</h1>');
     expect(markup).toContain('role="tab" aria-selected="true">Daily</button>');
     expect(markup).toContain('role="tab" aria-selected="false">Avg Week</button>');

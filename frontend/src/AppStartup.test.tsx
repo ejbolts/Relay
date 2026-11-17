@@ -544,7 +544,7 @@ describe('App startup', () => {
   });
 
   it.each([
-    ['settings', 'Settings', 'Preferences • privacy • data'],
+    ['settings', 'Settings', null],
     ['videos', 'Videos', 'Workout clips • uploads'],
   ])('renders the overlay header on the %s screen', (tab, title, subtitle) => {
     stubWindow(`#${tab}`);
@@ -555,7 +555,9 @@ describe('App startup', () => {
     expect(markup).toContain('with-overlay-header');
     expect(markup).toContain('aria-label="Go back"');
     expect(markup).toContain(`<strong>${title}</strong>`);
-    expect(markup).toContain(`<span>${subtitle}</span>`);
+    // Settings needs no line under its title; its sections say what is inside.
+    if (subtitle) expect(markup).toContain(`<span>${subtitle}</span>`);
+    else expect(markup).not.toContain('Preferences');
   });
 
   it.each(['dashboard', 'history', 'progress', 'cardio', 'body'])(
