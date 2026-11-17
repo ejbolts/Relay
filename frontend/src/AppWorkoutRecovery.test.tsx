@@ -602,8 +602,21 @@ describe('mixed-session timelines', () => {
       'Bench press',
     ]);
     const move = [...cards()[0].querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent?.includes('Move Later'),
+      button.textContent?.includes('Move later'),
     )!;
+    // The exercise menu reads in sentence case, and removing names what it removes.
+    expect(
+      [...cards()[0].querySelectorAll('.movement-overflow-menu button')].map((button) =>
+        button.textContent?.replace('⇄', '').trim(),
+      ),
+    ).toEqual([
+      'Recent history',
+      'Group as superset',
+      'Swap exercise',
+      'Move earlier',
+      'Move later',
+      'Remove exercise',
+    ]);
     await act(async () => move.click());
     expect(heading()).toBe('Upper body + Cardio workout');
     expect(cards().map((card) => card.querySelector('h2')?.textContent)).toEqual([

@@ -217,7 +217,7 @@ describe('swapping an exercise mid-workout', () => {
     await act(async () => root.render(<App />));
     expect(cardTitles()).toEqual([chestPress.name]);
 
-    await click(button('Swap Exercise'));
+    await click(button('Swap exercise'));
     const sheet = document.querySelector<HTMLDialogElement>('.exercise-swap-sheet')!;
     expect(sheet.open).toBe(true);
     expect(sheet.querySelector('h2')?.textContent).toBe(`Swap ${chestPress.name}`);
@@ -271,7 +271,7 @@ describe('swapping an exercise mid-workout', () => {
 
   it('falls back to the full exercise picker', async () => {
     await act(async () => root.render(<App />));
-    await click(button('Swap Exercise'));
+    await click(button('Swap exercise'));
     await click(button('Browse all exercises'));
     expect(document.querySelector('.exercise-swap-sheet')).toBeNull();
     expect(document.querySelector('.exercise-option[data-exercise-id="leg-press"]')).not.toBeNull();
