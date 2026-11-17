@@ -358,6 +358,14 @@ import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './logge
 import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
+import { FinishedWorkoutCard } from './FinishedWorkoutCard';
+import {
+  buildFinishSummary,
+  finishSummaryTimeLeft,
+  readFinishSummary,
+  writeFinishSummary,
+  type FinishSummary,
+} from './finishSummary';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
@@ -573,6 +581,16 @@ function recordTypeLabel(type: PersonalRecord['record_type']): string {
   );
 }
 
+function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): string {
+  return [
+    `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)} · ${recordDisplayValue(record, unit)}`,
+    record.record_type === 'reps_at_weight' && record.weight_kg != null
+      ? ` @ ${formatWeight(record.weight_kg, unit)}`
+      : '',
+    record.bodyweight_kg != null ? ` · at ${formatWeight(record.bodyweight_kg, unit)} BW` : '',
+  ].join('');
+}
+
 function WorkoutCompletionToast({
   records,
   onClose,
@@ -614,15 +632,7 @@ function WorkoutCompletionToast({
       {records.map((record) => (
         <div key={record.id}>
           <strong>{record.exercise_name}</strong>
-          <span>
-            {record.scope === 'block' ? 'Block ' : 'All-time '}
-            {recordTypeLabel(record.record_type)} · {recordDisplayValue(record, weightUnit)}
-            {record.record_type === 'reps_at_weight' && record.weight_kg != null
-              ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
-              : ''}
-            {record.bodyweight_kg != null &&
-              ` · at ${formatWeight(record.bodyweight_kg, weightUnit)} BW`}
-          </span>
+          <span>{completionRecordDetail(record, weightUnit)}</span>
         </div>
       ))}
     </aside>,
@@ -696,6 +706,44 @@ function AppContent() {
   );
   const { user, signingIn = false } = useUserSession();
   usePresenceConnection(user?.id ?? null);
+  // The workout just finished, shown on Home until it is dismissed or the next one starts.
+  const [finishSummary, setFinishSummary] = useState<FinishSummary | null>(null);
+  // Without accounts there is one person on the device, kept under a fixed name.
+  const finishSummaryOwner = user?.id ?? 'device';
+  useEffect(() => {
+    setFinishSummary(readFinishSummary(finishSummaryOwner, Date.now()));
+  }, [finishSummaryOwner]);
+  const finishSummaryRef = useRef(finishSummary);
+  finishSummaryRef.current = finishSummary;
+  /** Records set by the workout on the card; they arrive once it has synced. */
+  const [finishRecords, setFinishRecords] = useState<PersonalRecord[]>([]);
+  function rememberFinish(summary: FinishSummary | null) {
+    setFinishSummary(summary);
+    setFinishRecords([]);
+    writeFinishSummary(finishSummaryOwner, summary);
+  }
+  // The card also goes when the app has stayed open, or been asleep, past its time.
+  useEffect(() => {
+    if (!finishSummary) return;
+    const expire = () => {
+      if (finishSummaryTimeLeft(finishSummary, Date.now()) >= 0) return;
+      setFinishSummary(null);
+      setFinishRecords([]);
+      writeFinishSummary(finishSummaryOwner, null);
+    };
+    const timer = window.setTimeout(
+      expire,
+      finishSummaryTimeLeft(finishSummary, Date.now()) + 1000,
+    );
+    // A sleeping phone does not run timers, so look again whenever the app comes back.
+    document.addEventListener('visibilitychange', expire);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', expire);
+    };
+  }, [finishSummary, finishSummaryOwner]);
+  /** The exercise whose Machine weights should open when its progress page next shows. */
+  const [machineWeightsFor, setMachineWeightsFor] = useState<string | null>(null);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const offlineNotice = useOfflineNotice();
@@ -1448,6 +1496,7 @@ function AppContent() {
     const resumedId = resumingWorkoutId;
     if (!wasEditing) {
       finishedQueue.queue(payload);
+      rememberFinish(buildFinishSummary(payload, exercises, workouts, Date.now(), resumedId));
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
       setTab('dashboard', { replace: true });
@@ -1516,12 +1565,18 @@ function AppContent() {
         .listPersonalRecords({ workoutId: saved.id })
         .then((records) => {
           const fresh = records.filter((record) => !existing.has(signature(record)));
+          if (!fresh.length) return;
+          const withFresh = (current: PersonalRecord[]) => [
+            ...current,
+            ...fresh.filter((record) => !current.some((item) => item.id === record.id)),
+          ];
+          // The workout on Home's card lists its own records there; a toast would cover it.
+          const onCard =
+            saved.client_session_id != null &&
+            saved.client_session_id === finishSummaryRef.current?.sessionId;
           // Several workouts can sync together after a reconnection; celebrate all their records.
-          if (fresh.length)
-            setCompletionRecords((current) => [
-              ...current,
-              ...fresh.filter((record) => !current.some((item) => item.id === record.id)),
-            ]);
+          if (onCard) setFinishRecords(withFresh);
+          else setCompletionRecords(withFresh);
         })
         .catch(() => undefined);
     }
@@ -1630,6 +1685,7 @@ function AppContent() {
     setWorkoutStartCategory(freshStart ? category : null);
     setWorkoutStartType(freshStart ? startType : null);
     const startedAt = storedDraft?.startedAt ?? Date.now();
+    if (freshStart) rememberFinish(null);
     setEditingWorkout(null);
     setResumingWorkoutId(storedDraft?.resumingWorkoutId ?? null);
     setActiveWorkoutStartedAt(startedAt);
@@ -1656,6 +1712,7 @@ function AppContent() {
     if (workoutSaveBlocked || blockedWhileSyncing(workout.id) || activeWorkoutStartedAt !== null)
       return;
     clearActiveWorkoutDraft();
+    rememberFinish(null);
     setEditingWorkout(null);
     setResumingWorkoutId(workout.id);
     setActiveWorkoutStartedAt(Date.now());
@@ -2147,6 +2204,34 @@ function AppContent() {
               ) : (
                 <TodayScreen
                   home={home}
+                  finished={
+                    finishSummary && (
+                      <FinishedWorkoutCard
+                        key={finishSummary.finishedAt}
+                        summary={finishSummary}
+                        records={finishRecords.map((record) => ({
+                          id: record.id,
+                          exercise: record.exercise_name ?? 'Exercise',
+                          detail: completionRecordDetail(record, weightUnit),
+                        }))}
+                        onDismiss={() => rememberFinish(null)}
+                        onOpenWorkout={() => {
+                          const saved = finishSummary.sessionId
+                            ? workouts.find(
+                                (workout) => workout.client_session_id === finishSummary.sessionId,
+                              )
+                            : undefined;
+                          if (saved) openSavedWorkout(saved.id, null);
+                          else openHistorySection('history');
+                        }}
+                        onCompareMachines={(exerciseId) => {
+                          setMachineWeightsFor(exerciseId);
+                          openHistorySection('progress', exerciseId);
+                        }}
+                        onNotice={setMessage}
+                      />
+                    )
+                  }
                   data={shownDashboard}
                   muscleSets={muscleSets}
                   workouts={shownWorkouts}
@@ -2426,6 +2511,10 @@ function AppContent() {
                 onOpenMember={openSharedProfile}
                 onOpenWorkout={openSavedWorkout}
                 initialExerciseId={historyExerciseId}
+                openMachineWeights={
+                  machineWeightsFor !== null && machineWeightsFor === historyExerciseId
+                }
+                onMachineWeightsOpened={() => setMachineWeightsFor(null)}
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
@@ -8160,6 +8249,8 @@ export function ProgressScreen({
   onOpenWorkout,
   embedded = false,
   initialExerciseId = null,
+  openMachineWeights = false,
+  onMachineWeightsOpened,
   defaultExerciseId = null,
   browseFirst = false,
   onOpenSettings,
@@ -8178,6 +8269,9 @@ export function ProgressScreen({
   onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   embedded?: boolean;
   initialExerciseId?: string | null;
+  /** Asked for from elsewhere: Machine weights opens once this exercise's machines have loaded. */
+  openMachineWeights?: boolean;
+  onMachineWeightsOpened?: () => void;
   defaultExerciseId?: string | null;
   browseFirst?: boolean;
   onOpenSettings?: () => void;
@@ -8228,6 +8322,12 @@ export function ProgressScreen({
     view: 'all',
   });
   const [mappingOpen, setMappingOpen] = useState(false);
+  const mappingLoaded = mapping !== null && exerciseId === initialExerciseId;
+  useEffect(() => {
+    if (!openMachineWeights || !mappingLoaded) return;
+    setMappingOpen(true);
+    onMachineWeightsOpened?.();
+  }, [openMachineWeights, mappingLoaded, onMachineWeightsOpened]);
   const [mappingNotice, setMappingNotice] = useState(0);
   const libraryRoot = useRef<HTMLDivElement>(null);
   const libraryScroll = useRef(0);
@@ -9819,6 +9919,8 @@ function HistoryScreen({
   onOpenMember,
   onOpenWorkout,
   initialExerciseId,
+  openMachineWeights = false,
+  onMachineWeightsOpened,
   initialMovementId,
   weekStartDay,
   heatmap,
@@ -9853,6 +9955,8 @@ function HistoryScreen({
   onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   onOpenWorkout: (workoutId: string, exerciseId: string | null) => void;
   initialExerciseId: string | null;
+  openMachineWeights?: boolean;
+  onMachineWeightsOpened?: () => void;
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
@@ -10202,6 +10306,8 @@ function HistoryScreen({
             onExercisesMerged={onDataChange}
             onOpenMember={onOpenMember}
             initialExerciseId={initialExerciseId}
+            openMachineWeights={openMachineWeights}
+            onMachineWeightsOpened={onMachineWeightsOpened}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}
           />
