@@ -1,9 +1,20 @@
-﻿export const TIP_DEFINITIONS = {
+﻿/** Where a tip's button takes you. The app decides how to open each one. */
+export type TipTarget =
+  | 'machine-weights'
+  | 'weight-goal'
+  | 'training-blocks'
+  | 'home-edit'
+  | 'profile'
+  | 'split'
+  | 'appearance';
+
+export const TIP_DEFINITIONS = {
   normalise: {
     title: 'Different machines, one progress chart',
     homeBody: 'Compare different machines on one chart with Machine weights.',
     body: 'Open Machine weights to normalise different stacks against a reference machine. Your logged weights stay unchanged.',
     surface: 'hint',
+    action: { label: 'Open Machine weights', target: 'machine-weights' },
   },
   mergeMachines: {
     title: 'Saved the same machine twice?',
@@ -16,6 +27,7 @@
     homeBody: 'Choose Maintain in your weight goal to set a lower and upper range.',
     body: 'Choose Maintain in your weight goal to set lower and upper limits. Your trend chart shows the band.',
     surface: 'home',
+    action: { label: 'Set a goal', target: 'weight-goal' },
   },
   setType: {
     title: 'Warm-up or working set?',
@@ -60,16 +72,19 @@
     title: 'Give your next phase a fresh start',
     body: 'Training blocks track new progress while keeping your full history.',
     surface: 'home',
+    action: { label: 'Start a block', target: 'training-blocks' },
   },
   home: {
     title: 'Make Home your own',
     body: 'Tap the pencil to move, resize or hide your Home cards.',
     surface: 'home',
+    action: { label: 'Edit Home', target: 'home-edit' },
   },
   friends: {
     title: 'Train alongside a friend',
     body: 'Share the QR code on your Profile to connect in person.',
     surface: 'home',
+    action: { label: 'Open Profile', target: 'profile' },
   },
   back: {
     title: 'A quicker way back',
@@ -80,11 +95,19 @@
     title: 'Have a regular rotation?',
     body: 'Save your split so Up next follows your training days.',
     surface: 'home',
+    action: { label: 'Set up a split', target: 'split' },
+  },
+  repRange: {
+    title: 'Know when to add weight',
+    body: 'Give a planned exercise a rep range and Relay says when to stay and when to go up.',
+    surface: 'home',
+    action: { label: 'Open your split', target: 'split' },
   },
   appearance: {
     title: 'Make Relay look your way',
     body: 'Pick a colour theme, light or dark mode and a glass level in Settings › Appearance.',
     surface: 'home',
+    action: { label: 'Open Appearance', target: 'appearance' },
   },
 } as const;
 export type TipId = keyof typeof TIP_DEFINITIONS;
@@ -95,26 +118,55 @@ export type TipState = {
   counts: Record<string, number>;
   /** Home tips already opened from the date bulb; Home reading never spends contextual discovery. */
   homeRead?: TipId[];
+  /** Home tips put away with Got it. They leave the bulb but may still appear where they apply. */
+  homeDone?: TipId[];
+  /** Times each tip has appeared without being opened or acted on. */
+  shows?: Partial<Record<TipId, number>>;
 };
 export const TIP_COOLDOWN = 24 * 60 * 60 * 1000;
-export const freshTips = (): TipState => ({ enabled: true, lastShown: 0, seen: {}, counts: {} });
+/** A tip nobody touched gets this many showings before it stops appearing by itself. */
+export const TIP_MAX_SHOWS = 3;
+/** The button a tip offers, when it has somewhere to go. */
+export function tipAction(id: TipId): { label: string; target: TipTarget } | null {
+  const tip = TIP_DEFINITIONS[id];
+  return 'action' in tip ? tip.action : null;
+}
+export const freshTips = (): TipState => ({
+  enabled: true,
+  lastShown: 0,
+  seen: {},
+  counts: {},
+  shows: {},
+});
 export const tipStorageKey = (account: string) => `relay:tips:v1:${account}`;
 export function loadTips(account: string): TipState {
   try {
     const value = JSON.parse(localStorage.getItem(tipStorageKey(account)) ?? 'null');
     if (!value || typeof value !== 'object') return freshTips();
-    return {
-      ...(Array.isArray(value.homeRead)
-        ? {
-            homeRead: [
-              ...new Set(
-                value.homeRead.filter(
-                  (id: unknown) => typeof id === 'string' && Object.hasOwn(TIP_DEFINITIONS, id),
-                ),
+    const tipIds = (list: unknown) =>
+      Array.isArray(list)
+        ? [
+            ...new Set(
+              list.filter(
+                (id: unknown) => typeof id === 'string' && Object.hasOwn(TIP_DEFINITIONS, id),
               ),
-            ],
-          }
-        : {}),
+            ),
+          ]
+        : null;
+    const homeRead = tipIds(value.homeRead);
+    const homeDone = tipIds(value.homeDone);
+    return {
+      ...(homeRead ? { homeRead } : {}),
+      ...(homeDone ? { homeDone } : {}),
+      shows: Object.fromEntries(
+        Object.entries(value.shows ?? {}).filter(
+          ([id, count]) =>
+            Object.hasOwn(TIP_DEFINITIONS, id) &&
+            typeof count === 'number' &&
+            Number.isFinite(count) &&
+            count >= 0,
+        ),
+      ),
       enabled: value.enabled !== false,
       lastShown:
         typeof value.lastShown === 'number' && Number.isFinite(value.lastShown)
@@ -148,12 +200,32 @@ export function saveTips(account: string, state: TipState) {
 export function isPriorityTip(id: TipId) {
   return 'priority' in TIP_DEFINITIONS[id] && TIP_DEFINITIONS[id].priority;
 }
+/** A dot beside a control interrupts nothing, so it neither waits for nor spends the daily tip. */
+export function isQuietTip(id: TipId) {
+  return TIP_DEFINITIONS[id].surface === 'hint';
+}
 export function canShowTip(state: TipState, id: TipId, now: number) {
   return (
     state.enabled &&
     !state.seen[id] &&
-    (isPriorityTip(id) || state.lastShown === 0 || now - state.lastShown >= TIP_COOLDOWN)
+    (isPriorityTip(id) ||
+      isQuietTip(id) ||
+      state.lastShown === 0 ||
+      now - state.lastShown >= TIP_COOLDOWN)
   );
+}
+/**
+ * Records that a tip appeared. It is not "seen" yet: only opening it, acting on it or dismissing
+ * it does that, so a tip that slipped past unnoticed gets another showing, up to the limit.
+ */
+export function tipShown(state: TipState, id: TipId, now: number): TipState {
+  const shows = (state.shows?.[id] ?? 0) + 1;
+  return {
+    ...state,
+    lastShown: isQuietTip(id) ? state.lastShown : now,
+    shows: { ...state.shows, [id]: shows },
+    seen: shows >= TIP_MAX_SHOWS ? { ...state.seen, [id]: 'seen' } : state.seen,
+  };
 }
 export function countTipEvent(state: TipState, event: string): TipState {
   return {

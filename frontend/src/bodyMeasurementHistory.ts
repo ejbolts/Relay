@@ -58,6 +58,28 @@ export function bodyGoalKind(
   return direction === 'down' ? 'loss' : direction === 'up' ? 'gain' : 'maintain';
 }
 
+/**
+ * Whether a loss or gain goal has been met at `weightKg`. That is the moment a maintenance
+ * range becomes the next step, and the one trigger both Body and Home use for its tip.
+ */
+export function weightGoalReached(
+  goal:
+    | Pick<
+        BodyHistoryGoal,
+        'start_weight_kg' | 'target_weight_kg' | 'maintenance_min_kg' | 'maintenance_max_kg'
+      >
+    | null
+    | undefined,
+  weightKg: number | null | undefined,
+): boolean {
+  if (!goal || weightKg == null) return false;
+  const kind = bodyGoalKind(goal);
+  return (
+    (kind === 'loss' && weightKg <= goal.target_weight_kg) ||
+    (kind === 'gain' && weightKg >= goal.target_weight_kg)
+  );
+}
+
 export function maintenanceRange(goal: {
   maintenance_min_kg?: number | null;
   maintenance_max_kg?: number | null;

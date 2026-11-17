@@ -756,7 +756,7 @@ export function TodayScreen({
             workouts={workouts}
             createdAt={profile?.created_at}
             hasSplit={!!data?.recommendation?.split_name}
-            measurementCount={measurements.length}
+            latestWeightKg={measurements[0]?.weight_kg ?? null}
           />
         }
         title="Home"

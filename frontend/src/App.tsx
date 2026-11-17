@@ -359,6 +359,9 @@ import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
+import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
+import { onTipTarget, type TipAction } from './tipActions';
+import { TrainingBlockDialog } from './TrainingBlockDialog';
 import {
   buildFinishSummary,
   finishSummaryTimeLeft,
@@ -744,6 +747,9 @@ function AppContent() {
   }, [finishSummary, finishSummaryOwner]);
   /** The exercise whose Machine weights should open when its progress page next shows. */
   const [machineWeightsFor, setMachineWeightsFor] = useState<string | null>(null);
+  /** Counts requests to open the weight goal form, from a tip. */
+  const [bodyGoalRequest, setBodyGoalRequest] = useState(0);
+  const [tipBlocksOpen, setTipBlocksOpen] = useState(false);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
   const offlineNotice = useOfflineNotice();
@@ -1803,6 +1809,42 @@ function AppContent() {
     setTab('settings');
   }
 
+  /** Opens the place a tip's button names. */
+  const openTipTargetRef = useRef<(action: TipAction) => void>(() => undefined);
+  openTipTargetRef.current = (action) => {
+    switch (action.target) {
+      case 'machine-weights': {
+        const exerciseId = action.exerciseId ?? multiMachineExerciseId(workouts);
+        if (exerciseId) setMachineWeightsFor(exerciseId);
+        openHistorySection('progress', exerciseId);
+        break;
+      }
+      case 'weight-goal':
+        setBodyGoalRequest((count) => count + 1);
+        setTab('body');
+        break;
+      case 'training-blocks':
+        setTipBlocksOpen(true);
+        break;
+      case 'home-edit':
+        setTab('dashboard');
+        home.edit();
+        break;
+      case 'profile':
+        setTab('profile');
+        break;
+      case 'split':
+        openSplitSchedule();
+        break;
+      case 'appearance':
+        setSettingsJump(null);
+        setSettingsGroup('appearance');
+        setTab('settings');
+        break;
+    }
+  };
+  useEffect(() => onTipTarget((action) => openTipTargetRef.current(action)), []);
+
   function updateReduceMotion(reduced: boolean) {
     saveReduceMotionPreference(reduced);
     applyReduceMotion(reduced);
@@ -2114,6 +2156,13 @@ function AppContent() {
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
+        {tipBlocksOpen && (
+          <TrainingBlockDialog
+            start="new"
+            onClose={() => setTipBlocksOpen(false)}
+            onNotice={setMessage}
+          />
+        )}
         {conflictPrompt.dialog}
 
         {nestedHeader && (
@@ -2480,6 +2529,7 @@ function AppContent() {
                 onDelete={deleteMeasurement}
                 onDataChange={refreshAfterMutation}
                 trendPreference={bodyTrendPreference}
+                goalRequest={bodyGoalRequest}
                 onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(tab === 'body')}
               />
@@ -5934,6 +5984,11 @@ function MovementCard({
   onSuperset: (button: HTMLButtonElement) => void;
 }) {
   const tips = useTips();
+  const { learn: learnTip } = tips;
+  const hasRepRange = Boolean(movement.repRange);
+  useEffect(() => {
+    if (hasRepRange) learnTip('repRange');
+  }, [hasRepRange, learnTip]);
   const cardio = movement.exercise.kind === 'cardio';
   const treadmill =
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
@@ -7431,7 +7486,13 @@ function MachinePhotoChooser({
                     <span>Saved · {photos.length}</span>
                     <TipSlot
                       id="mergeMachines"
-                      eligible={photoPanelOpen && !selectingForMerge && !pending && !uploading}
+                      eligible={
+                        photoPanelOpen &&
+                        !selectingForMerge &&
+                        !pending &&
+                        !uploading &&
+                        hasLikelyDuplicateMachines(photos.map((photo) => photo.caption ?? ''))
+                      }
                     >
                       <button
                         type="button"
@@ -8839,14 +8900,18 @@ export function ProgressScreen({
                   </div>
                 )}
                 {(mapping?.machines.length ?? 0) > 1 && (
-                  <MachineWeightTip mapping={mapping}>
+                  <MachineWeightTip mapping={mapping} onOpen={() => setMappingOpen(true)}>
                     <button
                       type="button"
-                      className="progress-machine-settings"
-                      aria-label="Machine weights"
+                      className={`progress-machine-settings${mapping?.enabled ? ' is-on' : ''}`}
+                      aria-label={
+                        mapping?.enabled
+                          ? 'Machine weights, normalised'
+                          : 'Normalise machine weights'
+                      }
                       onClick={() => setMappingOpen(true)}
                     >
-                      <Icon name="settings" />
+                      {mapping?.enabled ? 'Normalised' : 'Normalise'}
                     </button>
                   </MachineWeightTip>
                 )}
