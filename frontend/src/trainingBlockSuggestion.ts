@@ -12,8 +12,8 @@ export type BlockSuggestion =
 
 /** Weeks of training before the first block is worth offering at all. */
 export const WEEKS_BEFORE_FIRST_BLOCK = 4;
-/** A break this long, just ended, reads as the start of something new. */
-const RETURN_GAP_DAYS = 10;
+/** This many days without training, just ended, reads as the start of something new. */
+const RETURN_DAYS_OFF = 10;
 /** How recent the return, or the new goal, must be to still be the moment. */
 const RECENT_DAYS = 14;
 /** A block this young is the new phase; nothing more is suggested on top of it. */
@@ -22,9 +22,13 @@ const STALL_DAYS = 21;
 
 const real = (workouts: TrackedWorkout[]) => workouts.filter((workout) => !workout.is_sample);
 
-/** How many different weeks hold at least one of the person's own workouts. */
-export function trainedWeeks(workouts: TrackedWorkout[]): number {
-  return new Set(real(workouts).map((workout) => weekStartFor(workout.workout_date, 1))).size;
+/**
+ * How many different weeks hold at least one of the person's own workouts. Weeks start on
+ * `weekStartDay` (Date#getDay numbering), so they match the weeks the rest of the app shows.
+ */
+export function trainedWeeks(workouts: TrackedWorkout[], weekStartDay = 1): number {
+  return new Set(real(workouts).map((workout) => weekStartFor(workout.workout_date, weekStartDay)))
+    .size;
 }
 
 /** The day the weight goal last changed direction (losing, gaining, maintaining), if it has. */
@@ -46,12 +50,14 @@ export function blockSuggestion({
   blocks,
   today,
   goalChangedOn = null,
+  weekStartDay = 1,
 }: {
   workouts: TrackedWorkout[];
   records: PersonalRecord[];
   blocks: TrainingBlock[];
   today: string;
   goalChangedOn?: string | null;
+  weekStartDay?: number;
 }): BlockSuggestion | null {
   const current = blockOn(blocks, today);
   if (current && daysBetween(current.start_date, today) < NEW_BLOCK_DAYS) return null;
@@ -59,11 +65,12 @@ export function blockSuggestion({
   const dates = [...new Set(real(workouts).map((workout) => workout.workout_date))]
     .filter((date) => date <= today)
     .sort();
-  // Back from a break: the latest gap between two training days, when the return is recent.
+  // Back from a break: the latest run of days off between two training days, when the return
+  // is recent. Training on the 1st and the 12th leaves ten days off between them.
   for (let index = dates.length - 1; index > 0; index -= 1) {
     if (daysBetween(dates[index], today) > RECENT_DAYS) break;
-    const gap = daysBetween(dates[index - 1], dates[index]);
-    if (gap >= RETURN_GAP_DAYS) return { reason: 'returning', days: gap };
+    const daysOff = daysBetween(dates[index - 1], dates[index]) - 1;
+    if (daysOff >= RETURN_DAYS_OFF) return { reason: 'returning', days: daysOff };
   }
 
   if (goalChangedOn && goalChangedOn <= today && daysBetween(goalChangedOn, today) <= RECENT_DAYS)
@@ -83,7 +90,7 @@ export function blockSuggestion({
   if (recent.length === 0 && earlier.length >= 3 && sessions >= 4)
     return { reason: 'stalled', weeks: STALL_DAYS / 7 };
 
-  const weeks = trainedWeeks(workouts);
+  const weeks = trainedWeeks(workouts, weekStartDay);
   if (blocks.length === 0 && weeks >= WEEKS_BEFORE_FIRST_BLOCK)
     return { reason: 'no-block', weeks };
   return null;

@@ -265,8 +265,8 @@ export function TodayScreen({
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
   const blockOfferReady = useMemo(
-    () => trainedWeeks(workouts) >= WEEKS_BEFORE_FIRST_BLOCK,
-    [workouts],
+    () => trainedWeeks(workouts, weekStartDay) >= WEEKS_BEFORE_FIRST_BLOCK,
+    [workouts, weekStartDay],
   );
   const layout = home.editing ? home.draft : home.layout;
   const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;

@@ -20,10 +20,13 @@ export function WeeklyReviewBlock({
   workouts,
   records,
   today,
+  weekStartDay = 1,
 }: {
   workouts: TrackedWorkout[];
   records: PersonalRecord[];
   today: string;
+  /** The first day of the account's week, in Date#getDay numbering. */
+  weekStartDay?: number;
 }) {
   const { config, loading, error } = useTrainingBlocks();
   const [goals, setGoals] = useState(NO_GOALS);
@@ -54,9 +57,10 @@ export function WeeklyReviewBlock({
             blocks: config.blocks,
             today,
             goalChangedOn: goalDirectionChangedOn(goals),
+            weekStartDay,
           })
         : null,
-    [ready, workouts, records, config.blocks, today, goals],
+    [ready, workouts, records, config.blocks, today, goals, weekStartDay],
   );
   if (!block && !suggestion) return null;
 

@@ -48,13 +48,22 @@ describe('blockSuggestion', () => {
     expect(suggest({ workouts: steady(8), blocks: [block('2026-09-01')] })).toBeNull();
   });
 
-  it('notices a return from a break of ten days or more', () => {
+  it('notices a return from ten or more days off', () => {
     const workouts = [workout('2026-10-20'), workout('2026-11-02'), workout('2026-11-16')];
-    // 2 Nov to 16 Nov is the latest gap: fourteen days.
+    // The latest break is 3 to 15 November: thirteen days without training.
     expect(suggest({ workouts, blocks: [block('2026-08-01')] })).toEqual({
       reason: 'returning',
-      days: 14,
+      days: 13,
     });
+    // Training on the 6th and the 17th leaves ten days off; the 7th leaves nine.
+    const blocks = [block('2026-08-01')];
+    expect(suggest({ workouts: [workout('2026-11-06'), workout('2026-11-17')], blocks })).toEqual({
+      reason: 'returning',
+      days: 10,
+    });
+    expect(
+      suggest({ workouts: [workout('2026-11-07'), workout('2026-11-17')], blocks }),
+    ).toBeNull();
     // A return that is itself more than two weeks old is no longer the moment.
     expect(
       suggest({
@@ -131,6 +140,22 @@ describe('supporting helpers', () => {
     ).toBe(2);
   });
 
+  it('counts weeks from the account’s own week start', () => {
+    // Sunday 15 and Monday 16 November: two weeks from Monday, one week from Sunday.
+    const weekend = [workout('2026-11-15'), workout('2026-11-16')];
+    expect(trainedWeeks(weekend)).toBe(2);
+    expect(trainedWeeks(weekend, 0)).toBe(1);
+    // Four Sunday-and-Monday pairs are four weeks for a Sunday start, not eight.
+    const pairs = [0, 7, 14, 21].flatMap((back) => [
+      workout(addDays('2026-11-15', -back)),
+      workout(addDays('2026-11-16', -back)),
+    ]);
+    expect(suggest({ workouts: pairs, weekStartDay: 0 })).toEqual({
+      reason: 'no-block',
+      weeks: 4,
+    });
+  });
+
   it('finds the day the weight goal changed direction', () => {
     expect(goalDirectionChangedOn([goal('2026-08-01', 90, 82), goal('2026-11-10', 82, 86)])).toBe(
       '2026-11-10',
@@ -146,7 +171,7 @@ describe('supporting helpers', () => {
   });
 
   it('words each reason in a few words', () => {
-    expect(blockSuggestionLabel({ reason: 'returning', days: 14 })).toBe('Back after 14 days off');
+    expect(blockSuggestionLabel({ reason: 'returning', days: 13 })).toBe('Back after 13 days off');
     expect(blockSuggestionLabel({ reason: 'new-goal' })).toBe('New weight goal');
     expect(blockSuggestionLabel({ reason: 'stalled', weeks: 3 })).toBe(
       'No new records for 3 weeks',

@@ -114,7 +114,8 @@ it('offers a new block on returning from a break, beside the block still running
     blocks: [block('Summer cut', '2026-08-03')],
   });
   expect(text()).toContain('Summer cut');
-  expect(text()).toContain('Back after 21 days off');
+  // Last trained on 27 October, back on 17 November.
+  expect(text()).toContain('Back after 20 days off');
   expect(button('Start a new block')).toBeDefined();
 });
 

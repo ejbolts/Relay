@@ -112,7 +112,14 @@ export function WeeklyReviewBrowser({
         onOpenBody={onOpenBody}
       />
       {/* About today rather than the week on show, so it stays with the two latest weeks. */}
-      {weeksAgo <= 1 && <WeeklyReviewBlock workouts={workouts} records={records} today={today} />}
+      {weeksAgo <= 1 && (
+        <WeeklyReviewBlock
+          workouts={workouts}
+          records={records}
+          today={today}
+          weekStartDay={weekStartDay}
+        />
+      )}
     </>
   );
 }
