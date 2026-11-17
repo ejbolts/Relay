@@ -10533,7 +10533,6 @@ function HistoryWorkoutCard({
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
   const workingSetCount = workingSets(workout).length;
-  const totalReps = completedWorkoutSets.reduce((total, item) => total + (item.reps ?? 0), 0);
   const totalVolume = workoutVolumeKg(workout);
   const totalDistance = completedWorkoutSets.reduce(
     (total, item) => total + (item.distance_km ?? 0),
@@ -10695,44 +10694,17 @@ function HistoryWorkoutCard({
               formatSet={(item) => setResult(item, weightUnit)}
             />
           )}
-          {!detailsOnly && !shared && (
-            <div className="history-workout-stats" aria-label="Workout totals">
-              {workout.start_time && workout.end_time && (
-                <span>
-                  <small>When</small>
-                  <strong>{formatWorkoutTimeRange(workout.start_time, workout.end_time)}</strong>
-                </span>
-              )}
-              <span>
-                <small>Time</small>
-                <strong>{formatMinutesDuration(workout.duration_minutes)}</strong>
-              </span>
-              <span>
-                <small>Sets</small>
-                <strong>{completedWorkoutSets.length}</strong>
-              </span>
-              <span>
-                <small>Reps</small>
-                <strong>{totalReps || '–'}</strong>
-              </span>
-              <span>
-                <small>Volume</small>
-                <strong>{totalVolume ? formatWeight(totalVolume, weightUnit, 0) : '–'}</strong>
-              </span>
-            </div>
-          )}
           {onPhotosChange && !detailsOnly ? (
-            <div className="history-workout-photos">
-              <WorkoutPhotoEditor
-                workoutId={workout.id}
-                photos={photos}
-                subject={photoSubject}
-                onChange={(next) => {
-                  setPhotos(next);
-                  onPhotosChange();
-                }}
-              />
-            </div>
+            <WorkoutPhotoEditor
+              workoutId={workout.id}
+              photos={photos}
+              subject={photoSubject}
+              canAdd={false}
+              onChange={(next) => {
+                setPhotos(next);
+                onPhotosChange();
+              }}
+            />
           ) : (
             photos.length > 0 && (
               <div className="history-workout-photos">

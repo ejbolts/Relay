@@ -1022,6 +1022,15 @@ describe('filtering History by machine', () => {
     expect(container.querySelector('[aria-label="Workout calendar"]')).not.toBeNull();
   });
 
+  it('opens a session straight onto its exercises, without a totals grid or an add-photo tile', async () => {
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
+    const detail = container.querySelector('.history-card.open .history-detail')!;
+    expect(detail.querySelector('[aria-label="Workout totals"]')).toBeNull();
+    expect(detail.querySelector('.workout-photo-add')).toBeNull();
+    expect(detail.firstElementChild?.classList.contains('history-movement')).toBe(true);
+  });
+
   it('finds the last session on one machine among later sessions at other gyms', async () => {
     await act(async () => root.render(<App />));
     expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);

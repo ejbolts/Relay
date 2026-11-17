@@ -2171,41 +2171,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   background: var(--p-surface-2);
 }
 
-.history-screen .history-workout-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr));
-  gap: 0;
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-}
-
-.history-screen .history-workout-stats span {
-  display: block;
-  border: 0;
-  padding: 0.5rem 0.625rem;
-  background: var(--p-surface);
-}
-
-.history-screen .history-workout-stats span + span {
-  border-left: 1px solid var(--p-line);
-}
-
-.history-screen .history-workout-stats small {
-  display: block;
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-}
-
-.history-screen .history-workout-stats strong {
-  display: block;
-  background: none;
-  color: var(--p-ink);
-  font-size: 0.875rem;
-  font-weight: 650;
-}
-
 .history-movement {
   border-top: 1px solid var(--p-line);
   padding: 0.75rem 0 0.25rem;
