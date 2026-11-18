@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CardioSession } from './types';
 import {
   cardioDistanceGroups,
+  cardioDistanceTabs,
   cardioTrendWeeks,
   cardioWeekTotals,
   distanceGroupFor,
@@ -165,6 +166,29 @@ describe('weekly cardio trend', () => {
     expect(groups).toEqual([
       { key: 'foot', label: 'Walk & run', sessions: 2, distance: 8 },
       { key: 'cycle', label: 'Cycling', sessions: 1, distance: 20 },
+    ]);
+  });
+
+  it('always offers Walk & run, Cycling and Rowing tabs after logged groups', () => {
+    const tabs = cardioDistanceTabs(
+      [
+        session({ id: 'swim', activity_type: 'Swimming', distance_km: 1.5 }),
+        session({ id: 'ride', distance_km: 20 }),
+        session({ id: 'ride 2', distance_km: 12 }),
+      ],
+      '2026-10-01',
+      '2026-10-24',
+    );
+    expect(tabs.map((tab) => [tab.label, tab.sessions, tab.distance])).toEqual([
+      ['Cycling', 2, 32],
+      ['Swimming', 1, 1.5],
+      ['Walk & run', 0, 0],
+      ['Rowing', 0, 0],
+    ]);
+    expect(cardioDistanceTabs([], '2026-10-01', '2026-10-24').map((tab) => tab.key)).toEqual([
+      'foot',
+      'cycle',
+      'row',
     ]);
   });
 });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CardioOverview } from './types';
 import { CardioEnergyCard } from './CardioEnergyCard';
-import { cardioDistanceGroups, cardioTrendWeeks, distanceGroupFor } from './cardioTrend';
+import { cardioDistanceTabs, cardioTrendWeeks, distanceGroupFor } from './cardioTrend';
 import { Icon } from './Icon';
 
 const metrics = [
@@ -20,7 +20,7 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
   const [distanceKey, setDistanceKey] = useState<string | null>(null);
   const currentStart = overview.current_week.week_start;
   const allWeeks = cardioTrendWeeks(overview.sessions, currentStart, today);
-  const distanceGroups = cardioDistanceGroups(overview.sessions, allWeeks[1].start, today);
+  const distanceGroups = cardioDistanceTabs(overview.sessions, allWeeks[1].start, today);
   const distanceGroup =
     distanceGroups.find((group) => group.key === distanceKey) ?? distanceGroups[0] ?? null;
   const distanceWeeks = distanceGroup
@@ -63,7 +63,7 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
           </button>
         ))}
       </div>
-      {metricKey === 'distance' && distanceGroups.length > 1 && (
+      {metricKey === 'distance' && (
         <div className="cardio-distance-groups" role="group" aria-label="Distance activity">
           {distanceGroups.map((group) => (
             <button
@@ -85,13 +85,7 @@ export function CardioTrendCard({ overview, today }: { overview: CardioOverview;
         </h2>
         <div className="cardio-week-value">
           {value === null ? '—' : format(value)}{' '}
-          <small>
-            {'suffix' in metric
-              ? `${metric.unit} ${metric.suffix}`
-              : metricKey === 'distance' && distanceGroups.length === 1
-                ? `${metric.unit} · ${distanceGroups[0].label.toLocaleLowerCase()}`
-                : metric.unit}
-          </small>
+          <small>{'suffix' in metric ? `${metric.unit} ${metric.suffix}` : metric.unit}</small>
         </div>
         <div className="cardio-week-comparison">
           {selected.sessions} {selected.sessions === 1 ? 'session' : 'sessions'}

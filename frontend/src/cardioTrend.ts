@@ -100,6 +100,26 @@ export function cardioDistanceGroups(
   );
 }
 
+// Always offered as Distance tabs, even before any distance is logged for them.
+const standardDistanceKinds = new Set(['foot', 'cycle', 'row']);
+
+/**
+ * Distance tabs: logged groups (most used first), then any standard kind with
+ * no distance logged yet, so Walk & run, Cycling and Rowing are always available.
+ */
+export function cardioDistanceTabs(
+  sessions: CardioSession[],
+  start: string,
+  end: string,
+): CardioDistanceGroup[] {
+  const groups = cardioDistanceGroups(sessions, start, end);
+  const missing = distanceKinds
+    .filter((kind) => standardDistanceKinds.has(kind.key))
+    .filter((kind) => !groups.some((group) => group.key === kind.key))
+    .map((kind) => ({ key: kind.key, label: kind.label, sessions: 0, distance: 0 }));
+  return [...groups, ...missing];
+}
+
 export function groupCardioHistory(sessions: CardioSession[], weekStartDay: number) {
   const groups = new Map<string, CardioSession[]>();
   for (const session of sessions) {
