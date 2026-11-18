@@ -1,9 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
+import { applyUpdateOnSignIn } from './appUpdates';
 import { AuthBrand, AuthScreen } from './AuthScreen';
 import { subscribeAuthExpired } from './authEvents';
 import { reportSavedDataUsed } from './connectionStatus';
 import { PasswordChangeRequired } from './PasswordChangeRequired';
+import { phonePushPermissionPromptSettled } from './push';
 import { adoptSignedInUser, resolveSession, type AuthState } from './authSession';
 import {
   browserDeps,
@@ -183,6 +185,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     generation.current += 1;
     await cleanup.current;
     const next = await adoptSignedInUser(user, browserDeps());
+    // Someone signed out on an older release moves straight to the newest one, signed in,
+    // instead of landing on a refresh prompt.
+    if (await applyUpdateOnSignIn({ promptSettled: phonePushPermissionPromptSettled() })) {
+      // The page is reloading; keep showing "Signing in…" until it does.
+      return new Promise<void>(() => undefined);
+    }
     setSignInExiting(true);
     setState(next);
   }, []);

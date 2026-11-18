@@ -79,6 +79,16 @@ export async function existingPhonePushSubscription(): Promise<PushSubscription 
   return automaticSubscription;
 }
 
+let permissionPrompt: Promise<unknown> | null = null;
+
+/** Settles once a notification permission prompt opened by sign-in has been answered. */
+export function phonePushPermissionPromptSettled(): Promise<void> {
+  return (permissionPrompt ?? Promise.resolve()).then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
 /**
  * Asks for notification permission from a sign-in or sign-up tap, since browsers only show the
  * prompt in response to one. Granting it turns phone alerts on for the account. Runs only in the
@@ -98,7 +108,7 @@ export function requestPhonePushPermissionFromTap(): void {
   } catch {
     return;
   }
-  void request
+  const prompt = request
     .then((permission) => {
       // Screens already showing re-check, which subscribes this device.
       if (permission === 'granted') {
@@ -107,7 +117,11 @@ export function requestPhonePushPermissionFromTap(): void {
         );
       }
     })
-    .catch(() => undefined);
+    .catch(() => undefined)
+    .finally(() => {
+      if (permissionPrompt === prompt) permissionPrompt = null;
+    });
+  permissionPrompt = prompt;
 }
 
 export async function enablePhonePushNotifications(): Promise<PushSubscription> {
