@@ -16,6 +16,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .profile_sex import Sex, known_sex
 from .account_limits import load_account_limits
 from .auth import (
     ACCOUNT_LOGIN_MAX_FAILURES,
@@ -163,6 +164,8 @@ class LoginRequest(BaseModel):
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     username: str | None = None
+    # Accepted once: after that only an administrator can change it.
+    sex: Sex | None = None
 
     @field_validator("username")
     @classmethod
@@ -204,6 +207,7 @@ class UserRead(BaseModel):
     must_change_password: bool = False
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
+    sex: Sex | None = None
 
 
 def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
@@ -221,6 +225,7 @@ def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
             if user.profile_photo_filename
             else None
         ),
+        sex=known_sex(user.sex),
     )
 
 
@@ -559,6 +564,12 @@ def update_profile(
         if taken is not None:
             raise api_error(409, "username_taken", "An account with that username already exists.")
         user.username = payload.username
+    if payload.sex is not None and payload.sex != user.sex:
+        if user.sex is not None:
+            raise api_error(
+                409, "sex_locked", "Your sex is already set. Ask an administrator to change it."
+            )
+        user.sex = payload.sex
     try:
         db.commit()
     except IntegrityError as error:

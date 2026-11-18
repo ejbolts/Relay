@@ -57,6 +57,7 @@ from .models import (
     utc_now,
 )
 from .photo_storage import profile_photo_path
+from .profile_sex import Sex, known_sex
 from .presence import FriendPresence, hub, presence_by_member
 from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
@@ -122,6 +123,8 @@ class SharedProfileSummary(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    # Shown only to those who can view the profile.
+    sex: Sex | None = None
     member_since: datetime
     # Private profiles are returned only to their owner.
     visibility: Visibility
@@ -555,6 +558,7 @@ def profile_summary(
         id=member.id,
         display_name=member.display_name,
         profile_photo_url=photo_url(member),
+        sex=known_sex(member.sex) if viewable else None,
         member_since=as_utc(member.created_at),
         visibility=sharing.visibility,
         is_you=member.id == viewer.id,
