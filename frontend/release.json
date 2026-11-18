@@ -1,6 +1,6 @@
 {
   "version": "1.3.0",
-  "date": "2026-11-17",
+  "date": "2026-11-19",
   "title": "See how you measure up",
   "summary": "Compare lifts with friends, track your body and plan your training in blocks.",
   "changes": [
@@ -65,18 +65,18 @@
     },
     {
       "title": "Body measurements",
-      "description": "See measurements on a body outline and tap to update.",
+      "description": "See measurements on a body outline and type new ones straight onto it.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png",
-        "alt": "Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/63d9f2b8ed0ef20c0ba4bca77653a078e9ed065e/lock-body-sex-inline-measurements/after-body.png",
+        "alt": "Body measurements card with the male body outline: shoulders, chest, arms, hips, wrist and calf labelled in centimetres, blank labels on parts not yet measured, and a locked Male pill. Isolated sample data."
       }
     },
     {
       "title": "Workout feed",
-      "description": "Catch up on workouts, comments and reactions.",
+      "description": "See who's training and catch up on workouts, comments and reactions.",
       "image": {
-        "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png",
-        "alt": "Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts."
+        "url": "https://raw.githubusercontent.com/ejbolts/Relay/b3c996d5053d45f06a71be6b82d984d1f7c08ed1/social-two-tabs/social-feed-after.png",
+        "alt": "Social feed with Feed and Friends tabs, a row of four friends with Sam marked Live and a week of dots under each, then workout cards from friends. Isolated sample accounts."
       }
     },
     {
