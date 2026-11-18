@@ -141,3 +141,37 @@ describe('signup returns to login', () => {
     expect(container.querySelector('[role="status"]')).toBeNull();
   });
 });
+
+describe('password visibility', () => {
+  it('shows an open eye to reveal the password and a crossed-out eye to hide it again', async () => {
+    await act(async () =>
+      root.render(
+        <AuthScreen
+          config={{ registration_open: true, invite_code_required: false }}
+          onAuthenticated={vi.fn()}
+        />,
+      ),
+    );
+    const toggle = container.querySelector<HTMLButtonElement>('.auth-reveal')!;
+    const input = container.querySelector<HTMLInputElement>('input[name="password"]')!;
+    const iconPath = () => toggle.querySelector('svg path')?.getAttribute('d');
+    const eyePath = iconPath();
+
+    expect(toggle.getAttribute('aria-label')).toBe('Show password');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.textContent).toBe('');
+    expect(input.type).toBe('password');
+    expect(eyePath).toMatch(/^M3 12s/);
+
+    await act(async () => toggle.click());
+    expect(input.type).toBe('text');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.title).toBe('Hide password');
+    // The eye now has a line through it.
+    expect(iconPath()).toMatch(/^M3 3l18 18/);
+
+    await act(async () => toggle.click());
+    expect(input.type).toBe('password');
+    expect(iconPath()).toBe(eyePath);
+  });
+});

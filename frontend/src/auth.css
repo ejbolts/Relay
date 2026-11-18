@@ -202,7 +202,7 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
 }
 
 .auth-password input {
-  padding-right: 4.5rem !important;
+  padding-right: 3.25rem !important;
 }
 
 .auth-handle {
@@ -225,20 +225,28 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   pointer-events: none;
 }
 
+/* An eye to show the password, or the eye with a line through it to hide it again. */
 .auth-reveal {
   position: absolute;
   top: 50%;
-  right: 0.35rem;
-  min-width: 3.4rem;
-  min-height: 2.2rem;
+  right: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-height: 0;
   border: 0;
   border-radius: 8px;
+  padding: 0;
   background: transparent;
   color: var(--p-accent-text);
-  font-size: 0.8125rem;
-  font-weight: 650;
   transform: translateY(-50%);
   touch-action: manipulation;
+}
+
+.auth-reveal .pulse-icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .auth-error-region:empty {

@@ -14,6 +14,7 @@ import {
   darkStylePreference,
   lightStylePreference,
 } from './colourThemes';
+import { Icon } from './Icon';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
 import { pendingRegistrationInvite } from './friendInvite';
@@ -441,12 +442,14 @@ export function AuthScreen({
                 <button
                   type="button"
                   className="auth-reveal"
+                  // One name with a pressed state; the eye shows what a tap will do.
+                  aria-label="Show password"
                   aria-pressed={showPassword}
                   aria-controls={ids.password}
+                  title={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword((current) => !current)}
                 >
-                  {showPassword ? 'Hide' : 'Show'}
-                  <span className="sr-only"> password</span>
+                  <Icon name={showPassword ? 'hide' : 'eye'} />
                 </button>
               </div>
             </AuthField>
