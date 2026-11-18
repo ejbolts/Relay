@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { isAllTimeRecord, recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { relativeStrength } from './relativeStrength';
 import { SET_KINDS, setKindOf, setNumberLabels } from './setFieldValues';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -151,16 +152,16 @@ export function HistorySetTable({
                           title={records[index]
                             .map(
                               (record) =>
-                                `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordLabel(record.record_type)}`,
+                                `${recordScopeLabel(record)} ${recordLabel(record.record_type)}`,
                             )
                             .join(', ')}
                         >
-                          {records[index].some((record) => record.scope !== 'block') ? (
+                          {records[index].some(isAllTimeRecord) ? (
                             <>
                               <span className="sr-only">All-time </span>PR
                             </>
                           ) : (
-                            'Block PR'
+                            recordBadgeLabel(records[index])
                           )}
                         </strong>
                       )}

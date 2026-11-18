@@ -1,3 +1,4 @@
+import { isAllTimeRecord, recordBadgeLabel } from './recordScope';
 import { setKindOf, setNumberLabels, type SetKind } from './setFieldValues';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { MachinePhoto, PersonalRecord, TrackedSet } from './types';
@@ -52,7 +53,7 @@ export function SharedSetList({
           const kind = setKindOf(item);
           const label = labels[index];
           const earned = personalRecords.filter((record) => record.set_id === item.id);
-          const allTime = earned.some((record) => record.scope !== 'block');
+          const allTime = earned.some(isAllTimeRecord);
           const machine = machineOf(item);
           return (
             <li
@@ -78,7 +79,7 @@ export function SharedSetList({
                     className="pr-badge"
                     title={describeRecord ? earned.map(describeRecord).join(', ') : undefined}
                   >
-                    {allTime ? 'PR' : 'Block PR'}
+                    {allTime ? 'PR' : recordBadgeLabel(earned)}
                   </strong>
                 )}
               </span>
