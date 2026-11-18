@@ -1,21 +1,35 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useEffect, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from './api';
+import { MachineWeightsDialog } from './MachineWeightsDialog';
+import { RoutinePanel } from './RoutinePanel';
 import { SetupGuideHost, SetupGuidesSettings } from './SetupGuide';
 import {
+  activeGuide,
+  exitGuide,
   favouriteLift,
-  latestWorkoutPlan,
-  machineComparison,
+  onGuideFinished,
   openSetupGuide,
   recentRotation,
+  startGuide,
 } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
-import { TipsProvider } from './Tips';
+import { TipsProvider, useTips } from './Tips';
+import { TrainingBlockDialog } from './TrainingBlockDialog';
 import { TrainingBlocksContext } from './trainingBlocksContext';
-import { TrainingPreferencesContext } from './trainingPreferencesContext';
 import { freshTips, loadTips, saveTips } from './tipsState';
-import type { TrackedWorkout, TrainingPreferences } from './types';
+import type {
+  Exercise,
+  ExerciseProgress,
+  MachineProgressPoint,
+  Routine,
+  TrackedWorkout,
+  TrainingBlocks,
+  WeightMapping,
+} from './types';
+import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
 type SetSpec = { kg: number | null; reps?: number; warmup?: boolean; machine?: string };
 
@@ -70,19 +84,7 @@ const history = [
   ]),
 ];
 
-describe('guide data', () => {
-  it('compares the machines one exercise was logged on, most used first', () => {
-    expect(machineComparison(history, 'leg-press')).toEqual({
-      exerciseId: 'leg-press',
-      exerciseName: 'Leg press',
-      machines: [
-        { id: 'Hammer', caption: 'Hammer', sessions: 2, topKg: 150 },
-        { id: 'Cybex', caption: 'Cybex', sessions: 1, topKg: 90 },
-      ],
-    });
-    expect(machineComparison(history, 'bench-press')).toBeNull();
-  });
-
+describe('guide facts', () => {
   it('picks the most-logged weighted lift, ignoring warm-ups, cardio and samples', () => {
     const sample = { ...history[0], id: 's', is_sample: true };
     expect(favouriteLift([...history, sample, sample])).toEqual({
@@ -93,167 +95,412 @@ describe('guide data', () => {
     });
   });
 
-  it('lists recent workouts in the order they were trained and the latest planned day', () => {
+  it('lists recent workouts in the order they were trained', () => {
     expect(recentRotation([history[2], history[0], history[1]])).toEqual(['Push', 'Pull', 'Legs']);
-    expect(latestWorkoutPlan(history)).toEqual({
-      name: 'Legs',
-      exercises: [
-        { name: 'Leg press', sets: 1 },
-        { name: 'Bench press', sets: 2 },
-      ],
-    });
   });
 });
 
-describe('setup guides', () => {
-  let root: Root;
-  let container: HTMLDivElement;
-  let unit: 'kg' | 'lb';
-  let blocks: number;
+let root: Root;
+let container: HTMLDivElement;
+let blocks: TrainingBlocks;
+let finished: string[];
+let stopFinished: () => void;
+let opened: TipAction[];
+let stopTargets: () => void;
+let setPage: (page: string) => void;
 
-  beforeEach(() => {
-    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-    HTMLDialogElement.prototype.showModal = function () {
-      this.open = true;
-    };
-    HTMLDialogElement.prototype.close = function () {
-      this.open = false;
-    };
-    localStorage.clear();
-    unit = 'kg';
-    blocks = 0;
-    container = document.createElement('div');
-    document.body.append(container);
-    root = createRoot(container);
+function PageControl() {
+  const { configure } = useTips();
+  useEffect(() => {
+    setPage = (page) => configure({ page, ready: true, resting: false, workoutCount: 5 });
+  }, [configure]);
+  return null;
+}
+
+beforeEach(() => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
+  localStorage.clear();
+  blocks = { blocks: [] };
+  finished = [];
+  stopFinished = onGuideFinished((id) => finished.push(id));
+  opened = [];
+  stopTargets = onTipTarget((action) => opened.push(action));
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+  exitGuide();
+  stopFinished();
+  stopTargets();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+async function render(children: ReactNode) {
+  await act(async () =>
+    root.render(
+      <TrainingBlocksContext.Provider
+        value={{
+          config: blocks,
+          block: null,
+          select: () => undefined,
+          changed: (next) => {
+            blocks = next;
+          },
+          loading: false,
+          error: null,
+          retry: () => undefined,
+        }}
+      >
+        <TipsProvider account="alice">
+          <PageControl />
+          {children}
+        </TipsProvider>
+      </TrainingBlocksContext.Provider>,
+    ),
+  );
+}
+
+const coach = () => document.querySelector('.setup-coach');
+const coachTitle = () => coach()?.querySelector('strong')?.textContent;
+const button = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,
+  )!;
+const click = async (label: string) => act(async () => button(label).click());
+async function type(selector: string, value: string) {
+  await act(async () => {
+    const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
+    Object.getOwnPropertyDescriptor(
+      el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype,
+      'value',
+    )!.set!.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
   });
+}
+async function submit(selector: string) {
+  await act(async () =>
+    document
+      .querySelector(selector)!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+}
 
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    vi.unstubAllGlobals();
-  });
-
-  async function render(children: React.ReactNode) {
-    await act(async () =>
-      root.render(
-        <TrainingPreferencesContext.Provider
-          value={{
-            preferences: { preferred_weight_unit: unit } as TrainingPreferences,
-            error: null,
-            applySaved: () => undefined,
-          }}
-        >
-          <TrainingBlocksContext.Provider
-            value={{
-              config: {
-                blocks: Array.from({ length: blocks }, (_, index) => ({
-                  id: `b${index}`,
-                  name: 'Strength',
-                  start_date: '2026-09-01',
-                  end_date: null,
-                })),
-              },
-              block: null,
-              select: () => undefined,
-              changed: () => undefined,
-              loading: false,
-              error: null,
-              retry: () => undefined,
-            }}
-          >
-            <TipsProvider account="alice">{children}</TipsProvider>
-          </TrainingBlocksContext.Provider>
-        </TrainingPreferencesContext.Provider>,
-      ),
-    );
-  }
-
-  const guide = () => document.querySelector('.setup-guide');
-  const button = (label: string) =>
-    [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
-  async function finish(steps: number) {
-    for (let step = 1; step < steps; step += 1) await act(async () => button('Next →')!.click());
-  }
-
-  it('explains training blocks with your own best lift and starts one', async () => {
-    const opened: TipAction[] = [];
-    const stop = onTipTarget((action) => opened.push(action));
+describe('starting guides', () => {
+  it('opens each feature with its guide running, and marks it set up when finished', async () => {
     await render(<SetupGuideHost workouts={history} />);
+    await act(async () => openSetupGuide('normalise'));
+    expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'leg-press' }]);
+    expect(activeGuide()).toMatchObject({
+      id: 'normalise',
+      facts: { lift: { name: 'Leg press' }, rotation: ['Push', 'Pull', 'Legs'] },
+    });
     await act(async () => openSetupGuide('blocks'));
-    expect(guide()?.textContent).toContain('SETUP GUIDE · 1 OF 4');
-    await act(async () => button('Next →')!.click());
-    expect(guide()?.textContent).toContain('Your best Leg press is 150 kg.');
-    await act(async () => button('Back')!.click());
-    expect(guide()?.textContent).toContain('A phase with its own start');
-    await finish(4);
-    await act(async () => button('Start a block')!.click());
-    expect(opened).toEqual([{ target: 'training-blocks' }]);
-    expect(guide()).toBeNull();
-    expect(loadTips('alice').seen.blocks).toBe('seen');
-    stop();
+    expect(opened.at(-1)).toEqual({ target: 'training-blocks' });
+    expect(activeGuide()?.id).toBe('blocks');
+    const { finishGuide } = await import('./setupGuides');
+    await act(async () => finishGuide('blocks'));
+    expect(activeGuide()).toBeNull();
+    expect(loadTips('alice').seen.blocks).toBe('learned');
   });
 
-  it('shows when to add weight using the same rule as logging, in pounds too', async () => {
-    unit = 'lb';
-    await render(<SetupGuideHost workouts={history} />);
-    await act(async () => openSetupGuide('split'));
-    expect(guide()?.textContent).toContain('Your recent workouts went Push, Pull, Legs.');
-    await finish(3);
-    const rows = [...guide()!.querySelectorAll('.setup-guide-progression tbody tr')].map(
-      (row) => row.lastElementChild?.textContent,
-    );
-    expect(rows).toEqual(['Stay at 330 lb', 'Stay at 330 lb', 'Go up to 335 lb']);
-    expect(button('Set up your split')).toBeDefined();
-  });
-
-  it('opens an existing split once one is saved, and stops when put away', async () => {
-    saveTips('alice', { ...freshTips(), seen: { split: 'learned' } });
-    const opened: TipAction[] = [];
-    const stop = onTipTarget((action) => opened.push(action));
-    await render(<SetupGuideHost workouts={[]} />);
-    await act(async () => openSetupGuide('split'));
-    // With no history the guide still explains the feature, with a template example.
-    expect(guide()?.querySelector('.setup-guide-rotation')?.textContent).toContain('Upper');
-    await act(async () => button('Not now')!.click());
-    expect(guide()).toBeNull();
-    expect(opened).toEqual([]);
-    await act(async () => openSetupGuide('split'));
-    await finish(3);
-    await act(async () => button('Open your split')!.click());
-    expect(opened).toEqual([{ target: 'split' }]);
-    stop();
-  });
-
-  it('points to Exercises when no exercise has used two machines yet', async () => {
-    const opened: TipAction[] = [];
-    const stop = onTipTarget((action) => opened.push(action));
+  it('explains what comparing machines needs before any exercise has used two', async () => {
     await render(<SetupGuideHost workouts={history.slice(0, 1)} />);
     await act(async () => openSetupGuide('normalise'));
-    expect(guide()?.querySelector('.setup-guide-machines')).toBeNull();
-    await finish(4);
-    expect(guide()?.textContent).toContain('choose Normalise');
-    await act(async () => button('Open Exercises')!.click());
-    expect(opened).toEqual([{ target: 'machine-weights' }]);
-    stop();
+    expect(opened).toEqual([]);
+    expect(activeGuide()).toBeNull();
+    expect(document.querySelector('.setup-guide-wait')?.textContent).toContain(
+      'two saved machines',
+    );
+    await click('OK');
+    expect(document.querySelector('.setup-guide-wait')).toBeNull();
+  });
+
+  it('ends the splits guide when you leave the splits page', async () => {
+    await render(<SetupGuideHost workouts={history} />);
+    await act(async () => openSetupGuide('split'));
+    expect(opened).toEqual([{ target: 'split' }]);
+    // Still on Home while the splits page opens: the guide keeps running.
+    await act(async () => setPage('dashboard'));
+    expect(activeGuide()?.id).toBe('split');
+    await act(async () => setPage('split'));
+    await act(async () => setPage('dashboard'));
+    expect(activeGuide()).toBeNull();
   });
 
   it('lists every guide in Settings, marking features already set up', async () => {
-    blocks = 1;
+    blocks = {
+      blocks: [{ id: 'b', name: 'Strength', start_date: '2026-09-01', end_date: null }],
+    };
     saveTips('alice', { ...freshTips(), seen: { split: 'learned', normalise: 'seen' } });
-    await render(
-      <>
-        <SetupGuidesSettings />
-        <SetupGuideHost workouts={history} />
-      </>,
-    );
-    const rows = [...document.querySelectorAll('.setup-guide-list button')];
-    expect(rows.map((row) => row.textContent)).toEqual([
+    await render(<SetupGuidesSettings />);
+    expect(
+      [...document.querySelectorAll('.setup-guide-list button')].map((row) => row.textContent),
+    ).toEqual([
       'Compare machines',
       'Training blocksSet up',
       // Rep ranges are part of this guide, so a split alone does not finish it.
       'Splits and rep ranges',
     ]);
-    await act(async () => (rows[0] as HTMLButtonElement).click());
-    expect(guide()?.textContent).toContain('You’ve logged Leg press on 2 machines.');
+  });
+});
+
+const press = {
+  id: 'press',
+  name: 'Chest press',
+  category: 'push',
+  kind: 'strength',
+  muscle_group: 'Chest',
+  equipment: 'Machine',
+  is_custom: false,
+  is_favorite: false,
+  muscle_contributions: [],
+} as Exercise;
+const point = (id: string, day: number, machine: string, weight: number) =>
+  ({
+    workout_id: id,
+    workout_date: `2026-10-${String(day).padStart(2, '0')}`,
+    best_weight_kg: weight,
+    best_reps: 8,
+    estimated_1rm: weight,
+    volume_kg: weight * 10,
+    best_rpe: null,
+    machine_photo_id: machine,
+  }) as MachineProgressPoint;
+const points = [point('w1', 1, 'hammer', 80), point('w2', 8, 'life', 66)];
+const progress = {
+  exercise: press,
+  points,
+  machine_points: points,
+  personal_best_weight_kg: 80,
+  personal_best_estimated_1rm: 80,
+} as ExerciseProgress;
+const machine = (id: string, caption: string, workouts: number) => ({
+  id,
+  caption,
+  thumbnail_url: `/${id}.webp`,
+  workout_count: workouts,
+  last_used_date: null,
+  machine_kg: null,
+  reference_kg: null,
+});
+const mapping: WeightMapping = {
+  enabled: false,
+  reference_machine_id: null,
+  machines: [machine('hammer', 'Hammer', 3), machine('life', 'Life Fitness', 2)],
+};
+
+describe('guides inside the real screens', () => {
+  it('walks through Machine weights and finishes when the normalised weights are saved', async () => {
+    vi.spyOn(api, 'saveWeightMapping').mockImplementation(async (_id, next) => next);
+    const onSaved = vi.fn();
+    startGuide('normalise', history);
+    await render(
+      <MachineWeightsDialog
+        exerciseId="press"
+        exerciseName="Chest press"
+        mapping={mapping}
+        progress={progress}
+        weightUnit="kg"
+        onClose={() => undefined}
+        onSaved={onSaved}
+      />,
+    );
+    expect(coachTitle()).toBe('Switch on Normalise weights');
+    expect(coach()?.textContent).toContain('Your Chest press machines weigh differently');
+    // The step points at the real switch, which is what moves the guide on.
+    const toggle = document.querySelector('[role="switch"][aria-label="Normalise weights"]')!;
+    expect(toggle.classList.contains('guide-target')).toBe(true);
+    await act(async () => (toggle as HTMLElement).click());
+    expect(coachTitle()).toBe('Check the reference machine');
+    await click('Next');
+    expect(coachTitle()).toBe('Match the weights');
+    await type('[aria-label="Weight on Life Fitness"]', '50');
+    await type('[aria-label="Matching weight on Hammer for Life Fitness"]', '60');
+    await click('Next');
+    expect(coachTitle()).toBe('Save it');
+    expect(
+      document.querySelector('.machine-weights-save')?.classList.contains('guide-target'),
+    ).toBe(true);
+    expect(finished).toEqual([]);
+    await submit('.machine-weights-form');
+    expect(api.saveWeightMapping).toHaveBeenCalled();
+    expect(finished).toEqual(['normalise']);
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+  });
+
+  it('leaves the guide when Machine weights closes without saving', async () => {
+    startGuide('normalise', history);
+    await render(
+      <MachineWeightsDialog
+        exerciseId="press"
+        exerciseName="Chest press"
+        mapping={mapping}
+        progress={progress}
+        weightUnit="kg"
+        onClose={() => undefined}
+        onSaved={() => undefined}
+      />,
+    );
+    await click('Close Machine weights');
+    expect(activeGuide()).toBeNull();
+    expect(finished).toEqual([]);
+  });
+
+  it('starts a training block step by step, using your own lift', async () => {
+    vi.spyOn(api.trainingBlocks, 'create').mockImplementation(async (block) => ({
+      blocks: [{ id: 'new', end_date: null, ...block }],
+    }));
+    const onNotice = vi.fn();
+    startGuide('blocks', history);
+    await render(<TrainingBlockDialog start="new" onClose={() => undefined} onNotice={onNotice} />);
+    expect(coachTitle()).toBe('Name this phase');
+    expect(button('Next').disabled).toBe(true);
+    await type('.training-block-form input[maxlength="80"]', 'Strength');
+    await click('Next');
+    expect(coachTitle()).toBe('Pick a start');
+    expect(
+      document
+        .querySelector('.training-block-starts:not(.plan)')
+        ?.classList.contains('guide-target'),
+    ).toBe(true);
+    await click('Next');
+    expect(coachTitle()).toBe('Plan an end, if you like');
+    await click('Next');
+    expect(coachTitle()).toBe('Start the block');
+    expect(coach()?.textContent).toContain('Leg press records start fresh');
+    await submit('.training-block-form');
+    expect(api.trainingBlocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Strength' }),
+    );
+    expect(finished).toEqual(['blocks']);
+    expect(onNotice).toHaveBeenCalledWith('Training block started');
+  });
+});
+
+const bench = { ...press, id: 'bench', name: 'Bench press', equipment: 'Barbell' } as Exercise;
+const plan: Routine = {
+  id: 'plan',
+  name: 'Upper / Rest',
+  shared: false,
+  days: [
+    {
+      workout_type_id: 'upper',
+      workout_type: DEFAULT_WORKOUT_TYPES[0],
+      movements: [
+        {
+          exercise_id: bench.id,
+          exercise: bench,
+          sets: [
+            {
+              reps: 8,
+              weight_kg: 50,
+              duration_seconds: null,
+              distance_km: null,
+              rest_seconds: 120,
+              set_type: 'normal',
+            },
+          ],
+        },
+      ],
+    },
+    { workout_type_id: null, workout_type: null, movements: [] },
+  ],
+};
+
+describe('splits guide', () => {
+  beforeEach(() => {
+    vi.spyOn(api.routines, 'list').mockResolvedValue([structuredClone(plan)]);
+    vi.spyOn(api.routines, 'save').mockImplementation(async (routine) => routine);
+    vi.spyOn(api.routines, 'create').mockImplementation(async (routine) => ({
+      ...routine,
+      id: 'new',
+    }));
+    vi.spyOn(api.routines, 'use').mockResolvedValue({
+      name: 'Upper / Lower',
+      enabled: true,
+      start_date: '2026-11-18',
+      steps: [],
+    });
+    vi.spyOn(api, 'listExercises').mockResolvedValue([bench]);
+    vi.spyOn(api, 'getCardioPreferences').mockResolvedValue({
+      heart_rate_zones: [],
+      goals: [],
+    });
+  });
+
+  async function openFirstDay() {
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('.routine-day-toggle')!.click(),
+    );
+  }
+
+  it('adds a rep range to the active split and finishes on save', async () => {
+    startGuide('split', history);
+    await render(<RoutinePanel ownerId="me" own embedded activeId="plan" />);
+    expect(coachTitle()).toBe('Open your split');
+    expect(coach()?.classList.contains('is-floating')).toBe(true);
+    await click('Edit split');
+    // The split already has exercises, so the guide goes straight to rep ranges.
+    expect(coachTitle()).toBe('Give an exercise a rep range');
+    expect(coach()?.textContent).toContain('stay at 150 kg on Leg press');
+    expect(button('Next').disabled).toBe(true);
+    if (!document.querySelector('.routine-day.is-open')) await openFirstDay();
+    await type('[aria-label="Rep range for Bench press on day 1"]', '8-12');
+    await click('Next');
+    expect(coachTitle()).toBe('Save your split');
+    await submit('.routine-editor');
+    expect(api.routines.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        days: expect.arrayContaining([
+          expect.objectContaining({
+            movements: [expect.objectContaining({ rep_range: { min: 8, max: 12 } })],
+          }),
+        ]),
+      }),
+    );
+    expect(finished).toEqual(['split']);
+  });
+
+  it('builds a new split from a template, then makes it the active split', async () => {
+    vi.spyOn(api.routines, 'list').mockResolvedValue([]);
+    startGuide('split', history);
+    await render(<RoutinePanel ownerId="me" own embedded activeId={null} />);
+    expect(coachTitle()).toBe('Start from a template');
+    expect(coach()?.textContent).toContain('Your recent workouts went Push, Pull, Legs.');
+    await click('New split');
+    expect(coachTitle()).toBe('Plan your days');
+    expect(button('Next').disabled).toBe(true);
+    await click('Add exercise to day 1');
+    await type('[aria-label="Search exercises to add to day 1"]', 'Bench');
+    const option = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+      (item) => item.querySelector('strong')?.textContent === 'Bench press',
+    )!;
+    await act(async () => option.click());
+    await click('Next');
+    expect(coachTitle()).toBe('Give an exercise a rep range');
+    await type('[aria-label="Rep range for Bench press on day 1"]', '8-12');
+    await click('Next');
+    await submit('.routine-editor');
+    // Saved, but not yet the split Up next follows.
+    expect(finished).toEqual([]);
+    await click('Close notification');
+    expect(coachTitle()).toBe('Make it your split');
+    await click('Use split');
+    expect(coachTitle()).toBe('Choose how it runs');
+    await submit('.routine-use');
+    expect(api.routines.use).toHaveBeenCalledWith('new', expect.any(String), 'workouts');
+    expect(finished).toEqual(['split']);
   });
 });

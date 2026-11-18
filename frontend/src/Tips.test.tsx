@@ -6,6 +6,7 @@ import { api } from './api';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
 import { SetupGuideHost } from './SetupGuide';
+import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
 import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
 
@@ -474,7 +475,7 @@ describe('shared tip presentation', () => {
     await act(async () => bulb()!.click());
     expect(popover()?.textContent).toContain('Train alongside a friend');
   });
-  it('walks through comparing machines, then opens the feature for the right exercise', async () => {
+  it('starts the machines guide in Machine weights for the right exercise', async () => {
     const opened: TipAction[] = [];
     const stop = onTipTarget((action) => opened.push(action));
     await homeBulb(
@@ -490,21 +491,11 @@ describe('shared tip presentation', () => {
     );
     await act(async () => button('Show me how').click());
     expect(popover()).toBeNull();
-    const guide = () => document.querySelector('.setup-guide');
-    // The guide talks about the person's own exercise and machines.
-    expect(guide()?.textContent).toContain('You’ve logged Chest press on 2 machines.');
-    expect(
-      [...guide()!.querySelectorAll('.setup-guide-machines strong')].map(
-        (item) => item.textContent,
-      ),
-    ).toEqual(['technogym', 'life-fitness']);
-    // Opening the guide counts as opening the tip.
-    expect(loadTips('alice').seen.normalise).toBe('seen');
-    for (let step = 0; step < 3; step += 1) await act(async () => button('Next →').click());
-    expect(guide()?.textContent).toContain('Your logged weights stay put');
-    await act(async () => button('Set up Chest press').click());
+    // The guide runs inside Machine weights itself, opened on the exercise used on two machines.
     expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'chest-press' }]);
-    expect(guide()).toBeNull();
+    expect(activeGuide()?.id).toBe('normalise');
+    expect(loadTips('alice').seen.normalise).toBe('seen');
+    exitGuide();
     stop();
   });
 });

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from './api';
+import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
+import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
 import { blockDay, blockOn, weeksEnd } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { addDays } from './trainingSummary';
@@ -88,6 +90,8 @@ export function TrainingBlockDialog({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const guide = useActiveGuide('blocks');
+  const [guideStep, setGuideStep] = useState(0);
   const today = localDate();
   const january = `${today.slice(0, 4)}-01-01`;
 
@@ -97,7 +101,10 @@ export function TrainingBlockDialog({
     setError(null);
     if (view === 'remove') setView('form');
     else if (view === 'form' && formBack) setView(formBack);
-    else onClose();
+    else {
+      exitGuide('blocks');
+      onClose();
+    }
   };
   const startForm = (item: TrainingBlock | null, back: View | null) => {
     setEditing(item);
@@ -155,6 +162,7 @@ export function TrainingBlockDialog({
         const created = next.blocks.find((item) => item.start_date === start);
         if (created)
           select(created.id === blockOn(next.blocks, today)?.id ? 'current' : created.id);
+        finishGuide('blocks');
         onNotice('Training block started');
         onClose();
       },
@@ -175,6 +183,35 @@ export function TrainingBlockDialog({
       : view === 'remove'
         ? 'Remove training block?'
         : 'Training blocks';
+
+  const lift = guide?.facts.lift;
+  const coachSteps: CoachStep[] = [
+    {
+      title: 'Name this phase',
+      body: 'Something like Strength or Summer cut. Your first session of each lift in a block sets a fresh baseline, so you can earn Block PRs below your all-time best.',
+      target: '.training-block-form fieldset > label:first-of-type input',
+      next: { disabled: !name.trim(), onClick: () => setGuideStep(1) },
+    },
+    {
+      title: 'Pick a start',
+      body: 'Today, 1 January, or Custom for a past date so recent workouts count towards this block.',
+      target: '.training-block-starts:not(.plan)',
+      next: { onClick: () => setGuideStep(2) },
+    },
+    {
+      title: 'Plan an end, if you like',
+      body: 'Home counts down the days left. A block never closes by itself.',
+      target: '.training-block-starts.plan',
+      next: { onClick: () => setGuideStep(3) },
+    },
+    {
+      title: 'Start the block',
+      body: lift
+        ? `Home then shows the week you’re on, and ${lift.name} records start fresh from your next session.`
+        : 'Home then shows the week you’re on, and records start fresh from your next session.',
+      target: '.training-block-form button[type="submit"]',
+    },
+  ];
 
   return (
     <PopupDialog
@@ -358,6 +395,14 @@ export function TrainingBlockDialog({
         <p role="alert" className="error-message">
           {error}
         </p>
+      )}
+      {guide && view === 'form' && !editing && (
+        <GuideCoach
+          step={coachSteps[guideStep]}
+          index={guideStep}
+          total={coachSteps.length}
+          onExit={() => exitGuide('blocks')}
+        />
       )}
     </PopupDialog>
   );

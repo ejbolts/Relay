@@ -18,7 +18,7 @@ Hold any Home section for 0.5 seconds, or tap the pencil, to customise the dashb
 
 The bulb beside Home's date lists features worth trying, most useful first, and each tip has a button that opens the feature. How-to hints for a control, such as dragging a set, appear beside that control instead. A tip you ignore comes back a couple of times; opening it, using its button or **Got it** puts it away. Turn tips off in **Settings > Help & about**.
 
-Comparing machines, training blocks, and splits with rep ranges each have a **setup guide**: a few short steps that explain the feature using your own lifts, machines and recent workouts, then open the place to set it up. Their tips offer **Show me how**, and **Settings > Help & about > Setup guides** lists all three, marking features you have already set up.
+Comparing machines, training blocks, and splits with rep ranges each have a **setup guide** that runs inside the feature's own screens. A card at the bottom of the screen explains each step using your own lifts and recent workouts and highlights the control to use. The guide finishes when the feature is saved, so finishing it sets the feature up. Their tips offer **Show me how**, and **Settings > Help & about > Setup guides** lists all three, marking features you have already set up. **Exit guide** leaves at any point without changing anything.
 
 <p>
   <a href="docs/screenshots/readme/today.png"><img src="docs/screenshots/readme/today.png" alt="Home dashboard with the next workout, activity calendar, cardio goal and body-weight trend" width="360"></a>

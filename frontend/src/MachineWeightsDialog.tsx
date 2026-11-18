@@ -1,5 +1,6 @@
 import { useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from './api';
+import { GuideCoach, type CoachStep } from './GuideCoach';
 import { HelpPopup } from './HelpPopup';
 import {
   FACTOR_RANGE,
@@ -14,6 +15,7 @@ import {
   type FactorSuggestion,
 } from './machineWeights';
 import { PopupDialog } from './PopupDialog';
+import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 import type { ExerciseProgress, MachineWeight, WeightMapping } from './types';
 import { weightFromKg, weightInputKg, weightInputValue, type WeightUnit } from './weightUnits';
@@ -125,6 +127,8 @@ export function MachineWeightsDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const guide = useActiveGuide('normalise');
+  const [guideStep, setGuideStep] = useState(1);
   const reference = draft.machines.find((machine) => machine.id === draft.reference_machine_id);
   const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
   const recommendedId = recommendedReferenceId(draft, recent);
@@ -245,12 +249,49 @@ export function MachineWeightsDialog({
     setSaving(true);
     setSaveError(null);
     try {
-      onSaved(await api.saveWeightMapping(exerciseId, next));
+      const saved = await api.saveWeightMapping(exerciseId, next);
+      if (saved.enabled) finishGuide('normalise');
+      onSaved(saved);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Could not save machine weights.');
       setSaving(false);
     }
   }
+
+  const close = () => {
+    exitGuide('normalise');
+    onClose();
+  };
+  const spokes = live.machines.filter((machine) => machine.id !== draft.reference_machine_id);
+  const coachSteps: CoachStep[] = [
+    {
+      title: 'Switch on Normalise weights',
+      body: `Your ${exerciseName} machines weigh differently, so the same number is a different effort on each. This shows every session in one machine’s weights.`,
+      target: '.machine-weights-toggle [role="switch"]',
+    },
+    {
+      title: 'Check the reference machine',
+      body: 'Relay picked the machine you use most. Tap Make reference on another machine to change it.',
+      target: '.machine-weights-list li.is-reference',
+      next: { onClick: () => setGuideStep(2) },
+    },
+    {
+      title: 'Match the weights',
+      body: 'Relay suggests a match from your sessions. Change either weight, or drag the slider, until they feel the same, and watch the preview.',
+      target: '.machine-weights-list li.is-spoke',
+      next: {
+        disabled: spokes.some((machine) => !machine.machine_kg || !machine.reference_kg),
+        onClick: () => setGuideStep(3),
+      },
+    },
+    {
+      title: 'Save it',
+      body: 'Your logged sets keep the weights you entered. Only the All machines chart is converted.',
+      target: '.machine-weights-save',
+    },
+  ];
+  // Turning the switch on is the first step; switching it off again returns there.
+  const coachIndex = draft.enabled ? guideStep : 0;
 
   return (
     <PopupDialog
@@ -262,7 +303,7 @@ export function MachineWeightsDialog({
           {saving ? 'Saving…' : 'Save'}
         </button>
       }
-      onClose={onClose}
+      onClose={close}
     >
       <form id={formId} className="machine-weights-form" onSubmit={(event) => void submit(event)}>
         <div className="notification-setting-row machine-weights-toggle">
@@ -495,6 +536,14 @@ export function MachineWeightsDialog({
           </p>
         )}
       </form>
+      {guide && (
+        <GuideCoach
+          step={coachSteps[coachIndex]}
+          index={coachIndex}
+          total={coachSteps.length}
+          onExit={() => exitGuide('normalise')}
+        />
+      )}
     </PopupDialog>
   );
 }

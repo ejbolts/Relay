@@ -1,7 +1,8 @@
+import { useSyncExternalStore } from 'react';
 import type { TipId } from './tipsState';
 import type { TrackedWorkout } from './types';
 
-/** A walkthrough that explains a feature with your own data, then opens it to set it up. */
+/** A walkthrough inside a feature's own screens that ends with the feature saved and set up. */
 export type SetupGuideId = 'normalise' | 'blocks' | 'split';
 
 export const SETUP_GUIDE_IDS: SetupGuideId[] = ['normalise', 'blocks', 'split'];
@@ -26,68 +27,7 @@ export function onSetupGuide(listener: (id: SetupGuideId) => void): () => void {
   return () => window.removeEventListener(EVENT, handle);
 }
 
-export interface GuideMachine {
-  id: string;
-  caption: string;
-  sessions: number;
-  /** The heaviest working set logged on this machine. */
-  topKg: number | null;
-}
-
-export interface MachineComparison {
-  exerciseId: string;
-  exerciseName: string;
-  /** Most-used first, so the first is the natural reference. */
-  machines: GuideMachine[];
-}
-
 const real = (workouts: TrackedWorkout[]) => workouts.filter((workout) => !workout.is_sample);
-
-/** The machines one exercise has been logged on, with sessions and top weight on each. */
-export function machineComparison(
-  workouts: TrackedWorkout[],
-  exerciseId: string,
-): MachineComparison | null {
-  let exerciseName = '';
-  const machines = new Map<string, { caption: string; sessions: number; topKg: number | null }>();
-  for (const workout of real(workouts)) {
-    for (const movement of workout.movements ?? []) {
-      if (movement.exercise.id !== exerciseId) continue;
-      exerciseName ||= movement.exercise.name?.trim() ?? '';
-      const pinned = movement.machine_photos ?? [];
-      const captions = new Map(pinned.map((photo) => [photo.id, photo.caption]));
-      const used = new Set<string>();
-      for (const set of movement.sets) {
-        const id = set.machine_photo_id ?? pinned[0]?.id;
-        if (!id) continue;
-        used.add(id);
-        const entry = machines.get(id) ?? { caption: '', sessions: 0, topKg: null };
-        if (!set.warmup && set.weight_kg !== null && set.weight_kg > 0)
-          entry.topKg = Math.max(entry.topKg ?? 0, set.weight_kg);
-        machines.set(id, entry);
-      }
-      for (const photo of pinned) used.add(photo.id);
-      for (const id of used) {
-        const entry = machines.get(id) ?? { caption: '', sessions: 0, topKg: null };
-        entry.sessions += 1;
-        entry.caption ||= captions.get(id)?.trim() || '';
-        machines.set(id, entry);
-      }
-    }
-  }
-  if (machines.size < 2) return null;
-  const ordered = [...machines]
-    .map(([id, entry]) => ({ id, ...entry }))
-    .sort((a, b) => b.sessions - a.sessions);
-  return {
-    exerciseId,
-    exerciseName: exerciseName || 'this exercise',
-    machines: ordered.map((machine, index) => ({
-      ...machine,
-      caption: machine.caption || `Machine ${index + 1}`,
-    })),
-  };
-}
 
 export interface FavouriteLift {
   name: string;
@@ -151,30 +91,68 @@ export function recentRotation(workouts: TrackedWorkout[], count = 5): string[] 
     .map((workout) => workout.name.trim());
 }
 
-export interface WorkoutPlanExample {
-  name: string;
-  exercises: { name: string; sets: number }[];
+/** What a guide says about your own training, worked out once when it starts. */
+export interface GuideFacts {
+  lift: FavouriteLift | null;
+  rotation: string[];
 }
 
-/** The latest strength workout's exercises, to show what a planned split day holds. */
-export function latestWorkoutPlan(
-  workouts: TrackedWorkout[],
-  limit = 3,
-): WorkoutPlanExample | null {
-  const latest = chronological(workouts)
-    .reverse()
-    .find((workout) =>
-      (workout.movements ?? []).some(
-        (movement) => movement.exercise.kind !== 'cardio' && movement.sets.length,
-      ),
-    );
-  if (!latest) return null;
-  const exercises = (latest.movements ?? [])
-    .filter((movement) => movement.exercise.kind !== 'cardio' && movement.sets.length)
-    .sort((a, b) => a.order_index - b.order_index)
-    .map((movement) => ({
-      name: movement.exercise.name,
-      sets: movement.sets.filter((set) => !set.warmup).length || movement.sets.length,
-    }));
-  return { name: latest.name?.trim() || 'Workout', exercises: exercises.slice(0, limit) };
+export interface ActiveGuide {
+  id: SetupGuideId;
+  facts: GuideFacts;
+  /** Splits: a saved split still to be made active, after the editor closes. */
+  useRoutineId?: string;
+}
+
+let active: ActiveGuide | null = null;
+const listeners = new Set<() => void>();
+const finishedListeners = new Set<(id: SetupGuideId) => void>();
+
+function emit(next: ActiveGuide | null) {
+  active = next;
+  for (const listener of listeners) listener();
+}
+
+/** The running guide, outside React. */
+export const activeGuide = () => active;
+
+export function startGuide(id: SetupGuideId, workouts: TrackedWorkout[]) {
+  emit({ id, facts: { lift: favouriteLift(workouts), rotation: recentRotation(workouts) } });
+}
+
+export function updateGuide(id: SetupGuideId, change: Partial<Omit<ActiveGuide, 'id'>>) {
+  if (active?.id === id) emit({ ...active, ...change });
+}
+
+/** Leaves a guide part way; nothing is marked as set up. */
+export function exitGuide(id?: SetupGuideId) {
+  if (active && (!id || active.id === id)) emit(null);
+}
+
+/** The feature was saved: the guide is complete. */
+export function finishGuide(id: SetupGuideId) {
+  if (active?.id !== id) return;
+  emit(null);
+  for (const listener of finishedListeners) listener(id);
+}
+
+export function onGuideFinished(listener: (id: SetupGuideId) => void): () => void {
+  finishedListeners.add(listener);
+  return () => finishedListeners.delete(listener);
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** The running guide, or only the named one when an id is given. */
+export function useActiveGuide(id?: SetupGuideId): ActiveGuide | null {
+  const current = useSyncExternalStore(
+    subscribe,
+    () => active,
+    // Nothing runs a guide while the page is rendered on the server.
+    () => null,
+  );
+  return current && (!id || current.id === id) ? current : null;
 }

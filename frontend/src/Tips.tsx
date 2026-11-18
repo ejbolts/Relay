@@ -81,7 +81,7 @@ function quiet() {
     document.visibilityState !== 'hidden' &&
     !document.activeElement?.matches('input, textarea, select, [contenteditable="true"]') &&
     !document.querySelector(
-      'dialog[open], [role="dialog"], .pr-toast, .workout-completion-toast, .workout-share-prompt, .undo-toast, .weekly-sets-shelf, .body-check-in-toast, .workout-share-toast',
+      'dialog[open], [role="dialog"], .setup-coach, .pr-toast, .workout-completion-toast, .workout-share-prompt, .undo-toast, .weekly-sets-shelf, .body-check-in-toast, .workout-share-toast',
     )
   );
 }
