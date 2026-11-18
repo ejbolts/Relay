@@ -449,11 +449,18 @@ to CI: run one locally only when changing its test infrastructure or configurati
 rerun the specific tests behind a CI failure. Do not rerun unrelated passing checks after
 every small edit. Documentation-only changes need documentation checks, not application suites.
 
-The GitHub **Checks** workflow selects relevant full suites for feature PRs, including
+The GitHub **Checks** workflow selects checks for feature PRs, including
 stacked PRs, from the changed files in the exact tested merge commit:
 
-- `frontend/` changes run frontend checks; `backend/`, `pyproject.toml` and
-  `alembic.ini` changes run backend checks.
+- Plain stylesheets directly under `frontend/src/` get CSS formatting checks and the
+  production build, including TypeScript. A padding-only PR skips ESLint and Vitest.
+- Changes confined to top-level frontend test files or TypeScript modules with a changed
+  same-name test run Vitest against the tested merge's first parent. This runs changed
+  tests and suites that import the changed modules. Plain stylesheets can accompany them.
+  These PRs also run frontend formatting, lint and the production build.
+- Other frontend changes, including removed files, configuration and modules without a
+  matching changed test, run the full frontend checks. Changes under `backend/` or to
+  `pyproject.toml` or `alembic.ini` run the full backend checks.
 - Backend route, schema, model and frontend-serving modules, plus
   `frontend/src/api.ts` and `frontend/src/types.ts`, run both suites. The detector's
   tests guard the route-module mapping when new API routers are added.
@@ -480,8 +487,7 @@ ruff check .github/scripts
 The workflow caches dependencies and cancels superseded runs. Before merging, require
 both check jobs to pass for the current PR revision. An explicit not-needed result is
 valid; a pending or failed job is not. Workflow changes do not alter branch protection
-or authorise a merge or deployment. The separate **Dependency security** workflow is
-unchanged and still audits both dependency sets.
+or authorise a merge or deployment. The separate **Dependency security** workflow audits installed Python packages and the npm lockfile on every PR.
 
 CI runs the full verification below. Run it locally only for the exceptions above, from
 the repository root:
