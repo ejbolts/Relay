@@ -1635,6 +1635,69 @@ describe('rest time controls', () => {
   });
 });
 
+describe('empty sets', () => {
+  const emptySet = (
+    key: string,
+    update: Partial<ActiveWorkoutDraft['movements'][0]['sets'][0]>,
+  ) => ({
+    ...createWorkoutSet('strength', undefined, false),
+    key,
+    restRevealed: true,
+    ...update,
+  });
+
+  it('opens an empty set at its reps instead of ticking it', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets.push(emptySet('empty', {}));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const tick = () => container.querySelector<HTMLButtonElement>('[aria-label="Complete set 2"]')!;
+    await act(async () => tick().click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[1].completed).toBe(false);
+    const row = container.querySelector('[data-set-key="empty"]')!;
+    const reps = row.querySelector<HTMLInputElement>('[data-set-field="reps"]')!;
+    expect(row.querySelector('.set-entry-error')?.textContent).toBe('Enter reps to log this set.');
+    expect(reps.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(reps);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(reps, '12');
+      reps.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(row.querySelector('.set-entry-error')).toBeNull();
+    expect(reps.hasAttribute('aria-invalid')).toBe(false);
+
+    await act(async () => tick().click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[1]).toMatchObject({
+      reps: 12,
+      completed: true,
+    });
+  });
+
+  it('saves an already ticked set with nothing entered as unticked', async () => {
+    const draft = storedDraft();
+    // Ticked before the check existed: only the automatic bodyweight is attached.
+    draft.movements[0].sets.unshift(
+      emptySet('ticked-empty', {
+        set_type: 'warmup',
+        warmup: true,
+        bodyweight_kg: 83.3,
+        completed: true,
+      }),
+    );
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    await confirmFinish();
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0] as WorkoutInput;
+    expect(payload.movements[0].sets.map((set) => set.completed)).toEqual([false, true]);
+    expect(payload.movements[1].sets.map((set) => set.completed)).toEqual([true]);
+  });
+});
+
 describe('hold to reorder workout sets', () => {
   afterEach(() => {
     Reflect.deleteProperty(document, 'elementFromPoint');
