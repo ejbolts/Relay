@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { CachedTabPanel } from './CachedTabPanel';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { useFriendConnections } from './friendConnections';
-import { FriendsList } from './FriendsList';
 import { FindPanel } from './SharedProfiles';
 import { SocialFeed } from './SocialFeed';
 import { PageHeader } from './TodayScreen';
@@ -31,9 +30,9 @@ export function SocialScreen({
   account?: User;
   openFeedback?: number;
 }) {
-  const [section, setSection] = useState<'feed' | 'friends' | 'find'>('feed');
+  const [section, setSection] = useState<'feed' | 'friends'>('feed');
   const indicator = useSlidingIndicator<HTMLDivElement>(section);
-  const { connections, state, error, refresh, updateReactions } = useFriendConnections(active);
+  const { connections, state, error, refresh } = useFriendConnections(active);
   const requests = connections?.requests.length ?? 0;
   const focusKey = useWorkoutFocus()?.key;
 
@@ -80,24 +79,15 @@ export function SocialScreen({
           type="button"
           role="tab"
           aria-selected={section === 'friends'}
+          aria-label={
+            requests > 0
+              ? `Friends, ${requests} friend ${requests === 1 ? 'request' : 'requests'}`
+              : undefined
+          }
           className={section === 'friends' ? 'active' : ''}
           onClick={() => setSection('friends')}
         >
           Friends
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={section === 'find'}
-          aria-label={
-            requests > 0
-              ? `Find, ${requests} friend ${requests === 1 ? 'request' : 'requests'}`
-              : undefined
-          }
-          className={section === 'find' ? 'active' : ''}
-          onClick={() => setSection('find')}
-        >
-          Find
           {requests > 0 && (
             <span className="segmented-badge" aria-hidden="true">
               {requests > 9 ? '9+' : requests}
@@ -115,26 +105,13 @@ export function SocialScreen({
           friends={connections?.friends ?? null}
           onOpenProfile={onOpenProfile}
           onOpenOwnProfile={onOpenOwnProfile}
-          onOpenFind={() => setSection('find')}
+          onOpenFind={() => setSection('friends')}
           onChooseSharing={onChooseSharing}
         />
       </CachedTabPanel>
       <CachedTabPanel active={section === 'friends'}>
-        <FriendsList
-          active={active && section === 'friends'}
-          connections={connections}
-          state={state}
-          error={error}
-          onRetry={refresh}
-          onOpenFriend={onOpenProfile}
-          onOpenFind={() => setSection('find')}
-          onChooseSharing={onChooseSharing}
-          onReactionsChange={updateReactions}
-        />
-      </CachedTabPanel>
-      <CachedTabPanel active={section === 'find'}>
         <FindPanel
-          active={active && section === 'find'}
+          active={active && section === 'friends'}
           connections={connections}
           state={state}
           error={error}
