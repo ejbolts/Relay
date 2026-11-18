@@ -176,6 +176,7 @@
 .popup-dialog.border-picker {
   width: min(calc(100% - 1.5rem), 560px);
   overflow: hidden;
+  overflow: clip;
 }
 
 .border-picker[open] {
@@ -503,21 +504,23 @@
 }
 
 /* Tier switcher in the preview. */
+/* Up to five tiers: they wrap rather than widen the dialog on a narrow phone. */
 .border-tiers {
   display: flex;
-  gap: 0.3rem;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
 .border-tiers button {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  min-width: 2.6rem;
+  min-width: 2.2rem;
   min-height: 2rem;
   justify-content: center;
   border: 1px solid var(--p-line-strong);
   border-radius: 999px;
-  padding: 0 0.6rem;
+  padding: 0 0.45rem;
   background: var(--p-surface-2);
   color: var(--p-muted);
   font: inherit;
