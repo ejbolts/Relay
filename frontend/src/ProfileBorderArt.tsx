@@ -1,5 +1,4 @@
 import { useId } from 'react';
-import { Band } from './ProfileBorderParts';
 import { profileBorderShapes } from './profileBorderShapes';
 import './profileBorders.css';
 
@@ -10,12 +9,11 @@ export function ProfileBorderArt({ border, animated }: { border: string; animate
   return (
     <svg
       className={`profile-border-art${animated ? ' is-animated' : ''}`}
-      viewBox="0 0 120 120"
+      viewBox="-10 -10 140 140"
       aria-hidden="true"
       focusable="false"
       data-border={border}
     >
-      <Band width={9.6} stroke="rgb(8 12 20 / 34%)" />
       {profileBorderShapes(border, id)}
     </svg>
   );

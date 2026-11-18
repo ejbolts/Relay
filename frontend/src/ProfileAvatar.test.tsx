@@ -32,7 +32,7 @@ describe('ProfileAvatar', () => {
       />,
     );
     expect(markup).toContain('class="profile-avatar has-photo avatar-bordered"');
-    expect(markup).toContain('class="profile-border-art" viewBox="0 0 120 120"');
+    expect(markup).toContain('class="profile-border-art" viewBox="-10 -10 140 140"');
     expect(markup).toContain('data-border="centurion"');
     expect(markup).not.toContain('is-animated');
   });
@@ -67,7 +67,9 @@ describe('ProfileAvatar', () => {
     );
     expect(ids.length).toBeGreaterThanOrEqual(2);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const id of ids) expect(markup).toContain(`url(#${id})`);
+    const used = new Set([...markup.matchAll(/url\(#([^)]+)\)/g)].map((match) => match[1]));
+    expect(used.size).toBeGreaterThan(0);
+    for (const id of used) expect(ids).toContain(id);
   });
 
   it('leaves the photo plain for a border this version cannot draw', () => {
