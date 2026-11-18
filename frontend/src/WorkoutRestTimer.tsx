@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { restOvertimeLabel, type RestNextSet } from './restComplete';
 import { restTimerProgress } from './restTimer';
@@ -218,88 +217,56 @@ export function WorkoutTimerDock({
   );
 }
 
-/** How long "+30s" on the rest complete pill rests for. */
-export const REST_EXTEND_SECONDS = 30;
+/** The bell icon, ringing in short bursts (still when motion is reduced). */
+export function RingingBell() {
+  return (
+    <span className="ringing-bell" aria-hidden="true">
+      <Icon name="bell" />
+    </span>
+  );
+}
 
-/**
- * Shown when a rest runs out: the rest pill turns into a "GO" pill in the theme accent naming the next set and
- * counting how long ago the rest ended. Tapping it goes to that set; +30s rests a little longer.
- * It sits in the rest pill's place on the workout, or above the tab bar on other screens.
- */
-export function RestCompletePill({
-  endedAt,
-  next,
-  aboveTabBar,
-  onGo,
-  onExtend,
-  onDismiss,
-}: {
-  endedAt: number;
-  next: RestNextSet | null;
-  aboveTabBar: boolean;
-  onGo: () => void;
-  onExtend: () => void;
-  onDismiss: () => void;
-}) {
+/** Time since the rest ended, such as "+0:12", updated every second. */
+export function RestOvertime({ endedAt, className }: { endedAt: number; className?: string }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  return <strong className={className}>{restOvertimeLabel(endedAt, now)}</strong>;
+}
+
+/**
+ * Shown on the workout when a rest runs out: the bottom-edge notch rings with a bell and counts the
+ * time since the rest ended. Tapping it brings the next set into view and stops the bell. While
+ * the workout is minimised, the tab bar's Start button rings instead.
+ */
+export function RestDoneBell({
+  endedAt,
+  next,
+  onGo,
+}: {
+  endedAt: number;
+  next: RestNextSet | null;
+  onGo: () => void;
+}) {
   const setName = next?.set.toLowerCase();
-  return createPortal(
-    <aside
-      className={`workout-timer-dock rest-complete-pill${aboveTabBar ? ' is-above-tab-bar' : ''}`}
-      aria-label="Rest complete"
-    >
+  const label = next ? `Rest complete. Go to ${next.exercise}, ${setName}` : 'Rest complete';
+  return (
+    <>
       <span className="sr-only" role="status">
         {next ? `Rest complete. Next: ${next.exercise}, ${setName}.` : 'Rest complete.'}
       </span>
       <button
         type="button"
-        className="rest-complete-go"
-        aria-label={next ? `Go to ${next.exercise}, ${setName}` : 'Go to workout'}
+        className="workout-timer-dock rest-notch rest-done-bell"
+        aria-label={label}
+        title={label}
         onClick={onGo}
       >
-        <span className="rest-complete-badge" aria-hidden="true">
-          GO
-        </span>
-        <span className="rest-complete-text" aria-hidden="true">
-          <span className="rest-complete-title">
-            <strong>{next ? 'Next set ready' : 'Rest complete'}</strong>
-            <span className="rest-complete-over">{restOvertimeLabel(endedAt, now)}</span>
-          </span>
-          {/* A long exercise name shortens first, so the set and its target stay readable. */}
-          <span className="rest-complete-detail">
-            <span className="rest-complete-name">{next ? next.exercise : 'All sets logged'}</span>
-            {next && (
-              <span className="rest-complete-meta">
-                {` · ${next.set}`}
-                {next.target && ` · ${next.target}`}
-              </span>
-            )}
-          </span>
-        </span>
+        <RingingBell />
+        <RestOvertime endedAt={endedAt} className="rest-done-over" />
       </button>
-      <button
-        type="button"
-        className="rest-complete-extend"
-        aria-label={`Rest ${REST_EXTEND_SECONDS} seconds more`}
-        title={`Rest ${REST_EXTEND_SECONDS} seconds more`}
-        onClick={onExtend}
-      >
-        +{REST_EXTEND_SECONDS}s
-      </button>
-      <button
-        type="button"
-        className="rest-complete-dismiss"
-        aria-label="Dismiss rest complete"
-        title="Dismiss"
-        onClick={onDismiss}
-      >
-        <Icon name="close" />
-      </button>
-    </aside>,
-    document.body,
+    </>
   );
 }
