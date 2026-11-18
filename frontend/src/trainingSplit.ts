@@ -70,3 +70,23 @@ function followedSplitPreview(split: TrainingSplit, from: string, count: number)
     return { date, typeId: split.steps[index].workout_type_id };
   });
 }
+
+/**
+ * The workout type a split puts on calendar days: the past days it marks missed, then today and
+ * the `daysAhead` after it as if each is done as planned. Rest days are left out.
+ */
+export function splitCalendarDays(
+  split: TrainingSplit | null | undefined,
+  today: string,
+  daysAhead: number,
+): Map<string, string> {
+  const days = new Map<string, string>();
+  if (!split?.enabled) return days;
+  for (const day of split.missed_days ?? []) {
+    if (day.workout_date < today) days.set(day.workout_date, day.workout_type_id);
+  }
+  for (const { date, typeId } of splitPreview(split, today, daysAhead + 1)) {
+    if (typeId) days.set(date, typeId);
+  }
+  return days;
+}

@@ -56,6 +56,8 @@ type WorkoutCalendarProps = {
   readOnly?: boolean;
   /** Called with the `YYYY-MM` months on screen whenever they change, for the legend. */
   onVisibleMonthsChange?: (months: string[]) => void;
+  /** The workout type a split plans on a date: days ahead, and past days it was missed. */
+  splitDays?: ReadonlyMap<string, string>;
 } & (
   | {
       preview: CalendarPreview;
@@ -86,6 +88,7 @@ export function WorkoutCalendar({
   types: suppliedTypes,
   readOnly = false,
   onVisibleMonthsChange,
+  splitDays,
   preview,
 }: WorkoutCalendarProps) {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
@@ -274,15 +277,30 @@ export function WorkoutCalendar({
                         .filter((type) => !hiddenCategories?.has(type.id))
                         .map((type) => workoutTypeColor(type, categoryColors));
                       const filteredOut = dayTypes.length > 0 && ring.length === 0;
+                      // A day with nothing logged keeps a faint outline for the split's workout.
+                      const scheduledId =
+                        entry || inProgress || previewMode ? undefined : splitDays?.get(key);
+                      const scheduled = scheduledId
+                        ? types.find((type) => type.id === scheduledId)
+                        : undefined;
+                      const scheduledColor =
+                        scheduled && !hiddenCategories?.has(scheduled.id)
+                          ? workoutTypeColor(scheduled, categoryColors)
+                          : null;
+                      const dayRingStyle =
+                        ring.length && !inProgress ? dayRing(ring) : scheduledColor;
+                      const scheduledNote = scheduled
+                        ? `${scheduled.name} ${key < todayKey ? 'missed' : 'planned'}`
+                        : null;
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledColor ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
                           style={
-                            ring.length && !inProgress
-                              ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
+                            dayRingStyle
+                              ? ({ '--day-ring': dayRingStyle } as CSSProperties)
                               : undefined
                           }
                           disabled={previewMode || (readOnly && !entry)}
@@ -300,7 +318,7 @@ export function WorkoutCalendar({
                                 ? `Resume workout in progress for ${prettyDate(key)}`
                                 : entry
                                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}`
+                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
                           }
                           title={
                             previewMode
@@ -309,7 +327,9 @@ export function WorkoutCalendar({
                                 ? `${prettyDate(key)}: workout in progress`
                                 : entry
                                   ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} ${entry.set_count === 1 ? 'set' : 'sets'}`
-                                  : prettyDate(key)
+                                  : scheduledNote
+                                    ? `${prettyDate(key)}: ${scheduledNote}`
+                                    : prettyDate(key)
                           }
                         >
                           <span className="calendar-day-number">{day.getDate()}</span>
@@ -355,6 +375,7 @@ export function WorkoutCalendar({
       readOnly,
       previewMap,
       previewMode,
+      splitDays,
       weekStartDay,
     ],
   );

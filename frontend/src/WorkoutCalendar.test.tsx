@@ -327,6 +327,52 @@ it('reports the months on screen as the calendar scrolls, for the legend', async
   }
 });
 
+it('outlines split days with nothing logged in the planned workout colour', async () => {
+  const splitDays = new Map([
+    ['2026-10-23', 'lower'], // Missed.
+    ['2026-10-24', 'upper'], // Logged as planned.
+    ['2026-10-26', 'upper'], // Today, still to do.
+    ['2026-10-27', 'lower'],
+    ['2026-10-29', 'custom-gone'], // A type since removed.
+  ]);
+  const render = (hidden: string[]) =>
+    act(async () =>
+      root.render(
+        <WorkoutCalendar
+          entries={[day('2026-10-24', ['upper'])]}
+          categoryColors={colors}
+          hiddenCategories={new Set(hidden)}
+          splitDays={splitDays}
+          onDayClick={vi.fn()}
+        />,
+      ),
+    );
+  await render([]);
+  const scheduled = () =>
+    [...host.querySelectorAll<HTMLElement>('.calendar-day.scheduled')].map((el) => [
+      el.dataset.date,
+      el.style.getPropertyValue('--day-ring'),
+    ]);
+  expect(scheduled()).toEqual([
+    ['2026-10-23', '#f59e0b'],
+    ['2026-10-26', '#8b5cf6'],
+    ['2026-10-27', '#f59e0b'],
+  ]);
+  // Dates are written in the reader's locale, so only the plan's wording is checked.
+  expect(cell('2026-10-23').getAttribute('aria-label')).toMatch(
+    /^Create workout for .*2026, Lower body missed$/,
+  );
+  expect(cell('2026-10-27').title).toMatch(/2026: Lower body planned$/);
+  // The logged day keeps its full outline and dot; the plan adds nothing to it.
+  expect(cell('2026-10-24').classList.contains('scheduled')).toBe(false);
+  expect(cell('2026-10-24').querySelectorAll('.calendar-day-dots i')).toHaveLength(1);
+  expect(cell('2026-10-27').querySelector('.calendar-day-dots i')).toBeNull();
+
+  // Switching a type off in the legend hides its planned outlines too.
+  await render(['lower']);
+  expect(scheduled()).toEqual([['2026-10-26', '#8b5cf6']]);
+});
+
 it('leaves the in-progress day to its live marker rather than a workout outline', async () => {
   await act(async () =>
     root.render(

@@ -217,7 +217,7 @@ def test_account_snapshot_preserves_only_the_owners_split_and_custom_types(clien
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == client.user["id"]
-        progress = ("next_step", "rest_saved", "next_date")
+        progress = ("next_step", "rest_saved", "next_date", "missed_days")
         stored = {key: value for key, value in saved.items() if key not in progress}
         assert json.loads(rows[0][1]) == stored
         assert connection.execute("SELECT id FROM workout_types").fetchall() == [(custom["id"],)]
@@ -371,3 +371,45 @@ def test_progression_round_trips_through_routines(client):
         params={"on_date": "2026-10-27"},
     ).json()
     assert (used["progression"], used["next_step"], used["rest_saved"]) == ("workouts", 0, True)
+
+
+def missed_days(client, on_date):
+    split = client.get("/api/dashboard", params={"on_date": on_date}).json()["training_split"]
+    return [(day["workout_date"], day["workout_type_id"]) for day in split["missed_days"]]
+
+
+def test_a_followed_split_misses_only_the_days_off_beyond_its_saved_rest(client):
+    save_split(client, "upper", "lower", None, progression="workouts")
+    log_workout(client, "2026-10-26", "upper")
+    # 27th: the day off is the saved rest. 28th and 29th: Lower is still due, so both miss it.
+    assert missed_days(client, "2026-10-28") == []
+    assert missed_days(client, "2026-10-30") == [("2026-10-28", "lower"), ("2026-10-29", "lower")]
+    log_workout(client, "2026-10-30", "lower")
+    # Today is never missed, and the planned rest after Lower is used up by the saved one.
+    assert missed_days(client, "2026-10-31") == [("2026-10-28", "lower"), ("2026-10-29", "lower")]
+    assert client.get("/api/training-split", params={"on_date": "2026-10-31"}).json()[
+        "missed_days"
+    ] == [
+        {"workout_date": "2026-10-28", "workout_type_id": "lower"},
+        {"workout_date": "2026-10-29", "workout_type_id": "lower"},
+    ]
+
+
+def test_a_calendar_split_misses_each_dated_workout_not_logged(client):
+    save_split(client, "upper", "lower", None)
+    log_workout(client, "2026-10-26", "upper")
+    # 27th: Lower not logged. 28th: rest. 29th: cardio instead of the planned Upper.
+    log_workout(client, "2026-10-29", "cardio")
+    log_workout(client, "2026-10-30", "lower")
+    assert missed_days(client, "2026-10-31") == [("2026-10-27", "lower"), ("2026-10-29", "upper")]
+    # Only the last year is reported.
+    assert missed_days(client, "2027-12-01")[0][0] == "2026-12-01"
+
+
+def test_a_disabled_or_missing_split_reports_no_missed_days(client):
+    assert (
+        client.get("/api/dashboard", params={"on_date": "2026-10-30"}).json()["training_split"]
+        is None
+    )
+    save_split(client, "upper", "lower", enabled=False)
+    assert missed_days(client, "2026-10-30") == []

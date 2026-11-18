@@ -1,5 +1,6 @@
 """Account-owned split cycles, pinned to calendar days or following logged workouts."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from itertools import groupby
@@ -9,11 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import TrainingWorkout, WorkoutCategory
-from .tracker_schemas import TrainingSplit, TrainingSplitRead, WorkoutRecommendationRead
+from .tracker_schemas import (
+    SplitMissedDay,
+    TrainingSplit,
+    TrainingSplitRead,
+    WorkoutRecommendationRead,
+)
 from .training_metrics import get_setting
 from .workout_types import workout_type_catalog
 
 TRAINING_SPLIT_KEY = "training_split"
+# Missed split days are reported for this long, enough for every month the calendar opens with.
+MISSED_DAYS_LOOKBACK = timedelta(days=366)
 
 
 def saved_training_split(db: Session, user_id: str) -> TrainingSplit | None:
@@ -42,6 +50,8 @@ class SplitProgress:
     rest_saved: bool
     # The first day the next step can happen: tomorrow once today's workout is logged.
     next_date: date
+    # Past days whose planned workout was not done, with that workout's type.
+    missed: tuple[tuple[date, str], ...] = ()
 
 
 def follow_progress(
@@ -51,11 +61,12 @@ def follow_progress(
 
     Each logged workout moves the split past the next day of that type. A day with no split
     workout completes a planned rest, or else saves one rest that the next planned rest absorbs.
-    At most one rest is ever saved.
+    At most one rest is ever saved, so a further day without the planned workout is missed.
     """
     steps = [step.workout_type_id for step in split.steps]
     size = len(steps)
     index, saved = 0, False
+    missed: list[tuple[date, str]] = []
 
     def arrive(position: int) -> int:
         nonlocal saved
@@ -78,12 +89,32 @@ def follow_progress(
             index = arrive((index + offset + 1) % size)
             progressed = True
         if day < today and not progressed:
-            if steps[index] is None:
+            planned = steps[index]
+            if planned is None:
                 index = (index + 1) % size
+            elif saved:
+                missed.append((day, planned))
             else:
                 saved = True
         day += timedelta(days=1)
-    return SplitProgress(index, saved, today + timedelta(days=1) if progressed else today)
+    return SplitProgress(
+        index, saved, today + timedelta(days=1) if progressed else today, tuple(missed)
+    )
+
+
+def calendar_missed_days(
+    split: TrainingSplit, logged: list[tuple[date, str]], start: date, today: date
+) -> list[tuple[date, str]]:
+    """Days from ``start`` to yesterday that a calendar split gave a workout type not logged."""
+    done = set(logged)
+    missed = []
+    day = max(start, split.start_date)
+    while day < today:
+        planned = split.steps[(day - split.start_date).days % len(split.steps)].workout_type_id
+        if planned is not None and (day, planned) not in done:
+            missed.append((day, planned))
+        day += timedelta(days=1)
+    return missed
 
 
 def logged_split_workouts(
@@ -127,11 +158,25 @@ def split_read(
     if split is None:
         return None
     progress = split_progress(db, user_id, split, today)
+    since = today - MISSED_DAYS_LOOKBACK
+    if not split.enabled:
+        missed: Sequence[tuple[date, str]] = ()
+    elif progress:
+        missed = progress.missed
+    else:
+        missed = calendar_missed_days(
+            split, logged_split_workouts(db, user_id, since, today), since, today
+        )
     return TrainingSplitRead(
         **split.model_dump(),
         next_step=progress.step if progress else None,
         rest_saved=progress.rest_saved if progress else False,
         next_date=progress.next_date if progress else None,
+        missed_days=[
+            SplitMissedDay(workout_date=day, workout_type_id=type_id)
+            for day, type_id in missed
+            if day >= since
+        ],
     )
 
 

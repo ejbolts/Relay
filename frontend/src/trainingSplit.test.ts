@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  splitCalendarDays,
   splitFromTemplate,
   splitPreview,
   splitPreviewLabel,
@@ -97,5 +98,44 @@ describe('workout-following split previews', () => {
       null,
       'upper',
     ]);
+  });
+});
+
+describe('split days on the calendar', () => {
+  const split = {
+    ...splitFromTemplate('upper-lower', '2026-10-01'),
+    progression: 'workouts' as const,
+    next_step: 1,
+    rest_saved: true,
+    next_date: '2026-11-18',
+    missed_days: [
+      { workout_date: '2026-11-16', workout_type_id: 'lower' },
+      { workout_date: '2026-11-17', workout_type_id: 'lower' },
+    ],
+  };
+
+  it('marks missed past days, then today and the days ahead without rests', () => {
+    // The saved rest absorbs the planned rest after Lower, so Upper follows straight on.
+    expect([...splitCalendarDays(split, '2026-11-18', 4)]).toEqual([
+      ['2026-11-16', 'lower'],
+      ['2026-11-17', 'lower'],
+      ['2026-11-18', 'lower'],
+      ['2026-11-19', 'upper'],
+      ['2026-11-20', 'lower'],
+      ['2026-11-22', 'upper'],
+    ]);
+  });
+
+  it('follows calendar dates, and shows nothing for a disabled or missing split', () => {
+    const dated = {
+      ...splitFromTemplate('upper-lower', '2026-11-16'),
+      progression: 'calendar' as const,
+    };
+    expect([...splitCalendarDays(dated, '2026-11-18', 2)]).toEqual([
+      ['2026-11-19', 'upper'],
+      ['2026-11-20', 'lower'],
+    ]);
+    expect(splitCalendarDays({ ...split, enabled: false }, '2026-11-18', 4).size).toBe(0);
+    expect(splitCalendarDays(null, '2026-11-18', 4).size).toBe(0);
   });
 });
