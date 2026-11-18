@@ -42,10 +42,10 @@ from .models import (
     WorkoutMovement,
     WorkoutSet,
 )
+from .profile_sex import Sex
 from .relative_strength import BodyweightHistory
 from .training_metrics import KG_TO_LB, get_setting, preferred_weight_unit, start_of_week
 
-Sex = Literal["male", "female"]
 Rarity = Literal["common", "rare", "epic", "legendary", "mythic"]
 Status = Literal["active", "upcoming", "ended"]
 

@@ -46,6 +46,11 @@ const SHARING_OPTIONS: Array<{ key: OptionalChoice; label: string; description: 
     description: 'Weigh-ins, body fat and body weight logged with sets',
   },
   {
+    key: 'share_body_sizes',
+    label: 'Body measurements',
+    description: 'Neck, chest, waist, arm and leg measurements',
+  },
+  {
     key: 'share_goals',
     label: 'Goals',
     description: 'Your body-weight goal and weekly Zone 2 cardio target',
@@ -80,6 +85,7 @@ const PRIVATE_DEFAULTS: SharingChoices = {
   visibility: 'private',
   share_notes: false,
   share_body_weight: false,
+  share_body_sizes: false,
   share_goals: false,
   share_machine_photos: false,
   share_online_status: true,
@@ -91,6 +97,8 @@ function choicesFrom(settings: SharingSettings): SharingChoices {
     visibility: settings.visibility,
     share_notes: settings.share_notes,
     share_body_weight: settings.share_body_weight,
+    // Missing from a server that predates the choice.
+    share_body_sizes: settings.share_body_sizes ?? false,
     share_goals: settings.share_goals,
     share_machine_photos: settings.share_machine_photos,
     share_online_status: settings.share_online_status,

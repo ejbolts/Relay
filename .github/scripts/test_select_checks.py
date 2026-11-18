@@ -19,7 +19,6 @@ class PathSelectionTests(unittest.TestCase):
     def test_frontend_paths(self):
         for path in (
             "frontend/src/App.tsx",
-            "frontend/src/app.css",
             "frontend/package-lock.json",
             "frontend/vite.config.ts",
             "frontend/release.json",
@@ -27,8 +26,31 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 selected = select_paths([path])
-                self.assertTrue(selected.frontend)
+                self.assertEqual(selected.frontend, "full")
                 self.assertFalse(selected.backend)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "frontend/src").mkdir(parents=True)
+            style = "frontend/src/sample.css"
+            source = "frontend/src/Sample.tsx"
+            test = "frontend/src/Sample.test.tsx"
+            unrelated = "frontend/src/Other.test.tsx"
+            for path in (style, source, test, unrelated):
+                (root / path).touch()
+            for paths, expected in (
+                ([style, "README.md"], "styles"),
+                ([test], "related"),
+                ([source, test, style], "related"),
+                ([source], "full"),
+                ([source, unrelated], "full"),
+                ([source, test, "frontend/src/api.ts"], "full"),
+                ([style, "frontend/src/deleted.css"], "full"),
+                ([test, "frontend/src/deleted.test.tsx"], "full"),
+                ([style, "frontend/package-lock.json"], "full"),
+            ):
+                with self.subTest(paths=paths):
+                    self.assertEqual(select_paths(paths, root).frontend, expected)
 
     def test_backend_paths(self):
         for path in (
@@ -40,7 +62,7 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 selected = select_paths([path])
-                self.assertFalse(selected.frontend)
+                self.assertEqual(selected.frontend, "none")
                 self.assertTrue(selected.backend)
 
     def test_shared_contract_and_unknown_paths_run_both(self):
@@ -59,7 +81,7 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 selected = select_paths([path])
-                self.assertTrue(selected.frontend and selected.backend)
+                self.assertEqual((selected.frontend, selected.backend), ("full", True))
 
     def test_docs_and_empty_diff_need_neither_suite(self):
         for paths in (
@@ -68,11 +90,11 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(paths=paths):
                 selected = select_paths(paths)
-                self.assertFalse(selected.frontend or selected.backend)
+                self.assertEqual((selected.frontend, selected.backend), ("none", False))
 
     def test_mixed_changes_run_both(self):
-        selected = select_paths(["frontend/src/app.css", "backend/app/cardio_energy.py"])
-        self.assertTrue(selected.frontend and selected.backend)
+        selected = select_paths(["frontend/vite.config.ts", "backend/app/cardio_energy.py"])
+        self.assertEqual((selected.frontend, selected.backend), ("full", True))
 
     def test_invalid_paths_fail(self):
         for path in ("", "/frontend/absolute", "backend/../unknown"):
@@ -86,15 +108,15 @@ class PathSelectionTests(unittest.TestCase):
             if re.search(r"\bAPIRouter\b|@app\.", path.read_text(encoding="utf-8")):
                 with self.subTest(path=path.name):
                     selected = select_paths([path.relative_to(ROOT).as_posix()])
-                    self.assertTrue(selected.frontend and selected.backend)
+                    self.assertEqual((selected.frontend, selected.backend), ("full", True))
 
     def test_main_release_push_and_manual_runs_are_full(self):
         selected = select_event("pull_request", {"pull_request": {"base": {"ref": "main"}}}, "")
-        self.assertTrue(selected.frontend and selected.backend)
+        self.assertEqual((selected.frontend, selected.backend), ("full", True))
         for name in ("push", "workflow_dispatch", "unexpected-event"):
             with self.subTest(event=name):
                 selected = select_event(name, {}, "")
-                self.assertTrue(selected.frontend and selected.backend)
+                self.assertEqual((selected.frontend, selected.backend), ("full", True))
 
 
 class MergeSelectionTests(unittest.TestCase):
@@ -149,14 +171,14 @@ class MergeSelectionTests(unittest.TestCase):
         )
         self.assertEqual(git(shallow, "rev-parse", "--is-shallow-repository").strip(), b"true")
         selected = select_event("pull_request", event, merge, shallow)
-        self.assertTrue(selected.frontend)
+        self.assertEqual(selected.frontend, "full")
         self.assertFalse(selected.backend)
 
     def test_cross_area_rename_includes_old_and_new_paths(self):
         git(self.root, "mv", "frontend/original.txt", "backend/moved.txt")
         event, merge = self.merge()
         selected = select_event("pull_request", event, merge, self.root)
-        self.assertTrue(selected.frontend and selected.backend)
+        self.assertEqual((selected.frontend, selected.backend), ("full", True))
 
     def test_unrelated_base_branch_changes_do_not_expand_feature_scope(self):
         self.write("frontend/original.txt", "frontend feature")
@@ -173,7 +195,7 @@ class MergeSelectionTests(unittest.TestCase):
             }
         }
         selected = select_event("pull_request", event, merge, self.root)
-        self.assertTrue(selected.frontend)
+        self.assertEqual(selected.frontend, "full")
         self.assertFalse(selected.backend)
 
     def test_stale_event_base_uses_merge_base_parent(self):
@@ -193,14 +215,14 @@ class MergeSelectionTests(unittest.TestCase):
             }
         }
         selected = select_event("pull_request", event, merge, self.root)
-        self.assertTrue(selected.frontend)
+        self.assertEqual(selected.frontend, "full")
         self.assertFalse(selected.backend)
 
     def test_deleted_backend_file_is_not_skipped(self):
         git(self.root, "rm", "backend/helper.txt")
         event, merge = self.merge()
         selected = select_event("pull_request", event, merge, self.root)
-        self.assertFalse(selected.frontend)
+        self.assertEqual(selected.frontend, "none")
         self.assertTrue(selected.backend)
 
     def test_no_three_hundred_file_truncation(self):
@@ -209,7 +231,7 @@ class MergeSelectionTests(unittest.TestCase):
         self.write("frontend/last.txt", "must not be overlooked")
         event, merge = self.merge()
         selected = select_event("pull_request", event, merge, self.root)
-        self.assertTrue(selected.frontend)
+        self.assertEqual(selected.frontend, "full")
         self.assertFalse(selected.backend)
 
     def test_wrong_commit_or_event_parents_fail_closed(self):
@@ -256,14 +278,15 @@ class RequiredCheckTests(unittest.TestCase):
         self.assertEqual(len(gates), 2)
         bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
         self.assertTrue(bash, "Bash is needed to verify the workflow's actual gate scripts")
-        for gate in gates:
+        for gate, valid_flags in zip(
+            gates, [("true", "false"), ("none", "styles", "related", "full")], strict=True
+        ):
             script = "\n".join(line[10:] for line in gate.splitlines())
             for result, flag, expected in (
-                ("success", "true", 0),
-                ("success", "false", 0),
-                ("failure", "false", 1),
-                ("cancelled", "true", 1),
-                ("skipped", "false", 1),
+                *(("success", flag, 0) for flag in valid_flags),
+                ("failure", valid_flags[0], 1),
+                ("cancelled", valid_flags[-1], 1),
+                ("skipped", valid_flags[0], 1),
                 ("success", "", 1),
                 ("success", "unexpected", 1),
             ):
@@ -295,7 +318,7 @@ class RequiredCheckTests(unittest.TestCase):
                 self.assertEqual(main(), 1)
             self.assertFalse(output.exists())
 
-    def test_cli_writes_valid_boolean_outputs_for_full_runs(self):
+    def test_cli_writes_valid_outputs_for_full_runs(self):
         with tempfile.TemporaryDirectory(prefix="relay-ci-output-") as directory:
             root = Path(directory)
             event = root / "event.json"
@@ -315,7 +338,7 @@ class RequiredCheckTests(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 self.assertEqual(main(), 0)
-            self.assertEqual(output.read_text(encoding="utf-8"), "frontend=true\nbackend=true\n")
+            self.assertEqual(output.read_text(encoding="utf-8"), "frontend=full\nbackend=true\n")
             self.assertIn("Backend suite: run", summary.read_text(encoding="utf-8"))
 
 

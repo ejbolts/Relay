@@ -411,7 +411,7 @@ export function ProfileIdentity({
                     ))}
                   </div>
                   <small id={`${id}-sex-hint`} className="auth-hint">
-                    This cannot be changed once saved.
+                    Only an administrator can change this once saved.
                   </small>
                 </>
               )}
@@ -441,8 +441,8 @@ export function ProfileIdentity({
           onClose={() => setConfirmingSex(false)}
         >
           <p>
-            It decides which strength standards your borders are measured against, and it cannot be
-            changed later.
+            It sets your body measurement outline and the strength standards your borders are
+            measured against. After you save, only an administrator can change it.
           </p>
           <div className="popup-dialog-actions">
             <button type="button" onClick={() => setConfirmingSex(false)}>

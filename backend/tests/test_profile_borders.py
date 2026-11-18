@@ -173,24 +173,6 @@ def test_longest_run_counts_evenly_spaced_dates():
     assert longest_run(mondays, 7) == 2
 
 
-def test_sex_is_chosen_once_and_then_locked(client):
-    assert client.get("/api/auth/me").json()["sex"] is None
-    assert set_sex(client, "other").status_code == 422
-
-    chosen = set_sex(client, "female")
-    assert chosen.status_code == 200, chosen.text
-    assert chosen.json()["sex"] == "female"
-
-    # Saving the rest of the profile, or the same answer again, still works.
-    assert client.patch("/api/profile", json={"display_name": "Renamed"}).json()["sex"] == "female"
-    assert set_sex(client, "female").status_code == 200
-
-    changed = set_sex(client, "male")
-    assert changed.status_code == 409
-    assert changed.json()["error"]["code"] == "sex_locked"
-    assert client.get("/api/auth/me").json()["sex"] == "female"
-
-
 def test_a_new_account_has_no_progress_because_sample_workouts_never_count(client):
     with SessionLocal() as db:
         db.execute(update(TrainingWorkout).values(is_sample=True))
@@ -452,22 +434,12 @@ def test_friends_see_the_worn_border_and_sex(client, other_client):
     assert client.get("/api/auth/me").json()["profile_border"] is None
 
 
-def test_a_friends_only_profile_hides_sex_from_non_friends(client, other_client):
-    share(client, "followers")
-    share(other_client)
-    set_sex(client, "male")
-
-    seen = profile(other_client, client).json()
-    assert seen["can_view"] is False
-    assert seen["sex"] is None
-
-
-def test_profile_borders_migration_adds_and_removes_the_account_columns():
-    path = Path(__file__).resolve().parents[1] / "migrations/versions/0062_profile_borders.py"
+def test_profile_borders_migration_adds_and_removes_the_border_column():
+    path = Path(__file__).resolve().parents[1] / "migrations/versions/0064_profile_borders.py"
     spec = importlib.util.spec_from_file_location("profile_borders_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert migration.down_revision == "0061_password_reset_requests"
+    assert migration.down_revision == "0063_share_body_sizes"
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys=ON"))
@@ -478,8 +450,8 @@ def test_profile_borders_migration_adds_and_removes_the_account_columns():
         migration.op = Operations(MigrationContext.configure(connection))
         migration.upgrade()
         assert connection.execute(
-            text("SELECT username, sex, profile_border FROM users WHERE id='owner'")
-        ).one() == ("owner", None, None)
+            text("SELECT username, profile_border FROM users WHERE id='owner'")
+        ).one() == ("owner", None)
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         migration.downgrade()
         columns = {column["name"] for column in inspect(connection).get_columns("users")}

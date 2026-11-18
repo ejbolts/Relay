@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('BodyFigure', () => {
-  it('labels only the measurements it is given, on the side of the body they belong to', async () => {
+  it('labels every measurement on its side of the body, leaving unmeasured ones empty', async () => {
     await act(async () =>
       root.render(
         <BodyFigure
@@ -32,19 +32,87 @@ describe('BodyFigure', () => {
         />,
       ),
     );
-    const fields = [...host.querySelectorAll('[data-field]')];
-    expect(fields.map((item) => item.getAttribute('data-field')).sort()).toEqual([
-      'left_arm_cm',
-      'right_arm_cm',
-      'waist_cm',
-    ]);
+    expect(host.querySelectorAll('[data-field]')).toHaveLength(12);
     expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist84 cm');
+    // A part not measured yet still has its band, leader and name, with no value.
+    const neck = host.querySelector('[data-field="neck_cm"]')!;
+    expect(neck.textContent).toBe('Neck');
+    expect(neck.classList.contains('empty')).toBe(true);
+    expect(neck.getAttribute('aria-label')).toBe('Add neck');
+    expect(neck.querySelector('.body-figure-band')).not.toBeNull();
     // The figure faces the viewer, so its right arm is drawn on the left of the picture.
     const bandStart = (field: string) =>
       Number(host.querySelector(`[data-field="${field}"] line`)!.getAttribute('x1'));
     expect(bandStart('right_arm_cm')).toBeLessThan(0);
     expect(bandStart('left_arm_cm')).toBeGreaterThan(0);
-    expect(host.querySelectorAll('.body-figure-leader')).toHaveLength(3);
+    expect(host.querySelectorAll('.body-figure-leader')).toHaveLength(12);
+  });
+
+  it('types a measurement in a box over its label, saving on Enter or leaving and not on Escape', async () => {
+    const commits: [string, string][] = [];
+    let cancelled = 0;
+    let accept = true;
+    const figure = (editing: 'neck_cm' | 'chest_cm' | null, editValue = '') => (
+      <BodyFigure
+        kind="male"
+        unit="cm"
+        values={{ chest_cm: '102' }}
+        onPick={() => undefined}
+        editing={editing}
+        editValue={editValue}
+        onCommit={(field, text) => {
+          commits.push([field, text]);
+          return accept;
+        }}
+        onCancel={() => (cancelled += 1)}
+      />
+    );
+    const type = (box: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, value);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    await act(async () => root.render(figure('neck_cm')));
+    let box = host.querySelector<HTMLInputElement>('.body-figure-editor input')!;
+    expect(box.getAttribute('aria-label')).toBe('Neck (cm)');
+    expect(document.activeElement).toBe(box);
+    expect(box.closest('.body-figure-editor')?.classList.contains('left')).toBe(true);
+    await act(async () => type(box, '38'));
+    await act(async () =>
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+    );
+    expect(commits).toEqual([['neck_cm', '38']]);
+    // Focus goes back to the label, without a second save from the blur.
+    expect(document.activeElement).toBe(host.querySelector('[data-field="neck_cm"]'));
+    expect(commits).toHaveLength(1);
+
+    // A value already there starts in the box, and its drawn value makes way for it.
+    await act(async () => root.render(figure('chest_cm', '102')));
+    box = host.querySelector<HTMLInputElement>('.body-figure-editor input')!;
+    expect(box.value).toBe('102');
+    expect(box.closest('.body-figure-editor')?.classList.contains('right')).toBe(true);
+    expect(host.querySelector('[data-field="chest_cm"] .body-figure-value')).toBeNull();
+    await act(async () =>
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
+    expect(cancelled).toBe(1);
+    expect(commits).toHaveLength(1);
+
+    // A rejected value keeps the box open; leaving it tries to save what was typed.
+    await act(async () => root.render(figure(null)));
+    await act(async () => root.render(figure('neck_cm')));
+    box = host.querySelector<HTMLInputElement>('.body-figure-editor input')!;
+    accept = false;
+    await act(async () => type(box, '0'));
+    await act(async () =>
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+    );
+    expect(document.activeElement).toBe(box);
+    accept = true;
+    await act(async () => box.blur());
+    expect(commits.slice(1)).toEqual([
+      ['neck_cm', '0'],
+      ['neck_cm', '0'],
+    ]);
   });
 
   it('draws a different outline for each figure', async () => {
@@ -54,11 +122,23 @@ describe('BodyFigure', () => {
     await act(async () => root.render(figure('male')));
     const male = host.querySelector('.body-figure-outline')!.getAttribute('d');
     expect(host.querySelector('.body-figure-hairline')).toBeNull();
+    expect(host.querySelectorAll('.body-figure-edge')).toHaveLength(1);
     await act(async () => root.render(figure('female')));
     const female = host.querySelector('.body-figure-outline')!.getAttribute('d');
     expect(host.querySelector('svg')?.getAttribute('data-figure')).toBe('female');
     expect(female).not.toBe(male);
     expect(host.querySelector('.body-figure-hairline')).not.toBeNull();
+    // The female outline has a bun joined on: each edge is masked inside the other shape.
+    const edges = [...host.querySelectorAll('.body-figure-edge')];
+    expect(edges).toHaveLength(2);
+    expect(host.querySelectorAll('.body-figure-extra')).toHaveLength(1);
+    for (const edge of edges) {
+      const id = edge.getAttribute('mask')!.slice(5, -1);
+      expect(host.querySelector(`mask[id="${id}"]`)).not.toBeNull();
+    }
+    const svg = host.querySelector('svg')!;
+    const top = Number(svg.getAttribute('viewBox')!.split(' ')[1]);
+    expect(top).toBeLessThan(-17);
   });
 });
 
@@ -104,7 +184,6 @@ describe('BodyFigure labels', () => {
         'left_calf_cm',
         'right_calf_cm',
         'wrist_cm',
-        'ankle_cm',
       ].map((field) => [field, '50']),
     );
     await act(async () =>
@@ -115,14 +194,14 @@ describe('BodyFigure labels', () => {
       top: Number(rect.getAttribute('y')),
       height: Number(rect.getAttribute('height')),
     }));
-    expect(areas).toHaveLength(13);
+    expect(areas).toHaveLength(12);
     for (const left of [true, false]) {
       const column = areas.filter((area) => area.left === left).sort((a, b) => a.top - b.top);
       for (let i = 1; i < column.length; i += 1) {
         expect(column[i].top).toBeGreaterThanOrEqual(column[i - 1].top + column[i - 1].height);
       }
       // Nothing runs off the top or bottom of the picture.
-      expect(column[0].top).toBeGreaterThanOrEqual(-16);
+      expect(column[0].top).toBeGreaterThanOrEqual(-26);
       const last = column[column.length - 1];
       expect(last.top + last.height).toBeLessThanOrEqual(826);
     }

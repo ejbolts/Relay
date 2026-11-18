@@ -87,13 +87,13 @@ from .photo_storage import (
 )
 from .profile_borders import (
     BordersRead,
-    Sex,
     borders_for,
     can_wear,
     find_border,
     worn_border,
     worn_border_name,
 )
+from .profile_sex import Sex, known_sex
 from .server_settings import load_runtime_settings
 from .session_events import session_events
 from .storage import remove_session_files
@@ -172,7 +172,7 @@ class LoginRequest(BaseModel):
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     username: str | None = None
-    # Accepted once: an account's sex cannot be changed after it is set.
+    # Accepted once: after that only an administrator can change it.
     sex: Sex | None = None
 
     @field_validator("username")
@@ -241,7 +241,7 @@ def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
             if user.profile_photo_filename
             else None
         ),
-        sex=user.sex if user.sex in ("male", "female") else None,
+        sex=known_sex(user.sex),
         profile_border=worn_border(user),
         profile_border_name=worn_border_name(user),
     )
@@ -584,7 +584,9 @@ def update_profile(
         user.username = payload.username
     if payload.sex is not None and payload.sex != user.sex:
         if user.sex is not None:
-            raise api_error(409, "sex_locked", "Your sex is already set and cannot be changed.")
+            raise api_error(
+                409, "sex_locked", "Your sex is already set. Ask an administrator to change it."
+            )
         user.sex = payload.sex
     try:
         db.commit()

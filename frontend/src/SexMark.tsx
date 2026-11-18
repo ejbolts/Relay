@@ -1,7 +1,7 @@
 import { Icon } from './Icon';
 import { SEX_LABELS } from './profileDisplay';
 import type { Sex } from './types';
-import './profileBorders.css';
+import './profileSex.css';
 
 /** The account's sex as a small symbol beside its name. */
 export function SexMark({ sex }: { sex: Sex | null | undefined }) {

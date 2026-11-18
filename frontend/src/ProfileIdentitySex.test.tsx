@@ -21,11 +21,11 @@ const borders: ProfileBorders = {
   sex: null,
   borders: [
     {
-      key: 'bench-club',
-      name: 'Bench Club',
+      key: 'bench-club-1',
+      name: 'Bench Club I',
       group: 'Strength',
-      rarity: 'epic',
-      requirement: 'Bench press 100 kg (men) or 50 kg (women)',
+      rarity: 'common',
+      requirement: 'Bench press 60 kg · 1 plate (men) or 40 kg (women)',
       unlocked: false,
       progress: null,
       needs_sex: true,
@@ -77,7 +77,7 @@ afterEach(async () => {
 });
 
 describe('sex on the profile', () => {
-  it('saves a chosen sex only after confirming that it cannot be changed', async () => {
+  it('saves a chosen sex only after confirming that only an admin can change it', async () => {
     const update = vi.spyOn(api, 'updateProfile').mockResolvedValue({ ...user, sex: 'female' });
     await show(user);
     expect(container.querySelector('.sex-mark')).toBeNull();
@@ -85,7 +85,7 @@ describe('sex on the profile', () => {
     await press(button('Edit profile'));
     expect(sexChoices().map((choice) => choice.textContent)).toEqual(['Male', 'Female']);
     expect(container.querySelector('.profile-sex-field .auth-hint')?.textContent).toBe(
-      'This cannot be changed once saved.',
+      'Only an administrator can change this once saved.',
     );
     expect(button('Save profile').disabled).toBe(true);
 

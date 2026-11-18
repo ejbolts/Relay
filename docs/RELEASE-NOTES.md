@@ -4,13 +4,13 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.3.0
 
-17 November 2026
+19 November 2026
 
 ### See how you measure up
 
-![The 84-second Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, adding sets anywhere, the rest bell, the workout summary, muscle goals and dark styles, then a scrolling list of other 1.3 changes](screenshots/releases/1.3.0-trailer.gif)
+![The 80-second Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, adding sets anywhere, the rest bell, the workout summary, muscle goals and dark styles, then a scrolling list of other 1.3 changes](screenshots/releases/1.3.0-trailer.gif)
 
-_The 84-second Relay 1.3 trailer plays with music at the top of What's new; this GIF is its silent preview. Every scene uses synthetic sample accounts._
+_The 80-second Relay 1.3 trailer plays with music at the top of What's new; this GIF is its silent preview. Every scene uses synthetic sample accounts._
 
 [Watch the trailer with music](../frontend/public/releases/1.3.0-trailer.mp4)
 
@@ -18,13 +18,13 @@ _The 84-second Relay 1.3 trailer plays with music at the top of What's new; this
 
 **Head-to-head** — Compare your best lifts with friends and see who leads.
 
-![Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png)
+![Body measurements card with the male body outline: shoulders, chest, arms, hips, wrist and calf labelled in centimetres, blank labels on parts not yet measured, and a locked Male pill. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/63d9f2b8ed0ef20c0ba4bca77653a078e9ed065e/lock-body-sex-inline-measurements/after-body.png)
 
-**Body measurements** — See measurements on a body outline and tap to update.
+**Body measurements** — See measurements on a body outline and type new ones straight onto it.
 
-![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png)
+![Social feed with Feed and Friends tabs, a row of four friends with Sam marked Live and a week of dots under each, then workout cards from friends. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/b3c996d5053d45f06a71be6b82d984d1f7c08ed1/social-two-tabs/social-feed-after.png)
 
-**Workout feed** — Catch up on workouts, comments and reactions.
+**Workout feed** — See who's training and catch up on workouts, comments and reactions.
 
 ![Two-finger pinch on the Body trend chart zooms from 3M to 1M and out through 3M, 9M and 1Y to All, with range chips and dates following the gesture. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8a3724e75c9b8b689904164646630dfe2927ed86/body-chart-pinch-zoom/pinch-zoom.gif)
 
@@ -51,18 +51,19 @@ _The 84-second Relay 1.3 trailer plays with music at the top of What's new; this
 - **Machine weights:** Machine-specific suggestions, per-set assignments, normalised trends and your last machine on planned days.
 - **Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.
 - **Weekly review:** Open last week's training review from a weekly popup or Notifications.
-- **Training blocks:** Plan coloured blocks on a zoomable timeline, compare results and get suggestions in your weekly review.
+- **Training blocks:** Plan blocks in 32 colours or your own on a zoomable timeline, compare results and get suggestions in your weekly review.
 - **Home layout:** Add five opt-in sections and customise weekly charts, check-ins and set totals.
-- **Body:** Maintenance ranges, a refined female outline, clearer check-ins and easier history menus; the FFMI calculator is gone.
+- **Body:** Maintenance ranges, an outline that matches your profile, measurements typed straight onto the figure, clearer check-ins and easier history menus; Ankle and the FFMI calculator are gone.
+- **Profile:** Set your sex once in Edit profile; an administrator can change it later.
 - **History:** Log-style set tables, fortnight pages and single-workout exports.
 - **Calendar:** Planned and missed split days show as outlines; the legend lists only the workout types in view.
-- **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
-- **Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.
+- **Sharing:** Copy custom workout cards, view profile photos full screen, keep comment threads open and choose whether friends see your body measurements.
+- **Social:** Feed and Friends tabs; the feed opens with a row of friends showing who's training, then compact cards, comments and animated reactions.
 - **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
 - **Full backup:** Download and restore your account, with a preview before replacing data.
 - **Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.
 - **Screen layouts:** Common actions come first on Training, Body, Social and Settings.
-- **Tips and setup:** Tips appear when they apply and open the feature; QR invites and smarter Settings search.
+- **Tips and setup:** Tips appear when they apply and open the feature; step-by-step guides set up machines, training blocks and splits; QR invites and smarter Settings search.
 - **Launch prompts:** One popup per visit, and dismissed notices stay dismissed on every device.
 - **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
 - **Offline and updates:** A small offline pill appears only after a lasting outage; updates refresh safely around unsynced work.
@@ -1291,6 +1292,7 @@ Username-based account creation in v0.3.0, captured with empty fields in the iso
 ## Publishing the next announcement
 
 1. Edit `frontend/release.json`. Choose the version manually following [the agent release policy](../AGENTS.md#release-versions-and-announcements). Before merging a batch, [evaluate the currently open GitHub PRs](../AGENTS.md#reviewing-and-merging-a-pr-batch), select the included PRs and reconcile their release metadata. A coordinated batch of multiple PRs for an application release gets **one minor bump** (`0.3.0` to `0.4.0`), even if its changes are mostly patches. Every PR in that batch shares the version and contributes to one announcement; do not accumulate its individual version proposals. Reuse an already pending minor release for that batch, consolidate unpublished patch notes into it, and retain the version for follow-up fixes before deployment. For an independently released single PR, default to a patch (`0.3.0` to `0.3.1`); a substantial new capability can justify a minor bump. Documentation/test/tooling-only batches with no application behavior change need no app bump. Compare deployed and pending versions, never reuse a deployed number, and preserve deployed release history. Before replacing a deployed release's notes, move its existing `release.json` object to the top of `frontend/release-history.json` so the app keeps showing it under **Earlier versions**; leave unpublished pending versions out of the history. Update `title`, `summary`, `changes` and `url`. `url` must be an HTTPS GitHub link to your release, changelog or pull request. The build validates the metadata but does not increment versions automatically.
+   To ship a patch silently, keep the notes of the release it follows and add `notesVersion` (that release's version) and `silentChanges` (the patch's change bullets). The app keeps announcing `notesVersion`; the next minor or major release folds `silentChanges` into its changes. Silent patches get no entry here or in `release-history.json`. See [the agent release policy](../AGENTS.md#release-versions-and-announcements).
 2. Add the detailed notes here (keep previous versions), or publish a GitHub release and link to it instead. If this repository is private, readers need GitHub access to open that link; the short notes remain visible inside the app.
    Put the release heading, date and title first, then the feature screenshots and animated GIFs with descriptive alt text and captions, followed by the change bullets. Keep this media-first order in the app announcement and published GitHub Release notes too.
    For a visible feature or UI improvement, include a screenshot of the verified revision using isolated sample data. When a selected feature recording is MP4 or WebM, convert it to a short, looping GIF that preserves the real interaction and readable final result; decode and visually review the converted file for quality and private information. Embed the GIF as an image, not a video link. Keep the original recording locally and preserve existing published media URLs. Commit release screenshots/GIFs under `docs/screenshots/releases/` with versioned filenames and use relative image paths here. Before/after images are useful when they clarify the change. Explain omitted screenshots in the notes or pull request when capture is unavailable or the change has no visible result.
@@ -1301,4 +1303,4 @@ Username-based account creation in v0.3.0, captured with empty fields in the iso
 
 Vite emits `release.json` into `frontend/dist` with the app and serves it directly during development. The browser checks that deployed file using `cache: no-store`; the service worker does not precache it. The announcement therefore follows the current frontend build. Changing source notes without rebuilding the frontend leaves its announcement unchanged.
 
-If users miss several releases, they see the latest notes and can expand earlier versions in the same pop-up. The build rejects a history entry that is invalid, out of order, duplicated or not older than the current version. Network failures leave the app usable and are retried when it returns to the foreground or reconnects. Dismissal survives sign-out; deleting browser storage shows the notes again. Browsers that block storage remember dismissal for the current page session only.
+If users miss several releases, they see the latest notes and can expand earlier versions in the same pop-up. The build rejects a history entry that is invalid, silent, out of order, duplicated or not older than the announced version. Network failures leave the app usable and are retried when it returns to the foreground or reconnects. Dismissal survives sign-out; deleting browser storage shows the notes again. Browsers that block storage remember dismissal for the current page session only.

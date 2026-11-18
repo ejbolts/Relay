@@ -22,6 +22,7 @@ describe('Home friend and feedback counts', () => {
       pending_requests: 2,
       share_notes: false,
       share_body_weight: false,
+      share_body_sizes: false,
       share_goals: false,
       share_machine_photos: false,
       share_online_status: true,

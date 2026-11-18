@@ -9,6 +9,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 ROOT = Path(__file__).resolve().parents[2]
 SHA = re.compile(r"[0-9a-f]{40,64}")
@@ -40,15 +41,20 @@ CONTRACT_MODULES = {
 }
 
 
+FrontendScope = Literal["none", "styles", "related", "full"]
+
+
 @dataclass(frozen=True)
 class Selection:
-    frontend: bool
+    frontend: FrontendScope
     backend: bool
     reason: str
 
 
-def select_paths(paths: list[str]) -> Selection:
-    frontend = backend = False
+def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
+    frontend_paths = set()
+    backend = False
+    full_frontend = False
     for path in paths:
         if not path or path.startswith("/") or ".." in path.split("/"):
             raise ValueError("Invalid changed-file path")
@@ -58,15 +64,38 @@ def select_paths(paths: list[str]) -> Selection:
             path.startswith("backend/app/")
             and (path.rsplit("/", 1)[-1] in CONTRACT_MODULES or path.endswith("schemas.py"))
         ):
-            frontend = backend = True
+            full_frontend = backend = True
         elif path.startswith("frontend/"):
-            frontend = True
+            frontend_paths.add(path)
         elif path.startswith("backend/") or path in {"pyproject.toml", "alembic.ini"}:
             backend = True
         else:
             # CI, deployment, shared configuration and unknown paths are conservative.
-            frontend = backend = True
-    return Selection(frontend, backend, "Selected from changed files in the tested PR merge.")
+            full_frontend = backend = True
+    mode = "full" if full_frontend else frontend_scope(frontend_paths, root)
+    return Selection(mode, backend, "Selected from changed files in the tested PR merge.")
+
+
+def frontend_scope(paths: set[str], root: Path) -> FrontendScope:
+    if not paths:
+        return "none"
+    # Deleted/renamed sources can no longer be traced in the current import graph.
+    if any(not (root / path).is_file() or (root / path).is_symlink() for path in paths):
+        return "full"
+    code = {path for path in paths if not re.fullmatch(r"frontend/src/[\w-]+\.css", path)}
+    if not code:
+        return "styles"
+    # Only narrow code changes with an explicit changed test for every module.
+    # Vitest also selects other suites that import the changed sources.
+    for path in code:
+        if re.fullmatch(r"frontend/src/[\w.-]+\.test\.tsx?", path, re.ASCII):
+            continue
+        if not re.fullmatch(r"frontend/src/[\w-]+\.tsx?", path, re.ASCII):
+            return "full"
+        stem = path.rsplit(".", 1)[0]
+        if not {f"{stem}.test.ts", f"{stem}.test.tsx"} & code:
+            return "full"
+    return "related"
 
 
 def git(root: Path, *args: str) -> bytes:
@@ -75,13 +104,15 @@ def git(root: Path, *args: str) -> bytes:
 
 def select_event(event_name: str, event: dict, merge_sha: str, root: Path = ROOT) -> Selection:
     if event_name != "pull_request":
-        return Selection(True, True, "Push, manual or other verification runs both suites.")
+        return Selection("full", True, "Push, manual or other verification runs both suites.")
     pr = event["pull_request"]
     base_ref = pr["base"]["ref"]
     if not isinstance(base_ref, str) or not base_ref:
         raise ValueError("PR base branch is missing")
     if base_ref == "main":
-        return Selection(True, True, "PRs into main verify the complete release with both suites.")
+        return Selection(
+            "full", True, "PRs into main verify the complete release with both suites."
+        )
     base, head = pr["base"]["sha"], pr["head"]["sha"]
     if not all(isinstance(sha, str) and SHA.fullmatch(sha) for sha in (base, head, merge_sha)):
         raise ValueError("PR commit identifiers are invalid")
@@ -104,22 +135,20 @@ def select_event(event_name: str, event: dict, merge_sha: str, root: Path = ROOT
     names = git(root, "diff", "--name-only", "--no-renames", "-z", tested_base, actual, "--")
     if names and not names.endswith(b"\0"):
         raise ValueError("Incomplete changed-file output")
-    return select_paths([os.fsdecode(name) for name in names.split(b"\0") if name])
+    return select_paths([os.fsdecode(name) for name in names.split(b"\0") if name], root)
 
 
 def main() -> int:
     try:
         event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
         selected = select_event(os.environ["GITHUB_EVENT_NAME"], event, os.getenv("GITHUB_SHA", ""))
-        output = (
-            f"frontend={str(selected.frontend).lower()}\nbackend={str(selected.backend).lower()}\n"
-        )
+        output = f"frontend={selected.frontend}\nbackend={str(selected.backend).lower()}\n"
         # Publish outputs only after all detection/validation has succeeded.
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
             handle.write(output)
         summary = (
             f"{selected.reason}\n\n"
-            f"Frontend suite: {'run' if selected.frontend else 'not needed'}.\n"
+            f"Frontend scope: {selected.frontend}.\n"
             f"Backend suite: {'run' if selected.backend else 'not needed'}.\n"
         )
         if summary_path := os.getenv("GITHUB_STEP_SUMMARY"):
