@@ -1,4 +1,4 @@
-import { useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { PopupDialog } from './PopupDialog';
@@ -25,6 +25,7 @@ export function MuscleSetsCard({
   goal,
   goals,
   onOpenWorkout,
+  onChangeGoal,
 }: {
   weeklySets: MuscleSetsWeek | null | undefined;
   /** The weeks before `weeklySets`, newest first. Older cached dashboards have none. */
@@ -32,6 +33,8 @@ export function MuscleSetsCard({
   goal: number;
   goals?: MuscleSetGoals;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
+  /** Saves one muscle's weekly goal; `null` returns it to the default. Omit to hide editing. */
+  onChangeGoal?: (muscle: string, goal: number | null) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -229,8 +232,11 @@ export function MuscleSetsCard({
           current={current}
           weekLabel={name}
           goal={muscleSetGoal(muscle.muscle_group, goal, goals)}
+          defaultGoal={goal}
+          customGoal={goals?.[muscle.muscle_group] !== undefined}
           onClose={() => setSelected(null)}
           onOpenWorkout={onOpenWorkout}
+          onChangeGoal={onChangeGoal && ((value) => onChangeGoal(muscle.muscle_group, value))}
         />
       )}
     </section>
@@ -242,18 +248,38 @@ function MuscleContributionSheet({
   current,
   weekLabel,
   goal,
+  defaultGoal,
+  customGoal,
   onClose,
   onOpenWorkout,
+  onChangeGoal,
 }: {
   muscle: MuscleSetsWeek['muscle_groups'][number];
   current: boolean;
   weekLabel: string;
   goal: number;
+  defaultGoal: number;
+  customGoal: boolean;
   onClose: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
+  onChangeGoal?: (goal: number | null) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [savingGoal, setSavingGoal] = useState(false);
+  const [goalError, setGoalError] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const toastRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!notice) return;
+    // The sheet's transform would pin a fixed toast to the sheet; the top layer frees it.
+    const toast = toastRef.current;
+    if (toast?.showPopover && !toast.matches(':popover-open')) toast.showPopover();
+    const timer = setTimeout(() => setNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const contributions = muscle.contributions ?? [];
   const percentage = Math.round((muscle.raw_sets / goal) * 100);
 
@@ -273,6 +299,49 @@ function MuscleContributionSheet({
     }
   }
 
+  function startEditing() {
+    setDraft(String(goal));
+    setGoalError(null);
+    setEditing(true);
+  }
+
+  function step(by: number) {
+    const value = Number(draft);
+    const base = Number.isInteger(value) && value >= 1 ? value : goal;
+    setDraft(String(Math.min(1000, Math.max(1, base + by))));
+    setGoalError(null);
+  }
+
+  async function saveGoal(value: number | null) {
+    if (!onChangeGoal || savingGoal) return;
+    if (value !== null && (!Number.isInteger(value) || value < 1 || value > 1000)) {
+      setGoalError('Enter a whole number of sets from 1 to 1,000.');
+      return;
+    }
+    setSavingGoal(true);
+    setGoalError(null);
+    try {
+      await onChangeGoal(value);
+      setEditing(false);
+      setNotice(
+        value === null
+          ? `${muscle.muscle_group} uses the default goal`
+          : `${muscle.muscle_group} goal set to ${value} sets`,
+      );
+    } catch (reason) {
+      setGoalError(
+        reason instanceof Error ? reason.message : 'Could not save the goal. Try again.',
+      );
+    } finally {
+      setSavingGoal(false);
+    }
+  }
+
+  function submitGoal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void saveGoal(draft.trim() === '' ? Number.NaN : Number(draft));
+  }
+
   return (
     <PopupDialog
       title={muscle.muscle_group}
@@ -283,10 +352,21 @@ function MuscleContributionSheet({
       onClose={onClose}
     >
       <div className="muscle-sheet-body">
-        <p className="muscle-sheet-total">
+        <div className="muscle-sheet-total">
           <strong>{credits(muscle.raw_sets)}</strong>
           <span>set credits {current ? 'this week' : 'that week'}</span>
-        </p>
+          {onChangeGoal && !editing && (
+            <button
+              type="button"
+              className="muscle-goal-edit-button"
+              aria-label={`Edit goal for ${muscle.muscle_group}`}
+              onClick={startEditing}
+            >
+              <Icon name="edit" />
+              Edit goal
+            </button>
+          )}
+        </div>
         <div
           className="muscle-sheet-goal"
           role="progressbar"
@@ -298,12 +378,85 @@ function MuscleContributionSheet({
         >
           <span style={{ width: `${Math.min(percentage, 100)}%` }} />
         </div>
-        <p className="muscle-sheet-goal-label">
-          <span>
-            {credits(muscle.raw_sets)} of {goal} sets
-          </span>
-          <span>{percentage}% of goal</span>
-        </p>
+        {editing ? (
+          <form className="muscle-goal-form" noValidate onSubmit={submitGoal}>
+            <div className="muscle-goal-field">
+              <span>Weekly goal</span>
+              <span className="muscle-goal-stepper">
+                <button
+                  type="button"
+                  aria-label="One set fewer"
+                  disabled={savingGoal || Number(draft) <= 1}
+                  onClick={() => step(-1)}
+                >
+                  <Icon name="minus" />
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="1000"
+                  step="1"
+                  aria-label={`${muscle.muscle_group} weekly set goal`}
+                  aria-invalid={goalError ? true : undefined}
+                  value={draft}
+                  disabled={savingGoal}
+                  onChange={(event) => {
+                    setDraft(event.target.value);
+                    setGoalError(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="One set more"
+                  disabled={savingGoal || Number(draft) >= 1000}
+                  onClick={() => step(1)}
+                >
+                  <Icon name="plus" />
+                </button>
+              </span>
+              <span>sets</span>
+            </div>
+            {goalError && (
+              <p className="inline-error" role="alert">
+                {goalError}
+              </p>
+            )}
+            <div className="muscle-goal-actions">
+              {customGoal && (
+                <button
+                  type="button"
+                  className="muscle-goal-default"
+                  disabled={savingGoal}
+                  onClick={() => void saveGoal(null)}
+                >
+                  Use default ({defaultGoal})
+                </button>
+              )}
+              <button
+                type="button"
+                className="pulse-button secondary"
+                disabled={savingGoal}
+                onClick={() => {
+                  setEditing(false);
+                  setGoalError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="pulse-button primary" disabled={savingGoal}>
+                {savingGoal ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="muscle-sheet-goal-label">
+            <span>
+              {credits(muscle.raw_sets)} of {goal} sets
+            </span>
+            <span>{percentage}% of goal</span>
+          </p>
+        )}
         {contributions.length ? (
           <ul className="muscle-contribution-list">
             {contributions.map((contribution) => (
@@ -355,6 +508,25 @@ function MuscleContributionSheet({
           </p>
         )}
       </div>
+      {notice && (
+        // Inside the dialog, so the modal sheet does not make it inert.
+        <div
+          ref={toastRef}
+          className="undo-toast top-toast muscle-goal-toast"
+          role="status"
+          popover="manual"
+        >
+          <span>{notice}</span>
+          <button
+            type="button"
+            className="undo-toast-close"
+            aria-label="Dismiss goal notification"
+            onClick={() => setNotice('')}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+      )}
     </PopupDialog>
   );
 }

@@ -1,6 +1,7 @@
 import { SexMark } from './SexMark';
 import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
+import { api } from './api';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import './liveSession.css';
@@ -268,9 +269,23 @@ export function TodayScreen({
   today = localDate(),
 }: TodayScreenProps) {
   const weightUnit = useWeightUnit();
-  const musclePreferences = useTrainingPreferences().preferences;
+  const trainingPreferences = useTrainingPreferences();
+  const musclePreferences = trainingPreferences.preferences;
   const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
   const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
+  /** Saves one muscle's weekly goal from Home; `null` returns it to the default goal. */
+  async function saveMuscleGoal(muscle: string, goal: number | null) {
+    if (!musclePreferences) throw new Error('Training preferences are still loading. Try again.');
+    const goals = { ...(musclePreferences.weekly_muscle_set_goals ?? {}) };
+    if (goal === null) delete goals[muscle];
+    else goals[muscle] = goal;
+    const saved = await api.updateTrainingPreferences({
+      ...musclePreferences,
+      weekly_muscle_set_goals: goals,
+    });
+    trainingPreferences.applySaved(saved);
+    window.dispatchEvent(new Event('training-preferences-updated'));
+  }
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
   const currentBlock = blockOn(trainingBlocks.config.blocks, today);
@@ -647,6 +662,7 @@ export function TodayScreen({
         goal={muscleSetGoal}
         goals={muscleGoals}
         onOpenWorkout={onOpenWorkout}
+        onChangeGoal={musclePreferences ? saveMuscleGoal : undefined}
       />
     ),
     zone2: (
