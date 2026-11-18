@@ -18,7 +18,7 @@ export interface WaitingToSync {
 
 const LABELS: Record<OfflineCause, string> = {
   device: 'No internet',
-  server: "Can't reach Relay",
+  server: 'Offline',
 };
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

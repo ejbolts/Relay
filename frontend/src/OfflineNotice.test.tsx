@@ -118,8 +118,8 @@ it('checks quietly with backoff, then names a lasting server outage after twenty
   expect(notice()).toBeNull();
 
   await advance(1);
-  expect(pill()?.textContent).toContain("Can't reach Relay");
-  expect(container.querySelector('[role="status"]')?.textContent).toBe("Can't reach Relay");
+  expect(pill()?.textContent).toContain('Offline');
+  expect(container.querySelector('[role="status"]')?.textContent).toBe('Offline');
   expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   expect(container.querySelector('.page-header')?.textContent).toBe('Home');
   expect(container.querySelector('.page-header .offline-notice')).toBeNull();
@@ -159,7 +159,7 @@ it('shrinks to an icon after saying it once, and opens the details from there', 
 
   await advance(MINIMISE_AFTER_MS);
   expect(notice()?.dataset.minimised).toBe('true');
-  expect(pill()?.getAttribute('aria-label')).toBe("Can't reach Relay");
+  expect(pill()?.getAttribute('aria-label')).toBe('Offline');
   expect(pill()?.getAttribute('aria-expanded')).toBe('false');
   expect(container.querySelector('[aria-label="Dismiss offline notice"]')).toBeNull();
 
@@ -203,7 +203,7 @@ it('reconnects from Try now, stays long enough to read, then confirms it is back
   await click(container.querySelector('.offline-notice-details .pulse-button'));
 
   await advance(MIN_OFFLINE_SHOWN_MS - 1);
-  expect(pill()?.textContent).toContain("Can't reach Relay");
+  expect(pill()?.textContent).toContain('Offline');
 
   await advance(1);
   expect(notice()?.dataset.phase).toBe('back');
