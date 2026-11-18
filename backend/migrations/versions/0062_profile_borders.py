@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0061_profile_borders"
-down_revision = "0060_cardio_elevation_gain"
+revision = "0062_profile_borders"
+down_revision = "0061_password_reset_requests"
 branch_labels = None
 depends_on = None
 

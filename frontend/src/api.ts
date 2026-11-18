@@ -42,6 +42,7 @@ import type {
   MachineSetting,
   MuscleVolume,
   MuscleSetCreditInput,
+  PasswordResetRequest,
   PersonalRecord,
   TrainingBlockInput,
   TrainingBlockSummary,
@@ -459,6 +460,12 @@ export const api = {
       ),
     logout: () =>
       request<void>('/api/auth/logout', { method: 'POST' }, { signalExpiredSession: false }),
+    requestPasswordReset: (username: string) =>
+      request<void>(
+        '/api/auth/password-reset-request',
+        { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ username }) },
+        { signalExpiredSession: false },
+      ),
   },
   admin: {
     feedback: () => request<AppFeedback[]>('/api/admin/feedback'),
@@ -481,6 +488,12 @@ export const api = {
         `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
         { method: 'POST' },
       ),
+    passwordResetRequests: () =>
+      request<PasswordResetRequest[]>('/api/admin/password-reset-requests'),
+    dismissPasswordResetRequest: (userId: string) =>
+      request<void>(`/api/admin/password-reset-requests/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
     settings: () => request<ServerSettings>('/api/admin/settings'),
     updateSettings: (payload: ServerSettingsUpdate) =>
       request<ServerSettings>('/api/admin/settings', {

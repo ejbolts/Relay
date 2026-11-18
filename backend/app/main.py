@@ -60,6 +60,7 @@ from .notifications import (
     send_push_notification,
     vapid_public_key,
 )
+from .password_reset_requests import admin_request_router, request_router
 from .presence import presence_router
 from .processing import ProcessingValidationError, SessionProcessor, validate_batch_ready
 from .push_security import MAX_PUSH_SUBSCRIPTIONS
@@ -715,6 +716,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_router)
     app.include_router(feedback_router)
     app.include_router(admin_feedback_router)
+    app.include_router(request_router)
+    app.include_router(admin_request_router)
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)

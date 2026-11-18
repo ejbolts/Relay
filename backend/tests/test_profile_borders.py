@@ -359,11 +359,11 @@ def test_a_friends_only_profile_hides_sex_from_non_friends(client, other_client)
 
 
 def test_profile_borders_migration_adds_and_removes_the_account_columns():
-    path = Path(__file__).resolve().parents[1] / "migrations/versions/0061_profile_borders.py"
+    path = Path(__file__).resolve().parents[1] / "migrations/versions/0062_profile_borders.py"
     spec = importlib.util.spec_from_file_location("profile_borders_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert migration.down_revision == "0060_cardio_elevation_gain"
+    assert migration.down_revision == "0061_password_reset_requests"
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys=ON"))

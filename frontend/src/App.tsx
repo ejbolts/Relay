@@ -340,6 +340,11 @@ import {
 import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
+import {
+  onAdminAccountFocusRequested,
+  requestAdminAccountFocus,
+  takeAdminAccountFromUrl,
+} from './adminAccountFocus';
 import { canUploadVideos, useUserSession } from './userContext';
 import {
   OUTDATED_CLIENT_MESSAGE,
@@ -1140,6 +1145,16 @@ function AppContent() {
   }, []);
   // A notification opens the reacted or commented workout in Social's feed.
   useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
+  // An admin's password reset notification opens that account in the admin console.
+  useEffect(
+    () => onAdminAccountFocusRequested(() => (isAdmin ? setTab('admin') : undefined)),
+    [isAdmin, setTab],
+  );
+  useEffect(() => {
+    // A tapped password reset phone alert opens the console at the account it is about.
+    const userId = takeAdminAccountFromUrl();
+    if (userId && isAdmin) requestAdminAccountFocus(userId);
+  }, [isAdmin]);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;
