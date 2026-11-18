@@ -1,0 +1,258 @@
+/* Settings > Help & about */
+.setup-guide-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-guide-list li + li {
+  border-top: 1px solid var(--p-line);
+}
+
+.setup-guide-list button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.5rem 0;
+  border: 0;
+  background: none;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.setup-guide-list button:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+
+.setup-guide-list strong {
+  flex: 1;
+  font-weight: 600;
+}
+
+.setup-guide-list button > svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--p-muted);
+}
+
+.setup-guide-list-glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.setup-guide-list-glyph svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.setup-guide-list-done {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* The guide's step card, pinned to the bottom of the screen it is guiding. */
+.setup-coach {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem;
+  margin-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding: 0.85rem 0.95rem 0.8rem;
+  /* Plain, so the pulsing control is the only thing drawing the eye. */
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  background: var(--p-surface-solid, var(--p-surface));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  color: var(--p-ink);
+}
+
+.setup-coach.is-floating {
+  position: fixed;
+  right: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  left: 0.75rem;
+  z-index: 40;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+
+.setup-coach header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.setup-coach-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--p-accent-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.setup-coach-kicker svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+button.setup-coach-exit {
+  min-height: 2rem;
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--p-ink-2);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.setup-coach strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.setup-coach p {
+  margin: 0.25rem 0 0;
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.setup-coach-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+button.setup-coach-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 2.5rem;
+  margin-right: auto;
+  padding: 0 0.8rem 0 0.55rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+button.setup-coach-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--p-accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+button.setup-coach-next:disabled {
+  opacity: 0.45;
+}
+
+button.setup-coach-back svg,
+button.setup-coach-next svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.setup-coach button:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+
+.setup-coach-progress {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.setup-coach-progress i {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--p-surface-3);
+}
+
+.setup-coach-progress i.is-done {
+  background: var(--p-accent);
+}
+
+/* The control the current step is about: its outline pulses and a ring spreads out from it. */
+.guide-target {
+  border-radius: 10px;
+  outline: 2px solid var(--p-accent);
+  outline-offset: 3px;
+  animation: guide-target-pulse 1.4s ease-out infinite;
+}
+
+@keyframes guide-target-pulse {
+  0% {
+    outline-color: var(--p-accent);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--p-accent) 75%, transparent),
+      0 0 14px 2px color-mix(in srgb, var(--p-accent) 55%, transparent);
+  }
+  60% {
+    outline-color: color-mix(in srgb, var(--p-accent) 35%, transparent);
+    outline-offset: 7px;
+    box-shadow:
+      0 0 0 18px transparent,
+      0 0 14px 2px transparent;
+  }
+  100% {
+    outline-color: var(--p-accent);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 18px transparent,
+      0 0 14px 2px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-target {
+    animation: none;
+  }
+}
+
+:root[data-reduce-motion] .guide-target {
+  animation: none;
+}
+
+.setup-guide-wait p {
+  margin: 0;
+  padding: 1rem 1rem 0;
+  line-height: 1.5;
+}
+
+.setup-guide-wait .popup-dialog-actions {
+  padding: 0 1rem 1rem;
+}

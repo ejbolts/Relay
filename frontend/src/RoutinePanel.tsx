@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
+import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
@@ -18,6 +19,8 @@ import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
 import { dayCardioMinutes, daySetCredits, exerciseMuscles, formatVolume } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
+import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
+import { formatWeight } from './weightUnits';
 import { localDate } from './utils';
 import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
@@ -184,6 +187,11 @@ export function RoutinePanel({
   const [importedId, setImportedId] = useState<string | null>(null);
   const locked = useRef(false);
   const [expandedId, setExpandedId] = useState<string | null>(initialOpenId ?? activeId ?? null);
+  const guideRunning = useActiveGuide('split');
+  // The splits guide runs on your own splits page only.
+  const guide = embedded && own ? guideRunning : null;
+  // With an active split the guide adds rep ranges to it; otherwise it builds and starts one.
+  const guideFlow: SplitGuideFlow = activeId ? 'edit' : 'new';
   const previousActive = useRef(activeId);
   const panelRef = useRef<HTMLElement>(null);
   const focusCard = useRef<string | null>(null);
@@ -496,6 +504,13 @@ export function RoutinePanel({
           </div>
         </section>
       )}
+      {guide && !editing && !using && !options && !deleting && !notice && (
+        <GuideCoach
+          floating
+          {...pageGuideStep(guide, guideFlow, activeId, routines)}
+          onExit={() => exitGuide('split')}
+        />
+      )}
       {options && (
         <PopupDialog
           title="Split options"
@@ -574,6 +589,7 @@ export function RoutinePanel({
           }
           busy={busy}
           error={error}
+          guide={guide ? editorGuide(guideFlow, editing) : undefined}
           onClose={() => {
             if (!busy) {
               setEditing(null);
@@ -606,6 +622,11 @@ export function RoutinePanel({
               setEditing(null);
               setExpandedId(saved.id);
               setNotice('Split saved.');
+              if (guide) {
+                // Saving the active split finishes the guide; a new one still needs starting.
+                if (saved.id === activeId || legacyEdit) finishGuide('split');
+                else updateGuide('split', { useRoutineId: saved.id });
+              }
               onChanged?.(saved.id);
             })
           }
@@ -635,6 +656,7 @@ export function RoutinePanel({
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
+                if (guide?.useRoutineId === using.id) finishGuide('split');
               });
             }}
           >
@@ -664,6 +686,21 @@ export function RoutinePanel({
               {busy ? 'Saving…' : 'Use this split'}
             </button>
           </form>
+          {guide?.useRoutineId === using.id && (
+            <GuideCoach
+              step={{
+                title: 'Choose how it runs',
+                body: 'Follow my workouts moves on each time you train; By date keeps to set days. Then tap Use this split.',
+                target: '.routine-use .popup-primary-action',
+              }}
+              index={NEW_SPLIT_STEPS - 1}
+              total={NEW_SPLIT_STEPS}
+              onBack={() => {
+                if (!busy) setUsing(null);
+              }}
+              onExit={() => exitGuide('split')}
+            />
+          )}
         </PopupDialog>
       )}
       {deleting && (
@@ -710,6 +747,69 @@ export function RoutinePanel({
   );
 }
 
+type SplitGuideFlow = 'new' | 'edit';
+/** Template, plan days, rep range, save, then Use split and its confirmation. */
+const NEW_SPLIT_STEPS = 6;
+
+const hasExercises = (routine: Routine) =>
+  routine.days.some((day) => day.workout_type_id !== null && day.movements.length > 0);
+
+/** The editor's guide steps: planning days is skipped when an existing split already has them. */
+function editorGuide(flow: SplitGuideFlow, routine: Routine) {
+  const plan = flow === 'new' || !hasExercises(routine);
+  return {
+    flow,
+    plan,
+    offset: 1,
+    total: flow === 'new' ? NEW_SPLIT_STEPS : 1 + (plan ? 1 : 0) + 2,
+  };
+}
+type EditorGuide = ReturnType<typeof editorGuide>;
+
+/** The guide's step on the splits page itself, outside the editor. */
+function pageGuideStep(
+  guide: { useRoutineId?: string; facts: { rotation: string[] } },
+  flow: SplitGuideFlow,
+  activeId: string | null | undefined,
+  routines: Routine[] | null,
+): { step: CoachStep; index: number; total: number } {
+  if (guide.useRoutineId)
+    return {
+      step: {
+        title: 'Make it your split',
+        body: 'Tap Use split. Up next on Home then follows it, rest days included.',
+        target: `.routine-card[data-routine-id="${guide.useRoutineId}"] .routine-primary`,
+      },
+      index: NEW_SPLIT_STEPS - 2,
+      total: NEW_SPLIT_STEPS,
+    };
+  if (flow === 'edit') {
+    const active = routines?.find((routine) => routine.id === activeId);
+    return {
+      step: {
+        title: 'Open your split',
+        body: 'Rep ranges live on each planned exercise. Tap Edit split.',
+        target: `.routine-card[data-routine-id="${activeId}"] .routine-actions > button:first-child`,
+      },
+      index: 0,
+      total: active ? editorGuide('edit', active).total : 3,
+    };
+  }
+  const rotation = guide.facts.rotation;
+  return {
+    step: {
+      title: 'Start from a template',
+      body:
+        rotation.length >= 2
+          ? `Your recent workouts went ${rotation.join(', ')}. Pick the closest template, or New split to build your own.`
+          : 'Pick the template closest to how you train, or New split to build your own.',
+      target: '.split-library-templates',
+    },
+    index: 0,
+    total: NEW_SPLIT_STEPS,
+  };
+}
+
 function daySummary(day: RoutineDay) {
   if (!day.workout_type_id) return 'Rest';
   if (!day.movements.length) return 'No exercises';
@@ -741,6 +841,7 @@ function RoutineEditor({
   schedule,
   busy,
   error,
+  guide,
   onSave,
   onClose,
 }: {
@@ -748,6 +849,8 @@ function RoutineEditor({
   schedule?: TrainingSplit;
   busy: boolean;
   error: string | null;
+  /** The splits guide's steps inside the editor, while it runs. */
+  guide?: EditorGuide;
   onSave: (
     value: Routine,
     schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
@@ -770,6 +873,10 @@ function RoutineEditor({
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [cardioGoal, setCardioGoal] = useState<number | null>(null);
+  const [guideStep, setGuideStep] = useState<'plan' | 'reps' | 'save'>(() =>
+    guide?.plan ? 'plan' : 'reps',
+  );
+  const guideFacts = useActiveGuide('split')?.facts;
   const alertRef = useRef<HTMLParagraphElement>(null);
   const types = useWorkoutTypes();
   const musclePreferences = useTrainingPreferences().preferences;
@@ -1159,6 +1266,61 @@ function RoutineEditor({
           </details>
         </fieldset>
       </form>
+      {guide && (
+        <GuideCoach
+          step={editorCoachStep()}
+          index={
+            guide.offset +
+            (guideStep === 'plan'
+              ? 0
+              : guideStep === 'reps'
+                ? Number(guide.plan)
+                : Number(guide.plan) + 1)
+          }
+          total={guide.total}
+          onBack={editorBack()}
+          onExit={() => exitGuide('split')}
+        />
+      )}
     </PopupDialog>
   );
+
+  function editorBack(): (() => void) | undefined {
+    if (guideStep === 'save') return () => setGuideStep('reps');
+    if (guideStep === 'reps' && guide?.plan) return () => setGuideStep('plan');
+    return JSON.stringify(value) === JSON.stringify(routine) ? onClose : undefined;
+  }
+
+  function editorCoachStep(): CoachStep {
+    if (guideStep === 'plan')
+      return {
+        title: 'Plan your days',
+        body: 'Set each day’s workout type, add rest days, and add exercises with their sets. Starting that workout fills them in.',
+        target: '.routine-day-list',
+        next: { disabled: !hasExercises(value), onClick: () => setGuideStep('reps') },
+      };
+    if (guideStep === 'reps') {
+      const lift = guideFacts?.lift;
+      const unit = musclePreferences?.preferred_weight_unit ?? 'kg';
+      return {
+        title: 'Give an exercise a rep range',
+        body: lift
+          ? `Choose Reps on an exercise. With 8–12, stay at ${formatWeight(lift.latestTopKg, unit, 1)} on ${lift.name} until every top set reaches 12 reps, then add weight. Relay says which while you log.`
+          : 'Choose Reps on an exercise. With 8–12, stay at a weight until every top set reaches 12 reps, then add weight. Relay says which while you log.',
+        target: '.routine-day.is-open .routine-rep-range',
+        next: {
+          disabled: !value.days.some((item) => item.movements.some((m) => m.rep_range)),
+          onClick: () => setGuideStep('save'),
+        },
+      };
+    }
+    return {
+      title: 'Save your split',
+      body:
+        guide?.flow === 'new'
+          ? 'Tap Save. Then you’ll make it your active split.'
+          : 'Tap Save. Your next workout shows the target as you log.',
+      target: '.routine-editor-save',
+    };
+  }
 }
