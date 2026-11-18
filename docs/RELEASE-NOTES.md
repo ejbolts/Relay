@@ -6,7 +6,7 @@ _Relay was called Gym Logger before version 1.0._
 
 17 November 2026
 
-### Head-to-head, body measurements and your feed
+### See how you measure up
 
 ![The one-minute Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, muscle goals and dark styles](screenshots/releases/1.3.0-trailer.gif)
 
