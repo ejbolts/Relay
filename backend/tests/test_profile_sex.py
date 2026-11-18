@@ -56,9 +56,7 @@ def test_only_an_admin_changes_or_clears_a_chosen_sex(client, other_client):
     assert admin_set_sex(other_client, client.user["id"], "male").status_code == 403
 
 
-def test_friends_see_the_sex_and_others_only_when_the_profile_is_open_to_them(
-    client, other_client
-):
+def test_friends_see_the_sex_and_others_only_when_the_profile_is_open_to_them(client, other_client):
     share(client, "followers")
     share(other_client)
     set_sex(client, "female")

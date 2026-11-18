@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from .profile_sex import Sex, known_sex
 from . import client_versions
 from .account_limits import (
     AccountLimits,
@@ -50,6 +49,7 @@ from .models import (
 from .password_reset_requests import open_request_time
 from .photo_storage import machine_photo_paths
 from .presence import FriendPresence, admin_presence_by_member
+from .profile_sex import Sex, known_sex
 from .server_settings import (
     ALLOW_REGISTRATION_KEY,
     VIDEO_UPLOADS_KEY,

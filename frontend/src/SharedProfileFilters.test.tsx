@@ -336,6 +336,45 @@ describe('own profile', () => {
   });
 });
 
+describe('shared body measurements', () => {
+  it('keeps a single consistency calendar beside them across refreshes', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      sex: 'female',
+      body_sizes: [
+        {
+          measurement_date: '2026-10-17',
+          neck_cm: null,
+          shoulders_cm: null,
+          chest_cm: null,
+          waist_cm: 76,
+          hips_cm: 98,
+          left_arm_cm: null,
+          right_arm_cm: null,
+          left_thigh_cm: null,
+          right_thigh_cm: null,
+          left_calf_cm: null,
+          right_calf_cm: null,
+          wrist_cm: null,
+        },
+      ],
+    });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    clearSharedProfileCache();
+    await renderProfile('friend', undefined, true, 'one');
+    await renderProfile('friend', undefined, true, 'two');
+    await renderProfile('friend', undefined, true, 'three');
+    expect(container.querySelectorAll('.calendar-panel')).toHaveLength(1);
+    // Two cards sharing a React key is what multiplied the calendar on refreshes.
+    expect(errors.mock.calls.flat().join(' ')).not.toContain('same key');
+    const card = container.querySelector('section[aria-labelledby="shared-body-sizes-title"]')!;
+    expect(card.querySelector('.body-figure')?.getAttribute('data-figure')).toBe('female');
+    expect(
+      container.querySelectorAll('section[aria-labelledby="shared-body-sizes-title"]'),
+    ).toHaveLength(1);
+  });
+});
+
 describe('opening a profile loaded in the background', () => {
   async function reopen(targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>) {
     await act(async () => root.unmount());

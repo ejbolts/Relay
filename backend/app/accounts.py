@@ -16,7 +16,6 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .profile_sex import Sex, known_sex
 from .account_limits import load_account_limits
 from .auth import (
     ACCOUNT_LOGIN_MAX_FAILURES,
@@ -86,6 +85,7 @@ from .photo_storage import (
     profile_photo_path,
     store_profile_photo,
 )
+from .profile_sex import Sex, known_sex
 from .server_settings import load_runtime_settings
 from .session_events import session_events
 from .storage import remove_session_files

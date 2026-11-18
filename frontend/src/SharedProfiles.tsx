@@ -25,6 +25,8 @@ import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
+import { SexMark } from './SexMark';
+import { SharedBodySizesCard } from './SharedBodySizesCard';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
 import { ProfileCardioCard } from './ProfileCardioCard';
@@ -1667,7 +1669,10 @@ export function SharedProfileScreen({
             <ProfileAvatar className="profile-avatar" user={avatarUser(profile)} viewable />
             <div className="profile-summary-copy">
               <strong>
-                {profile.display_name}
+                <span className="profile-name">
+                  {profile.display_name}
+                  <SexMark sex={profile.sex} />
+                </span>
                 {profile.is_you && <span className="profile-badge">You</span>}
               </strong>
               {memberSince && (
@@ -1771,6 +1776,13 @@ export function SharedProfileScreen({
           )}
           {profile.body_weight && (
             <BodyWeightCard measurements={profile.body_weight} goals={profile.goals} />
+          )}
+          {profile.body_sizes && (
+            <SharedBodySizesCard
+              key={`body-sizes:${profile.id}`}
+              entries={profile.body_sizes}
+              sex={profile.sex}
+            />
           )}
           {profile.goals && <GoalsCard goals={profile.goals} latestWeight={latestWeight} />}
           {profile.cardio_sessions && (

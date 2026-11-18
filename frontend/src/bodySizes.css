@@ -53,12 +53,15 @@
 .body-sizes-stepper button:disabled {
   opacity: 0.3;
 }
+.body-figure-frame {
+  position: relative;
+  max-width: 440px;
+  margin: 10px auto 0;
+}
 .body-figure {
   display: block;
   width: 100%;
-  max-width: 440px;
   height: auto;
-  margin: 10px auto 0;
   font-variant-numeric: tabular-nums;
 }
 .body-figure-outline,
@@ -103,6 +106,69 @@
   stroke-width: 2.5px;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+}
+/* A part not measured yet keeps its band and leader, fainter, with an empty label to tap. */
+.body-figure-label.empty .body-figure-band {
+  opacity: 0.4;
+}
+/* The number box typed into in place of a value; 16px text keeps iOS from zooming. */
+.body-figure-editor {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 34px;
+  border: 1px solid var(--p-accent);
+  border-radius: 10px;
+  padding: 0 8px;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+  font-size: 13px;
+}
+.body-figure-editor input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.body-figure-editor.right input {
+  text-align: right;
+}
+.body-figure-editor:has(input[aria-invalid='true']) {
+  border-color: var(--p-danger);
+}
+.body-figure-error {
+  margin: 6px 0 0;
+  text-align: center;
+}
+.body-sizes-figure-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 36px;
+  margin: 6px auto 0;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.body-sizes-figure-locked .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.body-sizes-figure-locked .pulse-icon:last-of-type {
+  color: var(--p-muted);
 }
 /* Sizes inside the figure are in its own units, so the labels scale with the drawing. */
 .body-figure-name {

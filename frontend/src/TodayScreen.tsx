@@ -1,3 +1,4 @@
+import { SexMark } from './SexMark';
 import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
@@ -193,7 +194,7 @@ export interface TodayScreenProps {
   profileLabel?: string;
   profilePhotoUrl?: string | null;
   /** The signed-in account for the Profile section; omitted outside the signed-in app. */
-  profile?: Pick<User, 'display_name' | 'username' | 'profile_photo_url' | 'created_at'>;
+  profile?: Pick<User, 'display_name' | 'username' | 'profile_photo_url' | 'sex' | 'created_at'>;
   /** Friend requests waiting for an answer, shown as a count on the profile button. */
   friendRequests?: number;
   notifications?: ReactNode;
@@ -385,7 +386,10 @@ export function TodayScreen({
           <ProfileAvatar className="profile-avatar today-profile-avatar" user={profile} />
         )}
         <div className="today-profile-body">
-          <h2 id="today-profile-title">{profile.display_name.trim() || profile.username}</h2>
+          <h2 id="today-profile-title">
+            {profile.display_name.trim() || profile.username}
+            <SexMark sex={profile.sex} />
+          </h2>
           <p>
             @{profile.username}
             {memberSince && ` · since ${memberSince}`}
