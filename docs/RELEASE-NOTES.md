@@ -6,7 +6,13 @@ _Relay was called Gym Logger before version 1.0._
 
 17 November 2026
 
-### Head-to-head, body measurements and your feed
+### See how you measure up
+
+![The 84-second Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, adding sets anywhere, the rest bell, the workout summary, muscle goals and dark styles, then a scrolling list of other 1.3 changes](screenshots/releases/1.3.0-trailer.gif)
+
+_The 84-second Relay 1.3 trailer plays with music at the top of What's new; this GIF is its silent preview. Every scene uses synthetic sample accounts._
+
+[Watch the trailer with music](../frontend/public/releases/1.3.0-trailer.mp4)
 
 ![Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png)
 
@@ -14,7 +20,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ![Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png)
 
-**Body measurements** — See measurements on a body outline and tap to update. The female outline has side-swept hair and ears.
+**Body measurements** — See measurements on a body outline and tap to update.
 
 ![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png)
 
@@ -24,22 +30,19 @@ _Relay was called Gym Logger before version 1.0._
 
 **Pinch to zoom** — Zoom Body and exercise charts with two fingers.
 
-![Female body measurements outline with side-swept hair and ears, shown with sample measurements](screenshots/releases/1.3.0-body-measurements-female.png)
-
-*The female outline with side-swept hair and ears.*
-
 - **Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.
-- **Start:** Pick any split day or repeat a past workout, and resume from Up next on Home.
+- **Start:** Start Up next, cardio or an empty workout, and resume a workout in progress from Home.
 - **Workout saves:** Finish instantly and keep logging while sessions sync quietly in the background, even offline.
 - **Safer edits:** Choose which version to keep when another device has changed a workout.
 - **Unfinished workouts:** Save, resume or discard; opt into auto-save and receive idle phone reminders.
 - **Workout controls:** Finish and add exercises from the header, correct live time and use larger iPhone touch targets.
-- **Rest complete:** When a rest ends, the timer becomes a ringing bell that counts time over rest; tap it to jump to your next set.
+- **Rest bell:** When a rest ends, a ringing bell counts the extra time; tap it to jump to your next set.
 - **Set groups:** Log tri-sets with clearer set counts, superset borders and custom rest times.
-- **Add sets anywhere:** Tap + above set 1 or on a rest line to add a set at the start or between sets.
+- **Add sets anywhere:** Add a set at the start or between sets, and a rest to any gap.
 - **Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.
 - **Workout summary:** After finishing, Home shows time, sets, volume, new records and a suggested next step.
 - **Rep targets:** Plan rep ranges and see when to add weight.
+- **Relative strength:** Earn PRs as your lift-to-bodyweight ratio improves.
 - **Empty sets:** Ticking a set with no reps opens it to fill in, so empty sets are never logged.
 - **Workout plans:** Follow logged splits, save exercises by type and preview suggested weights.
 - **Exercises:** Rename, hide or swap lifts, with exact-name search, new icons and simpler filters.
@@ -50,8 +53,9 @@ _Relay was called Gym Logger before version 1.0._
 - **Weekly review:** Open last week's training review from a weekly popup or Notifications.
 - **Training blocks:** Plan coloured blocks on a zoomable timeline, compare results and get suggestions in your weekly review.
 - **Home layout:** Add five opt-in sections and customise weekly charts, check-ins and set totals.
-- **Body:** Maintenance ranges, clearer check-ins and easier history menus; the FFMI calculator is gone.
+- **Body:** Maintenance ranges, a refined female outline, clearer check-ins and easier history menus; the FFMI calculator is gone.
 - **History:** Log-style set tables, fortnight pages and single-workout exports.
+- **Calendar:** Planned and missed split days show as outlines; the legend lists only the workout types in view.
 - **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
 - **Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.
 - **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
@@ -61,9 +65,9 @@ _Relay was called Gym Logger before version 1.0._
 - **Tips and setup:** Tips appear when they apply and open the feature; QR invites and smarter Settings search.
 - **Launch prompts:** One popup per visit, and dismissed notices stay dismissed on every device.
 - **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
-- **Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.
-- **Account recovery:** Admin-issued temporary passwords require a new password at sign-in, and an eye icon shows or hides your password as you type.
-- **Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout; Distance always offers Walk & run, Cycling and Rowing; Progress stats drop prior-period comparisons.
+- **Offline and updates:** A small offline pill appears only after a lasting outage; updates refresh safely around unsynced work.
+- **Account recovery:** Tap Forgot password? to get a temporary password from your admin; an eye icon shows or hides your password.
+- **Cardio:** Auto MET and elevation replace MET-minutes, Distance adds Rowing and linked sessions say With workout.
 
 ## 1.2.0
 

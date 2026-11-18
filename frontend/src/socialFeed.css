@@ -266,51 +266,127 @@ html[data-reduce-motion] .feed-card.is-focused {
   min-width: 0;
 }
 
-/* Friends training now, above the feed. */
-.feed-live {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
+/* Friends above the feed: training now first, each with a dot per day trained this week. */
+.friends-rail {
+  /* Scrolls to the screen edges, starting in line with the cards. */
+  --friends-rail-bleed: 0.875rem;
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 calc(-1 * var(--friends-rail-bleed));
+  padding: 0.125rem var(--friends-rail-bleed) 0.25rem;
+  scroll-padding-inline: var(--friends-rail-bleed);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
   list-style: none;
 }
 
-.feed-live button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--p-accent) 40%, var(--p-line));
-  border-radius: var(--p-radius);
-  padding: 0.625rem 0.75rem;
-  background: color-mix(in srgb, var(--p-accent) 8%, var(--p-surface));
+.friends-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.friends-rail > li {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+
+.friends-rail-person {
+  width: 4.25rem;
+  display: grid;
+  justify-items: center;
+  /* Room for the Live label under the avatar, so every name lines up. */
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.25rem 0.125rem;
+  background: transparent;
   color: var(--p-ink);
   font: inherit;
-  text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.feed-live .presence-dot {
-  border-color: var(--p-surface);
+.friends-rail-person:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: -2px;
 }
 
-.feed-live-name {
-  min-width: 0;
-  flex: 1;
+.friends-rail-avatar {
+  position: relative;
   display: grid;
-  gap: 0.1rem;
+  place-items: center;
+  padding: 3px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--p-line);
 }
 
-.feed-live-name b {
-  font-size: 0.9375rem;
+.friends-rail-person.is-live .friends-rail-avatar {
+  box-shadow: inset 0 0 0 2px var(--p-accent);
 }
 
-.feed-live-name small {
+.friends-rail .shared-profile-avatar.small {
+  width: 3.25rem;
+  height: 3.25rem;
+  font-size: 1.2rem;
+}
+
+.friends-rail .presence-dot {
+  right: 1px;
+  bottom: 1px;
+  border-color: var(--p-page);
+}
+
+/* The Live label replaces the dot for a friend working out. */
+.friends-rail-person.is-live .presence-dot {
+  display: none;
+}
+
+.friends-rail-live {
+  position: absolute;
+  bottom: -0.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 2px solid var(--p-page);
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+  background: var(--p-accent);
+  color: var(--p-on-accent, #fff);
+  font-size: 0.5625rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.friends-rail-name {
+  max-width: 100%;
   overflow: hidden;
-  color: var(--p-muted);
   font-size: 0.75rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.friends-rail-week {
+  display: flex;
+  gap: 3px;
+}
+
+.friends-rail-week > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--p-line-strong);
+}
+
+.friends-rail-week > span.is-trained {
+  background: var(--p-accent);
+}
+
+.friends-rail-week > span.is-today:not(.is-trained) {
+  box-shadow: inset 0 0 0 1px var(--p-muted);
+  background: transparent;
 }
 
 .feed-empty {

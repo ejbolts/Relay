@@ -43,9 +43,11 @@ import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
 import {
   friendStatusLabel,
+  plural,
   SHARED_WORKOUT_PAGE_SIZE,
   sinceMonthLabel,
 } from './sharedProfileDisplay';
+import { byLiveActivity, presenceStatus, presenceText, useNow } from './presence';
 import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
 import { localDateOf } from './utils';
 import {
@@ -781,7 +783,10 @@ export function SuggestedFriends({
   );
 }
 
-/** Social's Find tab: requests, people search, public suggestions, sent requests and blocks. */
+/**
+ * Social's Friends tab: requests, people search, your friends, public suggestions, sent requests
+ * and blocks.
+ */
 export function FindPanel({
   active,
   connections,
@@ -804,6 +809,7 @@ export function FindPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [searchVersion, setSearchVersion] = useState(0);
+  const now = useNow(connections?.friends.some((friend) => friend.presence) ?? false);
 
   function blockedGroup(blocked: SharingConnection[]) {
     return (
@@ -869,7 +875,7 @@ export function FindPanel({
       <LoadProblem message={error ?? 'Could not load your friends.'} onRetry={onRetry} />
     ) : (
       <p className="sharing-loading" role="status">
-        Loading friend requests…
+        Loading your friends…
       </p>
     );
   }
@@ -931,6 +937,21 @@ export function FindPanel({
         onFriendChanged={onChanged}
         onChooseSharing={onChooseSharing}
       />
+      {connections.friends.length > 0 && (
+        <FriendGroup title="Friends" count={connections.friends.length}>
+          {byLiveActivity(connections.friends, (friend) => friend.presence).map((friend) => (
+            <FriendRow
+              key={friend.id}
+              person={friend}
+              detail={
+                presenceText(presenceStatus(friend.presence), now) ??
+                `${plural(friend.recent_workout_count, 'workout')} in the last 30 days`
+              }
+              onOpen={open(friend)}
+            />
+          ))}
+        </FriendGroup>
+      )}
       <SuggestedFriends
         active={active}
         refreshKey={`${searchVersion}:${people.map((person) => person.id).join(',')}`}

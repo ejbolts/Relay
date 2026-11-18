@@ -1,4 +1,4 @@
-import { validBlockColor } from './blockColors';
+import { blockInk, validBlockColor } from './blockColors';
 import { MONTHS } from './trainingBlocks';
 import './trainingBlockYear.css';
 import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
@@ -72,7 +72,7 @@ export function BlockTimeline({
               className={`training-block-segment ${tone}${color ? ' custom' : ''}`}
               style={{
                 flex: `${Math.max(1, daysBetween(item.start, item.end))} 1 0`,
-                ...(color ? { background: color } : {}),
+                ...(color ? { background: color, color: blockInk(color) } : {}),
               }}
               title={item.name}
             >

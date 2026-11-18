@@ -75,7 +75,7 @@
   border-radius: 0;
   padding: 0 3px;
   background: var(--block-color);
-  color: #0b0d0f;
+  color: var(--block-ink, #0b0d0f);
   font-family: inherit;
   font-size: 0.66rem;
   font-weight: 800;
@@ -241,7 +241,7 @@ button.training-block-year-segment {
 }
 .training-block-weeks span.done {
   background: color-mix(in srgb, var(--block-color) 60%, transparent);
-  color: #0b0d0f;
+  color: var(--block-ink, #0b0d0f);
 }
 .training-block-weeks span.now {
   background: color-mix(in srgb, var(--block-color) 28%, transparent);
@@ -324,20 +324,94 @@ button.training-block-year-segment {
 .training-block-years > div {
   flex: 1;
 }
-/* Colour field in the block form: Auto plus the palette. */
+/* Colour field in the block form: Auto and Custom, then the palette. */
 .training-block-colours {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 .training-block-colours > span {
   color: var(--p-ink-2);
   font-size: 0.85rem;
 }
+.training-block-colour-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.training-block-dialog .training-block-colour-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0 14px 0 6px;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.training-block-colour-chip i {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--block-color);
+}
+.training-block-colour-chip.custom:not(.selected) i {
+  background: conic-gradient(
+    #f06a5a,
+    #f2c23d,
+    #6cc24a,
+    #2fb3d9,
+    #4a86e8,
+    #8c66e0,
+    #e0559a,
+    #f06a5a
+  );
+}
+.training-block-colour-chip input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.training-block-dialog .training-block-colour-chip[aria-pressed='true'],
+.training-block-dialog .training-block-colour-chip.selected {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+}
+.training-block-colour-chip:focus-within {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: 2px;
+}
+.training-block-dialog .training-block-colour-hex {
+  flex: 1 1 6.5rem;
+  width: 0;
+  min-width: 6.5rem;
+  min-height: 36px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  text-transform: lowercase;
+}
+.training-block-colour-hex[aria-invalid='true'] {
+  border-color: var(--p-danger);
+}
 .training-block-swatches {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
 }
 .training-block-dialog .training-block-swatches button {
   aspect-ratio: 1;
@@ -349,14 +423,12 @@ button.training-block-year-segment {
   border-radius: 50%;
   padding: 0;
   background: var(--block-color);
-}
-.training-block-dialog .training-block-swatches button.automatic {
-  color: #0b0d0f;
-  font-size: 0.72rem;
-  font-weight: 800;
+  /* A faint edge keeps pale swatches visible on a light surface. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-ink) 14%, transparent);
 }
 .training-block-dialog .training-block-swatches button[aria-checked='true'] {
   box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--p-ink) 14%, transparent),
     0 0 0 2px var(--p-surface),
     0 0 0 4px var(--p-ink);
 }

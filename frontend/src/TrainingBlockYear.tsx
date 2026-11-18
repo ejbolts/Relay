@@ -1,6 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { api } from './api';
-import { BLOCK_COLOR_CHOICES, blockColor } from './blockColors';
+import {
+  BLOCK_COLOR_CHOICES,
+  blockColor,
+  blockInk,
+  isPaletteColor,
+  validBlockColor,
+} from './blockColors';
 import { Icon } from './Icon';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
 import {
@@ -29,7 +35,9 @@ type Segment = {
 const workouts = (count: number | undefined) =>
   count === undefined ? '' : `${count.toLocaleString()} workout${count === 1 ? '' : 's'}`;
 const joined = (...parts: string[]) => parts.filter(Boolean).join(' · ');
-const colorStyle = (color: string): CSSProperties => ({ '--block-color': color }) as CSSProperties;
+const colorStyle = (color: string): CSSProperties =>
+  ({ '--block-color': color, '--block-ink': blockInk(color) }) as CSSProperties;
+const DEFAULT_CUSTOM = '#3a7bd5';
 
 /** Every stretch of history drawn on the year bar, including the planned rest of the block. */
 function segments(config: TrainingBlocks, today: string): Segment[] {
@@ -670,7 +678,7 @@ export function TrainingBlockYearView({
   );
 }
 
-/** Colour choice for a block: automatic, or one of the palette's colours. */
+/** Colour choice for a block: automatic, one of the palette's colours, or a custom colour. */
 export function BlockColorField({
   value,
   automatic,
@@ -680,30 +688,77 @@ export function BlockColorField({
   automatic: string;
   onChange: (color: string | null) => void;
 }) {
+  const custom = value !== null && !isPaletteColor(value) ? value.toLowerCase() : null;
+  // The last custom colour stays on the chip after picking a palette colour, to return to it.
+  const [lastCustom, setLastCustom] = useState(custom ?? DEFAULT_CUSTOM);
+  const [hex, setHex] = useState(custom ?? '');
+  useEffect(() => {
+    if (!custom) return;
+    setLastCustom(custom);
+    setHex((typed) => (typed.toLowerCase() === custom ? typed : custom));
+  }, [custom]);
+  const labelId = useId();
+  const pick = (color: string) => onChange(color.toLowerCase());
   return (
-    <div className="training-block-colours" role="radiogroup" aria-label="Colour">
-      <span aria-hidden="true">Colour</span>
-      <div className="training-block-swatches">
+    <div className="training-block-colours">
+      <span id={labelId}>Colour</span>
+      <div className="training-block-colour-modes" role="group" aria-labelledby={labelId}>
         <button
           type="button"
-          role="radio"
-          aria-checked={value === null}
+          aria-pressed={value === null}
           aria-label="Automatic colour"
-          className="automatic"
-          style={colorStyle(automatic)}
+          className="training-block-colour-chip"
           onClick={() => onChange(null)}
         >
+          <i style={colorStyle(automatic)} aria-hidden="true" />
           Auto
         </button>
-        {BLOCK_COLOR_CHOICES.map((color) => (
+        <label
+          className={`training-block-colour-chip custom${custom ? ' selected' : ''}`}
+          style={colorStyle(custom ?? lastCustom)}
+        >
+          <i aria-hidden="true" />
+          Custom
+          <input
+            type="color"
+            aria-label="Custom colour"
+            value={custom ?? lastCustom}
+            // Tapping Custom chooses it straight away, as well as opening the picker.
+            onClick={() => custom || pick(lastCustom)}
+            onChange={(event) => pick(event.target.value)}
+          />
+        </label>
+        {custom && (
+          <input
+            className="training-block-colour-hex"
+            aria-label="Hex colour"
+            aria-invalid={!validBlockColor(hex)}
+            maxLength={7}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoComplete="off"
+            value={hex}
+            onChange={(event) => {
+              const typed = event.target.value.trim();
+              const next = typed.startsWith('#') ? typed : `#${typed}`;
+              setHex(next);
+              if (validBlockColor(next)) pick(next);
+            }}
+            onBlur={() => setHex(custom)}
+          />
+        )}
+      </div>
+      <div className="training-block-swatches" role="radiogroup" aria-label="Colour palette">
+        {BLOCK_COLOR_CHOICES.map((choice) => (
           <button
-            key={color}
+            key={choice.hex}
             type="button"
             role="radio"
-            aria-checked={value?.toLowerCase() === color}
-            aria-label={color}
-            style={colorStyle(color)}
-            onClick={() => onChange(color)}
+            aria-checked={value?.toLowerCase() === choice.hex}
+            aria-label={choice.name}
+            title={choice.name}
+            style={colorStyle(choice.hex)}
+            onClick={() => onChange(choice.hex)}
           />
         ))}
       </div>

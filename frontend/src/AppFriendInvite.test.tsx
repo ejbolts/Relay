@@ -186,8 +186,24 @@ it('opens a Social workout expanded and focuses its summary, including older sam
     personal_records: [],
     total: 2,
   }));
+  vi.spyOn(api.sharing, 'timeline').mockResolvedValue({
+    items: [
+      {
+        member: {
+          id: inviterId,
+          display_name: inviter.display_name,
+          profile_photo_url: null,
+          is_you: false,
+        },
+        workout,
+        reactions: { counts: [], yours: null, comment_count: 0 },
+        record_count: 0,
+      },
+    ],
+    has_more: false,
+  });
   await openLink('/#social');
-  await act(async () => host.querySelector<HTMLButtonElement>('.friend-workout-link')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('.feed-card-title')!.click());
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 80)));
   expect(api.sharing.workouts).toHaveBeenCalledWith(
     inviterId,

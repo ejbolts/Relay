@@ -380,33 +380,53 @@ it('loads older workouts on request and skips any it already shows', async () =>
   expect(button(host, 'Show older workouts')).toBeUndefined();
 });
 
-it('lists friends training now above the feed', async () => {
+it('shows each friend above the feed, training now first, with their week', async () => {
   vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [], has_more: false });
-  await render([
-    {
-      ...friend,
-      presence: {
-        online: true,
-        last_active_at: null,
-        workout: {
-          name: 'Push',
-          kind: 'strength',
-          started_at: new Date(Date.now() - 20 * 60_000).toISOString(),
-        },
-      } as FriendActivity['presence'],
-    },
+  vi.spyOn(api.sharing, 'profile').mockRejectedValue(new Error('offline'));
+  const morgan: FriendActivity = {
+    ...friend,
+    id: 'morgan',
+    display_name: 'Morgan Sample',
+    training_dates: ['2026-11-13', TODAY],
+    presence: {
+      online: true,
+      last_active_at: null,
+      workout: {
+        name: 'Push',
+        kind: 'strength',
+        started_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+      },
+    } as FriendActivity['presence'],
+  };
+  await render([friend, morgan]);
+  const rail = host.querySelector('.friends-rail')!;
+  expect(rail.getAttribute('aria-label')).toBe('Friends');
+  const people = [...rail.querySelectorAll<HTMLButtonElement>('.friends-rail-person')];
+  expect(people.map((person) => person.querySelector('.friends-rail-name')?.textContent)).toEqual([
+    'Morgan',
+    'Alex',
   ]);
-  const live = host.querySelector('.feed-live')!;
-  expect(live.getAttribute('aria-label')).toBe('Training now');
-  expect(live.textContent).toContain('Alex Sample');
-  expect(live.textContent).toContain('Push · 20 min');
-  await click(button(live, 'Open Alex Sample’s profile, training now'));
-  expect(openProfile).toHaveBeenCalledWith(expect.objectContaining({ id: 'alex' }));
+  expect(people[0].getAttribute('aria-label')).toBe(
+    "Open Morgan Sample's profile, training now: Push, 20 min, trained on 2 of the last 7 days",
+  );
+  expect(people[0].querySelector('.friends-rail-live')?.textContent).toBe('Live');
+  expect(people[0].querySelectorAll('.friends-rail-week > span')).toHaveLength(7);
+  expect(people[0].querySelectorAll('.friends-rail-week .is-trained')).toHaveLength(2);
+  expect(people[0].querySelector('.friends-rail-week > span:last-child')?.className).toBe(
+    'is-trained is-today',
+  );
+  expect(people[1].getAttribute('aria-label')).toBe(
+    "Open Alex Sample's profile, trained on 0 of the last 7 days",
+  );
+  expect(people[1].querySelector('.friends-rail-live')).toBeNull();
+  await click(people[0]);
+  expect(openProfile).toHaveBeenCalledWith(expect.objectContaining({ id: 'morgan' }));
 });
 
 it('suggests finding friends when there is nobody to follow yet', async () => {
   vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [], has_more: false });
   await render([]);
+  expect(host.querySelector('.friends-rail')).toBeNull();
   expect(host.textContent).toContain('Add friends to see their workouts and photos here.');
   await click(button(host, 'Find friends'));
   expect(openFind).toHaveBeenCalledOnce();

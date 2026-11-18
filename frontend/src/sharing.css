@@ -1178,35 +1178,6 @@
   vertical-align: 0.05em;
 }
 
-/* Social's Friends tab: each friend once, with their week and latest session */
-
-.friends-list .pulse-card-header h2 {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.friends-loading-skeleton .friend-card-person {
-  cursor: default;
-}
-
-.friends-loading-skeleton .friend-card-name {
-  flex: 1;
-  gap: 0.4rem;
-}
-
-.friend-skeleton-count {
-  width: 1.3rem;
-  height: 0.9rem;
-}
-
-.friends-loading-skeleton .friend-skeleton-avatar {
-  flex-shrink: 0;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-}
-
 .friend-skeleton-name {
   width: min(7rem, 100%);
   height: 0.9rem;
@@ -1215,23 +1186,6 @@
 .friend-skeleton-meta {
   width: min(9rem, 100%);
   height: 0.65rem;
-}
-
-.friend-skeleton-week {
-  flex-shrink: 0;
-  width: 5.5rem;
-  height: 1.75rem;
-}
-
-.friend-skeleton-session {
-  width: min(8.5rem, 100%);
-  height: 1rem;
-}
-
-.friend-skeleton-actions {
-  grid-column: 2;
-  width: 4.5rem;
-  height: 2rem;
 }
 
 /* A profile's outline while it loads. */
@@ -1290,15 +1244,6 @@
   height: 6rem;
 }
 
-.friends-list-count {
-  border-radius: 999px;
-  padding: 0.05rem 0.45rem;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
-  font-size: 0.6875rem;
-  font-weight: 650;
-}
-
 .friends-list-empty {
   display: grid;
   justify-items: start;
@@ -1324,52 +1269,7 @@
   height: 1rem;
 }
 
-.friend-cards {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.friend-cards > li {
-  position: relative;
-  display: grid;
-  gap: 0.4rem;
-  padding: 0.625rem 0;
-  transition: opacity 160ms ease;
-}
-
-.friend-cards > li + li {
-  border-top: 1px solid var(--p-line);
-}
-
 /* While choosing a reaction, the other friends fade back. An open comment thread does not dim. */
-.friend-cards.is-picking:has(.friend-react-picker) > li:not(.is-picking) {
-  opacity: 0.35;
-}
-
-.friend-card-top {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.friend-card-person {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--p-ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
 .friend-card-name {
   min-width: 0;
   display: grid;
@@ -1390,53 +1290,6 @@
   overflow: hidden;
   color: var(--p-muted);
   font-size: 0.75rem;
-}
-
-.friend-week {
-  flex-shrink: 0;
-  display: flex;
-  gap: 5px;
-}
-
-.friend-week > span {
-  width: 13px;
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  color: color-mix(in srgb, var(--p-muted) 60%, transparent);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.friend-week > span::before {
-  content: '';
-  width: 9px;
-  height: 18px;
-  border-radius: 3px;
-  background: var(--p-line-strong);
-}
-
-.friend-week > span.is-trained {
-  color: var(--p-accent-text);
-}
-
-.friend-week > span.is-trained::before {
-  background: var(--p-accent);
-}
-
-.friend-week > span.is-today:not(.is-trained) {
-  color: var(--p-ink);
-}
-
-.friend-card-latest {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.4rem 0.5rem;
-  min-width: 0;
-  container-type: inline-size;
 }
 
 .friend-activity-session-row {
@@ -1510,24 +1363,6 @@
   outline: 2px solid var(--p-accent);
   outline-offset: 3px;
   border-radius: 3px;
-}
-
-.friend-card-empty {
-  margin: 0;
-  color: var(--p-muted);
-  font-size: 0.8125rem;
-}
-
-@container (max-width: 300px) {
-  .friend-card-top {
-    flex-wrap: wrap;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .friend-cards > li {
-    transition: none;
-  }
 }
 
 .workout-discussion {
@@ -1625,11 +1460,11 @@
 .workout-discussion .discussion-reaction-count {
   padding: 0 0.5rem 0 0.15rem;
 }
-:is(.friend-card-latest, .friend-activity-session-row) > .workout-discussion {
+.friend-activity-session-row > .workout-discussion {
   display: contents;
 }
 
-:is(.friend-card-latest, .friend-activity-session-row) .workout-discussion-actions {
+.friend-activity-session-row .workout-discussion-actions {
   grid-column: 2;
   grid-row: 1;
   justify-content: flex-end;
@@ -1638,7 +1473,7 @@
 }
 
 /* Beside a workout in a list the icons are a little smaller and closer together. */
-:is(.friend-card-latest, .friend-activity-session-row) .discussion-button {
+.friend-activity-session-row .discussion-button {
   min-width: 40px;
   min-height: 40px;
   padding: 0 0.4rem;
@@ -1646,23 +1481,22 @@
   font-size: 0.75rem;
 }
 
-:is(.friend-card-latest, .friend-activity-session-row) .discussion-button .pulse-icon {
+.friend-activity-session-row .discussion-button .pulse-icon {
   width: 1.25rem;
   height: 1.25rem;
 }
 
-:is(.friend-card-latest, .friend-activity-session-row) .discussion-reaction-summary.is-yours {
+.friend-activity-session-row .discussion-reaction-summary.is-yours {
   padding: 0;
 }
 
-:is(.friend-card-latest, .friend-activity-session-row)
+.friend-activity-session-row
   :is(.discussion-reaction-summary > .friend-react-button, .discussion-reaction-count) {
   min-width: 0;
   min-height: 40px;
 }
 
-:is(.friend-card-latest, .friend-activity-session-row)
-  :is(.friend-react-picker, .workout-discussion-thread) {
+.friend-activity-session-row :is(.friend-react-picker, .workout-discussion-thread) {
   grid-column: 1 / -1;
   min-width: 0;
 }
@@ -2171,23 +2005,6 @@
   animation: presence-blink 1.4s ease-in-out infinite;
 }
 
-.friend-card-latest.is-live {
-  display: flex;
-}
-
-.friend-week > span.is-live {
-  color: var(--p-accent-text);
-}
-
-.friend-week > span.is-live::before {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--p-accent) 0 3px,
-    color-mix(in srgb, var(--p-accent) 35%, transparent) 3px 6px
-  );
-  animation: presence-blink 1.8s ease-in-out infinite;
-}
-
 .sharing-live-preview {
   display: grid;
   gap: 0.55rem;
@@ -2233,8 +2050,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .presence-dot.workout,
-  .friend-activity-kind.live::before,
-  .friend-week > span.is-live::before {
+  .friend-activity-kind.live::before {
     animation: none;
   }
 }
