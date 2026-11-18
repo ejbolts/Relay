@@ -26,6 +26,7 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
 import { SexMark } from './SexMark';
+import { SharedBodySizesCard } from './SharedBodySizesCard';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
 import { ProfileCardioCard } from './ProfileCardioCard';
@@ -1796,6 +1797,9 @@ export function SharedProfileScreen({
           )}
           {profile.body_weight && (
             <BodyWeightCard measurements={profile.body_weight} goals={profile.goals} />
+          )}
+          {profile.body_sizes && (
+            <SharedBodySizesCard key={profile.id} entries={profile.body_sizes} sex={profile.sex} />
           )}
           {profile.goals && <GoalsCard goals={profile.goals} latestWeight={latestWeight} />}
           {profile.cardio_sessions && (

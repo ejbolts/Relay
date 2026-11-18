@@ -178,6 +178,8 @@ class ProfileSharing(Base):
     # account backups keep their schema.
     share_cardio: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_body_weight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Tape measurements (neck, chest, waist and so on), drawn on the profile's body figure.
+    share_body_sizes: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_goals: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_machine_photos: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Friends see whether you are online now and when you were last active.

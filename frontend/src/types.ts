@@ -1,3 +1,4 @@
+import type { BodySizeLog } from './bodySizes';
 export type SessionStatus =
   | 'draft'
   | 'uploading'
@@ -1040,6 +1041,8 @@ export interface SharingChoices {
   visibility: ProfileVisibility;
   share_notes: boolean;
   share_body_weight: boolean;
+  /** Tape measurements, drawn on the profile's body outline. */
+  share_body_sizes: boolean;
   share_goals: boolean;
   share_machine_photos: boolean;
   /** Friends see whether you are online and when you were last active. */
@@ -1087,6 +1090,7 @@ export interface SharedProfileSummary {
   shares: {
     notes: boolean;
     body_weight: boolean;
+    body_sizes?: boolean;
     goals: boolean;
     machine_photos: boolean;
   } | null;
@@ -1335,6 +1339,8 @@ export interface SharedConsistency {
 export interface SharedProfile extends SharedProfileSummary {
   consistency?: SharedConsistency | null;
   body_weight: SharedBodyMeasurement[] | null;
+  /** Newest first; absent or null unless the member shares them. */
+  body_sizes?: BodySizeLog[] | null;
   goals: SharedGoals | null;
   cardio_sessions: SharedCardioSession[] | null;
   cardio_total?: number | null;

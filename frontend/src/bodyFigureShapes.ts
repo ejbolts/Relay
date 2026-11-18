@@ -7,7 +7,7 @@
  */
 export type BodyFigureKind = 'male' | 'female';
 export type BodyFigureBand =
-  'neck' | 'shoulders' | 'chest' | 'waist' | 'hips' | 'arm' | 'wrist' | 'thigh' | 'calf' | 'ankle';
+  'neck' | 'shoulders' | 'chest' | 'waist' | 'hips' | 'arm' | 'wrist' | 'thigh' | 'calf';
 export interface BodyFigureShape {
   half: readonly number[];
   hairline?: string;
@@ -51,7 +51,6 @@ export const BODY_FIGURES: Record<BodyFigureKind, BodyFigureShape> = {
       wrist: [142.7, 165.3, 381],
       thigh: [6.3, 80.1, 445],
       calf: [31.3, 82.6, 617],
-      ankle: [46.9, 72, 718],
     },
   },
   female: {
@@ -68,7 +67,6 @@ export const BODY_FIGURES: Record<BodyFigureKind, BodyFigureShape> = {
       wrist: [134.5, 153.2, 382],
       thigh: [5.6, 78.8, 436],
       calf: [28.1, 78.2, 611],
-      ankle: [45, 67.6, 711],
     },
   },
 };
