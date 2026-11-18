@@ -134,7 +134,7 @@ it('paginates without duplicates, and resets when page size or filters change', 
   await click(button('Next exercises page'));
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(3);
 });
-it('filters by actual direct and half-set credits instead of compound labels', async () => {
+it('filters by actual direct and half-set credits instead of compound labels, and opens help separately', async () => {
   const curl = {
     ...bench,
     id: 'curl',
@@ -154,8 +154,10 @@ it('filters by actual direct and half-set credits instead of compound labels', a
   ]);
   await click(filters.find((item) => item.textContent === 'Triceps')!);
   expect(host.querySelectorAll('[data-exercise-id]')).toHaveLength(1);
-  // The row is one control: the credits are on the lift's own page.
-  expect(host.querySelectorAll('.exercise-list-rows button')).toHaveLength(1);
+  await click(button('Muscle set credits for Bench Press'));
+  expect(open).not.toHaveBeenCalled();
+  expect(document.querySelector('dialog')?.textContent).toContain('0.5 sets');
+  await click(document.querySelector('[aria-label="Close Bench Press"]')!);
   await click(host.querySelector('[data-exercise-id="bench"]')!);
   expect(open).toHaveBeenCalledExactlyOnceWith('bench');
 });

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
 import { ExerciseCustomFilter } from './ExerciseCustomFilter';
+import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { exerciseEquipment } from './exerciseEquipment';
@@ -425,6 +426,7 @@ export function ExerciseLibraryList({
                     .join(' · ')}
                 </small>
               </div>
+              <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
                 <b title={summary?.normalised ? 'In your reference machine’s weights' : undefined}>

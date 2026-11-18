@@ -3,23 +3,24 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import releaseHistory from './release-history.json';
 import releaseMetadata from './release.json';
-import { parseRelease, parseReleaseHistory } from './src/releaseMetadata';
+import { announcedVersion, parseRelease, parseReleaseHistory } from './src/releaseMetadata';
 
 export function releaseNotesPlugin(): Plugin {
   return {
     name: 'validate-release-notes',
     buildStart() {
-      if (!parseRelease(releaseMetadata) || !releaseMetadata.date) {
+      const release = parseRelease(releaseMetadata);
+      if (!release || !releaseMetadata.date) {
         this.error(
-          'release.json needs a version, valid YYYY-MM-DD date, title, summary, changes and an HTTPS GitHub URL.',
+          'release.json needs a version, valid YYYY-MM-DD date, title, summary, changes and an HTTPS GitHub URL. A silent patch also needs notesVersion, an earlier patch of the same minor, and silentChanges.',
         );
       }
       if (
-        !parseReleaseHistory(releaseHistory, releaseMetadata.version) ||
+        !parseReleaseHistory(releaseHistory, announcedVersion(release)) ||
         releaseHistory.some((release) => !release.date)
       ) {
         this.error(
-          'release-history.json must list dated, valid earlier releases, newest first, below the current version.',
+          'release-history.json must list dated, valid, announced earlier releases, newest first, below the version release.json announces.',
         );
       }
     },
