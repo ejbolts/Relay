@@ -8,6 +8,12 @@ _Relay was called Gym Logger before version 1.0._
 
 ### Head-to-head, body measurements and your feed
 
+![The one-minute Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, muscle goals and dark styles](screenshots/releases/1.3.0-trailer.gif)
+
+_The one-minute Relay 1.3 trailer sits at the top of What's new. Press Play to start with music at 50% volume where supported. This GIF is its silent preview. Every scene uses isolated synthetic accounts and training data._
+
+[Watch the trailer with music](../frontend/public/releases/1.3.0-trailer.mp4)
+
 ![Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png)
 
 **Head-to-head** — Compare your best lifts with friends and see who leads.

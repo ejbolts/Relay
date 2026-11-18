@@ -42,6 +42,11 @@
     "**Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout; Distance always offers Walk & run, Cycling and Rowing; Progress stats drop prior-period comparisons."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
+  "video": {
+    "url": "/releases/1.3.0-trailer.mp4",
+    "poster": "/releases/1.3.0-trailer-poster.jpg",
+    "alt": "The one-minute Relay 1.3 trailer with music. It shows head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, muscle goals and dark styles. Synthetic sample accounts."
+  },
   "image": {
     "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/head-to-head.png",
     "alt": "Head-to-head comparison of three lifts with a friend, showing best estimated one-rep max values and a one-to-two score. Isolated sample accounts."
