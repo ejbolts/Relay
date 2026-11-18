@@ -17,19 +17,42 @@ export function SetInsertButton({
       title={beforeSet === 1 ? 'Add set at start' : `Add set before set ${beforeSet}`}
       onClick={onInsert}
     >
-      <span className="set-insert-dot" aria-hidden="true">
-        +
-      </span>
+      {/* Drawn in CSS: a text "+" sits off-centre in the circle. */}
+      <span className="set-insert-dot" aria-hidden="true" />
     </button>
   );
 }
 
-/** An insert point on its own line, used where no rest divider sits between the sets. */
-export function SetInsertRow(props: { beforeSet: number; onInsert: () => void }) {
+/**
+ * An insert point on its own line, used where no rest divider sits between the sets. Between two
+ * sets it can also offer to add the rest after the set above.
+ */
+export function SetInsertRow({
+  beforeSet,
+  onInsert,
+  onAddRest,
+}: {
+  beforeSet: number;
+  onInsert: () => void;
+  onAddRest?: () => void;
+}) {
   return (
     <div className="set-insert-row">
-      <SetInsertButton {...props} />
+      <SetInsertButton beforeSet={beforeSet} onInsert={onInsert} />
       <i aria-hidden="true" />
+      {onAddRest && (
+        <>
+          <button
+            type="button"
+            className="set-add-rest"
+            aria-label={`Add rest after set ${beforeSet - 1}`}
+            onClick={onAddRest}
+          >
+            <span aria-hidden="true">Rest</span>
+          </button>
+          <i aria-hidden="true" />
+        </>
+      )}
     </div>
   );
 }
