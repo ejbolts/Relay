@@ -176,6 +176,10 @@
   font-weight: 650;
 }
 
+.profile-summary-copy .profile-border-chip {
+  white-space: nowrap;
+}
+
 .profile-border-chip.is-static {
   min-height: 1.6rem;
   padding-block: 0.1rem;
@@ -539,7 +543,10 @@
 }
 
 .profile-summary-main .profile-avatar.avatar-bordered {
-  margin: 0.85rem;
+  width: 4rem;
+  height: 4rem;
+  margin: 0.75rem 0.85rem 0.75rem 0.35rem;
+  font-size: 1.55rem;
 }
 
 .border-preview-avatar.profile-avatar.avatar-bordered {
