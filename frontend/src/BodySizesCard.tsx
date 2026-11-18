@@ -7,12 +7,23 @@ import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySi
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { HelpPopup } from './HelpPopup';
+import { SEX_LABELS } from './profileDisplay';
+import './profileSex.css';
+import type { Sex } from './types';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { useUserSession } from './userContext';
 import { localDate } from './utils';
 import './bodySizes.css';
 
 type Draft = Record<BodySizeField, string>;
+
+const emptyLog = (date: string) =>
+  ({
+    ...Object.fromEntries(BODY_SIZE_FIELDS.map(([key]) => [key, null])),
+    measurement_date: date,
+  }) as BodySizeLog;
+const newestFirst = (a: BodySizeLog, b: BodySizeLog) =>
+  b.measurement_date.localeCompare(a.measurement_date);
 
 const shortDate = (date: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -29,6 +40,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const weightUnit = useWeightUnit();
   const unit = weightUnit === 'lb' ? 'in' : 'cm';
   const factor = unit === 'in' ? 2.54 : 1;
+  const editText = (cm: number) => String(Number((cm / factor).toFixed(2)));
   const [logs, setLogs] = useState<BodySizeLog[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [date, setDate] = useState(localDate());
@@ -41,8 +53,23 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const [retry, setRetry] = useState(0);
   // The entry drawn on the figure: the latest one until another is stepped to or saved.
   const [shownDate, setShownDate] = useState<string | null>(null);
-  const userId = useUserSession().user?.id ?? null;
-  const [figure, setFigure] = useState<BodyFigureKind>(() => loadBodyFigure(userId));
+  const session = useUserSession();
+  const user = session.user;
+  const userId = user?.id ?? null;
+  const [chosenFigure, setFigure] = useState<BodyFigureKind>(() => loadBodyFigure(userId));
+  // The sex set on the profile decides the outline; the choice is only offered until it is set.
+  const profileSex = user?.sex ?? null;
+  const figure = profileSex ?? chosenFigure;
+  // Picking an outline before the profile has a sex offers to save it as the account's sex.
+  const [offeredSex, setOfferedSex] = useState<Sex | null>(null);
+  const [savingSex, setSavingSex] = useState(false);
+  const [sexError, setSexError] = useState<string | null>(null);
+  // The measurement being typed straight onto the figure, and why it was not accepted.
+  const [inlineField, setInlineField] = useState<BodySizeField | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  // Each save replaces a whole day, so saves run one after another and a later one cannot undo
+  // an earlier change.
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   // The measurement tapped on the figure, so the form opens on that field.
   const [focusField, setFocusField] = useState<BodySizeField | null>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -80,22 +107,61 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     const row = logs?.find((item) => item.measurement_date === nextDate);
     setDraft(
       Object.fromEntries(
-        BODY_SIZE_FIELDS.map(([key]) => [
-          key,
-          row?.[key] == null ? '' : String(Number((row[key] / factor).toFixed(2))),
-        ]),
+        BODY_SIZE_FIELDS.map(([key]) => [key, row?.[key] == null ? '' : editText(row[key])]),
       ) as Draft,
     );
     setError(null);
   }
 
+  function queueSave(payload: BodySizeLog) {
+    const result = saveQueue.current.then(() => api.saveBodySizes(payload));
+    saveQueue.current = result.catch(() => undefined);
+    return result;
+  }
+
+  /** Saves one measurement typed on the figure into the entry being shown. */
+  function saveOnFigure(field: BodySizeField, typed: string): boolean {
+    const day = shown?.measurement_date ?? localDate();
+    const entry = logs?.find((row) => row.measurement_date === day) ?? emptyLog(day);
+    const text = typed.trim().replace(',', '.');
+    const original = entry[field];
+    if (!text || (original != null && text === editText(original))) {
+      setInlineField(null);
+      setInlineError(null);
+      return true;
+    }
+    const value = Number(text) * factor;
+    if (!Number.isFinite(value) || value <= 0 || value > 300) {
+      const label = BODY_SIZE_FIELDS.find(([key]) => key === field)![1];
+      setInlineError(
+        `${label} must be above 0 and up to ${Number((300 / factor).toFixed(2))} ${unit}.`,
+      );
+      return false;
+    }
+    const next = { ...entry, [field]: value };
+    setLogs((items) =>
+      [next, ...(items ?? []).filter((row) => row.measurement_date !== day)].sort(newestFirst),
+    );
+    setShownDate(day);
+    setInlineField(null);
+    setInlineError(null);
+    queueSave(next).catch((reason) => {
+      setInlineError(reason instanceof Error ? reason.message : 'Could not save measurement.');
+      // Reload, so the figure shows what is actually stored.
+      setRetry((count) => count + 1);
+    });
+    return true;
+  }
+
   async function save() {
-    const payload = { measurement_date: date } as BodySizeLog;
+    // Starts from the stored entry, so a part no longer offered here (ankle) is kept.
+    const stored = logs?.find((row) => row.measurement_date === date);
+    const payload = { ...stored, measurement_date: date } as BodySizeLog;
     for (const [key, label] of BODY_SIZE_FIELDS) {
       const text = draft[key]?.trim();
       // Keep untouched measurements exact when displaying rounded inches.
-      const original = logs?.find((row) => row.measurement_date === date)?.[key];
-      const unchanged = original != null && text === String(Number((original / factor).toFixed(2)));
+      const original = stored?.[key];
+      const unchanged = original != null && text === editText(original);
       payload[key] = unchanged ? original : text ? Number(text) * factor : null;
       if (
         payload[key] !== null &&
@@ -114,11 +180,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     setSaving(true);
     setError(null);
     try {
-      const saved = await api.saveBodySizes(payload);
+      const saved = await queueSave(payload);
       setLogs((items) =>
-        [saved, ...(items ?? []).filter((row) => row.measurement_date !== date)].sort((a, b) =>
-          b.measurement_date.localeCompare(a.measurement_date),
-        ),
+        [saved, ...(items ?? []).filter((row) => row.measurement_date !== date)].sort(newestFirst),
       );
       setShownDate(saved.measurement_date);
       setEditing(false);
@@ -126,6 +190,20 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
       setError(reason instanceof Error ? reason.message : 'Could not save measurements.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveSex() {
+    if (!offeredSex) return;
+    setSavingSex(true);
+    setSexError(null);
+    try {
+      session.updateUser(await api.updateProfile({ sex: offeredSex }));
+      setOfferedSex(null);
+    } catch (reason) {
+      setSexError(reason instanceof Error ? reason.message : 'Could not save your sex.');
+    } finally {
+      setSavingSex(false);
     }
   }
 
@@ -158,6 +236,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     return change === 0 ? 'No change' : `${change > 0 ? '+' : '−'}${Math.abs(change)} ${unit}`;
   }
   const display = (cm: number) => Number((cm / factor).toFixed(1));
+  const shownDay = shown?.measurement_date ?? localDate();
   const changes = BODY_SIZE_FIELDS.flatMap(([key, label]) => {
     if (shown?.[key] == null || previous?.[key] == null) return [];
     const change = Number((display(shown[key]) - display(previous[key])).toFixed(1));
@@ -202,8 +281,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         <p className="body-sizes-empty">
           {error ? 'Measurements unavailable' : 'Loading measurements…'}
         </p>
-      ) : !shown ? (
-        <p className="body-sizes-empty">No body measurements yet</p>
       ) : (
         <>
           <div className="body-sizes-stepper">
@@ -217,7 +294,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                 <Icon name="chevron-left" />
               </button>
             )}
-            <time dateTime={shown.measurement_date}>{shortDate(shown.measurement_date)}</time>
+            <time dateTime={shownDay}>{shortDate(shownDay)}</time>
             {logs.length > 1 && (
               <button
                 type="button"
@@ -232,145 +309,180 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
           <BodyFigure
             kind={figure}
             unit={unit}
-            onPick={(field) => open(shown.measurement_date, field)}
+            onPick={(field) => {
+              setInlineError(null);
+              setInlineField(field);
+            }}
+            editing={inlineField}
+            editValue={
+              inlineField && shown?.[inlineField] != null ? editText(shown[inlineField]!) : ''
+            }
+            invalid={inlineError !== null && inlineField !== null}
+            onCommit={saveOnFigure}
+            onCancel={() => {
+              setInlineField(null);
+              setInlineError(null);
+            }}
             values={Object.fromEntries(
-              BODY_SIZE_FIELDS.filter(([key]) => shown[key] !== null).map(([key]) => [
+              BODY_SIZE_FIELDS.filter(([key]) => shown?.[key] != null).map(([key]) => [
                 key,
-                String(display(shown[key]!)),
+                String(display(shown![key]!)),
               ]),
             )}
           />
-          <div
-            className="segmented-control compact body-sizes-figure-kind"
-            role="radiogroup"
-            aria-label="Body outline"
-          >
-            {(
-              [
-                ['male', 'Male'],
-                ['female', 'Female'],
-              ] as const
-            ).map(([kind, label]) => (
-              <button
-                key={kind}
-                type="button"
-                role="radio"
-                aria-checked={figure === kind}
-                className={figure === kind ? 'active' : ''}
-                onClick={() => {
-                  setFigure(kind);
-                  saveBodyFigure(userId, kind);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {changes.length > 0 && previous && (
-            <div className="body-sizes-changes">
-              <h3>Changed since {dayAndMonth(previous.measurement_date)}</h3>
-              <ul>
-                {changes.map(({ key, label, change }) => (
-                  <li
-                    key={key}
-                    aria-label={`${label} ${change > 0 ? 'up' : 'down'} ${Math.abs(change)} ${unit}`}
-                  >
-                    {label}
-                    <b>
-                      {change > 0 ? '↑' : '↓'} {Math.abs(change)}
-                    </b>
-                  </li>
-                ))}
-              </ul>
+          {inlineError && (
+            <p id="body-figure-error" role="alert" className="inline-error body-figure-error">
+              {inlineError}
+            </p>
+          )}
+          {profileSex ? (
+            <p className="body-sizes-figure-locked">
+              <Icon name={profileSex} />
+              {SEX_LABELS[profileSex]}
+              <Icon name="lock" />
+              <span className="sr-only">, set on your profile</span>
+            </p>
+          ) : (
+            <div
+              className="segmented-control compact body-sizes-figure-kind"
+              role="radiogroup"
+              aria-label="Body outline"
+            >
+              {(
+                [
+                  ['male', 'Male'],
+                  ['female', 'Female'],
+                ] as const
+              ).map(([kind, label]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="radio"
+                  aria-checked={figure === kind}
+                  className={figure === kind ? 'active' : ''}
+                  onClick={() => {
+                    setFigure(kind);
+                    saveBodyFigure(userId, kind);
+                    if (user) {
+                      setSexError(null);
+                      setOfferedSex(kind);
+                    }
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           )}
-          <div className="body-sizes-entry-actions">
-            <button type="button" onClick={() => open(shown.measurement_date)}>
-              Edit
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                setError(null);
-                setDeleting(shown.measurement_date);
-              }}
-            >
-              Delete
-            </button>
-          </div>
-          <details className="body-sizes-history">
-            <summary>
-              Measurement history <span>{history.length}</span>
-            </summary>
-            <label className="body-sizes-history-filter">
-              Body part
-              <select
-                value={historyPart}
-                onChange={(event) => {
-                  setHistoryPart(event.target.value as BodySizeField | 'all');
-                  setVisible(5);
-                }}
-              >
-                <option value="all">All measurements</option>
-                {BODY_SIZE_FIELDS.map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {history.length === 0 && <p>No {partLabel?.toLowerCase()} measurements yet.</p>}
-            {history.slice(0, visible).map((row, index) => (
-              <article key={row.measurement_date}>
-                <div className="body-sizes-history-heading">
-                  <time dateTime={row.measurement_date}>{shortDate(row.measurement_date)}</time>
-                  <div>
-                    <button
-                      type="button"
-                      aria-label={`Edit measurements ${row.measurement_date}`}
-                      onClick={() => open(row.measurement_date)}
-                    >
-                      Edit
-                    </button>
-                    {historyPart === 'all' && (
-                      <button
-                        type="button"
-                        aria-label={`Delete measurements ${row.measurement_date}`}
-                        onClick={() => {
-                          setError(null);
-                          setDeleting(row.measurement_date);
-                        }}
+          {shown && (
+            <>
+              {changes.length > 0 && previous && (
+                <div className="body-sizes-changes">
+                  <h3>Changed since {dayAndMonth(previous.measurement_date)}</h3>
+                  <ul>
+                    {changes.map(({ key, label, change }) => (
+                      <li
+                        key={key}
+                        aria-label={`${label} ${change > 0 ? 'up' : 'down'} ${Math.abs(change)} ${unit}`}
                       >
-                        Delete
-                      </button>
-                    )}
-                  </div>
+                        {label}
+                        <b>
+                          {change > 0 ? '↑' : '↓'} {Math.abs(change)}
+                        </b>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                {historyPart !== 'all' ? (
-                  <div className="body-sizes-part-value">
-                    <strong>{format(row[historyPart]!)}</strong>
-                    <span
-                      aria-label={`Change from previous measurement: ${changeFromPrevious(index)}`}
-                    >
-                      {changeFromPrevious(index)}
-                    </span>
-                  </div>
-                ) : (
-                  <p>
-                    {BODY_SIZE_FIELDS.filter(([key]) => row[key] !== null)
-                      .map(([key, label]) => `${label} ${format(row[key]!)}`)
-                      .join(' · ')}
-                  </p>
+              )}
+              <div className="body-sizes-entry-actions">
+                <button type="button" onClick={() => open(shown.measurement_date)}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setError(null);
+                    setDeleting(shown.measurement_date);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+              <details className="body-sizes-history">
+                <summary>
+                  Measurement history <span>{history.length}</span>
+                </summary>
+                <label className="body-sizes-history-filter">
+                  Body part
+                  <select
+                    value={historyPart}
+                    onChange={(event) => {
+                      setHistoryPart(event.target.value as BodySizeField | 'all');
+                      setVisible(5);
+                    }}
+                  >
+                    <option value="all">All measurements</option>
+                    {BODY_SIZE_FIELDS.map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {history.length === 0 && <p>No {partLabel?.toLowerCase()} measurements yet.</p>}
+                {history.slice(0, visible).map((row, index) => (
+                  <article key={row.measurement_date}>
+                    <div className="body-sizes-history-heading">
+                      <time dateTime={row.measurement_date}>{shortDate(row.measurement_date)}</time>
+                      <div>
+                        <button
+                          type="button"
+                          aria-label={`Edit measurements ${row.measurement_date}`}
+                          onClick={() => open(row.measurement_date)}
+                        >
+                          Edit
+                        </button>
+                        {historyPart === 'all' && (
+                          <button
+                            type="button"
+                            aria-label={`Delete measurements ${row.measurement_date}`}
+                            onClick={() => {
+                              setError(null);
+                              setDeleting(row.measurement_date);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {historyPart !== 'all' ? (
+                      <div className="body-sizes-part-value">
+                        <strong>{format(row[historyPart]!)}</strong>
+                        <span
+                          aria-label={`Change from previous measurement: ${changeFromPrevious(index)}`}
+                        >
+                          {changeFromPrevious(index)}
+                        </span>
+                      </div>
+                    ) : (
+                      <p>
+                        {BODY_SIZE_FIELDS.filter(([key]) => row[key] !== null)
+                          .map(([key, label]) => `${label} ${format(row[key]!)}`)
+                          .join(' · ')}
+                      </p>
+                    )}
+                  </article>
+                ))}
+                {history.length > visible && (
+                  <button type="button" onClick={() => setVisible((count) => count + 5)}>
+                    Show more
+                  </button>
                 )}
-              </article>
-            ))}
-            {history.length > visible && (
-              <button type="button" onClick={() => setVisible((count) => count + 5)}>
-                Show more
-              </button>
-            )}
-          </details>
+              </details>
+            </>
+          )}
         </>
       )}
       {editing && (
@@ -445,6 +557,38 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               </button>
             </footer>
           </form>
+        </PopupDialog>
+      )}
+      {offeredSex && (
+        <PopupDialog
+          title={`Save your sex as ${SEX_LABELS[offeredSex]}?`}
+          className="profile-sex-confirm"
+          onClose={() => {
+            if (!savingSex) setOfferedSex(null);
+          }}
+        >
+          <p>
+            It sets your body measurement outline. After you save, only an administrator can change
+            it.
+          </p>
+          {sexError && (
+            <p role="alert" className="inline-error">
+              {sexError}
+            </p>
+          )}
+          <div className="popup-dialog-actions">
+            <button type="button" disabled={savingSex} onClick={() => setOfferedSex(null)}>
+              Not now
+            </button>
+            <button
+              type="button"
+              className="popup-primary-action"
+              disabled={savingSex}
+              onClick={() => void saveSex()}
+            >
+              {savingSex ? 'Saving…' : 'Save'}
+            </button>
+          </div>
         </PopupDialog>
       )}
       {deleting && (

@@ -20,6 +20,7 @@ ADMIN_ROUTES = (
     ("GET", "/api/admin/users"),
     ("PATCH", "/api/admin/users/anything"),
     ("POST", "/api/admin/users/anything/reset-password"),
+    ("PUT", "/api/admin/users/anything/sex"),
     ("GET", "/api/admin/settings"),
     ("PATCH", "/api/admin/settings"),
     ("GET", "/api/admin/status"),
