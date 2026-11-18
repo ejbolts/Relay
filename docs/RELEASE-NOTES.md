@@ -56,7 +56,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
 - **Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.
 - **Account recovery:** Admin-issued temporary passwords require a new password at sign-in.
-- **Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout; Distance always offers Walk & run, Cycling and Rowing.
+- **Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout; Distance always offers Walk & run, Cycling and Rowing; Progress stats drop prior-period comparisons.
 
 ## 1.2.0
 

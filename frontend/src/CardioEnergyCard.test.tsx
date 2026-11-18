@@ -40,12 +40,14 @@ describe('cardio energy card', () => {
     );
     expect(markup).toContain('Elevation gain');
     expect(markup).toContain('864');
-    expect(markup).toContain('↑ 214 m vs prior');
     expect(markup).toContain('1,540');
     expect(markup).toContain('cardio-stat-unit');
     expect(markup).toContain('Average MET');
-    expect(markup).toContain('↑ 0.7 MET vs prior');
     expect(markup).not.toMatch(/METs|MET-min/);
+    // Stats show the selected period only, with plain session counts.
+    const text = markup.replace(/<!-- -->/g, '');
+    expect(text).not.toMatch(/vs prior|prior comparison|sessions? logged/);
+    expect(text).toContain('<small>3 of 4 sessions</small>');
     expect(markup).toContain('Fat energy equivalent');
     expect(markup).toContain('About cardio progress');
     expect(markup).toContain('Cardio progress period');
@@ -69,10 +71,10 @@ describe('cardio energy card', () => {
         ]}
       />,
     );
-    expect(markup).toContain('1 session logged');
-    expect(markup).not.toContain('1 sessions');
-    expect(markup).toContain('No distance logged');
-    expect(markup).toContain('No elevation available');
+    const text = markup.replace(/<!-- -->/g, '');
+    expect(text).toContain('<small>1 of 1 session</small>');
+    expect(text).not.toContain('1 sessions');
+    expect(text).toContain('<span>Distance</span><strong>—</strong><small>0 sessions</small>');
   });
   it('leaves elevation empty for a server that does not report it yet', () => {
     const older = { ...week };
@@ -80,7 +82,9 @@ describe('cardio energy card', () => {
     delete older.previous_elevation_gain_m;
     delete older.elevation_sessions;
     const markup = renderToStaticMarkup(<CardioEnergyCard summaries={[older]} />);
-    expect(markup).toContain('No elevation available');
+    expect(markup.replace(/<!-- -->/g, '')).toContain(
+      '<span>Elevation gain</span><strong>—</strong><small>0 sessions</small>',
+    );
   });
   it('tolerates a cached dashboard from before calorie tracking', () => {
     expect(renderToStaticMarkup(<CardioEnergyCard summaries={undefined} />)).toBe('');

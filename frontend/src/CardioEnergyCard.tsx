@@ -3,7 +3,6 @@ import { HelpPopup } from './HelpPopup';
 import type { CardioEnergyPeriod } from './types';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { useWeightUnit } from './trainingPreferencesContext';
-import { weightFromKg } from './weightUnits';
 
 const periods: { value: CardioEnergyPeriod['period']; label: string }[] = [
   { value: 'week', label: 'Week' },
@@ -22,16 +21,6 @@ function prettyDate(value: string): string {
   });
 }
 
-function comparison(current: number | null, previous: number | null, unit = ''): string {
-  if (current === null || previous === null) return 'No prior comparison';
-  const difference = current - previous;
-  const decimals = ['bpm', 'g', 'kcal', 'm'].includes(unit) ? 0 : unit === 'lb' ? 2 : 1;
-  const unchangedThreshold = 0.5 / 10 ** decimals;
-  if (Math.abs(difference) < unchangedThreshold) return 'No change vs prior';
-  const prefix = difference > 0 ? '↑' : '↓';
-  return `${prefix} ${Math.abs(difference).toFixed(decimals)}${unit ? ` ${unit}` : ''} vs prior`;
-}
-
 export function CardioEnergyCard({
   summaries,
   weekEnd,
@@ -44,23 +33,6 @@ export function CardioEnergyCard({
   const summary = summaries?.find((item) => item.period === period);
   if (!summary) return null;
   const caloriesRecorded = summary.logged_sessions > 0;
-  const previousDates =
-    summary.previous_start_date && summary.previous_end_date
-      ? `${prettyDate(summary.previous_start_date)} – ${prettyDate(summary.previous_end_date)}`
-      : null;
-  const previousCalories = summary.previous_calories_kcal ?? null;
-  const caloriesComparison = comparison(summary.calories_kcal, previousCalories, 'kcal');
-  const fatComparison = comparison(
-    weightUnit === 'lb'
-      ? weightFromKg(summary.calories_kcal / 7700, weightUnit)
-      : (summary.calories_kcal / 7700) * 1000,
-    previousCalories === null
-      ? null
-      : weightUnit === 'lb'
-        ? weightFromKg(previousCalories / 7700, weightUnit)
-        : (previousCalories / 7700) * 1000,
-    weightUnit === 'lb' ? 'lb' : 'g',
-  );
   const heartRate = summary.average_heart_rate_bpm ?? null;
   const distance = summary.distance_km ?? 0;
   const speed = summary.average_speed_kph ?? null;
@@ -87,10 +59,8 @@ export function CardioEnergyCard({
               excluded.
             </p>
             <p>
-              Each metric uses the sessions where it was logged. Comparisons use the preceding
-              period{previousDates ? ` (${previousDates})` : ''}. Fat energy equivalent is
-              calculated from logged calories at 7,700 kcal per kilogram; it is not measured fat
-              loss.
+              Each metric uses the sessions where it was logged. Fat energy equivalent is calculated
+              from logged calories at 7,700 kcal per kilogram; it is not measured fat loss.
             </p>
             <p>
               {summary.logged_sessions} of {summary.total_sessions}{' '}
@@ -130,11 +100,6 @@ export function CardioEnergyCard({
             <small>
               {metsSessions} {metsSessions === 1 ? 'session' : 'sessions'}
             </small>
-            <small className="cardio-progress-comparison">
-              {averageMets === null
-                ? 'No MET available'
-                : comparison(averageMets, summary.previous_average_mets ?? null, 'MET')}
-            </small>
           </article>
           <article>
             <span>Elevation gain</span>
@@ -151,11 +116,6 @@ export function CardioEnergyCard({
             <small>
               {elevationSessions} {elevationSessions === 1 ? 'session' : 'sessions'}
             </small>
-            <small className="cardio-progress-comparison">
-              {elevationSessions === 0
-                ? 'No elevation available'
-                : comparison(elevation, summary.previous_elevation_gain_m ?? null, 'm')}
-            </small>
           </article>
           <article>
             <span>Calories</span>
@@ -171,10 +131,7 @@ export function CardioEnergyCard({
             </strong>
             <small>
               {summary.logged_sessions} of {summary.total_sessions}{' '}
-              {summary.total_sessions === 1 ? 'session' : 'sessions'} logged
-            </small>
-            <small className="cardio-progress-comparison">
-              {caloriesRecorded ? caloriesComparison : 'No calories logged'}
+              {summary.total_sessions === 1 ? 'session' : 'sessions'}
             </small>
           </article>
           <article>
@@ -184,9 +141,6 @@ export function CardioEnergyCard({
                 ? `≈ ${fatEnergyEquivalent(summary.calories_kcal, weightUnit)}`
                 : '—'}
             </strong>
-            <small className="cardio-progress-comparison">
-              {caloriesRecorded ? fatComparison : 'Not measured fat loss'}
-            </small>
           </article>
           <article>
             <span>Average HR</span>
@@ -201,12 +155,7 @@ export function CardioEnergyCard({
             </strong>
             <small>
               {summary.heart_rate_sessions ?? 0}{' '}
-              {(summary.heart_rate_sessions ?? 0) === 1 ? 'session' : 'sessions'} logged
-            </small>
-            <small className="cardio-progress-comparison">
-              {heartRate === null
-                ? 'No heart rate logged'
-                : comparison(heartRate, summary.previous_average_heart_rate_bpm ?? null, 'bpm')}
+              {(summary.heart_rate_sessions ?? 0) === 1 ? 'session' : 'sessions'}
             </small>
           </article>
           <article>
@@ -222,12 +171,7 @@ export function CardioEnergyCard({
             </strong>
             <small>
               {summary.distance_sessions ?? 0}{' '}
-              {(summary.distance_sessions ?? 0) === 1 ? 'session' : 'sessions'} logged
-            </small>
-            <small className="cardio-progress-comparison">
-              {(summary.distance_sessions ?? 0) === 0
-                ? 'No distance logged'
-                : comparison(distance, summary.previous_distance_km ?? null, 'km')}
+              {(summary.distance_sessions ?? 0) === 1 ? 'session' : 'sessions'}
             </small>
           </article>
           <article>
@@ -243,12 +187,7 @@ export function CardioEnergyCard({
             </strong>
             <small>
               {summary.speed_sessions ?? 0}{' '}
-              {(summary.speed_sessions ?? 0) === 1 ? 'session' : 'sessions'} logged
-            </small>
-            <small className="cardio-progress-comparison">
-              {speed === null
-                ? 'No speed logged'
-                : comparison(speed, summary.previous_average_speed_kph ?? null, 'km/h')}
+              {(summary.speed_sessions ?? 0) === 1 ? 'session' : 'sessions'}
             </small>
           </article>
           <article>
@@ -256,12 +195,7 @@ export function CardioEnergyCard({
             <strong>{incline === null ? '—' : `${incline.toFixed(1)}%`}</strong>
             <small>
               {summary.incline_sessions ?? 0}{' '}
-              {(summary.incline_sessions ?? 0) === 1 ? 'session' : 'sessions'} logged
-            </small>
-            <small className="cardio-progress-comparison">
-              {incline === null
-                ? 'No incline logged'
-                : comparison(incline, summary.previous_average_incline_percent ?? null, '%')}
+              {(summary.incline_sessions ?? 0) === 1 ? 'session' : 'sessions'}
             </small>
           </article>
         </div>
