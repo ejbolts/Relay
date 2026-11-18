@@ -90,6 +90,7 @@ export function BodyFigure({
         />
       ))}
       <path className="body-figure-outline" d={outline} />
+      {shape.hairline && <path className="body-figure-hairline" d={shape.hairline} />}
       {callouts.map((item) => (
         <g
           key={item.field}
