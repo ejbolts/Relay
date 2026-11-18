@@ -8,9 +8,10 @@ import {
   rememberRelease,
   rememberReleaseNoticeRead,
 } from './releaseAnnouncements';
-import { parseRelease, parseReleaseHistory } from './releaseMetadata';
+import { announcedRelease, parseRelease, parseReleaseHistory } from './releaseMetadata';
 
-const bundledRelease = parseRelease(releaseMetadata)!;
+// A silent patch keeps announcing the notes of the release it follows, so nothing reopens.
+const bundledRelease = announcedRelease(parseRelease(releaseMetadata)!);
 const bundledHistory = parseReleaseHistory(releaseHistory, bundledRelease.version)!;
 
 const ALWAYS_READY: Pick<AppNoticesState, 'ready' | 'notices' | 'record'> = {
@@ -20,9 +21,10 @@ const ALWAYS_READY: Pick<AppNoticesState, 'ready' | 'notices' | 'record'> = {
 };
 
 /**
- * Announces the release actually running, once per account. It is skipped when the account
- * dismissed it on another device, and for an account created on or after the release date:
- * nothing in it is new to someone who has only ever used this release.
+ * Announces the release actually running, once per account; a silent patch announces the release
+ * it follows instead. It is skipped when the account dismissed it on another device, and for an
+ * account created on or after the release date: nothing in it is new to someone who has only
+ * ever used this release.
  */
 export function useReleaseAnnouncement(
   userId: string | null,

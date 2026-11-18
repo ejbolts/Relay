@@ -164,6 +164,7 @@ import { AppUpdateBanner } from './AppUpdateBanner';
 import { OfflineNotice } from './OfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
+import { CLIENT_VERSION } from './clientVersion';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
 import { HomeScreenGuide, HomeScreenShortcut } from './HomeScreenGuide';
 import { WeeklyReviewPrompt } from './WeeklyReviewPrompt';
@@ -2677,7 +2678,7 @@ function AppContent() {
                 onOpenProfile={() => setTab('profile')}
                 openFeedback={openFeedback}
                 onOpenAdmin={isAdmin ? () => setTab('admin') : undefined}
-                releaseVersion={announcement.release.version}
+                releaseVersion={CLIENT_VERSION}
                 onOpenReleaseNotes={announcement.show}
                 updateCheck={
                   <AppUpdateCheck

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import metadata from '../release.json';
 import { fetchRelease, watchReleases } from './releaseAnnouncements';
+import { announcedRelease, announcedVersion, parseRelease } from './releaseMetadata';
 import { useReleaseAnnouncement } from './useReleaseAnnouncement';
 
 vi.mock('./releaseAnnouncements', async (importOriginal) => ({
@@ -11,6 +12,9 @@ vi.mock('./releaseAnnouncements', async (importOriginal) => ({
   fetchRelease: vi.fn(),
   watchReleases: vi.fn(),
 }));
+
+// A silent patch announces the release it follows; otherwise this is the running version.
+const NOTES_VERSION = announcedVersion(parseRelease(metadata)!);
 
 let root: Root;
 let container: HTMLDivElement;
@@ -63,7 +67,7 @@ describe('installed release announcements', () => {
     expect(announcement.noticeUnread).toBe(false);
     expect(
       window.localStorage.getItem(
-        `gym-logger-release-notice-read:notice-account-first:${metadata.version}`,
+        `gym-logger-release-notice-read:notice-account-first:${NOTES_VERSION}`,
       ),
     ).toBe('1');
     await render('notice-account-second');
@@ -82,7 +86,7 @@ describe('installed release announcements', () => {
 
   it('honours a notice read in an earlier browser session and survives blocked storage', async () => {
     window.localStorage.setItem(
-      `gym-logger-release-notice-read:notice-stored:${metadata.version}`,
+      `gym-logger-release-notice-read:notice-stored:${NOTES_VERSION}`,
       '1',
     );
     await render('notice-stored');
@@ -116,7 +120,7 @@ describe('installed release announcements', () => {
     await render('installed-release-sample');
     expect(announcement.checked).toBe(true);
     expect(announcement.open).toBe(true);
-    expect(announcement.release).toEqual(metadata);
+    expect(announcement.release).toEqual(announcedRelease(parseRelease(metadata)!));
     expect(container.textContent).toBe(metadata.title);
     expect(fetchRelease).not.toHaveBeenCalled();
     expect(watchReleases).not.toHaveBeenCalled();
@@ -128,9 +132,9 @@ describe('installed release announcements', () => {
     expect(announcement.open).toBe(true);
     await act(async () => announcement.dismiss());
     expect(announcement.open).toBe(false);
-    expect(
-      window.localStorage.getItem(`gym-logger-release-seen:${userId}:${metadata.version}`),
-    ).toBe('1');
+    expect(window.localStorage.getItem(`gym-logger-release-seen:${userId}:${NOTES_VERSION}`)).toBe(
+      '1',
+    );
 
     await render(null);
     expect(announcement.open).toBe(false);
@@ -167,12 +171,12 @@ describe('installed release announcements', () => {
     window.localStorage.setItem(`gym-logger-release-seen:${userId}:0.0.0`, '1');
     await render(userId);
     expect(announcement.open).toBe(true);
-    expect(announcement.release.version).toBe(metadata.version);
+    expect(announcement.release.version).toBe(NOTES_VERSION);
   });
 
   it('honours an installed-release dismissal recorded by an earlier browser session', async () => {
     const userId = 'earlier-session-sample';
-    window.localStorage.setItem(`gym-logger-release-seen:${userId}:${metadata.version}`, '1');
+    window.localStorage.setItem(`gym-logger-release-seen:${userId}:${NOTES_VERSION}`, '1');
     await render(userId);
     expect(announcement.open).toBe(false);
     expect(announcement.checked).toBe(true);
@@ -186,7 +190,7 @@ describe('installed release announcements', () => {
 
     await render('second-device', null, {
       ready: true,
-      notices: { release_seen: metadata.version, weekly_review_seen: null },
+      notices: { release_seen: NOTES_VERSION, weekly_review_seen: null },
       record,
     });
     expect(announcement.checked).toBe(true);
@@ -194,7 +198,7 @@ describe('installed release announcements', () => {
     expect(announcement.noticeUnread).toBe(false);
     // Remembered here too, so a later offline visit stays quiet.
     expect(
-      window.localStorage.getItem(`gym-logger-release-seen:second-device:${metadata.version}`),
+      window.localStorage.getItem(`gym-logger-release-seen:second-device:${NOTES_VERSION}`),
     ).toBe('1');
   });
 
@@ -208,7 +212,7 @@ describe('installed release announcements', () => {
     expect(announcement.open).toBe(true);
     await act(async () => announcement.dismiss());
     expect(announcement.open).toBe(false);
-    expect(record).toHaveBeenCalledWith({ release_seen: metadata.version });
+    expect(record).toHaveBeenCalledWith({ release_seen: NOTES_VERSION });
   });
 
   it('does not announce a release to an account created on or after its date', async () => {
