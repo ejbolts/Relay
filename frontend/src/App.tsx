@@ -358,12 +358,7 @@ import { launchPromptAllowed, type LaunchPrompt } from './launchPrompts';
 import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './loggerSession';
-import {
-  REST_EXTEND_SECONDS,
-  RestCompletePill,
-  WorkoutHeaderMeta,
-  WorkoutTimerDock,
-} from './WorkoutRestTimer';
+import { RestDoneBell, WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
 import { nextSetAfterRest } from './restComplete';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
@@ -405,6 +400,7 @@ import {
   completeRemainingSets,
   createSuggestedWorkoutSet,
   createWorkoutSet,
+  hasRecordedPerformance,
   isCompletedWorkingSet,
   latestExerciseSets,
   restTimerSecondsAfterSetUpdate,
@@ -844,6 +840,10 @@ function AppContent() {
   const [showRestTimes, setShowRestTimes] = useState(restTimesPreferenceEnabled);
   // The live workout's rest end, so the tab bar can count it down away from the workout.
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  // When a finished rest is waiting for the next set, so the tab bar's bell can ring.
+  const [restDoneAt, setRestDoneAt] = useState<number | null>(null);
+  // Bumped by the ringing bell to open the workout at the next set.
+  const [restGoRequest, setRestGoRequest] = useState(0);
   const [liveWorkoutSummary, setLiveWorkoutSummary] = useState<LiveWorkoutSummary | null>(null);
   const [workoutResumeRequest, setWorkoutResumeRequest] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(reduceMotionPreference);
@@ -2463,11 +2463,6 @@ function AppContent() {
                     {(navigation, viewedWorkout) => (
                       <WorkoutLogger
                         key={viewedWorkout?.id ?? 'original'}
-                        syncStatus={workoutSync.status}
-                        onSyncRetry={() => {
-                          setSyncConflictDismissed(false);
-                          workoutSync.retry();
-                        }}
                         exercises={exercises}
                         restoredDraftMovements={restoredDraftMovements}
                         recommendation={dashboard?.recommendation ?? null}
@@ -2504,6 +2499,10 @@ function AppContent() {
                         onRestTimerChange={
                           editingWorkout || viewedWorkout ? undefined : setRestEndsAt
                         }
+                        onRestDoneChange={
+                          editingWorkout || viewedWorkout ? undefined : setRestDoneAt
+                        }
+                        restGoRequest={restGoRequest}
                         screenVisible={tab === 'log'}
                         onLiveSummaryChange={setLiveWorkoutSummary}
                         onClose={navigateBack}
@@ -2749,13 +2748,19 @@ function AppContent() {
             active={liveSheetOpen ? 'dashboard' : activeMainTab}
             workoutStartedAt={activeWorkoutStartedAt}
             restEndsAt={restEndsAt}
+            restDoneAt={restDoneAt}
             workoutSaving={workoutSaveBlocked}
             onSelect={(nextTab) => {
               if (nextTab === 'training')
                 setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
               else setTab(nextTab);
             }}
-            onStart={() => (activeWorkoutStartedAt !== null ? resumeLiveWorkout() : startWorkout())}
+            onStart={() => {
+              if (activeWorkoutStartedAt === null) startWorkout();
+              // The ringing bell opens the workout at the next set; the logger opens it.
+              else if (restDoneAt !== null) setRestGoRequest((request) => request + 1);
+              else resumeLiveWorkout();
+            }}
             startMenu={{
               upNextLabel:
                 upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
@@ -2793,17 +2798,17 @@ function AppContent() {
             onClose={() => setSyncConflictDismissed(true)}
           />
         )}
-        {workoutSync.conflict &&
-          syncConflictDismissed &&
-          (tab !== 'log' || activeWorkoutStartedAt === null) && (
-            <button
-              type="button"
-              className="workout-sync-reopen primary-action"
-              onClick={() => setSyncConflictDismissed(false)}
-            >
-              Resolve workout sync
-            </button>
-          )}
+        {/* Failed syncs retry in the background; only a conflict needs the user. This floats
+            over the screen, so it never pushes the workout down. */}
+        {workoutSync.conflict && syncConflictDismissed && (
+          <button
+            type="button"
+            className="workout-sync-reopen primary-action"
+            onClick={() => setSyncConflictDismissed(false)}
+          >
+            Resolve workout sync
+          </button>
+        )}
       </div>
     </AppContentProviders>
   );
@@ -3226,8 +3231,6 @@ function BrowsedWorkoutDetails({
 }
 
 function WorkoutLogger({
-  syncStatus,
-  onSyncRetry,
   exercises,
   restoredDraftMovements,
   categoryColors,
@@ -3256,13 +3259,13 @@ function WorkoutLogger({
   onClose,
   onDelete,
   onRestTimerChange,
+  onRestDoneChange,
+  restGoRequest = 0,
   screenVisible = true,
   onLiveSummaryChange,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
-  syncStatus: import('./activeWorkoutSync').WorkoutSyncStatus;
-  onSyncRetry: () => void;
   categoryColors: WorkoutTypeColors;
   recommendation: WorkoutRecommendation | null;
   template: SessionTemplate | null;
@@ -3294,6 +3297,10 @@ function WorkoutLogger({
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
+  /** When a finished rest started waiting for the next set, or null, for the tab bar's bell. */
+  onRestDoneChange?: (endedAt: number | null) => void;
+  /** Each increase opens the workout at the set after the finished rest. */
+  restGoRequest?: number;
   /** False while the workout is minimised behind another tab. */
   screenVisible?: boolean;
   onLiveSummaryChange: (summary: LiveWorkoutSummary) => void;
@@ -4551,13 +4558,20 @@ function WorkoutLogger({
       return blocked('This workout type was removed. Choose another type before saving.');
     }
     const finishedAt = inactiveEndAt ?? Date.now();
-    const movementsToSave =
-      inactiveEndAt === undefined
-        ? movements
-        : movements.map((movement) => ({
-            ...movement,
-            sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
-          }));
+    const movementsToSave = movements.map((movement) => ({
+      ...movement,
+      sets: movement.sets.map((item) => {
+        const set =
+          inactiveEndAt === undefined ? item : workoutSetForAutoSave(movement.exercise.kind, item);
+        // A live workout never records a ticked set with nothing in it (such as one ticked
+        // before this check existed); it is kept as an unticked set instead.
+        return !initialWorkout &&
+          set.completed &&
+          !hasRecordedPerformance(movement.exercise.kind, set)
+          ? { ...set, completed: false }
+          : set;
+      }),
+    }));
     const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
     const unassigned = movementsToSave.find((movement) =>
       hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
@@ -4888,7 +4902,7 @@ function WorkoutLogger({
   const showTimerDock = !initialWorkout && restActive;
   const showRestDone = !initialWorkout && restTimerEnabled && !restActive && restDone !== null;
   const dockSpacing = showRestDone
-    ? 'has-rest-pill'
+    ? 'has-rest-notch'
     : !showTimerDock
       ? ''
       : restHidden
@@ -4898,7 +4912,24 @@ function WorkoutLogger({
     ? nextSetAfterRest(movements, restDone.movementKey, weightUnit)
     : null;
 
-  /** Opens the workout if it is minimised and brings the set the pill named into view. */
+  // The tab bar's bell rings while a finished rest waits, for as long as the workout is live.
+  const finishedRestAt = showRestDone ? restDone.endedAt : null;
+  useEffect(() => {
+    onRestDoneChange?.(finishedRestAt);
+  }, [finishedRestAt, onRestDoneChange]);
+  useEffect(() => () => onRestDoneChange?.(null), [onRestDoneChange]);
+
+  // Tapping the ringing bell on the tab bar opens the workout at the next set.
+  const handledRestGoRequest = useRef(restGoRequest);
+  useEffect(() => {
+    if (restGoRequest === handledRestGoRequest.current) return;
+    handledRestGoRequest.current = restGoRequest;
+    goToRestNextSet();
+    // Only a new request from the bell; the function changes on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restGoRequest]);
+
+  /** Opens the workout if it is minimised and brings the set after the finished rest into view. */
   function goToRestNextSet() {
     setRestDone(null);
     if (!screenVisible) onShow();
@@ -5004,21 +5035,6 @@ function WorkoutLogger({
         />
       )}
 
-      {/* Healthy sync stays silent; the badge only appears when it needs the user. */}
-      {!initialWorkout && (syncStatus === 'offline' || syncStatus === 'conflict') && (
-        <button
-          type="button"
-          className="workout-sync-status"
-          onClick={onSyncRetry}
-          aria-label={
-            syncStatus === 'conflict'
-              ? 'Resolve workout sync conflict'
-              : 'Sync workout across devices'
-          }
-        >
-          {syncStatus === 'conflict' ? 'Resolve sync' : 'Saved on device · Retry sync'}
-        </button>
-      )}
       {recommendation &&
         !recommendation.is_rest_day &&
         !recommendation.needs_split_update &&
@@ -5446,15 +5462,9 @@ function WorkoutLogger({
           joined={Boolean(weeklySetsUpdate)}
         />
       )}
-      {showRestDone && (
-        <RestCompletePill
-          endedAt={restDone.endedAt}
-          next={restNextSet}
-          aboveTabBar={!screenVisible}
-          onGo={goToRestNextSet}
-          onExtend={() => startRestTimer(REST_EXTEND_SECONDS)}
-          onDismiss={() => setRestDone(null)}
-        />
+      {/* Minimised, the tab bar's Start button rings instead. */}
+      {showRestDone && screenVisible && (
+        <RestDoneBell endedAt={restDone.endedAt} next={restNextSet} onGo={goToRestNextSet} />
       )}
       {weeklySetsUpdate && (
         <WeeklySetsShelf
@@ -5462,7 +5472,7 @@ function WorkoutLogger({
           goal={muscleSetGoal}
           goals={muscleGoals}
           placement={
-            showRestDone ? 'pill' : !showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'
+            showRestDone ? 'notch' : !showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'
           }
           onDismiss={() => setWeeklySetsUpdate(null)}
         />
@@ -6156,6 +6166,8 @@ function MovementCard({
     item: DraftSet;
     warning: SetEntryWarning;
   } | null>(null);
+  // A set whose tick was pressed before anything was entered; cleared once it has a value.
+  const [emptySetKey, setEmptySetKey] = useState<string | null>(null);
   const barType = cardio ? null : barTypeForExercise(movement.exercise);
   const [plateSetKey, setPlateSetKey] = useState<string | null>(null);
   const plateSetIndex = movement.sets.findIndex((item) => item.key === plateSetKey);
@@ -6287,6 +6299,12 @@ function MovementCard({
   function requestSetCompletion(item: DraftSet, index: number) {
     if (item.completed) {
       onToggleSet(item);
+      return;
+    }
+    if (!hasRecordedPerformance(movement.exercise.kind, item)) {
+      // Nothing to log yet: open the set at the field it needs instead of ticking it.
+      setEmptySetKey(item.key);
+      openSet(item.key, cardio ? 'duration' : 'reps');
       return;
     }
 
@@ -6542,6 +6560,12 @@ function MovementCard({
 
   function renderSetEditor(item: DraftSet, index: number) {
     const suggested = item.fromPrevious ? ', suggested value' : '';
+    const missingEntry =
+      emptySetKey === item.key && !hasRecordedPerformance(movement.exercise.kind, item);
+    const entryErrorId = `set-entry-error-${item.key}`;
+    const entryInvalid = missingEntry
+      ? { 'aria-invalid': true, 'aria-describedby': entryErrorId }
+      : {};
     return (
       <div className={`set-editor ${item.completed ? 'completed' : ''}`}>
         {renderSetTypeButton(item, index)}
@@ -6562,6 +6586,7 @@ function MovementCard({
                 })
               }
               aria-label="Duration minutes"
+              {...entryInvalid}
             />
             <input
               data-set-field="distance"
@@ -6600,6 +6625,7 @@ function MovementCard({
                 onUpdateSet(item.key, { reps: numberOrNull(event.target.value) })
               }
               aria-label={`Repetitions${suggested}`}
+              {...entryInvalid}
             />
           </>
         )}
@@ -6621,6 +6647,13 @@ function MovementCard({
         {renderRowCompleteButton(item, index)}
         {renderCompletedSetActions(item, index)}
         <div className="set-editor-extras">
+          {missingEntry && (
+            <p id={entryErrorId} className="set-entry-error" role="alert">
+              {cardio
+                ? 'Enter a time, distance or another measurement to log this set.'
+                : 'Enter reps to log this set.'}
+            </p>
+          )}
           <div className="set-editor-tools">
             {!cardio && (
               <label className="set-editor-rest">
