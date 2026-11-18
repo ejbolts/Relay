@@ -21,7 +21,17 @@ export function blockOn(blocks: TrainingBlock[], day: string): TrainingBlock | n
   return [...blocks].reverse().find((block) => block.start_date <= day) ?? null;
 }
 
-/** An all-time achievement also qualifies when browsing its training block. */
+/** The fresh start a day belongs to, from its date until the next fresh start. */
+export function freshStartOn(freshStarts: string[], day: string) {
+  let index = -1;
+  while (index + 1 < freshStarts.length && freshStarts[index + 1] <= day) index += 1;
+  return index < 0 ? null : { start: freshStarts[index], end: freshStarts[index + 1] ?? null };
+}
+
+/**
+ * An all-time or fresh-start achievement also qualifies when browsing its training block.
+ * Without a block, only block records are left out.
+ */
 export function recordsForBlock(records: PersonalRecord[], block: TrainingBlock | null) {
   return records.filter((record) =>
     block
