@@ -6676,7 +6676,6 @@ function MovementCard({
               }}
             >
               <Icon name="trash" />
-              Delete set
             </button>
           </div>
           {cardio && (

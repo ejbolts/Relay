@@ -1557,11 +1557,7 @@ describe('rest time controls', () => {
     draft.movements[0].sets[0].completed = false;
     writeActiveWorkoutDraft(draft);
     await mount();
-    // An unticked set is open, with Delete set among its own actions.
-    const remove = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Delete set'),
-    )!;
-    await act(async () => remove.click());
+    await click('Delete set 1');
     const notice = container.querySelector('.logger-notice-toast');
     expect(notice?.getAttribute('role')).toBe('alert');
     expect(notice?.textContent).toContain(
