@@ -5,15 +5,23 @@ whole history (its best streak, its heaviest lift, its biggest cardio week), so 
 earned for as long as the training behind it is logged. Sample workouts never count.
 
 Strength borders have a standard for each sex. That is why an account's sex is fixed once it is
-chosen: it decides which standard the account is measured against.
+chosen: it decides which standard the account is measured against. Strength is also where the
+rarest look, mythic, lives: effort alone (more minutes, more sessions) tops out lower.
+
+Some borders are limited editions. A season is a third of the year, and each has three tiers for
+the days trained during it; yearly events (New Year, Winter, Halloween, Christmas, Summer) each
+have one. A limited border can only be earned while its window is open: training logged after the
+window closes does not count, but a border earned in time stays earned.
 """
 
 from __future__ import annotations
 
+import calendar
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
 from pydantic import BaseModel
@@ -38,7 +46,8 @@ from .relative_strength import BodyweightHistory
 from .training_metrics import KG_TO_LB, get_setting, preferred_weight_unit, start_of_week
 
 Sex = Literal["male", "female"]
-Rarity = Literal["common", "rare", "epic", "legendary"]
+Rarity = Literal["common", "rare", "epic", "legendary", "mythic"]
+Status = Literal["active", "upcoming", "ended"]
 
 # Workouts that start from 4 am up to 7 am are early; from 9 pm until 4 am they are late.
 EARLY_FROM, EARLY_UNTIL, LATE_FROM = time(4), time(7), time(21)
@@ -63,6 +72,8 @@ class Metric:
     weight: bool = False
 
 
+RATIO = "× BW"
+
 METRICS = {
     "workouts": Metric("Consistency", "Log {target} workouts", "workouts"),
     "log_streak": Metric(
@@ -83,7 +94,9 @@ METRICS = {
     "big_three_kg": Metric(
         "Strength", "Total {target} across your best bench, squat and deadlift", weight=True
     ),
-    "bench_body_weight_pct": Metric("Strength", "Bench press {target} of your body weight", "%"),
+    "bench_bw": Metric("Bodyweight strength", "Bench press {target} your body weight", RATIO),
+    "squat_bw": Metric("Bodyweight strength", "Squat {target} your body weight", RATIO),
+    "deadlift_bw": Metric("Bodyweight strength", "Deadlift {target} your body weight", RATIO),
     "records_in_workout": Metric("Records", "Set {target} PRs in one workout", "PRs"),
     "records": Metric("Records", "Set {target} PRs", "PRs"),
     "cardio_month_km": Metric("Cardio", "Cover {target} km of cardio in one calendar month", "km"),
@@ -94,7 +107,31 @@ METRICS = {
         "weeks",
     ),
     "climbed_m": Metric("Cardio", "Climb {target} m of elevation in total", "m"),
+    # Limited editions: days with a workout or cardio inside the border's window.
+    "window_days": Metric("Limited", "Train on {target} days", "days"),
 }
+
+
+@dataclass(frozen=True)
+class Window:
+    """When a limited border can be earned: from `starts` to `ends`, both days included."""
+
+    kind: Literal["season", "event"]
+    starts: date
+    ends: date
+
+    def status(self, today: date) -> Status:
+        if today < self.starts:
+            return "upcoming"
+        return "ended" if today > self.ends else "active"
+
+    def describe(self) -> str:
+        start, end = self.starts, self.ends
+        if (start.year, start.month) == (end.year, end.month) and start.day == 1:
+            if end.day == calendar.monthrange(end.year, end.month)[1]:
+                return f"in {end:%B} {end.year}"
+        first = f"{start.day} {start:%b}" + (f" {start.year}" if start.year != end.year else "")
+        return f"between {first} and {end.day} {end:%b} {end.year}"
 
 
 @dataclass(frozen=True)
@@ -110,6 +147,8 @@ class Border:
     # Tiered borders share a family; tier 1 is the first to earn.
     family: str | None = None
     tier: int | None = None
+    # Set for a limited edition: the only dates whose training counts.
+    window: Window | None = None
 
     @property
     def measure(self) -> Metric:
@@ -145,8 +184,29 @@ def tiers(
     )
 
 
+STRENGTH_RARITIES: tuple[Rarity, ...] = ("common", "rare", "epic", "legendary", "mythic")
+NUMERALS = ("I", "II", "III", "IV", "V")
+
+
+def five_tiers(
+    family: str, metric: str, key: str, name: str, targets: Iterable[tuple[float, float]]
+) -> tuple[Border, ...]:
+    """A strength family of five tiers, from common to mythic, as (men, women) targets."""
+    return tiers(
+        family,
+        metric,
+        *(
+            (f"{key}-{index}", f"{name} {NUMERALS[index - 1]}", rarity, target)
+            for index, (rarity, target) in enumerate(
+                zip(STRENGTH_RARITIES, targets, strict=True), start=1
+            )
+        ),
+    )
+
+
 # Lift standards in kg as (men, women). A 20 kg bar with 20 kg plates: one plate a side is
-# 60 kg, two is 100 kg, three is 140 kg, four is 180 kg and five is 220 kg.
+# 60 kg, two is 100 kg, three is 140 kg, four is 180 kg, five is 220 kg and so on. Tier V of a
+# lift is elite, which is why it is the only route to mythic.
 # In the order the app lists them: by group, then roughly by how long each takes to earn.
 BORDERS: tuple[Border, ...] = (
     Border("first-steps", "First Steps", "common", "workouts", 5),
@@ -177,36 +237,57 @@ BORDERS: tuple[Border, ...] = (
         ("million-kilo", "Million Kilo Club", "legendary", 1000, "a million kilos"),
     ),
     Border("hundred-hours", "Hundred Hours", "rare", "training_hours", 100),
-    *tiers(
+    *five_tiers(
         "bench",
         "bench_kg",
-        ("bench-club-1", "Bench Club I", "rare", (60, 40)),
-        ("bench-club-2", "Bench Club II", "epic", (100, 60)),
-        ("bench-club-3", "Bench Club III", "legendary", (140, 80)),
+        "bench-club",
+        "Bench Club",
+        ((60, 40), (100, 60), (140, 80), (160, 90), (180, 100)),
     ),
-    *tiers(
+    *five_tiers(
         "squat",
         "squat_kg",
-        ("squat-club-1", "Squat Club I", "rare", (100, 60)),
-        ("squat-club-2", "Squat Club II", "epic", (140, 100)),
-        ("squat-club-3", "Squat Club III", "legendary", (180, 140)),
+        "squat-club",
+        "Squat Club",
+        ((100, 60), (140, 100), (180, 140), (220, 160), (260, 180)),
     ),
-    *tiers(
+    *five_tiers(
         "deadlift",
         "deadlift_kg",
-        ("deadlift-club-1", "Deadlift Club I", "rare", (140, 100)),
-        ("deadlift-club-2", "Deadlift Club II", "epic", (180, 140)),
-        ("deadlift-club-3", "Deadlift Club III", "legendary", (220, 180)),
+        "deadlift-club",
+        "Deadlift Club",
+        ((140, 100), (180, 140), (220, 180), (260, 200), (300, 220)),
     ),
-    *tiers(
+    # 1,000 lb and 1,500 lb totals for men at tiers III and V.
+    *five_tiers(
         "big-three",
         "big_three_kg",
-        ("big-three-1", "Big Three I", "rare", (300, 180)),
-        ("big-three-2", "Big Three II", "epic", (400, 250)),
-        # 1,000 lb for men.
-        ("big-three-3", "Big Three III", "legendary", (453.6, 320)),
+        "big-three",
+        "Big Three",
+        ((300, 180), (400, 250), (453.6, 320), (550, 380), (680.4, 450)),
     ),
-    Border("pound-for-pound", "Pound for Pound", "rare", "bench_body_weight_pct", (100, 60)),
+    # Lifts as multiples of the body weight logged nearest the set.
+    *five_tiers(
+        "bench-bw",
+        "bench_bw",
+        "pound-for-pound",
+        "Pound for Pound",
+        ((0.75, 0.5), (1, 0.65), (1.25, 0.8), (1.5, 1), (1.75, 1.2)),
+    ),
+    *five_tiers(
+        "squat-bw",
+        "squat_bw",
+        "atlas",
+        "Atlas",
+        ((1, 0.75), (1.25, 1), (1.5, 1.25), (2, 1.5), (2.5, 2)),
+    ),
+    *five_tiers(
+        "deadlift-bw",
+        "deadlift_bw",
+        "gravity-defier",
+        "Gravity Defier",
+        ((1.25, 1), (1.5, 1.25), (2, 1.5), (2.5, 2), (3, 2.5)),
+    ),
     Border("hat-trick", "Hat-trick", "common", "records_in_workout", 3),
     *tiers(
         "records",
@@ -216,12 +297,13 @@ BORDERS: tuple[Border, ...] = (
         ("record-breaker-3", "Record Breaker III", "epic", 1000),
     ),
     Border("marathon-month", "Marathon Month", "rare", "cardio_month_km", 42.2),
+    # Minutes alone are effort anyone can put in, so this family stops at epic.
     *tiers(
         "cardio-week",
         "cardio_week_minutes",
         ("cardiomaniac-1", "Cardiomaniac I", "common", 150),
-        ("cardiomaniac-2", "Cardiomaniac II", "epic", 300),
-        ("cardiomaniac-3", "Cardiomaniac III", "legendary", 600),
+        ("cardiomaniac-2", "Cardiomaniac II", "rare", 300),
+        ("cardiomaniac-3", "Cardiomaniac III", "epic", 600),
     ),
     Border("hybrid", "Hybrid Athlete", "epic", "hybrid_weeks", 4),
     Border("everest", "Everest", "legendary", "climbed_m", 8849),
@@ -231,6 +313,141 @@ BORDERS_BY_KEY = {border.key: border for border in BORDERS}
 
 # Single lifts, whose targets also read as plates on the bar.
 PLATE_LIFTS = {"bench_kg", "squat_kg", "deadlift_kg"}
+
+# Seasons are thirds of the year: January to April, May to August, September to December.
+# Season 1 is September to December 2026.
+FIRST_SEASON = (2026, 3)
+SEASON_TIERS: tuple[tuple[str, Rarity, int], ...] = (
+    ("Contender", "rare", 15),
+    ("Challenger", "epic", 40),
+    ("Champion", "legendary", 70),
+)
+
+
+@dataclass(frozen=True)
+class Event:
+    """A yearly limited edition, open from the first of `first_month` to the end of `last_month`.
+
+    Summer and Winter follow the southern hemisphere, where Relay started.
+    """
+
+    slug: str
+    name: str
+    rarity: Rarity
+    days: int
+    first_month: int
+    last_month: int
+
+    def window(self, year: int) -> Window:
+        end_year = year + (self.last_month < self.first_month)
+        last_day = calendar.monthrange(end_year, self.last_month)[1]
+        return Window(
+            "event", date(year, self.first_month, 1), date(end_year, self.last_month, last_day)
+        )
+
+    def title(self, year: int) -> str:
+        if self.last_month < self.first_month:
+            return f"{self.name} {year}–{str(year + 1)[-2:]}"
+        return f"{self.name} {year}"
+
+
+EVENTS = (
+    Event("new-year", "New Year", "epic", 16, 1, 1),
+    Event("winter", "Winter", "epic", 36, 6, 8),
+    Event("halloween", "Halloween", "rare", 13, 10, 10),
+    Event("christmas", "Christmas", "epic", 12, 12, 12),
+    Event("summer", "Summer", "epic", 36, 12, 2),
+)
+EVENTS_BY_SLUG = {event.slug: event for event in EVENTS}
+# Events open from Christmas 2026; earlier windows were never offered.
+EVENTS_FROM = date(2026, 12, 1)
+# How far ahead an event shows as coming soon.
+UPCOMING_DAYS = 30
+SEASON_KEY = re.compile(r"^season-(\d{1,3})-([1-3])$")
+EVENT_KEY = re.compile(r"^([a-z-]+)-(\d{4})$")
+
+
+def season_of(day: date) -> int:
+    """The season a date falls in; 0 or less before Season 1."""
+    first_year, first_third = FIRST_SEASON
+    return (day.year - first_year) * 3 + (day.month - 1) // 4 + 1 - (first_third - 1)
+
+
+def season_window(number: int) -> Window:
+    first_year, first_third = FIRST_SEASON
+    index = number - 1 + first_third - 1
+    year, third = first_year + index // 3, index % 3
+    last_month = third * 4 + 4
+    return Window(
+        "season",
+        date(year, third * 4 + 1, 1),
+        date(year, last_month, calendar.monthrange(year, last_month)[1]),
+    )
+
+
+def season_borders(number: int) -> tuple[Border, ...]:
+    window = season_window(number)
+    return tuple(
+        Border(
+            f"season-{number}-{index}",
+            f"Season {number} {title}",
+            rarity,
+            "window_days",
+            days,
+            window.describe(),
+            family=f"season-{number}",
+            tier=index,
+            window=window,
+        )
+        for index, (title, rarity, days) in enumerate(SEASON_TIERS, start=1)
+    )
+
+
+def event_border(event: Event, year: int) -> Border:
+    window = event.window(year)
+    return Border(
+        f"{event.slug}-{year}",
+        event.title(year),
+        event.rarity,
+        "window_days",
+        event.days,
+        window.describe(),
+        window=window,
+    )
+
+
+def limited_borders(today: date) -> tuple[Border, ...]:
+    """Every limited border offered up to today, plus events opening within UPCOMING_DAYS."""
+    seasons = [
+        border for number in range(1, season_of(today) + 1) for border in season_borders(number)
+    ]
+    events = [
+        event_border(event, year)
+        for year in range(EVENTS_FROM.year, today.year + 1)
+        for event in EVENTS
+        if EVENTS_FROM <= event.window(year).starts <= today + timedelta(days=UPCOMING_DAYS)
+    ]
+    return (*seasons, *events)
+
+
+def find_border(key: str | None, today: date | None = None) -> Border | None:
+    """The border with this key, if the app offers it: always, or once its window is near."""
+    if key is None:
+        return None
+    if key in BORDERS_BY_KEY:
+        return BORDERS_BY_KEY[key]
+    today = today or date.today()
+    if match := SEASON_KEY.match(key):
+        number, tier = int(match[1]), int(match[2])
+        if 1 <= number <= season_of(today):
+            return season_borders(number)[tier - 1]
+        return None
+    if (match := EVENT_KEY.match(key)) and (event := EVENTS_BY_SLUG.get(match[1])):
+        year = int(match[2])
+        starts = event.window(year).starts
+        if EVENTS_FROM <= starts <= today + timedelta(days=UPCOMING_DAYS):
+            return event_border(event, year)
+    return None
 
 
 class BorderProgress(BaseModel):
@@ -252,6 +469,13 @@ class BorderRead(BaseModel):
     # A tiered border's family and its place in it, from 1; both are None for a single border.
     family: str | None = None
     tier: int | None = None
+    # Limited editions only: a season or an event, its window, and whether it is open.
+    kind: Literal["season", "event"] | None = None
+    status: Status | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+    # Days left including today while open, or days until it opens while upcoming.
+    days_left: int | None = None
 
 
 class BordersRead(BaseModel):
@@ -262,12 +486,12 @@ class BordersRead(BaseModel):
 
 def worn_border(user: User) -> str | None:
     """The border shown around the account's photo, if it is still one the app knows."""
-    return user.profile_border if user.profile_border in BORDERS_BY_KEY else None
+    return user.profile_border if find_border(user.profile_border) else None
 
 
 def worn_border_name(user: User) -> str | None:
-    key = worn_border(user)
-    return BORDERS_BY_KEY[key].name if key else None
+    border = find_border(user.profile_border)
+    return border.name if border else None
 
 
 def longest_run(days: Iterable[date], step: int = 1) -> int:
@@ -286,7 +510,37 @@ def lift_of(exercise_name: str) -> str | None:
     return next((lift for lift, names in LIFT_NAMES.items() if name in names), None)
 
 
-def border_stats(db: Session, user: User, today: date | None = None) -> dict[str, float]:
+@dataclass
+class Stats:
+    """An account's numbers, plus the dated activity the limited editions are counted from."""
+
+    values: dict[str, float]
+    # (day trained, when it was logged), for every workout and cardio session.
+    activity: list[tuple[date, datetime]]
+
+
+def _naive_utc(moment: datetime) -> datetime:
+    # SQLite returns naive UTC timestamps; newly flushed rows can still carry tzinfo.
+    return moment if moment.tzinfo is None else moment.astimezone(UTC).replace(tzinfo=None)
+
+
+def window_days(activity: list[tuple[date, datetime]], window: Window) -> int:
+    """Days trained inside the window, logged by the day after it ends.
+
+    The extra day lets the last day's training be logged late; anything logged after that is a
+    backfill, which a closed window does not accept.
+    """
+    deadline = datetime.combine(window.ends + timedelta(days=2), time())
+    return len(
+        {
+            day
+            for day, logged in activity
+            if window.starts <= day <= window.ends and _naive_utc(logged) < deadline
+        }
+    )
+
+
+def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     """The account's number for every border metric, from its whole logged history."""
     today = today or date.today()
     week_start = get_setting(db, user.id, "week_start", "monday")
@@ -299,14 +553,15 @@ def border_stats(db: Session, user: User, today: date | None = None) -> dict[str
             TrainingWorkout.workout_date,
             TrainingWorkout.start_time,
             TrainingWorkout.duration_minutes,
+            TrainingWorkout.created_at,
         ).where(
             TrainingWorkout.user_id == user.id,
             TrainingWorkout.is_sample.is_(False),
             TrainingWorkout.workout_date <= today,
         )
     ).all()
-    training_days = {day for day, _, _ in workouts}
-    starts = [start for _, start, _ in workouts if start is not None]
+    training_days = {day for day, _, _, _ in workouts}
+    starts = [start for _, start, _, _ in workouts if start is not None]
 
     # Completed working sets of strength exercises: what counts as lifting.
     sets = db.execute(
@@ -335,7 +590,7 @@ def border_stats(db: Session, user: User, today: date | None = None) -> dict[str
     lifted_kg = 0.0
     lifting_days: set[date] = set()
     best_lift = {lift: 0.0 for lift in LIFT_NAMES}
-    bench_sets: list[tuple[date, float, float | None]] = []
+    lift_sets: list[tuple[str, date, float, float | None]] = []
     lift_by_name: dict[str, str | None] = {}
     for day, name, weight, reps, set_body_weight in sets:
         lifting_days.add(day)
@@ -348,15 +603,14 @@ def border_stats(db: Session, user: User, today: date | None = None) -> dict[str
         if lift is None:
             continue
         best_lift[lift] = max(best_lift[lift], weight)
-        if lift == "bench":
-            bench_sets.append((day, weight, set_body_weight))
-    bench_pct = 0.0
-    if bench_sets:
+        lift_sets.append((lift, day, weight, set_body_weight))
+    best_ratio = {lift: 0.0 for lift in LIFT_NAMES}
+    if lift_sets:
         body_weights = BodyweightHistory(db, user.id)
-        for day, weight, set_body_weight in bench_sets:
+        for lift, day, weight, set_body_weight in lift_sets:
             body_weight = body_weights.on(day, set_body_weight or None)
             if body_weight:
-                bench_pct = max(bench_pct, weight / body_weight * 100)
+                best_ratio[lift] = max(best_ratio[lift], weight / body_weight)
 
     cardio = db.scalars(
         select(CardioSession)
@@ -410,7 +664,7 @@ def border_stats(db: Session, user: User, today: date | None = None) -> dict[str
     for day in lifting_days:
         lifting_days_per_week[week_of(day)] += 1
 
-    return {
+    values = {
         "workouts": len(workouts),
         "log_streak": longest_run(
             [*training_days, *(session.session_date for session in cardio), *weigh_in_days]
@@ -421,12 +675,14 @@ def border_stats(db: Session, user: User, today: date | None = None) -> dict[str
         "late_starts": sum(start >= LATE_FROM or start < EARLY_FROM for start in starts),
         "months_trained": len({day.month for day in training_days}),
         "tonnes": lifted_kg / 1000,
-        "training_hours": sum(minutes or 0 for _, _, minutes in workouts) / 60,
+        "training_hours": sum(minutes or 0 for _, _, minutes, _ in workouts) / 60,
         "bench_kg": best_lift["bench"],
         "squat_kg": best_lift["squat"],
         "deadlift_kg": best_lift["deadlift"],
         "big_three_kg": sum(best_lift.values()),
-        "bench_body_weight_pct": bench_pct,
+        "bench_bw": best_ratio["bench"],
+        "squat_bw": best_ratio["squat"],
+        "deadlift_bw": best_ratio["deadlift"],
         "records": sum(record_counts),
         "records_in_workout": max(record_counts, default=0),
         "cardio_week_minutes": max(cardio_week_minutes.values(), default=0),
@@ -437,17 +693,28 @@ def border_stats(db: Session, user: User, today: date | None = None) -> dict[str
             for week, days in lifting_days_per_week.items()
         ),
     }
+    activity = [(day, created) for day, _, _, created in workouts] + [
+        (session.session_date, session.created_at) for session in cardio
+    ]
+    return Stats(values, activity)
 
 
-def _number(value: float) -> str:
-    return f"{value:,.1f}".removesuffix(".0")
+def value_of(border: Border, stats: Stats) -> float:
+    if border.window is not None:
+        return window_days(stats.activity, border.window)
+    return stats.values[border.metric]
+
+
+def _number(value: float, places: int = 1) -> str:
+    text = f"{value:,.{places}f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 def _shown(border: Border, value: float, unit: str) -> float:
     """A stored number as the account reads it: weights in its unit, to one decimal."""
     if border.measure.weight and unit == "lb":
         value *= KG_TO_LB
-    return round(value, 1)
+    return round(value, 2 if border.measure.unit == RATIO else 1)
 
 
 def plates(target_kg: float) -> int | None:
@@ -462,53 +729,99 @@ def _target_text(border: Border, target: float, unit: str) -> str:
         text = f"{_number(round(_shown(border, target, unit)))} {unit}"
         count = plates(target) if border.metric in PLATE_LIFTS else None
         return f"{text} · {count} plate{'s' if count > 1 else ''}" if count else text
-    return f"{_number(target)}%" if border.measure.unit == "%" else _number(target)
+    if border.measure.unit == RATIO:
+        return f"{_number(target, 2)}×"
+    return _number(target)
 
 
 def _requirement(border: Border, target: str) -> str:
     text = border.measure.requirement.format(target=target)
-    return f"{text}, {border.note}" if border.note else text
+    if not border.note:
+        return text
+    # A window reads as part of the sentence: "Train on 12 days in December 2026".
+    return f"{text} {border.note}" if border.window else f"{text}, {border.note}"
 
 
-def is_unlocked(border: Border, stats: dict[str, float], sex: str | None) -> bool:
+def is_unlocked(border: Border, stats: Stats, sex: str | None) -> bool:
     target = border.target_for(sex)
     # A float sum can land a hair under a target it has reached.
-    return target is not None and stats[border.metric] + 1e-9 >= target
+    return target is not None and value_of(border, stats) + 1e-9 >= target
 
 
-def borders_for(db: Session, user: User) -> BordersRead:
-    stats = border_stats(db, user)
-    unit = preferred_weight_unit(db, user.id)
-    borders = []
-    for border in BORDERS:
-        measure = border.measure
-        read = BorderRead(
-            key=border.key,
-            name=border.name,
-            group=measure.group,
-            rarity=border.rarity,
-            requirement="",
-            unlocked=is_unlocked(border, stats, user.sex),
-            family=border.family,
-            tier=border.tier,
+def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date) -> BorderRead:
+    measure = border.measure
+    read = BorderRead(
+        key=border.key,
+        name=border.name,
+        group=measure.group,
+        rarity=border.rarity,
+        requirement="",
+        unlocked=is_unlocked(border, stats, sex),
+        family=border.family,
+        tier=border.tier,
+    )
+    target = border.target_for(sex)
+    if target is None:
+        assert isinstance(border.target, tuple)
+        male, female = (_target_text(border, value, unit) for value in border.target)
+        read.requirement = _requirement(border, f"{male} (men) or {female} (women)")
+        read.needs_sex = True
+    else:
+        shown_target = _shown(border, target, unit)
+        read.requirement = _requirement(border, _target_text(border, target, unit))
+        read.progress = BorderProgress(
+            current=_shown(border, value_of(border, stats), unit),
+            target=round(shown_target) if measure.weight else shown_target,
+            unit=unit if measure.weight else measure.unit,
         )
-        target = border.target_for(user.sex)
-        if target is None:
-            assert isinstance(border.target, tuple)
-            male, female = (_target_text(border, value, unit) for value in border.target)
-            read.requirement = _requirement(border, f"{male} (men) or {female} (women)")
-            read.needs_sex = True
+    if window := border.window:
+        status = window.status(today)
+        read.kind = window.kind
+        read.status = status
+        read.starts_on, read.ends_on = window.starts, window.ends
+        if status == "active":
+            read.days_left = (window.ends - today).days + 1
+        elif status == "upcoming":
+            read.days_left = (window.starts - today).days
+            # Nothing counts before it opens.
+            read.unlocked = False
+            if read.progress:
+                read.progress.current = 0
+    return read
+
+
+def borders_for(db: Session, user: User, today: date | None = None) -> BordersRead:
+    """Every border to show the account, in the order the app lists them.
+
+    The open season comes first, then events that are open or about to open, then the permanent
+    borders. Limited editions whose window has closed are listed only where they were earned.
+    """
+    today = today or date.today()
+    stats = border_stats(db, user, today)
+    unit = preferred_weight_unit(db, user.id)
+    season = season_of(today)
+    current, events, permanent, past = [], [], [], []
+    for border in (*limited_borders(today), *BORDERS):
+        read = _read(border, stats, user.sex, unit, today)
+        if border.window is None:
+            permanent.append(read)
+        elif read.status == "ended":
+            if read.unlocked:
+                past.append(read.model_copy(update={"group": "Past seasons and events"}))
+        elif read.kind == "season":
+            current.append(read.model_copy(update={"group": f"Season {season}"}))
         else:
-            shown_target = _shown(border, target, unit)
-            read.requirement = _requirement(border, _target_text(border, target, unit))
-            read.progress = BorderProgress(
-                current=_shown(border, stats[border.metric], unit),
-                target=round(shown_target) if measure.weight else shown_target,
-                unit=unit if measure.weight else measure.unit,
-            )
-        borders.append(read)
-    return BordersRead(selected=worn_border(user), sex=user.sex, borders=borders)
+            events.append(read.model_copy(update={"group": "Events"}))
+    return BordersRead(
+        selected=worn_border(user), sex=user.sex, borders=[*current, *events, *permanent, *past]
+    )
 
 
-def can_wear(db: Session, user: User, key: str) -> bool:
-    return is_unlocked(BORDERS_BY_KEY[key], border_stats(db, user), user.sex)
+def can_wear(db: Session, user: User, key: str, today: date | None = None) -> bool:
+    border = find_border(key, today)
+    if border is None:
+        return False
+    today = today or date.today()
+    if border.window and border.window.status(today) == "upcoming":
+        return False
+    return is_unlocked(border, border_stats(db, user, today), user.sex)

@@ -72,6 +72,38 @@ describe('ProfileAvatar', () => {
     for (const id of used) expect(ids).toContain(id);
   });
 
+  it('draws seasons and yearly events from their key alone', () => {
+    const draw = (key: string) =>
+      renderToStaticMarkup(
+        <ProfileAvatar
+          className="profile-avatar"
+          user={{ ...account, profile_photo_url: null, profile_border: key }}
+        />,
+      );
+    expect(draw('season-1-3')).toContain('>S1</text>');
+    expect(draw('season-12-1')).toContain('>S12</text>');
+    expect(draw('christmas-2026')).toContain('>2026</text>');
+    expect(draw('summer-2026')).toContain('>26–27</text>');
+    expect(draw('season-1-4')).not.toContain('profile-border-art');
+    expect(draw('easter-2027')).not.toContain('profile-border-art');
+  });
+
+  it('gives mythic borders a halo, a flare and an orbit that legendary ones lack', () => {
+    const draw = (key: string) =>
+      renderToStaticMarkup(
+        <ProfileAvatar
+          className="profile-avatar"
+          user={{ ...account, profile_photo_url: null, profile_border: key }}
+          animated
+        />,
+      );
+    for (const layer of ['profile-border-halo', 'profile-border-flare', 'profile-border-orbit']) {
+      expect(draw('deadlift-club-5')).toContain(layer);
+      expect(draw('deadlift-club-4')).not.toContain(layer);
+    }
+    expect(draw('deadlift-club-5')).toContain('>V</text>');
+  });
+
   it('leaves the photo plain for a border this version cannot draw', () => {
     const markup = renderToStaticMarkup(
       <ProfileAvatar

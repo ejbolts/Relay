@@ -886,7 +886,7 @@ export interface User {
 
 export type Sex = 'male' | 'female';
 
-export type BorderRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type BorderRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
 
 /** One profile border: a challenge, and how far the account is towards it. */
 export interface ProfileBorder {
@@ -902,6 +902,13 @@ export interface ProfileBorder {
   /** A tiered border's family and its place in it, from 1; absent for a single border. */
   family?: string | null;
   tier?: number | null;
+  /** Limited editions only: a season or a yearly event, and whether it can be earned now. */
+  kind?: 'season' | 'event' | null;
+  status?: 'active' | 'upcoming' | 'ended' | null;
+  starts_on?: string | null;
+  ends_on?: string | null;
+  /** Days left including today while open, or days until it opens while upcoming. */
+  days_left?: number | null;
 }
 
 export interface ProfileBorders {

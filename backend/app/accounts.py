@@ -86,11 +86,11 @@ from .photo_storage import (
     store_profile_photo,
 )
 from .profile_borders import (
-    BORDERS_BY_KEY,
     BordersRead,
     Sex,
     borders_for,
     can_wear,
+    find_border,
     worn_border,
     worn_border_name,
 )
@@ -607,7 +607,7 @@ def choose_profile_border(
     payload: BorderChoice, user: CurrentUser, db: DbDependency, settings: AppSettings
 ) -> UserRead:
     if payload.border is not None:
-        if payload.border not in BORDERS_BY_KEY:
+        if find_border(payload.border) is None:
             raise api_error(404, "border_not_found", "That border is not available.")
         if not can_wear(db, user, payload.border):
             raise api_error(403, "border_locked", "Earn this border before you wear it.")

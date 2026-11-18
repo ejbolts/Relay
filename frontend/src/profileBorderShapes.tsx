@@ -12,8 +12,8 @@ import { C, around, at, flame, leaf, round, star } from './profileBorderGeometry
  * whose edge is the circle of radius 50 at the centre; ornaments reach out to about 70.
  */
 
-/** 1 common, 2 rare, 3 epic, 4 legendary. */
-type Grade = 1 | 2 | 3 | 4;
+/** 1 common, 2 rare, 3 epic, 4 legendary, 5 mythic. */
+type Grade = 1 | 2 | 3 | 4 | 5;
 type Sides = 'feather' | 'flame' | 'crystal' | 'laurel';
 
 interface Palette {
@@ -32,21 +32,41 @@ interface Spec {
   detail?: Detail;
   /** A tier in a family, shown on the banner. */
   tier?: number;
+  /** Words on the crest instead of the emblem, such as a season's number. */
+  crestText?: string;
+  /** Words on the banner instead of the tier, such as an event's year. */
+  bannerText?: string;
 }
 
 type Detail = (id: string, spec: Spec) => ReactNode;
 
 const RING = 54;
 const OUTLINE = '#070a12';
-const WIDTH = [7, 7.8, 8.6, 9.4];
+const WIDTH = [7, 7.8, 8.6, 9.4, 10.2];
 
-/** Trim metal by grade: forged iron, silver, gold, and radiant gold. */
-const TRIM = [
+/** Trim metal by grade: forged iron, silver, gold, radiant gold, and mythic holo. */
+const TRIM: [number, string][][] = [
   ['#e7e5e4', '#857a70', '#3a332d'],
   ['#ffffff', '#b6c2d1', '#4e5b6c'],
   ['#fff6d5', '#f2b10e', '#7c4f05'],
   ['#ffffff', '#ffd86b', '#b26b06'],
-] as const;
+].map(([light, mid, dark]) => [
+  [0, light],
+  [0.3, mid],
+  [0.55, dark],
+  [0.8, mid],
+  [1, light],
+]);
+// Mythic trim shifts through the spectrum like a holographic card.
+TRIM.push([
+  [0, '#ffffff'],
+  [0.18, '#f9a8d4'],
+  [0.36, '#a5f3fc'],
+  [0.54, '#fde68a'],
+  [0.72, '#c4b5fd'],
+  [0.88, '#86efac'],
+  [1, '#ffffff'],
+]);
 
 /** Emblems for the crest, drawn as strokes in a 24-unit box like the app's icons. */
 const GLYPHS = {
@@ -106,6 +126,25 @@ const GLYPHS = {
     d: 'M8 3l4 6.2L16 3M12 21a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 12.3v5.4M10.4 13.6L12 12.3',
   },
   bolt: { d: 'M13.5 2.5L5 14h6.2l-1.2 7.5L19 10h-6.2z' },
+  globe: {
+    d: 'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM3.5 12h17M12 3.5c2.4 2.4 3.6 5.2 3.6 8.5s-1.2 6.1-3.6 8.5M12 3.5C9.6 5.9 8.4 8.7 8.4 12s1.2 6.1 3.6 8.5M5 7.5h14M5 16.5h14',
+  },
+  rise: { d: 'M12 19V4.5M6.5 10L12 4.5 17.5 10M3 21h18M7.5 15.5h9' },
+  tree: {
+    d: 'M12 2.8l5.2 6.2h-3l4.3 5.2h-3.2l4.2 5.3H4.5l4.2-5.3H5.5L9.8 9h-3zM12 19.5v2.2M12 2.8v-.1',
+  },
+  sun: {
+    d: 'M12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6',
+  },
+  firework: {
+    d: 'M12 12V3M12 12l6.4-6.4M12 12h9M12 12l6.4 6.4M12 12v9M12 12l-6.4 6.4M12 12H3M12 12L5.6 5.6',
+  },
+  pumpkin: {
+    d: 'M12 6.5c-4.6 0-8 2.9-8 6.9s3.4 7 8 7 8-3 8-7-3.4-6.9-8-6.9zM12 6.5V3.8c1 0 2 .5 2.6 1.4M8.6 11l1.6 1.6-1.6 1.6M15.4 11l-1.6 1.6 1.6 1.6M9 17.2h6',
+  },
+  snowflake: {
+    d: 'M12 2.5v19M3.8 7.2l16.4 9.6M3.8 16.8l16.4-9.6M12 2.5L10 4.5M12 2.5l2 2M12 21.5l-2-2M12 21.5l2-2M3.8 7.2l2.7-.4M3.8 7.2l1 2.6M20.2 16.8l-2.7.4M20.2 16.8l-1-2.6',
+  },
   mountain: {
     d: 'M2.5 20l6.5-11 4 6.5 2.5-3.5 6 8zM9 9l1.6 3 1.9-1.4M18 4l.6 1.4L20 6l-1.4.6L18 8l-.6-1.4L16 6l1.4-.6z',
   },
@@ -114,6 +153,7 @@ const GLYPHS = {
 function defs(id: string, spec: Spec) {
   const { palette, grade } = spec;
   const trim = TRIM[grade - 1];
+  const glowStrength = [0.5, 0.5, 0.5, 0.75, 0.9][grade - 1];
   return (
     <defs>
       <linearGradient
@@ -138,11 +178,9 @@ function defs(id: string, spec: Spec) {
         x2={120}
         y2={114}
       >
-        <stop offset={0} stopColor={trim[0]} />
-        <stop offset={0.3} stopColor={trim[1]} />
-        <stop offset={0.55} stopColor={trim[2]} />
-        <stop offset={0.8} stopColor={trim[1]} />
-        <stop offset={1} stopColor={trim[0]} />
+        {trim.map(([offset, colour]) => (
+          <stop key={offset} offset={offset} stopColor={colour} />
+        ))}
       </linearGradient>
       <radialGradient id={`${id}gem`} cx={0.35} cy={0.3} r={0.9}>
         <stop offset={0} stopColor="#ffffff" />
@@ -151,7 +189,7 @@ function defs(id: string, spec: Spec) {
       </radialGradient>
       <radialGradient id={`${id}glow`} gradientUnits="userSpaceOnUse" cx={C} cy={C} r={76}>
         <stop offset={0.6} stopColor={palette.glow} stopOpacity={0} />
-        <stop offset={0.73} stopColor={palette.glow} stopOpacity={grade === 4 ? 0.75 : 0.5} />
+        <stop offset={0.73} stopColor={palette.glow} stopOpacity={glowStrength} />
         <stop offset={1} stopColor={palette.glow} stopOpacity={0} />
       </radialGradient>
       <radialGradient id={`${id}fire`} gradientUnits="userSpaceOnUse" cx={C} cy={C} r={74}>
@@ -210,6 +248,17 @@ function rims(id: string, spec: Spec) {
         stroke={`url(#${id}trim)`}
         strokeWidth={spec.grade >= 3 ? 1.8 : 1.3}
       />
+      {spec.grade === 5 && (
+        <circle
+          cx={C}
+          cy={C}
+          r={RING}
+          fill="none"
+          stroke={`url(#${id}trim)`}
+          strokeOpacity={0.45}
+          strokeWidth={w - 3.4}
+        />
+      )}
       {spec.grade >= 3 && (
         <circle
           cx={C}
@@ -248,7 +297,7 @@ function gem(id: string, x: number, y: number, size: number, key: string | numbe
 
 function gems(id: string, spec: Spec) {
   if (spec.grade < 3) return null;
-  const size = spec.grade === 4 ? 3.6 : 3;
+  const size = [0, 0, 3, 3.6, 4.1][spec.grade - 1];
   return (
     <>
       {[45, 135, 225, 315].map((deg) => {
@@ -295,7 +344,16 @@ const FAN: Record<Grade, [number, number, number, number][]> = {
     [76, 82, -10, 6.2],
     [91, 81, -6, 6.2],
     [106, 76, -2, 5.8],
-    [121, 70, 2, 5.2],
+    [121, 70.5, 2, 5.2],
+  ],
+  5: [
+    [42, 75, -22, 5.2],
+    [54, 81, -18, 5.8],
+    [67, 85.5, -14, 6.2],
+    [81, 87, -10, 6.5],
+    [96, 85, -6, 6.3],
+    [111, 80, -2, 5.9],
+    [126, 72.5, 2, 5.2],
   ],
 };
 
@@ -306,7 +364,7 @@ function sideArt(id: string, spec: Spec): ReactNode {
   const r0 = RING + 1;
   if (style === 'laurel') {
     // Gilded leaves climbing each side towards the crest, denser as the border gets rarer.
-    const count = [5, 6, 7, 9][spec.grade - 1];
+    const count = [5, 6, 7, 9, 11][spec.grade - 1];
     const step = 116 / count;
     const leaves = Array.from({ length: count }, (_, index) => 34 + index * step);
     return (
@@ -349,7 +407,7 @@ function sideArt(id: string, spec: Spec): ReactNode {
   const path = style === 'crystal' ? shard : blade;
   return (
     <>
-      {spec.grade === 4 && (
+      {spec.grade >= 4 && (
         <path
           d={fan
             .map(([deg, r1, sweep, half]) => path(deg + 6.5, r0, r1 + 2.5, half, sweep))
@@ -401,9 +459,11 @@ function sides(id: string, spec: Spec) {
 function crest(id: string, spec: Spec) {
   const { grade, palette } = spec;
   const cy = C - RING;
-  const r = [9.4, 10.8, 12.2, 13.4][grade - 1];
+  const r = [9.4, 10.8, 12.2, 13.4, 14.6][grade - 1];
   const inner = r - 2.2;
-  const glyph: { d: string } | { text: string } = GLYPHS[spec.glyph];
+  const glyph: { d: string } | { text: string } = spec.crestText
+    ? { text: spec.crestText }
+    : GLYPHS[spec.glyph];
   const base = cy - r + 2.2;
   const crown =
     `M${round(C - r * 0.9)} ${round(base)}L${round(C - r * 1.05)} ${round(base - 7)}` +
@@ -415,14 +475,32 @@ function crest(id: string, spec: Spec) {
     <>
       {grade >= 3 && (
         <path
-          d={star(RING, 0, r + (grade === 4 ? 11 : 7.5), r + 1.2, grade === 4 ? 12 : 8)}
+          d={star(
+            RING,
+            0,
+            r + (grade >= 4 ? 11 + (grade - 4) * 3 : 7.5),
+            r + 1.2,
+            grade >= 4 ? 12 : 8,
+          )}
           fill={`url(#${id}trim)`}
           stroke={OUTLINE}
           strokeWidth={0.8}
           strokeLinejoin="round"
         />
       )}
-      {grade === 4 && (
+      {grade === 5 && (
+        <ellipse
+          className="profile-border-halo"
+          cx={C}
+          cy={round(base - 13)}
+          rx={round(r * 0.95)}
+          ry={2.6}
+          fill="none"
+          stroke={`url(#${id}trim)`}
+          strokeWidth={1.6}
+        />
+      )}
+      {grade >= 4 && (
         <>
           <path
             d={crown}
@@ -451,9 +529,9 @@ function crest(id: string, spec: Spec) {
       {'text' in glyph ? (
         <text
           x={C}
-          y={round(cy + inner * 0.52)}
+          y={round(cy + inner * (glyph.text.length > 1 ? 0.42 : 0.52))}
           textAnchor="middle"
-          fontSize={round(inner * 1.55)}
+          fontSize={round(inner * 1.55 * [1, 1, 0.78, 0.6][Math.min(glyph.text.length, 3)])}
           fontWeight={900}
           fontFamily="system-ui, 'Segoe UI', sans-serif"
           fill={palette.light}
@@ -475,15 +553,16 @@ function crest(id: string, spec: Spec) {
   );
 }
 
-const NUMERALS = ['I', 'II', 'III'];
+const NUMERALS = ['I', 'II', 'III', 'IV', 'V'];
 
 /** The bottom: a banner with the tier for a family, a gem for a single border from rare. */
 function base(id: string, spec: Spec) {
   const y = C + RING;
-  if (!spec.tier) {
+  const text = spec.bannerText ?? (spec.tier ? NUMERALS[spec.tier - 1] : null);
+  if (!text) {
     return spec.grade >= 2 ? gem(id, C, y, 2.9 + spec.grade * 0.5, 'base') : null;
   }
-  const w = 16 + spec.grade * 4;
+  const w = Math.max(16 + spec.grade * 4, text.length * 5.6 + 9);
   const left = C - w / 2;
   const right = C + w / 2;
   const tail = (edge: number, out: number) =>
@@ -525,7 +604,7 @@ function base(id: string, spec: Spec) {
         strokeWidth={1.3}
         paintOrder="stroke"
       >
-        {NUMERALS[spec.tier - 1]}
+        {text}
       </text>
     </>
   );
@@ -546,7 +625,43 @@ function effects(id: string, spec: Spec, layer: 'back' | 'front') {
     return (
       <>
         <circle className="profile-border-aura" cx={C} cy={C} r={76} fill={`url(#${id}glow)`} />
-        {spec.grade === 4 && (
+        {spec.grade === 5 && (
+          <>
+            <path
+              className="profile-border-flare"
+              d={[45, 135, 225, 315]
+                .map(
+                  (deg) =>
+                    `M${at(48, deg - 3)}L${at(94, deg)}L${at(48, deg + 3)}Z` +
+                    `M${at(48, deg + 42)}L${at(80, deg + 45)}L${at(48, deg + 48)}Z`,
+                )
+                .join('')}
+              fill={`url(#${id}trim)`}
+              opacity={0.55}
+            />
+            <g className="profile-border-orbit">
+              <circle
+                cx={C}
+                cy={C}
+                r={70}
+                fill="none"
+                stroke={`url(#${id}trim)`}
+                strokeOpacity={0.7}
+                strokeWidth={0.6}
+              />
+              {[20, 140, 260].map((deg) => {
+                const [x, y] = at(70, deg).split(' ').map(Number);
+                return (
+                  <g key={deg}>
+                    <circle cx={x} cy={y} r={3.2} fill={spec.palette.glow} opacity={0.45} />
+                    <circle cx={x} cy={y} r={1.6} fill="#ffffff" />
+                  </g>
+                );
+              })}
+            </g>
+          </>
+        )}
+        {spec.grade >= 4 && (
           <g className="profile-border-runes">
             <circle
               cx={C}
@@ -592,7 +707,7 @@ function effects(id: string, spec: Spec, layer: 'back' | 'front') {
       />
       <path
         className="profile-border-sparks"
-        d={SPARKS.slice(0, spec.grade === 4 ? 6 : 3)
+        d={SPARKS.slice(0, spec.grade >= 4 ? 6 : 3)
           .map(([deg, r, size]) => star(r, deg, size, size * 0.28, 4))
           .join('')}
         fill="#ffffff"
@@ -889,15 +1004,76 @@ const P = {
   seasons: palette('#14532d', '#0f766e', '#ecfeff', '#fde047', '#5eead4'),
   slate: palette('#0f172a', '#334155', '#f1f5f9', '#f87171', '#94a3b8'),
   emerald: palette('#022c22', '#059669', '#d1fae5', '#fbbf24', '#34d399'),
+  titan: palette('#0b1e2b', '#0e7490', '#cffafe', '#fbbf24', '#22d3ee'),
+  void: palette('#1e0636', '#7e22ce', '#f3e8ff', '#e879f9', '#c084fc'),
   magenta: palette('#3b0764', '#c026d3', '#fae8ff', '#fde047', '#e879f9'),
   track: palette('#431407', '#ea580c', '#ffedd5', '#fef3c7', '#fb923c'),
   forge: palette('#1c1917', '#78716c', '#f5f5f4', '#f97316', '#fb923c'),
   summit: palette('#082f49', '#0369a1', '#f0f9ff', '#e0f2fe', '#7dd3fc'),
+  christmas: palette('#052e16', '#15803d', '#dcfce7', '#ef4444', '#f87171'),
+  summer: palette('#0c4a6e', '#0891b2', '#fef3c7', '#fbbf24', '#fb923c'),
+  newYear: palette('#0b1033', '#1e3a8a', '#fef9c3', '#fde047', '#facc15'),
+  halloween: palette('#1c0533', '#6b21a8', '#fed7aa', '#f97316', '#fb923c'),
+  winter: palette('#082f49', '#0284c7', '#f0f9ff', '#e0f2fe', '#7dd3fc'),
 };
 
 const BIG_THREE = ['#dc2626', '#eab308', '#2563eb'];
 const SEASONS = ['#4ade80', '#facc15', '#f97316', '#7dd3fc'];
 
+/** Baubles hung round the ring, alternating red and gold. */
+const baubles: Detail = () => (
+  <>
+    {around(10, 18).map((deg, index) => {
+      const [x, y] = at(RING + 0.4, deg)
+        .split(' ')
+        .map(Number);
+      return (
+        <g key={deg}>
+          <circle
+            cx={x}
+            cy={y}
+            r={2.3}
+            fill={index % 2 ? '#fbbf24' : '#ef4444'}
+            stroke={OUTLINE}
+            strokeWidth={0.6}
+          />
+          <circle cx={round(x - 0.7)} cy={round(y - 0.7)} r={0.7} fill="#ffffff" opacity={0.8} />
+        </g>
+      );
+    })}
+  </>
+);
+
+/** The year in thirds, with the season's own third lit. */
+const seasonThirds =
+  (third: number): Detail =>
+  (_, spec) => (
+    <>
+      {[0, 1, 2].map((index) => (
+        <path
+          key={index}
+          d={arcPath(RING, index * 120 + 6, (index + 1) * 120 - 6)}
+          fill="none"
+          stroke={index === third ? spec.palette.accent : spec.palette.light}
+          strokeOpacity={index === third ? 1 : 0.35}
+          strokeWidth={ringWidth(spec) - 2.4}
+        />
+      ))}
+    </>
+  );
+
+const BENCH = { palette: P.crimson, glyph: 'bench', detail: plates } as const;
+const SQUAT = { palette: P.cobalt, glyph: 'rack', detail: plates } as const;
+const DEADLIFT = { palette: P.molten, glyph: 'bentbar', detail: plates } as const;
+const TOTAL = { palette: P.podium, glyph: 'lights', detail: colourArcs(BIG_THREE) } as const;
+const BENCH_BW = { palette: P.emerald, glyph: 'scales', detail: clock } as const;
+const SQUAT_BW = { palette: P.titan, glyph: 'globe', detail: rivets } as const;
+const DEADLIFT_BW = { palette: P.void, glyph: 'rise', detail: facets } as const;
+
+/*
+ * Every permanent border, at the grade of its rarity. The server's catalogue is checked against
+ * these keys and grades, so a new border needs an entry here.
+ */
 const SPECS: Record<string, Spec> = {
   'first-steps': { grade: 1, palette: P.sprout, glyph: 'steps' },
   'seven-straight': { grade: 1, palette: P.sky, glyph: 'seven', detail: segments(7) },
@@ -943,51 +1119,41 @@ const SPECS: Record<string, Spec> = {
     tier: 2,
   },
   'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock },
-  'bench-club-1': { grade: 2, palette: P.crimson, glyph: 'bench', detail: plates, tier: 1 },
-  'bench-club-2': { grade: 3, palette: P.crimson, glyph: 'bench', detail: plates, tier: 2 },
-  'bench-club-3': { grade: 4, palette: P.crimson, glyph: 'bench', detail: plates, tier: 3 },
-  'squat-club-1': { grade: 2, palette: P.cobalt, glyph: 'rack', detail: plates, tier: 1 },
-  'squat-club-2': { grade: 3, palette: P.cobalt, glyph: 'rack', detail: plates, tier: 2 },
-  'squat-club-3': { grade: 4, palette: P.cobalt, glyph: 'rack', detail: plates, tier: 3 },
-  'deadlift-club-1': { grade: 2, palette: P.molten, glyph: 'bentbar', detail: plates, tier: 1 },
-  'deadlift-club-2': {
-    grade: 3,
-    palette: P.molten,
-    glyph: 'bentbar',
-    sides: 'flame',
-    detail: plates,
-    tier: 2,
-  },
-  'deadlift-club-3': {
-    grade: 4,
-    palette: P.molten,
-    glyph: 'bentbar',
-    sides: 'flame',
-    detail: plates,
-    tier: 3,
-  },
-  'big-three-1': {
-    grade: 2,
-    palette: P.podium,
-    glyph: 'lights',
-    detail: colourArcs(BIG_THREE),
-    tier: 1,
-  },
-  'big-three-2': {
-    grade: 3,
-    palette: P.podium,
-    glyph: 'lights',
-    detail: colourArcs(BIG_THREE),
-    tier: 2,
-  },
-  'big-three-3': {
-    grade: 4,
-    palette: P.podium,
-    glyph: 'lights',
-    detail: colourArcs(BIG_THREE),
-    tier: 3,
-  },
-  'pound-for-pound': { grade: 2, palette: P.emerald, glyph: 'scales' },
+  'bench-club-1': { grade: 1, ...BENCH, tier: 1 },
+  'bench-club-2': { grade: 2, ...BENCH, tier: 2 },
+  'bench-club-3': { grade: 3, ...BENCH, tier: 3 },
+  'bench-club-4': { grade: 4, ...BENCH, tier: 4 },
+  'bench-club-5': { grade: 5, ...BENCH, tier: 5 },
+  'squat-club-1': { grade: 1, ...SQUAT, tier: 1 },
+  'squat-club-2': { grade: 2, ...SQUAT, tier: 2 },
+  'squat-club-3': { grade: 3, ...SQUAT, tier: 3 },
+  'squat-club-4': { grade: 4, ...SQUAT, tier: 4 },
+  'squat-club-5': { grade: 5, ...SQUAT, tier: 5 },
+  'deadlift-club-1': { grade: 1, ...DEADLIFT, tier: 1 },
+  'deadlift-club-2': { grade: 2, ...DEADLIFT, tier: 2, sides: 'flame' },
+  'deadlift-club-3': { grade: 3, ...DEADLIFT, tier: 3, sides: 'flame' },
+  'deadlift-club-4': { grade: 4, ...DEADLIFT, tier: 4, sides: 'flame' },
+  'deadlift-club-5': { grade: 5, ...DEADLIFT, tier: 5, sides: 'flame' },
+  'big-three-1': { grade: 1, ...TOTAL, tier: 1 },
+  'big-three-2': { grade: 2, ...TOTAL, tier: 2 },
+  'big-three-3': { grade: 3, ...TOTAL, tier: 3 },
+  'big-three-4': { grade: 4, ...TOTAL, tier: 4 },
+  'big-three-5': { grade: 5, ...TOTAL, tier: 5 },
+  'pound-for-pound-1': { grade: 1, ...BENCH_BW, tier: 1 },
+  'pound-for-pound-2': { grade: 2, ...BENCH_BW, tier: 2 },
+  'pound-for-pound-3': { grade: 3, ...BENCH_BW, tier: 3 },
+  'pound-for-pound-4': { grade: 4, ...BENCH_BW, tier: 4 },
+  'pound-for-pound-5': { grade: 5, ...BENCH_BW, tier: 5 },
+  'atlas-1': { grade: 1, ...SQUAT_BW, tier: 1 },
+  'atlas-2': { grade: 2, ...SQUAT_BW, tier: 2 },
+  'atlas-3': { grade: 3, ...SQUAT_BW, tier: 3 },
+  'atlas-4': { grade: 4, ...SQUAT_BW, tier: 4 },
+  'atlas-5': { grade: 5, ...SQUAT_BW, tier: 5 },
+  'gravity-defier-1': { grade: 1, ...DEADLIFT_BW, tier: 1 },
+  'gravity-defier-2': { grade: 2, ...DEADLIFT_BW, tier: 2 },
+  'gravity-defier-3': { grade: 3, ...DEADLIFT_BW, tier: 3, sides: 'crystal' },
+  'gravity-defier-4': { grade: 4, ...DEADLIFT_BW, tier: 4, sides: 'crystal' },
+  'gravity-defier-5': { grade: 5, ...DEADLIFT_BW, tier: 5, sides: 'crystal' },
   'hat-trick': { grade: 1, palette: P.magenta, glyph: 'stars' },
   'record-breaker-1': { grade: 1, palette: P.copper, glyph: 'trophy', tier: 1 },
   'record-breaker-2': { grade: 2, palette: P.gold, glyph: 'trophy', tier: 2 },
@@ -1001,9 +1167,9 @@ const SPECS: Record<string, Spec> = {
   },
   'marathon-month': { grade: 2, palette: P.track, glyph: 'medal', sides: 'laurel', detail: lanes },
   'cardiomaniac-1': { grade: 1, palette: P.heart, glyph: 'heart', detail: heartbeat, tier: 1 },
-  'cardiomaniac-2': { grade: 3, palette: P.heart, glyph: 'heart', detail: heartbeat, tier: 2 },
+  'cardiomaniac-2': { grade: 2, palette: P.heart, glyph: 'heart', detail: heartbeat, tier: 2 },
   'cardiomaniac-3': {
-    grade: 4,
+    grade: 3,
     palette: P.heart,
     glyph: 'heart',
     sides: 'flame',
@@ -1020,55 +1186,82 @@ const SPECS: Record<string, Spec> = {
   },
 };
 
-/* One entry per border key, so the server's catalogue can be checked against this file. */
-const SHAPES: Record<string, (id: string) => ReactNode> = {
-  'first-steps': (id) => frame(id, SPECS['first-steps']),
-  'seven-straight': (id) => frame(id, SPECS['seven-straight']),
-  'locked-in': (id) => frame(id, SPECS['locked-in']),
-  'hundred-days': (id) => frame(id, SPECS['hundred-days']),
-  unbreakable: (id) => frame(id, SPECS.unbreakable),
-  regular: (id) => frame(id, SPECS.regular),
-  centurion: (id) => frame(id, SPECS.centurion),
-  'iron-legion': (id) => frame(id, SPECS['iron-legion']),
-  'monday-club': (id) => frame(id, SPECS['monday-club']),
-  'dawn-patrol': (id) => frame(id, SPECS['dawn-patrol']),
-  'night-shift': (id) => frame(id, SPECS['night-shift']),
-  'iron-habit': (id) => frame(id, SPECS['iron-habit']),
-  'four-seasons': (id) => frame(id, SPECS['four-seasons']),
-  'whale-lifter': (id) => frame(id, SPECS['whale-lifter']),
-  'million-kilo': (id) => frame(id, SPECS['million-kilo']),
-  'hundred-hours': (id) => frame(id, SPECS['hundred-hours']),
-  'bench-club-1': (id) => frame(id, SPECS['bench-club-1']),
-  'bench-club-2': (id) => frame(id, SPECS['bench-club-2']),
-  'bench-club-3': (id) => frame(id, SPECS['bench-club-3']),
-  'squat-club-1': (id) => frame(id, SPECS['squat-club-1']),
-  'squat-club-2': (id) => frame(id, SPECS['squat-club-2']),
-  'squat-club-3': (id) => frame(id, SPECS['squat-club-3']),
-  'deadlift-club-1': (id) => frame(id, SPECS['deadlift-club-1']),
-  'deadlift-club-2': (id) => frame(id, SPECS['deadlift-club-2']),
-  'deadlift-club-3': (id) => frame(id, SPECS['deadlift-club-3']),
-  'big-three-1': (id) => frame(id, SPECS['big-three-1']),
-  'big-three-2': (id) => frame(id, SPECS['big-three-2']),
-  'big-three-3': (id) => frame(id, SPECS['big-three-3']),
-  'pound-for-pound': (id) => frame(id, SPECS['pound-for-pound']),
-  'hat-trick': (id) => frame(id, SPECS['hat-trick']),
-  'record-breaker-1': (id) => frame(id, SPECS['record-breaker-1']),
-  'record-breaker-2': (id) => frame(id, SPECS['record-breaker-2']),
-  'record-breaker-3': (id) => frame(id, SPECS['record-breaker-3']),
-  'marathon-month': (id) => frame(id, SPECS['marathon-month']),
-  'cardiomaniac-1': (id) => frame(id, SPECS['cardiomaniac-1']),
-  'cardiomaniac-2': (id) => frame(id, SPECS['cardiomaniac-2']),
-  'cardiomaniac-3': (id) => frame(id, SPECS['cardiomaniac-3']),
-  hybrid: (id) => frame(id, SPECS.hybrid),
-  everest: (id) => frame(id, SPECS.everest),
+/* Limited editions: drawn from their key, so a new season or year needs no new entry. */
+
+/** Each season takes the next of these looks, round and round. */
+const SEASON_LOOKS: Palette[] = [
+  palette('#1a0b2e', '#9333ea', '#fae8ff', '#22d3ee', '#a855f7'),
+  palette('#04261c', '#059669', '#ecfdf5', '#fde047', '#34d399'),
+  palette('#2a0a0a', '#dc2626', '#fff1f2', '#fbbf24', '#f97316'),
+  palette('#0b1a3a', '#1d4ed8', '#eff6ff', '#f472b6', '#60a5fa'),
+  palette('#1f1300', '#b45309', '#fffbeb', '#a3e635', '#f59e0b'),
+  palette('#06212b', '#0e7490', '#ecfeff', '#fb7185', '#22d3ee'),
+];
+const SEASON_KEY = /^season-(\d{1,3})-([1-3])$/;
+
+function seasonSpec(number: number, tier: number): Spec {
+  return {
+    grade: ([2, 3, 4] as const)[tier - 1],
+    palette: SEASON_LOOKS[(number - 1) % SEASON_LOOKS.length],
+    glyph: 'seven',
+    crestText: `S${number}`,
+    tier,
+    sides: tier === 1 ? 'feather' : 'crystal',
+    // Season 1 runs September to December, the last third of the year.
+    detail: seasonThirds((number + 1) % 3),
+  };
+}
+
+const EVENT_LOOKS: Record<string, Omit<Spec, 'bannerText'> & { spans?: boolean }> = {
+  'new-year': {
+    grade: 3,
+    palette: P.newYear,
+    glyph: 'firework',
+    sides: 'crystal',
+    detail: starlight,
+  },
+  winter: { grade: 3, palette: P.winter, glyph: 'snowflake', sides: 'crystal', detail: starlight },
+  halloween: {
+    grade: 2,
+    palette: P.halloween,
+    glyph: 'pumpkin',
+    sides: 'flame',
+    detail: starlight,
+  },
+  christmas: { grade: 3, palette: P.christmas, glyph: 'tree', detail: baubles },
+  summer: {
+    grade: 3,
+    palette: P.summer,
+    glyph: 'sun',
+    sides: 'flame',
+    detail: sunrays,
+    spans: true,
+  },
 };
+const EVENT_KEY = /^([a-z-]+)-(\d{4})$/;
+
+function specFor(key: string): Spec | undefined {
+  if (Object.hasOwn(SPECS, key)) return SPECS[key];
+  const season = SEASON_KEY.exec(key);
+  if (season) return seasonSpec(Number(season[1]), Number(season[2]));
+  const event = EVENT_KEY.exec(key);
+  if (event && Object.hasOwn(EVENT_LOOKS, event[1])) {
+    const { spans, ...look } = EVENT_LOOKS[event[1]];
+    const year = Number(event[2]);
+    // Summer runs over New Year, so it carries both years.
+    const bannerText = spans ? `${year % 100}–${(year + 1) % 100}` : String(year);
+    return { ...look, bannerText };
+  }
+  return undefined;
+}
 
 /** Whether this build can draw the border, so an unknown key leaves the photo plain. */
 export function hasProfileBorderArt(border: string | null | undefined): border is string {
-  return typeof border === 'string' && Object.hasOwn(SHAPES, border);
+  return typeof border === 'string' && specFor(border) !== undefined;
 }
 
 /** Draws a border's shapes. `id` prefixes its gradients, which the whole page shares. */
 export function profileBorderShapes(border: string, id: string): ReactNode {
-  return SHAPES[border]?.(id) ?? null;
+  const spec = specFor(border);
+  return spec ? frame(id, spec) : null;
 }

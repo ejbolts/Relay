@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from alembic.migration import MigrationContext
@@ -13,8 +13,23 @@ from test_auth import named
 from test_sharing import befriend, profile, share
 
 from app.database import SessionLocal
-from app.models import TrainingWorkout, User
-from app.profile_borders import BORDERS, METRICS, border_stats, longest_run, plates
+from app.models import CardioSession, TrainingWorkout, User
+from app.profile_borders import (
+    BORDERS,
+    METRICS,
+    Window,
+    border_stats,
+    borders_for,
+    can_wear,
+    find_border,
+    limited_borders,
+    longest_run,
+    plates,
+    season_of,
+    season_window,
+    window_days,
+    worn_border,
+)
 
 BENCH, SQUAT, DEADLIFT = "Barbell Bench Press", "Back Squat", "Deadlift"
 
@@ -81,17 +96,25 @@ def wear(test_client: TestClient, key: str | None):
 
 def stats(test_client: TestClient, today: date | None = None) -> dict[str, float]:
     with SessionLocal() as db:
-        return border_stats(db, db.get(User, test_client.user["id"]), today)
+        return border_stats(db, db.get(User, test_client.user["id"]), today).values
 
 
 def test_every_border_has_one_key_and_a_known_metric():
     assert len({border.key for border in BORDERS}) == len(BORDERS)
     assert all(border.metric in METRICS for border in BORDERS)
     by_sex = {border.family or border.key for border in BORDERS if isinstance(border.target, tuple)}
-    assert by_sex == {"pound-for-pound", "bench", "squat", "deadlift", "big-three"}
+    assert by_sex == {
+        "bench",
+        "squat",
+        "deadlift",
+        "big-three",
+        "bench-bw",
+        "squat-bw",
+        "deadlift-bw",
+    }
 
 
-RARITY_ORDER = ["common", "rare", "epic", "legendary"]
+RARITY_ORDER = ["common", "rare", "epic", "legendary", "mythic"]
 
 
 def test_each_family_climbs_in_target_and_rarity_from_tier_one():
@@ -99,7 +122,7 @@ def test_each_family_climbs_in_target_and_rarity_from_tier_one():
     for border in BORDERS:
         if border.family:
             families.setdefault(border.family, []).append(border)
-    assert len(families) == 9
+    assert len(families) == 12
     for family, tiers in families.items():
         assert [border.tier for border in tiers] == list(range(1, len(tiers) + 1)), family
         assert len({border.metric for border in tiers}) == 1, family
@@ -111,6 +134,30 @@ def test_each_family_climbs_in_target_and_rarity_from_tier_one():
             assert all(a < b for a, b in zip(lower, higher, strict=True)), family
         ranks = [RARITY_ORDER.index(border.rarity) for border in tiers]
         assert ranks == sorted(ranks) and ranks[-1] > ranks[0], family
+
+
+def test_only_strength_reaches_mythic_and_effort_alone_stays_below_legendary():
+    mythic = {border.family for border in BORDERS if border.rarity == "mythic"}
+    assert mythic == {
+        "bench",
+        "squat",
+        "deadlift",
+        "big-three",
+        "bench-bw",
+        "squat-bw",
+        "deadlift-bw",
+    }
+    for family in mythic:
+        tiers = [border for border in BORDERS if border.family == family]
+        assert [border.rarity for border in tiers] == [
+            "common",
+            "rare",
+            "epic",
+            "legendary",
+            "mythic",
+        ]
+    # A big week of cardio is effort anyone can add, so it looks no rarer than epic.
+    assert find_border("cardiomaniac-3").rarity == "epic"
 
 
 def test_plates_count_twenty_kilo_plates_a_side_on_a_twenty_kilo_bar():
@@ -154,7 +201,7 @@ def test_a_new_account_has_no_progress_because_sample_workouts_never_count(clien
         db.commit()
 
     listed = borders(client)
-    assert len(listed) == len(BORDERS)
+    assert len([item for item in listed.values() if not item["kind"]]) == len(BORDERS)
     assert not any(item["unlocked"] for item in listed.values())
     assert listed["first-steps"]["progress"] == {"current": 0, "target": 5, "unit": "workouts"}
     assert listed["first-steps"]["requirement"] == "Log 5 workouts"
@@ -233,7 +280,10 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
     assert numbers["squat_kg"] == 140
     assert numbers["deadlift_kg"] == 180
     assert numbers["big_three_kg"] == 404
-    assert numbers["bench_body_weight_pct"] == 105
+    # 84 kg at 80 kg body weight; the squat and deadlift use the same weigh-in.
+    assert numbers["bench_bw"] == 1.05
+    assert numbers["squat_bw"] == 1.75
+    assert numbers["deadlift_bw"] == 2.25
     # 84 x 5, 150 x 1, 140 x 1 and 180 x 2: warm-ups and failed sets add nothing.
     assert numbers["tonnes"] == (420 + 150 + 140 + 360) / 1000
 
@@ -243,12 +293,22 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
     assert {"bench-club-1", "squat-club-1", "squat-club-2"} <= earned
     assert {"deadlift-club-1", "deadlift-club-2", "big-three-1", "big-three-2"} <= earned
     assert not earned & {"bench-club-2", "squat-club-3", "deadlift-club-3", "big-three-3"}
-    assert listed["pound-for-pound"]["unlocked"]
+    assert listed["pound-for-pound-2"]["unlocked"] and not listed["pound-for-pound-3"]["unlocked"]
+    assert listed["atlas-3"]["unlocked"] and not listed["atlas-4"]["unlocked"]
+    assert listed["gravity-defier-4"]["unlocked"] is False
+    assert listed["gravity-defier-3"]["unlocked"]
     assert listed["deadlift-club-3"]["requirement"] == "Deadlift 220 kg · 5 plates"
     assert listed["big-three-3"]["requirement"] == (
         "Total 454 kg across your best bench, squat and deadlift"
     )
-    assert listed["pound-for-pound"]["requirement"] == "Bench press 100% of your body weight"
+    assert listed["pound-for-pound-3"]["requirement"] == "Bench press 1.25× your body weight"
+    assert listed["pound-for-pound-3"]["progress"] == {
+        "current": 1.05,
+        "target": 1.25,
+        "unit": "× BW",
+    }
+    assert listed["bench-club-5"]["requirement"] == "Bench press 180 kg · 4 plates"
+    assert listed["bench-club-5"]["rarity"] == "mythic"
 
 
 def test_weight_targets_are_shown_in_the_accounts_unit(client):
@@ -427,9 +487,134 @@ def test_profile_borders_migration_adds_and_removes_the_account_columns():
         assert connection.scalar(text("SELECT COUNT(*) FROM child")) == 1
 
 
-def test_every_border_has_artwork_in_the_app():
+def test_every_border_has_artwork_in_the_app_at_its_rarity():
     shapes = Path(__file__).resolve().parents[2] / "frontend/src/profileBorderShapes.tsx"
-    drawn = set(
-        re.findall(r"^  '?([a-z0-9-]+)'?: \(", shapes.read_text(encoding="utf-8"), flags=re.M)
-    )
-    assert drawn == {border.key for border in BORDERS}
+    source = shapes.read_text(encoding="utf-8")
+    table = source[source.index("const SPECS: Record<string, Spec> = {") :]
+    table = table[: table.index("\n};")]
+    drawn = dict(re.findall(r"^  '?([a-z0-9-]+)'?: \{\s*grade: (\d)", table, re.M))
+    assert set(drawn) == {border.key for border in BORDERS}
+    for border in BORDERS:
+        assert int(drawn[border.key]) == RARITY_ORDER.index(border.rarity) + 1, border.key
+
+
+def test_seasons_are_thirds_of_the_year_from_september_2026():
+    assert season_of(date(2026, 8, 31)) == 0
+    assert season_of(date(2026, 9, 1)) == 1
+    assert season_of(date(2026, 12, 31)) == 1
+    assert season_of(date(2027, 1, 1)) == 2
+    assert season_of(date(2027, 9, 30)) == 4
+    assert season_window(1) == Window("season", date(2026, 9, 1), date(2026, 12, 31))
+    assert season_window(2) == Window("season", date(2027, 1, 1), date(2027, 4, 30))
+    assert season_window(3) == Window("season", date(2027, 5, 1), date(2027, 8, 31))
+    assert find_border("season-1-3").name == "Season 1 Champion"
+    assert limited_borders(date(2026, 8, 1)) == ()
+
+
+def test_events_open_yearly_and_show_a_month_ahead():
+    keys = lambda today: [border.key for border in limited_borders(today)]  # noqa: E731
+    # Christmas and Summer 2026 are the first events; they show from 1 November.
+    assert keys(date(2026, 10, 31)) == ["season-1-1", "season-1-2", "season-1-3"]
+    assert keys(date(2026, 11, 19))[3:] == ["christmas-2026", "summer-2026"]
+    summer = find_border("summer-2027", date(2027, 11, 15))
+    assert summer.name == "Summer 2027–28"
+    assert summer.window == Window("event", date(2027, 12, 1), date(2028, 2, 29))
+    assert find_border("summer-2027", date(2027, 10, 1)) is None
+    assert find_border("halloween-2026", date(2026, 11, 19)) is None
+    assert find_border("new-year-2027", date(2027, 1, 5)).window.describe() == "in January 2027"
+    assert find_border("season-9-1", date(2026, 11, 19)) is None
+    assert find_border("nonsense-2027", date(2027, 1, 5)) is None
+
+
+def test_a_window_counts_days_trained_inside_it_and_logged_in_time():
+    window = Window("season", date(2026, 9, 1), date(2026, 12, 31))
+    logged = datetime(2026, 10, 1, 9)
+    activity = [
+        (date(2026, 9, 1), logged),
+        (date(2026, 9, 1), logged),
+        (date(2026, 12, 31), datetime(2027, 1, 1, 20)),
+        (date(2026, 8, 31), logged),
+        (date(2027, 1, 1), logged),
+        # Backfilled after the season closed.
+        (date(2026, 11, 3), datetime(2027, 1, 2, 0, 1)),
+    ]
+    assert window_days(activity, window) == 2
+
+
+def _log_days(test_client: TestClient, first: date, count: int, logged: datetime) -> None:
+    for offset in range(count):
+        workout(test_client, first + timedelta(days=offset))
+    with SessionLocal() as db:
+        db.execute(
+            update(TrainingWorkout)
+            .where(TrainingWorkout.user_id == test_client.user["id"])
+            .values(created_at=logged)
+        )
+        db.commit()
+
+
+def _listing(test_client: TestClient, today: date) -> dict[str, dict]:
+    with SessionLocal() as db:
+        user = db.get(User, test_client.user["id"])
+        read = borders_for(db, user, today)
+    return {item.key: item.model_dump(mode="json") for item in read.borders}
+
+
+def test_the_open_season_and_coming_events_lead_the_list(client):
+    _log_days(client, date(2026, 9, 1), 16, datetime(2026, 10, 1, 9))
+    cardio(client, "2026-10-20")
+    with SessionLocal() as db:
+        db.execute(update(CardioSession).values(created_at=datetime(2026, 10, 21, 9)))
+        db.commit()
+
+    listed = _listing(client, date(2026, 11, 19))
+    keys = list(listed)
+    assert keys[:5] == [
+        "season-1-1",
+        "season-1-2",
+        "season-1-3",
+        "christmas-2026",
+        "summer-2026",
+    ]
+    contender = listed["season-1-1"]
+    assert contender["group"] == "Season 1" and contender["kind"] == "season"
+    assert contender["status"] == "active" and contender["days_left"] == 43
+    assert contender["unlocked"] is True
+    assert contender["progress"] == {"current": 17, "target": 15, "unit": "days"}
+    assert contender["requirement"] == "Train on 15 days between 1 Sep and 31 Dec 2026"
+    assert (contender["family"], contender["tier"]) == ("season-1", 1)
+    assert listed["season-1-2"]["unlocked"] is False
+    christmas = listed["christmas-2026"]
+    assert christmas["group"] == "Events" and christmas["status"] == "upcoming"
+    assert christmas["days_left"] == 12 and christmas["unlocked"] is False
+    assert christmas["progress"]["current"] == 0
+    assert christmas["requirement"] == "Train on 12 days in December 2026"
+
+
+def test_a_closed_season_keeps_what_was_earned_and_drops_the_rest(client):
+    _log_days(client, date(2026, 9, 1), 16, datetime(2026, 10, 1, 9))
+    listed = _listing(client, date(2027, 1, 10))
+    assert "season-1-1" in listed and "season-1-2" not in listed and "season-1-3" not in listed
+    assert listed["season-1-1"]["group"] == "Past seasons and events"
+    assert listed["season-1-1"]["status"] == "ended" and listed["season-1-1"]["days_left"] is None
+    assert list(listed)[:3] == ["season-2-1", "season-2-2", "season-2-3"]
+    assert listed["season-2-1"]["days_left"] == 111
+
+    with SessionLocal() as db:
+        user = db.get(User, client.user["id"])
+        assert can_wear(db, user, "season-1-1", date(2027, 1, 10))
+        assert not can_wear(db, user, "season-1-2", date(2027, 1, 10))
+        assert not can_wear(db, user, "christmas-2027", date(2027, 11, 20))
+        assert not can_wear(db, user, "season-5-1", date(2027, 1, 10))
+        user.profile_border = "season-1-1"
+        db.commit()
+        assert worn_border(user) == "season-1-1"
+
+
+def test_training_logged_after_a_season_closes_does_not_count(client):
+    _log_days(client, date(2026, 9, 1), 16, datetime(2027, 1, 5, 9))
+    listed = _listing(client, date(2027, 1, 10))
+    assert "season-1-1" not in listed
+    with SessionLocal() as db:
+        user = db.get(User, client.user["id"])
+        assert not can_wear(db, user, "season-1-1", date(2027, 1, 10))

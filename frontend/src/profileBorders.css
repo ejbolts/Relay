@@ -36,6 +36,15 @@
     animation: profile-border-pulse 3.2s ease-in-out infinite;
   }
 
+  html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-orbit {
+    transform-origin: 60px 60px;
+    animation: profile-border-spin 14s linear infinite reverse;
+  }
+
+  html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-flare {
+    animation: profile-border-twinkle 3s ease-in-out infinite alternate;
+  }
+
   html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-runes {
     transform-origin: 60px 60px;
     animation: profile-border-spin 24s linear infinite;
@@ -315,6 +324,79 @@
 
 .border-rarity.legendary {
   color: var(--p-gold);
+}
+
+/* Mythic: only the strongest earn it, so its label shimmers like the frame. */
+.border-rarity.mythic {
+  border-color: #c4b5fd;
+  background: linear-gradient(100deg, #f9a8d4, #a5f3fc, #fde68a, #c4b5fd, #f9a8d4) 0 0 / 220% 100%;
+  color: transparent;
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-reduce-motion]) .border-rarity.mythic {
+    animation: border-rarity-shimmer 4s linear infinite;
+  }
+}
+
+@keyframes border-rarity-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+/* Limited editions: how long is left. */
+.border-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.border-group-timer,
+.border-tile-timer {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p-accent) 22%, transparent);
+  color: var(--p-ink);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.border-group-timer {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.6875rem;
+}
+
+.border-tile-timer {
+  position: absolute;
+  z-index: 1;
+  top: -0.45rem;
+  right: -0.7rem;
+  padding: 0 0.3rem;
+  border: 2px solid var(--p-surface);
+  font-size: 0.625rem;
+  line-height: 1.3;
+}
+
+.border-preview-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--p-accent-text, var(--p-accent));
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.border-preview-timer.upcoming,
+.border-preview-timer.ended {
+  color: var(--p-muted);
+}
+
+.border-preview-timer .pulse-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .border-preview-requirement {

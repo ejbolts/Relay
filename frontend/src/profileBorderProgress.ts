@@ -1,12 +1,35 @@
 import type { ProfileBorder } from './types';
 
-const amount = (value: number) => value.toLocaleString('en-GB', { maximumFractionDigits: 1 });
+const amount = (value: number, places = 1) =>
+  value.toLocaleString('en-GB', { maximumFractionDigits: places });
 
-/** "62 / 100 workouts", with a percent sign kept against its number. */
+/** "62 / 100 workouts", a percent sign kept against its number, "1.05× / 1.25× BW" for ratios. */
 export function borderProgressLabel(progress: NonNullable<ProfileBorder['progress']>): string {
-  const gap = progress.unit === '%' ? '' : ' ';
   const shown = Math.min(progress.current, progress.target);
+  if (progress.unit === '× BW') {
+    return `${amount(shown, 2)}× / ${amount(progress.target, 2)}× BW`;
+  }
+  const gap = progress.unit === '%' ? '' : ' ';
   return `${amount(shown)} / ${amount(progress.target)}${gap}${progress.unit}`;
+}
+
+/** How long a limited edition has left, or how soon it opens. */
+export function borderTimeLabel(border: ProfileBorder): string | null {
+  const days = border.days_left;
+  if (border.status === 'active' && days != null) {
+    return days === 1 ? 'Last day' : `${days} days left`;
+  }
+  if (border.status === 'upcoming' && days != null) {
+    return days === 1 ? 'Starts tomorrow' : `Starts in ${days} days`;
+  }
+  if (border.status === 'ended') return border.kind === 'season' ? 'Season over' : 'Event over';
+  return null;
+}
+
+/** The same, short enough for a tile: "43d" while open, "Soon" before it opens. */
+export function borderTimeBadge(border: ProfileBorder): string | null {
+  if (border.status === 'active' && border.days_left != null) return `${border.days_left}d`;
+  return border.status === 'upcoming' ? 'Soon' : null;
 }
 
 /** How full the progress bar is, as a percentage with one decimal. */
