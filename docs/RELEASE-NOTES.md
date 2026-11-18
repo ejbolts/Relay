@@ -8,9 +8,9 @@ _Relay was called Gym Logger before version 1.0._
 
 ### See how you measure up
 
-![The 84-second Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, adding sets anywhere, the rest bell, the workout summary, muscle goals and dark styles, then a scrolling list of other 1.3 changes](screenshots/releases/1.3.0-trailer.gif)
+![The 80-second Relay 1.3 trailer: a 1.3 intro, then head-to-head lift comparisons, body measurements, pinch to zoom on charts, the workout feed, training blocks, the weekly review, customising Home, rep targets, adding sets anywhere, the rest bell, the workout summary, muscle goals and dark styles, then a scrolling list of other 1.3 changes](screenshots/releases/1.3.0-trailer.gif)
 
-_The 84-second Relay 1.3 trailer plays with music at the top of What's new; this GIF is its silent preview. Every scene uses synthetic sample accounts._
+_The 80-second Relay 1.3 trailer plays with music at the top of What's new; this GIF is its silent preview. Every scene uses synthetic sample accounts._
 
 [Watch the trailer with music](../frontend/public/releases/1.3.0-trailer.mp4)
 
@@ -51,18 +51,19 @@ _The 84-second Relay 1.3 trailer plays with music at the top of What's new; this
 - **Machine weights:** Machine-specific suggestions, per-set assignments, normalised trends and your last machine on planned days.
 - **Machine settings:** Edit saved defaults and inspect suggested weight-conversion ranges.
 - **Weekly review:** Open last week's training review from a weekly popup or Notifications.
-- **Training blocks:** Plan coloured blocks on a zoomable timeline, compare results and get suggestions in your weekly review.
+- **Training blocks:** Plan blocks in 32 colours or your own on a zoomable timeline, compare results and get suggestions in your weekly review.
 - **Home layout:** Add five opt-in sections and customise weekly charts, check-ins and set totals.
-- **Body:** Maintenance ranges, a refined female outline, clearer check-ins and easier history menus; the FFMI calculator is gone.
+- **Body:** Maintenance ranges, an outline that matches your profile, measurements typed straight onto the figure, clearer check-ins and easier history menus; Ankle and the FFMI calculator are gone.
+- **Profile:** Set your sex once in Edit profile; an administrator can change it later.
 - **History:** Log-style set tables, fortnight pages and single-workout exports.
 - **Calendar:** Planned and missed split days show as outlines; the legend lists only the workout types in view.
-- **Sharing:** Copy custom workout cards, view profile photos full screen and keep comment threads open.
-- **Social:** Compact feed cards, expandable exercise lists, comments and animated reactions.
+- **Sharing:** Copy custom workout cards, view profile photos full screen, keep comment threads open and choose whether friends see your body measurements.
+- **Social:** Feed and Friends tabs; the feed opens with a row of friends showing who's training, then compact cards, comments and animated reactions.
 - **Notifications:** Newest first, quick replies and direct links to highlighted reactions or comments.
 - **Full backup:** Download and restore your account, with a preview before replacing data.
 - **Appearance:** Frosted glass, Neutral accents and dark styles, with a soft blue ray at sign-in.
 - **Screen layouts:** Common actions come first on Training, Body, Social and Settings.
-- **Tips and setup:** Tips appear when they apply and open the feature; QR invites and smarter Settings search.
+- **Tips and setup:** Tips appear when they apply and open the feature; step-by-step guides set up machines, training blocks and splits; QR invites and smarter Settings search.
 - **Launch prompts:** One popup per visit, and dismissed notices stay dismissed on every device.
 - **Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.
 - **Offline and updates:** A small offline pill appears only after a lasting outage; updates refresh safely around unsynced work.
