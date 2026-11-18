@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
-import { preparedWorkoutAutoSave } from './activeWorkoutSync';
+import { preparedWorkoutAutoSave, useActiveWorkoutSync } from './activeWorkoutSync';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api, ApiError, revisionAfterSave } from './api';
@@ -55,6 +55,11 @@ vi.mock('./api', async (importOriginal) => {
     },
     revisionAfterSave: vi.fn(() => null),
   };
+});
+// Passes through to the real hook unless a test sets a sync state.
+vi.mock('./activeWorkoutSync', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./activeWorkoutSync')>();
+  return { ...original, useActiveWorkoutSync: vi.fn(original.useActiveWorkoutSync) };
 });
 const autoSave = vi.hoisted(() => ({ minutes: null as number | null }));
 vi.mock('./workoutAutoSaveChoice', async (importOriginal) => {
@@ -443,6 +448,50 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   applyReduceMotion(false);
+});
+
+describe('workout sync status in the logger', () => {
+  // Back to the real hook (the mock's original implementation) for later tests.
+  afterEach(() => vi.mocked(useActiveWorkoutSync).mockReset());
+  const syncState = (state: Partial<ReturnType<typeof useActiveWorkoutSync>>) =>
+    vi.mocked(useActiveWorkoutSync).mockReturnValue({
+      status: 'synced',
+      conflict: null,
+      error: null,
+      retry: vi.fn(),
+      resolve: vi.fn(),
+      ...state,
+    });
+
+  it('keeps retrying a failed sync in the background without a pill above the workout', async () => {
+    syncState({ status: 'offline', error: 'Failed to fetch' });
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    expect(container.querySelector('.movement-card')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Retry sync');
+    expect(document.body.textContent).not.toContain('Saved on device');
+    expect(container.querySelector('[aria-label="Sync workout across devices"]')).toBeNull();
+  });
+
+  it('floats the resolve button over the workout after the conflict dialog is closed', async () => {
+    const draft = storedDraft();
+    syncState({
+      status: 'conflict',
+      conflict: { local: draft, remote: { revision: 2, draft: { ...draft, name: 'Phone edit' } } },
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const close = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Close Workout sync conflict"]',
+    );
+    expect(close).not.toBeNull();
+    await act(async () => close!.click());
+    const reopen = [...container.querySelectorAll<HTMLButtonElement>('.workout-sync-reopen')];
+    expect(reopen.map((button) => button.textContent)).toEqual(['Resolve workout sync']);
+    expect(document.body.textContent).not.toContain('Resolve sync');
+    await act(async () => reopen[0].click());
+    expect(document.querySelector('[aria-label="Close Workout sync conflict"]')).not.toBeNull();
+  });
 });
 
 describe('cross-device live workout updates', () => {

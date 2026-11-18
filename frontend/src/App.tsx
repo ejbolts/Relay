@@ -2461,11 +2461,6 @@ function AppContent() {
                     {(navigation, viewedWorkout) => (
                       <WorkoutLogger
                         key={viewedWorkout?.id ?? 'original'}
-                        syncStatus={workoutSync.status}
-                        onSyncRetry={() => {
-                          setSyncConflictDismissed(false);
-                          workoutSync.retry();
-                        }}
                         exercises={exercises}
                         restoredDraftMovements={restoredDraftMovements}
                         recommendation={dashboard?.recommendation ?? null}
@@ -2791,17 +2786,17 @@ function AppContent() {
             onClose={() => setSyncConflictDismissed(true)}
           />
         )}
-        {workoutSync.conflict &&
-          syncConflictDismissed &&
-          (tab !== 'log' || activeWorkoutStartedAt === null) && (
-            <button
-              type="button"
-              className="workout-sync-reopen primary-action"
-              onClick={() => setSyncConflictDismissed(false)}
-            >
-              Resolve workout sync
-            </button>
-          )}
+        {/* Failed syncs retry in the background; only a conflict needs the user. This floats
+            over the screen, so it never pushes the workout down. */}
+        {workoutSync.conflict && syncConflictDismissed && (
+          <button
+            type="button"
+            className="workout-sync-reopen primary-action"
+            onClick={() => setSyncConflictDismissed(false)}
+          >
+            Resolve workout sync
+          </button>
+        )}
       </div>
     </AppContentProviders>
   );
@@ -3224,8 +3219,6 @@ function BrowsedWorkoutDetails({
 }
 
 function WorkoutLogger({
-  syncStatus,
-  onSyncRetry,
   exercises,
   restoredDraftMovements,
   categoryColors,
@@ -3259,8 +3252,6 @@ function WorkoutLogger({
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
-  syncStatus: import('./activeWorkoutSync').WorkoutSyncStatus;
-  onSyncRetry: () => void;
   categoryColors: WorkoutTypeColors;
   recommendation: WorkoutRecommendation | null;
   template: SessionTemplate | null;
@@ -4996,21 +4987,6 @@ function WorkoutLogger({
         />
       )}
 
-      {/* Healthy sync stays silent; the badge only appears when it needs the user. */}
-      {!initialWorkout && (syncStatus === 'offline' || syncStatus === 'conflict') && (
-        <button
-          type="button"
-          className="workout-sync-status"
-          onClick={onSyncRetry}
-          aria-label={
-            syncStatus === 'conflict'
-              ? 'Resolve workout sync conflict'
-              : 'Sync workout across devices'
-          }
-        >
-          {syncStatus === 'conflict' ? 'Resolve sync' : 'Saved on device · Retry sync'}
-        </button>
-      )}
       {recommendation &&
         !recommendation.is_rest_day &&
         !recommendation.needs_split_update &&
