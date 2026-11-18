@@ -41,7 +41,7 @@ describe('ProfileAvatar', () => {
     const markup = renderToStaticMarkup(
       <ProfileAvatar
         className="profile-avatar"
-        user={{ ...account, profile_photo_url: null, profile_border: 'hundred-days' }}
+        user={{ ...account, profile_photo_url: null, profile_border: 'unbreakable' }}
         animated
       />,
     );
@@ -62,9 +62,11 @@ describe('ProfileAvatar', () => {
         />
       </>,
     );
-    const ids = [...markup.matchAll(/<linearGradient id="([^"]+)"/g)].map((match) => match[1]);
-    expect(ids).toHaveLength(2);
-    expect(new Set(ids).size).toBe(2);
+    const ids = [...markup.matchAll(/<(?:linear|radial)Gradient id="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(ids.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(markup).toContain(`url(#${id})`);
   });
 

@@ -66,74 +66,112 @@ const PULSE = `M${at(R, 0)}${[58, 122, 238, 302]
   .join('')}A${R} ${R} 0 0 1 ${at(R, 359.9)}`;
 
 /** A chevron pointing outward at the bottom of the ring, as on a rank badge. */
-const chevron = (deg: number) => `M${at(56.6, deg - 3)}L${at(60, deg)}L${at(56.6, deg + 3)}`;
+type TierLook = { grand?: boolean; sheen?: boolean };
 
-/** A gold point standing out from the ring, for a family's grandest tier. */
-const point = (deg: number) => `M${at(56.2, deg - 3.4)}L${at(62.4, deg)}L${at(56.2, deg + 3.4)}Z`;
+/** Bronze, silver and gold: the material of tier I, tier II and a family's grandest tier. */
+const METALS: Stop[][] = [
+  [
+    [0, '#fde4c8'],
+    [0.5, '#c2773b'],
+    [1, '#7c3f18'],
+  ],
+  [
+    [0, '#ffffff'],
+    [0.5, '#a3b1c2'],
+    [1, '#4b5868'],
+  ],
+  [
+    [0, '#fff7d6'],
+    [0.5, '#f59e0b'],
+    [1, '#a16207'],
+  ],
+];
 
-const TIER_INK = ['#cbd5e1', '#fbbf24', '#fde68a'];
+const metalOf = (tier: number, { grand = tier >= 3 }: TierLook = {}) =>
+  grand ? 2 : Math.min(tier, 2) - 1;
+
+/** A blunt tooth on the ring's edge; twelve of them make the silver medal's outline. */
+const tooth = (deg: number) =>
+  `M${at(53, deg - 5.2)}L${at(61.4, deg - 3.4)}L${at(61.4, deg + 3.4)}L${at(53, deg + 5.2)}Z`;
+
+/** A ray of the gold sunburst behind a family's grandest tier. */
+const ray = (deg: number, index: number) =>
+  `M${at(53.5, deg - 3.4)}L${at(index % 2 ? 59.8 : 63.4, deg)}L${at(53.5, deg + 3.4)}Z`;
 
 /**
- * How a tiered border shows its tier: one, two or three rank chevrons at the bottom. From tier 2
- * the ring gains gold rims; a family's grandest tier adds a beaded gold frame and a glint.
+ * What sits behind a tiered border's ring: nothing at tier I, a silver medal's teeth at tier II,
+ * and a glowing gold sunburst at a family's grandest tier. Draw it before the family's own art.
  */
-function tierMarks(id: string, tier: number, options: { grand?: boolean; sheen?: boolean } = {}) {
-  const grand = options.grand ?? tier >= 3;
-  const sheen = options.sheen ?? grand;
-  const angles = Array.from({ length: tier }, (_, index) => 180 + (index - (tier - 1) / 2) * 8.5);
+function tierUnder(id: string, tier: number, look: TierLook = {}) {
+  const metal = metalOf(tier, look);
+  if (metal === 0) return null;
   return (
     <>
-      {tier >= 2 && (
+      <Fade id={`${id}m`} across stops={METALS[metal]} />
+      {metal === 2 ? (
         <>
-          <Fade
-            id={`${id}tier`}
-            across
-            stops={[
-              [0, '#fef3c7'],
-              [0.5, '#f59e0b'],
-              [1, '#fde68a'],
-            ]}
-          />
+          <radialGradient id={`${id}aura`} gradientUnits="userSpaceOnUse" cx={C} cy={C} r={66}>
+            <stop offset={0.74} stopColor="#fbbf24" stopOpacity={0} />
+            <stop offset={0.84} stopColor="#fbbf24" stopOpacity={0.55} />
+            <stop offset={1} stopColor="#fbbf24" stopOpacity={0} />
+          </radialGradient>
+          <circle cx={C} cy={C} r={66} fill={`url(#${id}aura)`} />
           <path
-            d={`${arc(47.3, 0, 359.9)}${arc(56.7, 0, 359.9)}`}
-            fill="none"
-            stroke={`url(#${id}tier)`}
-            strokeWidth={1.1}
+            d={around(24, 7.5).map(ray).join('')}
+            fill={`url(#${id}m)`}
+            stroke="#3b2306"
+            strokeWidth={0.45}
+            strokeLinejoin="round"
           />
         </>
-      )}
-      {tier >= 2 && (
+      ) : (
         <path
-          d={dots([45, 135, 225, 315], 56.7, 1.5)}
-          fill={`url(#${id}tier)`}
+          d={around(12, 15).map(tooth).join('')}
+          fill={`url(#${id}m)`}
           stroke="#0b1220"
-          strokeWidth={0.5}
-        />
-      )}
-      {grand && (
-        <path
-          d={around(8, 22.5).map(point).join('')}
-          fill={`url(#${id}tier)`}
-          stroke="#0b1220"
-          strokeWidth={0.5}
+          strokeWidth={0.6}
           strokeLinejoin="round"
         />
       )}
+    </>
+  );
+}
+
+/**
+ * What sits over a tiered border's ring: rims in the tier's metal, and a plaque at the bottom
+ * with one, two or three bars for its tier. The grandest tier adds gold beads and a glint.
+ */
+function tierMarks(id: string, tier: number, look: TierLook = {}) {
+  const metal = metalOf(tier, look);
+  const grand = metal === 2;
+  const sheen = look.sheen ?? grand;
+  const width = 5.4 + tier * 3;
+  const bars = Array.from({ length: tier }, (_, index) => C + (index - (tier - 1) / 2) * 2.8);
+  return (
+    <>
+      {metal === 0 && <Fade id={`${id}m`} across stops={METALS[0]} />}
       <path
-        d={angles.map(chevron).join('')}
+        d={metal === 0 ? arc(56.7, 0, 359.9) : `${arc(47.3, 0, 359.9)}${arc(56.7, 0, 359.9)}`}
         fill="none"
+        stroke={`url(#${id}m)`}
+        strokeWidth={[0.9, 1.7, 1.4][metal]}
+      />
+      {grand && <path d={dots(around(36, 5), 56.7, 0.75)} fill="#fff7d6" />}
+      <rect
+        x={C - width / 2}
+        y={110.3}
+        width={width}
+        height={7.4}
+        rx={2.2}
+        fill={`url(#${id}m)`}
         stroke="#0b1220"
-        strokeWidth={3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        strokeWidth={0.8}
       />
       <path
-        d={angles.map(chevron).join('')}
-        fill="none"
-        stroke={TIER_INK[Math.min(tier, 3) - 1]}
-        strokeWidth={1.6}
+        d={bars.map((x) => `M${x} 112.1v3.8`).join('')}
+        stroke={metal === 1 ? '#1f2937' : '#3b2306'}
+        strokeWidth={1.25}
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
       {sheen && <Sheen width={4} colour="#fff7d6" />}
     </>
@@ -186,6 +224,7 @@ function plateTier(id: string, lift: keyof typeof LIFT_PLATES, tier: number) {
   const [light, dark, ink] = LIFT_PLATES[lift];
   return (
     <>
+      {tierUnder(id, tier)}
       {plate(id, light, dark, tier >= 3 ? '#fde68a' : ink)}
       {tierMarks(id, tier)}
       {loadedPlates(tier, tier >= 3 ? '#fbbf24' : dark)}
@@ -273,6 +312,7 @@ function laurel(id: string, tier: number) {
   const look = LAURELS[tier - 1];
   return (
     <>
+      {tierUnder(id, tier)}
       <Fade
         id={`${id}a`}
         across
@@ -321,6 +361,7 @@ function laurel(id: string, tier: number) {
 function bigThree(id: string, tier: number) {
   return (
     <>
+      {tierUnder(id, tier)}
       <Fade
         id={`${id}a`}
         stops={[
@@ -370,6 +411,7 @@ function recordBreaker(id: string, tier: number) {
   const [light, mid, dark] = RECORD_METALS[tier - 1];
   return (
     <>
+      {tierUnder(id, tier)}
       <Fade
         id={`${id}a`}
         across
@@ -404,6 +446,7 @@ function recordBreaker(id: string, tier: number) {
 function cardiomaniac(id: string, tier: number) {
   return (
     <>
+      {tierUnder(id, tier)}
       <Fade
         id={`${id}a`}
         across
@@ -481,6 +524,7 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
   ),
   'locked-in': (id) => (
     <>
+      {tierUnder(id, 1)}
       <Fade
         id={`${id}a`}
         across
@@ -621,18 +665,21 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
   'iron-legion': (id) => laurel(id, 3),
   'hundred-days': (id) => (
     <>
+      {tierUnder(id, 2)}
       {flameRing(id, FLAMES.fire)}
-      {tierMarks(id, 2, { sheen: true })}
+      {tierMarks(id, 2)}
     </>
   ),
   unbreakable: (id) => (
     <>
+      {tierUnder(id, 3)}
       {flameRing(id, FLAMES.blue, 1.18)}
       {tierMarks(id, 3)}
     </>
   ),
   'whale-lifter': (id) => (
     <>
+      {tierUnder(id, 1)}
       <Fade
         id={`${id}a`}
         stops={[
@@ -680,6 +727,7 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
   ),
   'million-kilo': (id) => (
     <>
+      {tierUnder(id, 2, { grand: true })}
       <Fade
         id={`${id}a`}
         across
