@@ -1684,6 +1684,64 @@ describe('rest time controls', () => {
   });
 });
 
+describe('inserting sets', () => {
+  const insertButton = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`.movement-card [aria-label="${label}"]`);
+
+  it('adds a set at the start or between sets, copying the neighbouring set', async () => {
+    const draft = storedDraft();
+    const movement = draft.movements[0];
+    draft.movements = [movement];
+    movement.sets = [
+      { ...movement.sets[0], key: 'first', weight_kg: 60, reps: 10, rest_seconds: 120 },
+      { ...movement.sets[0], key: 'second', weight_kg: 85, reps: 6, completed: false },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    // The completed first set shows its rest divider, which carries the between-sets "+".
+    expect(insertButton('Add set before set 2')?.closest('.rest-between')).not.toBeNull();
+    // Nothing after the last set: the Add set button covers the end of the list.
+    expect(insertButton('Add set before set 3')).toBeNull();
+
+    await act(async () => insertButton('Add set at start')!.click());
+    let sets = readActiveWorkoutDraft()!.movements[0].sets;
+    expect(sets.map((set) => set.key).slice(1)).toEqual(['first', 'second']);
+    expect(sets[0]).toMatchObject({ weight_kg: 60, reps: 10, completed: false });
+
+    // The new set 1 is unticked with a revealed rest, so the next gap is a divider too.
+    await act(async () => insertButton('Add set before set 3')!.click());
+    sets = readActiveWorkoutDraft()!.movements[0].sets;
+    expect(sets).toHaveLength(4);
+    expect(sets[1].key).toBe('first');
+    expect(sets[2]).toMatchObject({ weight_kg: 60, completed: false });
+    expect(sets[3].key).toBe('second');
+  });
+
+  it('offers an insert line between sets with no rest divider', async () => {
+    const draft = storedDraft();
+    const movement = draft.movements[0];
+    draft.movements = [movement];
+    movement.sets = [1, 2].map((number) => ({
+      ...movement.sets[0],
+      key: `suggested-${number}`,
+      completed: false,
+      fromPrevious: true,
+      restRevealed: false,
+      weight_kg: number * 40,
+    }));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const between = insertButton('Add set before set 2');
+    expect(between?.closest('.set-insert-row')).not.toBeNull();
+    await act(async () => between!.click());
+    const sets = readActiveWorkoutDraft()!.movements[0].sets;
+    expect(sets.map((set) => set.weight_kg)).toEqual([40, 40, 80]);
+    expect(sets[1].key).not.toMatch(/^suggested-/);
+  });
+});
+
 describe('hold to reorder workout sets', () => {
   afterEach(() => {
     Reflect.deleteProperty(document, 'elementFromPoint');
