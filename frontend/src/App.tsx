@@ -357,7 +357,13 @@ import { launchPromptAllowed, type LaunchPrompt } from './launchPrompts';
 import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
 import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
 import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './loggerSession';
-import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import {
+  REST_EXTEND_SECONDS,
+  RestCompletePill,
+  WorkoutHeaderMeta,
+  WorkoutTimerDock,
+} from './WorkoutRestTimer';
+import { nextSetAfterRest } from './restComplete';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
 import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
@@ -896,10 +902,6 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
-  const notifyRestComplete = useCallback(
-    () => setMessage('Rest complete. Time for your next set.'),
-    [],
-  );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
   const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
@@ -2500,7 +2502,7 @@ function AppContent() {
                         onRestTimerChange={
                           editingWorkout || viewedWorkout ? undefined : setRestEndsAt
                         }
-                        onRestTimerComplete={notifyRestComplete}
+                        screenVisible={tab === 'log'}
                         onLiveSummaryChange={setLiveWorkoutSummary}
                         onClose={navigateBack}
                         onDelete={() => {
@@ -3252,7 +3254,7 @@ function WorkoutLogger({
   onClose,
   onDelete,
   onRestTimerChange,
-  onRestTimerComplete,
+  screenVisible = true,
   onLiveSummaryChange,
 }: {
   exercises: Exercise[];
@@ -3290,7 +3292,8 @@ function WorkoutLogger({
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
-  onRestTimerComplete: () => void;
+  /** False while the workout is minimised behind another tab. */
+  screenVisible?: boolean;
   onLiveSummaryChange: (summary: LiveWorkoutSummary) => void;
 }) {
   const { config: trainingBlocks } = useTrainingBlocks();
@@ -3624,6 +3627,12 @@ function WorkoutLogger({
   // Each new rest opens the pill; hiding it tucks the countdown into the bottom-edge notch.
   const [restTotal, setRestTotal] = useState(0);
   const [restHidden, setRestHidden] = useState(false);
+  // A finished rest becomes the "GO" pill until the next set is logged, it is used or dismissed.
+  const [restDone, setRestDone] = useState<{ endedAt: number; movementKey: string | null } | null>(
+    null,
+  );
+  // The exercise (or the first of its superset) whose logged set started the rest.
+  const restMovementKeyRef = useRef<string | null>(null);
   const restNotificationEndpointRef = useRef<string | null>(null);
   const activeRestTimerRef = useRef<{
     id: string;
@@ -3806,8 +3815,10 @@ function WorkoutLogger({
       activeRestTimerRef.current = null;
       setRestHidden(false);
       onRestTimerChange?.(null);
-      if (document.visibilityState === 'visible') onRestTimerComplete();
-      else if (!active.serverScheduled) void showRestTimerNotification().catch(() => undefined);
+      // The pill also waits for a return to the app after a background alert.
+      setRestDone({ endedAt: active.endsAt, movementKey: restMovementKeyRef.current });
+      if (document.visibilityState !== 'visible' && !active.serverScheduled)
+        void showRestTimerNotification().catch(() => undefined);
     };
     const interval = window.setInterval(tick, 500);
     document.addEventListener('visibilitychange', tick);
@@ -3817,7 +3828,7 @@ function WorkoutLogger({
       document.removeEventListener('visibilitychange', tick);
       window.removeEventListener('focus', tick);
     };
-  }, [restLeft, onRestTimerChange, onRestTimerComplete]);
+  }, [restLeft, onRestTimerChange]);
 
   const [undoDeletion, setUndoDeletion] = useState<{
     kind: 'set' | 'rest';
@@ -4185,6 +4196,7 @@ function WorkoutLogger({
       pendingSchedules: new Set<Promise<void>>(),
     };
     activeRestTimerRef.current = timer;
+    setRestDone(null);
     setRestLeft(seconds);
     setRestTotal(seconds);
     setRestHidden(false);
@@ -4237,6 +4249,7 @@ function WorkoutLogger({
     activeRestTimerRef.current = null;
     setRestLeft(0);
     setRestHidden(false);
+    setRestDone(null);
     onRestTimerChange?.(null);
     void dismissRestTimerNotifications().catch(() => undefined);
     if (timer) cancelRestTimerPush(timer);
@@ -4431,7 +4444,13 @@ function WorkoutLogger({
         };
       }),
     );
-    if (restSeconds !== null && !nextInRound) startRestTimer(restSeconds);
+    if (loggingSet) setRestDone(null);
+    if (restSeconds !== null && !nextInRound) {
+      restMovementKeyRef.current = movement?.supersetKey
+        ? (movements.find((item) => item.supersetKey === movement.supersetKey)?.key ?? movementKey)
+        : movementKey;
+      startRestTimer(restSeconds);
+    }
     if (nextInRound && !initialWorkout) {
       window.requestAnimationFrame(() =>
         [...(movementStackRef.current?.querySelectorAll<HTMLElement>('[data-flip-key]') ?? [])]
@@ -4859,7 +4878,40 @@ function WorkoutLogger({
   const restActive = restTimerEnabled && restLeft > 0;
   // A live rest shows the rest pill, or the bottom-edge notch while hidden.
   const showTimerDock = !initialWorkout && restActive;
-  const dockSpacing = !showTimerDock ? '' : restHidden ? 'has-rest-notch' : 'has-rest-pill';
+  const showRestDone = !initialWorkout && restTimerEnabled && !restActive && restDone !== null;
+  const dockSpacing = showRestDone
+    ? 'has-rest-pill'
+    : !showTimerDock
+      ? ''
+      : restHidden
+        ? 'has-rest-notch'
+        : 'has-rest-pill';
+  const restNextSet = restDone
+    ? nextSetAfterRest(movements, restDone.movementKey, weightUnit)
+    : null;
+
+  /** Opens the workout if it is minimised and brings the set the pill named into view. */
+  function goToRestNextSet() {
+    setRestDone(null);
+    if (!screenVisible) onShow();
+    if (!restNextSet) return;
+    const { setKey, movementKey } = restNextSet;
+    // Wait for a minimised workout to show before scrolling within it.
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        const stack = movementStackRef.current;
+        const find = (selector: string, matches: (element: HTMLElement) => boolean) =>
+          [...(stack?.querySelectorAll<HTMLElement>(selector) ?? [])].find(matches);
+        const target =
+          find('[data-set-key]', (row) => row.dataset.setKey === setKey) ??
+          find('[data-flip-key]', (card) => card.dataset.flipKey === movementKey);
+        target?.scrollIntoView?.({
+          block: 'center',
+          behavior: motionReduced() ? 'auto' : 'smooth',
+        });
+      }),
+    );
+  }
 
   return (
     <section
@@ -5385,12 +5437,24 @@ function WorkoutLogger({
           joined={Boolean(weeklySetsUpdate)}
         />
       )}
+      {showRestDone && (
+        <RestCompletePill
+          endedAt={restDone.endedAt}
+          next={restNextSet}
+          aboveTabBar={!screenVisible}
+          onGo={goToRestNextSet}
+          onExtend={() => startRestTimer(REST_EXTEND_SECONDS)}
+          onDismiss={() => setRestDone(null)}
+        />
+      )}
       {weeklySetsUpdate && (
         <WeeklySetsShelf
           update={weeklySetsUpdate}
           goal={muscleSetGoal}
           goals={muscleGoals}
-          placement={!showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'}
+          placement={
+            showRestDone ? 'pill' : !showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'
+          }
           onDismiss={() => setWeeklySetsUpdate(null)}
         />
       )}

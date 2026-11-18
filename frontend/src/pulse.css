@@ -4752,6 +4752,157 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-variant-numeric: tabular-nums;
 }
 
+/* Rest complete: the rest pill turns green with GO, the next set and the time since rest ended. */
+.rest-complete-pill {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  z-index: 130;
+  width: min(calc(100% - 1.5rem), 26rem);
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  border: 1px solid color-mix(in srgb, var(--p-good) 55%, var(--p-line-strong));
+  border-radius: 1.75rem;
+  padding: 0 0.375rem;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--p-good) 22%, transparent), transparent 75%),
+    color-mix(in srgb, var(--p-surface) 94%, transparent);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation:
+    rest-complete-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.15),
+    rest-complete-glow 1.8s 420ms ease-in-out 3;
+}
+
+/* Minimised workout: sit above the tab bar, where other notifications appear. */
+.rest-complete-pill.is-above-tab-bar {
+  bottom: calc(5.6rem + env(safe-area-inset-bottom));
+}
+
+.rest-complete-pill button {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  border: 0;
+  background: none;
+  color: var(--p-ink);
+}
+
+.rest-complete-pill button:focus-visible {
+  outline: 2px solid var(--p-good);
+  outline-offset: 2px;
+}
+
+.rest-complete-pill .rest-complete-go {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  border-radius: 1.5rem;
+  padding: 0 0.25rem 0 0;
+  text-align: left;
+}
+
+.rest-complete-badge {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--p-good);
+  color: #06210f;
+  font-size: 0.8rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.rest-complete-text {
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+  line-height: 1.2;
+}
+
+.rest-complete-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.rest-complete-title strong {
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rest-complete-over {
+  flex: none;
+  color: var(--p-gold);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-complete-detail {
+  display: flex;
+  min-width: 0;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.rest-complete-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rest-complete-meta {
+  flex: none;
+  white-space: pre;
+}
+
+.rest-complete-pill .rest-complete-extend {
+  border-radius: 999px;
+  padding: 0 0.75rem;
+  background: var(--p-surface-2);
+  font-size: 0.8rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-complete-pill .rest-complete-dismiss {
+  width: 2.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  padding: 0;
+  color: var(--p-muted);
+}
+
+.rest-complete-dismiss .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+@keyframes rest-complete-in {
+  from {
+    opacity: 0.4;
+    transform: scaleX(0.6);
+  }
+}
+
+@keyframes rest-complete-glow {
+  50% {
+    box-shadow:
+      0 12px 30px rgb(0 0 0 / 35%),
+      0 0 0 5px color-mix(in srgb, var(--p-good) 20%, transparent),
+      0 0 24px color-mix(in srgb, var(--p-good) 40%, transparent);
+  }
+}
+
 /* Paused: the same controls in gold, with the play icon. */
 .rest-pill.is-paused .rest-pill-fill {
   background: var(--p-gold-soft);
@@ -4775,6 +4926,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 @media (prefers-reduced-motion: reduce) {
   .workout-timer-dock {
+    animation: none;
+  }
+
+  .rest-complete-pill {
     animation: none;
   }
 

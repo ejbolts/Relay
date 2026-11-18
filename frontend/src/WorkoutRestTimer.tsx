@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { restOvertimeLabel, type RestNextSet } from './restComplete';
 import { restTimerProgress } from './restTimer';
 import { formatSeconds } from './utils';
 
@@ -213,5 +215,91 @@ export function WorkoutTimerDock({
         {time}
       </strong>
     </button>
+  );
+}
+
+/** How long "+30s" on the rest complete pill rests for. */
+export const REST_EXTEND_SECONDS = 30;
+
+/**
+ * Shown when a rest runs out: the rest pill turns into a green "GO" pill naming the next set and
+ * counting how long ago the rest ended. Tapping it goes to that set; +30s rests a little longer.
+ * It sits in the rest pill's place on the workout, or above the tab bar on other screens.
+ */
+export function RestCompletePill({
+  endedAt,
+  next,
+  aboveTabBar,
+  onGo,
+  onExtend,
+  onDismiss,
+}: {
+  endedAt: number;
+  next: RestNextSet | null;
+  aboveTabBar: boolean;
+  onGo: () => void;
+  onExtend: () => void;
+  onDismiss: () => void;
+}) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const setName = next?.set.toLowerCase();
+  return createPortal(
+    <aside
+      className={`workout-timer-dock rest-complete-pill${aboveTabBar ? ' is-above-tab-bar' : ''}`}
+      aria-label="Rest complete"
+    >
+      <span className="sr-only" role="status">
+        {next ? `Rest complete. Next: ${next.exercise}, ${setName}.` : 'Rest complete.'}
+      </span>
+      <button
+        type="button"
+        className="rest-complete-go"
+        aria-label={next ? `Go to ${next.exercise}, ${setName}` : 'Go to workout'}
+        onClick={onGo}
+      >
+        <span className="rest-complete-badge" aria-hidden="true">
+          GO
+        </span>
+        <span className="rest-complete-text" aria-hidden="true">
+          <span className="rest-complete-title">
+            <strong>{next ? 'Next set ready' : 'Rest complete'}</strong>
+            <span className="rest-complete-over">{restOvertimeLabel(endedAt, now)}</span>
+          </span>
+          {/* A long exercise name shortens first, so the set and its target stay readable. */}
+          <span className="rest-complete-detail">
+            <span className="rest-complete-name">{next ? next.exercise : 'All sets logged'}</span>
+            {next && (
+              <span className="rest-complete-meta">
+                {` · ${next.set}`}
+                {next.target && ` · ${next.target}`}
+              </span>
+            )}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="rest-complete-extend"
+        aria-label={`Rest ${REST_EXTEND_SECONDS} seconds more`}
+        title={`Rest ${REST_EXTEND_SECONDS} seconds more`}
+        onClick={onExtend}
+      >
+        +{REST_EXTEND_SECONDS}s
+      </button>
+      <button
+        type="button"
+        className="rest-complete-dismiss"
+        aria-label="Dismiss rest complete"
+        title="Dismiss"
+        onClick={onDismiss}
+      >
+        <Icon name="close" />
+      </button>
+    </aside>,
+    document.body,
   );
 }
