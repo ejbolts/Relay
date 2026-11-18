@@ -1,4 +1,4 @@
-/* The pill floats below any update banner; it never reserves space in the app. */
+/* Floats below any update banner; it never reserves space in the app. */
 .offline-notice {
   position: fixed;
   z-index: 120;
@@ -7,72 +7,201 @@
   width: max-content;
   max-width: calc(100% - 2 * max(1rem, env(safe-area-inset-left), env(safe-area-inset-right)));
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.125rem 0.25rem 0.125rem 1rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.offline-notice > * {
+  pointer-events: auto;
+}
+
+.offline-notice-pill {
+  height: 2.75rem;
+  max-width: 20rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding: 0 1rem 0 0.75rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 999px;
   background: var(--p-surface-2);
   color: var(--p-ink);
   box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 25%);
-  transform: translateX(-50%);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
   animation: offline-notice-in 220ms var(--ease-out, ease-out) backwards;
+  transition:
+    max-width 420ms var(--ease-out, ease-out),
+    padding 420ms var(--ease-out, ease-out),
+    background-color 220ms ease;
 }
 
-.offline-notice > .pulse-icon {
+button.offline-notice-pill {
+  cursor: pointer;
+}
+
+button.offline-notice-pill:hover,
+button.offline-notice-pill:focus-visible,
+button.offline-notice-pill[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--p-ink) 6%, var(--p-surface-2));
+}
+
+.offline-notice-pill > .pulse-icon,
+.offline-notice-title > .pulse-icon {
   width: 1.25rem;
   height: 1.25rem;
   flex-shrink: 0;
-  fill: none;
   stroke: var(--p-muted);
   stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
-.offline-notice strong {
-  font-size: 0.875rem;
-  line-height: 1.2;
+.offline-notice-label {
+  transition: opacity 200ms ease;
 }
 
-.offline-notice-close {
-  width: 2.75rem;
-  height: 2.75rem;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--p-muted);
-  -webkit-tap-highlight-color: transparent;
+/* After saying it once, the pill shrinks to its icon. */
+.offline-notice[data-minimised='true'] .offline-notice-pill {
+  max-width: 2.75rem;
+  padding: 0 calc((2.75rem - 2px - 1.25rem) / 2);
 }
 
-.offline-notice-close:hover,
-.offline-notice-close:focus-visible {
-  background: color-mix(in srgb, var(--p-ink) 8%, transparent);
+.offline-notice[data-minimised='true'] .offline-notice-label {
+  opacity: 0;
+}
+
+.offline-notice[data-phase='back'] .offline-notice-pill {
+  border-color: color-mix(in srgb, var(--p-good) 35%, transparent);
+  background: color-mix(in srgb, var(--p-good) 14%, var(--p-surface-2));
+}
+
+.offline-notice[data-phase='back'] .offline-notice-pill > .pulse-icon {
+  stroke: var(--p-good);
+}
+
+.offline-notice-details {
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 0.875rem 1rem 1rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 1.125rem;
+  background: var(--p-surface-2);
   color: var(--p-ink);
+  box-shadow: 0 0.75rem 2.5rem rgb(0 0 0 / 30%);
+  transform-origin: 50% 0;
+  animation: offline-notice-details-in 200ms var(--ease-out, ease-out) backwards;
 }
 
-.offline-notice-close svg {
-  width: 1.25rem;
-  height: 1.25rem;
-  stroke-linecap: round;
+.offline-notice-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.offline-notice-details dl {
+  margin: 0;
+}
+
+.offline-notice-details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--p-line);
+  font-size: 0.8125rem;
+}
+
+.offline-notice-details dt {
+  color: var(--p-muted);
+}
+
+.offline-notice-details dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.offline-notice-details dd[data-state] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--p-good);
+}
+
+.offline-notice-details dd[data-state='bad'] {
+  color: var(--p-danger);
+}
+
+.offline-notice-details dd[data-state]::before {
+  content: '';
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.offline-notice-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.625rem;
+}
+
+.offline-notice-actions small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.offline-notice-actions small {
+  white-space: nowrap;
+}
+
+/* The shared .primary rule makes buttons full width with a top margin; this one sits inline. */
+.offline-notice-actions .pulse-button {
+  flex: none;
+  width: auto;
+  min-height: 2.5rem;
+  margin-top: 0;
+  padding: 0 1rem;
+}
+
+.offline-notice-actions .pulse-button:disabled {
+  opacity: 0.6;
 }
 
 @keyframes offline-notice-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -0.5rem);
+    transform: translateY(-0.5rem);
   }
 }
 
-html[data-reduce-motion] .offline-notice {
+@keyframes offline-notice-details-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-0.25rem);
+  }
+}
+
+html[data-reduce-motion] .offline-notice *,
+html[data-reduce-motion] .offline-notice-pill {
   animation: none;
+  transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .offline-notice {
+  .offline-notice * {
     animation: none;
+    transition: none;
   }
 }
