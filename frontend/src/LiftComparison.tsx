@@ -26,7 +26,10 @@ const CLOSE_MS = 240;
 /** The gap between one new lift rising into the card and the next, as useFlipAnimation spaces them. */
 const ENTER_STAGGER_MS = 80;
 
-type Member = Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
+type Member = Pick<
+  SharedProfileSummary,
+  'id' | 'display_name' | 'profile_photo_url' | 'profile_border'
+>;
 type Leader = 'you' | 'them' | 'level';
 
 /** Who leads a lift both members have logged. */

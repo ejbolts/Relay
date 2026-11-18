@@ -58,6 +58,7 @@ from .models import (
 )
 from .photo_storage import profile_photo_path
 from .presence import FriendPresence, hub, presence_by_member
+from .profile_borders import Sex, worn_border, worn_border_name
 from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
@@ -122,6 +123,11 @@ class SharedProfileSummary(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    # The earned border worn around the photo, and its name for the profile itself.
+    profile_border: str | None = None
+    profile_border_name: str | None = None
+    # Shown only to those who can view the profile.
+    sex: Sex | None = None
     member_since: datetime
     # Private profiles are returned only to their owner.
     visibility: Visibility
@@ -244,6 +250,7 @@ class ConnectionRead(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     since: datetime
 
 
@@ -269,6 +276,7 @@ class FeedFriend(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     presence: FriendPresence | None = None
 
 
@@ -290,6 +298,7 @@ class TimelineMember(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     is_you: bool = False
 
 
@@ -555,6 +564,9 @@ def profile_summary(
         id=member.id,
         display_name=member.display_name,
         profile_photo_url=photo_url(member),
+        profile_border=worn_border(member),
+        profile_border_name=worn_border_name(member),
+        sex=member.sex if viewable and member.sex in ("male", "female") else None,
         member_since=as_utc(member.created_at),
         visibility=sharing.visibility,
         is_you=member.id == viewer.id,
@@ -1320,6 +1332,7 @@ def friend_feed(
                     id=member.id,
                     display_name=member.display_name,
                     profile_photo_url=photo_url(member),
+                    profile_border=worn_border(member),
                     presence=presence[member.id],
                 ),
                 workout=shared_workout(workout, sharing),
@@ -1396,6 +1409,7 @@ def workout_timeline(
                     id=member.id,
                     display_name=member.display_name,
                     profile_photo_url=photo_url(member),
+                    profile_border=worn_border(member),
                     is_you=member.id == user.id,
                 ),
                 workout=shared_workout(
@@ -1424,6 +1438,7 @@ class ReactionPerson(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     reaction: Reaction
 
 
@@ -1468,6 +1483,7 @@ def workout_reaction_people(
                 id=member.id,
                 display_name=member.display_name,
                 profile_photo_url=photo_url(member),
+                profile_border=worn_border(member),
                 reaction=reaction.reaction,
             )
             for reaction, member in rows
@@ -1517,6 +1533,7 @@ def connection(member: User, since: datetime) -> ConnectionRead:
         id=member.id,
         display_name=member.display_name,
         profile_photo_url=photo_url(member),
+        profile_border=worn_border(member),
         since=as_utc(since),
     )
 
@@ -1691,6 +1708,7 @@ def friend_notifications(user: CurrentUser, db: Db) -> NotificationsRead:
                 id=member.id,
                 display_name=member.display_name,
                 profile_photo_url=photo_url(member),
+                profile_border=worn_border(member),
                 since=as_utc(reaction.created_at),
                 workout_id=reaction.workout_id,
                 workout_name=workout_name,

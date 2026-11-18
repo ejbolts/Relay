@@ -1,0 +1,411 @@
+/* Profile borders: an earned frame drawn over the edge of a profile photo. */
+
+/* The frame reaches past the photo, so the avatar stops clipping and the photo rounds itself. */
+.avatar-bordered.avatar-bordered.avatar-bordered {
+  position: relative;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.avatar-bordered > img {
+  border-radius: 50%;
+}
+
+.profile-border-art {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Only large avatars move, and only where motion is welcome. */
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-sheen {
+    transform-origin: 60px 60px;
+    animation: profile-border-sheen 7s linear infinite;
+  }
+
+  html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-embers {
+    animation: profile-border-flicker 1.6s ease-in-out infinite alternate;
+  }
+
+  html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-heart {
+    transform-origin: 60px 6px;
+    animation: profile-border-beat 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes profile-border-sheen {
+  from {
+    transform: rotate(-60deg);
+  }
+
+  to {
+    transform: rotate(300deg);
+  }
+}
+
+@keyframes profile-border-flicker {
+  from {
+    opacity: 0.55;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes profile-border-beat {
+  0%,
+  36%,
+  100% {
+    transform: scale(1);
+  }
+
+  12% {
+    transform: scale(1.28);
+  }
+
+  24% {
+    transform: scale(1.08);
+  }
+}
+
+/* The account's sex as a symbol beside its name. */
+.sex-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--p-muted);
+}
+
+.sex-mark .pulse-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.today-profile h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.today-profile h2 > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The worn border's name on a profile; on your own profile it opens the borders. */
+.profile-summary-copy .profile-border-chip {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  margin-top: 0.35rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem 0.25rem 0.55rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.profile-border-chip.is-static {
+  min-height: 1.6rem;
+  padding-block: 0.1rem;
+}
+
+.profile-border-chip .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Sex in the profile editor: a choice until it is saved, then a fixed value. */
+.profile-sex-field .segmented-control {
+  margin: 0;
+}
+
+.profile-sex-locked {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.6rem;
+  margin: 0;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 0 0.8rem;
+  color: var(--p-ink-2);
+  font-size: 0.9375rem;
+}
+
+.profile-sex-locked .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.profile-sex-locked .pulse-icon:last-of-type {
+  margin-left: auto;
+  color: var(--p-muted);
+}
+
+.profile-sex-confirm > p {
+  margin: 0;
+  padding: 1rem;
+  color: var(--p-ink-2);
+  line-height: 1.5;
+}
+
+.profile-sex-confirm > .popup-dialog-actions {
+  margin: 0;
+  padding: 1rem;
+}
+
+/* Borders dialog: the border being looked at stays put while the list scrolls. */
+.popup-dialog.border-picker {
+  width: min(calc(100% - 1.5rem), 560px);
+  overflow: hidden;
+}
+
+.border-picker[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.border-picker > header {
+  flex-shrink: 0;
+}
+
+.border-picker-loading {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
+  color: var(--p-muted);
+}
+
+.border-picker-loading p {
+  margin: 0;
+}
+
+.border-preview {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--p-line);
+  padding: 1rem;
+}
+
+.border-preview-avatar.profile-avatar {
+  width: 5.25rem;
+  height: 5.25rem;
+  margin: 0.55rem;
+  font-size: 2rem;
+}
+
+.border-preview-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.border-preview-copy p {
+  margin: 0;
+}
+
+.border-preview-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.05rem;
+}
+
+.border-rarity {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.border-rarity.common {
+  color: var(--p-muted);
+}
+
+.border-rarity.rare {
+  color: #4f9df7;
+}
+
+.border-rarity.epic {
+  color: #b07cf5;
+}
+
+.border-rarity.legendary {
+  color: var(--p-gold);
+}
+
+.border-preview-requirement {
+  color: var(--p-ink-2);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.border-progress {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.border-progress-track {
+  display: block;
+  height: 0.4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+
+.border-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-accent);
+}
+
+.border-progress small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.border-preview-copy .border-wear {
+  width: auto;
+  min-height: 2.5rem;
+  justify-self: start;
+  padding: 0.4rem 1.1rem;
+  font-size: 0.875rem;
+}
+
+.border-preview-copy .text-link {
+  justify-self: start;
+}
+
+.border-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.border-wearing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--p-good);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.border-wearing .pulse-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.border-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.75rem 1.25rem;
+}
+
+.border-group h3 {
+  margin: 1.1rem 0.25rem 0.5rem;
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.border-group ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
+  gap: 0.35rem 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.border-tile {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 0.75rem 0.15rem 0.5rem;
+  background: transparent;
+  color: var(--p-ink-2);
+  font: inherit;
+}
+
+.border-tile[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  color: var(--p-ink);
+}
+
+.border-tile-art {
+  position: relative;
+  display: grid;
+}
+
+.border-tile-avatar.profile-avatar {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.15rem;
+}
+
+.border-tile.is-locked .border-tile-avatar {
+  opacity: 0.5;
+}
+
+.border-tile-badge {
+  position: absolute;
+  right: -0.4rem;
+  bottom: -0.35rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--p-surface);
+  border-radius: 50%;
+  background: var(--p-surface-3);
+  color: var(--p-ink-2);
+}
+
+.border-tile-badge.is-worn {
+  background: var(--p-good);
+  color: #fff;
+}
+
+.border-tile-badge .pulse-icon {
+  width: 0.7rem;
+  height: 0.7rem;
+  stroke-width: 2.4;
+}
+
+.border-tile-name {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}

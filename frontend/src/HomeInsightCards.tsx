@@ -496,7 +496,7 @@ export function FriendsWeekCard({
   onChooseSharing,
 }: {
   active: boolean;
-  you: Pick<User, 'display_name' | 'username' | 'profile_photo_url'>;
+  you: Pick<User, 'display_name' | 'username' | 'profile_photo_url' | 'profile_border'>;
   workouts: TrackedWorkout[];
   today: string;
   weekStartDay: number;
