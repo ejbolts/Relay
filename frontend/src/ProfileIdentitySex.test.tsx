@@ -25,7 +25,7 @@ const borders: ProfileBorders = {
       name: 'Bench Club I',
       group: 'Strength',
       rarity: 'common',
-      requirement: 'Bench press 60 kg · 1 plate (men) or 40 kg (women)',
+      requirement: 'Bench press 40 kg (men) or 25 kg (women)',
       unlocked: false,
       progress: null,
       needs_sex: true,

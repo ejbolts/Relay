@@ -216,11 +216,11 @@ def test_a_border_is_worn_only_once_it_is_earned(client):
 
 def test_strength_borders_use_the_standard_for_the_accounts_sex(client, other_client):
     for lifter in (client, other_client):
-        workout(lifter, "2026-01-05", BENCH, [{"weight_kg": 50, "reps": 3}])
+        workout(lifter, "2026-01-05", BENCH, [{"weight_kg": 30, "reps": 3}])
 
     waiting = borders(client)["bench-club-1"]
     assert waiting["needs_sex"] is True and waiting["progress"] is None
-    assert waiting["requirement"] == "Bench press 60 kg · 1 plate (men) or 40 kg (women)"
+    assert waiting["requirement"] == "Bench press 40 kg (men) or 25 kg (women)"
     assert waiting["unlocked"] is False
     assert (waiting["family"], waiting["tier"]) == ("bench", 1)
     assert wear(client, "bench-club-1").status_code == 403
@@ -228,14 +228,15 @@ def test_strength_borders_use_the_standard_for_the_accounts_sex(client, other_cl
     assert set_sex(client, "female").status_code == 200
     assert set_sex(other_client, "male").status_code == 200
     hers, his = borders(client), borders(other_client)
-    assert hers["bench-club-1"]["requirement"] == "Bench press 40 kg"
+    assert hers["bench-club-1"]["requirement"] == "Bench press 25 kg"
     assert hers["bench-club-1"]["unlocked"] is True
-    assert hers["bench-club-1"]["progress"] == {"current": 50, "target": 40, "unit": "kg"}
-    assert hers["bench-club-2"]["requirement"] == "Bench press 60 kg · 1 plate"
+    assert hers["bench-club-1"]["progress"] == {"current": 30, "target": 25, "unit": "kg"}
+    assert hers["bench-club-2"]["requirement"] == "Bench press 35 kg"
     assert hers["bench-club-2"]["unlocked"] is False
-    assert his["bench-club-1"]["requirement"] == "Bench press 60 kg · 1 plate"
+    assert his["bench-club-1"]["requirement"] == "Bench press 40 kg"
     assert his["bench-club-1"]["unlocked"] is False
-    assert his["bench-club-1"]["progress"] == {"current": 50, "target": 60, "unit": "kg"}
+    assert his["bench-club-1"]["progress"] == {"current": 30, "target": 40, "unit": "kg"}
+    assert his["bench-club-2"]["requirement"] == "Bench press 60 kg · 1 plate"
     assert wear(client, "bench-club-1").status_code == 200
     assert wear(client, "bench-club-2").status_code == 403
     assert wear(other_client, "bench-club-1").status_code == 403
@@ -272,16 +273,17 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
 
     listed = borders(client)
     earned = {key for key, item in listed.items() if item["unlocked"]}
-    # Men: bench 60 / 100, squat 100 / 140 / 180, deadlift 140 / 180 / 220, total 300 / 400 / 454.
-    assert {"bench-club-1", "squat-club-1", "squat-club-2"} <= earned
-    assert {"deadlift-club-1", "deadlift-club-2", "big-three-1", "big-three-2"} <= earned
-    assert not earned & {"bench-club-2", "squat-club-3", "deadlift-club-3", "big-three-3"}
+    # Men: bench 40 / 60 / 100, squat 60 / 100 / 140 / 180, deadlift 100 / 140 / 180 / 220,
+    # total 200 / 300 / 380 / 454.
+    assert {"bench-club-1", "bench-club-2", "squat-club-3", "deadlift-club-3"} <= earned
+    assert {"big-three-1", "big-three-2", "big-three-3"} <= earned
+    assert not earned & {"bench-club-3", "squat-club-4", "deadlift-club-4", "big-three-4"}
     assert listed["pound-for-pound-2"]["unlocked"] and not listed["pound-for-pound-3"]["unlocked"]
     assert listed["atlas-3"]["unlocked"] and not listed["atlas-4"]["unlocked"]
     assert listed["gravity-defier-4"]["unlocked"] is False
     assert listed["gravity-defier-3"]["unlocked"]
-    assert listed["deadlift-club-3"]["requirement"] == "Deadlift 220 kg · 5 plates"
-    assert listed["big-three-3"]["requirement"] == (
+    assert listed["deadlift-club-4"]["requirement"] == "Deadlift 220 kg · 5 plates"
+    assert listed["big-three-4"]["requirement"] == (
         "Total 454 kg across your best bench, squat and deadlift"
     )
     assert listed["pound-for-pound-3"]["requirement"] == "Bench press 1.25× your body weight"
@@ -290,7 +292,7 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
         "target": 1.25,
         "unit": "× BW",
     }
-    assert listed["bench-club-5"]["requirement"] == "Bench press 180 kg · 4 plates"
+    assert listed["bench-club-5"]["requirement"] == "Bench press 140 kg · 3 plates"
     assert listed["bench-club-5"]["rarity"] == "mythic"
 
 
@@ -303,7 +305,7 @@ def test_weight_targets_are_shown_in_the_accounts_unit(client):
     assert saved.status_code == 200, saved.text
     workout(client, "2026-01-05", BENCH, [{"weight_kg": 100, "reps": 1}])
 
-    bench = borders(client)["bench-club-2"]
+    bench = borders(client)["bench-club-3"]
     assert bench["requirement"] == "Bench press 220 lb · 2 plates"
     assert bench["progress"] == {"current": 220.5, "target": 220, "unit": "lb"}
     assert bench["unlocked"] is True

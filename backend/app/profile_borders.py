@@ -243,29 +243,29 @@ BORDERS: tuple[Border, ...] = (
         "bench_kg",
         "bench-club",
         "Bench Club",
-        ((60, 40), (100, 60), (140, 80), (160, 90), (180, 100)),
+        ((40, 25), (60, 35), (100, 50), (120, 65), (140, 80)),
     ),
     *five_tiers(
         "squat",
         "squat_kg",
         "squat-club",
         "Squat Club",
-        ((100, 60), (140, 100), (180, 140), (220, 160), (260, 180)),
+        ((60, 40), (100, 60), (140, 90), (180, 120), (220, 140)),
     ),
     *five_tiers(
         "deadlift",
         "deadlift_kg",
         "deadlift-club",
         "Deadlift Club",
-        ((140, 100), (180, 140), (220, 180), (260, 200), (300, 220)),
+        ((100, 60), (140, 100), (180, 120), (220, 140), (260, 180)),
     ),
-    # 1,000 lb and 1,500 lb totals for men at tiers III and V.
+    # The 1,000 lb total for men at tier IV.
     *five_tiers(
         "big-three",
         "big_three_kg",
         "big-three",
         "Big Three",
-        ((300, 180), (400, 250), (453.6, 320), (550, 380), (680.4, 450)),
+        ((200, 120), (300, 180), (380, 240), (453.6, 300), (550, 360)),
     ),
     # Lifts as multiples of the body weight logged nearest the set.
     *five_tiers(
