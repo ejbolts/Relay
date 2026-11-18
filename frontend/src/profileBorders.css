@@ -260,25 +260,8 @@
   color: var(--p-gold);
 }
 
-/* Mythic: only the strongest earn it, so its label shimmers like the frame. */
 .border-rarity.mythic {
-  border-color: #c4b5fd;
-  background: linear-gradient(100deg, #f9a8d4, #a5f3fc, #fde68a, #c4b5fd, #f9a8d4) 0 0 / 220% 100%;
-  color: transparent;
-  background-clip: text;
-  -webkit-background-clip: text;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  html:not([data-reduce-motion]) .border-rarity.mythic {
-    animation: border-rarity-shimmer 4s linear infinite;
-  }
-}
-
-@keyframes border-rarity-shimmer {
-  to {
-    background-position: -220% 0;
-  }
+  color: #ef4444;
 }
 
 /* Limited editions: how long is left. */
