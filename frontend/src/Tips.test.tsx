@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
+import { SetupGuideHost } from './SetupGuide';
 import { onTipTarget, type TipAction } from './tipActions';
 import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
 
@@ -405,8 +406,13 @@ describe('shared tip presentation', () => {
     workout_date: date,
     movements: [
       {
-        exercise: { id: 'chest-press', equipment: 'Machine', kind: 'strength' },
-        machine_photos: [{ id: machine }],
+        exercise: {
+          id: 'chest-press',
+          name: 'Chest press',
+          equipment: 'Machine',
+          kind: 'strength',
+        },
+        machine_photos: [{ id: machine, caption: machine }],
         sets: [],
       },
     ],
@@ -468,19 +474,37 @@ describe('shared tip presentation', () => {
     await act(async () => bulb()!.click());
     expect(popover()?.textContent).toContain('Train alongside a friend');
   });
-  it('opens the feature from the tip, naming the exercise to compare machines on', async () => {
+  it('walks through comparing machines, then opens the feature for the right exercise', async () => {
     const opened: TipAction[] = [];
     const stop = onTipTarget((action) => opened.push(action));
-    await homeBulb(<HomeTips hasSplit workouts={twoMachines} />);
+    await homeBulb(
+      <>
+        <HomeTips hasSplit workouts={twoMachines} />
+        <SetupGuideHost workouts={twoMachines} />
+      </>,
+    );
     await act(async () => bulb()!.click());
     // Home's wording says what the feature is for, not where its button is.
     expect(popover()?.querySelector('p')?.textContent).toBe(
       'Compare different machines on one chart with Machine weights.',
     );
-    await act(async () => button('Open Machine weights').click());
-    expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'chest-press' }]);
+    await act(async () => button('Show me how').click());
     expect(popover()).toBeNull();
+    const guide = () => document.querySelector('.setup-guide');
+    // The guide talks about the person's own exercise and machines.
+    expect(guide()?.textContent).toContain('You’ve logged Chest press on 2 machines.');
+    expect(
+      [...guide()!.querySelectorAll('.setup-guide-machines strong')].map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(['technogym', 'life-fitness']);
+    // Opening the guide counts as opening the tip.
     expect(loadTips('alice').seen.normalise).toBe('seen');
+    for (let step = 0; step < 3; step += 1) await act(async () => button('Next →').click());
+    expect(guide()?.textContent).toContain('Your logged weights stay put');
+    await act(async () => button('Set up Chest press').click());
+    expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'chest-press' }]);
+    expect(guide()).toBeNull();
     stop();
   });
 });
