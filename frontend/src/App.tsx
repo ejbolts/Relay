@@ -400,6 +400,7 @@ import {
   completeRemainingSets,
   createSuggestedWorkoutSet,
   createWorkoutSet,
+  hasRecordedPerformance,
   isCompletedWorkingSet,
   latestExerciseSets,
   restTimerSecondsAfterSetUpdate,
@@ -4565,13 +4566,20 @@ function WorkoutLogger({
       return blocked('This workout type was removed. Choose another type before saving.');
     }
     const finishedAt = inactiveEndAt ?? Date.now();
-    const movementsToSave =
-      inactiveEndAt === undefined
-        ? movements
-        : movements.map((movement) => ({
-            ...movement,
-            sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
-          }));
+    const movementsToSave = movements.map((movement) => ({
+      ...movement,
+      sets: movement.sets.map((item) => {
+        const set =
+          inactiveEndAt === undefined ? item : workoutSetForAutoSave(movement.exercise.kind, item);
+        // A live workout never records a ticked set with nothing in it (such as one ticked
+        // before this check existed); it is kept as an unticked set instead.
+        return !initialWorkout &&
+          set.completed &&
+          !hasRecordedPerformance(movement.exercise.kind, set)
+          ? { ...set, completed: false }
+          : set;
+      }),
+    }));
     const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
     const unassigned = movementsToSave.find((movement) =>
       hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
@@ -6181,6 +6189,8 @@ function MovementCard({
     item: DraftSet;
     warning: SetEntryWarning;
   } | null>(null);
+  // A set whose tick was pressed before anything was entered; cleared once it has a value.
+  const [emptySetKey, setEmptySetKey] = useState<string | null>(null);
   const barType = cardio ? null : barTypeForExercise(movement.exercise);
   const [plateSetKey, setPlateSetKey] = useState<string | null>(null);
   const plateSetIndex = movement.sets.findIndex((item) => item.key === plateSetKey);
@@ -6312,6 +6322,12 @@ function MovementCard({
   function requestSetCompletion(item: DraftSet, index: number) {
     if (item.completed) {
       onToggleSet(item);
+      return;
+    }
+    if (!hasRecordedPerformance(movement.exercise.kind, item)) {
+      // Nothing to log yet: open the set at the field it needs instead of ticking it.
+      setEmptySetKey(item.key);
+      openSet(item.key, cardio ? 'duration' : 'reps');
       return;
     }
 
@@ -6567,6 +6583,12 @@ function MovementCard({
 
   function renderSetEditor(item: DraftSet, index: number) {
     const suggested = item.fromPrevious ? ', suggested value' : '';
+    const missingEntry =
+      emptySetKey === item.key && !hasRecordedPerformance(movement.exercise.kind, item);
+    const entryErrorId = `set-entry-error-${item.key}`;
+    const entryInvalid = missingEntry
+      ? { 'aria-invalid': true, 'aria-describedby': entryErrorId }
+      : {};
     return (
       <div className={`set-editor ${item.completed ? 'completed' : ''}`}>
         {renderSetTypeButton(item, index)}
@@ -6587,6 +6609,7 @@ function MovementCard({
                 })
               }
               aria-label="Duration minutes"
+              {...entryInvalid}
             />
             <input
               data-set-field="distance"
@@ -6625,6 +6648,7 @@ function MovementCard({
                 onUpdateSet(item.key, { reps: numberOrNull(event.target.value) })
               }
               aria-label={`Repetitions${suggested}`}
+              {...entryInvalid}
             />
           </>
         )}
@@ -6646,6 +6670,13 @@ function MovementCard({
         {renderRowCompleteButton(item, index)}
         {renderCompletedSetActions(item, index)}
         <div className="set-editor-extras">
+          {missingEntry && (
+            <p id={entryErrorId} className="set-entry-error" role="alert">
+              {cardio
+                ? 'Enter a time, distance or another measurement to log this set.'
+                : 'Enter reps to log this set.'}
+            </p>
+          )}
           <div className="set-editor-tools">
             {!cardio && (
               <label className="set-editor-rest">

@@ -40,6 +40,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.
 - **Workout summary:** After finishing, Home shows time, sets, volume, new records and a suggested next step.
 - **Rep targets:** Plan rep ranges and see when to add weight.
+- **Empty sets:** Ticking a set with no reps opens it to fill in, so empty sets are never logged.
 - **Workout plans:** Follow logged splits, save exercises by type and preview suggested weights.
 - **Exercises:** Rename, hide or swap lifts, with exact-name search, new icons and simpler filters.
 - **Merge exercises:** Relay guides custom lifts through the changes needed to combine duplicates.

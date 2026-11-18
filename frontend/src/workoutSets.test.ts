@@ -386,6 +386,20 @@ describe('completeRemainingSets', () => {
     expect(result[3]).toBe(sets[3]);
   });
 
+  it('leaves strength sets without reps unticked, even with weight or bodyweight attached', () => {
+    const sets = [
+      strengthSet({ weight_kg: 100 }),
+      strengthSet({ bodyweight_kg: 83.3, percentile: 40 }),
+      strengthSet({ reps: 12 }),
+    ];
+
+    expect(completeRemainingSets('strength', sets).map((item) => item.completed)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+
   it('logs cardio sets that have a recorded metric', () => {
     const sets = [
       { ...createWorkoutSet('cardio'), duration_seconds: 600 },
