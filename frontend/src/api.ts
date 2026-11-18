@@ -217,13 +217,14 @@ async function request<T>(
   try {
     response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
   } catch (reason) {
-    if (isUnreachable(reason)) reportConnectionFailure();
+    if (isUnreachable(reason)) reportConnectionFailure('unreachable');
     throw reason;
   }
-  const unreachable = GATEWAY_FAILURES.has(response.status);
-  if (unreachable) reportConnectionFailure();
+  // The proxy answered, but Relay behind it did not.
+  const serverDown = GATEWAY_FAILURES.has(response.status);
+  if (serverDown) reportConnectionFailure('down');
   checkAccount();
-  if (!unreachable) reportServerReached();
+  if (!serverDown) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string };

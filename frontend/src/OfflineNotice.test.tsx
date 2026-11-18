@@ -14,6 +14,7 @@ import {
   resetConnectionStatus,
   setConnectionCheck,
   useConnectionState,
+  type ServerProblem,
 } from './connectionStatus';
 import { OfflineNotice } from './OfflineNotice';
 import { PageHeader } from './TodayScreen';
@@ -22,7 +23,7 @@ import { MINIMISE_AFTER_MS } from './useOfflineNotice';
 let container: HTMLDivElement;
 let root: Root;
 let serverAnswers: boolean;
-const check = vi.fn<() => Promise<boolean>>();
+const check = vi.fn<() => Promise<boolean | ServerProblem>>();
 let online: boolean;
 
 function Harness() {
@@ -141,6 +142,8 @@ it('says there is no internet when the phone reports it, without asking the serv
   expect(pill()?.textContent).toContain('No internet');
   await click(pill());
   expect(details()?.textContent).toContain('InternetNot connected');
+  // With no internet there is no way to know how the server is.
+  expect(details()?.textContent).not.toContain('Server');
 });
 
 it('notices a phone that opened without a connection', async () => {
@@ -168,6 +171,8 @@ it('shrinks to an icon after saying it once, and opens the details from there', 
   expect(pill()?.getAttribute('aria-controls')).toBe(details()?.id);
   const text = details()?.textContent;
   expect(text).toContain('InternetConnected');
+  expect(text).toContain('ServerUnreachable');
+  expect(details()?.querySelector('dd[data-state="bad"]')?.textContent).toBe('Unreachable');
   expect(text).toContain('Last connected');
   expect(text).toContain('Saved on this phone1 workout · 2 check-ins');
   expect(text).toMatch(/Next check in \d+ s/);
@@ -248,4 +253,19 @@ it('re-renders nothing while it checks quietly', async () => {
 
   expect(check).toHaveBeenCalledTimes(3);
   expect(renders).toBe(before);
+});
+
+it('says the server is offline when a proxy answers that Relay is not running', async () => {
+  check.mockImplementation(async () => 'down');
+  await act(async () => reportConnectionFailure('down'));
+  await advance(CONFIRM_OFFLINE_MS);
+  await click(pill());
+
+  expect(details()?.textContent).toContain('InternetConnected');
+  expect(details()?.textContent).toContain('ServerOffline');
+
+  // The panel follows the latest attempt: now nothing answers at all.
+  check.mockImplementation(async () => 'unreachable');
+  await advance(OFFLINE_CHECK_MS);
+  expect(details()?.textContent).toContain('ServerUnreachable');
 });

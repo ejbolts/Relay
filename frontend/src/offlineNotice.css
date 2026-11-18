@@ -129,14 +129,18 @@ button.offline-notice-pill[aria-expanded='true'] {
   text-align: right;
 }
 
-.offline-notice-details dd[data-ok='true'] {
+.offline-notice-details dd[data-state] {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
   color: var(--p-good);
 }
 
-.offline-notice-details dd[data-ok='true']::before {
+.offline-notice-details dd[data-state='bad'] {
+  color: var(--p-danger);
+}
+
+.offline-notice-details dd[data-state]::before {
   content: '';
   width: 0.4375rem;
   height: 0.4375rem;

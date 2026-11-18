@@ -67,10 +67,17 @@ function Details({
       <dl>
         <div>
           <dt>Internet</dt>
-          <dd data-ok={connection.cause === 'server'}>
+          <dd data-state={connection.cause === 'server' ? 'ok' : 'bad'}>
             {connection.cause === 'server' ? 'Connected' : 'Not connected'}
           </dd>
         </div>
+        {/* With no internet there is no way to know how the server is. */}
+        {connection.cause === 'server' && (
+          <div>
+            <dt>Server</dt>
+            <dd data-state="bad">{connection.server === 'down' ? 'Offline' : 'Unreachable'}</dd>
+          </div>
+        )}
         {connection.lastReachedAt !== null && (
           <div>
             <dt>Last connected</dt>

@@ -127,6 +127,7 @@ describe('account reads without a connection', () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await api.health().catch(() => undefined);
     expect(connectionState().phase).toBe('checking');
+    expect(connectionState().server).toBe('unreachable');
 
     fetchMock.mockResolvedValueOnce(json([]));
     await api.health();
@@ -135,6 +136,7 @@ describe('account reads without a connection', () => {
     fetchMock.mockResolvedValueOnce(json({ error: { message: 'Bad gateway' } }, 503));
     await api.health().catch(() => undefined);
     expect(connectionState().phase).toBe('checking');
+    expect(connectionState().server).toBe('down');
 
     reportServerReached();
     fetchMock.mockRejectedValueOnce(new DOMException('Cancelled', 'AbortError'));

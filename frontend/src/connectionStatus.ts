@@ -46,10 +46,16 @@ export function isUsingSavedData(): boolean {
 export type ConnectionPhase = 'online' | 'checking' | 'offline' | 'back';
 /** `device`: the phone itself has no connection. `server`: the phone is online but Relay is not answering. */
 export type OfflineCause = 'device' | 'server';
+/**
+ * What the last failed attempt showed about the server: `down` when a proxy in front of Relay
+ * answered that it is not running (502–504), `unreachable` when nothing answered at all.
+ */
+export type ServerProblem = 'down' | 'unreachable';
 
 export interface ConnectionState {
   phase: ConnectionPhase;
   cause: OfflineCause;
+  server: ServerProblem;
   /** When the server last answered, as epoch milliseconds; null if it has not this session. */
   lastReachedAt: number | null;
 }
@@ -85,7 +91,12 @@ function deviceOffline(): boolean {
 
 const currentCause = (): OfflineCause => (deviceOffline() ? 'device' : 'server');
 
-const INITIAL: ConnectionState = { phase: 'online', cause: 'server', lastReachedAt: null };
+const INITIAL: ConnectionState = {
+  phase: 'online',
+  cause: 'server',
+  server: 'unreachable',
+  lastReachedAt: null,
+};
 const IDLE: ConnectionCheck = { checking: false, nextCheckAt: null };
 
 let state = INITIAL;
@@ -105,7 +116,10 @@ let phaseTimer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 const progressListeners = new Set<() => void>();
 
-async function defaultCheck(): Promise<boolean> {
+/** `true` when the server answered; otherwise what the failure showed. `false` reads as unreachable. */
+type CheckOutcome = boolean | ServerProblem;
+
+async function defaultCheck(): Promise<CheckOutcome> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
   try {
@@ -114,18 +128,18 @@ async function defaultCheck(): Promise<boolean> {
       credentials: 'same-origin',
       signal: controller.signal,
     });
-    return !GATEWAY_FAILURES.has(response.status);
+    return GATEWAY_FAILURES.has(response.status) ? 'down' : true;
   } catch {
-    return false;
+    return 'unreachable';
   } finally {
     clearTimeout(timer);
   }
 }
 
-let runCheck: () => Promise<boolean> = defaultCheck;
+let runCheck: () => Promise<CheckOutcome> = defaultCheck;
 
 /** Replaces the server check, for tests; call with no argument to restore the real one. */
-export function setConnectionCheck(check?: () => Promise<boolean>): void {
+export function setConnectionCheck(check?: () => Promise<CheckOutcome>): void {
   runCheck = check ?? defaultCheck;
 }
 
@@ -137,7 +151,9 @@ function update(patch: Partial<ConnectionState>): void {
   if (
     next.phase === view.phase &&
     (next.phase === 'online' ||
-      (next.cause === view.cause && next.lastReachedAt === view.lastReachedAt))
+      (next.cause === view.cause &&
+        next.server === view.server &&
+        next.lastReachedAt === view.lastReachedAt))
   )
     return;
   view = next.phase === 'online' ? INITIAL : next;
@@ -194,23 +210,26 @@ async function check(): Promise<void> {
   const started = generation;
   updateProgress({ checking: true, nextCheckAt: null });
   // Without a connection there is nothing to ask; it still counts as a failed attempt.
-  const ok = deviceOffline() ? false : await runCheck().catch(() => false);
+  const outcome = deviceOffline() ? false : await runCheck().catch(() => false);
   if (started !== generation) return;
   checkInFlight = false;
   updateProgress({ checking: false });
-  if (ok) reached();
-  else reportConnectionFailure();
+  if (outcome === true) reached();
+  else reportConnectionFailure(outcome === false ? 'unreachable' : outcome);
 }
 
-/** A request could not reach the server: no connection, a timeout, or a failed proxy (502–504). */
-export function reportConnectionFailure(): void {
+/**
+ * A request could not reach the server: `unreachable` for no connection or a timeout, `down` for a
+ * proxy answering 502–504.
+ */
+export function reportConnectionFailure(problem: ServerProblem = 'unreachable'): void {
   failures += 1;
   outageStart ??= Date.now();
   clearTimeout(phaseTimer);
   phaseTimer = undefined;
   if (state.phase === 'online' || state.phase === 'back') {
-    update({ phase: 'checking', cause: currentCause(), lastReachedAt });
-  }
+    update({ phase: 'checking', cause: currentCause(), server: problem, lastReachedAt });
+  } else if (state.server !== problem) update({ server: problem });
   if (state.phase === 'checking') {
     confirm();
     scheduleConfirm();
