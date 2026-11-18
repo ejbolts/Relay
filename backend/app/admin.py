@@ -49,6 +49,7 @@ from .models import (
 from .password_reset_requests import open_request_time
 from .photo_storage import machine_photo_paths
 from .presence import FriendPresence, admin_presence_by_member
+from .profile_sex import Sex, known_sex
 from .server_settings import (
     ALLOW_REGISTRATION_KEY,
     VIDEO_UPLOADS_KEY,
@@ -106,10 +107,16 @@ class AdminUserRead(BaseModel):
     photos: int
     photo_bytes: int
     video_sessions: int
+    sex: Sex | None = None
 
 
 class AdminUserUpdate(BaseModel):
     disabled: bool
+
+
+class AdminSexUpdate(BaseModel):
+    # None clears it, so the person can choose again.
+    sex: Sex | None
 
 
 class TemporaryPasswordRead(BaseModel):
@@ -233,6 +240,7 @@ def _admin_user_reads(
             photos=photos.get(user.id, 0),
             photo_bytes=photo_bytes.get(user.id, 0),
             video_sessions=video_sessions.get(user.id, 0),
+            sex=known_sex(user.sex),
         )
         for user in users
     ]
@@ -341,6 +349,20 @@ def update_user(
         request.app.state.rest_timer_notifications.cancel_endpoint(endpoint)
         request.app.state.workout_reminders.cancel(endpoint=endpoint, user_id=user.id)
     session_events.changed(user.id)
+    db.refresh(user)
+    return _admin_user_reads(db, settings, [user])[0]
+
+
+@admin_router.put("/users/{user_id}/sex", response_model=AdminUserRead)
+def set_user_sex(
+    user_id: str, payload: AdminSexUpdate, db: DbDependency, settings: AppSettings
+) -> AdminUserRead:
+    """The only way to change a sex the account has already chosen."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise api_error(404, "user_not_found", "That account was not found.")
+    user.sex = payload.sex
+    db.commit()
     db.refresh(user)
     return _admin_user_reads(db, settings, [user])[0]
 

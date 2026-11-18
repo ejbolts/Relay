@@ -383,8 +383,11 @@ html[data-reduce-motion] .popup-dialog.lift-picker[open]::backdrop {
 .popup-dialog.lift-picker .popup-dialog-close {
   width: auto;
   min-height: 2.75rem;
+  /* Even padding on both sides keeps the focus ring clear of the text; the negative margin
+     keeps "Done" lined up with the sheet's right edge. */
+  margin-right: -0.75rem;
   border: 0;
-  padding: 0 0 0 0.75rem;
+  padding: 0 0.75rem;
   background: transparent;
   color: var(--p-accent-text);
   font-size: 0.875rem;

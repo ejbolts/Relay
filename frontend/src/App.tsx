@@ -1,5 +1,6 @@
 import { MachineWeightTip } from './FeatureDiscoveryTips';
 import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
+import { SetupGuideHost, SetupGuidesSettings } from './SetupGuide';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
 import {
@@ -2217,6 +2218,7 @@ function AppContent() {
             onNotice={setMessage}
           />
         )}
+        <SetupGuideHost workouts={workouts} />
         {conflictPrompt.dialog}
 
         {nestedHeader && (
@@ -10040,6 +10042,7 @@ function SettingsScreen({
             content: (
               <>
                 <TipsSettings />
+                <SetupGuidesSettings />
                 <section
                   className="settings-panel panel"
                   aria-labelledby="home-screen-settings-title"

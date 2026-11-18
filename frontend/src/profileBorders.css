@@ -131,33 +131,6 @@
   }
 }
 
-/* The account's sex as a symbol beside its name. */
-.sex-mark {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--p-muted);
-}
-
-.sex-mark .pulse-icon {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-/* A profile's name keeps its sex symbol beside it when the row wraps. */
-.profile-summary-copy .profile-name {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: inherit;
-  font-size: inherit;
-}
-
-.today-profile h2 .sex-mark {
-  margin-left: 0.3rem;
-  vertical-align: -0.12em;
-}
-
 /* The worn border's name on a profile; on your own profile it opens the borders. */
 .profile-summary-copy .profile-border-chip {
   justify-self: start;
@@ -188,46 +161,6 @@
 .profile-border-chip .pulse-icon {
   width: 1rem;
   height: 1rem;
-}
-
-/* Sex in the profile editor: a choice until it is saved, then a fixed value. */
-.profile-sex-field .segmented-control {
-  margin: 0;
-}
-
-.profile-sex-locked {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2.6rem;
-  margin: 0;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  padding: 0 0.8rem;
-  color: var(--p-ink-2);
-  font-size: 0.9375rem;
-}
-
-.profile-sex-locked .pulse-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.profile-sex-locked .pulse-icon:last-of-type {
-  margin-left: auto;
-  color: var(--p-muted);
-}
-
-.profile-sex-confirm > p {
-  margin: 0;
-  padding: 1rem;
-  color: var(--p-ink-2);
-  line-height: 1.5;
-}
-
-.profile-sex-confirm > .popup-dialog-actions {
-  margin: 0;
-  padding: 1rem;
 }
 
 /* Borders dialog: the border being looked at stays put while the list scrolls. */

@@ -16,6 +16,7 @@ import {
   videoQueueSummary,
 } from './adminDisplay';
 import { authErrorMessage } from './authForm';
+import { SEX_LABELS } from './profileDisplay';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { motionReduced } from './motion';
 import type {
@@ -25,6 +26,7 @@ import type {
   AdminUser,
   ServerSettings,
   ServerStatus,
+  Sex,
   VideoUploadMode,
 } from './types';
 import { useUserSession } from './userContext';
@@ -57,6 +59,8 @@ export interface AdminScreenViewProps {
   onRegistrationChange: (open: boolean) => void;
   onUserDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
   onResetPassword: (user: AdminUser) => Promise<void>;
+  /** Changes or clears an account's sex; absent hides the control. */
+  onUserSexChange?: (user: AdminUser, sex: Sex | null) => void;
   onResetRequestDismiss?: (user: AdminUser) => void;
   onTemporaryPasswordDismiss: () => void;
   onRefresh: () => void;
@@ -367,6 +371,7 @@ function UserRow({
   temporaryPassword,
   onDisabledChange,
   onResetPassword,
+  onSexChange,
   onResetRequestDismiss,
   onTemporaryPasswordDismiss,
 }: {
@@ -377,6 +382,7 @@ function UserRow({
   temporaryPassword: TemporaryPasswordReveal | null;
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
   onResetPassword: (user: AdminUser) => Promise<void>;
+  onSexChange?: (user: AdminUser, sex: Sex | null) => void;
   onResetRequestDismiss?: (user: AdminUser) => void;
   onTemporaryPasswordDismiss: () => void;
 }) {
@@ -460,6 +466,27 @@ function UserRow({
           <dt>Video sessions</dt>
           <dd>{user.video_sessions}</dd>
         </div>
+        {onSexChange && (
+          <div className="admin-user-sex">
+            <dt>
+              <label htmlFor={`admin-sex-${user.id}`}>Sex</label>
+            </dt>
+            <dd>
+              <select
+                id={`admin-sex-${user.id}`}
+                value={user.sex ?? ''}
+                disabled={busy}
+                onChange={(event) =>
+                  onSexChange(user, event.target.value === '' ? null : (event.target.value as Sex))
+                }
+              >
+                <option value="">Not set</option>
+                <option value="male">{SEX_LABELS.male}</option>
+                <option value="female">{SEX_LABELS.female}</option>
+              </select>
+            </dd>
+          </div>
+        )}
       </dl>
       {temporaryPassword && (
         <TemporaryPasswordPanel reveal={temporaryPassword} onDismiss={onTemporaryPasswordDismiss} />
@@ -568,6 +595,7 @@ export function AdminScreenView({
   onSaveLimits,
   onUserDisabledChange,
   onResetPassword,
+  onUserSexChange,
   onResetRequestDismiss,
   onTemporaryPasswordDismiss,
   onRefresh,
@@ -666,6 +694,7 @@ export function AdminScreenView({
                 temporaryPassword={temporaryPassword?.userId === user.id ? temporaryPassword : null}
                 onDisabledChange={onUserDisabledChange}
                 onResetPassword={onResetPassword}
+                onSexChange={onUserSexChange}
                 onResetRequestDismiss={onResetRequestDismiss}
                 onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
               />
@@ -812,6 +841,27 @@ export function AdminScreen({ active }: { active: boolean }) {
     }
   }
 
+  async function changeUserSex(target: AdminUser, sex: Sex | null) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await api.admin.setUserSex(target.id, sex);
+      setUsers((current) =>
+        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
+      );
+      setNotice(
+        sex
+          ? `${updated.display_name}’s sex is now ${SEX_LABELS[sex]}.`
+          : `${updated.display_name} can choose their sex again.`,
+      );
+    } catch (reason) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
   async function resetUserPassword(target: AdminUser) {
     setBusyUserId(target.id);
     setError(null);
@@ -913,6 +963,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       onRegistrationChange={(open) => void saveSettings({ allow_registration: open })}
       onUserDisabledChange={changeUserDisabled}
       onResetPassword={resetUserPassword}
+      onUserSexChange={(target, sex) => void changeUserSex(target, sex)}
       onResetRequestDismiss={(target) => void dismissResetRequest(target)}
       onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
       onRefresh={() => void load()}

@@ -34,10 +34,10 @@ from .models import (
     WorkoutMovement,
     WorkoutSet,
 )
+from .profile_sex import Sex
 from .relative_strength import BodyweightHistory
 from .training_metrics import KG_TO_LB, get_setting, preferred_weight_unit, start_of_week
 
-Sex = Literal["male", "female"]
 Rarity = Literal["common", "rare", "epic", "legendary"]
 
 # Workouts that start from 4 am up to 7 am are early; from 9 pm until 4 am they are late.

@@ -56,6 +56,7 @@ import type {
   ServerStatus,
   SharedProfile,
   SharedProfileSummary,
+  Sex,
   SuggestedProfilePage,
   SharedWorkoutPage,
   SharedCardioPage,
@@ -482,6 +483,13 @@ export const api = {
         method: 'PATCH',
         headers: jsonHeaders,
         body: JSON.stringify({ disabled }),
+      }),
+    /** Changes or clears an account's sex; null lets the person choose again. */
+    setUserSex: (userId: string, sex: Sex | null) =>
+      request<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/sex`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ sex }),
       }),
     resetUserPassword: (userId: string) =>
       request<{ temporary_password: string }>(

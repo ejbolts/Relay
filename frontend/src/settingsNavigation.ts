@@ -32,6 +32,15 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '#tips-settings-title',
   },
   {
+    id: 'setup-guides',
+    group: 'help',
+    title: 'Setup guides',
+    page: 'settings',
+    keywords:
+      'how to walkthrough normalise machine weights training blocks split rep range progression',
+    selector: '#setup-guides-settings-title',
+  },
+  {
     id: 'workout-sharing',
     group: 'notifications',
     title: 'Share workout reminder',

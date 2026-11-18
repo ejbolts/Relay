@@ -116,8 +116,8 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # A square WebP in data/profile-photos/; a new upload gets a new name, which busts caches.
     profile_photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # "male" or "female". Chosen once and then fixed, because it sets the strength standards
-    # the account's profile borders are earned against.
+    # "male" or "female". The owner chooses it once; after that only an administrator can change
+    # it. It sets the body measurement outline.
     sex: Mapped[str | None] = mapped_column(String(6), nullable=True)
     # The earned border the account wears around its photo; see profile_borders.
     profile_border: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -178,6 +178,8 @@ class ProfileSharing(Base):
     # account backups keep their schema.
     share_cardio: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_body_weight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Tape measurements (neck, chest, waist and so on), drawn on the profile's body figure.
+    share_body_sizes: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_goals: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_machine_photos: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Friends see whether you are online now and when you were last active.

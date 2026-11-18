@@ -33,6 +33,8 @@ from sqlalchemy.orm import Session, selectinload
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
+from .body_sizes import PREFIX as BODY_SIZES_PREFIX
+from .body_sizes import BodySizeLog
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
@@ -49,6 +51,7 @@ from .models import (
     ProfileSharing,
     TrainingWorkout,
     User,
+    UserSetting,
     WorkoutCategory,
     WorkoutMovement,
     WorkoutPhoto,
@@ -58,7 +61,8 @@ from .models import (
 )
 from .photo_storage import profile_photo_path
 from .presence import FriendPresence, hub, presence_by_member
-from .profile_borders import Sex, worn_border, worn_border_name
+from .profile_borders import worn_border, worn_border_name
+from .profile_sex import Sex, known_sex
 from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
@@ -102,6 +106,7 @@ class SharingChoices(BaseModel):
     visibility: Visibility = PRIVATE
     share_notes: bool = False
     share_body_weight: bool = False
+    share_body_sizes: bool = False
     share_goals: bool = False
     share_machine_photos: bool = False
     share_online_status: bool = True
@@ -115,6 +120,7 @@ class SharingRead(SharingChoices):
 class SharedContent(BaseModel):
     notes: bool
     body_weight: bool
+    body_sizes: bool = False
     goals: bool
     machine_photos: bool
 
@@ -216,6 +222,8 @@ class SharedConsistencyRead(BaseModel):
 class SharedProfileRead(SharedProfileSummary):
     # None when the profile cannot be viewed or does not share that part.
     body_weight: list[SharedBodyMeasurement] | None = None
+    # Newest first, without the ankle, which the app no longer shows.
+    body_sizes: list[BodySizeLog] | None = None
     goals: SharedGoals | None = None
     cardio_sessions: list[SharedCardioSession] | None = None
     cardio_total: int | None = None
@@ -373,6 +381,7 @@ def sharing_choices(db: Session, user_id: str) -> ProfileSharing:
         visibility=PRIVATE,
         share_notes=False,
         share_body_weight=False,
+        share_body_sizes=False,
         share_goals=False,
         share_machine_photos=False,
         share_online_status=True,
@@ -566,7 +575,7 @@ def profile_summary(
         profile_photo_url=photo_url(member),
         profile_border=worn_border(member),
         profile_border_name=worn_border_name(member),
-        sex=member.sex if viewable and member.sex in ("male", "female") else None,
+        sex=known_sex(member.sex) if viewable else None,
         member_since=as_utc(member.created_at),
         visibility=sharing.visibility,
         is_you=member.id == viewer.id,
@@ -582,6 +591,7 @@ def profile_summary(
             SharedContent(
                 notes=sharing.share_notes,
                 body_weight=sharing.share_body_weight,
+                body_sizes=sharing.share_body_sizes,
                 goals=sharing.share_goals,
                 machine_photos=sharing.share_machine_photos,
             )
@@ -716,6 +726,25 @@ def pending_request_count(db: Session, user_id: str) -> int:
         )
         or 0
     )
+
+
+def shared_body_sizes(db: Session, user_id: str) -> list[BodySizeLog]:
+    """The member's tape measurements, newest first, leaving out days with only an ankle."""
+    rows = db.scalars(
+        select(UserSetting.value)
+        .where(UserSetting.user_id == user_id, UserSetting.key.startswith(BODY_SIZES_PREFIX))
+        .order_by(UserSetting.key.desc())
+    )
+    logs = [BodySizeLog.model_validate_json(value) for value in rows]
+    return [
+        log.model_copy(update={"ankle_cm": None})
+        for log in logs
+        if any(
+            value is not None
+            for key, value in log.model_dump().items()
+            if key not in ("measurement_date", "ankle_cm")
+        )
+    ]
 
 
 def sharing_read(db: Session, sharing: ProfileSharing) -> SharingRead:
@@ -903,6 +932,7 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
     return SharedProfileRead(
         **summary.model_dump(),
         body_weight=body_weight,
+        body_sizes=shared_body_sizes(db, member.id) if sharing.share_body_sizes else None,
         goals=shared_goals(db, member.id) if sharing.share_goals else None,
         # Cardio is shared with workouts; its notes still follow the notes choice.
         cardio_sessions=cardio.sessions,
