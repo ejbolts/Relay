@@ -89,32 +89,39 @@ jobs:
           RUN_CHECKS: ${{ needs.changes.outputs.frontend }}
         run: |
           case "$DETECTION_RESULT:$RUN_CHECKS" in
-            success:true) echo "Running frontend checks." ;;
-            success:false) echo "Frontend suite is not needed for this change." ;;
+            success:full|success:styles|success:related) echo "Frontend scope: $RUN_CHECKS." ;;
+            success:none) echo "Frontend suite is not needed for this change." ;;
             *) echo "::error::Change detection failed or returned an invalid scope."; exit 1 ;;
           esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.frontend != 'none'
         with:
           persist-credentials: false
+          fetch-depth: 2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.frontend != 'none'
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install locked dependencies
-        if: needs.changes.outputs.frontend == 'true'
-        run: npm ci
+        if: needs.changes.outputs.frontend != 'none'
+        run: npm ci --no-audit
       - name: Check frontend formatting
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.frontend == 'full' || needs.changes.outputs.frontend == 'related'
         run: npm run format:check
+      - name: Check stylesheet formatting
+        if: needs.changes.outputs.frontend == 'styles'
+        run: npm exec -- prettier --check "src/*.css"
       - name: Lint frontend
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.frontend == 'full' || needs.changes.outputs.frontend == 'related'
         run: npm run lint
       - name: Build frontend
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.frontend != 'none'
         run: npm run build
+      - name: Run changed and related frontend tests
+        if: needs.changes.outputs.frontend == 'related'
+        run: npm run test:changed -- HEAD^1 --no-passWithNoTests
       - name: Run all frontend tests
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.frontend == 'full'
         run: npm test
