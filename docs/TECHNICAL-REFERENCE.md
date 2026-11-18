@@ -96,7 +96,7 @@ that shares with nobody gets no friends ranking.
 Blocking a member from their profile prevents shared-profile discovery and
 access in both directions, including profile and machine photos, workout filters, history,
 reactions and recent activity. It removes the friendship or request and reactions between those accounts.
-Blocked members remain in the owner's **Blocked** list in **Social > Find** for unblocking, even
+Blocked members remain in the owner's **Blocked** list in **Social > Friends** for unblocking, even
 while the owner's profile is private. Unblocking does not recreate friendships. Migration `0039_profile_blocks`
 adds this persistent relationship; run `alembic upgrade head` before serving this frontend.
 Blocks are excluded from account snapshots because they refer to other accounts, and account

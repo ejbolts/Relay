@@ -3,8 +3,7 @@ import { friendSession, relativeDay } from './friendFeedData';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
-import { PresenceAvatar } from './PresenceAvatar';
-import { presenceStatus, useNow, workoutElapsed } from './presence';
+import { FriendsRail } from './FriendsRail';
 import { ProfileAvatar } from './ProfileAvatar';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
 import { updateCachedReactions } from './sharedProfileCache';
@@ -242,44 +241,6 @@ function FeedCard({
   );
 }
 
-/** Friends working out right now, above the feed. */
-function TrainingNow({
-  friends,
-  onOpenFriend,
-}: {
-  friends: FriendActivity[];
-  onOpenFriend: (friend: Pick<FriendActivity, 'id' | 'display_name'>) => void;
-}) {
-  const live = friends.flatMap((friend) => {
-    const status = presenceStatus(friend.presence);
-    return status?.kind === 'workout' ? [{ friend, status }] : [];
-  });
-  const now = useNow(live.length > 0);
-  if (!live.length) return null;
-  return (
-    <ul className="feed-live" aria-label="Training now">
-      {live.map(({ friend, status }) => (
-        <li key={friend.id}>
-          <button
-            type="button"
-            aria-label={`Open ${friend.display_name}’s profile, training now`}
-            onClick={() => onOpenFriend(friend)}
-          >
-            <PresenceAvatar user={{ ...friend, username: '' }} status={status} />
-            <span className="feed-live-name">
-              <b>{friend.display_name}</b>
-              <small>
-                {status.workout.name} · {workoutElapsed(status.workout.started_at, now)}
-              </small>
-            </span>
-            <span className="friend-activity-kind live">Live</span>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function FeedSkeleton() {
   return (
     <ul className="feed-cards feed-loading-skeleton" role="status" aria-label="Loading the feed">
@@ -301,8 +262,8 @@ function FeedSkeleton() {
 }
 
 /**
- * Social's Feed tab: every workout you and your friends have shared, newest first, with its
- * photos, a summary of the session and its reactions and comments.
+ * Social's Feed tab: a row of your friends, then every workout you and your friends have shared,
+ * newest first, with its photos, a summary of the session and its reactions and comments.
  */
 export function SocialFeed({
   active,
@@ -364,7 +325,12 @@ export function SocialFeed({
   }
   return (
     <div className="social-feed">
-      <TrainingNow friends={friends ?? []} onOpenFriend={onOpenProfile} />
+      <FriendsRail
+        friends={friends ?? []}
+        today={today}
+        active={active}
+        onOpenFriend={onOpenProfile}
+      />
       {items.length === 0 ? (
         <section className="pulse-card friends-list-empty feed-empty">
           <p>
