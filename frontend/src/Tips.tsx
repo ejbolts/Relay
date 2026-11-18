@@ -24,6 +24,7 @@ import {
   tipShown,
   tipStorageKey,
   TIP_DEFINITIONS,
+  withTipReminders,
   type TipId,
   type TipState,
 } from './tipsState';
@@ -102,7 +103,9 @@ export function TipsProvider({
   account: string | null;
   children: ReactNode;
 }) {
-  const [state, setState] = useState(() => (account ? loadTips(account) : freshTips()));
+  const [state, setState] = useState(() =>
+    account ? withTipReminders(loadTips(account), Date.now()) : freshTips(),
+  );
   const stateRef = useRef(state);
   const [active, setActive] = useState<TipId | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
@@ -122,7 +125,9 @@ export function TipsProvider({
   const activeSince = useRef(0);
   const quietSince = useRef(0);
   const [api] = useState(() => {
-    function write(next: TipState) {
+    function write(change: TipState) {
+      // A guided tip put away before its feature is used is scheduled to come back.
+      const next = withTipReminders(change, Date.now());
       stateRef.current = next;
       setState(next);
       if (account) saveTips(account, next);
@@ -205,9 +210,12 @@ export function TipsProvider({
     };
   });
   useEffect(() => {
+    // Keep reminders that came back or were scheduled while loading.
+    if (account && JSON.stringify(loadTips(account)) !== JSON.stringify(stateRef.current))
+      saveTips(account, stateRef.current);
     const sync = (event: StorageEvent) => {
       if (!account || (event.key !== tipStorageKey(account) && event.key !== null)) return;
-      const next = loadTips(account);
+      const next = withTipReminders(loadTips(account), Date.now());
       stateRef.current = next;
       setState(next);
       api.close();
@@ -270,7 +278,7 @@ export function TipsProvider({
         setState(stored);
         return;
       }
-      const next = tipShown(stateRef.current, id, now);
+      const next = withTipReminders(tipShown(stateRef.current, id, now), now);
       stateRef.current = next;
       setState(next);
       saveTips(account!, next);
@@ -285,6 +293,14 @@ export function TipsProvider({
       if (document.visibilityState === 'hidden') {
         quietSince.current = 0;
         api.close();
+        return;
+      }
+      // An app left open for days still brings reminders back when it is next looked at.
+      const reminded = withTipReminders(stateRef.current, Date.now());
+      if (reminded !== stateRef.current) {
+        stateRef.current = reminded;
+        setState(reminded);
+        if (account) saveTips(account, reminded);
       }
     };
     const timer = window.setInterval(tick, 500);

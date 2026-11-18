@@ -15,6 +15,7 @@ export const TIP_DEFINITIONS = {
     body: 'Open Machine weights to normalise different stacks against a reference machine. Your logged weights stay unchanged.',
     surface: 'hint',
     action: { label: 'Open Machine weights', target: 'machine-weights' },
+    reminds: true,
   },
   mergeMachines: {
     title: 'Saved the same machine twice?',
@@ -73,6 +74,7 @@ export const TIP_DEFINITIONS = {
     body: 'Training blocks track new progress while keeping your full history.',
     surface: 'home',
     action: { label: 'Start a block', target: 'training-blocks' },
+    reminds: true,
   },
   home: {
     title: 'Make Home your own',
@@ -96,12 +98,14 @@ export const TIP_DEFINITIONS = {
     body: 'Save your split so Up next follows your training days.',
     surface: 'home',
     action: { label: 'Set up a split', target: 'split' },
+    reminds: true,
   },
   repRange: {
     title: 'Know when to add weight',
     body: 'Give a planned exercise a rep range and Relay says when to stay and when to go up.',
     surface: 'home',
     action: { label: 'Open your split', target: 'split' },
+    reminds: true,
   },
   appearance: {
     title: 'Make Relay look your way',
@@ -122,7 +126,13 @@ export type TipState = {
   homeDone?: TipId[];
   /** Times each tip has appeared without being opened or acted on. */
   shows?: Partial<Record<TipId, number>>;
+  /**
+   * Reminders for tips put away before their feature was set up: how many have come back, and
+   * when the next one is due.
+   */
+  reminders?: Partial<Record<TipId, TipReminder>>;
 };
+export type TipReminder = { count: number; at?: number };
 export const TIP_COOLDOWN = 24 * 60 * 60 * 1000;
 /** A tip nobody touched gets this many showings before it stops appearing by itself. */
 export const TIP_MAX_SHOWS = 3;
@@ -155,9 +165,18 @@ export function loadTips(account: string): TipState {
         : null;
     const homeRead = tipIds(value.homeRead);
     const homeDone = tipIds(value.homeDone);
+    const reminders = Object.fromEntries(
+      Object.entries(value.reminders ?? {}).flatMap(([id, reminder]) => {
+        const { count, at } = (reminder ?? {}) as { count?: unknown; at?: unknown };
+        if (!Object.hasOwn(TIP_DEFINITIONS, id) || !isReminderTip(id as TipId)) return [];
+        if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return [];
+        return [[id, typeof at === 'number' && Number.isFinite(at) ? { count, at } : { count }]];
+      }),
+    );
     return {
       ...(homeRead ? { homeRead } : {}),
       ...(homeDone ? { homeDone } : {}),
+      ...(Object.keys(reminders).length ? { reminders } : {}),
       shows: Object.fromEntries(
         Object.entries(value.shows ?? {}).filter(
           ([id, count]) =>
@@ -232,4 +251,68 @@ export function countTipEvent(state: TipState, event: string): TipState {
     ...state,
     counts: { ...state.counts, [event]: Math.min(100, (state.counts[event] ?? 0) + 1) },
   };
+}
+
+/** Days until each reminder of a tip put away without its feature set up; then no more. */
+export const TIP_REMINDER_DAYS = [7, 14, 28];
+const DAY = 24 * 60 * 60 * 1000;
+
+/** Tips with a setup guide, which come back while their feature is still unused. */
+export function isReminderTip(id: TipId) {
+  return 'reminds' in TIP_DEFINITIONS[id] && TIP_DEFINITIONS[id].reminds;
+}
+
+/** Put away without the feature being set up: opened, dismissed or set aside with Got it. */
+function putAway(state: TipState, id: TipId) {
+  const status = state.seen[id];
+  return (status !== undefined && status !== 'learned') || !!state.homeDone?.includes(id);
+}
+
+/**
+ * Schedules the next reminder for each guided tip that has been put away while its feature is
+ * unused. A reminder already waiting keeps its date. Returns the same state when nothing changes.
+ */
+export function scheduleTipReminders(state: TipState, now: number): TipState {
+  let reminders = state.reminders;
+  for (const id of Object.keys(TIP_DEFINITIONS) as TipId[]) {
+    if (!isReminderTip(id) || !putAway(state, id)) continue;
+    const current = reminders?.[id] ?? { count: 0 };
+    if (current.at !== undefined || current.count >= TIP_REMINDER_DAYS.length) continue;
+    reminders = {
+      ...reminders,
+      [id]: { count: current.count, at: now + TIP_REMINDER_DAYS[current.count] * DAY },
+    };
+  }
+  return reminders === state.reminders ? state : { ...state, reminders };
+}
+
+/**
+ * Brings back each guided tip whose reminder is due and whose feature is still unused: it is
+ * unread on Home again and can appear beside its control. Returns the same state when none is due.
+ */
+export function applyTipReminders(state: TipState, now: number): TipState {
+  let next = state;
+  for (const [key, reminder] of Object.entries(state.reminders ?? {})) {
+    const id = key as TipId;
+    if (!reminder || reminder.at === undefined || reminder.at > now) continue;
+    if (next.seen[id] === 'learned') continue;
+    const seen = { ...next.seen };
+    delete seen[id];
+    const shows = { ...next.shows };
+    delete shows[id];
+    next = {
+      ...next,
+      seen,
+      shows,
+      ...(next.homeRead ? { homeRead: next.homeRead.filter((item) => item !== id) } : {}),
+      ...(next.homeDone ? { homeDone: next.homeDone.filter((item) => item !== id) } : {}),
+      reminders: { ...next.reminders, [id]: { count: reminder.count + 1 } },
+    };
+  }
+  return next;
+}
+
+/** Due reminders come back, then anything put away is scheduled to come back later. */
+export function withTipReminders(state: TipState, now: number): TipState {
+  return scheduleTipReminders(applyTipReminders(state, now), now);
 }

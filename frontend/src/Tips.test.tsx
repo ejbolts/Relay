@@ -459,6 +459,26 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
   });
+  it('brings a guided tip back to the bulb a week after Got it, while the feature is unused', async () => {
+    await homeBulb(<HomeTips hasSplit workouts={twoMachines} />);
+    await act(async () => bulb()!.click());
+    expect(popover()?.querySelector('strong')?.textContent).toBe(
+      'Different machines, one progress chart',
+    );
+    await act(async () => button('Got it').click());
+    const unread = () => bulb()?.getAttribute('aria-label');
+    const before = unread();
+    expect(loadTips('alice').reminders?.normalise?.at).toBe(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    // A week later, coming back to the app brings it back as new.
+    vi.setSystemTime(Date.now() + 7 * 24 * 60 * 60 * 1000 + 1000);
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    expect(unread()).not.toBe(before);
+    await act(async () => bulb()!.click());
+    expect(popover()?.querySelector('strong')?.textContent).toBe(
+      'Different machines, one progress chart',
+    );
+    expect(loadTips('alice').reminders?.normalise).toEqual({ count: 1 });
+  });
   it('leaves the maintenance range out while the weight goal is still ahead', async () => {
     // Three weigh-ins in, 2.4 kg short of the goal: nothing to maintain yet.
     cutTo(80);
