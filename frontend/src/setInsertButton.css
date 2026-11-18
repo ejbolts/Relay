@@ -94,33 +94,41 @@
 }
 
 /*
- * Where no rest divider separates two sets (and above the first set), the gap is as tall as a rest
- * divider. Equal side padding keeps the middle column on the same centre as the rest times.
+ * Where no rest divider separates two sets (and above the first set), a dashed line laid out like
+ * a rest divider: as tall, with the same padding and gaps, so the Rest control sits on the same
+ * centre as the rest times and the "+" covers the start of the line.
  */
 .set-insert-row {
   position: relative;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
+  gap: 0.375rem;
   height: 1.875rem;
-  padding: 0 calc(var(--set-number-x, 1.5rem) - 0.875rem);
+  padding: 0 0.875rem;
 }
 
 .set-insert-row > .set-insert-button {
-  grid-column: 1;
-  justify-self: start;
+  position: absolute;
+  top: 50%;
+  left: calc(var(--set-number-x, 1.5rem) - 0.875rem);
+  transform: translateY(-50%);
+}
+
+.set-insert-row > i {
+  flex: 1;
+  border-top: 1px dashed var(--p-line, var(--line));
 }
 
 /* Adds the rest after the set above, where the rest time would sit. */
 .set-add-rest {
-  grid-column: 2;
+  flex: none;
   display: inline-grid;
   place-items: center;
   height: 1.875rem;
   min-height: 0;
   margin: 0;
   border: 0;
-  padding: 0 0.5rem;
+  padding: 0;
   background: transparent;
   color: var(--p-muted, var(--muted-ink));
   cursor: pointer;

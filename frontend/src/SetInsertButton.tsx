@@ -39,15 +39,19 @@ export function SetInsertRow({
   return (
     <div className="set-insert-row">
       <SetInsertButton beforeSet={beforeSet} onInsert={onInsert} />
+      <i aria-hidden="true" />
       {onAddRest && (
-        <button
-          type="button"
-          className="set-add-rest"
-          aria-label={`Add rest after set ${beforeSet - 1}`}
-          onClick={onAddRest}
-        >
-          <span aria-hidden="true">Rest</span>
-        </button>
+        <>
+          <button
+            type="button"
+            className="set-add-rest"
+            aria-label={`Add rest after set ${beforeSet - 1}`}
+            onClick={onAddRest}
+          >
+            <span aria-hidden="true">Rest</span>
+          </button>
+          <i aria-hidden="true" />
+        </>
       )}
     </div>
   );
