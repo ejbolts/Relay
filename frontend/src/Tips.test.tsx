@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
+import { SetupGuideHost } from './SetupGuide';
+import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
 import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
 
@@ -405,8 +407,13 @@ describe('shared tip presentation', () => {
     workout_date: date,
     movements: [
       {
-        exercise: { id: 'chest-press', equipment: 'Machine', kind: 'strength' },
-        machine_photos: [{ id: machine }],
+        exercise: {
+          id: 'chest-press',
+          name: 'Chest press',
+          equipment: 'Machine',
+          kind: 'strength',
+        },
+        machine_photos: [{ id: machine, caption: machine }],
         sets: [],
       },
     ],
@@ -452,6 +459,26 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
   });
+  it('brings a guided tip back to the bulb a week after Got it, while the feature is unused', async () => {
+    await homeBulb(<HomeTips hasSplit workouts={twoMachines} />);
+    await act(async () => bulb()!.click());
+    expect(popover()?.querySelector('strong')?.textContent).toBe(
+      'Different machines, one progress chart',
+    );
+    await act(async () => button('Got it').click());
+    const unread = () => bulb()?.getAttribute('aria-label');
+    const before = unread();
+    expect(loadTips('alice').reminders?.normalise?.at).toBe(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    // A week later, coming back to the app brings it back as new.
+    vi.setSystemTime(Date.now() + 7 * 24 * 60 * 60 * 1000 + 1000);
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    expect(unread()).not.toBe(before);
+    await act(async () => bulb()!.click());
+    expect(popover()?.querySelector('strong')?.textContent).toBe(
+      'Different machines, one progress chart',
+    );
+    expect(loadTips('alice').reminders?.normalise).toEqual({ count: 1 });
+  });
   it('leaves the maintenance range out while the weight goal is still ahead', async () => {
     // Three weigh-ins in, 2.4 kg short of the goal: nothing to maintain yet.
     cutTo(80);
@@ -468,19 +495,27 @@ describe('shared tip presentation', () => {
     await act(async () => bulb()!.click());
     expect(popover()?.textContent).toContain('Train alongside a friend');
   });
-  it('opens the feature from the tip, naming the exercise to compare machines on', async () => {
+  it('starts the machines guide in Machine weights for the right exercise', async () => {
     const opened: TipAction[] = [];
     const stop = onTipTarget((action) => opened.push(action));
-    await homeBulb(<HomeTips hasSplit workouts={twoMachines} />);
+    await homeBulb(
+      <>
+        <HomeTips hasSplit workouts={twoMachines} />
+        <SetupGuideHost workouts={twoMachines} />
+      </>,
+    );
     await act(async () => bulb()!.click());
     // Home's wording says what the feature is for, not where its button is.
     expect(popover()?.querySelector('p')?.textContent).toBe(
       'Compare different machines on one chart with Machine weights.',
     );
-    await act(async () => button('Open Machine weights').click());
-    expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'chest-press' }]);
+    await act(async () => button('Show me how').click());
     expect(popover()).toBeNull();
+    // The guide runs inside Machine weights itself, opened on the exercise used on two machines.
+    expect(opened).toEqual([{ target: 'machine-weights', exerciseId: 'chest-press' }]);
+    expect(activeGuide()?.id).toBe('normalise');
     expect(loadTips('alice').seen.normalise).toBe('seen');
+    exitGuide();
     stop();
   });
 });

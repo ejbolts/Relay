@@ -14,6 +14,7 @@ const friendsOnly: SharingSettings = {
   visibility: 'followers',
   share_notes: false,
   share_body_weight: false,
+  share_body_sizes: false,
   share_goals: false,
   share_machine_photos: false,
   share_online_status: true,
@@ -170,6 +171,20 @@ it('saves online status and live workouts separately and previews what friends s
   await act(async () => toggle('Live workouts').click());
   expect(preview()).toBe('Working out · Leg day');
   clearActiveWorkoutDraft();
+});
+
+it('keeps body measurements private until they are switched on', async () => {
+  await render();
+  const toggle = container.querySelector<HTMLButtonElement>(
+    '[role="switch"][aria-label="Body measurements"]',
+  )!;
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  await act(async () => toggle.click());
+  expect(api.sharing.updateChoices).toHaveBeenLastCalledWith({
+    ...choicesOf(friendsOnly),
+    share_body_sizes: true,
+  });
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
 });
 
 function choicesOf(settings: SharingSettings): SharingChoices {

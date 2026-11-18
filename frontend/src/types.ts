@@ -1,3 +1,4 @@
+import type { BodySizeLog } from './bodySizes';
 export type SessionStatus =
   | 'draft'
   | 'uploading'
@@ -877,6 +878,8 @@ export interface User {
   must_change_password?: boolean;
   /** Versioned URL of the account's profile photo; null when it has none. */
   profile_photo_url?: string | null;
+  /** Set once by the owner; after that only an administrator can change it. */
+  sex?: Sex | null;
 }
 
 /** Who may upload workout videos: nobody, administrators only, or every account. */
@@ -903,6 +906,7 @@ export interface AdminUser {
   photos: number;
   photo_bytes: number;
   video_sessions: number;
+  sex?: Sex | null;
 }
 
 /** A signed-out person waiting for an administrator to give them a temporary password. */
@@ -989,7 +993,11 @@ export interface RegisterInput {
 export interface ProfileUpdateInput {
   display_name?: string;
   username?: string;
+  /** Accepted once: the server refuses to change a sex that is already set. */
+  sex?: Sex;
 }
+
+export type Sex = 'male' | 'female';
 export interface AppFeedback {
   id: string;
   username: string;
@@ -1007,6 +1015,8 @@ export interface SharingChoices {
   visibility: ProfileVisibility;
   share_notes: boolean;
   share_body_weight: boolean;
+  /** Tape measurements, drawn on the profile's body outline. */
+  share_body_sizes: boolean;
   share_goals: boolean;
   share_machine_photos: boolean;
   /** Friends see whether you are online and when you were last active. */
@@ -1027,6 +1037,8 @@ export interface SharedProfileSummary {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  /** Sent only to those who can view the profile. */
+  sex?: Sex | null;
   member_since: string;
   /** Private is returned only when viewing your own profile. */
   visibility: ProfileVisibility;
@@ -1046,6 +1058,7 @@ export interface SharedProfileSummary {
   shares: {
     notes: boolean;
     body_weight: boolean;
+    body_sizes?: boolean;
     goals: boolean;
     machine_photos: boolean;
   } | null;
@@ -1292,6 +1305,8 @@ export interface SharedConsistency {
 export interface SharedProfile extends SharedProfileSummary {
   consistency?: SharedConsistency | null;
   body_weight: SharedBodyMeasurement[] | null;
+  /** Newest first; absent or null unless the member shares them. */
+  body_sizes?: BodySizeLog[] | null;
   goals: SharedGoals | null;
   cardio_sessions: SharedCardioSession[] | null;
   cardio_total?: number | null;

@@ -11,7 +11,6 @@ export const BODY_SIZE_FIELDS = [
   ['left_calf_cm', 'Left calf'],
   ['right_calf_cm', 'Right calf'],
   ['wrist_cm', 'Wrist'],
-  ['ankle_cm', 'Ankle'],
 ] as const;
 export type BodySizeField = (typeof BODY_SIZE_FIELDS)[number][0];
 export type BodySizeLog = { measurement_date: string } & Record<BodySizeField, number | null>;

@@ -17,6 +17,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 import { daysBetween } from './trainingSummary';
 import { localDate } from './utils';
 import { tipAction, TIP_DEFINITIONS, type TipId } from './tipsState';
+import { GUIDE_FOR_TIP, openSetupGuide } from './setupGuides';
 import type { BodyWeightGoal, TrackedWorkout } from './types';
 
 /** The most new tips the bulb counts out loud; beyond it, it says "3+". */
@@ -180,6 +181,7 @@ export function HomeTips({
       }
     : { title: "You're all caught up", body: 'New tips appear here as you use more of Relay.' };
   const action = current ? tipAction(current) : null;
+  const guide = current ? GUIDE_FOR_TIP[current] : undefined;
   const toggle = () => {
     // Open on the first unread tip, or the first tip once everything has been read.
     if (!showing) setIndex(Math.max(0, eligible.indexOf(unread[0])));
@@ -224,21 +226,37 @@ export function HomeTips({
           >
             <strong id={titleId}>{tip.title}</strong>
             <p>{tip.body}</p>
-            {current && action && (
+            {current && guide ? (
               <button
                 type="button"
                 className="home-tip-action"
                 onClick={() => {
+                  // The guide ends with the tip's own button, after explaining the feature.
                   setOpen(false);
-                  tips.act(
-                    current,
-                    current === 'normalise' ? (machineExerciseId ?? undefined) : undefined,
-                  );
+                  openSetupGuide(guide);
                 }}
               >
-                {action.label}
+                Show me how
                 <Icon name="chevron-right" />
               </button>
+            ) : (
+              current &&
+              action && (
+                <button
+                  type="button"
+                  className="home-tip-action"
+                  onClick={() => {
+                    setOpen(false);
+                    tips.act(
+                      current,
+                      current === 'normalise' ? (machineExerciseId ?? undefined) : undefined,
+                    );
+                  }}
+                >
+                  {action.label}
+                  <Icon name="chevron-right" />
+                </button>
+              )
             )}
             <footer>
               {current && eligible.length > 1 && (

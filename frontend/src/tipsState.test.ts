@@ -1,15 +1,19 @@
 ﻿// @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
+  applyTipReminders,
   canShowTip,
   countTipEvent,
   freshTips,
   loadTips,
   saveTips,
+  scheduleTipReminders,
   TIP_COOLDOWN,
   tipAction,
   tipShown,
   tipStorageKey,
+  withTipReminders,
+  type TipState,
 } from './tipsState';
 beforeEach(() => localStorage.clear());
 describe('tip persistence and allowance', () => {
@@ -92,6 +96,90 @@ describe('tip persistence and allowance', () => {
       enabled: false,
       seen: { home: 'learned' },
       counts: { valid: 3 },
+    });
+  });
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+describe('reminders for guided tips', () => {
+  it('schedules a guided tip put away before its feature is used to come back in a week', () => {
+    const put = {
+      ...freshTips(),
+      homeDone: ['normalise' as const],
+      seen: { home: 'seen' as const },
+    };
+    const scheduled = scheduleTipReminders(put, 1000);
+    expect(scheduled.reminders).toEqual({ normalise: { count: 0, at: 1000 + 7 * DAY } });
+    // Ordinary tips do not come back, and a waiting reminder keeps its date.
+    expect(scheduleTipReminders(scheduled, 5 * DAY)).toBe(scheduled);
+    // Nothing is scheduled once the feature is in use.
+    const learned = { ...freshTips(), seen: { blocks: 'learned' as const } };
+    expect(scheduleTipReminders(learned, 1000)).toBe(learned);
+    // Opening the guide, dismissing and Got it all count as putting the tip away.
+    expect(
+      Object.keys(
+        scheduleTipReminders(
+          { ...freshTips(), seen: { split: 'seen', repRange: 'dismissed' } },
+          1000,
+        ).reminders ?? {},
+      ),
+    ).toEqual(['split', 'repRange']);
+  });
+
+  it('brings the tip back unread when due, at 7, 14 and 28 days, then stops', () => {
+    let state: TipState = {
+      ...freshTips(),
+      seen: { blocks: 'seen' },
+      homeRead: ['blocks', 'home'],
+      homeDone: ['blocks'],
+      shows: { blocks: 3 },
+    };
+    let now = 0;
+    const gaps: number[] = [];
+    for (let round = 0; round < 4; round += 1) {
+      state = withTipReminders(state, now);
+      const at = state.reminders?.blocks?.at;
+      if (at === undefined) break;
+      gaps.push((at - now) / DAY);
+      // Not due a moment early.
+      expect(applyTipReminders(state, at - 1)).toBe(state);
+      now = at;
+      state = withTipReminders(state, now);
+      expect(state.seen.blocks).toBeUndefined();
+      expect(state.homeDone).toEqual([]);
+      expect(state.homeRead).toEqual(['home']);
+      expect(state.shows?.blocks).toBeUndefined();
+      // Put away again.
+      state = { ...state, homeDone: ['blocks'] };
+    }
+    expect(gaps).toEqual([7, 14, 28]);
+    expect(state.reminders?.blocks).toEqual({ count: 3 });
+  });
+
+  it('does not bring a tip back once its feature is in use', () => {
+    const state = withTipReminders({ ...freshTips(), homeDone: ['normalise'] }, 0);
+    const used = { ...state, seen: { normalise: 'learned' as const } };
+    expect(applyTipReminders(used, 30 * DAY)).toBe(used);
+  });
+
+  it('keeps reminders in storage, ignoring unknown or ordinary tips and bad values', () => {
+    localStorage.setItem(
+      tipStorageKey('alice'),
+      JSON.stringify({
+        reminders: {
+          normalise: { count: 1, at: 5 },
+          split: { count: 2 },
+          home: { count: 0, at: 5 },
+          gone: { count: 0, at: 5 },
+          blocks: { count: -1, at: 5 },
+          repRange: { count: 1, at: 'soon' },
+        },
+      }),
+    );
+    expect(loadTips('alice').reminders).toEqual({
+      normalise: { count: 1, at: 5 },
+      split: { count: 2 },
+      repRange: { count: 1 },
     });
   });
 });
