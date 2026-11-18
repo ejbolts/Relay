@@ -75,6 +75,8 @@ const PATHS = {
   // A cloud struck through, for working without a connection.
   'cloud-off':
     'M3.5 3.5l17 17M9.2 6.4A5.5 5.5 0 0 1 17.3 10a3.8 3.8 0 0 1 2.6 6.1M16.5 18.5H7a4.5 4.5 0 0 1-1.3-8.8',
+  // A key, for password requests.
+  key: 'M8 20a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM11.2 12.3 20 3.5M16.8 6.7l2.5 2.5M14.3 9.2l2 2',
 } as const;
 
 const FILLED = {

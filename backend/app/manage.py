@@ -76,6 +76,7 @@ def command_reset_password(args: argparse.Namespace) -> None:
         if user is None:
             raise SystemExit(f"No account for {username}.")
         user.password_hash = hash_password(prompt_new_password())
+        user.password_reset_requested_at = None
         # Anyone signed in with the old password is signed out.
         db.execute(delete(UserSession).where(UserSession.user_id == user.id))
         db.commit()

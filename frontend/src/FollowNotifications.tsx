@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import { requestAdminAccountFocus } from './adminAccountFocus';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { Icon } from './Icon';
@@ -16,6 +17,7 @@ import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { WorkoutComments } from './WorkoutComments';
 import { formatReleaseDate, type Release } from './releaseMetadata';
 import { dayMonth } from './trainingSummary';
+import { useUserSession } from './userContext';
 import { requestWorkoutFocus } from './workoutFocus';
 import {
   requestWeeklyReview,
@@ -27,6 +29,7 @@ import type {
   SharingNotifications,
   ReactionNotice,
   CommentNotice,
+  PasswordResetRequest,
 } from './types';
 import './FollowNotifications.css';
 
@@ -35,6 +38,7 @@ export const NOTIFICATIONS_PER_PAGE = 10;
 type NotificationRow =
   | { kind: 'release'; item: Release }
   | { kind: 'weekly-review'; item: WeeklyReviewNotice }
+  | { kind: 'password-reset'; item: PasswordResetRequest }
   | { kind: 'comment'; item: CommentNotice }
   | { kind: 'request'; item: SharingConnection }
   | { kind: 'reaction'; item: ReactionNotice }
@@ -43,6 +47,8 @@ type NotificationRow =
 interface LocalNotices {
   release?: Release;
   weeklyReview?: WeeklyReviewNotice | null;
+  /** Only loaded for administrators. */
+  resetRequests?: PasswordResetRequest[];
 }
 
 /** The start of the day after the reviewed week, when its review became available. */
@@ -54,11 +60,12 @@ function weeklyReviewTime(notice: WeeklyReviewNotice): number {
 
 function notificationRows(
   items: SharingNotifications,
-  { release, weeklyReview }: LocalNotices = {},
+  { release, weeklyReview, resetRequests = [] }: LocalNotices = {},
 ): NotificationRow[] {
   const rows: NotificationRow[] = [
     ...(release ? [{ kind: 'release' as const, item: release }] : []),
     ...(weeklyReview ? [{ kind: 'weekly-review' as const, item: weeklyReview }] : []),
+    ...resetRequests.map((item) => ({ kind: 'password-reset' as const, item })),
     ...(items.comments ?? []).map((item) => ({ kind: 'comment' as const, item })),
     ...items.requests.map((item) => ({ kind: 'request' as const, item })),
     ...(items.reactions ?? []).map((item) => ({ kind: 'reaction' as const, item })),
@@ -66,7 +73,13 @@ function notificationRows(
   ];
   const timestamp = (row: NotificationRow) => {
     if (row.kind === 'weekly-review') return weeklyReviewTime(row.item);
-    const value = Date.parse(row.kind === 'release' ? (row.item.date ?? '') : row.item.since);
+    const value = Date.parse(
+      row.kind === 'release'
+        ? (row.item.date ?? '')
+        : row.kind === 'password-reset'
+          ? row.item.requested_at
+          : row.item.since,
+    );
     return Number.isNaN(value) ? 0 : value;
   };
   return rows.sort((a, b) => timestamp(b) - timestamp(a));
@@ -148,6 +161,11 @@ export function FollowNotifications({ active }: { active: boolean }) {
   const list = useRef<HTMLUListElement>(null);
   const bell = useRef<HTMLButtonElement>(null);
   const restoreBellFocus = useRef(false);
+  const isAdmin = useUserSession().user?.is_admin === true;
+  const [resetRequests, setResetRequests] = useState<PasswordResetRequest[]>([]);
+  // Read by the refresh below without restarting its polling when the requests change.
+  const resetRequestsRef = useRef(resetRequests);
+  resetRequestsRef.current = resetRequests;
 
   useEffect(() => {
     // Runs after the notes dialog has closed, so its own focus restoration cannot override this.
@@ -177,7 +195,11 @@ export function FollowNotifications({ active }: { active: boolean }) {
           setItems(next);
           setError(null);
           const unread = unreadNotificationReferences(
-            displayedNotifications(next, page, { release, weeklyReview }),
+            displayedNotifications(next, page, {
+              release,
+              weeklyReview,
+              resetRequests: resetRequestsRef.current,
+            }),
           );
           if (open && unread.length) {
             await api.sharing.markNotificationsRead(unread);
@@ -209,6 +231,34 @@ export function FollowNotifications({ active }: { active: boolean }) {
     };
   }, [active, open, attempt, page, release, weeklyReview]);
 
+  useEffect(() => {
+    // Administrators also see people waiting for a temporary password, until it is handled.
+    if (!active || !isAdmin) return;
+    let cancelled = false;
+    function refresh() {
+      if (document.visibilityState === 'hidden') return;
+      void api.admin
+        .passwordResetRequests()
+        .then((next) => {
+          if (!cancelled) setResetRequests(next);
+        })
+        .catch(() => undefined);
+    }
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [active, isAdmin, open]);
+  const waitingResets = isAdmin ? resetRequests : [];
+
   async function respond(person: SharingConnection, action: 'accept' | 'decline') {
     if (busy) return;
     setBusy(true);
@@ -238,9 +288,11 @@ export function FollowNotifications({ active }: { active: boolean }) {
         unreadNotificationReferences(items).filter((item) => item.kind !== 'request').length
       : 0) +
     Number(announcement?.noticeUnread ?? false) +
-    Number(weeklyReview?.unread ?? false);
+    Number(weeklyReview?.unread ?? false) +
+    // Like friend requests, these count until they have been dealt with.
+    waitingResets.length;
   const currentItems = items ?? { requests: [], accepted: [] };
-  const notices = { release, weeklyReview };
+  const notices = { release, weeklyReview, resetRequests: waitingResets };
   const rows = notificationRows(currentItems, notices);
   const total = rows.length;
   const pageCount = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
@@ -356,6 +408,32 @@ export function FollowNotifications({ active }: { active: boolean }) {
                     }}
                   >
                     View
+                  </button>
+                </li>
+              ) : row.kind === 'password-reset' ? (
+                <li
+                  key={`password-reset-${row.item.user_id}`}
+                  className="release-notification-row password-reset-notification-row"
+                >
+                  <span className="release-notification-icon" aria-hidden="true">
+                    <Icon name="key" />
+                  </span>
+                  <div className="follow-notification-copy">
+                    <p>
+                      <strong>{row.item.display_name}</strong> asked for a password reset
+                      <NotificationDate since={row.item.requested_at} />
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-secondary release-notification-view"
+                    aria-label={`Review ${row.item.display_name}’s password reset request`}
+                    onClick={() => {
+                      setOpen(false);
+                      requestAdminAccountFocus(row.item.user_id);
+                    }}
+                  >
+                    Review
                   </button>
                 </li>
               ) : row.kind === 'comment' ? (
