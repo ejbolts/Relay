@@ -729,19 +729,20 @@ export function AdminScreen({ active }: { active: boolean }) {
 
   useEffect(() => {
     // An account opened from a notification. This runs before the reload below, so it waits for
-    // a list applied after the request, where the account's request shows and the order is final.
+    // a list applied after the request, where the account's request shows and the order is final,
+    // and for the panels above it to load, so they do not push the card back out of view.
     if (!active || !focus) return;
     if (focusAfter.current?.key !== focus.key) {
       focusAfter.current = { key: focus.key, snapshots };
     }
-    if (snapshots <= focusAfter.current.snapshots) return;
+    if (loading || snapshots <= focusAfter.current.snapshots) return;
     const row = document.getElementById(adminUserRowId(focus.userId));
     if (row) {
       row.scrollIntoView({ block: 'center', behavior: motionReduced() ? 'auto' : 'smooth' });
       row.focus({ preventScroll: true });
     }
     clearAdminAccountFocus(focus.key);
-  }, [active, focus, snapshots]);
+  }, [active, focus, loading, snapshots]);
 
   useEffect(() => {
     // The screen stays mounted while hidden, so reload whenever it is opened again.

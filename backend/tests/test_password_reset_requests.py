@@ -11,11 +11,25 @@ from conftest import TEST_PASSWORD
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
 
+from app import password_reset_requests
 from app.database import SessionLocal
 from app.models import User, utc_now
 from app.password_reset_requests import MAX_REQUESTS_PER_ADDRESS, REQUEST_LIFETIME
 
 REQUESTS = "/api/admin/password-reset-requests"
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch):
+    """Phone alerts the requests would send, without contacting a push service."""
+    sent: list[dict] = []
+
+    def record(session_factory, settings, **alert):
+        sent.append(alert)
+        return True
+
+    monkeypatch.setattr(password_reset_requests, "send_push_notification", record)
+    return sent
 
 
 def ask(test_client: TestClient, username: str):
@@ -164,6 +178,69 @@ def test_only_admins_can_see_or_dismiss_requests(other_client, method, path):
     assert refused.status_code == 403
     assert refused.json()["error"]["code"] == "admin_required"
     assert TestClient(other_client.app).request(method, path).status_code == 401
+
+
+def add_account(username: str, *, is_admin: bool, disabled: bool = False) -> str:
+    with SessionLocal() as db:
+        user = User(
+            username=username,
+            display_name=username.title(),
+            password_hash="not-a-real-hash",
+            is_admin=is_admin,
+            disabled_at=utc_now() if disabled else None,
+        )
+        db.add(user)
+        db.commit()
+        return user.id
+
+
+def test_a_new_request_alerts_each_active_admins_phones(client, other_client, alerts):
+    second_admin = add_account("second-admin", is_admin=True)
+    add_account("retired-admin", is_admin=True, disabled=True)
+
+    assert ask(TestClient(client.app), "other").status_code == 204
+
+    assert sorted(alert["user_id"] for alert in alerts) == sorted([client.user["id"], second_admin])
+    alert = alerts[0]
+    assert alert["title"] == "Password reset request"
+    assert alert["body"] == "Other (@other) asked for a temporary password."
+    assert alert["url"] == f"/?admin-account={other_client.user['id']}#admin"
+    assert alert["tag"] == f"password-reset-{other_client.user['id']}"
+
+
+def test_only_a_new_request_sends_alerts(client, other_client, alerts):
+    signed_out = TestClient(client.app)
+    ask(signed_out, "nobody-here")
+    assert alerts == []
+
+    ask(signed_out, "other")
+    ask(signed_out, "other")
+    assert len(alerts) == 1
+
+
+def test_an_admin_asking_is_not_alerted_about_themselves(client, alerts):
+    second_admin = add_account("second-admin", is_admin=True)
+
+    ask(TestClient(client.app), "owner")
+
+    assert [alert["user_id"] for alert in alerts] == [second_admin]
+
+
+def test_one_failed_alert_does_not_stop_the_others(client, other_client, monkeypatch):
+    second_admin = add_account("second-admin", is_admin=True)
+    delivered = []
+
+    def flaky(session_factory, settings, *, user_id, **alert):
+        if user_id == client.user["id"]:
+            raise RuntimeError("push service down")
+        delivered.append(user_id)
+        return True
+
+    monkeypatch.setattr(password_reset_requests, "send_push_notification", flaky)
+
+    assert ask(TestClient(client.app), "other").status_code == 204
+    assert delivered == [second_admin]
+    assert len(listed(client)) == 1
 
 
 def load_migration():

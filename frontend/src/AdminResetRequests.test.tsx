@@ -214,4 +214,31 @@ describe('password reset requests in the admin console', () => {
     expect(document.activeElement).toBe(card);
     expect(host.querySelector('[data-testid="focus"]')?.textContent).toBe('');
   });
+
+  it('scrolls only once the panels above the accounts have loaded', async () => {
+    let finishStatus!: (value: ServerStatus) => void;
+    let failLimits!: (reason: Error) => void;
+    vi.mocked(api.admin.status).mockReturnValue(
+      new Promise((resolve) => {
+        finishStatus = resolve;
+      }),
+    );
+    vi.mocked(api.admin.limits).mockReturnValue(
+      new Promise((_, reject) => {
+        failLimits = reject;
+      }),
+    );
+    requestAdminAccountFocus('riley');
+    await render(true);
+
+    expect(cards()).toHaveLength(3);
+    expect(scrolled).toEqual([]);
+
+    await act(async () => {
+      finishStatus(status);
+      failLimits(new Error('not needed'));
+    });
+
+    expect(scrolled).toEqual([host.querySelector('#admin-user-riley')]);
+  });
 });

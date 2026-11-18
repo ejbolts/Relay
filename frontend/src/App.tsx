@@ -339,7 +339,11 @@ import {
 import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
-import { onAdminAccountFocusRequested } from './adminAccountFocus';
+import {
+  onAdminAccountFocusRequested,
+  requestAdminAccountFocus,
+  takeAdminAccountFromUrl,
+} from './adminAccountFocus';
 import { canUploadVideos, useUserSession } from './userContext';
 import {
   OUTDATED_CLIENT_MESSAGE,
@@ -1145,6 +1149,11 @@ function AppContent() {
     () => onAdminAccountFocusRequested(() => (isAdmin ? setTab('admin') : undefined)),
     [isAdmin, setTab],
   );
+  useEffect(() => {
+    // A tapped password reset phone alert opens the console at the account it is about.
+    const userId = takeAdminAccountFromUrl();
+    if (userId && isAdmin) requestAdminAccountFocus(userId);
+  }, [isAdmin]);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;
