@@ -46,6 +46,7 @@ from .models import (
     WorkoutPhoto,
     WorkoutSession,
 )
+from .password_reset_requests import open_request_time
 from .photo_storage import machine_photo_paths
 from .presence import FriendPresence, admin_presence_by_member
 from .server_settings import (
@@ -94,6 +95,8 @@ class AdminUserRead(BaseModel):
     disabled_at: datetime | None
     # An admin reset the password and the person has not chosen a new one yet.
     must_change_password: bool
+    # The person asked for a temporary password from the sign-in screen and is still waiting.
+    password_reset_requested_at: datetime | None = None
     created_at: datetime
     last_active_at: datetime | None
     presence: FriendPresence
@@ -211,6 +214,7 @@ def _admin_user_reads(
         photos.update(_counts_by_user(db, model))
     video_sessions = _counts_by_user(db, WorkoutSession)
     photo_bytes = _photo_bytes_by_user(db, settings)
+    now = utc_now()
     return [
         AdminUserRead(
             id=user.id,
@@ -219,6 +223,7 @@ def _admin_user_reads(
             is_admin=user.is_admin,
             disabled_at=as_utc(user.disabled_at) if user.disabled_at else None,
             must_change_password=user.must_change_password,
+            password_reset_requested_at=open_request_time(user, now),
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
             presence=activity[user.id],
@@ -360,6 +365,7 @@ def reset_user_password(
     temporary_password = generate_temporary_password()
     user.password_hash = hash_password(temporary_password)
     user.must_change_password = True
+    user.password_reset_requested_at = None
     # Signed out everywhere, so nobody holding the old password stays in.
     db.execute(delete(UserSession).where(UserSession.user_id == user.id))
     db.commit()

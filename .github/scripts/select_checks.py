@@ -27,6 +27,7 @@ CONTRACT_MODULES = {
     "machine_settings.py",
     "main.py",
     "models.py",
+    "password_reset_requests.py",
     "presence.py",
     "routines.py",
     "session_events.py",

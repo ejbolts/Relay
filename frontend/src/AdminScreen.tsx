@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { useAdminUsers } from './adminActivity';
+import { adminUserRowId, clearAdminAccountFocus, useAdminAccountFocus } from './adminAccountFocus';
 import { useNow, workoutElapsed } from './presence';
 import {
   LIMIT_GROUPS,
@@ -16,6 +17,7 @@ import {
 } from './adminDisplay';
 import { authErrorMessage } from './authForm';
 import { InlineConfirmButton } from './InlineConfirmButton';
+import { motionReduced } from './motion';
 import type {
   AccountLimits,
   AppFeedback,
@@ -55,6 +57,7 @@ export interface AdminScreenViewProps {
   onRegistrationChange: (open: boolean) => void;
   onUserDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
   onResetPassword: (user: AdminUser) => Promise<void>;
+  onResetRequestDismiss?: (user: AdminUser) => void;
   onTemporaryPasswordDismiss: () => void;
   onRefresh: () => void;
 }
@@ -364,6 +367,7 @@ function UserRow({
   temporaryPassword,
   onDisabledChange,
   onResetPassword,
+  onResetRequestDismiss,
   onTemporaryPasswordDismiss,
 }: {
   user: AdminUser;
@@ -373,25 +377,38 @@ function UserRow({
   temporaryPassword: TemporaryPasswordReveal | null;
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
   onResetPassword: (user: AdminUser) => Promise<void>;
+  onResetRequestDismiss?: (user: AdminUser) => void;
   onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
   const online = !disabled && user.presence?.online;
   const live = disabled ? null : user.presence?.workout;
   const versions = user.client_versions ?? [];
+  const resetRequestedAt = user.password_reset_requested_at ?? null;
   return (
-    <li className={`admin-user ${disabled ? 'is-disabled' : ''}`}>
+    <li
+      id={adminUserRowId(user.id)}
+      tabIndex={-1}
+      className={`admin-user ${disabled ? 'is-disabled' : ''} ${resetRequestedAt ? 'has-reset-request' : ''}`}
+    >
       <div className="admin-user-heading">
         <strong>
           {user.display_name}
           {user.is_admin && <span className="profile-badge">Admin</span>}
           {isSelf && <span className="admin-tag">You</span>}
           {disabled && <span className="admin-tag is-danger">Disabled</span>}
+          {resetRequestedAt && <span className="admin-tag is-request">Reset requested</span>}
           {user.must_change_password && <span className="admin-tag">Temporary password</span>}
         </strong>
         <span>{user.username}</span>
       </div>
       <dl className="admin-user-stats">
+        {resetRequestedAt && (
+          <div className="admin-user-request">
+            <dt>Asked for a reset</dt>
+            <dd>{formatLastActive(resetRequestedAt, new Date(now))}</dd>
+          </div>
+        )}
         <div>
           <dt>Joined</dt>
           <dd>{formatJoined(user.created_at)}</dd>
@@ -447,18 +464,30 @@ function UserRow({
       {temporaryPassword && (
         <TemporaryPasswordPanel reveal={temporaryPassword} onDismiss={onTemporaryPasswordDismiss} />
       )}
-      {!isSelf && (
+      {(!isSelf || (resetRequestedAt && onResetRequestDismiss)) && (
         <div className="admin-user-actions">
-          <InlineConfirmButton
-            label="Reset password"
-            confirmLabel="Reset and sign out"
-            workingLabel="Resetting…"
-            confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
-            className="profile-secondary"
-            disabled={busy}
-            onConfirm={() => onResetPassword(user)}
-          />
-          {disabled ? (
+          {!isSelf && (
+            <InlineConfirmButton
+              label="Reset password"
+              confirmLabel="Reset and sign out"
+              workingLabel="Resetting…"
+              confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
+              className={resetRequestedAt ? 'profile-primary' : 'profile-secondary'}
+              disabled={busy}
+              onConfirm={() => onResetPassword(user)}
+            />
+          )}
+          {resetRequestedAt && onResetRequestDismiss && (
+            <button
+              type="button"
+              className="profile-secondary"
+              disabled={busy}
+              onClick={() => onResetRequestDismiss(user)}
+            >
+              Dismiss request
+            </button>
+          )}
+          {isSelf ? null : disabled ? (
             <button
               type="button"
               className="profile-secondary"
@@ -539,11 +568,13 @@ export function AdminScreenView({
   onSaveLimits,
   onUserDisabledChange,
   onResetPassword,
+  onResetRequestDismiss,
   onTemporaryPasswordDismiss,
   onRefresh,
 }: AdminScreenViewProps) {
   const now = useNow(users !== null, 60_000);
   const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
+  const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
   const openFeedback = feedback?.filter((item) => item.resolved_at === null).length ?? 0;
   return (
     <section className="settings-screen admin-screen content-page">
@@ -613,6 +644,11 @@ export function AdminScreenView({
               {disabledCount > 0 && ` · ${disabledCount} disabled`}
             </h2>
           </div>
+          {resetRequests > 0 && (
+            <span className="sharing-state is-on">
+              {resetRequests} {resetRequests === 1 ? 'reset request' : 'reset requests'}
+            </span>
+          )}
         </header>
         <p>
           Disabling an account signs it out on every device and blocks sign-in. Its data is kept, so
@@ -630,6 +666,7 @@ export function AdminScreenView({
                 temporaryPassword={temporaryPassword?.userId === user.id ? temporaryPassword : null}
                 onDisabledChange={onUserDisabledChange}
                 onResetPassword={onResetPassword}
+                onResetRequestDismiss={onResetRequestDismiss}
                 onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
               />
             ))}
@@ -645,7 +682,9 @@ export function AdminScreenView({
 
 export function AdminScreen({ active }: { active: boolean }) {
   const { user, updateUser } = useUserSession();
-  const { users, setUsers, loadUsers } = useAdminUsers(active && Boolean(user?.is_admin));
+  const { users, setUsers, loadUsers, snapshots } = useAdminUsers(
+    active && Boolean(user?.is_admin),
+  );
   const [feedback, setFeedback] = useState<AppFeedback[] | null>(null);
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [status, setStatus] = useState<ServerStatus | null>(null);
@@ -658,6 +697,8 @@ export function AdminScreen({ active }: { active: boolean }) {
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [busyFeedbackId, setBusyFeedbackId] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<TemporaryPasswordReveal | null>(null);
+  const focus = useAdminAccountFocus();
+  const focusAfter = useRef<{ key: number; snapshots: number } | null>(null);
 
   useEffect(() => {
     // A temporary password is only kept in memory while this screen is in view.
@@ -685,6 +726,23 @@ export function AdminScreen({ active }: { active: boolean }) {
       setLoading(false);
     }
   }, [loadUsers]);
+
+  useEffect(() => {
+    // An account opened from a notification. This runs before the reload below, so it waits for
+    // a list applied after the request, where the account's request shows and the order is final,
+    // and for the panels above it to load, so they do not push the card back out of view.
+    if (!active || !focus) return;
+    if (focusAfter.current?.key !== focus.key) {
+      focusAfter.current = { key: focus.key, snapshots };
+    }
+    if (loading || snapshots <= focusAfter.current.snapshots) return;
+    const row = document.getElementById(adminUserRowId(focus.userId));
+    if (row) {
+      row.scrollIntoView({ block: 'center', behavior: motionReduced() ? 'auto' : 'smooth' });
+      row.focus({ preventScroll: true });
+    }
+    clearAdminAccountFocus(focus.key);
+  }, [active, focus, loading, snapshots]);
 
   useEffect(() => {
     // The screen stays mounted while hidden, so reload whenever it is opened again.
@@ -765,7 +823,12 @@ export function AdminScreen({ active }: { active: boolean }) {
         current
           ? current.map((row) =>
               row.id === target.id
-                ? { ...row, must_change_password: true, signed_in_devices: 0 }
+                ? {
+                    ...row,
+                    must_change_password: true,
+                    password_reset_requested_at: null,
+                    signed_in_devices: 0,
+                  }
                 : row,
             )
           : current,
@@ -775,6 +838,27 @@ export function AdminScreen({ active }: { active: boolean }) {
         displayName: target.display_name,
         password: temporary_password,
       });
+    } catch (reason) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  async function dismissResetRequest(target: AdminUser) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.admin.dismissPasswordResetRequest(target.id);
+      // The tag and the header count clear; the card keeps its place until the next refresh.
+      setUsers((current) =>
+        current
+          ? current.map((row) =>
+              row.id === target.id ? { ...row, password_reset_requested_at: null } : row,
+            )
+          : current,
+      );
     } catch (reason) {
       setError(authErrorMessage(reason));
     } finally {
@@ -829,6 +913,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       onRegistrationChange={(open) => void saveSettings({ allow_registration: open })}
       onUserDisabledChange={changeUserDisabled}
       onResetPassword={resetUserPassword}
+      onResetRequestDismiss={(target) => void dismissResetRequest(target)}
       onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
       onRefresh={() => void load()}
     />

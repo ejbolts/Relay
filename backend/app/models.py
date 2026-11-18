@@ -108,6 +108,11 @@ class User(Base):
     # Set when an admin hands out a temporary password; the account can do nothing but choose a
     # new password until it does.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # When the person asked the admins for a temporary password from the sign-in screen; cleared
+    # once an admin resets or dismisses it, or the person signs in.
+    password_reset_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # A square WebP in data/profile-photos/; a new upload gets a new name, which busts caches.
     profile_photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
