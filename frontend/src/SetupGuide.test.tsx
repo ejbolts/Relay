@@ -172,6 +172,7 @@ async function render(children: ReactNode) {
 }
 
 const coach = () => document.querySelector('.setup-coach');
+const back = () => coach()?.querySelector<HTMLButtonElement>('.setup-coach-back') ?? null;
 const coachTitle = () => coach()?.querySelector('strong')?.textContent;
 const button = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -318,12 +319,23 @@ describe('guides inside the real screens', () => {
       />,
     );
     expect(coachTitle()).toBe('Switch on Normalise weights');
+    expect(back()).toBeNull();
+    expect(button('Next').disabled).toBe(true);
     expect(coach()?.textContent).toContain('Your Chest press machines weigh differently');
     // The step points at the real switch, which is what moves the guide on.
     const toggle = document.querySelector('[role="switch"][aria-label="Normalise weights"]')!;
     expect(toggle.classList.contains('guide-target')).toBe(true);
     await act(async () => (toggle as HTMLElement).click());
     expect(coachTitle()).toBe('Check the reference machine');
+    await click('Next');
+    expect(coachTitle()).toBe('Match the weights');
+    await act(async () => back()!.click());
+    expect(coachTitle()).toBe('Check the reference machine');
+    await act(async () => back()!.click());
+    // Back on the switch step while it is on: Next moves on again without touching the switch.
+    expect(coachTitle()).toBe('Switch on Normalise weights');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    await click('Next');
     await click('Next');
     expect(coachTitle()).toBe('Match the weights');
     await type('[aria-label="Weight on Life Fitness"]', '50');
@@ -370,6 +382,12 @@ describe('guides inside the real screens', () => {
     await type('.training-block-form input[maxlength="80"]', 'Strength');
     await click('Next');
     expect(coachTitle()).toBe('Pick a start');
+    await act(async () => back()!.click());
+    expect(coachTitle()).toBe('Name this phase');
+    expect(
+      document.querySelector<HTMLInputElement>('.training-block-form input[maxlength="80"]')!.value,
+    ).toBe('Strength');
+    await click('Next');
     expect(
       document
         .querySelector('.training-block-starts:not(.plan)')
@@ -454,12 +472,22 @@ describe('splits guide', () => {
     await click('Edit split');
     // The split already has exercises, so the guide goes straight to rep ranges.
     expect(coachTitle()).toBe('Give an exercise a rep range');
+    await act(async () => back()!.click());
+    expect(document.querySelector('.routine-editor')).toBeNull();
+    expect(coachTitle()).toBe('Open your split');
+    await click('Edit split');
+    expect(coachTitle()).toBe('Give an exercise a rep range');
     expect(coach()?.textContent).toContain('stay at 150 kg on Leg press');
     expect(button('Next').disabled).toBe(true);
     if (!document.querySelector('.routine-day.is-open')) await openFirstDay();
     await type('[aria-label="Rep range for Bench press on day 1"]', '8-12');
+    // Going back now would throw the new range away, so Back is not offered.
+    expect(back()).toBeNull();
     await click('Next');
     expect(coachTitle()).toBe('Save your split');
+    await act(async () => back()!.click());
+    expect(coachTitle()).toBe('Give an exercise a rep range');
+    await click('Next');
     await submit('.routine-editor');
     expect(api.routines.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -499,6 +527,10 @@ describe('splits guide', () => {
     expect(coachTitle()).toBe('Make it your split');
     await click('Use split');
     expect(coachTitle()).toBe('Choose how it runs');
+    await act(async () => back()!.click());
+    expect(document.querySelector('.routine-use')).toBeNull();
+    expect(coachTitle()).toBe('Make it your split');
+    await click('Use split');
     await submit('.routine-use');
     expect(api.routines.use).toHaveBeenCalledWith('new', expect.any(String), 'workouts');
     expect(finished).toEqual(['split']);

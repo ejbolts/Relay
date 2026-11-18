@@ -75,7 +75,8 @@
   margin: 0.75rem;
   margin-bottom: max(0.75rem, env(safe-area-inset-bottom));
   padding: 0.85rem 0.95rem 0.8rem;
-  border: 1px solid var(--p-accent);
+  /* Plain, so the pulsing control is the only thing drawing the eye. */
+  border: 1px solid var(--p-line-strong);
   border-radius: 14px;
   background: var(--p-surface-solid, var(--p-surface));
   box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
@@ -137,10 +138,31 @@ button.setup-coach-exit {
   line-height: 1.5;
 }
 
+.setup-coach-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+button.setup-coach-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 2.5rem;
+  margin-right: auto;
+  padding: 0 0.8rem 0 0.55rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 button.setup-coach-next {
   display: inline-flex;
   align-items: center;
-  justify-self: end;
   gap: 0.25rem;
   min-height: 2.5rem;
   padding: 0 0.9rem;
@@ -156,6 +178,7 @@ button.setup-coach-next:disabled {
   opacity: 0.45;
 }
 
+button.setup-coach-back svg,
 button.setup-coach-next svg {
   width: 0.9rem;
   height: 0.9rem;
@@ -182,17 +205,35 @@ button.setup-coach-next svg {
   background: var(--p-accent);
 }
 
-/* The control the current step is about. */
+/* The control the current step is about: its outline pulses and a ring spreads out from it. */
 .guide-target {
   border-radius: 10px;
   outline: 2px solid var(--p-accent);
   outline-offset: 3px;
-  animation: guide-target-pulse 1.6s ease-in-out infinite;
+  animation: guide-target-pulse 1.4s ease-out infinite;
 }
 
 @keyframes guide-target-pulse {
-  50% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--p-accent) 25%, transparent);
+  0% {
+    outline-color: var(--p-accent);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--p-accent) 75%, transparent),
+      0 0 14px 2px color-mix(in srgb, var(--p-accent) 55%, transparent);
+  }
+  60% {
+    outline-color: color-mix(in srgb, var(--p-accent) 35%, transparent);
+    outline-offset: 7px;
+    box-shadow:
+      0 0 0 18px transparent,
+      0 0 14px 2px transparent;
+  }
+  100% {
+    outline-color: var(--p-accent);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 18px transparent,
+      0 0 14px 2px transparent;
   }
 }
 

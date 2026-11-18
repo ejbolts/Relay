@@ -695,6 +695,9 @@ export function RoutinePanel({
               }}
               index={NEW_SPLIT_STEPS - 1}
               total={NEW_SPLIT_STEPS}
+              onBack={() => {
+                if (!busy) setUsing(null);
+              }}
               onExit={() => exitGuide('split')}
             />
           )}
@@ -1275,11 +1278,18 @@ function RoutineEditor({
                 : Number(guide.plan) + 1)
           }
           total={guide.total}
+          onBack={editorBack()}
           onExit={() => exitGuide('split')}
         />
       )}
     </PopupDialog>
   );
+
+  function editorBack(): (() => void) | undefined {
+    if (guideStep === 'save') return () => setGuideStep('reps');
+    if (guideStep === 'reps' && guide?.plan) return () => setGuideStep('plan');
+    return JSON.stringify(value) === JSON.stringify(routine) ? onClose : undefined;
+  }
 
   function editorCoachStep(): CoachStep {
     if (guideStep === 'plan')

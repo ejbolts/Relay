@@ -20,6 +20,7 @@ export function GuideCoach({
   index,
   total,
   floating = false,
+  onBack,
   onExit,
 }: {
   step: CoachStep;
@@ -27,6 +28,8 @@ export function GuideCoach({
   total: number;
   /** On a page rather than inside a dialog, so it sits above the page instead of in its flow. */
   floating?: boolean;
+  /** Returns to the previous step on this screen; left out on a screen's first step. */
+  onBack?: () => void;
   onExit: () => void;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -87,16 +90,26 @@ export function GuideCoach({
         <strong>{step.title}</strong>
         <p>{step.body}</p>
       </div>
-      {step.next && (
-        <button
-          type="button"
-          className="setup-coach-next"
-          disabled={step.next.disabled}
-          onClick={step.next.onClick}
-        >
-          {step.next.label ?? 'Next'}
-          <Icon name="chevron-right" />
-        </button>
+      {(onBack || step.next) && (
+        <div className="setup-coach-actions">
+          {onBack && (
+            <button type="button" className="setup-coach-back" onClick={onBack}>
+              <Icon name="chevron-left" />
+              Back
+            </button>
+          )}
+          {step.next && (
+            <button
+              type="button"
+              className="setup-coach-next"
+              disabled={step.next.disabled}
+              onClick={step.next.onClick}
+            >
+              {step.next.label ?? 'Next'}
+              <Icon name="chevron-right" />
+            </button>
+          )}
+        </div>
       )}
       <span className="setup-coach-progress" aria-hidden="true">
         {Array.from({ length: total }, (_, item) => (

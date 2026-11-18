@@ -128,7 +128,7 @@ export function MachineWeightsDialog({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const guide = useActiveGuide('normalise');
-  const [guideStep, setGuideStep] = useState(1);
+  const [guideStep, setGuideStep] = useState(() => (mapping.enabled ? 1 : 0));
   const reference = draft.machines.find((machine) => machine.id === draft.reference_machine_id);
   const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
   const recommendedId = recommendedReferenceId(draft, recent);
@@ -237,6 +237,8 @@ export function MachineWeightsDialog({
       reference_machine_id: draft.reference_machine_id ?? recommendedId,
     };
     setDraft(next);
+    // Turning the switch on is the guide's first step; switching it off again returns there.
+    if (guide) setGuideStep((step) => (!next.enabled ? 0 : step === 0 ? 1 : step));
     if (next.enabled) {
       setTexts((current) => withSuggestions(current, next, progress, weightUnit));
     }
@@ -268,6 +270,7 @@ export function MachineWeightsDialog({
       title: 'Switch on Normalise weights',
       body: `Your ${exerciseName} machines weigh differently, so the same number is a different effort on each. This shows every session in one machine’s weights.`,
       target: '.machine-weights-toggle [role="switch"]',
+      next: { disabled: !draft.enabled, onClick: () => setGuideStep(1) },
     },
     {
       title: 'Check the reference machine',
@@ -290,8 +293,6 @@ export function MachineWeightsDialog({
       target: '.machine-weights-save',
     },
   ];
-  // Turning the switch on is the first step; switching it off again returns there.
-  const coachIndex = draft.enabled ? guideStep : 0;
 
   return (
     <PopupDialog
@@ -538,9 +539,10 @@ export function MachineWeightsDialog({
       </form>
       {guide && (
         <GuideCoach
-          step={coachSteps[coachIndex]}
-          index={coachIndex}
+          step={coachSteps[guideStep]}
+          index={guideStep}
           total={coachSteps.length}
+          onBack={guideStep > 0 ? () => setGuideStep(guideStep - 1) : undefined}
           onExit={() => exitGuide('normalise')}
         />
       )}

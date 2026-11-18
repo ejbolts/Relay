@@ -401,6 +401,7 @@ export function TrainingBlockDialog({
           step={coachSteps[guideStep]}
           index={guideStep}
           total={coachSteps.length}
+          onBack={guideStep > 0 ? () => setGuideStep(guideStep - 1) : undefined}
           onExit={() => exitGuide('blocks')}
         />
       )}
