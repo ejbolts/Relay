@@ -36,6 +36,7 @@ _Relay was called Gym Logger before version 1.0._
 - **Workout controls:** Finish and add exercises from the header, correct live time and use larger iPhone touch targets.
 - **Rest complete:** When a rest ends, a GO pill names your next set, counts time over rest and offers +30s.
 - **Set groups:** Log tri-sets with clearer set counts, superset borders and custom rest times.
+- **Add sets anywhere:** Tap + above set 1 or on a rest line to add a set at the start or between sets.
 - **Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.
 - **Workout summary:** After finishing, Home shows time, sets, volume, new records and a suggested next step.
 - **Rep targets:** Plan rep ranges and see when to add weight.

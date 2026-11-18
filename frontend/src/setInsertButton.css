@@ -1,0 +1,83 @@
+/* A small "+" that inserts a set between rows; the visible dot is smaller than its tap target. */
+.set-insert-button {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-accent-text, var(--accent-dark));
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Specific enough to beat the rest divider's own `span` label styles. */
+.set-grid .set-insert-button > .set-insert-dot {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 999px;
+  background: var(--p-surface-2, var(--card));
+  color: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.set-grid .set-insert-button:hover > .set-insert-dot,
+.set-grid .set-insert-button:focus-visible > .set-insert-dot {
+  background: color-mix(in srgb, currentColor 22%, var(--p-surface-2, var(--card)));
+}
+
+.set-grid .set-insert-button:active > .set-insert-dot {
+  transform: scale(0.9);
+}
+
+.set-insert-button:focus-visible {
+  outline: none;
+}
+
+.set-grid .set-insert-button:focus-visible > .set-insert-dot {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* On a rest divider the "+" sits over the start of its line, keeping the rest time centred. */
+.rest-between {
+  position: relative;
+}
+
+.rest-between > .set-insert-button {
+  position: absolute;
+  top: 50%;
+  left: 0.5rem;
+  transform: translateY(-50%);
+}
+
+/* Where no rest divider separates two sets (and above the first set), use a slim line. */
+.set-insert-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.25rem;
+  padding: 0 0.875rem 0 0.5rem;
+}
+
+.set-insert-row > i {
+  flex: 1;
+  border-top: 1px dashed var(--p-line, var(--line));
+}

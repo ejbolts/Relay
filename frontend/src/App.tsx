@@ -208,6 +208,7 @@ import {
 } from './restTimerPreference';
 import { RestTimeSelect } from './RestTimeSelect';
 import { SetRestControl } from './SetRestControl';
+import { SetInsertButton, SetInsertRow } from './SetInsertButton';
 import { cancelRestTimerPushSchedule, restSecondsLeft } from './restTimer';
 import {
   disablePhonePushNotifications,
@@ -4482,7 +4483,8 @@ function WorkoutLogger({
     updateSet(movement.key, item.key, { completed: !item.completed });
   }
 
-  function addSet(movement: DraftMovement) {
+  /** Adds a set at `position` (the end by default), copying the set above it, or set 1 at the start. */
+  function addSet(movement: DraftMovement, position?: number) {
     if (
       recentRemoval.current?.kind === 'set' &&
       recentRemoval.current.key === movement.key &&
@@ -4493,10 +4495,15 @@ function WorkoutLogger({
     setMovements((current) =>
       current.map((item) => {
         if (item.key !== movement.key) return item;
-        const added = emptySet(item.exercise.kind, item.sets.at(-1));
+        const at = Math.min(Math.max(position ?? item.sets.length, 0), item.sets.length);
+        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1]);
         markSetAdded(added.key);
         addedSetKeys.current.add(added.key);
-        return { ...item, isComplete: false, sets: [...item.sets, added] };
+        return {
+          ...item,
+          isComplete: false,
+          sets: [...item.sets.slice(0, at), added, ...item.sets.slice(at)],
+        };
       }),
     );
   }
@@ -5287,6 +5294,7 @@ function WorkoutLogger({
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
               onToggleSet={(item) => toggleSet(movement, item)}
               onAddSet={() => addSet(movement)}
+              onInsertSet={(position) => addSet(movement, position)}
               onSwitch={() => setSwapSheetMovementKey(movement.key)}
               machineTipEligible={
                 /machine|cable/i.test(movement.exercise.equipment ?? '') &&
@@ -6028,6 +6036,7 @@ function MovementCard({
   onUpdateSet,
   onToggleSet,
   onAddSet,
+  onInsertSet,
   onSwitch,
   machineTipEligible,
   onRemove,
@@ -6058,6 +6067,8 @@ function MovementCard({
   onUpdateSet: (setKey: string, update: Partial<DraftSet>) => void;
   onToggleSet: (item: DraftSet) => void;
   onAddSet: () => void;
+  /** Adds a set before the set at this index (0 for the start of the list). */
+  onInsertSet: (position: number) => void;
   onSwitch: () => void;
   machineTipEligible: boolean;
   onRemove: () => void;
@@ -7066,8 +7077,18 @@ function MovementCard({
             </>
           )}
         </div>
+        {movement.sets.length > 0 && <SetInsertRow beforeSet={1} onInsert={() => onInsertSet(0)} />}
         {movement.sets.map((item, index) => {
           const open = isSetOpen(item);
+          const restShown =
+            !cardio &&
+            showRestTimes &&
+            (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+            (item.rest_seconds ?? 0) > 0;
+          // Between two sets; after the last set, Add set below does the same job.
+          const insertAfter = index < movement.sets.length - 1 && (
+            <SetInsertButton beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
+          );
           return (
             <Fragment key={item.key}>
               <SwipeToDeleteSetRow
@@ -7120,37 +7141,39 @@ function MovementCard({
                   )}
                 </div>
               </SwipeToDeleteSetRow>
-              {!cardio &&
-                showRestTimes &&
-                (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
-                (item.rest_seconds ?? 0) > 0 && (
-                  <SwipeToDeleteSetRow
-                    flipKey={`${item.key}:rest`}
-                    label={`rest after set ${index + 1}`}
-                    onDelete={() => removeRest(item)}
-                  >
-                    <SetRestControl
-                      seconds={item.rest_seconds!}
-                      setIndex={index}
-                      sets={movement.sets}
-                      history={
-                        item.machine_photo_id
-                          ? historyOnMachine(
-                              exerciseHistory,
-                              item.machine_photo_id,
-                              savedMachineAliases,
-                            )
-                          : history
-                      }
-                      suggested={!item.completed && !item.restConfirmed}
-                      onChange={(seconds) => {
-                        clearRestEdit(item.key);
-                        if (seconds === 0) removeRest(item);
-                        else onUpdateSet(item.key, { rest_seconds: seconds });
-                      }}
-                    />
-                  </SwipeToDeleteSetRow>
-                )}
+              {restShown ? (
+                <SwipeToDeleteSetRow
+                  flipKey={`${item.key}:rest`}
+                  label={`rest after set ${index + 1}`}
+                  onDelete={() => removeRest(item)}
+                >
+                  <SetRestControl
+                    seconds={item.rest_seconds!}
+                    setIndex={index}
+                    sets={movement.sets}
+                    history={
+                      item.machine_photo_id
+                        ? historyOnMachine(
+                            exerciseHistory,
+                            item.machine_photo_id,
+                            savedMachineAliases,
+                          )
+                        : history
+                    }
+                    suggested={!item.completed && !item.restConfirmed}
+                    onChange={(seconds) => {
+                      clearRestEdit(item.key);
+                      if (seconds === 0) removeRest(item);
+                      else onUpdateSet(item.key, { rest_seconds: seconds });
+                    }}
+                    leading={insertAfter}
+                  />
+                </SwipeToDeleteSetRow>
+              ) : (
+                insertAfter && (
+                  <SetInsertRow beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
+                )
+              )}
             </Fragment>
           );
         })}
