@@ -3922,7 +3922,7 @@ function WorkoutLogger({
         olderHistory,
         trainingBlocks.blocks,
         measurements,
-        trainingBlocks.fresh_start ?? null,
+        trainingBlocks.fresh_starts,
       ),
     [
       movements,
@@ -3932,7 +3932,7 @@ function WorkoutLogger({
       workoutDate,
       olderHistory,
       trainingBlocks.blocks,
-      trainingBlocks.fresh_start,
+      trainingBlocks.fresh_starts,
       measurements,
     ],
   );

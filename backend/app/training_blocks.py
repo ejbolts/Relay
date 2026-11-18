@@ -1,6 +1,6 @@
 """Account-owned date boundaries. Workouts and lifetime records are never moved or reset.
 
-Besides the blocks, the account can keep one fresh-start date: a PR baseline outside blocks.
+Besides the blocks, the account can keep fresh-start dates: PR baselines outside blocks.
 """
 
 from __future__ import annotations
@@ -57,9 +57,9 @@ class TrainingBlock(BlockInput):
 
 class TrainingBlocks(BaseModel):
     blocks: list[TrainingBlock] = Field(default_factory=list)
-    # An account-wide PR baseline that works with or without blocks: "Fresh start" records
-    # compare with workouts from this date on, while all-time records stay as they are.
-    fresh_start: date | None = None
+    # Account-wide PR baselines that work with or without blocks. Each fresh start's records
+    # compare with workouts from its date until the next fresh start; all-time records stay.
+    fresh_starts: list[date] = Field(default_factory=list)
 
 
 class TrainingBlockRead(TrainingBlock):
@@ -72,13 +72,13 @@ class TrainingBlocksRead(BaseModel):
     blocks: list[TrainingBlockRead]
     earlier_workout_count: int = 0
     history_start: date | None = None
-    fresh_start: date | None = None
+    fresh_starts: list[date] = Field(default_factory=list)
 
 
 class FreshStartInput(BaseModel):
-    """The day PR baselines start again, or none to compare with all history only."""
+    """A day PR baselines start again."""
 
-    start_date: date | None = None
+    start_date: date
 
 
 def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
@@ -88,11 +88,17 @@ def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
     blocks = sorted(config.blocks, key=lambda block: block.start_date)
     for index, block in enumerate(blocks):
         block.end_date = blocks[index + 1].start_date if index + 1 < len(blocks) else None
-    return TrainingBlocks(blocks=blocks, fresh_start=config.fresh_start)
+    return TrainingBlocks(blocks=blocks, fresh_starts=sorted(set(config.fresh_starts)))
 
 
 def block_on(config: TrainingBlocks, day: date) -> TrainingBlock | None:
     return next((block for block in reversed(config.blocks) if block.start_date <= day), None)
+
+
+def fresh_start_on(config: TrainingBlocks, day: date) -> date | None:
+    """The latest fresh start on or before ``day``, whose baseline that day belongs to."""
+    index = bisect_right(config.fresh_starts, day)
+    return config.fresh_starts[index - 1] if index else None
 
 
 def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBlocksRead:
@@ -112,7 +118,7 @@ def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBl
         ],
         earlier_workout_count=counts[0],
         history_start=min((day for day, _ in rows), default=None),
-        fresh_start=config.fresh_start,
+        fresh_starts=config.fresh_starts,
     )
 
 
@@ -149,15 +155,27 @@ def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> Train
     return save_blocks(db, user.id, config)
 
 
-# Registered before "/{block_id}" so the path is not read as a block ID.
-@router.put("/fresh-start", response_model=TrainingBlocksRead)
-def set_fresh_start(
+@router.post("/fresh-starts", response_model=TrainingBlocksRead, status_code=201)
+def add_fresh_start(
     payload: FreshStartInput, db: DbSession, user: CurrentUser
 ) -> TrainingBlocksRead:
-    if payload.start_date and payload.start_date > date.today():
-        raise HTTPException(422, "The fresh start cannot be in the future.")
+    if payload.start_date > date.today():
+        raise HTTPException(422, "A fresh start cannot be in the future.")
     config = training_blocks(db, user.id)
-    config.fresh_start = payload.start_date
+    if payload.start_date in config.fresh_starts:
+        raise HTTPException(422, "A fresh start already begins on that date.")
+    if len(config.fresh_starts) >= 100:
+        raise HTTPException(422, "You can save up to 100 fresh starts.")
+    config.fresh_starts.append(payload.start_date)
+    return save_blocks(db, user.id, config)
+
+
+@router.delete("/fresh-starts/{start_date}", response_model=TrainingBlocksRead)
+def remove_fresh_start(start_date: date, db: DbSession, user: CurrentUser) -> TrainingBlocksRead:
+    config = training_blocks(db, user.id)
+    if start_date not in config.fresh_starts:
+        raise HTTPException(404, "Fresh start was not found.")
+    config.fresh_starts.remove(start_date)
     return save_blocks(db, user.id, config)
 
 

@@ -130,8 +130,8 @@ from .tracker_schemas import (
     ExerciseRead,
     ExerciseTrendPointRead,
     ExerciseUpdate,
+    FreshStartBaselineRead,
     HeatmapDay,
-    HistoryBestRead,
     ImportBatchRead,
     ImportUndoRead,
     MachinePhotoCaptionUpdate,
@@ -170,7 +170,7 @@ from .tracker_schemas import (
     WorkoutTypeUpdate,
     Zone2WeekRead,
 )
-from .training_blocks import TrainingBlock, block_on, training_blocks
+from .training_blocks import TrainingBlock, block_on, fresh_start_on, training_blocks
 from .training_metrics import (
     estimated_one_rep_max,
     get_setting,
@@ -2304,11 +2304,11 @@ def list_personal_records(
 
     def scoped_records(
         workouts: list[TrainingWorkout],
-        scope: Literal["block", "fresh_start"],
         block: TrainingBlock | None = None,
+        fresh_start: date | None = None,
     ) -> Iterator[PersonalRecordRead]:
-        """Records against a scope's own baseline: the workouts it was given."""
-        prefix = f"block:{block.id}" if block else "fresh"
+        """Records against one block's or fresh start's own baseline: the workouts given."""
+        prefix = f"block:{block.id}" if block else f"fresh:{fresh_start}"
         for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
             if (workout_id and workout.id != workout_id) or (
                 exercise_id and movement.exercise_id != exercise_id
@@ -2319,9 +2319,10 @@ def list_personal_records(
             relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
             yield PersonalRecordRead(
                 id=f"{prefix}:{item.id}:{record_type.value}",
-                scope=scope,
+                scope="block" if block else "fresh_start",
                 block_id=block.id if block else None,
                 block_name=block.name if block else None,
+                fresh_start_date=fresh_start,
                 exercise_id=movement.exercise_id,
                 workout_id=workout.id,
                 set_id=item.id,
@@ -2345,27 +2346,29 @@ def list_personal_records(
             )
 
     config = training_blocks(db, user.id) if include_blocks or include_fresh_start else None
-    if include_blocks and config and config.blocks:
-        workouts = list(
-            db.scalars(
-                workout_query(user.id).where(
-                    TrainingWorkout.workout_date >= config.blocks[0].start_date
-                )
-            )
+    use_blocks = bool(include_blocks and config and config.blocks)
+    use_fresh = bool(include_fresh_start and config and config.fresh_starts)
+    if config and (use_blocks or use_fresh):
+        first = min(
+            ([config.blocks[0].start_date] if use_blocks else [])
+            + ([config.fresh_starts[0]] if use_fresh else [])
         )
-        grouped = defaultdict(list)
-        for workout in workouts:
-            block = block_on(config, workout.workout_date)
+        by_block = defaultdict(list)
+        by_fresh_start = defaultdict(list)
+        for workout in db.scalars(
+            workout_query(user.id).where(TrainingWorkout.workout_date >= first)
+        ):
+            block = block_on(config, workout.workout_date) if use_blocks else None
             if block:
-                grouped[block.id].append(workout)
-        for block in config.blocks:
-            records.extend(scoped_records(grouped[block.id], "block", block))
-    if include_fresh_start and config and config.fresh_start:
-        fresh_workouts = db.scalars(
-            workout_query(user.id).where(TrainingWorkout.workout_date >= config.fresh_start)
-        )
-        records.extend(scoped_records(list(fresh_workouts), "fresh_start"))
-    # One achievement per metric/set, from the broadest scope: all-time, then the fresh start,
+                by_block[block.id].append(workout)
+            fresh_start = fresh_start_on(config, workout.workout_date) if use_fresh else None
+            if fresh_start:
+                by_fresh_start[fresh_start].append(workout)
+        for block in config.blocks if use_blocks else []:
+            records.extend(scoped_records(by_block[block.id], block=block))
+        for fresh_start in config.fresh_starts if use_fresh else []:
+            records.extend(scoped_records(by_fresh_start[fresh_start], fresh_start=fresh_start))
+    # One achievement per metric/set, from the broadest scope: all-time, then a fresh start,
     # then the block. Fresh-start records are only listed when asked for, because older apps
     # read any scope other than "block" as all-time.
     broadest: dict[tuple[str, PersonalRecordType], PersonalRecordRead] = {}
@@ -2579,8 +2582,8 @@ def exercise_history_baselines(
     bodyweights = BodyweightHistory(db, user.id)
     relative_bests = {}
     block_relative_bests = defaultdict(dict)
-    fresh_weights: dict[str, dict[float, int]] = defaultdict(dict)
-    fresh_relative_bests: dict[str, float] = {}
+    fresh_weights: dict[str, dict[date, dict[float, int]]] = defaultdict(lambda: defaultdict(dict))
+    fresh_relative_bests: dict[str, dict[date, float]] = defaultdict(dict)
     reps_by_weight: dict[str, dict[float, int]] = {}
     latest: dict[str, ExerciseLatestSessionRead] = {}
     latest_movement_ids: dict[str, str] = {}
@@ -2612,13 +2615,13 @@ def exercise_history_baselines(
         )
         if ratio is not None:
             relative_bests[row.exercise_id] = max(relative_bests.get(row.exercise_id, 0), ratio)
-        if config.fresh_start and row.workout_date >= config.fresh_start:
-            fresh = fresh_weights[row.exercise_id]
+        fresh_start = fresh_start_on(config, row.workout_date)
+        if fresh_start:
+            fresh = fresh_weights[row.exercise_id][fresh_start]
             fresh[weight] = max(fresh.get(weight, 0), row.reps)
             if ratio is not None:
-                fresh_relative_bests[row.exercise_id] = max(
-                    fresh_relative_bests.get(row.exercise_id, 0), ratio
-                )
+                scoped_relative = fresh_relative_bests[row.exercise_id]
+                scoped_relative[fresh_start] = max(scoped_relative.get(fresh_start, 0), ratio)
         block = block_on(config, row.workout_date)
         if block:
             if ratio is not None:
@@ -2662,16 +2665,18 @@ def exercise_history_baselines(
                 )
                 for block_id, values in block_weights[exercise_id].items()
             ],
-            fresh_start_best=HistoryBestRead(
-                best_relative_strength=fresh_relative_bests.get(exercise_id),
-                best_weight_kg=max(fresh_weights[exercise_id]),
-                reps_by_weight=[
-                    WeightRepsRead(weight_kg=weight, reps=reps)
-                    for weight, reps in sorted(fresh_weights[exercise_id].items())
-                ],
-            )
-            if fresh_weights.get(exercise_id)
-            else None,
+            fresh_start_bests=[
+                FreshStartBaselineRead(
+                    start_date=start,
+                    best_relative_strength=fresh_relative_bests[exercise_id].get(start),
+                    best_weight_kg=max(values),
+                    reps_by_weight=[
+                        WeightRepsRead(weight_kg=weight, reps=reps)
+                        for weight, reps in sorted(values.items())
+                    ],
+                )
+                for start, values in fresh_weights[exercise_id].items()
+            ],
         )
         for exercise_id, weights in reps_by_weight.items()
     ]

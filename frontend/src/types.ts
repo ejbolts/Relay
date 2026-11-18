@@ -554,8 +554,11 @@ export interface TrainingBlocks {
   earlier_workout_count?: number;
   /** Date of the earliest logged workout. */
   history_start?: string | null;
-  /** The account's PR fresh start: "Fresh start" records compare with lifts from this date. */
-  fresh_start?: string | null;
+  /**
+   * PR fresh starts, oldest first. "Fresh start" records compare with lifts from a fresh start
+   * until the next one.
+   */
+  fresh_starts?: string[];
 }
 
 /** An exercise's history before the loaded window, condensed by the server. */
@@ -568,8 +571,8 @@ export interface HistoryBest {
 export interface ExerciseHistoryBaseline {
   best_relative_strength?: number | null;
   block_bests?: Array<HistoryBest & { block_id: string }>;
-  /** Bests since the account's fresh start. */
-  fresh_start_best?: HistoryBest | null;
+  /** Bests within each fresh start, until the next one. */
+  fresh_start_bests?: Array<HistoryBest & { start_date: string }>;
   exercise_id: string;
   best_weight_kg: number | null;
   reps_by_weight: Array<{ weight_kg: number; reps: number }>;
@@ -592,6 +595,7 @@ export interface PersonalRecord {
   scope?: 'all_time' | 'block' | 'fresh_start';
   block_id?: string | null;
   block_name?: string | null;
+  fresh_start_date?: string | null;
   id: string;
   exercise_id: string;
   workout_id: string;

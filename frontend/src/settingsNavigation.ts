@@ -69,9 +69,9 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   {
     id: 'pr-fresh-start',
     group: 'training',
-    title: 'Personal records fresh start',
+    title: 'Fresh starts',
     page: 'settings',
-    keywords: 'pr prs reset baseline restart new start injury break gym records',
+    keywords: 'personal records pr prs reset baseline restart new start injury break gym',
     selector: '#pr-fresh-start-title',
     requiresAccount: true,
   },

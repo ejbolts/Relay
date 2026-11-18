@@ -114,7 +114,7 @@ describe('fresh start PRs', () => {
   const scoped = (
     weight: number,
     blocks: Parameters<typeof calculateScopedDraftPrs>[5] = [],
-    freshStart: string | null = '2026-06-01',
+    freshStarts = ['2026-06-01'],
     date = '2026-06-10',
     history = workouts,
     older: Map<string, ExerciseHistoryBaseline> | null = null,
@@ -127,7 +127,7 @@ describe('fresh start PRs', () => {
       older,
       blocks,
       [],
-      freshStart,
+      freshStarts,
     )
       .get('movement')!
       .values(),
@@ -137,9 +137,20 @@ describe('fresh start PRs', () => {
     expect(scoped(95)).toEqual([['Fresh start weight PR']]);
     expect(scoped(125)).toEqual([['All-time weight PR']]);
     expect(scoped(90)).toEqual([]);
-    expect(scoped(95, [], null)).toEqual([]);
+    expect(scoped(95, [], [])).toEqual([]);
     // A workout dated before the fresh start only compares with all history.
-    expect(scoped(95, [], '2026-06-01', '2026-05-20')).toEqual([]);
+    expect(scoped(95, [], ['2026-06-01'], '2026-05-20')).toEqual([]);
+  });
+
+  it('gives each fresh start its own baseline until the next one', () => {
+    const periods = [...workouts, history([set(100, 8)], 'june', '2026-06-05')];
+    const both = ['2026-06-01', '2026-08-01'];
+    const withAugust = [...periods, history([set(70, 8)], 'august', '2026-08-01')];
+    // In August only lifts since 1 Aug count, so 80 kg beats 70 kg despite June's 100 kg.
+    expect(scoped(80, [], both, '2026-08-10', withAugust)).toEqual([['Fresh start weight PR']]);
+    // Editing a July workout compares with June's fresh start, which excludes August.
+    expect(scoped(105, [], both, '2026-07-10', withAugust)).toEqual([['Fresh start weight PR']]);
+    expect(scoped(95, [], both, '2026-07-10', withAugust)).toEqual([]);
   });
 
   it('names a record by its broadest scope when a block also applies', () => {
@@ -148,12 +159,10 @@ describe('fresh start PRs', () => {
     // The early block's 100 kg stands, but the lift beats everything since the fresh start.
     const earlyBlock = [{ id: 'block', name: 'Rebuild', start_date: '2026-05-01', end_date: null }];
     const withBlockLift = [...workouts, history([set(100, 8)], 'block', '2026-05-02')];
-    expect(scoped(95, earlyBlock, '2026-06-01', '2026-06-10', withBlockLift)).toEqual([
+    expect(scoped(95, earlyBlock, ['2026-06-01'], '2026-06-10', withBlockLift)).toEqual([
       ['Fresh start weight PR'],
     ]);
-    expect(scoped(105, earlyBlock, null, '2026-06-10', withBlockLift)).toEqual([
-      ['Block weight PR'],
-    ]);
+    expect(scoped(105, earlyBlock, [], '2026-06-10', withBlockLift)).toEqual([['Block weight PR']]);
   });
 
   it('uses the server-condensed bests since the fresh start', () => {
@@ -164,18 +173,27 @@ describe('fresh start PRs', () => {
           exercise_id: bench.id,
           best_weight_kg: 120,
           reps_by_weight: [{ weight_kg: 120, reps: 8 }],
-          fresh_start_best: {
-            best_weight_kg: 100,
-            reps_by_weight: [{ weight_kg: 100, reps: 8 }],
-          },
+          fresh_start_bests: [
+            {
+              start_date: '2026-03-01',
+              best_weight_kg: 110,
+              reps_by_weight: [{ weight_kg: 110, reps: 8 }],
+            },
+            {
+              start_date: '2026-06-01',
+              best_weight_kg: 100,
+              reps_by_weight: [{ weight_kg: 100, reps: 8 }],
+            },
+          ],
           latest: null,
         },
       ],
     ]);
-    expect(scoped(105, [], '2026-06-01', '2026-06-10', [], older)).toEqual([
-      ['Fresh start weight PR'],
-    ]);
-    expect(scoped(100, [], '2026-06-01', '2026-06-10', [], older)).toEqual([]);
+    const starts = ['2026-03-01', '2026-06-01'];
+    expect(scoped(105, [], starts, '2026-06-10', [], older)).toEqual([['Fresh start weight PR']]);
+    expect(scoped(100, [], starts, '2026-06-10', [], older)).toEqual([]);
+    // March's fresh start has its own bests.
+    expect(scoped(105, [], starts, '2026-04-10', [], older)).toEqual([]);
   });
 });
 function draft(sets: WorkoutSetInput[], exercise = bench, key = 'movement'): WorkoutDraftMovement {

@@ -7,7 +7,7 @@ import type {
   BodyMeasurement,
 } from './types';
 import type { WorkoutDraftMovement as DraftMovement } from './workoutMovements';
-import { blockOn } from './trainingBlocks';
+import { blockOn, freshStartOn } from './trainingBlocks';
 import { bodyweightOn, relativeStrength } from './relativeStrength';
 
 // Compare canonical kilograms, independently of the preferred display unit.
@@ -119,8 +119,8 @@ export function calculateScopedDraftPrs(
   olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
   blocks: TrainingBlock[],
   measurements: BodyMeasurement[] = [],
-  /** The account's fresh start; lifts from this date form a separate PR baseline. */
-  freshStart: string | null = null,
+  /** The account's fresh starts, oldest first; each forms a PR baseline until the next. */
+  freshStarts: string[] = [],
 ) {
   const lifetime = calculateDraftPrs(
     movements,
@@ -130,7 +130,7 @@ export function calculateScopedDraftPrs(
     olderHistory,
     measurements,
   );
-  const fresh = freshStart && workoutDate >= freshStart ? freshStart : null;
+  const fresh = freshStartOn(freshStarts, workoutDate);
   if (!blocks.length && !fresh) return lifetime;
   const block = blockOn(blocks, workoutDate);
   const since = (
@@ -155,14 +155,18 @@ export function calculateScopedDraftPrs(
     );
   };
   const none = new Map<string, Map<string, string[]>>();
-  const sinceFresh = fresh ? since(fresh, null, (baseline) => baseline.fresh_start_best) : none;
+  const sinceFresh = fresh
+    ? since(fresh.start, fresh.end, (baseline) =>
+        baseline.fresh_start_bests?.find((item) => item.start_date === fresh.start),
+      )
+    : none;
   const inBlock = block
     ? since(block.start_date, block.end_date, (baseline) =>
         baseline.block_bests?.find((item) => item.block_id === block.id),
       )
     : none;
   const lower = (label: string) => `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
-  // Each record is named once, by its broadest scope: all-time, then fresh start, then block.
+  // Each record is named once, by its broadest scope: all-time, then a fresh start, then block.
   return new Map(
     movements.map((movement) => {
       const badges = new Map<string, string[]>();

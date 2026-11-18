@@ -982,12 +982,17 @@ export const api = {
       request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       }),
-    setFreshStart: (startDate: string | null) =>
-      request<TrainingBlocks>('/api/training-blocks/fresh-start', {
-        method: 'PUT',
+    addFreshStart: (startDate: string) =>
+      request<TrainingBlocks>('/api/training-blocks/fresh-starts', {
+        method: 'POST',
         headers: jsonHeaders,
         body: JSON.stringify({ start_date: startDate }),
       }),
+    removeFreshStart: (startDate: string) =>
+      request<TrainingBlocks>(
+        `/api/training-blocks/fresh-starts/${encodeURIComponent(startDate)}`,
+        { method: 'DELETE' },
+      ),
     summary: (id: string) =>
       request<TrainingBlockSummary>(`/api/training-blocks/${encodeURIComponent(id)}/summary`),
   },
