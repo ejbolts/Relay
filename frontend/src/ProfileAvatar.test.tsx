@@ -23,4 +23,62 @@ describe('ProfileAvatar', () => {
     );
     expect(markup).toBe('<span class="profile-avatar" aria-hidden="true">L</span>');
   });
+
+  it('draws the border the account wears around the photo', () => {
+    const markup = renderToStaticMarkup(
+      <ProfileAvatar
+        className="profile-avatar"
+        user={{ ...account, profile_photo_url: '/photo.webp', profile_border: 'centurion' }}
+      />,
+    );
+    expect(markup).toContain('class="profile-avatar has-photo avatar-bordered"');
+    expect(markup).toContain('class="profile-border-art" viewBox="-10 -10 140 140"');
+    expect(markup).toContain('data-border="centurion"');
+    expect(markup).not.toContain('is-animated');
+  });
+
+  it('lets a border move only where it is asked to', () => {
+    const markup = renderToStaticMarkup(
+      <ProfileAvatar
+        className="profile-avatar"
+        user={{ ...account, profile_photo_url: null, profile_border: 'unbreakable' }}
+        animated
+      />,
+    );
+    expect(markup).toContain('class="profile-border-art is-animated"');
+    expect(markup).toContain('profile-border-sheen');
+  });
+
+  it('gives each drawing its own gradients, so two borders never share colours', () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <ProfileAvatar
+          className="profile-avatar"
+          user={{ ...account, profile_photo_url: null, profile_border: 'bench-club-1' }}
+        />
+        <ProfileAvatar
+          className="profile-avatar"
+          user={{ ...account, profile_photo_url: null, profile_border: 'squat-club-1' }}
+        />
+      </>,
+    );
+    const ids = [...markup.matchAll(/<(?:linear|radial)Gradient id="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(ids.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(ids).size).toBe(ids.length);
+    const used = new Set([...markup.matchAll(/url\(#([^)]+)\)/g)].map((match) => match[1]));
+    expect(used.size).toBeGreaterThan(0);
+    for (const id of used) expect(ids).toContain(id);
+  });
+
+  it('leaves the photo plain for a border this version cannot draw', () => {
+    const markup = renderToStaticMarkup(
+      <ProfileAvatar
+        className="profile-avatar"
+        user={{ ...account, profile_photo_url: null, profile_border: 'from-a-newer-release' }}
+      />,
+    );
+    expect(markup).toBe('<span class="profile-avatar" aria-hidden="true">L</span>');
+  });
 });

@@ -75,6 +75,11 @@ const PATHS = {
   // A cloud struck through, for working without a connection.
   'cloud-off':
     'M3.5 3.5l17 17M9.2 6.4A5.5 5.5 0 0 1 17.3 10a3.8 3.8 0 0 1 2.6 6.1M16.5 18.5H7a4.5 4.5 0 0 1-1.3-8.8',
+  lock: 'M7.5 11V8a4.5 4.5 0 0 1 9 0v3M6.5 11h11a1.5 1.5 0 0 1 1.5 1.5v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19v-6.5A1.5 1.5 0 0 1 6.5 11z',
+  // Two rings, for the border around a profile photo.
+  border: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z',
+  male: 'M10 19.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM14 10l6-6M15 4h5v5',
+  female: 'M12 14.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM12 14.5v7M8.5 18h7',
   // A key, for password requests.
   key: 'M8 20a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM11.2 12.3 20 3.5M16.8 6.7l2.5 2.5M14.3 9.2l2 2',
 } as const;

@@ -8,6 +8,7 @@ import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
+import { SexMark } from './SexMark';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
@@ -193,7 +194,10 @@ export interface TodayScreenProps {
   profileLabel?: string;
   profilePhotoUrl?: string | null;
   /** The signed-in account for the Profile section; omitted outside the signed-in app. */
-  profile?: Pick<User, 'display_name' | 'username' | 'profile_photo_url' | 'created_at'>;
+  profile?: Pick<
+    User,
+    'display_name' | 'username' | 'profile_photo_url' | 'profile_border' | 'sex' | 'created_at'
+  >;
   /** Friend requests waiting for an answer, shown as a count on the profile button. */
   friendRequests?: number;
   notifications?: ReactNode;
@@ -379,13 +383,20 @@ export function TodayScreen({
             onClick={onOpenProfile}
             aria-label="Open profile"
           >
-            <ProfileAvatar className="profile-avatar today-profile-avatar" user={profile} />
+            <ProfileAvatar
+              className="profile-avatar today-profile-avatar"
+              user={profile}
+              animated
+            />
           </button>
         ) : (
-          <ProfileAvatar className="profile-avatar today-profile-avatar" user={profile} />
+          <ProfileAvatar className="profile-avatar today-profile-avatar" user={profile} animated />
         )}
         <div className="today-profile-body">
-          <h2 id="today-profile-title">{profile.display_name.trim() || profile.username}</h2>
+          <h2 id="today-profile-title">
+            {profile.display_name.trim() || profile.username}
+            <SexMark sex={profile.sex} />
+          </h2>
           <p>
             @{profile.username}
             {memberSince && ` · since ${memberSince}`}
@@ -800,6 +811,7 @@ export function TodayScreen({
                   onClick={onOpenProfile}
                   name={profileLabel}
                   photoUrl={profilePhotoUrl}
+                  border={profile?.profile_border}
                   friendRequests={friendRequests}
                   openFeedback={openFeedback}
                 />

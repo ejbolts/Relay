@@ -85,6 +85,15 @@ from .photo_storage import (
     profile_photo_path,
     store_profile_photo,
 )
+from .profile_borders import (
+    BORDERS_BY_KEY,
+    BordersRead,
+    Sex,
+    borders_for,
+    can_wear,
+    worn_border,
+    worn_border_name,
+)
 from .server_settings import load_runtime_settings
 from .session_events import session_events
 from .storage import remove_session_files
@@ -163,6 +172,8 @@ class LoginRequest(BaseModel):
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     username: str | None = None
+    # Accepted once: an account's sex cannot be changed after it is set.
+    sex: Sex | None = None
 
     @field_validator("username")
     @classmethod
@@ -204,6 +215,15 @@ class UserRead(BaseModel):
     must_change_password: bool = False
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
+    sex: Sex | None = None
+    # The earned border worn around the photo, and its name; see profile_borders.
+    profile_border: str | None = None
+    profile_border_name: str | None = None
+
+
+class BorderChoice(BaseModel):
+    # None goes back to the plain photo.
+    border: str | None = Field(default=None, max_length=40)
 
 
 def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
@@ -221,6 +241,9 @@ def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
             if user.profile_photo_filename
             else None
         ),
+        sex=user.sex if user.sex in ("male", "female") else None,
+        profile_border=worn_border(user),
+        profile_border_name=worn_border_name(user),
     )
 
 
@@ -559,6 +582,10 @@ def update_profile(
         if taken is not None:
             raise api_error(409, "username_taken", "An account with that username already exists.")
         user.username = payload.username
+    if payload.sex is not None and payload.sex != user.sex:
+        if user.sex is not None:
+            raise api_error(409, "sex_locked", "Your sex is already set and cannot be changed.")
+        user.sex = payload.sex
     try:
         db.commit()
     except IntegrityError as error:
@@ -566,6 +593,26 @@ def update_profile(
         raise api_error(
             409, "username_taken", "An account with that username already exists."
         ) from error
+    db.refresh(user)
+    return user_to_read(db, user, settings)
+
+
+@profile_router.get("/borders", response_model=BordersRead)
+def profile_borders(user: CurrentUser, db: DbDependency) -> BordersRead:
+    return borders_for(db, user)
+
+
+@profile_router.put("/border", response_model=UserRead)
+def choose_profile_border(
+    payload: BorderChoice, user: CurrentUser, db: DbDependency, settings: AppSettings
+) -> UserRead:
+    if payload.border is not None:
+        if payload.border not in BORDERS_BY_KEY:
+            raise api_error(404, "border_not_found", "That border is not available.")
+        if not can_wear(db, user, payload.border):
+            raise api_error(403, "border_locked", "Earn this border before you wear it.")
+    user.profile_border = payload.border
+    db.commit()
     db.refresh(user)
     return user_to_read(db, user, settings)
 

@@ -877,6 +877,37 @@ export interface User {
   must_change_password?: boolean;
   /** Versioned URL of the account's profile photo; null when it has none. */
   profile_photo_url?: string | null;
+  /** Chosen once, then fixed: it sets the strength standards for profile borders. */
+  sex?: Sex | null;
+  /** Key of the earned border worn around the photo; null for the plain photo. */
+  profile_border?: string | null;
+  profile_border_name?: string | null;
+}
+
+export type Sex = 'male' | 'female';
+
+export type BorderRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+/** One profile border: a challenge, and how far the account is towards it. */
+export interface ProfileBorder {
+  key: string;
+  name: string;
+  group: string;
+  rarity: BorderRarity;
+  requirement: string;
+  unlocked: boolean;
+  /** Missing only for a strength border while the account has not set its sex. */
+  progress: { current: number; target: number; unit: string } | null;
+  needs_sex: boolean;
+  /** A tiered border's family and its place in it, from 1; absent for a single border. */
+  family?: string | null;
+  tier?: number | null;
+}
+
+export interface ProfileBorders {
+  selected: string | null;
+  sex: Sex | null;
+  borders: ProfileBorder[];
 }
 
 /** Who may upload workout videos: nobody, administrators only, or every account. */
@@ -989,6 +1020,8 @@ export interface RegisterInput {
 export interface ProfileUpdateInput {
   display_name?: string;
   username?: string;
+  /** Accepted once: the server refuses to change a sex that is already set. */
+  sex?: Sex;
 }
 export interface AppFeedback {
   id: string;
@@ -1020,6 +1053,9 @@ export interface SharingSettings extends SharingChoices {
   pending_requests: number;
 }
 
+/** What identifies a member beside their name: their photo and the border around it. */
+type MemberAvatarField = 'id' | 'display_name' | 'profile_photo_url' | 'profile_border';
+
 /** `incoming` requests asked you; `outgoing` requests are yours, waiting for them. */
 export type FriendStatus = 'none' | 'incoming' | 'outgoing' | 'friends';
 
@@ -1027,6 +1063,11 @@ export interface SharedProfileSummary {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  /** The earned border around the photo, and its name for the profile itself. */
+  profile_border?: string | null;
+  profile_border_name?: string | null;
+  /** Sent only to those who can view the profile. */
+  sex?: Sex | null;
   member_since: string;
   /** Private is returned only when viewing your own profile. */
   visibility: ProfileVisibility;
@@ -1066,6 +1107,7 @@ export interface SharingConnection {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  profile_border?: string | null;
   since: string;
   /** Present on notification snapshots; read notices remain available in the bell. */
   is_read?: boolean;
@@ -1137,7 +1179,7 @@ export interface LiftComparisons {
 }
 
 export interface LiftRanking {
-  member: Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
+  member: Pick<SharedProfileSummary, MemberAvatarField>;
   is_you: boolean;
   best: LiftBest;
 }
@@ -1154,6 +1196,7 @@ export interface WorkoutReactionPerson {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  profile_border?: string | null;
   reaction: WorkoutReactionKind;
 }
 
@@ -1165,7 +1208,7 @@ export interface WorkoutReactionPage {
 
 export interface WorkoutComment {
   id: string;
-  author: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'>;
+  author: Pick<SharingConnection, MemberAvatarField>;
   body: string;
   reaction?: WorkoutReactionKind | null;
   parent_id: string | null;
@@ -1196,7 +1239,7 @@ export interface CommentNotice extends SharingConnection {
 
 /** A friend's latest workout or cardio session. */
 export interface FriendFeedItem {
-  friend: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+  friend: Pick<SharingConnection, MemberAvatarField> & {
     presence?: FriendPresence | null;
   };
   workout: TrackedWorkout;
@@ -1205,7 +1248,7 @@ export interface FriendFeedItem {
 
 /** One workout in Social's feed: yours or a friend's, with only what its owner shares. */
 export interface TimelineItem {
-  member: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+  member: Pick<SharingConnection, MemberAvatarField> & {
     is_you: boolean;
   };
   workout: TrackedWorkout;

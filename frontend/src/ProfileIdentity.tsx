@@ -13,13 +13,16 @@ import { authErrorMessage, USERNAME_HINT, validateUsername } from './authForm';
 import { FriendInviteButton } from './FriendQrCode';
 import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
+import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ProfileBorderPicker } from './ProfileBorderPicker';
 import { ProfilePhotoCrop } from './ProfilePhotoCrop';
 import { DEFAULT_PHOTO_CROP, type PhotoCrop } from './profilePhotoGeometry';
 import { NotificationDialog } from './NotificationDialog';
 import { motionReduced } from './motion';
-import { formatMemberSince } from './profileDisplay';
-import type { User } from './types';
+import { formatMemberSince, SEX_LABELS } from './profileDisplay';
+import { SexMark } from './SexMark';
+import type { Sex, User } from './types';
 import { SettingsNavigationContext } from './settingsNavigation';
 
 const PHOTO_ERRORS = new Set([
@@ -51,6 +54,12 @@ export function ProfileIdentity({
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user.display_name);
   const [username, setUsername] = useState(user.username);
+  // Chosen once: the draft exists only until the account has a sex.
+  const [sex, setSex] = useState<Sex | null>(null);
+  const [confirmingSex, setConfirmingSex] = useState(false);
+  const sexConfirmed = useRef(false);
+  const [bordersOpen, setBordersOpen] = useState(false);
+  const borderButton = useRef<HTMLButtonElement>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [cropSource, setCropSource] = useState<File | string | null>(null);
@@ -137,13 +146,16 @@ export function ProfileIdentity({
   const photoUrl = editing
     ? (preview ?? (removePhoto ? null : user.profile_photo_url))
     : user.profile_photo_url;
-  const textDirty = displayName.trim() !== user.display_name || username.trim() !== user.username;
+  const sexDirty = !user.sex && sex !== null;
+  const textDirty =
+    displayName.trim() !== user.display_name || username.trim() !== user.username || sexDirty;
   const dirty = textDirty || photo !== null || removePhoto;
   const joined = formatMemberSince(user.created_at);
 
   function edit() {
     setDisplayName(user.display_name);
     setUsername(user.username);
+    setSex(null);
     setPhoto(null);
     setPhotoSource(null);
     setPhotoCrop(DEFAULT_PHOTO_CROP);
@@ -155,6 +167,8 @@ export function ProfileIdentity({
 
   function close() {
     setEditing(false);
+    setSex(null);
+    setConfirmingSex(false);
     setPhoto(null);
     setPhotoSource(null);
     setCropSource(null);
@@ -163,8 +177,8 @@ export function ProfileIdentity({
     requestAnimationFrame(() => editButton.current?.focus());
   }
 
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function save(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     if (saving || !dirty) return;
     setError(null);
     setStatus(null);
@@ -177,6 +191,12 @@ export function ProfileIdentity({
       setError(usernameError);
       return;
     }
+    // A sex cannot be changed later, so saving one is confirmed first.
+    if (sexDirty && !sexConfirmed.current) {
+      setConfirmingSex(true);
+      return;
+    }
+    sexConfirmed.current = false;
     setSaving(true);
     let detailsSaved = false;
     try {
@@ -189,6 +209,7 @@ export function ProfileIdentity({
               ? { display_name: displayName.trim() }
               : {}),
             ...(username.trim() !== user.username ? { username: username.trim() } : {}),
+            ...(sexDirty && sex ? { sex } : {}),
           }),
         );
         detailsSaved = true;
@@ -230,15 +251,35 @@ export function ProfileIdentity({
             <Icon name="edit" />
           </button>
         ) : (
-          <ProfileAvatar className="profile-avatar" user={user} viewable />
+          <ProfileAvatar className="profile-avatar" user={user} viewable animated />
         )}
         <div className="profile-summary-copy">
           <strong>
-            {user.display_name}
+            <span className="profile-name">
+              {user.display_name}
+              <SexMark sex={user.sex} />
+            </span>
             {user.is_admin && <span className="profile-badge">Admin</span>}
           </strong>
           <span>{user.username}</span>
           {joined && <small>Joined {joined}</small>}
+          {!editing && (
+            <button
+              ref={borderButton}
+              type="button"
+              className="profile-border-chip"
+              aria-haspopup="dialog"
+              aria-label={
+                user.profile_border_name
+                  ? `Borders, wearing ${user.profile_border_name}`
+                  : 'Borders'
+              }
+              onClick={() => setBordersOpen(true)}
+            >
+              <Icon name="border" />
+              {user.profile_border_name ?? 'Borders'}
+            </button>
+          )}
         </div>
         {!editing && (
           <div className="profile-identity-actions">
@@ -338,6 +379,43 @@ export function ProfileIdentity({
             <small id={`${id}-username-hint`} className="auth-hint">
               {USERNAME_HINT}
             </small>
+            <div className="auth-field profile-sex-field">
+              <span id={`${id}-sex`}>Sex</span>
+              {user.sex ? (
+                <p className="profile-sex-locked">
+                  <Icon name={user.sex} />
+                  {SEX_LABELS[user.sex]}
+                  <Icon name="lock" />
+                  <span className="sr-only">Locked</span>
+                </p>
+              ) : (
+                <>
+                  <div
+                    className="segmented-control"
+                    role="radiogroup"
+                    aria-labelledby={`${id}-sex`}
+                    aria-describedby={`${id}-sex-hint`}
+                  >
+                    {(['male', 'female'] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        role="radio"
+                        aria-checked={sex === option}
+                        className={sex === option ? 'active' : undefined}
+                        disabled={saving}
+                        onClick={() => setSex(sex === option ? null : option)}
+                      >
+                        {SEX_LABELS[option]}
+                      </button>
+                    ))}
+                  </div>
+                  <small id={`${id}-sex-hint`} className="auth-hint">
+                    This cannot be changed once saved.
+                  </small>
+                </>
+              )}
+            </div>
             {error && (
               <p className="inline-error" role="alert">
                 {error}
@@ -356,6 +434,49 @@ export function ProfileIdentity({
         </>
       )}
       {status && <NotificationDialog message={status} onClose={() => setStatus(null)} />}
+      {confirmingSex && sex && (
+        <PopupDialog
+          title={`Save your sex as ${SEX_LABELS[sex]}?`}
+          className="profile-sex-confirm"
+          onClose={() => setConfirmingSex(false)}
+        >
+          <p>
+            It decides which strength standards your borders are measured against, and it cannot be
+            changed later.
+          </p>
+          <div className="popup-dialog-actions">
+            <button type="button" onClick={() => setConfirmingSex(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="popup-primary-action"
+              onClick={() => {
+                sexConfirmed.current = true;
+                setConfirmingSex(false);
+                void save();
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </PopupDialog>
+      )}
+      {bordersOpen && (
+        <ProfileBorderPicker
+          user={user}
+          onSaved={onSaved}
+          onClose={() => {
+            setBordersOpen(false);
+            requestAnimationFrame(() => borderButton.current?.focus());
+          }}
+          onSetSex={() => {
+            setBordersOpen(false);
+            requestedFocus.current = '.profile-sex-field [role="radio"]';
+            edit();
+          }}
+        />
+      )}
       {cropSource && (
         <ProfilePhotoCrop
           source={cropSource}

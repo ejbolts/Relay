@@ -175,6 +175,9 @@ def test_register_requires_explicit_login_before_access(anonymous_client):
         "created_at",
         "must_change_password",
         "profile_photo_url",
+        "sex",
+        "profile_border",
+        "profile_border_name",
     }
     assert body["profile_photo_url"] is None
     assert body["username"] == "lifter"
