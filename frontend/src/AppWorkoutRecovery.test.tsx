@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
-import { preparedWorkoutAutoSave } from './activeWorkoutSync';
+import { preparedWorkoutAutoSave, useActiveWorkoutSync } from './activeWorkoutSync';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { api, ApiError, revisionAfterSave } from './api';
@@ -55,6 +55,11 @@ vi.mock('./api', async (importOriginal) => {
     },
     revisionAfterSave: vi.fn(() => null),
   };
+});
+// Passes through to the real hook unless a test sets a sync state.
+vi.mock('./activeWorkoutSync', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./activeWorkoutSync')>();
+  return { ...original, useActiveWorkoutSync: vi.fn(original.useActiveWorkoutSync) };
 });
 const autoSave = vi.hoisted(() => ({ minutes: null as number | null }));
 vi.mock('./workoutAutoSaveChoice', async (importOriginal) => {
@@ -443,6 +448,50 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   applyReduceMotion(false);
+});
+
+describe('workout sync status in the logger', () => {
+  // Back to the real hook (the mock's original implementation) for later tests.
+  afterEach(() => vi.mocked(useActiveWorkoutSync).mockReset());
+  const syncState = (state: Partial<ReturnType<typeof useActiveWorkoutSync>>) =>
+    vi.mocked(useActiveWorkoutSync).mockReturnValue({
+      status: 'synced',
+      conflict: null,
+      error: null,
+      retry: vi.fn(),
+      resolve: vi.fn(),
+      ...state,
+    });
+
+  it('keeps retrying a failed sync in the background without a pill above the workout', async () => {
+    syncState({ status: 'offline', error: 'Failed to fetch' });
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    expect(container.querySelector('.movement-card')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Retry sync');
+    expect(document.body.textContent).not.toContain('Saved on device');
+    expect(container.querySelector('[aria-label="Sync workout across devices"]')).toBeNull();
+  });
+
+  it('floats the resolve button over the workout after the conflict dialog is closed', async () => {
+    const draft = storedDraft();
+    syncState({
+      status: 'conflict',
+      conflict: { local: draft, remote: { revision: 2, draft: { ...draft, name: 'Phone edit' } } },
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const close = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Close Workout sync conflict"]',
+    );
+    expect(close).not.toBeNull();
+    await act(async () => close!.click());
+    const reopen = [...container.querySelectorAll<HTMLButtonElement>('.workout-sync-reopen')];
+    expect(reopen.map((button) => button.textContent)).toEqual(['Resolve workout sync']);
+    expect(document.body.textContent).not.toContain('Resolve sync');
+    await act(async () => reopen[0].click());
+    expect(document.querySelector('[aria-label="Close Workout sync conflict"]')).not.toBeNull();
+  });
 });
 
 describe('cross-device live workout updates', () => {
@@ -1249,21 +1298,29 @@ describe('rest time controls', () => {
       );
       expect(window.location.hash).toBe('#body');
       await act(async () => vi.advanceTimersByTimeAsync(30_000));
-      // The minimised workout's GO pill waits above the tab bar.
-      const pill = document.querySelector('.rest-complete-pill');
-      expect(pill?.classList.contains('is-above-tab-bar')).toBe(true);
-      expect(pill?.textContent).toContain('Rest complete');
+      // The minimised workout's Start button rings a bell instead of showing a popup.
+      const start = () => container.querySelector<HTMLButtonElement>('.app-tab-start');
+      expect(start()?.classList.contains('ringing')).toBe(true);
+      expect(start()?.querySelector('.ringing-bell')).not.toBeNull();
+      expect(start()?.getAttribute('aria-label')).toBe(
+        'Rest complete. Resume workout at the next set',
+      );
+      expect(start()?.textContent).toContain('+0:00');
+      expect(document.querySelector('.rest-done-bell')).toBeNull();
       expect(systemNotification).not.toHaveBeenCalled();
       if (scheduled) expect(api.scheduleRestTimerNotification).toHaveBeenCalled();
-      // Dismissal and returning focus must not announce the same timer a second time.
-      await act(async () =>
-        document.querySelector<HTMLButtonElement>('[aria-label="Dismiss rest complete"]')!.click(),
-      );
+      // Tapping it opens the workout and stops the bell; returning focus must not ring again.
+      await act(async () => {
+        start()!.click();
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(window.location.hash).toBe('#log');
       await act(async () => {
         window.dispatchEvent(new Event('focus'));
         await vi.advanceTimersByTimeAsync(1000);
       });
-      expect(document.querySelector('.rest-complete-pill')).toBeNull();
+      expect(start()?.classList.contains('ringing')).toBe(false);
+      expect(document.querySelector('.rest-done-bell')).toBeNull();
     },
   );
 
@@ -1273,7 +1330,7 @@ describe('rest time controls', () => {
     expect(container.querySelector('[role="timer"]')).toBeNull();
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
-    expect(document.querySelector('.rest-complete-pill')).toBeNull();
+    expect(document.querySelector('.rest-done-bell')).toBeNull();
   });
 
   it('logs a tri-set round before starting the rest', async () => {
@@ -1343,7 +1400,7 @@ describe('rest time controls', () => {
     expect(api.cancelRestTimerNotification).toHaveBeenCalled();
     expect(headerMeta()?.textContent).toMatch(/^Live /);
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
-    expect(document.querySelector('.rest-complete-pill')).toBeNull();
+    expect(document.querySelector('.rest-done-bell')).toBeNull();
   });
 
   it('pauses the live time and the rest together, keeps the rest alert waiting, then resumes both', async () => {
@@ -1361,7 +1418,7 @@ describe('rest time controls', () => {
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(headerMeta()?.textContent).toBe(frozenHeader);
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
-    expect(document.querySelector('.rest-complete-pill')).toBeNull();
+    expect(document.querySelector('.rest-done-bell')).toBeNull();
     // Adjusting a paused rest changes what is left without starting it.
     await click('Add 30 seconds to the rest');
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
@@ -1373,7 +1430,9 @@ describe('rest time controls', () => {
       expect.objectContaining({ delay_seconds: 55 }),
     );
     await act(async () => vi.advanceTimersByTimeAsync(55_000));
-    expect(document.querySelector('.rest-complete-pill')?.textContent).toContain('Rest complete');
+    expect(document.querySelector('.rest-done-bell')?.getAttribute('aria-label')).toContain(
+      'Rest complete',
+    );
     expect(systemNotification).not.toHaveBeenCalled();
   });
 
@@ -1428,8 +1487,8 @@ describe('rest time controls', () => {
       vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
       await act(async () => vi.advanceTimersByTimeAsync(30_000));
       expect(systemNotification).toHaveBeenCalledTimes(scheduled ? 0 : 1);
-      // The GO pill is waiting when the app is opened again.
-      expect(document.querySelector('.rest-complete-pill')).not.toBeNull();
+      // The bell is ringing when the app is opened again.
+      expect(document.querySelector('.rest-done-bell')).not.toBeNull();
     },
   );
 
@@ -1437,10 +1496,12 @@ describe('rest time controls', () => {
     await startRest();
     vi.setSystemTime(Date.now() + 31_000);
     await act(async () => window.dispatchEvent(new Event('focus')));
-    expect(document.querySelector('.rest-complete-pill')?.textContent).toContain('Rest complete');
+    expect(document.querySelector('.rest-done-bell')?.getAttribute('aria-label')).toContain(
+      'Rest complete',
+    );
   });
 
-  it('turns a finished rest into a GO pill for the next set, with +30s and go to set', async () => {
+  it('rings a bell when the rest ends, with no popup, and tapping it goes to the next set', async () => {
     vi.useFakeTimers();
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     const draft = storedDraft();
@@ -1458,41 +1519,36 @@ describe('rest time controls', () => {
       scrolled.push(this);
     };
     await mount();
-    const pill = () => document.querySelector<HTMLElement>('.rest-complete-pill');
+    const bell = () => document.querySelector<HTMLButtonElement>('.rest-done-bell');
     await click('Complete set 1');
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
-    expect(pill()?.classList.contains('is-above-tab-bar')).toBe(false);
-    expect(pill()?.textContent).toContain('Next set ready');
-    expect(pill()?.querySelector('.rest-complete-detail')?.textContent).toBe(
-      'Bench press · Set 2 · 80 kg × 8',
-    );
+    // The rest timer's bottom-edge notch rings; there is no GO popup any more.
+    expect(bell()?.getAttribute('aria-label')).toBe('Rest complete. Go to Bench press, set 2');
+    expect(bell()?.querySelector('.ringing-bell')).not.toBeNull();
+    expect(document.querySelector('.rest-complete-pill')).toBeNull();
     expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(container.querySelector('.logger-screen')?.classList.contains('has-rest-notch')).toBe(
+      true,
+    );
     // It counts the time since the rest ended.
     await act(async () => vi.advanceTimersByTimeAsync(12_000));
-    expect(pill()?.querySelector('.rest-complete-over')?.textContent).toBe('+0:12');
-    // +30s rests a little longer, then the pill returns.
-    await act(async () =>
-      document.querySelector<HTMLButtonElement>('[aria-label="Rest 30 seconds more"]')!.click(),
-    );
-    expect(pill()).toBeNull();
-    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:30');
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
-    expect(pill()).not.toBeNull();
-    // Going to the set brings it into view.
+    expect(bell()?.querySelector('.rest-done-over')?.textContent).toBe('+0:12');
+    // Tapping it brings the next set into view and stops the bell.
     await act(async () => {
-      document.querySelector<HTMLButtonElement>('[aria-label="Go to Bench press, set 2"]')!.click();
+      bell()!.click();
       await vi.advanceTimersByTimeAsync(100);
     });
-    expect(pill()).toBeNull();
+    expect(bell()).toBeNull();
     expect(scrolled.some((element) => element.getAttribute('data-set-key') === 'set-0b')).toBe(
       true,
     );
-    // Logging the next set clears a waiting pill.
+    // Logging the next set also stops a ringing bell.
     await click('Complete set 2');
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
-    expect(pill()?.querySelector('.rest-complete-detail')?.textContent).toContain('Set 3');
+    expect(bell()?.getAttribute('aria-label')).toBe('Rest complete. Go to Bench press, set 3');
     await click('Complete set 3');
-    expect(pill()).toBeNull();
+    expect(bell()).toBeNull();
+    expect(container.querySelector('.app-tab-start')?.classList.contains('ringing')).toBe(false);
   });
 
   it("explains in a timed popup that an exercise's only set can't be deleted", async () => {
@@ -1632,6 +1688,69 @@ describe('rest time controls', () => {
       container.querySelector<HTMLButtonElement>('.undo-toast-action')!.click(),
     );
     expect(restControl()?.value).toBe('180');
+  });
+});
+
+describe('empty sets', () => {
+  const emptySet = (
+    key: string,
+    update: Partial<ActiveWorkoutDraft['movements'][0]['sets'][0]>,
+  ) => ({
+    ...createWorkoutSet('strength', undefined, false),
+    key,
+    restRevealed: true,
+    ...update,
+  });
+
+  it('opens an empty set at its reps instead of ticking it', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets.push(emptySet('empty', {}));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const tick = () => container.querySelector<HTMLButtonElement>('[aria-label="Complete set 2"]')!;
+    await act(async () => tick().click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[1].completed).toBe(false);
+    const row = container.querySelector('[data-set-key="empty"]')!;
+    const reps = row.querySelector<HTMLInputElement>('[data-set-field="reps"]')!;
+    expect(row.querySelector('.set-entry-error')?.textContent).toBe('Enter reps to log this set.');
+    expect(reps.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(reps);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(reps, '12');
+      reps.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(row.querySelector('.set-entry-error')).toBeNull();
+    expect(reps.hasAttribute('aria-invalid')).toBe(false);
+
+    await act(async () => tick().click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[1]).toMatchObject({
+      reps: 12,
+      completed: true,
+    });
+  });
+
+  it('saves an already ticked set with nothing entered as unticked', async () => {
+    const draft = storedDraft();
+    // Ticked before the check existed: only the automatic bodyweight is attached.
+    draft.movements[0].sets.unshift(
+      emptySet('ticked-empty', {
+        set_type: 'warmup',
+        warmup: true,
+        bodyweight_kg: 83.3,
+        completed: true,
+      }),
+    );
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    await confirmFinish();
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0] as WorkoutInput;
+    expect(payload.movements[0].sets.map((set) => set.completed)).toEqual([false, true]);
+    expect(payload.movements[1].sets.map((set) => set.completed)).toEqual([true]);
   });
 });
 

@@ -6,6 +6,7 @@ import { liveWorkoutDurationSeconds, type LiveWorkoutSummary } from './liveWorko
 import { useRestCountdown } from './restTimer';
 import { formatSeconds } from './utils';
 import type { useHomeLayout } from './useHomeLayout';
+import { RestOvertime, RingingBell } from './WorkoutRestTimer';
 
 const TABS: Array<{ tab: MainTab; label: string; icon: IconName }> = [
   { tab: 'dashboard', label: 'Home', icon: 'home' },
@@ -26,6 +27,7 @@ export function AppTabBar({
   active,
   workoutStartedAt,
   restEndsAt = null,
+  restDoneAt = null,
   liveSummary = null,
   inert = false,
   workoutSaving = false,
@@ -38,6 +40,8 @@ export function AppTabBar({
   workoutStartedAt: number | null;
   /** While the live workout's rest runs, the button shows a timer counting it down. */
   restEndsAt?: number | null;
+  /** When the rest ran out, while the next set waits: the button's bell rings until then. */
+  restDoneAt?: number | null;
   /** Lets the live timer include time from before a workout was resumed. */
   liveSummary?: Pick<
     LiveWorkoutSummary,
@@ -55,6 +59,7 @@ export function AppTabBar({
   const live = workoutStartedAt !== null && !workoutSaving;
   const restLeft = useRestCountdown(live ? restEndsAt : null);
   const resting = restLeft > 0;
+  const ringing = live && !resting && restDoneAt !== null;
   const editing = Boolean(homeLayout?.editing);
   const busy = Boolean(homeLayout?.saving || homeLayout?.dragging);
   const menuAvailable = Boolean(startMenu) && workoutStartedAt === null && !workoutSaving;
@@ -164,6 +169,11 @@ export function AppTabBar({
           </div>
         </>
       )}
+      {ringing && !inert && (
+        <span className="sr-only" role="status">
+          Rest complete.
+        </span>
+      )}
       <nav
         inert={inert}
         aria-hidden={inert || undefined}
@@ -175,7 +185,7 @@ export function AppTabBar({
           <button
             type="button"
             ref={startButton}
-            className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${open ? ' menu-open' : ''}`}
+            className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${ringing ? ' ringing' : ''}${open ? ' menu-open' : ''}`}
             data-guide-target="start"
             aria-expanded={menuAvailable ? open : undefined}
             aria-controls={menuAvailable ? 'start-menu' : undefined}
@@ -184,9 +194,11 @@ export function AppTabBar({
                 ? 'Saving workout'
                 : resting
                   ? `Resume active workout, rest ${formatSeconds(restLeft)} left`
-                  : live
-                    ? 'Resume active workout'
-                    : 'Start workout'
+                  : ringing
+                    ? 'Rest complete. Resume workout at the next set'
+                    : live
+                      ? 'Resume active workout'
+                      : 'Start workout'
             }
             disabled={workoutSaving}
             onClick={() => (menuAvailable ? setMenuOpen(!open) : onStart())}
@@ -194,6 +206,8 @@ export function AppTabBar({
             <span className="app-tab-start-bubble">
               {resting ? (
                 <Icon name="timer" />
+              ) : ringing ? (
+                <RingingBell />
               ) : live ? (
                 <LiveDot startedAt={workoutStartedAt} />
               ) : (
@@ -205,6 +219,8 @@ export function AppTabBar({
                 'Saving'
               ) : resting ? (
                 <span className="num">{formatSeconds(restLeft)}</span>
+              ) : ringing ? (
+                <RestOvertime endedAt={restDoneAt} className="num" />
               ) : live ? (
                 <LiveElapsed startedAt={workoutStartedAt} summary={liveSummary} />
               ) : (
