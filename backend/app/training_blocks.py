@@ -1,4 +1,7 @@
-"""Account-owned date boundaries. Workouts and lifetime records are never moved or reset."""
+"""Account-owned date boundaries. Workouts and lifetime records are never moved or reset.
+
+Besides the blocks, the account can keep one fresh-start date: a PR baseline outside blocks.
+"""
 
 from __future__ import annotations
 
@@ -54,6 +57,9 @@ class TrainingBlock(BlockInput):
 
 class TrainingBlocks(BaseModel):
     blocks: list[TrainingBlock] = Field(default_factory=list)
+    # An account-wide PR baseline that works with or without blocks: "Fresh start" records
+    # compare with workouts from this date on, while all-time records stay as they are.
+    fresh_start: date | None = None
 
 
 class TrainingBlockRead(TrainingBlock):
@@ -66,6 +72,13 @@ class TrainingBlocksRead(BaseModel):
     blocks: list[TrainingBlockRead]
     earlier_workout_count: int = 0
     history_start: date | None = None
+    fresh_start: date | None = None
+
+
+class FreshStartInput(BaseModel):
+    """The day PR baselines start again, or none to compare with all history only."""
+
+    start_date: date | None = None
 
 
 def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
@@ -75,7 +88,7 @@ def training_blocks(db: Session, user_id: str) -> TrainingBlocks:
     blocks = sorted(config.blocks, key=lambda block: block.start_date)
     for index, block in enumerate(blocks):
         block.end_date = blocks[index + 1].start_date if index + 1 < len(blocks) else None
-    return TrainingBlocks(blocks=blocks)
+    return TrainingBlocks(blocks=blocks, fresh_start=config.fresh_start)
 
 
 def block_on(config: TrainingBlocks, day: date) -> TrainingBlock | None:
@@ -99,6 +112,7 @@ def with_counts(db: Session, user_id: str, config: TrainingBlocks) -> TrainingBl
         ],
         earlier_workout_count=counts[0],
         history_start=min((day for day, _ in rows), default=None),
+        fresh_start=config.fresh_start,
     )
 
 
@@ -132,6 +146,18 @@ def create_block(payload: BlockInput, db: DbSession, user: CurrentUser) -> Train
     if any(block.start_date == payload.start_date for block in config.blocks):
         raise HTTPException(422, "A training block already starts on that date.")
     config.blocks.append(TrainingBlock(id=str(uuid4()), **payload.model_dump()))
+    return save_blocks(db, user.id, config)
+
+
+# Registered before "/{block_id}" so the path is not read as a block ID.
+@router.put("/fresh-start", response_model=TrainingBlocksRead)
+def set_fresh_start(
+    payload: FreshStartInput, db: DbSession, user: CurrentUser
+) -> TrainingBlocksRead:
+    if payload.start_date and payload.start_date > date.today():
+        raise HTTPException(422, "The fresh start cannot be in the future.")
+    config = training_blocks(db, user.id)
+    config.fresh_start = payload.start_date
     return save_blocks(db, user.id, config)
 
 

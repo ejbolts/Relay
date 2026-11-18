@@ -4,6 +4,7 @@ import json
 import uuid
 from bisect import bisect_right
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import date, timedelta
 from typing import Annotated, Literal
 
@@ -130,6 +131,7 @@ from .tracker_schemas import (
     ExerciseTrendPointRead,
     ExerciseUpdate,
     HeatmapDay,
+    HistoryBestRead,
     ImportBatchRead,
     ImportUndoRead,
     MachinePhotoCaptionUpdate,
@@ -2274,6 +2276,7 @@ def list_personal_records(
     exercise_id: str | None = None,
     workout_id: str | None = None,
     include_blocks: bool = False,
+    include_fresh_start: bool = False,
 ) -> list[PersonalRecordRead]:
     query = (
         select(PersonalRecord)
@@ -2297,74 +2300,88 @@ def list_personal_records(
             query.order_by(PersonalRecord.achieved_date.desc(), PersonalRecord.created_at.desc())
         )
     ]
-    if include_blocks:
-        config = training_blocks(db, user.id)
-        if config.blocks:
-            workouts = list(
-                db.scalars(
-                    workout_query(user.id).where(
-                        TrainingWorkout.workout_date >= config.blocks[0].start_date
-                    )
+    unit = preferred_weight_unit(db, user.id)
+
+    def scoped_records(
+        workouts: list[TrainingWorkout],
+        scope: Literal["block", "fresh_start"],
+        block: TrainingBlock | None = None,
+    ) -> Iterator[PersonalRecordRead]:
+        """Records against a scope's own baseline: the workouts it was given."""
+        prefix = f"block:{block.id}" if block else "fresh"
+        for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
+            if (workout_id and workout.id != workout_id) or (
+                exercise_id and movement.exercise_id != exercise_id
+            ):
+                continue
+            weight = normalized_weight(item.weight_kg, unit)
+            bodyweight = bodyweights.on(workout.workout_date, item.bodyweight_kg)
+            relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
+            yield PersonalRecordRead(
+                id=f"{prefix}:{item.id}:{record_type.value}",
+                scope=scope,
+                block_id=block.id if block else None,
+                block_name=block.name if block else None,
+                exercise_id=movement.exercise_id,
+                workout_id=workout.id,
+                set_id=item.id,
+                achieved_date=workout.workout_date,
+                record_type=record_type,
+                value=relative_strength(item.weight_kg, bodyweight)
+                if relative
+                else weight
+                if record_type == PersonalRecordType.WEIGHT
+                else float(item.reps),
+                unit="× BW"
+                if relative
+                else unit
+                if record_type == PersonalRecordType.WEIGHT
+                else "reps",
+                normalized_weight=weight,
+                weight_kg=item.weight_kg,
+                bodyweight_kg=bodyweight,
+                formula="weight / bodyweight" if relative else None,
+                exercise_name=movement.exercise.name,
+            )
+
+    config = training_blocks(db, user.id) if include_blocks or include_fresh_start else None
+    if include_blocks and config and config.blocks:
+        workouts = list(
+            db.scalars(
+                workout_query(user.id).where(
+                    TrainingWorkout.workout_date >= config.blocks[0].start_date
                 )
             )
-            grouped = defaultdict(list)
-            for workout in workouts:
-                block = block_on(config, workout.workout_date)
-                if block:
-                    grouped[block.id].append(workout)
-            unit = preferred_weight_unit(db, user.id)
-            for block in config.blocks:
-                for workout, movement, item, record_type in personal_record_events(
-                    grouped[block.id], bodyweights
-                ):
-                    if (workout_id and workout.id != workout_id) or (
-                        exercise_id and movement.exercise_id != exercise_id
-                    ):
-                        continue
-                    weight = normalized_weight(item.weight_kg, unit)
-                    bodyweight = bodyweights.on(workout.workout_date, item.bodyweight_kg)
-                    relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
-                    records.append(
-                        PersonalRecordRead(
-                            id=f"block:{block.id}:{item.id}:{record_type.value}",
-                            scope="block",
-                            block_id=block.id,
-                            block_name=block.name,
-                            exercise_id=movement.exercise_id,
-                            workout_id=workout.id,
-                            set_id=item.id,
-                            achieved_date=workout.workout_date,
-                            record_type=record_type,
-                            value=relative_strength(item.weight_kg, bodyweight)
-                            if relative
-                            else weight
-                            if record_type == PersonalRecordType.WEIGHT
-                            else float(item.reps),
-                            unit="× BW"
-                            if relative
-                            else unit
-                            if record_type == PersonalRecordType.WEIGHT
-                            else "reps",
-                            normalized_weight=weight,
-                            weight_kg=item.weight_kg,
-                            bodyweight_kg=bodyweight,
-                            formula="weight / bodyweight" if relative else None,
-                            exercise_name=movement.exercise.name,
-                        )
-                    )
-    # One achievement per metric/set: lifetime wins if it is also a block record.
-    lifetime = {
-        (record.set_id, record.record_type) for record in records if record.scope == "all_time"
-    }
+        )
+        grouped = defaultdict(list)
+        for workout in workouts:
+            block = block_on(config, workout.workout_date)
+            if block:
+                grouped[block.id].append(workout)
+        for block in config.blocks:
+            records.extend(scoped_records(grouped[block.id], "block", block))
+    if include_fresh_start and config and config.fresh_start:
+        fresh_workouts = db.scalars(
+            workout_query(user.id).where(TrainingWorkout.workout_date >= config.fresh_start)
+        )
+        records.extend(scoped_records(list(fresh_workouts), "fresh_start"))
+    # One achievement per metric/set, from the broadest scope: all-time, then the fresh start,
+    # then the block. Fresh-start records are only listed when asked for, because older apps
+    # read any scope other than "block" as all-time.
+    broadest: dict[tuple[str, PersonalRecordType], PersonalRecordRead] = {}
+    for record in records:
+        key = (record.set_id, record.record_type)
+        kept = broadest.get(key)
+        if kept is None or RECORD_SCOPE_RANK[record.scope] < RECORD_SCOPE_RANK[kept.scope]:
+            broadest[key] = record
     return sorted(
-        [
-            record
-            for record in records
-            if record.scope == "all_time" or (record.set_id, record.record_type) not in lifetime
-        ],
+        [record for record in records if broadest[(record.set_id, record.record_type)] is record],
         key=lambda record: record.achieved_date,
         reverse=True,
     )
+
+
+RECORD_SCOPE_RANK = {"all_time": 0, "fresh_start": 1, "block": 2}
 
 
 def block_stats(
@@ -2425,7 +2442,12 @@ def training_block_summary(
         )
     )
     records = list_personal_records(
-        db=db, user=user, exercise_id=None, workout_id=None, include_blocks=True
+        db=db,
+        user=user,
+        exercise_id=None,
+        workout_id=None,
+        include_blocks=True,
+        include_fresh_start=False,
     )
     return TrainingBlockSummaryRead(
         block=block_stats(block, workouts, records, today),
@@ -2557,6 +2579,8 @@ def exercise_history_baselines(
     bodyweights = BodyweightHistory(db, user.id)
     relative_bests = {}
     block_relative_bests = defaultdict(dict)
+    fresh_weights: dict[str, dict[float, int]] = defaultdict(dict)
+    fresh_relative_bests: dict[str, float] = {}
     reps_by_weight: dict[str, dict[float, int]] = {}
     latest: dict[str, ExerciseLatestSessionRead] = {}
     latest_movement_ids: dict[str, str] = {}
@@ -2588,6 +2612,13 @@ def exercise_history_baselines(
         )
         if ratio is not None:
             relative_bests[row.exercise_id] = max(relative_bests.get(row.exercise_id, 0), ratio)
+        if config.fresh_start and row.workout_date >= config.fresh_start:
+            fresh = fresh_weights[row.exercise_id]
+            fresh[weight] = max(fresh.get(weight, 0), row.reps)
+            if ratio is not None:
+                fresh_relative_bests[row.exercise_id] = max(
+                    fresh_relative_bests.get(row.exercise_id, 0), ratio
+                )
         block = block_on(config, row.workout_date)
         if block:
             if ratio is not None:
@@ -2631,6 +2662,16 @@ def exercise_history_baselines(
                 )
                 for block_id, values in block_weights[exercise_id].items()
             ],
+            fresh_start_best=HistoryBestRead(
+                best_relative_strength=fresh_relative_bests.get(exercise_id),
+                best_weight_kg=max(fresh_weights[exercise_id]),
+                reps_by_weight=[
+                    WeightRepsRead(weight_kg=weight, reps=reps)
+                    for weight, reps in sorted(fresh_weights[exercise_id].items())
+                ],
+            )
+            if fresh_weights.get(exercise_id)
+            else None,
         )
         for exercise_id, weights in reps_by_weight.items()
     ]

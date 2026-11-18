@@ -1,4 +1,5 @@
 import { bodyGoalKind } from './bodyMeasurementHistory';
+import { isAllTimeRecord } from './recordScope';
 import { blockOn } from './trainingBlocks';
 import { daysBetween, weekStartFor } from './trainingSummary';
 import type { BodyWeightGoal, PersonalRecord, TrackedWorkout, TrainingBlock } from './types';
@@ -78,7 +79,7 @@ export function blockSuggestion({
 
   // Still training, but the records have dried up after a spell that had plenty.
   const daysAgo = (date: string) => daysBetween(date, today);
-  const allTime = records.filter((record) => record.scope !== 'block');
+  const allTime = records.filter(isAllTimeRecord);
   const recent = allTime.filter(
     (record) => daysAgo(record.achieved_date) >= 0 && daysAgo(record.achieved_date) < STALL_DAYS,
   );

@@ -21,7 +21,10 @@ export function blockOn(blocks: TrainingBlock[], day: string): TrainingBlock | n
   return [...blocks].reverse().find((block) => block.start_date <= day) ?? null;
 }
 
-/** An all-time achievement also qualifies when browsing its training block. */
+/**
+ * An all-time or fresh-start achievement also qualifies when browsing its training block.
+ * Without a block, only block records are left out.
+ */
 export function recordsForBlock(records: PersonalRecord[], block: TrainingBlock | null) {
   return records.filter((record) =>
     block

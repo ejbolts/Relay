@@ -1,5 +1,6 @@
 import type {
   ExerciseHistoryBaseline,
+  HistoryBest,
   TrackedWorkout,
   WorkoutSetInput,
   TrainingBlock,
@@ -118,6 +119,8 @@ export function calculateScopedDraftPrs(
   olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
   blocks: TrainingBlock[],
   measurements: BodyMeasurement[] = [],
+  /** The account's fresh start; lifts from this date form a separate PR baseline. */
+  freshStart: string | null = null,
 ) {
   const lifetime = calculateDraftPrs(
     movements,
@@ -127,39 +130,54 @@ export function calculateScopedDraftPrs(
     olderHistory,
     measurements,
   );
-  if (!blocks.length) return lifetime;
+  const fresh = freshStart && workoutDate >= freshStart ? freshStart : null;
+  if (!blocks.length && !fresh) return lifetime;
   const block = blockOn(blocks, workoutDate);
-  const scopedOlder = new Map<string, ExerciseHistoryBaseline>();
-  if (block)
+  const since = (
+    start: string,
+    end: string | null | undefined,
+    bestOf: (baseline: ExerciseHistoryBaseline) => HistoryBest | null | undefined,
+  ) => {
+    const scopedOlder = new Map<string, ExerciseHistoryBaseline>();
     for (const [id, baseline] of olderHistory ?? []) {
-      const best = baseline.block_bests?.find((item) => item.block_id === block.id);
+      const best = bestOf(baseline);
       if (best) scopedOlder.set(id, { ...baseline, ...best });
     }
-  const scoped = block
-    ? calculateDraftPrs(
-        movements,
-        historicalWorkouts.filter(
-          (workout) =>
-            workout.workout_date >= block.start_date &&
-            (!block.end_date || workout.workout_date < block.end_date),
-        ),
-        excludedWorkoutId,
-        workoutDate,
-        scopedOlder,
-        measurements,
+    return calculateDraftPrs(
+      movements,
+      historicalWorkouts.filter(
+        (workout) => workout.workout_date >= start && (!end || workout.workout_date < end),
+      ),
+      excludedWorkoutId,
+      workoutDate,
+      scopedOlder,
+      measurements,
+    );
+  };
+  const none = new Map<string, Map<string, string[]>>();
+  const sinceFresh = fresh ? since(fresh, null, (baseline) => baseline.fresh_start_best) : none;
+  const inBlock = block
+    ? since(block.start_date, block.end_date, (baseline) =>
+        baseline.block_bests?.find((item) => item.block_id === block.id),
       )
-    : new Map<string, Map<string, string[]>>();
+    : none;
+  const lower = (label: string) => `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  // Each record is named once, by its broadest scope: all-time, then fresh start, then block.
   return new Map(
     movements.map((movement) => {
       const badges = new Map<string, string[]>();
       for (const item of movement.sets) {
         const all = lifetime.get(movement.key)?.get(item.key) ?? [];
-        const current = scoped.get(movement.key)?.get(item.key) ?? [];
+        const freshLabels = (sinceFresh.get(movement.key)?.get(item.key) ?? []).filter(
+          (label) => !all.includes(label),
+        );
+        const blockLabels = (inBlock.get(movement.key)?.get(item.key) ?? []).filter(
+          (label) => !all.includes(label) && !freshLabels.includes(label),
+        );
         const labels = [
-          ...all.map((label) => `All-time ${label.charAt(0).toLowerCase()}${label.slice(1)}`),
-          ...current
-            .filter((label) => !all.includes(label))
-            .map((label) => `Block ${label.charAt(0).toLowerCase()}${label.slice(1)}`),
+          ...all.map((label) => `All-time ${lower(label)}`),
+          ...freshLabels.map((label) => `Fresh start ${lower(label)}`),
+          ...blockLabels.map((label) => `Block ${lower(label)}`),
         ];
         if (labels.length) badges.set(item.key, labels);
       }

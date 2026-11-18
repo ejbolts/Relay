@@ -108,6 +108,76 @@ describe('relative strength PRs', () => {
     expect([...lifetime.get('movement')!.values()]).toEqual([['All-time relative strength PR']]);
   });
 });
+
+describe('fresh start PRs', () => {
+  const workouts = [history([set(120, 8)]), history([set(90, 8)], 'since', '2026-06-01')];
+  const scoped = (
+    weight: number,
+    blocks: Parameters<typeof calculateScopedDraftPrs>[5] = [],
+    freshStart: string | null = '2026-06-01',
+    date = '2026-06-10',
+    history = workouts,
+    older: Map<string, ExerciseHistoryBaseline> | null = null,
+  ) => [
+    ...calculateScopedDraftPrs(
+      [draft([set(weight, 8)])],
+      history,
+      null,
+      date,
+      older,
+      blocks,
+      [],
+      freshStart,
+    )
+      .get('movement')!
+      .values(),
+  ];
+
+  it('compares with lifts since the fresh start without training blocks', () => {
+    expect(scoped(95)).toEqual([['Fresh start weight PR']]);
+    expect(scoped(125)).toEqual([['All-time weight PR']]);
+    expect(scoped(90)).toEqual([]);
+    expect(scoped(95, [], null)).toEqual([]);
+    // A workout dated before the fresh start only compares with all history.
+    expect(scoped(95, [], '2026-06-01', '2026-05-20')).toEqual([]);
+  });
+
+  it('names a record by its broadest scope when a block also applies', () => {
+    const lateBlock = [{ id: 'block', name: 'Rebuild', start_date: '2026-06-05', end_date: null }];
+    expect(scoped(95, lateBlock)).toEqual([['Fresh start weight PR']]);
+    // The early block's 100 kg stands, but the lift beats everything since the fresh start.
+    const earlyBlock = [{ id: 'block', name: 'Rebuild', start_date: '2026-05-01', end_date: null }];
+    const withBlockLift = [...workouts, history([set(100, 8)], 'block', '2026-05-02')];
+    expect(scoped(95, earlyBlock, '2026-06-01', '2026-06-10', withBlockLift)).toEqual([
+      ['Fresh start weight PR'],
+    ]);
+    expect(scoped(105, earlyBlock, null, '2026-06-10', withBlockLift)).toEqual([
+      ['Block weight PR'],
+    ]);
+  });
+
+  it('uses the server-condensed bests since the fresh start', () => {
+    const older = new Map<string, ExerciseHistoryBaseline>([
+      [
+        bench.id,
+        {
+          exercise_id: bench.id,
+          best_weight_kg: 120,
+          reps_by_weight: [{ weight_kg: 120, reps: 8 }],
+          fresh_start_best: {
+            best_weight_kg: 100,
+            reps_by_weight: [{ weight_kg: 100, reps: 8 }],
+          },
+          latest: null,
+        },
+      ],
+    ]);
+    expect(scoped(105, [], '2026-06-01', '2026-06-10', [], older)).toEqual([
+      ['Fresh start weight PR'],
+    ]);
+    expect(scoped(100, [], '2026-06-01', '2026-06-10', [], older)).toEqual([]);
+  });
+});
 function draft(sets: WorkoutSetInput[], exercise = bench, key = 'movement'): WorkoutDraftMovement {
   return {
     key,

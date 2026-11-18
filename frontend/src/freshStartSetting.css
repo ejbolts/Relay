@@ -1,0 +1,22 @@
+.fresh-start-date input {
+  min-height: 2.5rem;
+  border: 1px solid var(--p-line-strong, var(--line));
+  border-radius: 8px;
+  padding: 0 0.6rem;
+  background: var(--p-surface-2, #0f1412);
+  color: var(--p-ink, var(--ink));
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  color-scheme: dark;
+}
+
+:root[data-colour-mode='light'] .fresh-start-date input {
+  color-scheme: light;
+}
+
+.fresh-start-error {
+  margin: 0.75rem 0 0;
+  color: var(--p-danger, #f08a7e);
+  font-size: 0.75rem;
+}

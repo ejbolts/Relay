@@ -14,6 +14,7 @@ import {
   workoutAutoSaveMinutes,
 } from './workoutAutoSaveChoice';
 import { WorkoutAutoSaveSetting } from './WorkoutAutoSaveSetting';
+import { FreshStartSetting } from './FreshStartSetting';
 import { ActiveWorkoutSyncDialog } from './ActiveWorkoutSyncDialog';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import {
@@ -455,6 +456,7 @@ import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
+import { recordBadgeLabel, recordScopeLabel } from './recordScope';
 import {
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
@@ -601,7 +603,7 @@ function recordTypeLabel(type: PersonalRecord['record_type']): string {
 
 function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): string {
   return [
-    `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)} · ${recordDisplayValue(record, unit)}`,
+    `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)} · ${recordDisplayValue(record, unit)}`,
     record.record_type === 'reps_at_weight' && record.weight_kg != null
       ? ` @ ${formatWeight(record.weight_kg, unit)}`
       : '',
@@ -3920,6 +3922,7 @@ function WorkoutLogger({
         olderHistory,
         trainingBlocks.blocks,
         measurements,
+        trainingBlocks.fresh_start ?? null,
       ),
     [
       movements,
@@ -3929,6 +3932,7 @@ function WorkoutLogger({
       workoutDate,
       olderHistory,
       trainingBlocks.blocks,
+      trainingBlocks.fresh_start,
       measurements,
     ],
   );
@@ -6561,9 +6565,11 @@ function MovementCard({
                     <b className="pr-badge" title={prBadges.get(item.key)?.join(', ')}>
                       {prBadges.get(item.key)?.some((label) => label.startsWith('All-time'))
                         ? 'All-time PR'
-                        : prBadges.get(item.key)?.some((label) => label.startsWith('Block'))
-                          ? 'Block PR'
-                          : 'PR'}
+                        : prBadges.get(item.key)?.some((label) => label.startsWith('Fresh start'))
+                          ? 'Fresh start PR'
+                          : prBadges.get(item.key)?.some((label) => label.startsWith('Block'))
+                            ? 'Block PR'
+                            : 'PR'}
                     </b>
                   )}
                 </>,
@@ -9327,14 +9333,13 @@ export function ProgressScreen({
                                   {recordIds.has(point.workout_id) && (
                                     <em className="pr-chip">
                                       {defaultView
-                                        ? personalRecords.some(
-                                            (record) =>
-                                              record.workout_id === point.workout_id &&
-                                              record.exercise_id === exerciseId &&
-                                              record.scope !== 'block',
+                                        ? recordBadgeLabel(
+                                            personalRecords.filter(
+                                              (record) =>
+                                                record.workout_id === point.workout_id &&
+                                                record.exercise_id === exerciseId,
+                                            ),
                                           )
-                                          ? 'All-time PR'
-                                          : 'Block PR'
                                         : 'PR'}
                                     </em>
                                   )}
@@ -9773,6 +9778,7 @@ function SettingsScreen({
                   </div>
                 </section>
                 {account && <WorkoutAutoSaveSetting userId={account.id} />}
+                {account && <FreshStartSetting />}
                 <WorkoutTypesSettings
                   collapsible
                   types={workoutTypes.types}
@@ -11029,7 +11035,7 @@ function HistoryWorkoutCard({
                 machinePhotos={movement.machine_photos}
                 formatSet={(item) => setResult(item, weightUnit)}
                 describeRecord={(record) =>
-                  `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)}`
+                  `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
                 }
               />
             ) : (
@@ -11197,15 +11203,11 @@ function HistorySetFlow({
                   .filter((record) => record.set_id === item.id)
                   .map(
                     (record) =>
-                      `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)}`,
+                      `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`,
                   )
                   .join(', ')}
               >
-                {personalRecords.some(
-                  (record) => record.set_id === item.id && record.scope !== 'block',
-                )
-                  ? 'All-time PR'
-                  : 'Block PR'}
+                {recordBadgeLabel(personalRecords.filter((record) => record.set_id === item.id))}
               </strong>
             )}
           </div>
