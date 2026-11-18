@@ -11197,11 +11197,6 @@ html {
   line-height: 1.25;
 }
 
-.cardio-progress-grid article > .cardio-progress-comparison {
-  min-height: 1.25em;
-  color: #64c8f3;
-}
-
 .cardio-metrics-dialog {
   padding: 1rem;
 }

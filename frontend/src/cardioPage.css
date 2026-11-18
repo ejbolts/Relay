@@ -130,9 +130,6 @@
   color: var(--p-muted);
   font-size: 0.6875rem;
 }
-.cardio-screen .cardio-progress-grid article > .cardio-progress-comparison {
-  color: var(--p-ink-2);
-}
 .cardio-screen .cardio-history-header {
   display: block;
   margin-bottom: 0.35rem;
