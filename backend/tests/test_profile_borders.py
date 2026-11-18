@@ -16,6 +16,7 @@ from app.database import SessionLocal
 from app.models import CardioSession, TrainingWorkout, User
 from app.profile_borders import (
     BORDERS,
+    EVENTS,
     METRICS,
     Window,
     border_stats,
@@ -468,6 +469,24 @@ def test_every_border_has_artwork_in_the_app_at_its_rarity():
     assert set(drawn) == {border.key for border in BORDERS}
     for border in BORDERS:
         assert int(drawn[border.key]) == RARITY_ORDER.index(border.rarity) + 1, border.key
+
+
+def test_limited_editions_are_common_and_drawn_at_their_rarity():
+    # Seasons and events reward turning up, so they enter at common; a season tops out at epic.
+    season = [find_border(f"season-1-{tier}", date(2026, 11, 19)) for tier in (1, 2, 3)]
+    assert [border.rarity for border in season] == ["common", "rare", "epic"]
+    assert {event.rarity for event in EVENTS} == {"common"}
+    shapes = Path(__file__).resolve().parents[2] / "frontend/src/profileBorderShapes.tsx"
+    source = shapes.read_text(encoding="utf-8")
+    grades = re.search(r"grade: \(\[([\d, ]+)\] as const\)\[tier - 1\]", source)
+    assert grades is not None
+    assert [int(grade) for grade in grades[1].split(",")] == [
+        RARITY_ORDER.index(border.rarity) + 1 for border in season
+    ]
+    looks = source[source.index("const EVENT_LOOKS") :]
+    looks = looks[: looks.index("\n};")]
+    drawn = dict(re.findall(r"^  '?([a-z-]+)'?: \{\s*grade: (\d)", looks, re.M))
+    assert drawn == {event.slug: str(RARITY_ORDER.index(event.rarity) + 1) for event in EVENTS}
 
 
 def test_seasons_are_thirds_of_the_year_from_september_2026():

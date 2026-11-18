@@ -1201,7 +1201,7 @@ const SEASON_KEY = /^season-(\d{1,3})-([1-3])$/;
 
 function seasonSpec(number: number, tier: number): Spec {
   return {
-    grade: ([2, 3, 4] as const)[tier - 1],
+    grade: ([1, 2, 3] as const)[tier - 1],
     palette: SEASON_LOOKS[(number - 1) % SEASON_LOOKS.length],
     glyph: 'seven',
     crestText: `S${number}`,
@@ -1214,23 +1214,23 @@ function seasonSpec(number: number, tier: number): Spec {
 
 const EVENT_LOOKS: Record<string, Omit<Spec, 'bannerText'> & { spans?: boolean }> = {
   'new-year': {
-    grade: 3,
+    grade: 1,
     palette: P.newYear,
     glyph: 'firework',
     sides: 'crystal',
     detail: starlight,
   },
-  winter: { grade: 3, palette: P.winter, glyph: 'snowflake', sides: 'crystal', detail: starlight },
+  winter: { grade: 1, palette: P.winter, glyph: 'snowflake', sides: 'crystal', detail: starlight },
   halloween: {
-    grade: 2,
+    grade: 1,
     palette: P.halloween,
     glyph: 'pumpkin',
     sides: 'flame',
     detail: starlight,
   },
-  christmas: { grade: 3, palette: P.christmas, glyph: 'tree', detail: baubles },
+  christmas: { grade: 1, palette: P.christmas, glyph: 'tree', detail: baubles },
   summer: {
-    grade: 3,
+    grade: 1,
     palette: P.summer,
     glyph: 'sun',
     sides: 'flame',

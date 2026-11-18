@@ -10,8 +10,9 @@ rarest look, mythic, lives: effort alone (more minutes, more sessions) tops out 
 
 Some borders are limited editions. A season is a third of the year, and each has three tiers for
 the days trained during it; yearly events (New Year, Winter, Halloween, Christmas, Summer) each
-have one. A limited border can only be earned while its window is open: training logged after the
-window closes does not count, but a border earned in time stays earned.
+have one. They reward turning up rather than strength, so they are common, and only a season's
+higher tiers climb to rare and epic. A limited border can only be earned while its window is open:
+training logged after the window closes does not count, but a border earned in time stays earned.
 """
 
 from __future__ import annotations
@@ -318,9 +319,9 @@ PLATE_LIFTS = {"bench_kg", "squat_kg", "deadlift_kg"}
 # Season 1 is September to December 2026.
 FIRST_SEASON = (2026, 3)
 SEASON_TIERS: tuple[tuple[str, Rarity, int], ...] = (
-    ("Contender", "rare", 15),
-    ("Challenger", "epic", 40),
-    ("Champion", "legendary", 70),
+    ("Contender", "common", 15),
+    ("Challenger", "rare", 40),
+    ("Champion", "epic", 70),
 )
 
 
@@ -352,11 +353,11 @@ class Event:
 
 
 EVENTS = (
-    Event("new-year", "New Year", "epic", 16, 1, 1),
-    Event("winter", "Winter", "epic", 36, 6, 8),
-    Event("halloween", "Halloween", "rare", 13, 10, 10),
-    Event("christmas", "Christmas", "epic", 12, 12, 12),
-    Event("summer", "Summer", "epic", 36, 12, 2),
+    Event("new-year", "New Year", "common", 16, 1, 1),
+    Event("winter", "Winter", "common", 36, 6, 8),
+    Event("halloween", "Halloween", "common", 13, 10, 10),
+    Event("christmas", "Christmas", "common", 12, 12, 12),
+    Event("summer", "Summer", "common", 36, 12, 2),
 )
 EVENTS_BY_SLUG = {event.slug: event for event in EVENTS}
 # Events open from Christmas 2026; earlier windows were never offered.
