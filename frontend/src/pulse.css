@@ -1837,6 +1837,37 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   content: none;
 }
 
+/* Today's outline sends out a soft, repeating ripple so the current day is easy to find. The ring
+   starts exactly over the outline (2px wide, 1px offset) and fades before reaching a neighbour. */
+.calendar-panel .calendar-day.today::after {
+  position: absolute;
+  inset: -3px;
+  width: auto;
+  height: auto;
+  border-radius: 13px;
+  background: none;
+  content: '';
+  pointer-events: none;
+  transform: none;
+  animation: calendar-today-ripple 2.4s ease-out infinite;
+}
+
+@keyframes calendar-today-ripple {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 90%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-panel .calendar-day.today::after {
+    content: none;
+  }
+}
+
 .calendar-panel .calendar-day:hover {
   background: var(--p-surface-2);
 }
