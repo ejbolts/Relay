@@ -65,6 +65,385 @@ const PULSE = `M${at(R, 0)}${[58, 122, 238, 302]
   )
   .join('')}A${R} ${R} 0 0 1 ${at(R, 359.9)}`;
 
+/** A chevron pointing outward at the bottom of the ring, as on a rank badge. */
+const chevron = (deg: number) => `M${at(56.6, deg - 3)}L${at(60, deg)}L${at(56.6, deg + 3)}`;
+
+/** A gold point standing out from the ring, for a family's grandest tier. */
+const point = (deg: number) => `M${at(56.2, deg - 3.4)}L${at(62.4, deg)}L${at(56.2, deg + 3.4)}Z`;
+
+const TIER_INK = ['#cbd5e1', '#fbbf24', '#fde68a'];
+
+/**
+ * How a tiered border shows its tier: one, two or three rank chevrons at the bottom. From tier 2
+ * the ring gains gold rims; a family's grandest tier adds a beaded gold frame and a glint.
+ */
+function tierMarks(id: string, tier: number, options: { grand?: boolean; sheen?: boolean } = {}) {
+  const grand = options.grand ?? tier >= 3;
+  const sheen = options.sheen ?? grand;
+  const angles = Array.from({ length: tier }, (_, index) => 180 + (index - (tier - 1) / 2) * 8.5);
+  return (
+    <>
+      {tier >= 2 && (
+        <>
+          <Fade
+            id={`${id}tier`}
+            across
+            stops={[
+              [0, '#fef3c7'],
+              [0.5, '#f59e0b'],
+              [1, '#fde68a'],
+            ]}
+          />
+          <path
+            d={`${arc(47.3, 0, 359.9)}${arc(56.7, 0, 359.9)}`}
+            fill="none"
+            stroke={`url(#${id}tier)`}
+            strokeWidth={1.1}
+          />
+        </>
+      )}
+      {tier >= 2 && (
+        <path
+          d={dots([45, 135, 225, 315], 56.7, 1.5)}
+          fill={`url(#${id}tier)`}
+          stroke="#0b1220"
+          strokeWidth={0.5}
+        />
+      )}
+      {grand && (
+        <path
+          d={around(8, 22.5).map(point).join('')}
+          fill={`url(#${id}tier)`}
+          stroke="#0b1220"
+          strokeWidth={0.5}
+          strokeLinejoin="round"
+        />
+      )}
+      <path
+        d={angles.map(chevron).join('')}
+        fill="none"
+        stroke="#0b1220"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d={angles.map(chevron).join('')}
+        fill="none"
+        stroke={TIER_INK[Math.min(tier, 3) - 1]}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {sheen && <Sheen width={4} colour="#fff7d6" />}
+    </>
+  );
+}
+
+const LIFT_PLATES = {
+  bench: ['#f87171', '#b91c1c', '#fff'],
+  squat: ['#60a5fa', '#1d4ed8', '#fff'],
+  deadlift: ['#fde047', '#ca8a04', '#422006'],
+} as const;
+
+/**
+ * Plates loaded either side of the ring, as on a bar: one, two or three a side by tier. Each is
+ * outlined so it reads on any ring colour.
+ */
+function loadedPlates(tier: number, colour: string) {
+  const plates = Array.from({ length: tier }, (_, index) => 108.4 + index * 3.6);
+  const rects = (x: number, index: number) => {
+    const height = 26 - index * 2;
+    return (
+      <g key={x}>
+        {[x, 120 - x - 3].map((left) => (
+          <rect
+            key={left}
+            x={left}
+            y={C - height / 2}
+            width={3}
+            height={height}
+            rx={0.8}
+            fill={colour}
+            stroke="#0b1220"
+            strokeWidth={0.7}
+          />
+        ))}
+      </g>
+    );
+  };
+  return (
+    <>
+      <path d="M104.6 60H120M15.4 60H0" stroke="#0b1220" strokeWidth={3.4} />
+      <path d="M104.6 60H120M15.4 60H0" stroke="#d1d5db" strokeWidth={1.8} />
+      {plates.map(rects)}
+    </>
+  );
+}
+
+/** A lift club tier: its bumper plate, with plates loaded by tier and gold lettering at the top. */
+function plateTier(id: string, lift: keyof typeof LIFT_PLATES, tier: number) {
+  const [light, dark, ink] = LIFT_PLATES[lift];
+  return (
+    <>
+      {plate(id, light, dark, tier >= 3 ? '#fde68a' : ink)}
+      {tierMarks(id, tier)}
+      {loadedPlates(tier, tier >= 3 ? '#fbbf24' : dark)}
+    </>
+  );
+}
+
+const FLAMES = {
+  fire: {
+    band: ['#dc2626', '#f97316', '#fbbf24'],
+    flames: ['#b91c1c', '#ea580c', '#f59e0b'],
+    embers: '#fde047',
+    rim: '#fef3c7',
+  },
+  // White-hot: the flames burn blue.
+  blue: {
+    band: ['#1e3a8a', '#2563eb', '#7dd3fc'],
+    flames: ['#1d4ed8', '#38bdf8', '#e0f2fe'],
+    embers: '#f0f9ff',
+    rim: '#e0f2fe',
+  },
+} as const;
+
+/** A ring of flames, for the long streaks. */
+function flameRing(id: string, colours: (typeof FLAMES)[keyof typeof FLAMES], tall = 1) {
+  return (
+    <>
+      <Fade
+        id={`${id}a`}
+        stops={[
+          [0, colours.band[0]],
+          [0.55, colours.band[1]],
+          [1, colours.band[2]],
+        ]}
+      />
+      <Fade
+        id={`${id}b`}
+        stops={[
+          [0, colours.flames[0]],
+          [0.6, colours.flames[1]],
+          [1, colours.flames[2]],
+        ]}
+      />
+      <path
+        className="profile-border-flames"
+        d={around(15)
+          .map((deg, index) => flame(deg, 53.6, [7.2, 4.6, 5.8][index % 3] * tall, 8.5))
+          .join('')}
+        fill={`url(#${id}b)`}
+      />
+      <path
+        className="profile-border-embers"
+        d={around(15, 12)
+          .map((deg, index) => flame(deg, 53.4, [3, 4, 3.4][index % 3] * tall, 5))
+          .join('')}
+        fill={colours.embers}
+      />
+      <Band width={6.4} stroke={`url(#${id}a)`} />
+      <Band r={49.4} width={0.9} stroke={colours.rim} opacity={0.85} />
+    </>
+  );
+}
+
+const LAURELS = [
+  // Regular: a bronze ring with a sprig either side.
+  { band: ['#b45309', '#78350f'], leaves: ['#fcd34d', '#b45309'], at: [90, 112, 134], star: false },
+  // Centurion: a red ring with a full gold laurel.
+  {
+    band: ['#ef4444', '#7f1d1d'],
+    leaves: ['#fde68a', '#d97706'],
+    at: [46, 68, 90, 112, 134, 156],
+    star: true,
+  },
+  // Iron Legion: imperial purple with a laurel that nearly closes.
+  {
+    band: ['#7c3aed', '#2e1065'],
+    leaves: ['#fef3c7', '#f59e0b'],
+    at: [30, 50, 70, 90, 110, 130, 150],
+    star: true,
+  },
+] as const;
+
+/** A laurel wreath, for the workout count. */
+function laurel(id: string, tier: number) {
+  const look = LAURELS[tier - 1];
+  return (
+    <>
+      <Fade
+        id={`${id}a`}
+        across
+        stops={[
+          [0, look.band[0]],
+          [1, look.band[1]],
+        ]}
+      />
+      <Fade
+        id={`${id}b`}
+        stops={[
+          [0, look.leaves[0]],
+          [1, look.leaves[1]],
+        ]}
+      />
+      <Band width={6.4} stroke={`url(#${id}a)`} />
+      <path
+        d={`${arc(48.4, 0, 359.9)}${arc(55.6, 0, 359.9)}`}
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth={tier >= 2 ? 1 : 0.6}
+        opacity={tier >= 2 ? 1 : 0.6}
+      />
+      <path
+        d={look.at
+          .flatMap((deg) => [leaf(57.4, deg, 10.4, 4.4, 42), leaf(57.4, 360 - deg, 10.4, 4.4, -42)])
+          .join('')}
+        fill={`url(#${id}b)`}
+        stroke="#78350f"
+        strokeWidth={0.4}
+      />
+      {look.star && (
+        <path
+          d={star(56, 0, tier >= 3 ? 5 : 4.2, tier >= 3 ? 2.1 : 1.8)}
+          fill="#fde68a"
+          stroke="#78350f"
+          strokeWidth={0.4}
+        />
+      )}
+      {tierMarks(id, tier)}
+    </>
+  );
+}
+
+/** The bench, squat and deadlift colours around one ring; the crown waits for the top tier. */
+function bigThree(id: string, tier: number) {
+  return (
+    <>
+      <Fade
+        id={`${id}a`}
+        stops={[
+          [0, '#fef3c7'],
+          [1, '#d97706'],
+        ]}
+      />
+      {(['#dc2626', '#eab308', '#2563eb'] as const).map((colour, index) => (
+        <path
+          key={colour}
+          d={arc(R, index * 120 + 3, index * 120 + 117)}
+          fill="none"
+          stroke={colour}
+          strokeWidth={7.4}
+        />
+      ))}
+      {tier >= 2 && (
+        <path
+          d={dots([120, 240], R, 2.6)}
+          fill={`url(#${id}a)`}
+          stroke="#78350f"
+          strokeWidth={0.5}
+        />
+      )}
+      {tier >= 3 && (
+        <path
+          d="M52.4 10.4l-1.6-8 4.8 3.6L60 .4l4.4 5.6 4.8-3.6-1.6 8z"
+          fill={`url(#${id}a)`}
+          stroke="#78350f"
+          strokeWidth={0.5}
+          strokeLinejoin="round"
+        />
+      )}
+      {tierMarks(id, tier)}
+    </>
+  );
+}
+
+const RECORD_METALS = [
+  ['#fed7aa', '#f97316', '#9a3412'],
+  ['#fde68a', '#f59e0b', '#b45309'],
+  ['#f5f3ff', '#a78bfa', '#5b21b6'],
+] as const;
+
+/** A ring broken open by a record, in bronze, gold and then violet. */
+function recordBreaker(id: string, tier: number) {
+  const [light, mid, dark] = RECORD_METALS[tier - 1];
+  return (
+    <>
+      <Fade
+        id={`${id}a`}
+        across
+        stops={[
+          [0, light],
+          [0.5, mid],
+          [1, dark],
+        ]}
+      />
+      <path d={arc(R, 54, 381)} fill="none" stroke={`url(#${id}a)`} strokeWidth={7} />
+      <path
+        d={
+          `M${at(48.5, 54.2)}L${at(52.4, 48.6)}L${at(55.5, 54.2)}Z` +
+          `M${at(48.5, 20.8)}L${at(50.6, 25.6)}L${at(53, 22.6)}L${at(55.5, 26.4)}L${at(55.5, 20.8)}Z`
+        }
+        fill={mid}
+      />
+      <path
+        d={
+          `M${at(54.6, 33)}L${at(60, 30)}L${at(58.6, 37.4)}Z` +
+          `M${at(56.6, 42.6)}L${at(60.4, 44.4)}L${at(57.6, 48)}Z` +
+          `M${at(50, 37.5)}L${at(53.4, 35)}L${at(53, 40.4)}Z`
+        }
+        fill={tier >= 3 ? '#fde68a' : light}
+      />
+      {tierMarks(id, tier)}
+    </>
+  );
+}
+
+/** A heartbeat around the ring. The heart joins at tier 2, and the beat glows at tier 3. */
+function cardiomaniac(id: string, tier: number) {
+  return (
+    <>
+      <Fade
+        id={`${id}a`}
+        across
+        stops={[
+          [0, tier >= 3 ? '#be123c' : '#991b1b'],
+          [1, '#450a0a'],
+        ]}
+      />
+      <Band width={8} stroke={`url(#${id}a)`} />
+      {tier >= 3 && (
+        <path
+          d={PULSE}
+          fill="none"
+          stroke="#fb7185"
+          strokeWidth={3.6}
+          strokeLinejoin="round"
+          opacity={0.45}
+        />
+      )}
+      <path
+        d={PULSE}
+        fill="none"
+        stroke={tier >= 3 ? '#ffe4e6' : '#fda4af'}
+        strokeWidth={1.4}
+        strokeLinejoin="round"
+      />
+      {tier >= 2 && (
+        <path
+          className="profile-border-heart"
+          d="M60 11.6C52.6 6.6 53.4.8 57.2.8 58.9.8 59.8 2 60 3c.2-1 1.1-2.2 2.8-2.2 3.8 0 4.6 5.8-2.8 10.8z"
+          fill="#fb7185"
+          stroke="#450a0a"
+          strokeWidth={0.5}
+        />
+      )}
+      {tierMarks(id, tier)}
+    </>
+  );
+}
+
 const SHAPES: Record<string, (id: string) => ReactNode> = {
   'first-steps': (id) => (
     <>
@@ -118,14 +497,15 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
         strokeDasharray="0.62 0.38"
         strokeLinecap="round"
       />
-      <rect x={55} y={106.4} width={10} height={8.2} rx={1.8} fill="#ede9fe" />
+      <rect x={55} y={5.4} width={10} height={8.2} rx={1.8} fill="#ede9fe" />
       <path
-        d="M56.9 106.6v-2.4a3.1 3.1 0 0 1 6.2 0v2.4"
+        d="M56.9 5.6v-2.4a3.1 3.1 0 0 1 6.2 0v2.4"
         fill="none"
         stroke="#ede9fe"
         strokeWidth={1.7}
       />
-      <circle cx={C} cy={110.4} r={1.2} fill="#5b21b6" />
+      <circle cx={C} cy={9.4} r={1.2} fill="#5b21b6" />
+      {tierMarks(id, 1)}
     </>
   ),
   'monday-club': (id) => (
@@ -236,76 +616,19 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
       <path d={ticks(around(12, 15), 50.2, 53.8)} stroke="#fff" strokeWidth={1} opacity={0.85} />
     </>
   ),
-  centurion: (id) => (
-    <>
-      <Fade
-        id={`${id}a`}
-        across
-        stops={[
-          [0, '#ef4444'],
-          [1, '#7f1d1d'],
-        ]}
-      />
-      <Fade
-        id={`${id}b`}
-        stops={[
-          [0, '#fde68a'],
-          [1, '#d97706'],
-        ]}
-      />
-      <Band width={6.4} stroke={`url(#${id}a)`} />
-      <path
-        d={`${arc(48.4, 0, 359.9)}${arc(55.6, 0, 359.9)}`}
-        fill="none"
-        stroke="#fbbf24"
-        strokeWidth={1}
-      />
-      <path
-        d={[46, 68, 90, 112, 134, 156]
-          .flatMap((deg) => [leaf(57.4, deg, 10.4, 4.4, 42), leaf(57.4, 360 - deg, 10.4, 4.4, -42)])
-          .join('')}
-        fill={`url(#${id}b)`}
-        stroke="#78350f"
-        strokeWidth={0.4}
-      />
-      <path d={star(56, 0, 4.2, 1.8)} fill="#fde68a" stroke="#78350f" strokeWidth={0.4} />
-    </>
-  ),
+  regular: (id) => laurel(id, 1),
+  centurion: (id) => laurel(id, 2),
+  'iron-legion': (id) => laurel(id, 3),
   'hundred-days': (id) => (
     <>
-      <Fade
-        id={`${id}a`}
-        stops={[
-          [0, '#dc2626'],
-          [0.55, '#f97316'],
-          [1, '#fbbf24'],
-        ]}
-      />
-      <Fade
-        id={`${id}b`}
-        stops={[
-          [0, '#b91c1c'],
-          [0.6, '#ea580c'],
-          [1, '#f59e0b'],
-        ]}
-      />
-      <path
-        className="profile-border-flames"
-        d={around(15)
-          .map((deg, index) => flame(deg, 53.6, [7.2, 4.6, 5.8][index % 3], 8.5))
-          .join('')}
-        fill={`url(#${id}b)`}
-      />
-      <path
-        className="profile-border-embers"
-        d={around(15, 12)
-          .map((deg, index) => flame(deg, 53.4, [3, 4, 3.4][index % 3], 5))
-          .join('')}
-        fill="#fde047"
-      />
-      <Band width={6.4} stroke={`url(#${id}a)`} />
-      <Band r={49.4} width={0.9} stroke="#fef3c7" opacity={0.85} />
-      <Sheen width={3} colour="#fef9c3" />
+      {flameRing(id, FLAMES.fire)}
+      {tierMarks(id, 2, { sheen: true })}
+    </>
+  ),
+  unbreakable: (id) => (
+    <>
+      {flameRing(id, FLAMES.blue, 1.18)}
+      {tierMarks(id, 3)}
     </>
   ),
   'whale-lifter': (id) => (
@@ -326,6 +649,7 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
         stroke="#0c4a6e"
         strokeWidth={0.5}
       />
+      {tierMarks(id, 1)}
     </>
   ),
   'hundred-hours': (id) => (
@@ -394,6 +718,7 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
         strokeWidth={0.5}
       />
       <Sheen width={5} />
+      {tierMarks(id, 2, { grand: true, sheen: false })}
     </>
   ),
   'pound-for-pound': (id) => (
@@ -421,44 +746,18 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
       <path d="M60 107.6l4.4 6.8h-8.8z" fill="#fbbf24" />
     </>
   ),
-  'bench-club': (id) => plate(id, '#f87171', '#b91c1c', '#fff'),
-  'squat-club': (id) => plate(id, '#60a5fa', '#1d4ed8', '#fff'),
-  'deadlift-club': (id) => plate(id, '#fde047', '#ca8a04', '#422006'),
-  'big-three': (id) => (
-    <>
-      <Fade
-        id={`${id}a`}
-        stops={[
-          [0, '#fef3c7'],
-          [1, '#d97706'],
-        ]}
-      />
-      {(['#dc2626', '#eab308', '#2563eb'] as const).map((colour, index) => (
-        <path
-          key={colour}
-          d={arc(R, index * 120 + 3, index * 120 + 117)}
-          fill="none"
-          stroke={colour}
-          strokeWidth={7.4}
-        />
-      ))}
-      <path
-        d={`${arc(47.7, 0, 359.9)}${arc(56.3, 0, 359.9)}`}
-        fill="none"
-        stroke="#fbbf24"
-        strokeWidth={1.2}
-      />
-      <path d={dots([120, 240], R, 2.6)} fill={`url(#${id}a)`} stroke="#78350f" strokeWidth={0.5} />
-      <path
-        d="M52.4 10.4l-1.6-8 4.8 3.6L60 .4l4.4 5.6 4.8-3.6-1.6 8z"
-        fill={`url(#${id}a)`}
-        stroke="#78350f"
-        strokeWidth={0.5}
-        strokeLinejoin="round"
-      />
-      <Sheen width={5} colour="#fef9c3" />
-    </>
-  ),
+  'bench-club-1': (id) => plateTier(id, 'bench', 1),
+  'bench-club-2': (id) => plateTier(id, 'bench', 2),
+  'bench-club-3': (id) => plateTier(id, 'bench', 3),
+  'squat-club-1': (id) => plateTier(id, 'squat', 1),
+  'squat-club-2': (id) => plateTier(id, 'squat', 2),
+  'squat-club-3': (id) => plateTier(id, 'squat', 3),
+  'deadlift-club-1': (id) => plateTier(id, 'deadlift', 1),
+  'deadlift-club-2': (id) => plateTier(id, 'deadlift', 2),
+  'deadlift-club-3': (id) => plateTier(id, 'deadlift', 3),
+  'big-three-1': (id) => bigThree(id, 1),
+  'big-three-2': (id) => bigThree(id, 2),
+  'big-three-3': (id) => bigThree(id, 3),
   'hat-trick': (id) => (
     <>
       <Fade
@@ -478,35 +777,9 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
       />
     </>
   ),
-  'record-breaker': (id) => (
-    <>
-      <Fade
-        id={`${id}a`}
-        across
-        stops={[
-          [0, '#fde68a'],
-          [0.5, '#f59e0b'],
-          [1, '#b45309'],
-        ]}
-      />
-      <path d={arc(R, 54, 381)} fill="none" stroke={`url(#${id}a)`} strokeWidth={7} />
-      <path
-        d={
-          `M${at(48.5, 54.2)}L${at(52.4, 48.6)}L${at(55.5, 54.2)}Z` +
-          `M${at(48.5, 20.8)}L${at(50.6, 25.6)}L${at(53, 22.6)}L${at(55.5, 26.4)}L${at(55.5, 20.8)}Z`
-        }
-        fill="#f59e0b"
-      />
-      <path
-        d={
-          `M${at(54.6, 33)}L${at(60, 30)}L${at(58.6, 37.4)}Z` +
-          `M${at(56.6, 42.6)}L${at(60.4, 44.4)}L${at(57.6, 48)}Z` +
-          `M${at(50, 37.5)}L${at(53.4, 35)}L${at(53, 40.4)}Z`
-        }
-        fill="#fde68a"
-      />
-    </>
-  ),
+  'record-breaker-1': (id) => recordBreaker(id, 1),
+  'record-breaker-2': (id) => recordBreaker(id, 2),
+  'record-breaker-3': (id) => recordBreaker(id, 3),
   'marathon-month': (id) => (
     <>
       <Fade
@@ -534,27 +807,9 @@ const SHAPES: Record<string, (id: string) => ReactNode> = {
       />
     </>
   ),
-  cardiomaniac: (id) => (
-    <>
-      <Fade
-        id={`${id}a`}
-        across
-        stops={[
-          [0, '#991b1b'],
-          [1, '#450a0a'],
-        ]}
-      />
-      <Band width={8} stroke={`url(#${id}a)`} />
-      <path d={PULSE} fill="none" stroke="#fda4af" strokeWidth={1.4} strokeLinejoin="round" />
-      <path
-        className="profile-border-heart"
-        d="M60 11.6C52.6 6.6 53.4.8 57.2.8 58.9.8 59.8 2 60 3c.2-1 1.1-2.2 2.8-2.2 3.8 0 4.6 5.8-2.8 10.8z"
-        fill="#fb7185"
-        stroke="#450a0a"
-        strokeWidth={0.5}
-      />
-    </>
-  ),
+  'cardiomaniac-1': (id) => cardiomaniac(id, 1),
+  'cardiomaniac-2': (id) => cardiomaniac(id, 2),
+  'cardiomaniac-3': (id) => cardiomaniac(id, 3),
   hybrid: (id) => (
     <>
       <Fade id={`${id}a`} across stops={STEEL} />

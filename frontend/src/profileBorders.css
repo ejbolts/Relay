@@ -406,10 +406,68 @@
   stroke-width: 2.4;
 }
 
+/* One pip per tier, filled once earned. */
+.border-tile-pips {
+  display: flex;
+  justify-content: center;
+  gap: 0.2rem;
+}
+
+.border-tile-pips > i {
+  width: 0.4rem;
+  height: 0.4rem;
+  border: 1px solid var(--p-muted);
+  border-radius: 50%;
+}
+
+.border-tile-pips > i.is-earned {
+  border-color: var(--p-gold);
+  background: var(--p-gold);
+}
+
+/* Tier switcher in the preview. */
+.border-tiers {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.border-tiers button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 2.6rem;
+  min-height: 2rem;
+  justify-content: center;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0 0.6rem;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.border-tiers button.is-earned {
+  color: var(--p-ink-2);
+}
+
+.border-tiers button[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  color: var(--p-ink);
+}
+
+.border-tiers .pulse-icon {
+  width: 0.7rem;
+  height: 0.7rem;
+}
+
 .border-tile-name {
   font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }

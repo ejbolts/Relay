@@ -107,6 +107,9 @@ class Border:
     target: float | tuple[float, float]
     # Extra colour for the challenge, added after its requirement.
     note: str = ""
+    # Tiered borders share a family; tier 1 is the first to earn.
+    family: str | None = None
+    tier: int | None = None
 
     @property
     def measure(self) -> Metric:
@@ -118,35 +121,116 @@ class Border:
         return {"male": self.target[0], "female": self.target[1]}.get(sex or "")
 
 
+# A border family's tiers share an idea and a metric; each tier is its own border to earn and
+# wear, and later tiers are harder and look grander.
+def tiers(
+    family: str,
+    metric: str,
+    *steps: tuple[str, str, Rarity, float | tuple[float, float]]
+    | tuple[str, str, Rarity, float | tuple[float, float], str],
+) -> tuple[Border, ...]:
+    """A family's borders from (key, name, rarity, target[, note]), easiest first."""
+    return tuple(
+        Border(
+            step[0],
+            step[1],
+            step[2],
+            metric,
+            step[3],
+            step[4] if len(step) > 4 else "",
+            family=family,
+            tier=index,
+        )
+        for index, step in enumerate(steps, start=1)
+    )
+
+
+# Lift standards in kg as (men, women). A 20 kg bar with 20 kg plates: one plate a side is
+# 60 kg, two is 100 kg, three is 140 kg, four is 180 kg and five is 220 kg.
 # In the order the app lists them: by group, then roughly by how long each takes to earn.
 BORDERS: tuple[Border, ...] = (
     Border("first-steps", "First Steps", "common", "workouts", 5),
     Border("seven-straight", "Seven Straight", "common", "log_streak", 7),
-    Border("locked-in", "Locked In", "rare", "log_streak", 30),
+    *tiers(
+        "streak",
+        "log_streak",
+        ("locked-in", "Locked In", "rare", 50),
+        ("hundred-days", "Hundred Days", "epic", 100),
+        ("unbreakable", "Unbreakable", "legendary", 500),
+    ),
+    *tiers(
+        "workouts",
+        "workouts",
+        ("regular", "Regular", "common", 50),
+        ("centurion", "Centurion", "rare", 100),
+        ("iron-legion", "Iron Legion", "legendary", 500),
+    ),
     Border("monday-club", "Never Miss a Monday", "rare", "monday_streak", 8),
     Border("dawn-patrol", "Dawn Patrol", "rare", "early_starts", 15),
     Border("night-shift", "Night Shift", "rare", "late_starts", 15),
     Border("iron-habit", "Iron Habit", "epic", "week_streak", 12),
     Border("four-seasons", "Four Seasons", "epic", "months_trained", 12),
-    Border("centurion", "Centurion", "epic", "workouts", 100),
-    Border("hundred-days", "Hundred Days", "legendary", "log_streak", 100),
-    Border("whale-lifter", "Whale Lifter", "rare", "tonnes", 150, "the weight of a blue whale"),
+    *tiers(
+        "tonnes",
+        "tonnes",
+        ("whale-lifter", "Whale Lifter", "rare", 150, "the weight of a blue whale"),
+        ("million-kilo", "Million Kilo Club", "legendary", 1000, "a million kilos"),
+    ),
     Border("hundred-hours", "Hundred Hours", "rare", "training_hours", 100),
-    Border("million-kilo", "Million Kilo Club", "legendary", "tonnes", 1000, "a million kilos"),
+    *tiers(
+        "bench",
+        "bench_kg",
+        ("bench-club-1", "Bench Club I", "rare", (60, 40)),
+        ("bench-club-2", "Bench Club II", "epic", (100, 60)),
+        ("bench-club-3", "Bench Club III", "legendary", (140, 80)),
+    ),
+    *tiers(
+        "squat",
+        "squat_kg",
+        ("squat-club-1", "Squat Club I", "rare", (100, 60)),
+        ("squat-club-2", "Squat Club II", "epic", (140, 100)),
+        ("squat-club-3", "Squat Club III", "legendary", (180, 140)),
+    ),
+    *tiers(
+        "deadlift",
+        "deadlift_kg",
+        ("deadlift-club-1", "Deadlift Club I", "rare", (140, 100)),
+        ("deadlift-club-2", "Deadlift Club II", "epic", (180, 140)),
+        ("deadlift-club-3", "Deadlift Club III", "legendary", (220, 180)),
+    ),
+    *tiers(
+        "big-three",
+        "big_three_kg",
+        ("big-three-1", "Big Three I", "rare", (300, 180)),
+        ("big-three-2", "Big Three II", "epic", (400, 250)),
+        # 1,000 lb for men.
+        ("big-three-3", "Big Three III", "legendary", (453.6, 320)),
+    ),
     Border("pound-for-pound", "Pound for Pound", "rare", "bench_body_weight_pct", (100, 60)),
-    Border("bench-club", "Bench Club", "epic", "bench_kg", (100, 50)),
-    Border("squat-club", "Squat Club", "epic", "squat_kg", (140, 80)),
-    Border("deadlift-club", "Deadlift Club", "epic", "deadlift_kg", (180, 100)),
-    Border("big-three", "Big Three", "legendary", "big_three_kg", (420, 230)),
     Border("hat-trick", "Hat-trick", "common", "records_in_workout", 3),
-    Border("record-breaker", "Record Breaker", "rare", "records", 100),
+    *tiers(
+        "records",
+        "records",
+        ("record-breaker-1", "Record Breaker I", "common", 50),
+        ("record-breaker-2", "Record Breaker II", "rare", 250),
+        ("record-breaker-3", "Record Breaker III", "epic", 1000),
+    ),
     Border("marathon-month", "Marathon Month", "rare", "cardio_month_km", 42.2),
-    Border("cardiomaniac", "Cardiomaniac", "epic", "cardio_week_minutes", 300),
+    *tiers(
+        "cardio-week",
+        "cardio_week_minutes",
+        ("cardiomaniac-1", "Cardiomaniac I", "common", 150),
+        ("cardiomaniac-2", "Cardiomaniac II", "epic", 300),
+        ("cardiomaniac-3", "Cardiomaniac III", "legendary", 600),
+    ),
     Border("hybrid", "Hybrid Athlete", "epic", "hybrid_weeks", 4),
     Border("everest", "Everest", "legendary", "climbed_m", 8849),
 )
 
 BORDERS_BY_KEY = {border.key: border for border in BORDERS}
+
+# Single lifts, whose targets also read as plates on the bar.
+PLATE_LIFTS = {"bench_kg", "squat_kg", "deadlift_kg"}
 
 
 class BorderProgress(BaseModel):
@@ -165,6 +249,9 @@ class BorderRead(BaseModel):
     # Missing only for a strength border while the account has not set its sex.
     progress: BorderProgress | None = None
     needs_sex: bool = False
+    # A tiered border's family and its place in it, from 1; both are None for a single border.
+    family: str | None = None
+    tier: int | None = None
 
 
 class BordersRead(BaseModel):
@@ -363,10 +450,18 @@ def _shown(border: Border, value: float, unit: str) -> float:
     return round(value, 1)
 
 
+def plates(target_kg: float) -> int | None:
+    """How many 20 kg plates a side load a 20 kg bar to this weight, when it is a whole number."""
+    count = (target_kg - 20) / 40
+    return int(count) if count >= 1 and count.is_integer() else None
+
+
 def _target_text(border: Border, target: float, unit: str) -> str:
     if border.measure.weight:
         # A whole number of the account's unit: 100 kg reads as 220 lb.
-        return f"{_number(round(_shown(border, target, unit)))} {unit}"
+        text = f"{_number(round(_shown(border, target, unit)))} {unit}"
+        count = plates(target) if border.metric in PLATE_LIFTS else None
+        return f"{text} · {count} plate{'s' if count > 1 else ''}" if count else text
     return f"{_number(target)}%" if border.measure.unit == "%" else _number(target)
 
 
@@ -394,6 +489,8 @@ def borders_for(db: Session, user: User) -> BordersRead:
             rarity=border.rarity,
             requirement="",
             unlocked=is_unlocked(border, stats, user.sex),
+            family=border.family,
+            tier=border.tier,
         )
         target = border.target_for(user.sex)
         if target is None:

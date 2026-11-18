@@ -14,7 +14,7 @@ from test_sharing import befriend, profile, share
 
 from app.database import SessionLocal
 from app.models import TrainingWorkout, User
-from app.profile_borders import BORDERS, METRICS, border_stats, longest_run
+from app.profile_borders import BORDERS, METRICS, border_stats, longest_run, plates
 
 BENCH, SQUAT, DEADLIFT = "Barbell Bench Press", "Back Squat", "Deadlift"
 
@@ -87,8 +87,35 @@ def stats(test_client: TestClient, today: date | None = None) -> dict[str, float
 def test_every_border_has_one_key_and_a_known_metric():
     assert len({border.key for border in BORDERS}) == len(BORDERS)
     assert all(border.metric in METRICS for border in BORDERS)
-    by_sex = {border.key for border in BORDERS if isinstance(border.target, tuple)}
-    assert by_sex == {"pound-for-pound", "bench-club", "squat-club", "deadlift-club", "big-three"}
+    by_sex = {border.family or border.key for border in BORDERS if isinstance(border.target, tuple)}
+    assert by_sex == {"pound-for-pound", "bench", "squat", "deadlift", "big-three"}
+
+
+RARITY_ORDER = ["common", "rare", "epic", "legendary"]
+
+
+def test_each_family_climbs_in_target_and_rarity_from_tier_one():
+    families: dict[str, list] = {}
+    for border in BORDERS:
+        if border.family:
+            families.setdefault(border.family, []).append(border)
+    assert len(families) == 9
+    for family, tiers in families.items():
+        assert [border.tier for border in tiers] == list(range(1, len(tiers) + 1)), family
+        assert len({border.metric for border in tiers}) == 1, family
+        targets = [
+            border.target if isinstance(border.target, tuple) else (border.target,)
+            for border in tiers
+        ]
+        for lower, higher in zip(targets, targets[1:], strict=False):
+            assert all(a < b for a, b in zip(lower, higher, strict=True)), family
+        ranks = [RARITY_ORDER.index(border.rarity) for border in tiers]
+        assert ranks == sorted(ranks) and ranks[-1] > ranks[0], family
+
+
+def test_plates_count_twenty_kilo_plates_a_side_on_a_twenty_kilo_bar():
+    assert [plates(weight) for weight in (60, 100, 140, 180, 220)] == [1, 2, 3, 4, 5]
+    assert plates(20) is None and plates(40) is None and plates(80) is None
 
 
 def test_longest_run_counts_evenly_spaced_dates():
@@ -161,21 +188,27 @@ def test_strength_borders_use_the_standard_for_the_accounts_sex(client, other_cl
     for lifter in (client, other_client):
         workout(lifter, "2026-01-05", BENCH, [{"weight_kg": 50, "reps": 3}])
 
-    waiting = borders(client)["bench-club"]
+    waiting = borders(client)["bench-club-1"]
     assert waiting["needs_sex"] is True and waiting["progress"] is None
-    assert waiting["requirement"] == "Bench press 100 kg (men) or 50 kg (women)"
+    assert waiting["requirement"] == "Bench press 60 kg · 1 plate (men) or 40 kg (women)"
     assert waiting["unlocked"] is False
-    assert wear(client, "bench-club").status_code == 403
+    assert (waiting["family"], waiting["tier"]) == ("bench", 1)
+    assert wear(client, "bench-club-1").status_code == 403
 
     assert set_sex(client, "female").status_code == 200
     assert set_sex(other_client, "male").status_code == 200
-    hers, his = borders(client)["bench-club"], borders(other_client)["bench-club"]
-    assert hers["requirement"] == "Bench press 50 kg" and hers["unlocked"] is True
-    assert hers["progress"] == {"current": 50, "target": 50, "unit": "kg"}
-    assert his["requirement"] == "Bench press 100 kg" and his["unlocked"] is False
-    assert his["progress"] == {"current": 50, "target": 100, "unit": "kg"}
-    assert wear(client, "bench-club").status_code == 200
-    assert wear(other_client, "bench-club").status_code == 403
+    hers, his = borders(client), borders(other_client)
+    assert hers["bench-club-1"]["requirement"] == "Bench press 40 kg"
+    assert hers["bench-club-1"]["unlocked"] is True
+    assert hers["bench-club-1"]["progress"] == {"current": 50, "target": 40, "unit": "kg"}
+    assert hers["bench-club-2"]["requirement"] == "Bench press 60 kg · 1 plate"
+    assert hers["bench-club-2"]["unlocked"] is False
+    assert his["bench-club-1"]["requirement"] == "Bench press 60 kg · 1 plate"
+    assert his["bench-club-1"]["unlocked"] is False
+    assert his["bench-club-1"]["progress"] == {"current": 50, "target": 60, "unit": "kg"}
+    assert wear(client, "bench-club-1").status_code == 200
+    assert wear(client, "bench-club-2").status_code == 403
+    assert wear(other_client, "bench-club-1").status_code == 403
 
 
 def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
@@ -205,9 +238,16 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
     assert numbers["tonnes"] == (420 + 150 + 140 + 360) / 1000
 
     listed = borders(client)
-    assert listed["squat-club"]["unlocked"] and listed["deadlift-club"]["unlocked"]
+    earned = {key for key, item in listed.items() if item["unlocked"]}
+    # Men: bench 60 / 100, squat 100 / 140 / 180, deadlift 140 / 180 / 220, total 300 / 400 / 454.
+    assert {"bench-club-1", "squat-club-1", "squat-club-2"} <= earned
+    assert {"deadlift-club-1", "deadlift-club-2", "big-three-1", "big-three-2"} <= earned
+    assert not earned & {"bench-club-2", "squat-club-3", "deadlift-club-3", "big-three-3"}
     assert listed["pound-for-pound"]["unlocked"]
-    assert not listed["bench-club"]["unlocked"] and not listed["big-three"]["unlocked"]
+    assert listed["deadlift-club-3"]["requirement"] == "Deadlift 220 kg · 5 plates"
+    assert listed["big-three-3"]["requirement"] == (
+        "Total 454 kg across your best bench, squat and deadlift"
+    )
     assert listed["pound-for-pound"]["requirement"] == "Bench press 100% of your body weight"
 
 
@@ -220,8 +260,8 @@ def test_weight_targets_are_shown_in_the_accounts_unit(client):
     assert saved.status_code == 200, saved.text
     workout(client, "2026-01-05", BENCH, [{"weight_kg": 100, "reps": 1}])
 
-    bench = borders(client)["bench-club"]
-    assert bench["requirement"] == "Bench press 220 lb"
+    bench = borders(client)["bench-club-2"]
+    assert bench["requirement"] == "Bench press 220 lb · 2 plates"
     assert bench["progress"] == {"current": 220.5, "target": 220, "unit": "lb"}
     assert bench["unlocked"] is True
 
@@ -279,7 +319,11 @@ def test_cardio_borders_take_the_best_week_and_month(client):
     assert numbers["climbed_m"] == 250 + 498
 
     listed = borders(client)
-    assert listed["cardiomaniac"]["unlocked"] and listed["marathon-month"]["unlocked"]
+    assert listed["cardiomaniac-1"]["unlocked"] and listed["cardiomaniac-2"]["unlocked"]
+    assert not listed["cardiomaniac-3"]["unlocked"]
+    assert listed["cardiomaniac-3"]["progress"] == {"current": 300, "target": 600, "unit": "min"}
+    assert listed["marathon-month"]["unlocked"]
+    assert listed["marathon-month"]["family"] is None and listed["marathon-month"]["tier"] is None
     assert listed["hybrid"]["progress"] == {"current": 1, "target": 4, "unit": "weeks"}
     assert listed["everest"]["progress"] == {"current": 748, "target": 8849, "unit": "m"}
 
@@ -385,5 +429,7 @@ def test_profile_borders_migration_adds_and_removes_the_account_columns():
 
 def test_every_border_has_artwork_in_the_app():
     shapes = Path(__file__).resolve().parents[2] / "frontend/src/profileBorderShapes.tsx"
-    drawn = set(re.findall(r"^  '?([a-z-]+)'?: \(", shapes.read_text(encoding="utf-8"), flags=re.M))
+    drawn = set(
+        re.findall(r"^  '?([a-z0-9-]+)'?: \(", shapes.read_text(encoding="utf-8"), flags=re.M)
+    )
     assert drawn == {border.key for border in BORDERS}

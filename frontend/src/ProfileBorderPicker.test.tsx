@@ -4,7 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { api } from './api';
 import { ProfileBorderPicker } from './ProfileBorderPicker';
-import { borderProgressLabel, borderProgressPercent } from './profileBorderProgress';
+import {
+  borderProgressLabel,
+  borderProgressPercent,
+  borderSets,
+  shownTier,
+} from './profileBorderProgress';
 import type { ProfileBorder, ProfileBorders, User } from './types';
 
 const user: User = {
@@ -223,5 +228,71 @@ describe('ProfileBorderPicker', () => {
       [...dialog().querySelectorAll('button')].find((item) => item.textContent === 'Try again')!,
     );
     expect(tile('First Steps')).toBeDefined();
+  });
+});
+
+const deadlift = (tier: number, unlocked: boolean) =>
+  border({
+    key: `deadlift-club-${tier}`,
+    name: `Deadlift Club ${['I', 'II', 'III'][tier - 1]}`,
+    group: 'Strength',
+    requirement: `Deadlift ${[140, 180, 220][tier - 1]} kg`,
+    unlocked,
+    progress: { current: 185, target: [140, 180, 220][tier - 1], unit: 'kg' },
+    family: 'deadlift',
+    tier,
+  });
+
+const tiered: ProfileBorders = {
+  selected: null,
+  sex: 'male',
+  // Listed out of order to show the picker sorts tiers itself.
+  borders: [deadlift(3, false), deadlift(1, true), deadlift(2, true)],
+};
+
+describe('tiered borders', () => {
+  it('groups a family into one set, easiest first, and shows its best earned tier', () => {
+    const [[group, [set]]] = borderSets(tiered.borders);
+    expect(group).toBe('Strength');
+    expect(set.map((item) => item.tier)).toEqual([1, 2, 3]);
+    expect(shownTier(set, null).key).toBe('deadlift-club-2');
+    expect(shownTier(set, 'deadlift-club-1').key).toBe('deadlift-club-1');
+    expect(shownTier([deadlift(1, false), deadlift(2, false)], null).key).toBe('deadlift-club-1');
+  });
+
+  it('shows one tile per family with a pip for each tier earned', async () => {
+    await open(tiered);
+    const tiles = dialog().querySelectorAll('.border-tile');
+    expect(tiles).toHaveLength(1);
+    const family = tile('Deadlift Club II');
+    expect(family.getAttribute('aria-label')).toBe(
+      'Deadlift Club II, unlocked, 2 of 3 tiers earned',
+    );
+    expect(family.querySelectorAll('.border-tile-pips > i.is-earned')).toHaveLength(2);
+    expect(family.querySelectorAll('.border-tile-pips > i')).toHaveLength(3);
+    expect(family.querySelector('[data-border="deadlift-club-2"]')).not.toBeNull();
+  });
+
+  it('steps through a family from the preview, with progress towards a locked tier', async () => {
+    await open(tiered);
+    const tierButtons = () => [
+      ...preview().querySelectorAll<HTMLButtonElement>('.border-tiers button'),
+    ];
+    expect(tierButtons().map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Tier 1, unlocked',
+      'Tier 2, unlocked',
+      'Tier 3, locked',
+    ]);
+    expect(tierButtons()[1].getAttribute('aria-pressed')).toBe('true');
+    expect(preview().querySelector('.border-wear')).not.toBeNull();
+
+    await press(tierButtons()[2]);
+    expect(preview().textContent).toContain('Deadlift Club III');
+    expect(preview().textContent).toContain('Deadlift 220 kg');
+    expect(preview().querySelector('[role=progressbar]')?.getAttribute('aria-valuetext')).toBe(
+      '185 / 220 kg',
+    );
+    expect(preview().querySelector('.border-wear')).toBeNull();
+    expect(tile('Deadlift Club II').getAttribute('aria-pressed')).toBe('true');
   });
 });

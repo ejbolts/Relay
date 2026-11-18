@@ -54,11 +54,11 @@ describe('ProfileAvatar', () => {
       <>
         <ProfileAvatar
           className="profile-avatar"
-          user={{ ...account, profile_photo_url: null, profile_border: 'bench-club' }}
+          user={{ ...account, profile_photo_url: null, profile_border: 'bench-club-1' }}
         />
         <ProfileAvatar
           className="profile-avatar"
-          user={{ ...account, profile_photo_url: null, profile_border: 'squat-club' }}
+          user={{ ...account, profile_photo_url: null, profile_border: 'squat-club-1' }}
         />
       </>,
     );

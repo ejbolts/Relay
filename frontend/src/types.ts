@@ -899,6 +899,9 @@ export interface ProfileBorder {
   /** Missing only for a strength border while the account has not set its sex. */
   progress: { current: number; target: number; unit: string } | null;
   needs_sex: boolean;
+  /** A tiered border's family and its place in it, from 1; absent for a single border. */
+  family?: string | null;
+  tier?: number | null;
 }
 
 export interface ProfileBorders {

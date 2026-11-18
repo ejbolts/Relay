@@ -5,7 +5,12 @@ import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
-import { borderProgressLabel, borderProgressPercent } from './profileBorderProgress';
+import {
+  borderProgressLabel,
+  borderProgressPercent,
+  borderSets,
+  shownTier,
+} from './profileBorderProgress';
 import type { ProfileBorder, ProfileBorders, User } from './types';
 
 const RARITY_LABELS: Record<ProfileBorder['rarity'], string> = {
@@ -14,6 +19,9 @@ const RARITY_LABELS: Record<ProfileBorder['rarity'], string> = {
   epic: 'Epic',
   legendary: 'Legendary',
 };
+
+const NUMERALS = ['I', 'II', 'III', 'IV', 'V'];
+const numeral = (tier: number) => NUMERALS[tier - 1] ?? String(tier);
 
 /** Every profile border with the account's progress; earned ones can be worn. */
 export function ProfileBorderPicker({
@@ -43,15 +51,16 @@ export function ProfileBorderPicker({
       (loaded) => {
         if (!current) return;
         setData(loaded);
-        // Start on the worn border, or on the first one earned so there is something to try.
+        // Start on the worn border, or on the first one earned (its best tier) to try on.
         const listed = (key: string | null) =>
           loaded.borders.some((border) => border.key === key) ? key : null;
+        const sets = borderSets(loaded.borders).flatMap(([, groupSets]) => groupSets);
+        const earned = sets.find((set) => set.some((border) => border.unlocked)) ?? sets[0];
         setPreviewKey(
           (previous) =>
             listed(previous) ??
             listed(loaded.selected) ??
-            (loaded.borders.find((border) => border.unlocked) ?? loaded.borders[0])?.key ??
-            null,
+            (earned ? shownTier(earned, null).key : null),
         );
       },
       (reason) => {
@@ -63,15 +72,14 @@ export function ProfileBorderPicker({
     };
   }, [attempt]);
 
-  const groups = useMemo(() => {
-    const byGroup = new Map<string, ProfileBorder[]>();
-    for (const border of data?.borders ?? []) {
-      byGroup.set(border.group, [...(byGroup.get(border.group) ?? []), border]);
-    }
-    return [...byGroup];
-  }, [data]);
+  const groups = useMemo(() => borderSets(data?.borders ?? []), [data]);
   const unlocked = data?.borders.filter((border) => border.unlocked).length ?? 0;
   const preview = data?.borders.find((border) => border.key === previewKey) ?? null;
+  const previewTiers = preview?.family
+    ? (data?.borders ?? [])
+        .filter((border) => border.family === preview.family)
+        .sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0))
+    : [];
   const worn = data?.selected ?? null;
 
   async function wear(key: string | null) {
@@ -131,6 +139,26 @@ export function ProfileBorderPicker({
                     {RARITY_LABELS[preview.rarity]}
                   </span>
                 </p>
+                {previewTiers.length > 1 && (
+                  <div className="border-tiers" role="group" aria-label="Tiers">
+                    {previewTiers.map((tier) => (
+                      <button
+                        key={tier.key}
+                        type="button"
+                        className={tier.unlocked ? 'is-earned' : undefined}
+                        aria-pressed={tier.key === preview.key}
+                        aria-label={`Tier ${tier.tier}, ${tier.unlocked ? 'unlocked' : 'locked'}`}
+                        onClick={() => {
+                          setPreviewKey(tier.key);
+                          setSaveError(null);
+                        }}
+                      >
+                        {numeral(tier.tier ?? 1)}
+                        {!tier.unlocked && <Icon name="lock" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <p className="border-preview-requirement">{preview.requirement}</p>
                 {preview.needs_sex ? (
                   <button type="button" className="text-link" onClick={onSetSex}>
@@ -185,45 +213,63 @@ export function ProfileBorderPicker({
             )}
           </section>
           <div className="border-groups">
-            {groups.map(([group, borders]) => (
+            {groups.map(([group, sets]) => (
               <section key={group} className="border-group" aria-label={group}>
                 <h3>{group}</h3>
                 <ul>
-                  {borders.map((border) => (
-                    <li key={border.key}>
-                      <button
-                        type="button"
-                        className={`border-tile${border.unlocked ? '' : ' is-locked'}`}
-                        aria-pressed={border.key === previewKey}
-                        aria-label={`${border.name}, ${
-                          worn === border.key ? 'wearing' : border.unlocked ? 'unlocked' : 'locked'
-                        }`}
-                        onClick={() => {
-                          setPreviewKey(border.key);
-                          setSaveError(null);
-                        }}
-                      >
-                        <span className="border-tile-art">
-                          <ProfileAvatar
-                            className="profile-avatar border-tile-avatar"
-                            user={{ ...user, profile_border: border.key }}
-                          />
-                          {worn === border.key ? (
-                            <span className="border-tile-badge is-worn">
-                              <Icon name="check" />
-                            </span>
-                          ) : (
-                            !border.unlocked && (
-                              <span className="border-tile-badge">
-                                <Icon name="lock" />
+                  {sets.map((set) => {
+                    const border = shownTier(set, worn);
+                    const earned = set.filter((tier) => tier.unlocked).length;
+                    const state =
+                      worn === border.key ? 'wearing' : border.unlocked ? 'unlocked' : 'locked';
+                    return (
+                      <li key={border.family ?? border.key}>
+                        <button
+                          type="button"
+                          className={`border-tile${border.unlocked ? '' : ' is-locked'}`}
+                          aria-pressed={set.some((tier) => tier.key === previewKey)}
+                          aria-label={
+                            set.length > 1
+                              ? `${border.name}, ${state}, ${earned} of ${set.length} tiers earned`
+                              : `${border.name}, ${state}`
+                          }
+                          onClick={() => {
+                            setPreviewKey(border.key);
+                            setSaveError(null);
+                          }}
+                        >
+                          <span className="border-tile-art">
+                            <ProfileAvatar
+                              className="profile-avatar border-tile-avatar"
+                              user={{ ...user, profile_border: border.key }}
+                            />
+                            {worn === border.key ? (
+                              <span className="border-tile-badge is-worn">
+                                <Icon name="check" />
                               </span>
-                            )
+                            ) : (
+                              !border.unlocked && (
+                                <span className="border-tile-badge">
+                                  <Icon name="lock" />
+                                </span>
+                              )
+                            )}
+                          </span>
+                          <span className="border-tile-name">{border.name}</span>
+                          {set.length > 1 && (
+                            <span className="border-tile-pips" aria-hidden="true">
+                              {set.map((tier) => (
+                                <i
+                                  key={tier.key}
+                                  className={tier.unlocked ? 'is-earned' : undefined}
+                                />
+                              ))}
+                            </span>
                           )}
-                        </span>
-                        <span className="border-tile-name">{border.name}</span>
-                      </button>
-                    </li>
-                  ))}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             ))}
