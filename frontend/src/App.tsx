@@ -62,6 +62,7 @@ import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
+import { entriesInMonths } from './calendarRange';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
@@ -2980,7 +2981,9 @@ function InteractiveWorkoutCalendar({
   // Every type shows by default; tapping one in the legend greys it out in the calendar.
   const { types } = useWorkoutTypes();
   const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<string>>(() => new Set());
-  const presentTypes = calendarLegendTypes(entries, types);
+  // The legend lists only the types logged in the months on screen.
+  const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
+  const presentTypes = calendarLegendTypes(entriesInMonths(entries, visibleMonths), types);
   const toggleCategory = (category: string) =>
     setHiddenCategories((current) => {
       const next = new Set(current);
@@ -3016,6 +3019,7 @@ function InteractiveWorkoutCalendar({
             selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
             onActiveWorkoutClick={onResumeWorkout}
             onDayClick={openDay}
+            onVisibleMonthsChange={setVisibleMonths}
           />
           <WorkoutCalendarLegend
             presentTypes={presentTypes}
