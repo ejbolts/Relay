@@ -1788,6 +1788,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 /* A trained day is outlined in its workout colour; a day that mixes types splits the outline
    between them. With every type on the day switched off in the legend, it turns neutral grey. */
 .calendar-panel .calendar-day.trained:not(.in-progress)::before,
+.calendar-panel .calendar-day.scheduled::before,
 .week-strip-day.trained:not(.in-progress)::before {
   position: absolute;
   inset: 0;
@@ -1808,6 +1809,12 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   mask:
     linear-gradient(#000 0 0) padding-box exclude,
     linear-gradient(#000 0 0);
+}
+
+/* A day the split plans with nothing logged: a faint outline in that workout's colour. Future
+   days are already faded as a whole; today and missed past days fade the outline to match. */
+.calendar-panel .calendar-day.scheduled:not(.future)::before {
+  opacity: 0.32;
 }
 
 .calendar-panel .calendar-day.today {

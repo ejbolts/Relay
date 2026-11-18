@@ -63,6 +63,7 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
+import { splitCalendarDays } from './trainingSplit';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
@@ -93,6 +94,7 @@ import type {
   TrackedSet,
   TrackedWorkout,
   TrainingPreferences,
+  TrainingSplit,
   User,
   WeeklyMuscleContribution,
   WeightMapping,
@@ -2408,6 +2410,7 @@ function AppContent() {
                       entries={shownDashboard?.heatmap ?? []}
                       workouts={shownWorkouts}
                       olderHistory={olderHistoryProps}
+                      split={shownDashboard?.training_split}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
                       activeWorkoutDate={activeWorkoutDate}
@@ -2602,6 +2605,7 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
+                trainingSplit={shownDashboard?.training_split ?? null}
                 historySummary={shownDashboard?.history ?? null}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -2954,6 +2958,7 @@ function InteractiveWorkoutCalendar({
   entries,
   workouts,
   olderHistory,
+  split,
   categoryColors,
   activeWorkout,
   activeWorkoutDate,
@@ -2968,6 +2973,8 @@ function InteractiveWorkoutCalendar({
   weekStartDay?: number;
   workouts: TrackedWorkout[];
   olderHistory?: OlderHistoryProps;
+  /** The saved split, whose planned and missed days get a faint outline in the calendar. */
+  split?: TrainingSplit | null;
   categoryColors: WorkoutTypeColors;
   activeWorkout: boolean;
   activeWorkoutDate: string | null;
@@ -2984,6 +2991,9 @@ function InteractiveWorkoutCalendar({
   // The legend lists only the types logged in the months on screen.
   const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const presentTypes = calendarLegendTypes(entriesInMonths(entries, visibleMonths), types);
+  const today = localDate();
+  // Six weeks ahead reaches the end of the current month, the newest one the calendar shows.
+  const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
   const toggleCategory = (category: string) =>
     setHiddenCategories((current) => {
       const next = new Set(current);
@@ -3020,6 +3030,7 @@ function InteractiveWorkoutCalendar({
             onActiveWorkoutClick={onResumeWorkout}
             onDayClick={openDay}
             onVisibleMonthsChange={setVisibleMonths}
+            splitDays={splitDays}
           />
           <WorkoutCalendarLegend
             presentTypes={presentTypes}
@@ -10144,6 +10155,7 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
+  trainingSplit,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -10180,6 +10192,7 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
+  trainingSplit: TrainingSplit | null;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -10585,6 +10598,7 @@ function HistoryScreen({
                   entries={heatmap}
                   workouts={workouts}
                   olderHistory={olderHistory}
+                  split={trainingSplit}
                   categoryColors={categoryColors}
                   activeWorkout={activeWorkout}
                   activeWorkoutDate={activeWorkoutDate}

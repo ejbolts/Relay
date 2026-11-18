@@ -3463,6 +3463,7 @@ def dashboard(
             split_recommendation(db, user.id, today)
             or workout_recommendation(workouts, today, earlier_rotation)
         ),
+        training_split=split_read(db, user.id, saved_training_split(db, user.id), today),
         weekly_sets=weekly_sets(workouts, today, preferences.week_start),
         weekly_sets_history=[
             weekly_sets(workouts, today, preferences.week_start, weeks_ago)

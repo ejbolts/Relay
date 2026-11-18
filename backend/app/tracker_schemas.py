@@ -913,11 +913,19 @@ class TrainingSplit(BaseModel):
         return self
 
 
+class SplitMissedDay(BaseModel):
+    workout_date: date
+    workout_type_id: str
+
+
 class TrainingSplitRead(TrainingSplit):
     # Where a workout-following split currently stands; unset for calendar splits.
     next_step: int | None = None
     rest_saved: bool = False
     next_date: date | None = None
+    # Past days, within the last year, whose planned workout was not done. A workout-following
+    # split leaves out the one day off it absorbs as a rest.
+    missed_days: list[SplitMissedDay] = Field(default_factory=list)
 
 
 class TrainingPreferencesUpdate(BaseModel):
@@ -999,6 +1007,8 @@ class DashboardRead(BaseModel):
     zone2: Zone2WeekRead
     recent_workouts: list[TrainingWorkoutRead]
     history: WorkoutHistorySummaryRead | None = None
+    # The saved split and its progress, for the calendar's planned and missed days.
+    training_split: TrainingSplitRead | None = None
 
 
 class TrainingTimeRead(BaseModel):

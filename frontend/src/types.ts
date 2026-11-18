@@ -378,6 +378,8 @@ export interface TrainingSplit {
   next_step?: number | null;
   rest_saved?: boolean;
   next_date?: string | null;
+  /** Past days whose planned workout was not done, from the server's replay (last year only). */
+  missed_days?: { workout_date: string; workout_type_id: string }[];
 }
 
 export interface RoutineSet {
@@ -491,6 +493,8 @@ export interface DashboardData {
   recent_workouts: TrackedWorkout[];
   /** Whole-log facts; absent from dashboards cached by earlier releases. */
   history?: WorkoutHistorySummary | null;
+  /** The saved split and its progress; absent from servers and caches before it was added. */
+  training_split?: TrainingSplit | null;
 }
 
 export interface WorkoutHistorySummary {
