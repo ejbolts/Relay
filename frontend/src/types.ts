@@ -378,6 +378,8 @@ export interface TrainingSplit {
   next_step?: number | null;
   rest_saved?: boolean;
   next_date?: string | null;
+  /** Past days whose planned workout was not done, from the server's replay (last year only). */
+  missed_days?: { workout_date: string; workout_type_id: string }[];
 }
 
 export interface RoutineSet {
@@ -491,6 +493,8 @@ export interface DashboardData {
   recent_workouts: TrackedWorkout[];
   /** Whole-log facts; absent from dashboards cached by earlier releases. */
   history?: WorkoutHistorySummary | null;
+  /** The saved split and its progress; absent from servers and caches before it was added. */
+  training_split?: TrainingSplit | null;
 }
 
 export interface WorkoutHistorySummary {
@@ -886,6 +890,8 @@ export interface AdminUser {
   disabled_at: string | null;
   /** An admin reset the password and the person has not chosen a new one yet. */
   must_change_password: boolean;
+  /** The person asked for a temporary password from the sign-in screen and is still waiting. */
+  password_reset_requested_at?: string | null;
   created_at: string;
   last_active_at: string | null;
   /** Admin-only live activity, including accounts that do not share with friends. */
@@ -897,6 +903,14 @@ export interface AdminUser {
   photos: number;
   photo_bytes: number;
   video_sessions: number;
+}
+
+/** A signed-out person waiting for an administrator to give them a temporary password. */
+export interface PasswordResetRequest {
+  user_id: string;
+  username: string;
+  display_name: string;
+  requested_at: string;
 }
 
 export interface ServerSettings {

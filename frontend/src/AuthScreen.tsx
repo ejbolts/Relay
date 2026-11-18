@@ -14,6 +14,7 @@ import {
   darkStylePreference,
   lightStylePreference,
 } from './colourThemes';
+import { ForgotPasswordDialog } from './ForgotPasswordDialog';
 import { Icon } from './Icon';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
@@ -70,6 +71,7 @@ function AuthField({
   error,
   hint,
   help,
+  labelAction,
   children,
 }: {
   id: string;
@@ -78,24 +80,29 @@ function AuthField({
   hint?: string;
   /** A short explanation shown under the label when its ? button is tapped. */
   help?: ReactNode;
+  /** A link-style control at the end of the label row, such as Forgot password. */
+  labelAction?: ReactNode;
   children: ReactNode;
 }) {
   const [helpOpen, setHelpOpen] = useState(false);
   return (
     <div className="auth-field">
-      {help ? (
+      {help || labelAction ? (
         <div className="auth-label-row">
           <label htmlFor={id}>{label}</label>
-          <button
-            type="button"
-            className="auth-help-button"
-            aria-label={`About ${label.toLowerCase()}`}
-            aria-expanded={helpOpen}
-            aria-controls={`${id}-help`}
-            onClick={() => setHelpOpen((current) => !current)}
-          >
-            ?
-          </button>
+          {help && (
+            <button
+              type="button"
+              className="auth-help-button"
+              aria-label={`About ${label.toLowerCase()}`}
+              aria-expanded={helpOpen}
+              aria-controls={`${id}-help`}
+              onClick={() => setHelpOpen((current) => !current)}
+            >
+              ?
+            </button>
+          )}
+          {labelAction}
         </div>
       ) : (
         <label htmlFor={id}>{label}</label>
@@ -186,6 +193,7 @@ export function AuthScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const screenRef = useRef<HTMLElement>(null);
   const shellTopRef = useRef<number | null>(null);
@@ -418,6 +426,17 @@ export function AuthScreen({
               label="Password"
               error={fieldErrors.password}
               hint={creating ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
+              labelAction={
+                creating ? undefined : (
+                  <button
+                    type="button"
+                    className="auth-forgot-password"
+                    onClick={() => setForgotOpen(true)}
+                  >
+                    Forgot password?
+                  </button>
+                )
+              }
             >
               <div className="auth-password">
                 <input
@@ -514,6 +533,9 @@ export function AuthScreen({
               username={username}
               onClose={() => setSampleOpen(false)}
             />
+          )}
+          {!creating && forgotOpen && (
+            <ForgotPasswordDialog initialUsername={username} onClose={() => setForgotOpen(false)} />
           )}
         </section>
       </div>

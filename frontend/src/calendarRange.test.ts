@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { calendarMonths, calendarWeekdays, monthCountFromOldestWorkout } from './calendarRange';
+import {
+  calendarMonths,
+  calendarWeekdays,
+  entriesInMonths,
+  monthCountFromOldestWorkout,
+} from './calendarRange';
 
 describe('calendar workout range', () => {
   it('builds complete six-row months across years without skipping a month from a late date', () => {
@@ -32,6 +37,18 @@ describe('calendar workout range', () => {
 
   it('shows the current month when the history is empty', () => {
     expect(monthCountFromOldestWorkout([], new Date(2026, 7, 12))).toBe(1);
+  });
+
+  it('keeps only the entries in the given months, or all of them while the months are unknown', () => {
+    const entries = [
+      { workout_date: '2026-09-30' },
+      { workout_date: '2026-10-01' },
+      { workout_date: '2026-11-18' },
+      { workout_date: '2025-11-02' },
+    ];
+    expect(entriesInMonths(entries, ['2026-10', '2026-11'])).toEqual(entries.slice(1, 3));
+    expect(entriesInMonths(entries, ['2026-12'])).toEqual([]);
+    expect(entriesInMonths(entries, null)).toBe(entries);
   });
 });
 

@@ -501,6 +501,8 @@ def login(
     if password_needs_rehash(user.password_hash):
         # Upgrade hashes made with older cost settings; committed with the new session.
         user.password_hash = hash_password(payload.password)
+    # They remembered it, so an admin no longer needs to reset it; committed with the session.
+    user.password_reset_requested_at = None
     token = create_user_session(db, user, settings, request.headers.get("user-agent"))
     set_session_cookie(response, token, settings)
     return user_to_read(db, user, settings)
@@ -647,6 +649,7 @@ def change_password(
         )
     user.password_hash = hash_password(payload.new_password)
     user.must_change_password = False
+    user.password_reset_requested_at = None
     # A password change signs out every other device.
     db.execute(
         delete(UserSession).where(

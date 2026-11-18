@@ -32,6 +32,7 @@ import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkout
 import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
+import { entriesInMonths } from './calendarRange';
 import { TrainingTimeCard } from './TrainingTimeStats';
 import { PopupDialog } from './PopupDialog';
 import { RoutinePanel } from './RoutinePanel';
@@ -1148,6 +1149,7 @@ function SharedConsistencyCalendar({
   onOpenSplits?: () => void;
 }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const colors = builtinTypeColors(data.workout_types);
   return (
     <ConsistencyCard
@@ -1163,9 +1165,13 @@ function SharedConsistencyCalendar({
         selectedDate={selectedDate}
         readOnly
         onDayClick={onDayClick}
+        onVisibleMonthsChange={setVisibleMonths}
       />
       <WorkoutCalendarLegend
-        presentTypes={calendarLegendTypes(data.heatmap, data.workout_types)}
+        presentTypes={calendarLegendTypes(
+          entriesInMonths(data.heatmap, visibleMonths),
+          data.workout_types,
+        )}
         hiddenCategories={hidden}
         categoryColors={colors}
         onToggle={(id) =>

@@ -42,6 +42,7 @@ import type {
   MachineSetting,
   MuscleVolume,
   MuscleSetCreditInput,
+  PasswordResetRequest,
   PersonalRecord,
   TrainingBlockInput,
   TrainingBlockSummary,
@@ -94,7 +95,12 @@ import {
   readWorkoutCache,
   writeWorkoutCache,
 } from './workoutCache';
-import { isUsingSavedData, reportSavedDataUsed, reportServerReached } from './connectionStatus';
+import {
+  isUsingSavedData,
+  reportConnectionFailure,
+  reportSavedDataUsed,
+  reportServerReached,
+} from './connectionStatus';
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
@@ -187,6 +193,12 @@ export function isConnectionFailure(reason: unknown): boolean {
   return reason instanceof TypeError || reason instanceof SyntaxError;
 }
 
+/** The request never got an answer: no connection or a timeout, rather than a deliberate cancel. */
+function isUnreachable(reason: unknown): boolean {
+  if (reason instanceof DOMException) return reason.name === 'TimeoutError';
+  return reason instanceof TypeError;
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
@@ -202,9 +214,18 @@ async function request<T>(
     credentials: 'same-origin',
   });
   const method = init?.method?.toUpperCase() ?? 'GET';
-  const response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
+  let response: Response;
+  try {
+    response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
+  } catch (reason) {
+    if (isUnreachable(reason)) reportConnectionFailure('unreachable');
+    throw reason;
+  }
+  // The proxy answered, but Relay behind it did not.
+  const serverDown = GATEWAY_FAILURES.has(response.status);
+  if (serverDown) reportConnectionFailure('down');
   checkAccount();
-  if (!GATEWAY_FAILURES.has(response.status)) reportServerReached();
+  if (!serverDown) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string };
@@ -438,6 +459,12 @@ export const api = {
       ),
     logout: () =>
       request<void>('/api/auth/logout', { method: 'POST' }, { signalExpiredSession: false }),
+    requestPasswordReset: (username: string) =>
+      request<void>(
+        '/api/auth/password-reset-request',
+        { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ username }) },
+        { signalExpiredSession: false },
+      ),
   },
   admin: {
     feedback: () => request<AppFeedback[]>('/api/admin/feedback'),
@@ -460,6 +487,12 @@ export const api = {
         `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
         { method: 'POST' },
       ),
+    passwordResetRequests: () =>
+      request<PasswordResetRequest[]>('/api/admin/password-reset-requests'),
+    dismissPasswordResetRequest: (userId: string) =>
+      request<void>(`/api/admin/password-reset-requests/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
     settings: () => request<ServerSettings>('/api/admin/settings'),
     updateSettings: (payload: ServerSettingsUpdate) =>
       request<ServerSettings>('/api/admin/settings', {

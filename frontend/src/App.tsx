@@ -62,6 +62,8 @@ import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
+import { entriesInMonths } from './calendarRange';
+import { splitCalendarDays } from './trainingSplit';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
@@ -92,6 +94,7 @@ import type {
   TrackedSet,
   TrackedWorkout,
   TrainingPreferences,
+  TrainingSplit,
   User,
   WeeklyMuscleContribution,
   WeightMapping,
@@ -158,7 +161,6 @@ import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { OfflineNotice } from './OfflineNotice';
-import { useOfflineNotice } from './useOfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
@@ -338,6 +340,11 @@ import {
 import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
+import {
+  onAdminAccountFocusRequested,
+  requestAdminAccountFocus,
+  takeAdminAccountFromUrl,
+} from './adminAccountFocus';
 import { canUploadVideos, useUserSession } from './userContext';
 import {
   OUTDATED_CLIENT_MESSAGE,
@@ -406,6 +413,7 @@ import {
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
 } from './workoutSets';
+import { restToAdd } from './workoutRestHistory';
 import {
   finalizeWorkoutIdentity,
   isCardioTypeWithoutCardio,
@@ -760,7 +768,6 @@ function AppContent() {
   const [tipBlocksOpen, setTipBlocksOpen] = useState(false);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
-  const offlineNotice = useOfflineNotice();
   const appNotices = useAppNoticesContext();
   /** The prompt that opened by itself this visit. Others then wait for the next app open. */
   const [launchPrompt, setLaunchPrompt] = useState<LaunchPrompt | null>(null);
@@ -1138,6 +1145,16 @@ function AppContent() {
   }, []);
   // A notification opens the reacted or commented workout in Social's feed.
   useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
+  // An admin's password reset notification opens that account in the admin console.
+  useEffect(
+    () => onAdminAccountFocusRequested(() => (isAdmin ? setTab('admin') : undefined)),
+    [isAdmin, setTab],
+  );
+  useEffect(() => {
+    // A tapped password reset phone alert opens the console at the account it is about.
+    const userId = takeAdminAccountFromUrl();
+    if (userId && isAdmin) requestAdminAccountFocus(userId);
+  }, [isAdmin]);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;
@@ -2103,7 +2120,12 @@ function AppContent() {
             onRefresh={() => void appUpdates.refresh()}
           />
         )}
-        {offlineNotice.visible && <OfflineNotice onDismiss={offlineNotice.dismiss} />}
+        <OfflineNotice
+          waiting={{
+            workouts: finishedQueue.items.length,
+            checkIns: bodyMeasurementSync.pending,
+          }}
+        />
         {prompt === 'release' && (
           <ReleaseAnnouncement
             release={announcement.release}
@@ -2407,6 +2429,7 @@ function AppContent() {
                       entries={shownDashboard?.heatmap ?? []}
                       workouts={shownWorkouts}
                       olderHistory={olderHistoryProps}
+                      split={shownDashboard?.training_split}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
                       activeWorkoutDate={activeWorkoutDate}
@@ -2601,6 +2624,7 @@ function AppContent() {
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
+                trainingSplit={shownDashboard?.training_split ?? null}
                 historySummary={shownDashboard?.history ?? null}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
@@ -2953,6 +2977,7 @@ function InteractiveWorkoutCalendar({
   entries,
   workouts,
   olderHistory,
+  split,
   categoryColors,
   activeWorkout,
   activeWorkoutDate,
@@ -2967,6 +2992,8 @@ function InteractiveWorkoutCalendar({
   weekStartDay?: number;
   workouts: TrackedWorkout[];
   olderHistory?: OlderHistoryProps;
+  /** The saved split, whose planned and missed days get a faint outline in the calendar. */
+  split?: TrainingSplit | null;
   categoryColors: WorkoutTypeColors;
   activeWorkout: boolean;
   activeWorkoutDate: string | null;
@@ -2980,7 +3007,12 @@ function InteractiveWorkoutCalendar({
   // Every type shows by default; tapping one in the legend greys it out in the calendar.
   const { types } = useWorkoutTypes();
   const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<string>>(() => new Set());
-  const presentTypes = calendarLegendTypes(entries, types);
+  // The legend lists only the types logged in the months on screen.
+  const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
+  const presentTypes = calendarLegendTypes(entriesInMonths(entries, visibleMonths), types);
+  const today = localDate();
+  // Six weeks ahead reaches the end of the current month, the newest one the calendar shows.
+  const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
   const toggleCategory = (category: string) =>
     setHiddenCategories((current) => {
       const next = new Set(current);
@@ -3016,6 +3048,8 @@ function InteractiveWorkoutCalendar({
             selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
             onActiveWorkoutClick={onResumeWorkout}
             onDayClick={openDay}
+            onVisibleMonthsChange={setVisibleMonths}
+            splitDays={splitDays}
           />
           <WorkoutCalendarLegend
             presentTypes={presentTypes}
@@ -7122,6 +7156,9 @@ function MovementCard({
           const insertAfter = index < movement.sets.length - 1 && (
             <SetInsertButton beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
           );
+          const restHistory = item.machine_photo_id
+            ? historyOnMachine(exerciseHistory, item.machine_photo_id, savedMachineAliases)
+            : history;
           return (
             <Fragment key={item.key}>
               <SwipeToDeleteSetRow
@@ -7184,15 +7221,7 @@ function MovementCard({
                     seconds={item.rest_seconds!}
                     setIndex={index}
                     sets={movement.sets}
-                    history={
-                      item.machine_photo_id
-                        ? historyOnMachine(
-                            exerciseHistory,
-                            item.machine_photo_id,
-                            savedMachineAliases,
-                          )
-                        : history
-                    }
+                    history={restHistory}
                     suggested={!item.completed && !item.restConfirmed}
                     onChange={(seconds) => {
                       clearRestEdit(item.key);
@@ -7204,7 +7233,19 @@ function MovementCard({
                 </SwipeToDeleteSetRow>
               ) : (
                 insertAfter && (
-                  <SetInsertRow beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
+                  <SetInsertRow
+                    beforeSet={index + 2}
+                    onInsert={() => onInsertSet(index + 1)}
+                    onAddRest={
+                      !cardio && showRestTimes
+                        ? () =>
+                            onUpdateSet(item.key, {
+                              rest_seconds: restToAdd(movement.sets, index, restHistory),
+                              restRevealed: true,
+                            })
+                        : undefined
+                    }
+                  />
                 )
               )}
             </Fragment>
@@ -10140,6 +10181,7 @@ function HistoryScreen({
   initialMovementId,
   weekStartDay,
   heatmap,
+  trainingSplit,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -10176,6 +10218,7 @@ function HistoryScreen({
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
+  trainingSplit: TrainingSplit | null;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -10581,6 +10624,7 @@ function HistoryScreen({
                   entries={heatmap}
                   workouts={workouts}
                   olderHistory={olderHistory}
+                  split={trainingSplit}
                   categoryColors={categoryColors}
                   activeWorkout={activeWorkout}
                   activeWorkoutDate={activeWorkoutDate}

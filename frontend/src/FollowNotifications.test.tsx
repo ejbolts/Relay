@@ -18,6 +18,8 @@ import {
 import type { SharingNotifications } from './types';
 import { onWeeklyReviewRequested, publishWeeklyReviewNotice } from './weeklyReviewNotice';
 import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
+import { onAdminAccountFocusRequested } from './adminAccountFocus';
+import { UserContext, type UserSession } from './userContext';
 const person = {
   id: 'sample',
   display_name: 'Sam Preview',
@@ -625,4 +627,73 @@ it('opens a reaction or comment notice at that workout in Social, keeping Reply 
   } finally {
     await act(async () => probe.unmount());
   }
+});
+
+const adminSession: UserSession = {
+  user: {
+    id: 'owner',
+    username: 'owner',
+    display_name: 'Owner',
+    is_admin: true,
+    can_upload_videos: true,
+    created_at: '2026-10-01T10:00:00Z',
+  },
+  updateUser: () => undefined,
+  signOut: async () => undefined,
+  accountDeleted: async () => undefined,
+};
+
+it('shows admins who asked for a password reset until it is handled, and opens the account', async () => {
+  let requests = [
+    {
+      user_id: 'riley',
+      username: 'riley',
+      display_name: 'Riley Sample',
+      requested_at: '2026-10-20T09:00:00Z',
+    },
+  ];
+  vi.spyOn(api.admin, 'passwordResetRequests').mockImplementation(async () => requests);
+  const opened = vi.fn();
+  const stop = onAdminAccountFocusRequested(opened);
+  try {
+    await act(async () =>
+      root.render(
+        <UserContext.Provider value={adminSession}>
+          <FollowNotifications active />
+        </UserContext.Provider>,
+      ),
+    );
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe(
+      'Notifications, 1 unread',
+    );
+
+    await click('Notifications, 1 unread');
+    const row = document.querySelector('.password-reset-notification-row');
+    expect(row?.textContent).toContain('Riley Sample asked for a password reset');
+    expect(row?.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-20T09:00:00Z');
+    // Opening the inbox does not read it away: it counts until an admin deals with it.
+    expect(api.sharing.markNotificationsRead).not.toHaveBeenCalled();
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe(
+      'Notifications, 1 unread',
+    );
+
+    await click('Review Riley Sample’s password reset request');
+
+    expect(document.querySelector('dialog.follow-notifications')).toBeNull();
+    expect(opened).toHaveBeenCalledOnce();
+
+    requests = [];
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+  } finally {
+    stop();
+  }
+});
+
+it('never asks the admin API for members', async () => {
+  const load = vi.spyOn(api.admin, 'passwordResetRequests');
+  await render();
+  await click('Notifications');
+  expect(load).not.toHaveBeenCalled();
+  expect(document.querySelector('.password-reset-notification-row')).toBeNull();
 });

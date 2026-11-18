@@ -54,6 +54,10 @@ type WorkoutCalendarProps = {
   olderHistory?: OlderHistoryProps;
   types?: WorkoutType[];
   readOnly?: boolean;
+  /** Called with the `YYYY-MM` months on screen whenever they change, for the legend. */
+  onVisibleMonthsChange?: (months: string[]) => void;
+  /** The workout type a split plans on a date: days ahead, and past days it was missed. */
+  splitDays?: ReadonlyMap<string, string>;
 } & (
   | {
       preview: CalendarPreview;
@@ -83,6 +87,8 @@ export function WorkoutCalendar({
   olderHistory,
   types: suppliedTypes,
   readOnly = false,
+  onVisibleMonthsChange,
+  splitDays,
   preview,
 }: WorkoutCalendarProps) {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
@@ -122,10 +128,40 @@ export function WorkoutCalendar({
   }, [activeWorkoutDate, entries, hasOlder, historyStart, previewFrom, weekStartDay]);
   const todayKey = localCalendarDate(new Date());
   // Taps read the latest handlers from a ref, so the memoised grid below never calls a stale one.
-  const handlersRef = useRef({ onDayClick, onActiveWorkoutClick, olderHistory });
-  useLayoutEffect(() => {
-    handlersRef.current = { onDayClick, onActiveWorkoutClick, olderHistory };
+  const handlersRef = useRef({
+    onDayClick,
+    onActiveWorkoutClick,
+    olderHistory,
+    onVisibleMonthsChange,
   });
+  useLayoutEffect(() => {
+    handlersRef.current = { onDayClick, onActiveWorkoutClick, olderHistory, onVisibleMonthsChange };
+  });
+
+  // Months at least half on screen count as visible; mid-swipe, when none is, the one showing most.
+  const visibleMonthsRef = useRef<string | null>(null);
+  const reportVisibleMonths = useCallback(() => {
+    const calendar = calendarScrollRef.current;
+    const report = handlersRef.current.onVisibleMonthsChange;
+    if (!calendar || !report || calendar.clientWidth === 0) return;
+    const view = calendar.getBoundingClientRect();
+    const visible: string[] = [];
+    let most: { month: string; shown: number } | null = null;
+    for (const element of calendar.querySelectorAll<HTMLElement>('[data-month-start]')) {
+      const box = element.getBoundingClientRect();
+      if (box.left >= view.right) break;
+      const shown = Math.min(box.right, view.right) - Math.max(box.left, view.left);
+      if (shown <= 0) continue;
+      const month = element.dataset.monthStart!;
+      if (shown >= box.width / 2) visible.push(month);
+      if (!most || shown > most.shown) most = { month, shown };
+    }
+    if (!visible.length && most) visible.push(most.month);
+    const signature = visible.join();
+    if (signature === visibleMonthsRef.current) return;
+    visibleMonthsRef.current = signature;
+    report(visible);
+  }, []);
 
   // The month in view, so prepending older months (or showing a hidden screen again) keeps it in
   // place. `null` follows the newest month; `before` means the loading card ahead of `key`.
@@ -155,16 +191,22 @@ export function WorkoutCalendar({
     });
   }, [previewMode]);
 
-  useLayoutEffect(restoreScroll, [months, hasOlder, restoreScroll]);
+  useLayoutEffect(() => {
+    restoreScroll();
+    reportVisibleMonths();
+  }, [months, hasOlder, restoreScroll, reportVisibleMonths]);
 
   useEffect(() => {
     const calendar = calendarScrollRef.current;
     if (!calendar || typeof ResizeObserver === 'undefined') return;
     // A hidden screen has no width; once shown again, return to the month that was in view.
-    const observer = new ResizeObserver(restoreScroll);
+    const observer = new ResizeObserver(() => {
+      restoreScroll();
+      reportVisibleMonths();
+    });
     observer.observe(calendar);
     return () => observer.disconnect();
-  }, [restoreScroll]);
+  }, [restoreScroll, reportVisibleMonths]);
 
   const handleScroll = useCallback(() => {
     const calendar = calendarScrollRef.current;
@@ -183,6 +225,7 @@ export function WorkoutCalendar({
       anchorRef.current =
         closest && (previewMode || !atNewest) ? { key: closest.key, before: closest.before } : null;
     }
+    reportVisibleMonths();
     const older = handlersRef.current.olderHistory;
     if (
       older?.hasOlder &&
@@ -192,14 +235,19 @@ export function WorkoutCalendar({
     ) {
       older.onLoadOlder();
     }
-  }, [previewMode]);
+  }, [previewMode, reportVisibleMonths]);
 
   // Each tab switch re-renders the cached screens, and redrawing thousands of day cells was most
   // of that cost. The grid now only rebuilds when its data changes.
   const monthGrid = useMemo(
     () =>
       months.map((month) => (
-        <article className="calendar-month" key={month.key} data-month={month.key}>
+        <article
+          className="calendar-month"
+          key={month.key}
+          data-month={month.key}
+          data-month-start={month.first.slice(0, 7)}
+        >
           <h3>{month.title}</h3>
           <div className="calendar-weekdays" aria-hidden="true">
             {calendarWeekdays(weekStartDay).map((day, index) => (
@@ -229,15 +277,30 @@ export function WorkoutCalendar({
                         .filter((type) => !hiddenCategories?.has(type.id))
                         .map((type) => workoutTypeColor(type, categoryColors));
                       const filteredOut = dayTypes.length > 0 && ring.length === 0;
+                      // A day with nothing logged keeps a faint outline for the split's workout.
+                      const scheduledId =
+                        entry || inProgress || previewMode ? undefined : splitDays?.get(key);
+                      const scheduled = scheduledId
+                        ? types.find((type) => type.id === scheduledId)
+                        : undefined;
+                      const scheduledColor =
+                        scheduled && !hiddenCategories?.has(scheduled.id)
+                          ? workoutTypeColor(scheduled, categoryColors)
+                          : null;
+                      const dayRingStyle =
+                        ring.length && !inProgress ? dayRing(ring) : scheduledColor;
+                      const scheduledNote = scheduled
+                        ? `${scheduled.name} ${key < todayKey ? 'missed' : 'planned'}`
+                        : null;
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledColor ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
                           style={
-                            ring.length && !inProgress
-                              ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
+                            dayRingStyle
+                              ? ({ '--day-ring': dayRingStyle } as CSSProperties)
                               : undefined
                           }
                           disabled={previewMode || (readOnly && !entry)}
@@ -255,7 +318,7 @@ export function WorkoutCalendar({
                                 ? `Resume workout in progress for ${prettyDate(key)}`
                                 : entry
                                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}`
+                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
                           }
                           title={
                             previewMode
@@ -264,7 +327,9 @@ export function WorkoutCalendar({
                                 ? `${prettyDate(key)}: workout in progress`
                                 : entry
                                   ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} ${entry.set_count === 1 ? 'set' : 'sets'}`
-                                  : prettyDate(key)
+                                  : scheduledNote
+                                    ? `${prettyDate(key)}: ${scheduledNote}`
+                                    : prettyDate(key)
                           }
                         >
                           <span className="calendar-day-number">{day.getDate()}</span>
@@ -310,6 +375,7 @@ export function WorkoutCalendar({
       readOnly,
       previewMap,
       previewMode,
+      splitDays,
       weekStartDay,
     ],
   );
