@@ -85,6 +85,16 @@
   height: 0.95rem;
 }
 
+/* A profile's name keeps its sex symbol beside it when the row wraps. */
+.profile-summary-copy .profile-name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: inherit;
+  font-size: inherit;
+}
+
 .today-profile h2 {
   display: flex;
   align-items: center;
@@ -320,6 +330,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
   padding: 0 0.75rem 1.25rem;
 }
 
@@ -334,7 +345,7 @@
 
 .border-group ul {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr));
   gap: 0.35rem 0.25rem;
   margin: 0;
   padding: 0;

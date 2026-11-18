@@ -1661,8 +1661,10 @@ export function SharedProfileScreen({
             />
             <div className="profile-summary-copy">
               <strong>
-                {profile.display_name}
-                <SexMark sex={profile.sex} />
+                <span className="profile-name">
+                  {profile.display_name}
+                  <SexMark sex={profile.sex} />
+                </span>
                 {profile.is_you && <span className="profile-badge">You</span>}
               </strong>
               {memberSince && (

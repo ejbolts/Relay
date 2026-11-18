@@ -255,8 +255,10 @@ export function ProfileIdentity({
         )}
         <div className="profile-summary-copy">
           <strong>
-            {user.display_name}
-            <SexMark sex={user.sex} />
+            <span className="profile-name">
+              {user.display_name}
+              <SexMark sex={user.sex} />
+            </span>
             {user.is_admin && <span className="profile-badge">Admin</span>}
           </strong>
           <span>{user.username}</span>
