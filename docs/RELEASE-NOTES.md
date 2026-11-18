@@ -4,7 +4,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ## 1.3.0
 
-17 November 2026
+19 November 2026
 
 ### See how you measure up
 
@@ -18,13 +18,13 @@ _The 80-second Relay 1.3 trailer plays with music at the top of What's new; this
 
 **Head-to-head** — Compare your best lifts with friends and see who leads.
 
-![Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png)
+![Body measurements card with the male body outline: shoulders, chest, arms, hips, wrist and calf labelled in centimetres, blank labels on parts not yet measured, and a locked Male pill. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/63d9f2b8ed0ef20c0ba4bca77653a078e9ed065e/lock-body-sex-inline-measurements/after-body.png)
 
-**Body measurements** — See measurements on a body outline and tap to update.
+**Body measurements** — See measurements on a body outline and type new ones straight onto it.
 
-![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png)
+![Social feed with Feed and Friends tabs, a row of four friends with Sam marked Live and a week of dots under each, then workout cards from friends. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/b3c996d5053d45f06a71be6b82d984d1f7c08ed1/social-two-tabs/social-feed-after.png)
 
-**Workout feed** — Catch up on workouts, comments and reactions.
+**Workout feed** — See who's training and catch up on workouts, comments and reactions.
 
 ![Two-finger pinch on the Body trend chart zooms from 3M to 1M and out through 3M, 9M and 1Y to All, with range chips and dates following the gesture. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8a3724e75c9b8b689904164646630dfe2927ed86/body-chart-pinch-zoom/pinch-zoom.gif)
 
