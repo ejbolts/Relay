@@ -18,6 +18,15 @@ export function monthCountFromOldestWorkout(
   return Math.max(count, 1);
 }
 
+/** The entries dated in the given `YYYY-MM` months, or every entry while the months are unknown. */
+export function entriesInMonths<T extends DatedWorkoutEntry>(
+  entries: T[],
+  months: readonly string[] | null,
+): T[] {
+  if (!months) return entries;
+  return entries.filter((entry) => months.includes(entry.workout_date.slice(0, 7)));
+}
+
 const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export function calendarWeekdays(weekStartDay = 1): string[] {
