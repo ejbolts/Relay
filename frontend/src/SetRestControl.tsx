@@ -26,9 +26,7 @@ export function SetRestControl({
   const previous = previousSetRests(sets, setIndex, history);
   const ghost = suggested && previous[0]?.seconds === seconds;
   return (
-    <div
-      className={`rest-between${ghost ? ' rest-is-suggested' : ''}${leading ? ' has-insert' : ''}`}
-    >
+    <div className={`rest-between${ghost ? ' rest-is-suggested' : ''}`}>
       {leading}
       <i aria-hidden="true" />
       <div className="rest-between-controls">

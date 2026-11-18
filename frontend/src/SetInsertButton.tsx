@@ -17,7 +17,7 @@ export function SetInsertButton({
       title={beforeSet === 1 ? 'Add set at start' : `Add set before set ${beforeSet}`}
       onClick={onInsert}
     >
-      {/* The plus is drawn in CSS so its upright lines up with the rail through the set numbers. */}
+      {/* Drawn in CSS: a text "+" sits off-centre in the circle. */}
       <span className="set-insert-dot" aria-hidden="true" />
     </button>
   );
