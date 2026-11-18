@@ -106,6 +106,12 @@ def merge_exercise(db: Session, user_id: str, source_id: str, target_id: str) ->
                     if movement["exercise_id"] == source.id:
                         movement["exercise_id"] = target.id
             row.value = json.dumps(content)
+        elif row.key.startswith("type_exercises:"):
+            content = json.loads(row.value)
+            for movement in content["movements"]:
+                if movement["exercise_id"] == source.id:
+                    movement["exercise_id"] = target.id
+            row.value = json.dumps(content)
         elif row.key.startswith(f"machine_settings:{source.id}"):
             # Photo-specific settings move with their photos. The destination's
             # exercise-wide defaults win; use source defaults only if absent.

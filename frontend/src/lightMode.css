@@ -9,6 +9,9 @@
   --p-surface: #ffffff;
   --p-surface-2: #eef1f3;
   --p-surface-3: #e2e6ea;
+  --p-surface-raised: #ffffff;
+  --p-card-shadow: none;
+  --p-card-border: var(--p-line);
   --p-line: rgb(16 24 32 / 9%);
   --p-line-strong: rgb(16 24 32 / 16%);
   --p-ink: #14181c;
@@ -37,6 +40,23 @@
   --completed-set-open: #edf6ef;
   --completed-set-ink: #f3faf4;
   --completed-set-line: #8fb798;
+}
+
+:root[data-colour-mode='light'][data-light-style='stained'] {
+  /* Surfaces take a faint tint of the accent theme, like the dark Stained style. */
+  --p-page: color-mix(in srgb, var(--p-accent) 7%, #f3f5f7);
+  --p-surface: color-mix(in srgb, var(--p-accent) 4%, #ffffff);
+  --p-surface-2: color-mix(in srgb, var(--p-accent) 9%, #eef1f3);
+  --p-surface-3: color-mix(in srgb, var(--p-accent) 14%, #e2e6ea);
+  --p-surface-raised: color-mix(in srgb, var(--p-accent) 4%, #ffffff);
+  --p-line: color-mix(in srgb, var(--p-accent) 16%, rgb(16 24 32 / 9%));
+  --p-line-strong: color-mix(in srgb, var(--p-accent) 26%, rgb(16 24 32 / 16%));
+  --p-ink-2: color-mix(in srgb, var(--p-accent) 14%, #48515a);
+  --p-muted: color-mix(in srgb, var(--p-accent) 14%, #69727a);
+  --p-grid: color-mix(in srgb, var(--p-accent) 12%, #e4e8eb);
+  --p-deemph: color-mix(in srgb, var(--p-accent) 18%, #cdd3d8);
+  --paper: var(--p-page);
+  --card: var(--p-surface);
 }
 
 :root[data-colour-mode='light'] .app-tab-bar {
@@ -189,8 +209,7 @@
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
 }
-:root[data-colour-mode='light'] .set-details.previous-set-details > .completed-set-summary,
-:root[data-colour-mode='light'] .set-details.previous-set-details .completed-set-menu {
+:root[data-colour-mode='light'] .set-details.previous-set-details > .completed-set-summary {
   color: var(--p-ink-2);
 }
 :root[data-colour-mode='light'] .movement-overflow-menu {
@@ -305,9 +324,6 @@
 }
 :root[data-colour-mode='light'] .home-guide-action-button {
   color: #1c1c1e;
-}
-:root[data-colour-mode='light'] .live-workout-card {
-  background: linear-gradient(160deg, var(--p-accent-soft) 0%, var(--p-surface) 70%);
 }
 :root[data-colour-mode='light'] .body-history-goal-name {
   color: #2565b5;

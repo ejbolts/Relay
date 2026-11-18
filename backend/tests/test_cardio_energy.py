@@ -187,6 +187,7 @@ def test_cardio_creation_with_exercise_retains_calories_after_sync(client):
             average_speed_kph=10.4,
             incline_percent=7,
             average_mets=7.5,
+            elevation_gain_m=210,
         ),
     ).json()
     assert session["calories_kcal"] == 420
@@ -224,6 +225,7 @@ def test_cardio_creation_with_exercise_retains_calories_after_sync(client):
     assert synced["average_speed_kph"] == 11
     assert synced["incline_percent"] == 8
     assert synced["average_mets"] == 7.5
+    assert synced["elevation_gain_m"] == 210
     revision = client.get("/api/workouts/revision").json()["revision"]
     assert (
         client.patch(
@@ -369,6 +371,9 @@ def test_periods_compare_weighted_cardio_performance_with_prior_period():
     assert week.previous_average_mets == 4
     assert week.previous_met_minutes == 180
     assert week.mets_sessions == 2
+    # No elevation was logged, so each session's climb comes from its incline and distance.
+    assert (week.elevation_gain_m, week.elevation_sessions) == (1046, 2)
+    assert week.previous_elevation_gain_m == 80
     assert week.heart_rate_sessions == week.distance_sessions == 2
     assert week.previous_start_date == date(2026, 8, 31)
     assert week.previous_end_date == date(2026, 9, 6)

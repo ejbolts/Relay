@@ -109,7 +109,8 @@ def test_duplicates_include_archived_and_builtin_names_and_are_account_scoped(cl
     assert client.patch("/api/workout-types/not-found", json={"archived": True}).status_code == 404
 
 
-def test_saved_custom_types_persist_on_edits_archive_and_calendar(client):
+@pytest.mark.parametrize("version", [None, "1.2.0", "1.3.0"])
+def test_saved_custom_types_persist_on_edits_archive_and_calendar(client, version):
     types = [add_type(client, name) for name in ["Arms", "Legs", "Limbs", "Torso"]]
     workouts = []
     for item in types:
@@ -125,7 +126,8 @@ def test_saved_custom_types_persist_on_edits_archive_and_calendar(client):
     assert client.post("/api/workouts", json=payload(client, arms["id"])).status_code == 422
     old_client_edit = payload(client)
     del old_client_edit["workout_type_id"]
-    updated = client.put(f"/api/workouts/{workout['id']}", json=old_client_edit)
+    headers = {"X-Relay-Version": version} if version else {}
+    updated = client.put(f"/api/workouts/{workout['id']}", json=old_client_edit, headers=headers)
     assert updated.status_code == 200, updated.text
     assert updated.json()["workout_type_id"] == arms["id"]
     day = client.get("/api/dashboard").json()["heatmap"][0]
@@ -133,6 +135,10 @@ def test_saved_custom_types_persist_on_edits_archive_and_calendar(client):
     assert day["workouts"][0]["workout_type_id"] in {item["id"] for item in types}
     calendar = client.get("/api/calendar", params={"start": date.today().isoformat()}).json()
     assert calendar[0]["workout_types"] == day["workout_types"]
+    # An explicit null still clears the type; only omission preserves it.
+    cleared = client.put(f"/api/workouts/{workout['id']}", json=payload(client), headers=headers)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["workout_type_id"] is None
 
 
 def test_removed_builtin_cannot_be_used_for_new_workout_but_history_is_editable(client):

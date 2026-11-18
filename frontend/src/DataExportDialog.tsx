@@ -2,18 +2,8 @@ import { useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import { dateRangeForDates, TIME_RANGE_OPTIONS, type TimeRange } from './dateRanges';
+import { downloadFile as downloadCsv } from './downloadFile';
 import { localDate } from './utils';
-
-function downloadCsv(blob: Blob, name: string) {
-  const href = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = href;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(href);
-}
 
 export function DataExportDialog({
   workoutDates,

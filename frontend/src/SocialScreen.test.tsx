@@ -5,8 +5,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { lastWeek } from './friendFeedData';
 import { publishFriendPresence } from './presence';
+import { cachedSharedProfile, clearSharedProfileCache } from './sharedProfileCache';
 import { SocialScreen } from './SocialScreen';
-import type { FriendActivity, FriendConnections, TrackedWorkout } from './types';
+import type { FriendActivity, FriendConnections, SharedProfile, TrackedWorkout } from './types';
 import { localDate } from './utils';
 
 let root: Root;
@@ -67,6 +68,17 @@ beforeEach(() => {
     reactions: [],
   });
   vi.spyOn(api.sharing, 'profiles').mockResolvedValue([]);
+  vi.spyOn(api.sharing, 'timeline').mockResolvedValue({ items: [], has_more: false });
+  clearSharedProfileCache();
+  vi.spyOn(api.sharing, 'profile').mockImplementation(
+    async (id) => ({ id, display_name: id, can_view: true }) as SharedProfile,
+  );
+  vi.spyOn(api.sharing, 'workouts').mockResolvedValue({
+    total: 1,
+    workouts: [workout],
+    personal_records: [],
+  });
+  vi.spyOn(api.sharing, 'workoutFilters').mockResolvedValue({ exercises: [], machines: [] });
   vi.spyOn(api.sharing, 'suggestions').mockResolvedValue({
     profiles: [],
     total: 0,
@@ -85,7 +97,8 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render(active = true) {
+/** Social opens on its feed; these tests start from the Friends tab unless told otherwise. */
+async function render(active = true, section: 'Feed' | 'Friends' = 'Friends') {
   await act(async () =>
     root.render(
       <SocialScreen
@@ -97,9 +110,10 @@ async function render(active = true) {
       />,
     ),
   );
+  if (section === 'Friends') await act(async () => tab('Friends').click());
 }
 
-function tab(name: 'Friends' | 'Find') {
+function tab(name: 'Feed' | 'Friends') {
   return [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((item) =>
     item.textContent?.startsWith(name),
   )!;
@@ -113,6 +127,12 @@ function labelled(label: string) {
   return host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
 }
 
+it('counts friends above the title', async () => {
+  await render();
+  expect(host.querySelector('.page-eyebrow')?.textContent).toBe('2 friends');
+  expect(host.textContent).not.toContain('reactions');
+});
+
 it('opens your own profile from the avatar separately from sharing settings', async () => {
   await render();
   await click(host.querySelector<HTMLButtonElement>('.account-header-actions .profile-button')!);
@@ -120,7 +140,15 @@ it('opens your own profile from the avatar separately from sharing settings', as
   expect(chooseSharing).not.toHaveBeenCalled();
 });
 
-it('shows accessible friend-row skeletons until the initial friends response arrives', async () => {
+it('has only Feed and Friends tabs', async () => {
+  await render();
+  expect([...host.querySelectorAll('[role="tab"]')].map((item) => item.textContent)).toEqual([
+    'Feed',
+    'Friends1',
+  ]);
+});
+
+it('shows a loading status on Friends until the initial friends response arrives', async () => {
   let resolve!: (value: FriendConnections) => void;
   vi.mocked(api.sharing.friends).mockReturnValue(
     new Promise((done) => {
@@ -128,18 +156,10 @@ it('shows accessible friend-row skeletons until the initial friends response arr
     }),
   );
   await render();
-
-  const skeleton = host.querySelector('.friends-loading-skeleton')!;
-  expect(skeleton.getAttribute('role')).toBe('status');
-  expect(skeleton.getAttribute('aria-label')).toBe('Loading your friends');
-  expect(skeleton.getAttribute('aria-busy')).toBe('true');
-  expect(skeleton.querySelectorAll('.friend-cards > li')).toHaveLength(3);
-  expect(skeleton.querySelector('ul')?.getAttribute('aria-hidden')).toBe('true');
-  expect(skeleton.querySelectorAll('button, a, input')).toHaveLength(0);
-  expect(host.textContent).not.toContain('Loading your friends');
+  expect(host.querySelector('[role="status"]')?.textContent).toBe('Loading your friends…');
 
   await act(async () => resolve(connections));
-  expect(host.querySelector('.friends-loading-skeleton')).toBeNull();
+  expect(host.textContent).not.toContain('Loading your friends');
   expect(host.textContent).toContain('Alex Sample');
 });
 
@@ -161,39 +181,70 @@ it('keeps the existing friends visible during a slow background refresh', async 
   expect(host.textContent).toContain('Casey Sample');
 });
 
-it('lists each friend once with their week and latest session, and opens their profile', async () => {
+it('lists your friends on Friends, and opens their profile', async () => {
   await render();
   expect(tab('Friends').getAttribute('aria-selected')).toBe('true');
-  const cards = [...host.querySelectorAll('.friend-cards > li')];
-  expect(cards.map((card) => card.querySelector('b')?.textContent)).toEqual([
+  const group = [...host.querySelectorAll('.friend-group')].find(
+    (item) => item.querySelector('h3')?.textContent === 'Friends2',
+  )!;
+  const rows = [...group.querySelectorAll('li')];
+  expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
     'Alex Sample',
     'Casey Sample',
   ]);
-  expect(cards[0].textContent).toContain('4 workouts in the last 30 days');
-  expect(cards[0].textContent).toContain('Upper body · 48min');
-  expect(cards[0].textContent).toContain('Today · 0 sets');
-  expect(cards[0].querySelector('.friend-week')?.getAttribute('aria-label')).toBe(
-    'Trained on 2 of the last 7 days',
-  );
-  expect(cards[0].querySelectorAll('.friend-week .is-trained')).toHaveLength(2);
-  const days = [...cards[0].querySelectorAll<HTMLElement>('.friend-week > span')];
-  expect(days.map((day) => day.textContent)).toEqual(
-    week.map((day) =>
-      new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'narrow' }),
-    ),
-  );
-  expect(days.at(-1)?.className).toBe('is-trained is-today');
-  expect(cards[0].querySelector('[aria-label="React to Alex Sample’s Upper body"]')).not.toBeNull();
-  expect(cards[1].textContent).toContain('No sessions logged yet.');
+  expect(rows[0].textContent).toContain('4 workouts in the last 30 days');
+  expect(rows[1].textContent).toContain('0 workouts in the last 30 days');
+  expect(host.querySelector('[aria-label^="React to"]')).toBeNull();
   await click(labelled("Open Alex Sample's profile"));
   expect(openProfile).toHaveBeenCalledWith(alex);
 });
 
-it('shows friend requests on Find with a count, and keeps the search between tabs', async () => {
+it('loads the first five profiles in the background, only while the feed is on screen', async () => {
+  vi.useFakeTimers();
+  const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => ({
+    ...alex,
+    id,
+    display_name: `Friend ${id}`,
+  }));
+  connections = { friends: many, requests: [], sent: [], blocked: [] };
+  await render(true, 'Feed');
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  const loaded = () => vi.mocked(api.sharing.profile).mock.calls.map(([id]) => id);
+  expect(loaded()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  expect(cachedSharedProfile(null, 'a')?.page.workouts).toEqual([workout]);
+
+  // The 30-second friends refresh does not load them again.
+  await act(async () => vi.advanceTimersByTimeAsync(60_000));
+  expect(loaded()).toHaveLength(5);
+
+  // Pointing at a friend further along the row loads theirs.
+  await act(async () => {
+    host
+      .querySelector(`[aria-label^="Open Friend f's profile"]`)!
+      .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(loaded()).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  vi.useRealTimers();
+});
+
+it('does not load profiles in the background from Friends or a hidden Social tab', async () => {
+  vi.useFakeTimers();
+  await render(false, 'Feed');
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(api.sharing.profile).not.toHaveBeenCalled();
   await render();
-  expect(tab('Find').getAttribute('aria-label')).toBe('Find, 1 friend request');
-  expect(tab('Find').querySelector('.segmented-badge')?.textContent).toBe('1');
-  await click(tab('Find'));
+  vi.mocked(api.sharing.profile).mockClear();
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(api.sharing.profile).not.toHaveBeenCalled();
+  vi.useRealTimers();
+});
+
+it('shows friend requests on Friends with a count, and keeps the search between tabs', async () => {
+  await render(true, 'Feed');
+  expect(tab('Friends').getAttribute('aria-label')).toBe('Friends, 1 friend request');
+  expect(tab('Friends').querySelector('.segmented-badge')?.textContent).toBe('1');
+  await click(tab('Friends'));
   expect(host.textContent).toContain('Friend requests');
   expect(host.textContent).toContain('Search people');
   const accept = vi.spyOn(api.sharing, 'acceptFriend').mockImplementation(async () => {
@@ -203,27 +254,18 @@ it('shows friend requests on Find with a count, and keeps the search between tab
   await click(labelled('Accept Jamie Sample'));
   expect(accept).toHaveBeenCalledWith('jamie');
   expect(host.textContent).not.toContain('Friend requests');
-  expect(tab('Find').querySelector('.segmented-badge')).toBeNull();
+  expect(tab('Friends').querySelector('.segmented-badge')).toBeNull();
   const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Jamie');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  await click(tab('Feed'));
   await click(tab('Friends'));
-  await click(tab('Find'));
   expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('Jamie');
 });
 
-it('opens the selected saved workout separately from the friend profile', async () => {
-  await render();
-  const link = labelled('Open Alex Sample’s Upper body workout');
-  expect(link.tagName).toBe('BUTTON');
-  await click(link);
-  expect(openProfile).toHaveBeenCalledExactlyOnceWith(alex, workout);
-  expect(host.querySelectorAll('.friend-workout-link')).toHaveLength(1);
-});
-
-it('cancels sent requests and unblocks members from Find', async () => {
+it('cancels sent requests and unblocks members from Friends', async () => {
   connections = {
     friends: [],
     requests: [],
@@ -232,14 +274,14 @@ it('cancels sent requests and unblocks members from Find', async () => {
   };
   const remove = vi.spyOn(api.sharing, 'removeFriend').mockResolvedValue(undefined);
   const unblock = vi.spyOn(api.sharing, 'unblockMember').mockResolvedValue(undefined);
-  await render();
-  expect(host.textContent).toContain('Add friends to see their latest sessions');
+  await render(true, 'Feed');
+  expect(host.textContent).toContain('Add friends to see their workouts and photos here.');
   await click(
-    [...host.querySelectorAll<HTMLButtonElement>('.friends-list-empty button')].find((button) =>
+    [...host.querySelectorAll<HTMLButtonElement>('.feed-empty button')].find((button) =>
       button.textContent?.includes('Find friends'),
     )!,
   );
-  expect(tab('Find').getAttribute('aria-selected')).toBe('true');
+  expect(tab('Friends').getAttribute('aria-selected')).toBe('true');
   await click(labelled('Cancel request to Riley Sample'));
   expect(remove).toHaveBeenCalledWith('riley');
   await click(labelled('Unblock Morgan Sample'));
@@ -264,7 +306,6 @@ it('keeps private profiles private, routes sharing choices to Settings and still
     )!,
   );
   expect(chooseSharing).toHaveBeenCalledOnce();
-  await click(tab('Find'));
   expect(host.textContent).toContain('Share your profile to see others');
   await click(labelled('Unblock Morgan Sample'));
   expect(unblock).toHaveBeenCalledWith('morgan');
@@ -315,40 +356,40 @@ it('shows friends’ live activity, working out first, and updates it when it ch
     presence: { online: true, last_active_at: null, workout: null },
   };
   connections = { ...connections, friends: [away, online, morgan] };
-  await render();
-  const names = () =>
-    [...host.querySelectorAll('.friend-cards > li')].map(
-      (card) => card.querySelector('b')?.textContent,
+  await render(true, 'Feed');
+  const rail = () =>
+    [...host.querySelectorAll('.friends-rail-person')].map(
+      (person) => person.querySelector('.friends-rail-name')?.textContent,
     );
-  expect(names()).toEqual(['Morgan Sample', 'Casey Sample', 'Alex Sample']);
-  const [working, active, earlier] = [...host.querySelectorAll('.friend-cards > li')];
-  expect(working.className).toBe('is-live');
-  expect(working.querySelector('.friend-status')?.textContent).toBe('Working out');
-  expect(working.querySelector('.presence-dot.workout')).not.toBeNull();
-  expect(working.querySelector('.friend-card-latest.is-live')?.textContent).toBe(
-    'LivePush dayStrength · 38 min so far',
+  expect(rail()).toEqual(['Morgan', 'Casey', 'Alex']);
+  const [working, active] = [...host.querySelectorAll('.friends-rail-person')];
+  expect(working.className).toBe('friends-rail-person is-live');
+  expect(working.getAttribute('aria-label')).toBe(
+    "Open Morgan Sample's profile, training now: Push day, 38 min, trained on 1 of the last 7 days",
   );
-  expect(working.querySelector('[aria-label^="React to"]')).toBeNull();
-  expect(working.querySelector('.friend-week > span:last-child')?.className).toBe(
-    'is-today is-live',
-  );
-  expect(working.querySelector('.friend-week')?.getAttribute('aria-label')).toBe(
-    'Trained on 1 of the last 7 days, training now',
-  );
-  expect(labelled("Open Morgan Sample's profile, Working out")).not.toBeNull();
-  expect(active.querySelector('.friend-status')?.textContent).toBe('Active now');
   expect(active.querySelector('.presence-dot.online')).not.toBeNull();
-  expect(earlier.querySelector('.friend-status')?.textContent).toBe('Active 2h ago');
-  expect(earlier.querySelector('.presence-dot')).toBeNull();
 
-  // Morgan finishes: their latest session and reaction button return.
+  await click(tab('Friends'));
+  const rows = () =>
+    [...host.querySelectorAll('.friend-group li')]
+      .filter((row) => !row.textContent?.includes('Jamie'))
+      .map((row) => row.querySelector('.shared-connection-copy')?.textContent);
+  expect(rows()).toEqual([
+    'Morgan SampleWorking out',
+    'Casey SampleActive now',
+    'Alex SampleActive 2h ago',
+  ]);
+
+  // Morgan finishes and moves behind Casey, who was online first.
   await act(async () =>
     publishFriendPresence('morgan', { online: true, last_active_at: null, workout: null }),
   );
-  expect(names()).toEqual(['Casey Sample', 'Morgan Sample', 'Alex Sample']);
-  const finished = host.querySelectorAll('.friend-cards > li')[1];
-  expect(finished.querySelector('.friend-status')?.textContent).toBe('Active now');
-  expect(
-    finished.querySelector('[aria-label="React to Morgan Sample’s Upper body"]'),
-  ).not.toBeNull();
+  expect(rows()).toEqual([
+    'Casey SampleActive now',
+    'Morgan SampleActive now',
+    'Alex SampleActive 2h ago',
+  ]);
+  await click(tab('Feed'));
+  expect(rail()).toEqual(['Casey', 'Morgan', 'Alex']);
+  expect(host.querySelector('.friends-rail-live')).toBeNull();
 });

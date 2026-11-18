@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import { Icon } from './Icon';
+import { openInstallOption, useInstallMethod } from './installPrompt';
 import { PopupDialog } from './PopupDialog';
 
 /** Outline glyphs drawn after Safari's own controls, used only inside the illustrations. */
@@ -180,13 +182,83 @@ const STEPS: { text: ReactNode; shot: ReactNode }[] = [
   },
 ];
 
+/**
+ * Opens the browser's own install prompt, or the share sheet that holds Add to Home Screen,
+ * so nobody has to hunt for a menu that moves between browsers. Hidden when neither exists.
+ */
+export function HomeScreenShortcut({ onUnavailable }: { onUnavailable?: () => void }) {
+  const method = useInstallMethod();
+  if (method !== 'install' && method !== 'share') return null;
+  return (
+    <button
+      type="button"
+      className="profile-primary home-guide-shortcut"
+      onClick={() => {
+        void openInstallOption().then((opened) => {
+          if (!opened) onUnavailable?.();
+        });
+      }}
+    >
+      <Icon name={method === 'install' ? 'plus' : 'share'} />
+      {method === 'install' ? 'Install Relay' : 'Open Share menu'}
+    </button>
+  );
+}
+
 export function HomeScreenGuideContent() {
+  const method = useInstallMethod();
+  const manualSteps = useRef<HTMLDetailsElement>(null);
+  const hasShortcut = method === 'install' || method === 'share';
+  const safariSteps = (
+    <ol className="home-guide-steps">
+      {STEPS.map((step, index) => (
+        <li key={index}>
+          <p>{step.text}</p>
+          <div className="home-guide-shot" aria-hidden="true">
+            {step.shot}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
   return (
     <div className="home-guide-body">
       <p className="home-guide-intro" tabIndex={-1}>
         Open Relay like an app: full screen and one tap away. On iPhone, workout notifications also
         need the Home Screen app.
       </p>
+      {hasShortcut && (
+        <ol className="home-guide-steps home-guide-shortcut-steps">
+          <li>
+            <p tabIndex={-1}>
+              {method === 'install' ? (
+                <>
+                  Tap <strong>Install Relay</strong>, then confirm in your browser.
+                </>
+              ) : (
+                <>
+                  Tap Relay’s <strong>Open Share menu</strong> button below.
+                </>
+              )}
+            </p>
+            <HomeScreenShortcut
+              onUnavailable={() => {
+                if (manualSteps.current) manualSteps.current.open = true;
+              }}
+            />
+          </li>
+          {method === 'share' && (
+            <li>
+              <p>
+                Look for <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.
+              </p>
+              <div className="home-guide-shot" aria-hidden="true">
+                <ShareListShot />
+              </div>
+            </li>
+          )}
+        </ol>
+      )}
       <p className="home-guide-site">
         Start at{' '}
         <a href={APPLICATION_URL} target="_blank" rel="noopener noreferrer">
@@ -194,16 +266,14 @@ export function HomeScreenGuideContent() {
         </a>
         .
       </p>
-      <ol className="home-guide-steps">
-        {STEPS.map((step, index) => (
-          <li key={index}>
-            <p>{step.text}</p>
-            <div className="home-guide-shot" aria-hidden="true">
-              {step.shot}
-            </div>
-          </li>
-        ))}
-      </ol>
+      {hasShortcut ? (
+        <details className="home-guide-manual" ref={manualSteps}>
+          <summary>Can’t find Add to Home Screen? Use Safari’s menu</summary>
+          {safariSteps}
+        </details>
+      ) : (
+        safariSteps
+      )}
       <p className="home-guide-note">
         On Android, open Chrome's <strong>⋮</strong> menu and tap{' '}
         <strong>Add to Home screen</strong> or <strong>Install app</strong>.

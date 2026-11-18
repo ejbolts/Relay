@@ -4,13 +4,21 @@ import { App } from './App';
 import { AuthGate } from './AuthGate';
 import { registerAppUpdates } from './appUpdates';
 import { captureFriendInvite } from './friendInvite';
+import { captureInstallPrompt } from './installPrompt';
 import { preventIosInputZoom } from './iosInputZoom';
 import { applyReduceMotion, reduceMotionPreference } from './motion';
 import {
   applyColourMode,
   applyColourTheme,
+  applyDarkStyle,
+  applyGlass,
+  applyLightStyle,
   colourModePreference,
   colourThemePreference,
+  darkStylePreference,
+  glassPreference,
+  resetAppearanceOnce,
+  lightStylePreference,
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
@@ -29,9 +37,14 @@ import './exerciseList.css';
 // Before the app reads its screen from the address, keep any friend invite through sign-in.
 captureFriendInvite();
 registerAppUpdates();
+captureInstallPrompt();
 preventIosInputZoom();
 // Apply before the first paint so the opening screen respects the setting.
 applyReduceMotion(reduceMotionPreference());
+resetAppearanceOnce();
+applyDarkStyle(darkStylePreference());
+applyLightStyle(lightStylePreference());
+applyGlass(glassPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
 

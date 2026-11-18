@@ -106,6 +106,66 @@
   color: var(--p-muted);
   margin-top: 4px;
 }
+.exercise-merge-targets label > span {
+  flex: 1 1 auto;
+}
+.exercise-merge-tag {
+  display: inline-block;
+  margin-top: 6px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--p-ink-2);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.exercise-merge-changes {
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 14px;
+}
+.exercise-merge-changes h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.exercise-merge-changes dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.exercise-merge-changes dl > div {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 13px;
+}
+.exercise-merge-changes dt {
+  color: var(--p-muted);
+}
+.exercise-merge-changes dd {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.exercise-merge-changes s {
+  color: var(--p-muted);
+}
+.exercise-merge-changes dd span {
+  font-weight: 600;
+}
+.exercise-merge-changes p {
+  margin: 10px 0 12px;
+  color: var(--p-muted);
+  font-size: 13px;
+}
+.exercise-merge-changes .pulse-button {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
 .exercise-merge-review {
   border: 1px solid var(--p-line-strong);
   border-radius: 12px;
@@ -137,4 +197,33 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* The rename dialog opened from the same exercise options menu. */
+.exercise-rename-dialog > form {
+  padding: 1rem;
+}
+
+.exercise-rename-dialog label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.exercise-rename-dialog input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 1rem;
+}
+
+.exercise-rename-dialog .inline-error {
+  margin: 0.6rem 0 0;
 }

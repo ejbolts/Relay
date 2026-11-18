@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { useAdminUsers } from './adminActivity';
+import { adminUserRowId, clearAdminAccountFocus, useAdminAccountFocus } from './adminAccountFocus';
 import { useNow, workoutElapsed } from './presence';
 import {
   LIMIT_GROUPS,
@@ -15,7 +16,9 @@ import {
   videoQueueSummary,
 } from './adminDisplay';
 import { authErrorMessage } from './authForm';
+import { SEX_LABELS } from './profileDisplay';
 import { InlineConfirmButton } from './InlineConfirmButton';
+import { motionReduced } from './motion';
 import type {
   AccountLimits,
   AppFeedback,
@@ -23,9 +26,17 @@ import type {
   AdminUser,
   ServerSettings,
   ServerStatus,
+  Sex,
   VideoUploadMode,
 } from './types';
 import { useUserSession } from './userContext';
+
+/** A temporary password an admin has just generated; shown once, then discarded. */
+export interface TemporaryPasswordReveal {
+  userId: string;
+  displayName: string;
+  password: string;
+}
 
 export interface AdminScreenViewProps {
   feedback?: AppFeedback[] | null;
@@ -41,11 +52,17 @@ export interface AdminScreenViewProps {
   savingLimits: boolean;
   busyUserId: string | null;
   busyFeedbackId?: string | null;
+  temporaryPassword: TemporaryPasswordReveal | null;
   onFeedbackResolvedChange?: (item: AppFeedback, resolved: boolean) => void;
   onVideoUploadsChange: (mode: VideoUploadMode) => void;
   onSaveLimits: (values: AccountLimits) => void;
   onRegistrationChange: (open: boolean) => void;
   onUserDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
+  onResetPassword: (user: AdminUser) => Promise<void>;
+  /** Changes or clears an account's sex; absent hides the control. */
+  onUserSexChange?: (user: AdminUser, sex: Sex | null) => void;
+  onResetRequestDismiss?: (user: AdminUser) => void;
+  onTemporaryPasswordDismiss: () => void;
   onRefresh: () => void;
 }
 
@@ -223,6 +240,41 @@ function LimitsPanel({
   );
 }
 
+function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: number }) {
+  const versions = status.client_versions ?? [];
+  return (
+    <section className="settings-panel panel" aria-labelledby="admin-versions-title">
+      <header>
+        <div>
+          <p className="section-kicker">LAST 30 DAYS</p>
+          <h2 id="admin-versions-title">App versions in use</h2>
+        </div>
+      </header>
+      <dl className="admin-stats">
+        {versions.map((usage) => (
+          <div key={usage.version ?? 'unreported'}>
+            <dt>{usage.version ? `Version ${usage.version}` : 'Not reported'}</dt>
+            <dd>
+              {plural(usage.users, 'account')} · {plural(usage.sessions, 'device')} ·{' '}
+              {formatLastActive(usage.last_seen_at, new Date(now))}
+            </dd>
+          </div>
+        ))}
+        {versions.length === 0 && (
+          <div>
+            <dt>Signed-in devices</dt>
+            <dd>None</dd>
+          </div>
+        )}
+        <div>
+          <dt>Oldest version that can save</dt>
+          <dd>{status.minimum_write_version ?? 'Any'}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 function StatusPanel({ status }: { status: ServerStatus }) {
   const { total_bytes, used_bytes, free_bytes } = status.disk;
   const usedPercent = total_bytes ? Math.round((used_bytes / total_bytes) * 100) : 0;
@@ -271,34 +323,98 @@ function StatusPanel({ status }: { status: ServerStatus }) {
   );
 }
 
+function TemporaryPasswordPanel({
+  reveal,
+  onDismiss,
+}: {
+  reveal: TemporaryPasswordReveal;
+  onDismiss: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(reveal.password);
+      setCopied(true);
+    } catch {
+      // The password stays selectable, so it can still be copied by hand.
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div
+      className="admin-temp-password"
+      role="group"
+      aria-label={`Temporary password for ${reveal.displayName}`}
+    >
+      <strong>Temporary password</strong>
+      <code>{reveal.password}</code>
+      <small>Shown once. {reveal.displayName} must choose a new password after signing in.</small>
+      <div className="admin-temp-password-actions">
+        <button type="button" className="profile-secondary" onClick={() => void copy()}>
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+        <button type="button" className="profile-primary" onClick={onDismiss}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UserRow({
   user,
   now,
   isSelf,
   busy,
+  temporaryPassword,
   onDisabledChange,
+  onResetPassword,
+  onSexChange,
+  onResetRequestDismiss,
+  onTemporaryPasswordDismiss,
 }: {
   user: AdminUser;
   now: number;
   isSelf: boolean;
   busy: boolean;
+  temporaryPassword: TemporaryPasswordReveal | null;
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
+  onResetPassword: (user: AdminUser) => Promise<void>;
+  onSexChange?: (user: AdminUser, sex: Sex | null) => void;
+  onResetRequestDismiss?: (user: AdminUser) => void;
+  onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
   const online = !disabled && user.presence?.online;
   const live = disabled ? null : user.presence?.workout;
+  const versions = user.client_versions ?? [];
+  const resetRequestedAt = user.password_reset_requested_at ?? null;
   return (
-    <li className={`admin-user ${disabled ? 'is-disabled' : ''}`}>
+    <li
+      id={adminUserRowId(user.id)}
+      tabIndex={-1}
+      className={`admin-user ${disabled ? 'is-disabled' : ''} ${resetRequestedAt ? 'has-reset-request' : ''}`}
+    >
       <div className="admin-user-heading">
         <strong>
           {user.display_name}
           {user.is_admin && <span className="profile-badge">Admin</span>}
           {isSelf && <span className="admin-tag">You</span>}
           {disabled && <span className="admin-tag is-danger">Disabled</span>}
+          {resetRequestedAt && <span className="admin-tag is-request">Reset requested</span>}
+          {user.must_change_password && <span className="admin-tag">Temporary password</span>}
         </strong>
         <span>{user.username}</span>
       </div>
       <dl className="admin-user-stats">
+        {resetRequestedAt && (
+          <div className="admin-user-request">
+            <dt>Asked for a reset</dt>
+            <dd>{formatLastActive(resetRequestedAt, new Date(now))}</dd>
+          </div>
+        )}
         <div>
           <dt>Joined</dt>
           <dd>{formatJoined(user.created_at)}</dd>
@@ -322,6 +438,21 @@ function UserRow({
           <dd>{plural(user.signed_in_devices, 'device')}</dd>
         </div>
         <div>
+          <dt>App versions</dt>
+          <dd>
+            {versions.length
+              ? versions
+                  .map(
+                    (usage) =>
+                      `${usage.version ? `v${usage.version}` : 'Not reported'} (${plural(usage.devices, 'device')})`,
+                  )
+                  .join(', ')
+              : user.signed_in_devices === 0
+                ? 'No signed-in devices'
+                : 'Not reported'}
+          </dd>
+        </div>
+        <div>
           <dt>Workouts</dt>
           <dd>{user.workouts}</dd>
         </div>
@@ -335,27 +466,75 @@ function UserRow({
           <dt>Video sessions</dt>
           <dd>{user.video_sessions}</dd>
         </div>
+        {onSexChange && (
+          <div className="admin-user-sex">
+            <dt>
+              <label htmlFor={`admin-sex-${user.id}`}>Sex</label>
+            </dt>
+            <dd>
+              <select
+                id={`admin-sex-${user.id}`}
+                value={user.sex ?? ''}
+                disabled={busy}
+                onChange={(event) =>
+                  onSexChange(user, event.target.value === '' ? null : (event.target.value as Sex))
+                }
+              >
+                <option value="">Not set</option>
+                <option value="male">{SEX_LABELS.male}</option>
+                <option value="female">{SEX_LABELS.female}</option>
+              </select>
+            </dd>
+          </div>
+        )}
       </dl>
-      {!isSelf &&
-        (disabled ? (
-          <button
-            type="button"
-            className="profile-secondary"
-            disabled={busy}
-            onClick={() => void onDisabledChange(user, false)}
-          >
-            {busy ? 'Enabling…' : 'Enable account'}
-          </button>
-        ) : (
-          <InlineConfirmButton
-            label="Disable account"
-            confirmLabel="Disable and sign out"
-            workingLabel="Disabling…"
-            className="profile-danger"
-            disabled={busy}
-            onConfirm={() => onDisabledChange(user, true)}
-          />
-        ))}
+      {temporaryPassword && (
+        <TemporaryPasswordPanel reveal={temporaryPassword} onDismiss={onTemporaryPasswordDismiss} />
+      )}
+      {(!isSelf || (resetRequestedAt && onResetRequestDismiss)) && (
+        <div className="admin-user-actions">
+          {!isSelf && (
+            <InlineConfirmButton
+              label="Reset password"
+              confirmLabel="Reset and sign out"
+              workingLabel="Resetting…"
+              confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
+              className={resetRequestedAt ? 'profile-primary' : 'profile-secondary'}
+              disabled={busy}
+              onConfirm={() => onResetPassword(user)}
+            />
+          )}
+          {resetRequestedAt && onResetRequestDismiss && (
+            <button
+              type="button"
+              className="profile-secondary"
+              disabled={busy}
+              onClick={() => onResetRequestDismiss(user)}
+            >
+              Dismiss request
+            </button>
+          )}
+          {isSelf ? null : disabled ? (
+            <button
+              type="button"
+              className="profile-secondary"
+              disabled={busy}
+              onClick={() => void onDisabledChange(user, false)}
+            >
+              {busy ? 'Enabling…' : 'Enable account'}
+            </button>
+          ) : (
+            <InlineConfirmButton
+              label="Disable account"
+              confirmLabel="Disable and sign out"
+              workingLabel="Disabling…"
+              className="profile-danger"
+              disabled={busy}
+              onConfirm={() => onDisabledChange(user, true)}
+            />
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -409,15 +588,21 @@ export function AdminScreenView({
   savingLimits,
   busyUserId,
   busyFeedbackId = null,
+  temporaryPassword,
   onFeedbackResolvedChange,
   onVideoUploadsChange,
   onRegistrationChange,
   onSaveLimits,
   onUserDisabledChange,
+  onResetPassword,
+  onUserSexChange,
+  onResetRequestDismiss,
+  onTemporaryPasswordDismiss,
   onRefresh,
 }: AdminScreenViewProps) {
   const now = useNow(users !== null, 60_000);
   const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
+  const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
   const openFeedback = feedback?.filter((item) => item.resolved_at === null).length ?? 0;
   return (
     <section className="settings-screen admin-screen content-page">
@@ -451,6 +636,7 @@ export function AdminScreenView({
         />
       )}
       {status && <StatusPanel status={status} />}
+      {status && <ClientVersionsPanel status={status} now={now} />}
       {feedback && (
         <section className="settings-panel panel" aria-labelledby="admin-feedback-title">
           <header>
@@ -486,6 +672,11 @@ export function AdminScreenView({
               {disabledCount > 0 && ` · ${disabledCount} disabled`}
             </h2>
           </div>
+          {resetRequests > 0 && (
+            <span className="sharing-state is-on">
+              {resetRequests} {resetRequests === 1 ? 'reset request' : 'reset requests'}
+            </span>
+          )}
         </header>
         <p>
           Disabling an account signs it out on every device and blocks sign-in. Its data is kept, so
@@ -500,7 +691,12 @@ export function AdminScreenView({
                 now={now}
                 isSelf={user.id === currentUserId}
                 busy={busyUserId === user.id}
+                temporaryPassword={temporaryPassword?.userId === user.id ? temporaryPassword : null}
                 onDisabledChange={onUserDisabledChange}
+                onResetPassword={onResetPassword}
+                onSexChange={onUserSexChange}
+                onResetRequestDismiss={onResetRequestDismiss}
+                onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
               />
             ))}
           </ul>
@@ -515,7 +711,9 @@ export function AdminScreenView({
 
 export function AdminScreen({ active }: { active: boolean }) {
   const { user, updateUser } = useUserSession();
-  const { users, setUsers, loadUsers } = useAdminUsers(active && Boolean(user?.is_admin));
+  const { users, setUsers, loadUsers, snapshots } = useAdminUsers(
+    active && Boolean(user?.is_admin),
+  );
   const [feedback, setFeedback] = useState<AppFeedback[] | null>(null);
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [status, setStatus] = useState<ServerStatus | null>(null);
@@ -527,6 +725,14 @@ export function AdminScreen({ active }: { active: boolean }) {
   const [savingSetting, setSavingSetting] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [busyFeedbackId, setBusyFeedbackId] = useState<string | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState<TemporaryPasswordReveal | null>(null);
+  const focus = useAdminAccountFocus();
+  const focusAfter = useRef<{ key: number; snapshots: number } | null>(null);
+
+  useEffect(() => {
+    // A temporary password is only kept in memory while this screen is in view.
+    if (!active) setTemporaryPassword(null);
+  }, [active]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -549,6 +755,23 @@ export function AdminScreen({ active }: { active: boolean }) {
       setLoading(false);
     }
   }, [loadUsers]);
+
+  useEffect(() => {
+    // An account opened from a notification. This runs before the reload below, so it waits for
+    // a list applied after the request, where the account's request shows and the order is final,
+    // and for the panels above it to load, so they do not push the card back out of view.
+    if (!active || !focus) return;
+    if (focusAfter.current?.key !== focus.key) {
+      focusAfter.current = { key: focus.key, snapshots };
+    }
+    if (loading || snapshots <= focusAfter.current.snapshots) return;
+    const row = document.getElementById(adminUserRowId(focus.userId));
+    if (row) {
+      row.scrollIntoView({ block: 'center', behavior: motionReduced() ? 'auto' : 'smooth' });
+      row.focus({ preventScroll: true });
+    }
+    clearAdminAccountFocus(focus.key);
+  }, [active, focus, loading, snapshots]);
 
   useEffect(() => {
     // The screen stays mounted while hidden, so reload whenever it is opened again.
@@ -618,6 +841,81 @@ export function AdminScreen({ active }: { active: boolean }) {
     }
   }
 
+  async function changeUserSex(target: AdminUser, sex: Sex | null) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await api.admin.setUserSex(target.id, sex);
+      setUsers((current) =>
+        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
+      );
+      setNotice(
+        sex
+          ? `${updated.display_name}’s sex is now ${SEX_LABELS[sex]}.`
+          : `${updated.display_name} can choose their sex again.`,
+      );
+    } catch (reason) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  async function resetUserPassword(target: AdminUser) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    setTemporaryPassword(null);
+    try {
+      const { temporary_password } = await api.admin.resetUserPassword(target.id);
+      setUsers((current) =>
+        current
+          ? current.map((row) =>
+              row.id === target.id
+                ? {
+                    ...row,
+                    must_change_password: true,
+                    password_reset_requested_at: null,
+                    signed_in_devices: 0,
+                  }
+                : row,
+            )
+          : current,
+      );
+      setTemporaryPassword({
+        userId: target.id,
+        displayName: target.display_name,
+        password: temporary_password,
+      });
+    } catch (reason) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  async function dismissResetRequest(target: AdminUser) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.admin.dismissPasswordResetRequest(target.id);
+      // The tag and the header count clear; the card keeps its place until the next refresh.
+      setUsers((current) =>
+        current
+          ? current.map((row) =>
+              row.id === target.id ? { ...row, password_reset_requested_at: null } : row,
+            )
+          : current,
+      );
+    } catch (reason) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
   async function changeFeedbackResolved(target: AppFeedback, resolved: boolean) {
     if (busyFeedbackId) return;
     setBusyFeedbackId(target.id);
@@ -658,11 +956,16 @@ export function AdminScreen({ active }: { active: boolean }) {
       savingLimits={savingLimits}
       busyUserId={busyUserId}
       busyFeedbackId={busyFeedbackId}
+      temporaryPassword={temporaryPassword}
       onFeedbackResolvedChange={(item, resolved) => void changeFeedbackResolved(item, resolved)}
       onVideoUploadsChange={(mode) => void saveSettings({ video_uploads: mode })}
       onSaveLimits={(values) => void saveLimits(values)}
       onRegistrationChange={(open) => void saveSettings({ allow_registration: open })}
       onUserDisabledChange={changeUserDisabled}
+      onResetPassword={resetUserPassword}
+      onUserSexChange={(target, sex) => void changeUserSex(target, sex)}
+      onResetRequestDismiss={(target) => void dismissResetRequest(target)}
+      onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
       onRefresh={() => void load()}
     />
   );

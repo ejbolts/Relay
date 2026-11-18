@@ -33,7 +33,7 @@
 }
 
 .weekly-sets-shelf.is-notch {
-  bottom: calc(2.75rem + env(safe-area-inset-bottom));
+  bottom: calc(4rem + env(safe-area-inset-bottom));
 }
 
 .rest-pill.has-weekly-shelf {

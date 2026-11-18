@@ -3,11 +3,13 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
+import { preparedWorkoutAutoSave, useActiveWorkoutSync } from './activeWorkoutSync';
 import { createAppHistoryState } from './appNavigation';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
-import { api, ApiError } from './api';
+import { api, ApiError, revisionAfterSave } from './api';
 import { reportSavedDataUsed, reportServerReached } from './connectionStatus';
-import { WORKOUT_SAVE_TIMEOUT_MS } from './usePendingWorkoutSave';
+import { WORKOUT_SAVE_TIMEOUT_MS } from './useFinishedWorkoutQueue';
 import * as push from './push';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import {
@@ -16,8 +18,15 @@ import {
   writeActiveWorkoutDraft,
   type ActiveWorkoutDraft,
 } from './workoutDraft';
+import {
+  addFinishedWorkout,
+  clearFinishedWorkouts,
+  readFinishedWorkouts,
+  type FinishedWorkout,
+} from './finishedWorkoutQueue';
 import { isStrengthPrEligible } from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
+import { applyReduceMotion } from './motion';
 import type {
   DashboardData,
   Exercise,
@@ -44,6 +53,22 @@ vi.mock('./api', async (importOriginal) => {
       createWorkout: vi.fn(),
       updateWorkout: vi.fn(),
     },
+    revisionAfterSave: vi.fn(() => null),
+  };
+});
+// Passes through to the real hook unless a test sets a sync state.
+vi.mock('./activeWorkoutSync', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./activeWorkoutSync')>();
+  return { ...original, useActiveWorkoutSync: vi.fn(original.useActiveWorkoutSync) };
+});
+const autoSave = vi.hoisted(() => ({ minutes: null as number | null }));
+vi.mock('./workoutAutoSaveChoice', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./workoutAutoSaveChoice')>();
+  return {
+    ...original,
+    useWorkoutAutoSaveAccount: vi.fn(),
+    useWorkoutAutoSaveMinutes: () => autoSave.minutes,
+    workoutAutoSaveMinutes: () => autoSave.minutes,
   };
 });
 vi.mock('./workoutCache', () => ({
@@ -285,8 +310,17 @@ function retry() {
   button!.click();
 }
 
+/** The finished workout waiting to sync on this device, if any. */
+function finishedSave() {
+  return readFinishedWorkouts()[0]?.pendingSave;
+}
+
+/** The workout's entries are still on this device: in the logger, or finished and waiting. */
 function expectPreserved(draft: ActiveWorkoutDraft) {
-  const recovered = readActiveWorkoutDraft();
+  const recovered =
+    readActiveWorkoutDraft() ??
+    readFinishedWorkouts().find((item) => item.startedAt === draft.startedAt) ??
+    null;
   expect(recovered).toMatchObject({
     startedAt: draft.startedAt,
     name: draft.name,
@@ -295,6 +329,23 @@ function expectPreserved(draft: ActiveWorkoutDraft) {
     notes: draft.notes,
     movements: draft.movements,
   });
+}
+
+function pendingButton(label: string) {
+  return [...container.querySelectorAll<HTMLButtonElement>('.pending-workout-actions button')].find(
+    (button) => button.textContent === label,
+  )!;
+}
+
+function inactivePrompt() {
+  return document.querySelector<HTMLDialogElement>('.inactive-workout-dialog');
+}
+
+async function chooseInactive(label: string) {
+  const button = [...inactivePrompt()!.querySelectorAll('button')].find(
+    (item) => item.textContent === label,
+  )!;
+  await act(async () => button.click());
 }
 
 async function confirmFinish() {
@@ -306,6 +357,43 @@ async function confirmFinish() {
     '.workout-finish-dialog .popup-primary-action',
   )!;
   await act(async () => confirm.click());
+}
+
+/** Taps Finish workout on a workout that cannot save, checking the popup explains why. */
+async function openFinishBlocker() {
+  const finish = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Finish workout',
+  )!;
+  await act(async () => finish.click());
+  const dialog = document.querySelector('.workout-finish-dialog')!;
+  expect(dialog.querySelector('h2')?.textContent).toContain("Can't finish yet");
+  // Only a way back to the workout: there is nothing to confirm yet.
+  expect(
+    [...dialog.querySelectorAll('.popup-dialog-actions button')].map((b) => b.textContent),
+  ).toEqual(['Keep working out']);
+  // The reason sits in the popup rather than at the top of the logger.
+  expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+}
+
+function finishBlocker() {
+  return document.querySelector('.workout-finish-dialog .workout-finish-blocker')?.textContent;
+}
+
+async function keepWorkingOut() {
+  const keep = document.querySelector<HTMLButtonElement>(
+    '.workout-finish-dialog .popup-primary-action',
+  )!;
+  expect(keep.textContent).toBe('Keep working out');
+  await act(async () => keep.click());
+  expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+}
+
+async function closeFinishConfirmation() {
+  const keep = [
+    ...document.querySelectorAll<HTMLButtonElement>('.workout-finish-dialog button'),
+  ].find((button) => button.textContent === 'Keep working out')!;
+  await act(async () => keep.click());
+  expect(document.querySelector('.workout-finish-dialog')).toBeNull();
 }
 
 function restoreOldLoggerLocation() {
@@ -328,6 +416,7 @@ beforeEach(() => {
   };
   window.localStorage.clear();
   window.localStorage.setItem('gym-logger-reduce-motion', 'reduced');
+  applyReduceMotion(true);
   window.history.replaceState(null, '', '#log');
   vi.mocked(api.dashboard).mockResolvedValue({ recommendation: null } as unknown as DashboardData);
   vi.mocked(api.listExercises).mockResolvedValue([bench, row]);
@@ -358,6 +447,147 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  applyReduceMotion(false);
+});
+
+describe('workout sync status in the logger', () => {
+  // Back to the real hook (the mock's original implementation) for later tests.
+  afterEach(() => vi.mocked(useActiveWorkoutSync).mockReset());
+  const syncState = (state: Partial<ReturnType<typeof useActiveWorkoutSync>>) =>
+    vi.mocked(useActiveWorkoutSync).mockReturnValue({
+      status: 'synced',
+      conflict: null,
+      error: null,
+      retry: vi.fn(),
+      resolve: vi.fn(),
+      ...state,
+    });
+
+  it('keeps retrying a failed sync in the background without a pill above the workout', async () => {
+    syncState({ status: 'offline', error: 'Failed to fetch' });
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    expect(container.querySelector('.movement-card')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Retry sync');
+    expect(document.body.textContent).not.toContain('Saved on device');
+    expect(container.querySelector('[aria-label="Sync workout across devices"]')).toBeNull();
+  });
+
+  it('floats the resolve button over the workout after the conflict dialog is closed', async () => {
+    const draft = storedDraft();
+    syncState({
+      status: 'conflict',
+      conflict: { local: draft, remote: { revision: 2, draft: { ...draft, name: 'Phone edit' } } },
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const close = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Close Workout sync conflict"]',
+    );
+    expect(close).not.toBeNull();
+    await act(async () => close!.click());
+    const reopen = [...container.querySelectorAll<HTMLButtonElement>('.workout-sync-reopen')];
+    expect(reopen.map((button) => button.textContent)).toEqual(['Resolve workout sync']);
+    expect(document.body.textContent).not.toContain('Resolve sync');
+    await act(async () => reopen[0].click());
+    expect(document.querySelector('[aria-label="Close Workout sync conflict"]')).not.toBeNull();
+  });
+});
+
+describe('cross-device live workout updates', () => {
+  it('records the dated bodyweight when logging and retains it through recovery', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets[0].completed = false;
+    draft.movements[0].sets[0].weight_kg = 100;
+    draft.movements[0].supersetKey = null;
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.listBodyMeasurements).mockResolvedValue([
+      {
+        id: 'future',
+        measurement_date: '2026-10-14',
+        weight_kg: 70,
+        body_fat_pct: null,
+        notes: null,
+        is_sample: false,
+        created_at: '',
+      },
+      {
+        id: 'then',
+        measurement_date: '2026-10-13',
+        weight_kg: 80,
+        body_fat_pct: null,
+        notes: null,
+        is_sample: false,
+        created_at: '',
+      },
+    ]);
+    await mount();
+    // A set still to lift shows no ratio yet.
+    expect(container.querySelector('.completed-set-bodyweight')).toBeNull();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+    );
+    expect(container.querySelector('.completed-set-bodyweight')?.textContent).toBe(
+      '1.25× BW · at 80 kg BW',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].bodyweight_kg).toBe(80);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(container.querySelector('.completed-set-bodyweight')?.textContent).toBe(
+      '1.25× BW · at 80 kg BW',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].bodyweight_kg).toBe(80);
+  });
+  it('updates the mounted logger without replacing its focused set input or echoing old data', async () => {
+    const draft = storedDraft({ clientSessionId: crypto.randomUUID() });
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const weight = container.querySelector<HTMLInputElement>('[aria-label="Weight kilograms"]')!;
+    await act(async () => weight.focus());
+    const remote = structuredClone(readActiveWorkoutDraft()!);
+    remote.movements[0].sets[0].weight_kg = 92.5;
+    remote.notes = 'Updated on phone';
+    remote.pausedAt = Date.now();
+    remote.pausedMs = 120000;
+    remote.adjustedMs = -60000;
+    remote.movements[0].repRange = { min: 8, max: 12 };
+    await act(async () => {
+      writeActiveWorkoutDraft(remote);
+      window.dispatchEvent(new CustomEvent(REMOTE_WORKOUT_APPLIED, { detail: remote }));
+    });
+    expect(container.querySelector('[aria-label="Weight kilograms"]')).toBe(weight);
+    expect(document.activeElement).toBe(weight);
+    expect(weight.value).toBe('92.5');
+    expect(readActiveWorkoutDraft()?.notes).toBe('Updated on phone');
+    expect(readActiveWorkoutDraft()?.pausedMs).toBe(120000);
+    expect(readActiveWorkoutDraft()?.adjustedMs).toBe(-60000);
+    expect(readActiveWorkoutDraft()?.movements[0].repRange).toEqual({ min: 8, max: 12 });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Workout options"]')!.click(),
+    );
+    expect(container.querySelector('[aria-label="Resume workout"]')).not.toBeNull();
+  });
+
+  it('records workout interactions while ignoring activity elsewhere in the app', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const draft = storedDraft({ clientSessionId: crypto.randomUUID() });
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const before = readActiveWorkoutDraft()!.lastActiveAt!;
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    expect(readActiveWorkoutDraft()!.lastActiveAt).toBe(before);
+    const input = container.querySelector<HTMLInputElement>('[aria-label="Weight kilograms"]')!;
+    await act(async () =>
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })),
+    );
+    expect(readActiveWorkoutDraft()!.lastActiveAt).toBeGreaterThan(before);
+  });
 });
 
 it('uses the top header to return from settings sections before leaving settings', async () => {
@@ -421,8 +651,22 @@ describe('mixed-session timelines', () => {
       'Bench press',
     ]);
     const move = [...cards()[0].querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent?.includes('Move Later'),
+      button.textContent?.includes('Move later'),
     )!;
+    // The exercise menu reads in sentence case, and removing names what it removes.
+    expect(
+      [...cards()[0].querySelectorAll('.movement-overflow-menu button')].map((button) =>
+        button.textContent?.replace('⇄', '').trim(),
+      ),
+    ).toEqual([
+      'Recent history',
+      'Muscle credits',
+      'Group as superset',
+      'Swap exercise',
+      'Move earlier',
+      'Move later',
+      'Remove exercise',
+    ]);
     await act(async () => move.click());
     expect(heading()).toBe('Upper body + Cardio workout');
     expect(cards().map((card) => card.querySelector('h2')?.textContent)).toEqual([
@@ -577,6 +821,23 @@ it('keeps settings search navigation working after the header resets a previous 
   await searchRest();
 });
 
+function savedMovement(exercise: Exercise) {
+  return {
+    exercise_id: exercise.id,
+    exercise,
+    sets: [
+      {
+        reps: 12,
+        weight_kg: 40,
+        rest_seconds: 90,
+        duration_seconds: null,
+        distance_km: null,
+        set_type: 'normal' as const,
+      },
+    ],
+  };
+}
+
 describe('saved training splits on Home', () => {
   const custom = {
     id: 'custom-a',
@@ -725,6 +986,62 @@ describe('saved training splits on Home', () => {
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
+  it('fills a workout from the exercises saved to its type when the split day has none', async () => {
+    vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
+      { workout_type_id: custom.id, movements: [savedMovement(row)] },
+    ]);
+    await mount();
+    expect(container.querySelector('.next-session-exercises')?.textContent).toContain('Cable row');
+    expect(container.querySelector('.next-session-head small')?.textContent).toBe('Saved');
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    const draft = readActiveWorkoutDraft()!;
+    expect(draft.workoutTypeId).toBe(custom.id);
+    expect(draft.movements.map((movement) => movement.exerciseId)).toEqual([row.id]);
+    expect(draft.movements[0].sets).toMatchObject([
+      { reps: 12, weight_kg: 40, completed: false, fromPrevious: true },
+    ]);
+  });
+
+  it('fills an empty workout when its type changes, but never replaces exercises', async () => {
+    const upper = { ...custom, id: 'upper', name: 'Upper body', is_custom: false };
+    vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom, upper]);
+    vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
+      { workout_type_id: 'upper', movements: [savedMovement(bench)] },
+      { workout_type_id: custom.id, movements: [savedMovement(row)] },
+    ]);
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+    } as unknown as DashboardData);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!.click(),
+    );
+    const empty = [...document.querySelectorAll<HTMLButtonElement>('.start-menu button')].find(
+      (item) => item.textContent?.includes('Empty'),
+    )!;
+    await act(async () => empty.click());
+    expect(readActiveWorkoutDraft()?.movements ?? []).toEqual([]);
+    const select = () =>
+      [...container.querySelectorAll('label')]
+        .find((label) => label.textContent?.startsWith('Workout type'))!
+        .querySelector('select')!;
+    async function choose(id: string) {
+      await act(async () => {
+        select().value = id;
+        select().dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    await choose('upper');
+    expect(readActiveWorkoutDraft()!.movements.map((movement) => movement.exerciseId)).toEqual([
+      bench.id,
+    ]);
+    await choose(custom.id);
+    const draft = readActiveWorkoutDraft()!;
+    expect(draft.workoutTypeId).toBe(custom.id);
+    expect(draft.movements.map((movement) => movement.exerciseId)).toEqual([bench.id]);
+  });
+
   it('shows a rest day without offering it as a workout in the Start menu', async () => {
     vi.mocked(api.dashboard).mockResolvedValue({
       recommendation: { ...recommendation, workout_type: null, is_rest_day: true },
@@ -732,6 +1049,9 @@ describe('saved training splits on Home', () => {
     await mount();
     expect(container.querySelector('#next-session-title')?.textContent).toBe('Rest day');
     expect(container.querySelector('.next-session-exercises')).toBeNull();
+    // Start workout already starts an empty workout, so there is no second Empty button.
+    expect(container.querySelector('.next-session-empty')).toBeNull();
+    expect(container.querySelector('.next-session-actions')?.textContent).toBe('Start workout');
     const start = container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')!;
     await act(async () => start.click());
     expect(container.querySelector('.start-menu')?.textContent).not.toContain('Rest day');
@@ -840,12 +1160,7 @@ describe('rest time controls', () => {
     set.restRevealed = false;
     writeActiveWorkoutDraft(draft);
     await mount();
-    await click('Options for set 1');
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
-        .find((button) => button.textContent?.includes('Edit set'))!
-        .click(),
-    );
+    await click('Edit weight for set 1');
     const input = container.querySelector<HTMLInputElement>('[data-set-key="set-0"] input')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '85');
@@ -905,33 +1220,107 @@ describe('rest time controls', () => {
     return systemNotification;
   }
 
+  it('minimises to the live Start bubble without saving or losing sets, notes or the running rest', async () => {
+    await startRest();
+    const before = readActiveWorkoutDraft()!;
+    // Behind the open sheet the tab bar already shows the live Start bubble, so pulling the sheet
+    // down reveals it instead of it popping in; the bar stays inert until the sheet closes.
+    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+    expect(container.querySelector('.app-tab-bar')?.hasAttribute('inert')).toBe(true);
+    const minimise = container.querySelector<HTMLButtonElement>('[aria-label="Minimise workout"]')!;
+    minimise.focus();
+    await act(async () => minimise.click());
+    expect(window.location.hash).toBe('#dashboard');
+    const start = () => container.querySelector<HTMLButtonElement>('.app-tab-start.live')!;
+    expect(start().getAttribute('aria-label')).toBe('Resume active workout, rest 0:30 left');
+    expect(document.activeElement).toBe(start());
+    expect(container.querySelector('.live-workout-resume')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(start().getAttribute('aria-label')).toBe('Resume active workout, rest 0:25 left');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => start().click());
+    expect(window.location.hash).toBe('#log');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
+    expect(readActiveWorkoutDraft()?.movements).toEqual(before.movements);
+    expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
+  });
+
+  it('keeps Add exercise after the last movement and in the header, with Discard in the menu', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const actions = container.querySelector('.live-workout-actions')!;
+    const last = [...container.querySelectorAll('.movement-card')].at(-1)!;
+    expect(last.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(actions.querySelector('.finish-workout-bottom')).toBeNull();
+    // Throwing the workout away is no longer one slip below Add exercise.
+    expect([...actions.querySelectorAll('button')].map((item) => item.textContent?.trim())).toEqual(
+      ['＋ Add exercise'],
+    );
+    expect(
+      container.querySelector('.live-workout-header [aria-label="Add exercise"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('.live-workout-header [aria-label="Finish workout"]'),
+    ).not.toBeNull();
+    await click('Workout options');
+    await click('Discard workout');
+    const confirm = document.querySelector('.workout-discard-dialog')!;
+    expect(confirm.querySelector('h2')?.textContent).toBe('Discard this workout?');
+    expect(
+      [...confirm.querySelectorAll('.popup-dialog-actions button')].map((item) => item.textContent),
+    ).toEqual(['Keep workout', 'Discard workout']);
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('collapses details by default and opens the notes from the workout menu', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const details = container.querySelector<HTMLDetailsElement>('.workout-details-disclosure')!;
+    expect(details.open).toBe(false);
+    await click('Workout options');
+    await click('Add note');
+    expect(details.open).toBe(true);
+    expect(details.querySelector<HTMLTextAreaElement>('.workout-notes textarea')?.value).toBe(
+      'Workout notes survive',
+    );
+  });
+
   it.each([false, true])(
     'alerts above other tabs after a dismissed countdown (server push scheduled: %s)',
     async (scheduled) => {
       const systemNotification = await startRest(scheduled);
       await click('Hide rest timer');
       await act(async () =>
-        container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click(),
+        container.querySelector<HTMLButtonElement>('.workout-sheet-grab')!.click(),
       );
       await act(async () =>
         container.querySelector<HTMLButtonElement>('.app-tab[data-guide-target="body"]')!.click(),
       );
       expect(window.location.hash).toBe('#body');
       await act(async () => vi.advanceTimersByTimeAsync(30_000));
-      expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-        'Rest complete. Time for your next set.',
+      // The minimised workout's Start button rings a bell instead of showing a popup.
+      const start = () => container.querySelector<HTMLButtonElement>('.app-tab-start');
+      expect(start()?.classList.contains('ringing')).toBe(true);
+      expect(start()?.querySelector('.ringing-bell')).not.toBeNull();
+      expect(start()?.getAttribute('aria-label')).toBe(
+        'Rest complete. Resume workout at the next set',
       );
+      expect(start()?.textContent).toContain('+0:00');
+      expect(document.querySelector('.rest-done-bell')).toBeNull();
       expect(systemNotification).not.toHaveBeenCalled();
       if (scheduled) expect(api.scheduleRestTimerNotification).toHaveBeenCalled();
-      // Dismissal and returning focus must not announce the same timer a second time.
-      await act(async () =>
-        document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
-      );
+      // Tapping it opens the workout and stops the bell; returning focus must not ring again.
+      await act(async () => {
+        start()!.click();
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(window.location.hash).toBe('#log');
       await act(async () => {
         window.dispatchEvent(new Event('focus'));
         await vi.advanceTimersByTimeAsync(1000);
       });
-      expect(document.querySelector('.app-notification-toast')).toBeNull();
+      expect(start()?.classList.contains('ringing')).toBe(false);
+      expect(document.querySelector('.rest-done-bell')).toBeNull();
     },
   );
 
@@ -941,7 +1330,49 @@ describe('rest time controls', () => {
     expect(container.querySelector('[role="timer"]')).toBeNull();
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.rest-done-bell')).toBeNull();
+  });
+
+  it('logs a tri-set round before starting the rest', async () => {
+    const curl: Exercise = { ...bench, id: 'curl', name: 'Biceps curl', category: 'pull' };
+    vi.mocked(api.listExercises).mockResolvedValue([bench, row, curl]);
+    const draft = storedDraft();
+    draft.movements.push({ ...draft.movements[1], key: 'movement-2', exerciseId: curl.id });
+    draft.movements.forEach((movement) => {
+      movement.sets = [{ ...movement.sets[0], completed: false, rest_seconds: 30 }];
+    });
+    writeActiveWorkoutDraft(draft);
+    const scrolledTo: Array<string | null | undefined> = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      if (this.classList.contains('movement-card'))
+        scrolledTo.push(this.querySelector('h2')?.textContent);
+    };
+    await mount();
+    const cards = () => [...container.querySelectorAll<HTMLElement>('.movement-card')];
+    const upNext = () =>
+      cards()
+        .filter((card) => card.querySelector('.superset-up-next'))
+        .map((card) => card.querySelector('h2')?.textContent);
+    const logRound = async (index: number) => {
+      await act(async () =>
+        cards()[index].querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
+      );
+      await act(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+    };
+
+    expect(cards()[0].querySelector('.superset-ribbon')?.textContent).toBe(
+      'Tri-set · Bench press + Cable row + Biceps curl',
+    );
+    await logRound(0);
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(upNext()).toEqual(['Cable row']);
+    await logRound(1);
+    expect(container.querySelector('[role="timer"]')).toBeNull();
+    expect(upNext()).toEqual(['Biceps curl']);
+    await logRound(2);
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
+    expect(upNext()).toEqual([]);
+    expect(scrolledTo).toEqual(['Cable row', 'Biceps curl']);
   });
 
   it('moves the rest fill by the whole 30 seconds when time is added or taken off', async () => {
@@ -969,7 +1400,7 @@ describe('rest time controls', () => {
     expect(api.cancelRestTimerNotification).toHaveBeenCalled();
     expect(headerMeta()?.textContent).toMatch(/^Live /);
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.rest-done-bell')).toBeNull();
   });
 
   it('pauses the live time and the rest together, keeps the rest alert waiting, then resumes both', async () => {
@@ -987,7 +1418,7 @@ describe('rest time controls', () => {
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(headerMeta()?.textContent).toBe(frozenHeader);
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.rest-done-bell')).toBeNull();
     // Adjusting a paused rest changes what is left without starting it.
     await click('Add 30 seconds to the rest');
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
@@ -999,13 +1430,13 @@ describe('rest time controls', () => {
       expect.objectContaining({ delay_seconds: 55 }),
     );
     await act(async () => vi.advanceTimersByTimeAsync(55_000));
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+    expect(document.querySelector('.rest-done-bell')?.getAttribute('aria-label')).toContain(
       'Rest complete',
     );
     expect(systemNotification).not.toHaveBeenCalled();
   });
 
-  it('pauses beside the live time with no rest, and completing a set resumes the workout', async () => {
+  it('pauses from the workout menu with no rest, and completing a set resumes the workout', async () => {
     vi.useFakeTimers();
     const draft = storedDraft();
     draft.movements[0].sets[0].completed = false;
@@ -1014,11 +1445,15 @@ describe('rest time controls', () => {
     await mount();
     expect(container.querySelector('[role="timer"]')).toBeNull();
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
+    await click('Workout options');
     await click('Pause workout');
     expect(headerMeta()?.textContent).toContain('Paused');
-    expect(headerMeta()?.querySelector('.workout-header-pause')?.getAttribute('aria-label')).toBe(
-      'Resume workout',
-    );
+    expect(headerMeta()?.querySelector('.workout-header-pause')).toBeNull();
+    await click('Workout options');
+    expect(
+      container.querySelector('[role="menuitem"][aria-label="Resume workout"]'),
+    ).not.toBeNull();
+    await click('Workout options');
     await act(async () => vi.advanceTimersByTimeAsync(120_000));
     await click('Complete set 1');
     expect(headerMeta()?.textContent).toMatch(/^Live 10:0\d$/);
@@ -1034,7 +1469,11 @@ describe('rest time controls', () => {
     );
     await mount();
     expect(headerMeta()?.textContent).toBe('6:00•Paused');
-    expect(headerMeta()?.querySelector('[aria-label="Resume workout"]')).not.toBeNull();
+    await click('Workout options');
+    expect(
+      container.querySelector('[role="menuitem"][aria-label="Resume workout"]'),
+    ).not.toBeNull();
+    await click('Workout options');
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     await confirmFinish();
     const payload = vi.mocked(api.createWorkout).mock.calls.at(-1)![0];
@@ -1047,8 +1486,9 @@ describe('rest time controls', () => {
       const systemNotification = await startRest(scheduled);
       vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
       await act(async () => vi.advanceTimersByTimeAsync(30_000));
-      expect(document.querySelector('.app-notification-toast')).toBeNull();
       expect(systemNotification).toHaveBeenCalledTimes(scheduled ? 0 : 1);
+      // The bell is ringing when the app is opened again.
+      expect(document.querySelector('.rest-done-bell')).not.toBeNull();
     },
   );
 
@@ -1056,9 +1496,81 @@ describe('rest time controls', () => {
     await startRest();
     vi.setSystemTime(Date.now() + 31_000);
     await act(async () => window.dispatchEvent(new Event('focus')));
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+    expect(document.querySelector('.rest-done-bell')?.getAttribute('aria-label')).toContain(
       'Rest complete',
     );
+  });
+
+  it('rings a bell when the rest ends, with no popup, and tapping it goes to the next set', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const draft = storedDraft();
+    const [benchMovement] = draft.movements;
+    benchMovement.supersetKey = null;
+    benchMovement.sets = [
+      { ...benchMovement.sets[0], completed: false, rest_seconds: 30 },
+      { ...benchMovement.sets[0], key: 'set-0b', completed: false, rest_seconds: 30 },
+      { ...benchMovement.sets[0], key: 'set-0c', completed: false, rest_seconds: 30 },
+    ];
+    draft.movements = [benchMovement];
+    writeActiveWorkoutDraft(draft);
+    const scrolled: Element[] = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this);
+    };
+    await mount();
+    const bell = () => document.querySelector<HTMLButtonElement>('.rest-done-bell');
+    await click('Complete set 1');
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    // The rest timer's bottom-edge notch rings; there is no GO popup any more.
+    expect(bell()?.getAttribute('aria-label')).toBe('Rest complete. Go to Bench press, set 2');
+    expect(bell()?.querySelector('.ringing-bell')).not.toBeNull();
+    expect(document.querySelector('.rest-complete-pill')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(container.querySelector('.logger-screen')?.classList.contains('has-rest-notch')).toBe(
+      true,
+    );
+    // It counts the time since the rest ended.
+    await act(async () => vi.advanceTimersByTimeAsync(12_000));
+    expect(bell()?.querySelector('.rest-done-over')?.textContent).toBe('+0:12');
+    // Tapping it brings the next set into view and stops the bell.
+    await act(async () => {
+      bell()!.click();
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(bell()).toBeNull();
+    expect(scrolled.some((element) => element.getAttribute('data-set-key') === 'set-0b')).toBe(
+      true,
+    );
+    // Logging the next set also stops a ringing bell.
+    await click('Complete set 2');
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(bell()?.getAttribute('aria-label')).toBe('Rest complete. Go to Bench press, set 3');
+    await click('Complete set 3');
+    expect(bell()).toBeNull();
+    expect(container.querySelector('.app-tab-start')?.classList.contains('ringing')).toBe(false);
+  });
+
+  it("explains in a timed popup that an exercise's only set can't be deleted", async () => {
+    vi.useFakeTimers();
+    const draft = storedDraft();
+    draft.movements[0].sets[0].completed = false;
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    // An unticked set is open, with Delete set among its own actions.
+    const remove = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Delete set'),
+    )!;
+    await act(async () => remove.click());
+    const notice = container.querySelector('.logger-notice-toast');
+    expect(notice?.getAttribute('role')).toBe('alert');
+    expect(notice?.textContent).toContain(
+      'An exercise needs at least one set. Remove the exercise instead.',
+    );
+    expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+    expect(readActiveWorkoutDraft()?.movements[0].sets).toHaveLength(1);
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(container.querySelector('.logger-notice-toast')).toBeNull();
   });
 
   it('removes only a rest, offers Undo, persists removal and restores it only on a saved edit', async () => {
@@ -1085,34 +1597,20 @@ describe('rest time controls', () => {
     root = createRoot(container);
     await mount();
     expect(restControl()).toBeNull();
-    await click('Options for set 1');
-    const edit = [
-      ...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button'),
-    ].find((button) => button.textContent?.includes('Edit set'))!;
-    await act(async () => edit.click());
+    await click('Edit weight for set 1');
     expect(
       container.querySelector<HTMLSelectElement>('[aria-label="Rest time for set 1"]')?.value,
     ).toBe('0');
     await click('Done editing set 1');
     expect(restControl()).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].sets[0].rest_seconds).toBeNull();
-    await click('Options for set 1');
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
-        .find((button) => button.textContent?.includes('Edit set'))!
-        .click(),
-    );
+    await click('Edit weight for set 1');
     await choose('Rest time for set 1', '30');
     expect(restControl()).toBeNull();
     await click('Done editing set 1');
     expect(restControl()?.value).toBe('30');
     expect(container.querySelector('[role="timer"]')).toBeNull();
-    await click('Options for set 1');
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')]
-        .find((button) => button.textContent?.includes('Edit set'))!
-        .click(),
-    );
+    await click('Edit weight for set 1');
     await choose('Rest time for set 1', '0');
     await click('Done editing set 1');
     expect(restControl()).toBeNull();
@@ -1190,6 +1688,154 @@ describe('rest time controls', () => {
       container.querySelector<HTMLButtonElement>('.undo-toast-action')!.click(),
     );
     expect(restControl()?.value).toBe('180');
+  });
+});
+
+describe('empty sets', () => {
+  const emptySet = (
+    key: string,
+    update: Partial<ActiveWorkoutDraft['movements'][0]['sets'][0]>,
+  ) => ({
+    ...createWorkoutSet('strength', undefined, false),
+    key,
+    restRevealed: true,
+    ...update,
+  });
+
+  it('opens an empty set at its reps instead of ticking it', async () => {
+    const draft = storedDraft();
+    draft.movements = [draft.movements[0]];
+    draft.movements[0].sets.push(emptySet('empty', {}));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const tick = () => container.querySelector<HTMLButtonElement>('[aria-label="Complete set 2"]')!;
+    await act(async () => tick().click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[1].completed).toBe(false);
+    const row = container.querySelector('[data-set-key="empty"]')!;
+    const reps = row.querySelector<HTMLInputElement>('[data-set-field="reps"]')!;
+    expect(row.querySelector('.set-entry-error')?.textContent).toBe('Enter reps to log this set.');
+    expect(reps.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(reps);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(reps, '12');
+      reps.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(row.querySelector('.set-entry-error')).toBeNull();
+    expect(reps.hasAttribute('aria-invalid')).toBe(false);
+
+    await act(async () => tick().click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[1]).toMatchObject({
+      reps: 12,
+      completed: true,
+    });
+  });
+
+  it('saves an already ticked set with nothing entered as unticked', async () => {
+    const draft = storedDraft();
+    // Ticked before the check existed: only the automatic bodyweight is attached.
+    draft.movements[0].sets.unshift(
+      emptySet('ticked-empty', {
+        set_type: 'warmup',
+        warmup: true,
+        bodyweight_kg: 83.3,
+        completed: true,
+      }),
+    );
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    await confirmFinish();
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0] as WorkoutInput;
+    expect(payload.movements[0].sets.map((set) => set.completed)).toEqual([false, true]);
+    expect(payload.movements[1].sets.map((set) => set.completed)).toEqual([true]);
+  });
+});
+
+describe('inserting sets', () => {
+  const insertButton = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`.movement-card [aria-label="${label}"]`);
+
+  it('adds a set at the start or between sets, copying the neighbouring set', async () => {
+    const draft = storedDraft();
+    const movement = draft.movements[0];
+    draft.movements = [movement];
+    movement.sets = [
+      { ...movement.sets[0], key: 'first', weight_kg: 60, reps: 10, rest_seconds: 120 },
+      { ...movement.sets[0], key: 'second', weight_kg: 85, reps: 6, completed: false },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    // The completed first set shows its rest divider, which carries the between-sets "+".
+    expect(insertButton('Add set before set 2')?.closest('.rest-between')).not.toBeNull();
+    // Nothing after the last set: the Add set button covers the end of the list.
+    expect(insertButton('Add set before set 3')).toBeNull();
+
+    await act(async () => insertButton('Add set at start')!.click());
+    let sets = readActiveWorkoutDraft()!.movements[0].sets;
+    expect(sets.map((set) => set.key).slice(1)).toEqual(['first', 'second']);
+    expect(sets[0]).toMatchObject({ weight_kg: 60, reps: 10, completed: false });
+
+    // The new set 1 is unticked with a revealed rest, so the next gap is a divider too.
+    await act(async () => insertButton('Add set before set 3')!.click());
+    sets = readActiveWorkoutDraft()!.movements[0].sets;
+    expect(sets).toHaveLength(4);
+    expect(sets[1].key).toBe('first');
+    expect(sets[2]).toMatchObject({ weight_kg: 60, completed: false });
+    expect(sets[3].key).toBe('second');
+  });
+
+  it('offers an insert line between sets with no rest divider', async () => {
+    const draft = storedDraft();
+    const movement = draft.movements[0];
+    draft.movements = [movement];
+    movement.sets = [1, 2].map((number) => ({
+      ...movement.sets[0],
+      key: `suggested-${number}`,
+      completed: false,
+      fromPrevious: true,
+      restRevealed: false,
+      weight_kg: number * 40,
+    }));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const between = insertButton('Add set before set 2');
+    expect(between?.closest('.set-insert-row')).not.toBeNull();
+    await act(async () => between!.click());
+    const sets = readActiveWorkoutDraft()!.movements[0].sets;
+    expect(sets.map((set) => set.weight_kg)).toEqual([40, 40, 80]);
+    expect(sets[1].key).not.toMatch(/^suggested-/);
+  });
+
+  it('adds the rest after a set from the gap below it', async () => {
+    const draft = storedDraft();
+    const movement = draft.movements[0];
+    draft.movements = [movement];
+    movement.sets = [
+      { ...movement.sets[0], key: 'no-rest', completed: false, rest_seconds: null },
+      { ...movement.sets[0], key: 'next', completed: false, rest_seconds: 90 },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const addRest = insertButton('Add rest after set 1');
+    expect(addRest?.closest('.set-insert-row')).not.toBeNull();
+    // Only between sets: nothing before the first set or after the last.
+    expect(container.querySelectorAll('.movement-card .set-add-rest')).toHaveLength(1);
+    await act(async () => addRest!.click());
+
+    // The nearest rest in the exercise is used, and the gap becomes a rest divider.
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].rest_seconds).toBe(90);
+    expect(insertButton('Add rest after set 1')).toBeNull();
+    expect(
+      container.querySelector<HTMLSelectElement>('.rest-between [aria-label="Rest after set 1"]')
+        ?.value,
+    ).toBe('90');
+    expect(insertButton('Add set before set 2')?.closest('.rest-between')).not.toBeNull();
   });
 });
 
@@ -1421,6 +2067,22 @@ describe('phantom workout prevention', () => {
     expect(api.createWorkout).toHaveBeenCalledOnce();
   });
 
+  it('refreshes from the revision the save reported instead of asking for it again', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    vi.mocked(revisionAfterSave).mockReturnValueOnce('after-save');
+    await mount();
+    const revisionChecks = vi.mocked(api.workoutRevision).mock.calls.length;
+
+    await confirmFinish();
+
+    await vi.waitFor(() =>
+      expect(api.listWorkouts).toHaveBeenLastCalledWith(expect.any(String), 'after-save'),
+    );
+    expect(api.dashboard).toHaveBeenCalledTimes(2);
+    expect(api.workoutRevision).toHaveBeenCalledTimes(revisionChecks);
+  });
+
   it('closes the original logger without replacing it when a save succeeds after returning to the logger', async () => {
     writeActiveWorkoutDraft(storedDraft());
     let finishSave!: (workout: TrackedWorkout) => void;
@@ -1435,7 +2097,7 @@ describe('phantom workout prevention', () => {
     await act(async () => restoreOldLoggerLocation());
     expect(window.location.hash).toBe('#dashboard');
     expect(container.querySelector('.logger-screen')).toBeNull();
-    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
+    expect(finishedSave()).toBeDefined();
 
     await act(async () => finishSave(remoteWorkout()));
     expect(window.location.hash).toBe('#dashboard');
@@ -1498,7 +2160,8 @@ describe('phantom workout prevention', () => {
     );
     await confirmFinish();
     expect(vi.mocked(api.createWorkout).mock.calls[0][0].client_session_id).toBe(clientSessionId);
-    expect(readActiveWorkoutDraft()?.clientSessionId).toBe(clientSessionId);
+    expect(readFinishedWorkouts()[0]?.clientSessionId).toBe(clientSessionId);
+    expect(readActiveWorkoutDraft()).toBeNull();
 
     await act(async () => root.unmount());
     vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
@@ -1511,14 +2174,47 @@ describe('phantom workout prevention', () => {
 });
 
 describe('finishing workouts in the background', () => {
+  it('says how many sets are ticked before finishing a workout with unticked sets', async () => {
+    const draft = storedDraft();
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-unticked',
+      completed: false,
+    });
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    expect(
+      document.querySelector('.workout-finish-dialog .workout-finish-summary')?.textContent,
+    ).toBe("2 of 3 sets ticked. Unticked sets won't count.");
+    await closeFinishConfirmation();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('keeps the finish confirmation short when every set is ticked', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const finish = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Finish workout',
+    )!;
+    await act(async () => finish.click());
+    expect(document.querySelector('.workout-finish-dialog')).not.toBeNull();
+    expect(document.querySelector('.workout-finish-summary')).toBeNull();
+    await closeFinishConfirmation();
+  });
+
   it('explains how to finish an empty workout without discarding it', async () => {
     const draft = storedDraft({ movements: [] });
     writeActiveWorkoutDraft(draft);
     await mount();
-    await confirmFinish();
-    expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+    await openFinishBlocker();
+    expect(finishBlocker()).toContain(
       'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick',
     );
+    await keepWorkingOut();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expectPreserved(draft);
   });
@@ -1542,10 +2238,11 @@ describe('finishing workouts in the background', () => {
       }));
       writeActiveWorkoutDraft(draft);
       await mount();
-      await confirmFinish();
-      expect(container.querySelector('.logger-screen .inline-error')?.textContent).toContain(
+      await openFinishBlocker();
+      expect(finishBlocker()).toContain(
         'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise.',
       );
+      await keepWorkingOut();
       expect(api.createWorkout).not.toHaveBeenCalled();
       expectPreserved(draft);
     },
@@ -1599,16 +2296,14 @@ describe('finishing workouts in the background', () => {
     await confirmFinish();
     expect(api.createWorkout).toHaveBeenCalledOnce();
     expect(window.location.hash).toBe('#dashboard');
+    // The finished workout syncs from its own queue, so another can start straight away.
     expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="Saving workout"]')?.disabled,
-    ).toBe(true);
-    expect(container.querySelector('.live-workout-card')).toBeNull();
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Workout finished',
-    );
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Syncing workout',
-    );
+      container.querySelector<HTMLButtonElement>('[aria-label="Start workout"]')?.disabled,
+    ).toBe(false);
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
     expectPreserved(draft);
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
       true,
@@ -1636,7 +2331,223 @@ describe('finishing workouts in the background', () => {
     expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
 
-  it('keeps a finished snapshot after a failed background save, allowing a retry', async () => {
+  it('keeps the configured calendar week and workout colour while showing an offline finish', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 23, 12));
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      heatmap: [],
+      weekly_sets: { week_start: '2026-10-18', week_end: '2026-10-24', muscle_groups: [] },
+    } as unknown as DashboardData);
+    writeActiveWorkoutDraft(storedDraft({ workoutDate: '2026-10-23' }));
+    await mount();
+    await confirmFinish();
+    const days = container.querySelectorAll<HTMLButtonElement>('.week-strip .week-strip-day');
+    expect(days[0].dataset.date).toBe('2026-10-18');
+    // This week is its own Home section rather than part of the consistency calendar.
+    expect(container.querySelector('.this-week-card .week-strip')).not.toBeNull();
+    expect(container.querySelector('.calendar-panel .week-strip')).toBeNull();
+    const finishedDay = container.querySelector<HTMLButtonElement>(
+      '.week-strip [data-date="2026-10-23"]',
+    )!;
+    expect(finishedDay.getAttribute('aria-label')).toContain('View 1 workout');
+    expect(finishedDay.style.getPropertyValue('--day-ring')).toBe('#8b5cf6');
+    await act(async () => finishedDay.click());
+    expect(document.querySelector('.calendar-day-detail')?.textContent).toContain(
+      'Recovery workout',
+    );
+    // This week is its own section, so only the tapped day is marked, not the calendar's too.
+    expect(
+      [...container.querySelectorAll('.home-sections [data-date="2026-10-23"].selected')].map(
+        (day) => day.closest('.this-week-card') !== null,
+      ),
+    ).toEqual([true]);
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Close workout details"]')!.click(),
+    );
+    expect(container.querySelector('.home-sections .selected')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('lists the finished workout from this device while it syncs, then swaps in the saved one', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    let finishSave!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    await navigateTo('Training');
+    const card = () =>
+      [...container.querySelectorAll('.history-card')].find((item) =>
+        item.textContent?.includes('Recovery workout'),
+      );
+    expect(card()).toBeDefined();
+    expect(card()?.querySelector('.syncing-tag')).toBeNull();
+    await act(async () =>
+      card()!.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
+    );
+    const buttonLabels = () =>
+      [...card()!.querySelectorAll('button')].map((button) => button.textContent?.trim());
+    expect(buttonLabels()).not.toContain('Edit');
+    expect(buttonLabels()).not.toContain('Delete');
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0];
+    const saved = {
+      ...remoteWorkout('Recovery workout'),
+      id: 'finished-workout',
+      client_session_id: payload.client_session_id,
+      workout_date: payload.workout_date,
+      is_sample: false,
+    };
+    vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+    await act(async () => finishSave(saved));
+    expect(card()).toBeDefined();
+    expect(card()!.querySelector('.syncing-tag')).toBeNull();
+    expect(
+      [...container.querySelectorAll('.history-card')].filter((item) =>
+        item.textContent?.includes('Recovery workout'),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('finishes quietly and does not show a saved popup after the upload completes', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    let finishSave!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    const toast = () => document.querySelector('.app-notification-toast');
+    expect(toast()).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+
+    const payload = vi.mocked(api.createWorkout).mock.calls[0][0];
+    await act(async () =>
+      finishSave({
+        ...remoteWorkout('Recovery workout'),
+        id: 'finished-workout',
+        client_session_id: payload.client_session_id,
+      }),
+    );
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(toast()).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+  });
+
+  function queuedWorkout(name: string, minutesAgo: number): FinishedWorkout {
+    const startedAt = Date.now() - minutesAgo * 60_000;
+    const clientSessionId = crypto.randomUUID();
+    const draft = storedDraft({
+      name,
+      clientSessionId,
+      startedAt,
+      updatedAt: startedAt,
+      lastActiveAt: startedAt,
+      inactiveFinishAt: startedAt + 3 * 60 * 60 * 1000,
+    });
+    return {
+      ...draft,
+      pendingSave: {
+        userId: null,
+        finishedAt: startedAt + 30 * 60_000,
+        workoutId: null,
+        payload: {
+          client_session_id: clientSessionId,
+          name,
+          workout_date: draft.workoutDate,
+          category: draft.category,
+          notes: null,
+          duration_minutes: 30,
+          start_time: null,
+          end_time: null,
+          movements: [
+            {
+              exercise_id: bench.id,
+              notes: null,
+              machine_photo_ids: [],
+              sets: [
+                {
+                  ...createWorkoutSet('strength'),
+                  reps: 8,
+                  weight_kg: 80,
+                  set_type: 'normal',
+                  warmup: false,
+                  completed: true,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  it('moves a finished workout from an earlier release out of the way, then syncs it once', async () => {
+    const legacy = queuedWorkout('Earlier release workout', 90);
+    // Releases before the queue kept the finished workout inside the active draft.
+    writeActiveWorkoutDraft(legacy);
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    window.history.replaceState(null, '', '#dashboard');
+    await mount();
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(readFinishedWorkouts().map((item) => item.name)).toEqual(['Earlier release workout']);
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="Start empty workout"]')?.disabled,
+    ).toBe(false);
+
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    vi.mocked(api.createWorkout).mockResolvedValue({
+      ...remoteWorkout('Earlier release workout'),
+      client_session_id: legacy.clientSessionId,
+    });
+    await act(async () => window.dispatchEvent(new Event('online')));
+    await vi.waitFor(() => expect(readFinishedWorkouts()).toEqual([]));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.createWorkout).mock.calls[0][0]).toEqual(legacy.pendingSave.payload);
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+  });
+
+  it('holds a refused workout for review without stopping the next one from syncing', async () => {
+    addFinishedWorkout(queuedWorkout('Refused workout', 180));
+    addFinishedWorkout(queuedWorkout('Later workout', 90));
+    writeActiveWorkoutDraft(storedDraft({ name: 'Workout in progress' }));
+    vi.mocked(api.createWorkout)
+      .mockRejectedValueOnce(new ApiError('Choose an available workout type.', 'invalid_type', 422))
+      .mockImplementationOnce(async (payload) => ({
+        ...remoteWorkout(payload.name),
+        id: 'later-workout',
+        client_session_id: payload.client_session_id,
+      }));
+    window.history.replaceState(null, '', '#dashboard');
+    await mount();
+    await vi.waitFor(() =>
+      expect(readFinishedWorkouts().map((item) => item.name)).toEqual(['Refused workout']),
+    );
+    expect(vi.mocked(api.createWorkout).mock.calls.map(([payload]) => payload.name)).toEqual([
+      'Refused workout',
+      'Later workout',
+    ]);
+    const card = container.querySelector('.pending-workout-save')!;
+    expect(card.textContent).toContain('Choose an available workout type.');
+    // Reviewing reopens it in the logger, which is busy with the workout in progress.
+    expect(card.textContent).toContain('Finish your current workout to review this one.');
+    expect(pendingButton('Review workout').disabled).toBe(true);
+    expect(readActiveWorkoutDraft()?.name).toBe('Workout in progress');
+  });
+
+  it('keeps a finished snapshot after a failed background save and quietly retries on reconnect', async () => {
     const draft = storedDraft();
     writeActiveWorkoutDraft(draft);
     let failSave!: (error: Error) => void;
@@ -1650,15 +2561,63 @@ describe('finishing workouts in the background', () => {
     expect(window.location.hash).toBe('#dashboard');
     await act(async () => failSave(new Error('Server unavailable; try again.')));
     expect(window.location.hash).toBe('#dashboard');
-    expect(container.textContent).toContain('Saved on this device. Waiting to sync.');
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
     expectPreserved(draft);
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise(() => {}));
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('.pending-workout-actions button')!.click(),
-    );
+    await act(async () => window.dispatchEvent(new Event('online')));
     expect(api.createWorkout).toHaveBeenCalledTimes(2);
     expect(window.location.hash).toBe('#dashboard');
+  });
+
+  it('discards a finished workout that has not synced, after confirming', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(
+      new ApiError('Review this workout before saving.', 'invalid_workout', 422),
+    );
+    await mount();
+    await confirmFinish();
+    expect(container.textContent).toContain('Review this workout before saving.');
+    await act(async () => pendingButton('Discard').click());
+    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
+      'This workout has not synced and will be lost.',
+    );
+    expect(finishedSave()).toBeDefined();
+    await act(async () => pendingButton('Cancel').click());
+    expect(finishedSave()).toBeDefined();
+    await act(async () => pendingButton('Discard').click());
+    await act(async () => pendingButton('Discard workout').click());
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(document.body.textContent).toContain('Workout discarded.');
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    // Nothing is left to replay when the connection returns.
+    await act(async () => window.dispatchEvent(new Event('online')));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+  });
+
+  it('cannot discard a finished workout while its save is in flight', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    await confirmFinish();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(finishedSave()).toBeDefined();
+  });
+
+  it('files a workout started as Cardio by its exercises when it has no cardio', async () => {
+    writeActiveWorkoutDraft(
+      storedDraft({ name: '', category: 'cardio', workoutTypeExplicit: true }),
+    );
+    vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
+    await mount();
+    expect(container.querySelector('.logger-screen')?.textContent).toContain('Upper body workout');
+    await confirmFinish();
+    expect(vi.mocked(api.createWorkout).mock.calls[0][0]).toMatchObject({
+      category: 'upper',
+      name: 'Upper body workout',
+    });
   });
 
   it('keeps later navigation after a failed new-workout save and preserves recovery', async () => {
@@ -1676,9 +2635,7 @@ describe('finishing workouts in the background', () => {
     await act(async () => fail(new Error('Connection lost.')));
     expect(window.location.hash).toBe('#training');
     expectPreserved(draft);
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain(
-      'Saved on this device',
-    );
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
   });
 
@@ -1706,6 +2663,7 @@ describe('finishing workouts in the background', () => {
     expect(document.querySelector('.workout-completion-toast')?.textContent).toContain('1 new PR');
     expect(document.querySelector('[aria-modal="true"], #root[inert]')).toBeNull();
     expect(document.body.style.overflow).not.toBe('hidden');
+    expect(document.body.classList.contains('live-workout-sheet-open')).toBe(false);
     await navigateTo('Training');
     expect(window.location.hash).toBe('#training');
     expect(document.querySelector('.workout-completion-toast')).not.toBeNull();
@@ -1723,11 +2681,104 @@ describe('durable workout completion', () => {
     vi.mocked(api.createWorkout).mockReset();
   });
 
+  it.each(['pagehide', 'hidden', 'pageshow'])(
+    'retries a waiting save at %s without showing progress or duplicating an in-flight request',
+    async (event) => {
+      writeActiveWorkoutDraft(storedDraft());
+      vi.mocked(api.createWorkout)
+        .mockRejectedValueOnce(new TypeError('Connection interrupted'))
+        .mockReturnValueOnce(new Promise(() => {}));
+      await mount();
+      await confirmFinish();
+      expect(api.createWorkout).toHaveBeenCalledOnce();
+      if (event === 'hidden')
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      const dispatch = () =>
+        event === 'hidden'
+          ? document.dispatchEvent(new Event('visibilitychange'))
+          : window.dispatchEvent(new Event(event));
+      await act(async () => {
+        dispatch();
+        dispatch();
+      });
+      expect(api.createWorkout).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(api.createWorkout).mock.calls[1][0]).toEqual(
+        vi.mocked(api.createWorkout).mock.calls[0][0],
+      );
+      expect(vi.mocked(api.createWorkout).mock.calls[1][1]?.aborted).toBe(false);
+      expect(readFinishedWorkouts()).toHaveLength(1);
+      expect(container.querySelector('.background-activity-bar')).toBeNull();
+      expect(container.querySelector('.pending-workout-save')).toBeNull();
+    },
+  );
+
+  it('keeps a new workout intact when an earlier save finishes', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    let finish!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    const first = vi.mocked(api.createWorkout).mock.calls[0][0];
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Start empty workout"]')!.click(),
+    );
+    const second = readActiveWorkoutDraft()!;
+    expect(second.clientSessionId).not.toBe(first.client_session_id);
+    await act(async () =>
+      finish({ ...remoteWorkout(), client_session_id: first.client_session_id }),
+    );
+    expect(window.location.hash).toBe('#log');
+    expect(container.querySelector('.logger-screen')).not.toBeNull();
+    expect(readActiveWorkoutDraft()?.clientSessionId).toBe(second.clientSessionId);
+    expect(readFinishedWorkouts()).toEqual([]);
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+  });
+
+  it('keeps another workout open for editing when a queued save finishes', async () => {
+    const earlier = {
+      ...remoteWorkout('Earlier session'),
+      id: 'earlier-session',
+      is_sample: false,
+    };
+    vi.mocked(api.listWorkouts).mockResolvedValue([earlier]);
+    writeActiveWorkoutDraft(storedDraft());
+    let finish!: (workout: TrackedWorkout) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    await navigateTo('Training');
+    const card = [...container.querySelectorAll('.history-card')].find((item) =>
+      item.textContent?.includes('Earlier session'),
+    )!;
+    await act(async () => card.querySelector<HTMLButtonElement>('.history-card-summary')!.click());
+    await act(async () =>
+      [...card.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === 'Edit')!
+        .click(),
+    );
+    expect(window.location.hash).toBe('#log');
+    const loggerName = () =>
+      container.querySelector('.logger-screen .overlay-screen-header')?.textContent;
+    expect(loggerName()).toContain('Earlier session');
+    await act(async () => finish(remoteWorkout('Finished session')));
+    expect(window.location.hash).toBe('#log');
+    expect(loggerName()).toContain('Earlier session');
+    expect(api.updateWorkout).not.toHaveBeenCalled();
+  });
+
   it('stores the exact completion before sending, closes mid-request, and replays it hours later without the catalogue', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     writeActiveWorkoutDraft(storedDraft());
     vi.mocked(api.createWorkout).mockImplementation((_payload) => {
-      expect(readActiveWorkoutDraft()?.pendingSave?.payload).toEqual(_payload);
+      expect(finishedSave()?.payload).toEqual(_payload);
       return new Promise(() => {});
     });
     await mount();
@@ -1747,6 +2798,11 @@ describe('durable workout completion', () => {
     expect(vi.mocked(api.createWorkout).mock.calls[1][0]).toEqual(first);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(container.querySelector('.logger-screen')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')?.textContent).not.toContain(
+      'Workout saved',
+    );
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
 
   it('blocks Finish when local storage fails and preserves the editable workout', async () => {
@@ -1760,32 +2816,65 @@ describe('durable workout completion', () => {
     expect(window.location.hash).toBe('#log');
     expect(container.textContent).toContain('free some storage');
     expect(container.querySelector<HTMLElement>('.logger-screen')?.inert).not.toBe(true);
-    expect(readActiveWorkoutDraft()?.pendingSave).toBeUndefined();
+    expect(finishedSave()).toBeUndefined();
   });
 
-  it('finishes offline, stops the logger, prevents replacement, then syncs once on reconnection', async () => {
+  it('finishes offline, starts and finishes another workout, then syncs each once in order', async () => {
     writeActiveWorkoutDraft(storedDraft({ durationOverrideMinutes: 45 }));
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     await mount();
     await confirmFinish();
     expect(api.createWorkout).not.toHaveBeenCalled();
     expect(container.querySelector('.logger-screen')).toBeNull();
-    expect(container.querySelector('.pending-workout-save')?.textContent).toContain('45 min');
-    expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="Start empty workout"]')?.disabled,
-    ).toBe(true);
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Saving workout"]')!.click(),
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(finishedSave()?.payload.duration_minutes).toBe(45);
+    expect(readActiveWorkoutDraft()).toBeNull();
+
+    // The finished workout waits in its own queue, so the next one can start offline.
+    const start = container.querySelector<HTMLButtonElement>('[aria-label="Start empty workout"]')!;
+    expect(start.disabled).toBe(false);
+    const secondStartedAt = Date.now() - 300_000;
+    writeActiveWorkoutDraft(
+      storedDraft({
+        name: 'Second workout',
+        startedAt: secondStartedAt,
+        updatedAt: secondStartedAt,
+        lastActiveAt: secondStartedAt,
+        inactiveFinishAt: secondStartedAt + 3 * 60 * 60 * 1000,
+        durationOverrideMinutes: 30,
+      }),
     );
-    expect(readActiveWorkoutDraft()?.pendingSave?.payload.duration_minutes).toBe(45);
+    await act(async () => start.click());
+    expect(container.querySelector('.logger-screen')).not.toBeNull();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    await confirmFinish();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expect(readFinishedWorkouts().map((item) => item.pendingSave.payload.name)).toEqual([
+      'Recovery workout',
+      'Second workout',
+    ]);
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
-    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    vi.mocked(api.createWorkout).mockImplementation(async (payload) => ({
+      ...remoteWorkout(payload.name),
+      id: payload.name,
+      client_session_id: payload.client_session_id,
+    }));
     await act(async () => {
       window.dispatchEvent(new Event('online'));
       window.dispatchEvent(new Event('focus'));
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    expect(api.createWorkout).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(readFinishedWorkouts()).toEqual([]));
+    expect(vi.mocked(api.createWorkout).mock.calls.map(([payload]) => payload.name)).toEqual([
+      'Recovery workout',
+      'Second workout',
+    ]);
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(readActiveWorkoutDraft()).toBeNull();
   });
 
@@ -1808,8 +2897,9 @@ describe('durable workout completion', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(WORKOUT_SAVE_TIMEOUT_MS);
     });
-    expect(readActiveWorkoutDraft()?.pendingSave).toBeDefined();
-    expect(container.textContent).toContain('Waiting to sync');
+    expect(finishedSave()).toBeDefined();
+    expect(container.querySelector('.pending-workout-save')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
@@ -1858,9 +2948,54 @@ describe('durable workout completion', () => {
     await act(async () => review.click());
     expect(api.createWorkout).toHaveBeenCalledOnce();
     expect(window.location.hash).toBe('#log');
-    expect(readActiveWorkoutDraft()?.pendingSave).toBeUndefined();
+    expect(finishedSave()).toBeUndefined();
     expect(readActiveWorkoutDraft()?.durationOverrideMinutes).toBe(10);
     expectPreserved(draft);
+  });
+
+  it('stops listing a finished workout the server refused, leaving it for review', async () => {
+    writeActiveWorkoutDraft(storedDraft());
+    let reject!: (reason: unknown) => void;
+    vi.mocked(api.createWorkout).mockReturnValueOnce(
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+    );
+    await mount();
+    await confirmFinish();
+    await navigateTo('Training');
+    const listed = () =>
+      [...container.querySelectorAll('.history-card')].some((item) =>
+        item.textContent?.includes('Recovery workout'),
+      );
+    expect(listed()).toBe(true);
+
+    await act(async () =>
+      reject(new ApiError('Choose an available workout type.', 'invalid_type', 422)),
+    );
+    expect(listed()).toBe(false);
+    expect(container.textContent).toContain('Choose an available workout type.');
+    expect(finishedSave()).toBeDefined();
+  });
+
+  it('keeps a completion on the device without a review while this release is too old to save', async () => {
+    const draft = storedDraft();
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockRejectedValueOnce(
+      new ApiError('Relay needs to update before it can save this.', 'client_outdated', 426),
+    );
+    await mount();
+    await confirmFinish();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Saved on this device. Update Relay to sync it.');
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Review workout',
+      ),
+    ).toBe(false);
+    await act(async () => window.dispatchEvent(new Event('online')));
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(finishedSave()?.payload.name).toBe(draft.name);
   });
 
   it('does not replay another account’s completion even if old device metadata is missing', async () => {
@@ -1869,14 +3004,30 @@ describe('durable workout completion', () => {
     await mount();
     await confirmFinish();
     await act(async () => root.unmount());
-    const draft = readActiveWorkoutDraft()!;
+    const finished = readFinishedWorkouts()[0];
+    clearFinishedWorkouts();
+    addFinishedWorkout({
+      ...finished,
+      pendingSave: { ...finished.pendingSave, userId: 'other-account' },
+    });
+    // A release before the queue kept a finished workout in the active draft instead.
+    const legacy = storedDraft({ name: 'Legacy workout', clientSessionId: crypto.randomUUID() });
     writeActiveWorkoutDraft({
-      ...draft,
-      pendingSave: { ...draft.pendingSave!, userId: 'other-account' },
+      ...legacy,
+      pendingSave: {
+        ...finished.pendingSave,
+        userId: 'other-account',
+        payload: {
+          ...finished.pendingSave.payload,
+          client_session_id: legacy.clientSessionId,
+          workout_date: legacy.workoutDate,
+        },
+      },
     });
     root = createRoot(container);
     await mount();
     expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(readFinishedWorkouts()).toEqual([]);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
   });
@@ -2003,12 +3154,8 @@ describe('exercise completion stays consistent with its sets', () => {
   it('clears completion when Undo brings back an unfinished set', async () => {
     writeActiveWorkoutDraft(completionDraft());
     await mount();
-    await click(container.querySelector<HTMLButtonElement>('[aria-label="Options for set 1"]')!);
-    await click(
-      [...container.querySelectorAll<HTMLButtonElement>('.set-actions-menu-popover button')].find(
-        (button) => button.textContent?.includes('Delete set'),
-      )!,
-    );
+    // The unticked first set is open, so its Delete set is the first one on screen.
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Delete set 1"]')!);
     expect(savedMovement().sets).toHaveLength(2);
     await click(exerciseTick());
     expect(savedMovement().isComplete).toBe(true);
@@ -2133,6 +3280,8 @@ describe('cardio set editing defaults', () => {
     await mount();
     await confirmFinish();
     expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.body.textContent).not.toContain('Workout saved');
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     expect(api.cardioOverview).not.toHaveBeenCalled();
   });
 
@@ -2144,6 +3293,188 @@ describe('cardio set editing defaults', () => {
     category: 'cardio',
     equipment: 'Treadmill',
   };
+
+  function cardioDraft(overrides: Partial<ActiveWorkoutDraft> = {}) {
+    const draft = storedDraft({ category: 'cardio', ...overrides });
+    draft.movements = [
+      {
+        ...draft.movements[0],
+        exerciseId: treadmill.id,
+        machinePhotoIds: [],
+        supersetKey: null,
+        sets: [
+          {
+            ...createWorkoutSet('cardio'),
+            key: 'cardio-set',
+            duration_seconds: 1800,
+            completed: false,
+            fromPrevious: true,
+          },
+        ],
+      },
+    ];
+    vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+    return draft;
+  }
+
+  const workoutTime = () => container.querySelector('.workout-summary-metrics strong')?.textContent;
+
+  it('keeps live time unchanged by logging cardio, recovery and unticking', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    writeActiveWorkoutDraft(cardioDraft());
+    await mount();
+    expect(workoutTime()).toBe('10:00');
+    const tick = () => container.querySelector<HTMLButtonElement>('.row-complete-button')!;
+    await act(async () => tick().click());
+    expect(workoutTime()).toBe('10:00');
+    expect(container.querySelector('.logger-screen .overlay-screen-header')?.textContent).toContain(
+      'Live 10:00',
+    );
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(workoutTime()).toBe('10:00');
+    await act(async () => tick().click());
+    expect(workoutTime()).toBe('10:00');
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.logger-screen .workout-sheet-grab')!.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
+    });
+    expect(container.querySelector('.app-tab-live-time')?.textContent).toBe('10:00');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.app-tab-start.live')!.click(),
+    );
+    await act(async () => tick().click());
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.logger-screen .workout-sheet-grab')!.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
+    });
+    expect(container.querySelector('.app-tab-live-time')?.textContent).toBe('10:00');
+  });
+
+  it.each([
+    { label: 'new', overrides: {}, live: 10, expected: 30 },
+    {
+      label: 'longer timer',
+      overrides: { startedAt: Date.now() - 40 * 60_000 },
+      live: 40,
+      expected: 40,
+    },
+    {
+      label: 'resumed',
+      overrides: { resumingWorkoutId: 'existing', previousDurationMinutes: 45 },
+      live: 55,
+      expected: 55,
+    },
+    { label: 'corrected', overrides: { durationOverrideMinutes: 15 }, live: 15, expected: 30 },
+    {
+      label: 'paused',
+      overrides: { pausedMs: 5 * 60_000, pausedAt: Date.now() },
+      live: 5,
+      expected: 30,
+    },
+  ])(
+    'saves $label workout time without double-counting cardio',
+    async ({ overrides, live, expected }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const draft = cardioDraft({
+        ...overrides,
+        ...(overrides.startedAt && { startedAt: Date.now() - 40 * 60_000 }),
+        ...(overrides.pausedAt && { pausedAt: Date.now() }),
+      });
+      draft.movements[0].sets[0].completed = true;
+      writeActiveWorkoutDraft(draft);
+      vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+      vi.mocked(api.updateWorkout).mockResolvedValue(remoteWorkout());
+      await mount();
+      expect(workoutTime()).toBe(`${live}:00`);
+      await confirmFinish();
+      const payload = overrides.resumingWorkoutId
+        ? vi.mocked(api.updateWorkout).mock.lastCall![1]
+        : vi.mocked(api.createWorkout).mock.lastCall![0];
+      expect(payload.duration_minutes).toBe(expected);
+    },
+  );
+
+  it('includes entered cardio promoted to completed when an inactive workout is saved', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const draft = cardioDraft({
+      startedAt: Date.now() - 181 * 60_000,
+      inactiveFinishAt: Date.now() - 60_000,
+    });
+    draft.lastActiveAt = draft.updatedAt = draft.startedAt;
+    Object.assign(draft.movements[0].sets[0], { duration_seconds: 240 * 60, fromPrevious: false });
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await chooseInactive('Save workout');
+    expect(vi.mocked(api.createWorkout).mock.lastCall![0]).toMatchObject({ duration_minutes: 240 });
+  });
+
+  it.each([45, 1440, 1441])(
+    'keeps saved timing consistent when cardio is edited to %i minutes',
+    async (minutes) => {
+      window.history.replaceState(null, '', '#training');
+      const saved = remoteWorkout();
+      saved.start_time = '23:45';
+      saved.end_time = '00:15';
+      saved.movements[0].exercise = treadmill;
+      saved.movements[0].sets[0] = {
+        ...saved.movements[0].sets[0],
+        ...createWorkoutSet('cardio'),
+        duration_seconds: 1800,
+        completed: true,
+      };
+      vi.mocked(api.listExercises).mockResolvedValue([treadmill]);
+      vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+      vi.mocked(api.updateWorkout).mockResolvedValue(saved);
+      await mount();
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
+      );
+      const edit = [
+        ...container.querySelectorAll<HTMLButtonElement>('.workout-actions button'),
+      ].find((button) => button.textContent === 'Edit')!;
+      await act(async () => edit.click());
+      await act(async () =>
+        container.querySelector<HTMLElement>('.completed-set-summary')!.click(),
+      );
+      const duration = container.querySelector<HTMLInputElement>(
+        '[aria-label="Duration minutes"]',
+      )!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          duration,
+          String(minutes),
+        );
+        duration.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      if (minutes >= 1440) {
+        await act(async () =>
+          container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
+        );
+        expect(api.updateWorkout).not.toHaveBeenCalled();
+        expect(container.textContent).toContain(
+          minutes === 1440 ? 'Clear the start and end times' : 'Correct the cardio durations',
+        );
+        return;
+      }
+      expect(workoutTime()).toBe('30:00');
+      expect(
+        container.querySelector<HTMLInputElement>('[aria-label="Workout end time"]')?.value,
+      ).toBe('00:15');
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
+      );
+      expect(vi.mocked(api.updateWorkout).mock.lastCall![1]).toMatchObject({
+        duration_minutes: 45,
+        start_time: '23:45',
+        end_time: '00:30',
+      });
+    },
+  );
 
   it.each([treadmill, bench])(
     'starts $kind suggestions with the expected editor and preserves uncompleted values',
@@ -2298,6 +3629,92 @@ describe('cardio set editing defaults', () => {
 });
 
 describe('inactive workout suggestions', () => {
+  function emptyDraft() {
+    const startedAt = Date.now() - 72 * 60 * 60 * 1000;
+    return storedDraft({
+      startedAt,
+      updatedAt: startedAt,
+      lastActiveAt: startedAt,
+      inactiveFinishAt: startedAt + 3 * 60 * 60 * 1000,
+      movements: [],
+      notes: '',
+    });
+  }
+
+  it.each(['#dashboard', '#log'])(
+    'clears a three-day-old empty draft from %s without changing saved workouts',
+    async (location) => {
+      window.history.replaceState(null, '', location);
+      const deleteWorkout = vi.spyOn(api, 'deleteWorkout');
+      vi.mocked(api.listWorkouts).mockResolvedValue([remoteWorkout()]);
+      writeActiveWorkoutDraft(emptyDraft());
+      await mount();
+      expect(readActiveWorkoutDraft()).toBeNull();
+      expect(window.location.hash).toBe('#dashboard');
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
+      expect(container.querySelector('.logger-screen')).toBeNull();
+      expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
+      expect(api.createWorkout).not.toHaveBeenCalled();
+      expect(api.updateWorkout).not.toHaveBeenCalled();
+      expect(deleteWorkout).not.toHaveBeenCalled();
+      await act(async () => window.dispatchEvent(new Event('pagehide')));
+      expect(readActiveWorkoutDraft()).toBeNull();
+    },
+  );
+
+  it.each(['focus', 'visibilitychange', 'timer'])(
+    'expires an empty draft on %s after its deadline while Home is open',
+    async (trigger) => {
+      vi.useFakeTimers();
+      window.history.replaceState(null, '', '#dashboard');
+      const draft = emptyDraft();
+      draft.startedAt = Date.now() - 3 * 60 * 60 * 1000 + 60_000;
+      draft.updatedAt = draft.lastActiveAt = draft.startedAt;
+      draft.inactiveFinishAt = Date.now() + 60_000;
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+      expect(readActiveWorkoutDraft()).not.toBeNull();
+      await act(async () => {
+        if (trigger === 'timer') await vi.advanceTimersByTimeAsync(60_000);
+        else {
+          vi.setSystemTime(draft.inactiveFinishAt!);
+          if (trigger === 'focus') window.dispatchEvent(new Event('focus'));
+          else document.dispatchEvent(new Event('visibilitychange'));
+        }
+      });
+      expect(readActiveWorkoutDraft()).toBeNull();
+      expect(container.querySelector('.app-tab-start.live')).toBeNull();
+      expect(api.createWorkout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('clears an expired empty draft even when the exercise catalogue cannot load', async () => {
+    vi.mocked(api.listExercises).mockRejectedValue(new Error('offline'));
+    writeActiveWorkoutDraft(emptyDraft());
+    await mount();
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it.each(['notes', 'paused', 'resumed'])(
+    'preserves an overdue empty draft with %s',
+    async (state) => {
+      const draft = emptyDraft();
+      if (state === 'notes') draft.notes = 'Keep these notes';
+      if (state === 'paused') draft.pausedAt = draft.startedAt;
+      if (state === 'resumed') draft.resumingWorkoutId = 'saved-workout';
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      expectPreserved(draft);
+      expect(readActiveWorkoutDraft()?.pausedAt).toBe(draft.pausedAt ?? null);
+      expect(readActiveWorkoutDraft()?.resumingWorkoutId).toBe(draft.resumingWorkoutId);
+      expect(container.querySelector('.logger-screen')).not.toBeNull();
+      expect(api.createWorkout).not.toHaveBeenCalled();
+    },
+  );
+
   function expiredSuggestions(completedFirst: boolean) {
     const draft = storedDraft();
     draft.startedAt = Date.now() - 3 * 60 * 60 * 1000 - 1000;
@@ -2350,13 +3767,145 @@ describe('inactive workout suggestions', () => {
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
+  it('asks before saving a workout found past its time limit, on any screen', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#dashboard');
+    expect(inactivePrompt()?.textContent).toContain('Unfinished workout');
+    expect(inactivePrompt()?.textContent).toContain('Recovery workout');
+    expect(inactivePrompt()?.textContent).toContain('1 set logged');
+    expectPreserved(draft);
+  });
+
+  it('prepares for auto-save exactly what Save in the prompt saves, only while it is on', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    writeActiveWorkoutDraft(expiredSuggestions(true));
+    await mount();
+    expect(preparedWorkoutAutoSave(readActiveWorkoutDraft())).toBeNull();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    autoSave.minutes = 120;
+    try {
+      await mount();
+      const stored = readActiveWorkoutDraft()!;
+      const prepared = preparedWorkoutAutoSave(stored);
+      expect(prepared).toMatchObject({
+        client_session_id: stored.clientSessionId,
+        name: 'Recovery workout',
+      });
+      // A different draft revision never carries it.
+      expect(preparedWorkoutAutoSave({ ...stored, notes: 'Edited elsewhere' })).toBeNull();
+      vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+      await chooseInactive('Save workout');
+      const saved = vi.mocked(api.createWorkout).mock.lastCall![0];
+      expect(prepared).toEqual(saved);
+    } finally {
+      autoSave.minutes = null;
+    }
+  });
+
+  it('resumes an inactive workout without saving it or asking again', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await chooseInactive('Resume');
+    expect(inactivePrompt()).toBeNull();
+    expect(window.location.hash).toBe('#log');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expectPreserved(draft);
+    expect(readActiveWorkoutDraft()!.inactiveFinishAt).toBeGreaterThan(Date.now());
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(inactivePrompt()).toBeNull();
+    // The extended deadline is stored, so reopening the app does not ask again either.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(inactivePrompt()).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('keeps an inactive workout running when the prompt is closed', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () =>
+      inactivePrompt()!.querySelector<HTMLButtonElement>('.popup-dialog-close')!.click(),
+    );
+    expect(inactivePrompt()).toBeNull();
+    expect(window.location.hash).toBe('#dashboard');
+    expect(container.querySelector('.app-tab-start.live')).not.toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    expectPreserved(draft);
+  });
+
+  it('discards an inactive workout only after confirming', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await chooseInactive('Discard');
+    expect(inactivePrompt()).toBeNull();
+    const keep = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '.workout-discard-dialog .popup-dialog-actions button',
+      ),
+    ];
+    await act(async () => keep.find((button) => button.textContent === 'Keep workout')!.click());
+    expectPreserved(draft);
+    expect(inactivePrompt()).not.toBeNull();
+    await chooseInactive('Discard');
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('.discard-workout-button')!.click(),
+    );
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(inactivePrompt()).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('discards untouched suggestions past the time limit instead of asking or saving', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(false);
+    draft.notes = '';
+    draft.movements[0].notes = '';
+    draft.movements[0].sets.forEach((set) => (set.notes = null));
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    expect(readActiveWorkoutDraft()).toBeNull();
+    expect(inactivePrompt()).toBeNull();
+    expect(container.querySelector('.app-tab-start.live')).toBeNull();
+    expect(document.body.textContent).toContain('Your inactive empty workout was cleared.');
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it('continues an overdue workout with nothing logged when it is used again', async () => {
+    const draft = expiredSuggestions(false);
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('pointerdown')));
+    expect(inactivePrompt()).toBeNull();
+    expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
+    expect(readActiveWorkoutDraft()!.inactiveFinishAt).toBeGreaterThan(Date.now());
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
   it('saves exactly one completed set alongside untouched suggestions at timeout', async () => {
     const draft = expiredSuggestions(true);
     writeActiveWorkoutDraft(draft);
-    // Keep the response pending so the assertion observes the actual autosave payload.
+    // Keep the response pending so the assertion observes the actual save payload.
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     await mount();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await chooseInactive('Save workout');
+    expect(inactivePrompt()).toBeNull();
     expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain('auto-saved');
     expect(window.location.hash).toBe('#dashboard');
     // An update cannot reload while the server save is still awaiting its response.
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
@@ -2386,6 +3935,7 @@ describe('inactive workout suggestions', () => {
     vi.mocked(api.createWorkout).mockReturnValueOnce(new Promise<TrackedWorkout>(() => {}));
     vi.spyOn(Date, 'now').mockReturnValue(draft.inactiveFinishAt! + 1000);
     await act(async () => window.dispatchEvent(new Event('focus')));
+    await chooseInactive('Save workout');
     const payload = vi.mocked(api.createWorkout).mock.calls[0][0] as WorkoutInput;
     expect(payload.movements[0].sets.map((set) => set.completed)).toEqual([true, false]);
   });
@@ -2443,7 +3993,7 @@ describe('inactive workout suggestions', () => {
       container.querySelector<HTMLButtonElement>('.history-card-summary')!.click(),
     );
     const resume = container.querySelector<HTMLButtonElement>('.resume-workout-button')!;
-    expect(resume.textContent).toBe('Resume from now');
+    expect(resume.textContent).toBe('Resume');
     await act(async () => resume.click());
     const resumed = readActiveWorkoutDraft()!;
     expect(resumed.resumingWorkoutId).toBe(saved.id);
@@ -2451,6 +4001,9 @@ describe('inactive workout suggestions', () => {
     expect(resumed.movements[0].sets.map((set) => set.fromPrevious)).toEqual([false, true, true]);
     vi.spyOn(Date, 'now').mockReturnValue(resumed.inactiveFinishAt! + 1000);
     await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(api.updateWorkout).not.toHaveBeenCalled();
+    expect(inactivePrompt()?.textContent).toContain('Discard session');
+    await chooseInactive('Save workout');
     expect(api.updateWorkout).toHaveBeenCalledOnce();
     expect(window.location.hash).toBe('#dashboard');
     expect(api.createWorkout).not.toHaveBeenCalled();
@@ -2554,7 +4107,89 @@ describe('live muscle totals while logging', () => {
   const chestTotals = () =>
     [...container.querySelectorAll('.muscle-bars li')]
       .filter((item) => item.textContent?.includes('Chest'))
-      .map((item) => item.querySelector('b')?.textContent);
+      .map((item) => item.querySelector('.muscle-set-count')?.firstChild?.textContent);
+
+  it('shows the whole exercise once on completion, counting each set once and no warm-ups', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    const base = draft.movements[0].sets[0];
+    draft.movements[0].sets = [
+      { ...base, key: 'warmup', set_type: 'warmup', warmup: true },
+      { ...base, key: 'logged', completed: true },
+      { ...base, key: 'working-1', fromPrevious: true },
+      { ...base, key: 'working-2' },
+      { ...base, key: 'drop', set_type: 'drop' },
+      { ...base, key: 'failed', failed: true, reps: 0 },
+      { ...createWorkoutSet('strength'), key: 'blank' },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+    );
+    const complete = () => container.querySelector<HTMLButtonElement>('.exercise-complete-button')!;
+    await act(async () => complete().click());
+    const cells = [...container.querySelectorAll('.weekly-shelf-cell')];
+    expect(cells.map((cell) => cell.querySelector('.weekly-shelf-name')?.textContent)).toEqual([
+      'Chest',
+      'Triceps',
+    ]);
+    // Four working sets in all: the one ticked earlier was never announced, so it counts here.
+    expect(cells.map((cell) => cell.querySelector('.weekly-shelf-gain')?.textContent)).toEqual([
+      '+4',
+      '+2',
+    ]);
+    expect(cells.map((cell) => cell.querySelector('.weekly-shelf-roll')?.textContent)).toEqual([
+      '04',
+      '02',
+    ]);
+    expect(chestTotals()).toEqual(['4']);
+    expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.completed)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    const roll = cells[0].querySelector('.weekly-shelf-roll > span');
+    // A blank set keeps the exercise open; tapping again must not announce the same gains.
+    await act(async () => complete().click());
+    expect(container.querySelector('.weekly-shelf-roll > span')).toBe(roll);
+    expect(chestTotals()).toEqual(['4']);
+    expect(api.createWorkout).not.toHaveBeenCalled();
+  });
+
+  it.each(['warmup', 'cardio', 'logged'] as const)(
+    'does not show exercise-completion gains for %s sets',
+    async (kind) => {
+      const draft = readActiveWorkoutDraft()!;
+      if (kind === 'warmup') {
+        draft.movements[0].sets[0].set_type = 'warmup';
+        draft.movements[0].sets[0].warmup = true;
+      } else if (kind === 'logged') {
+        draft.movements[0].sets[0].completed = true;
+      } else {
+        vi.mocked(api.listExercises).mockResolvedValue([{ ...bench, kind: 'cardio' }]);
+        draft.movements[0].sets = [
+          { ...createWorkoutSet('cardio'), key: 'cardio', duration_seconds: 600 },
+        ];
+      }
+      writeActiveWorkoutDraft(draft);
+      await mount();
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[aria-label="Resume active workout"]')!.click(),
+      );
+      const complete = () =>
+        container.querySelector<HTMLButtonElement>('.exercise-complete-button')!;
+      await act(async () => complete().click());
+      expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
+      expect(container.querySelector('.weekly-sets-shelf')).toBeNull();
+      await act(async () => complete().click());
+      await act(async () => complete().click());
+      expect(container.querySelector('.weekly-sets-shelf')).toBeNull();
+    },
+  );
 
   it('keeps the final credits through a slow completion and dashboard refresh', async () => {
     const draft = readActiveWorkoutDraft()!;
@@ -2572,6 +4207,8 @@ describe('live muscle totals while logging', () => {
     );
     await confirmFinish();
     expect(chestTotals()).toEqual(['1']);
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(container.querySelector('.background-activity-bar')).toBeNull();
     let refresh!: (data: DashboardData) => void;
     vi.mocked(api.dashboard).mockReturnValueOnce(
       new Promise((resolve) => {
@@ -2580,11 +4217,14 @@ describe('live muscle totals while logging', () => {
     );
     const saved = {
       ...remoteWorkout(),
-      client_session_id: readActiveWorkoutDraft()!.clientSessionId,
+      client_session_id: readFinishedWorkouts()[0].clientSessionId,
     };
     await act(async () => finish(saved));
+    expect(readFinishedWorkouts()).toEqual([]);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(chestTotals()).toEqual(['1']);
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     await act(async () =>
       refresh({
         recommendation: null,
@@ -2596,9 +4236,10 @@ describe('live muscle totals while logging', () => {
       } as unknown as DashboardData),
     );
     expect(chestTotals()).toEqual(['1']);
+    expect(document.querySelector('.notification-toast-action')).toBeNull();
   });
 
-  it('updates Home and Training immediately, opens the live source, and reverses unticking', async () => {
+  it('updates Home immediately, opens the live source, and reverses unticking', async () => {
     await mount();
     await navigateTo('Home');
     await navigateTo('Training');
@@ -2608,11 +4249,11 @@ describe('live muscle totals while logging', () => {
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Complete set 1"]')!.click(),
     );
-    expect(chestTotals()).toEqual(['1', '1']);
+    expect(chestTotals()).toEqual(['1']);
     expect(api.dashboard).toHaveBeenCalledOnce();
     expect(api.createWorkout).not.toHaveBeenCalled();
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('.overlay-header-back')!.click();
+      container.querySelector<HTMLButtonElement>('.workout-sheet-grab')!.click();
       await new Promise((resolve) => window.setTimeout(resolve, 30));
     });
     await navigateTo('Home');
@@ -2759,6 +4400,7 @@ describe('navigation while saving an old workout', () => {
     await navigateTo('Body');
     await act(async () => finish(remoteWorkout('Saved changes')));
     expect(window.location.hash).toBe('#body');
+    expect(document.querySelector('.notification-toast-action')).toBeNull();
   });
   it('keeps the editor mounted for a failed edit while another screen stays usable', async () => {
     let fail!: (error: Error) => void;
@@ -2796,5 +4438,68 @@ describe('navigation while saving an old workout', () => {
     );
     expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
     expect(container.querySelector('.logger-screen')).not.toBeNull();
+  });
+});
+
+describe('no working sets warnings', () => {
+  function warmupDraft() {
+    const draft = storedDraft();
+    const [first] = draft.movements[0].sets;
+    const warmup = { ...first, set_type: 'warmup' as const, warmup: true };
+    draft.movements[0].sets = [
+      { ...warmup, key: 'warmup-1', weight_kg: 40 },
+      { ...warmup, key: 'warmup-2', weight_kg: 80 },
+    ];
+    return draft;
+  }
+
+  it('lets a warm-up-only exercise be finished, flagging its icon and counting its warm-ups', async () => {
+    writeActiveWorkoutDraft(warmupDraft());
+    await mount();
+    const card = () => container.querySelector('.movement-card')!;
+    expect(card().querySelector('.exercise-icon-warning')).toBeNull();
+    await act(async () =>
+      card().querySelector<HTMLButtonElement>('[aria-label="Finish Bench press"]')!.click(),
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
+    expect(card().querySelector('.exercise-icon-warning')).not.toBeNull();
+    expect(card().querySelector('.movement-completed-summary')?.textContent).toBe('2 warm-up sets');
+    // The working-set exercise keeps its usual count and no flag.
+    const other = container.querySelectorAll('.movement-card')[1];
+    expect(other.querySelector('.exercise-icon-warning')).toBeNull();
+  });
+
+  it('reminds about warm-up-only exercises when finishing, then can go back or finish anyway', async () => {
+    writeActiveWorkoutDraft(warmupDraft());
+    vi.mocked(api.createWorkout).mockResolvedValueOnce(remoteWorkout());
+    await mount();
+    const finish = () =>
+      [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Finish workout',
+      )!;
+    const dialog = () => document.querySelector('.warmup-only-finish-dialog');
+    const action = (label: string) =>
+      [...dialog()!.querySelectorAll('button')].find((button) => button.textContent === label)!;
+    await act(async () => finish().click());
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('No working sets');
+    // Only the warm-up-only exercise is listed, with its icon, name and logged warm-ups.
+    const sections = [...dialog()!.querySelectorAll('section')];
+    expect(sections.map((section) => section.querySelector('h3')?.textContent)).toEqual([
+      'Bench press',
+    ]);
+    expect(sections[0].querySelector('h3 img')).not.toBeNull();
+    expect(
+      [...sections[0].querySelectorAll('.warmup-only-set')].map((chip) => chip.textContent),
+    ).toEqual(['WWarm-up: 40 kg × 8', 'WWarm-up: 80 kg × 8']);
+    expect(dialog()!.querySelector('[aria-pressed]')).toBeNull();
+    await act(async () => action('Keep working out').click());
+    expect(dialog()).toBeNull();
+    expect(api.createWorkout).not.toHaveBeenCalled();
+    await act(async () => finish().click());
+    await act(async () => action('Finish anyway').click());
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    const saved = vi.mocked(api.createWorkout).mock.calls[0][0];
+    expect(saved.movements[0].sets.map((item) => item.set_type)).toEqual(['warmup', 'warmup']);
   });
 });

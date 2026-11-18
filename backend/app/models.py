@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
+from .cardio_estimates import estimate_elevation_gain_m, estimate_mets
 from .database import Base
 
 
@@ -78,6 +79,7 @@ class MuscleRole(enum.StrEnum):
 class PersonalRecordType(enum.StrEnum):
     WEIGHT = "weight"
     REPS_AT_WEIGHT = "reps_at_weight"
+    RELATIVE_STRENGTH = "relative_strength"
     ESTIMATED_1RM = "estimated_1rm"
     DURATION = "duration"
     DISTANCE = "distance"
@@ -103,9 +105,20 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(32, collation="NOCASE"), unique=True)
     display_name: Mapped[str] = mapped_column(String(80))
     password_hash: Mapped[str] = mapped_column(String(300))
+    # Set when an admin hands out a temporary password; the account can do nothing but choose a
+    # new password until it does.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # When the person asked the admins for a temporary password from the sign-in screen; cleared
+    # once an admin resets or dismisses it, or the person signs in.
+    password_reset_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # A square WebP in data/profile-photos/; a new upload gets a new name, which busts caches.
     profile_photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # "male" or "female". The owner chooses it once; after that only an administrator can change
+    # it. It sets the body measurement outline.
+    sex: Mapped[str | None] = mapped_column(String(6), nullable=True)
     # Set by an admin; a disabled account cannot sign in and has no live sessions.
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Survives sign-out and session expiry, unlike the per-session last_seen_at.
@@ -163,6 +176,8 @@ class ProfileSharing(Base):
     # account backups keep their schema.
     share_cardio: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_body_weight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Tape measurements (neck, chest, waist and so on), drawn on the profile's body figure.
+    share_body_sizes: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_goals: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     share_machine_photos: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Friends see whether you are online now and when you were last active.
@@ -342,6 +357,8 @@ class UserSession(Base):
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
     user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # The app release this sign-in last used, from the X-Relay-Version header.
+    client_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class YouTubeConnection(Base):
@@ -560,6 +577,26 @@ class LiveWorkout(Base):
     )
 
 
+class ActiveWorkoutSync(Base):
+    """Private shared draft; retain the revision after ending to refuse stale devices."""
+
+    __tablename__ = "active_workout_sync"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    draft: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    started_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reminder_delivered: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The finished workout the logging app prepared for exactly this revision, for opt-in
+    # auto-save; any other write clears it.
+    auto_save: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    auto_save_client_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
 class ActiveWorkoutReminder(Base):
     __tablename__ = "active_workout_reminders"
 
@@ -619,6 +656,8 @@ class BodyWeightGoal(Base):
     target_date: Mapped[date] = mapped_column(Date)
     start_weight_kg: Mapped[float] = mapped_column(Float)
     target_weight_kg: Mapped[float] = mapped_column(Float)
+    maintenance_min_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maintenance_max_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
@@ -788,6 +827,9 @@ class TrainingWorkout(Base):
     start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     is_sample: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Advanced by every change to the workout's content, so a save from an editor that loaded an
+    # older revision is refused rather than overwriting newer edits (see tracker.update_workout).
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
@@ -806,6 +848,11 @@ class TrainingWorkout(Base):
     personal_records: Mapped[list[PersonalRecord]] = relationship(
         back_populates="workout", cascade="all, delete-orphan"
     )
+    photos: Mapped[list[WorkoutPhoto]] = relationship(
+        back_populates="workout",
+        cascade="all, delete-orphan",
+        order_by="WorkoutPhoto.created_at, WorkoutPhoto.id",
+    )
 
     __table_args__ = (
         Index(
@@ -823,6 +870,44 @@ class TrainingWorkout(Base):
             "(start_time IS NOT NULL AND end_time IS NOT NULL)",
             name="training_workout_times_together",
         ),
+    )
+
+
+class WorkoutPhoto(Base):
+    """A photo of the whole session, shown with the workout to everyone who can see it."""
+
+    __tablename__ = "workout_photos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    workout_id: Mapped[str] = mapped_column(
+        ForeignKey("training_workouts.id", ondelete="CASCADE"), index=True
+    )
+    original_filename: Mapped[str] = mapped_column(String(500))
+    full_filename: Mapped[str] = mapped_column(String(200), unique=True)
+    thumbnail_filename: Mapped[str] = mapped_column(String(200), unique=True)
+    media_type: Mapped[str] = mapped_column(String(100), default="image/webp")
+    file_size: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    workout: Mapped[TrainingWorkout] = relationship(back_populates="photos")
+
+    @property
+    def thumbnail_url(self) -> str:
+        return f"/api/workout-photos/{self.id}/image?variant=thumbnail"
+
+    @property
+    def full_url(self) -> str:
+        return f"/api/workout-photos/{self.id}/image?variant=full"
+
+    __table_args__ = (
+        CheckConstraint("file_size > 0", name="workout_photo_file_size_positive"),
+        CheckConstraint("width > 0", name="workout_photo_width_positive"),
+        CheckConstraint("height > 0", name="workout_photo_height_positive"),
     )
 
 
@@ -868,6 +953,9 @@ class WorkoutSet(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     movement_id: Mapped[str] = mapped_column(ForeignKey("workout_movements.id", ondelete="CASCADE"))
+    machine_photo_id: Mapped[str | None] = mapped_column(
+        ForeignKey("machine_photos.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     order_index: Mapped[int] = mapped_column(Integer)
     reps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -1017,6 +1105,7 @@ class CardioSession(Base):
     incline_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     average_power_watts: Mapped[int | None] = mapped_column(Integer, nullable=True)
     average_mets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    elevation_gain_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     source_exercise_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     intensity: Mapped[str | None] = mapped_column(String(100), nullable=True)
     zone: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -1059,6 +1148,45 @@ class CardioSession(Base):
     def source_workout_name(self) -> str | None:
         return self.source_workout.name if self.source_workout else None
 
+    # Not stored: the body weight near the session date, set by attach_body_weights so
+    # the estimates below can use it. Without it they fall back to weight-free methods.
+    body_weight_kg = None
+
+    @property
+    def estimated_elevation_gain_m(self) -> float | None:
+        return estimate_elevation_gain_m(
+            duration_minutes=self.duration_minutes,
+            distance_km=self.distance_km,
+            speed_kph=self.average_speed_kph,
+            incline_percent=self.incline_percent,
+        )
+
+    @property
+    def effective_elevation_gain_m(self) -> float | None:
+        """The logged elevation gain, or the estimate when it was left blank."""
+        if self.elevation_gain_m is not None:
+            return self.elevation_gain_m
+        return self.estimated_elevation_gain_m
+
+    @property
+    def estimated_mets(self) -> float | None:
+        return estimate_mets(
+            activity=self.activity_type or "",
+            duration_minutes=self.duration_minutes,
+            distance_km=self.distance_km,
+            speed_kph=self.average_speed_kph,
+            incline_percent=self.incline_percent,
+            elevation_gain_m=self.elevation_gain_m,
+            power_watts=self.average_power_watts,
+            calories_kcal=self.calories_kcal,
+            body_weight_kg=self.body_weight_kg,
+        )
+
+    @property
+    def effective_mets(self) -> float | None:
+        """The logged average MET, or the estimate when it was left blank."""
+        return self.average_mets if self.average_mets is not None else self.estimated_mets
+
     __table_args__ = (
         CheckConstraint(
             "calories_kcal IS NULL OR (calories_kcal >= 0 AND calories_kcal <= 100000)",
@@ -1089,6 +1217,10 @@ class CardioSession(Base):
         CheckConstraint(
             "average_mets IS NULL OR (average_mets > 0 AND average_mets <= 50)",
             name="cardio_average_mets_range",
+        ),
+        CheckConstraint(
+            "elevation_gain_m IS NULL OR (elevation_gain_m >= 0 AND elevation_gain_m <= 30000)",
+            name="cardio_elevation_gain_range",
         ),
         CheckConstraint(
             "duration_minutes > 0 AND duration_minutes <= 1440", name="cardio_duration_range"

@@ -49,3 +49,19 @@ export function evenlySpacedChartIndexes(pointCount: number, tickCount: number):
     ),
   ];
 }
+
+/**
+ * Baseline for a goal line's end label. A falling line keeps its label under the end, unless that
+ * would sit on the date labels; then it goes above the line where the label starts, clear of it.
+ */
+export function goalLabelY(
+  line: { x1: number; y1: number; x2: number; y2: number; label: string },
+  plotBottom: number,
+): number {
+  if (line.y2 <= line.y1) return line.y2 - 6;
+  const below = line.y2 + 14;
+  if (below <= plotBottom - 2) return below;
+  // 10.5px semibold text averages about 6px a character.
+  const reach = Math.min(1, (line.label.length * 6 + 4) / Math.max(line.x2 - line.x1, 1));
+  return line.y2 - (line.y2 - line.y1) * reach - 5;
+}

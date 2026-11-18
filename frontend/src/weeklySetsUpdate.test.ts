@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { weeklySetGains } from './weeklySetsUpdate';
+import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import type { Exercise } from './types';
 
@@ -60,10 +60,53 @@ describe('weeklySetGains', () => {
     expect(gains.map((item) => item.muscle)).toEqual(['Glutes', 'Quads', 'Adductors']);
   });
 
+  it('combines direct and partial credits across newly completed working sets', () => {
+    const backExtension = exercise([
+      { muscle_name: 'Lower back', sets: 1 },
+      { muscle_name: 'Glutes', sets: 0.5 },
+    ]);
+    expect(weeklySetGains(backExtension, week, '2026-11-06', '2026-11-06', 3)).toEqual([
+      { muscle: 'Lower back', before: 6, gain: 3, after: 9 },
+      { muscle: 'Glutes', before: 9.5, gain: 1.5, after: 11 },
+    ]);
+    expect(weeklySetGains(backExtension, week, '2026-11-06', '2026-11-06', 0)).toEqual([]);
+  });
+
   it('shows nothing for a workout outside the live week or without one', () => {
     const backExtension = exercise([{ muscle_name: 'Lower back', sets: 1 }]);
     expect(weeklySetGains(backExtension, week, '2026-11-01', '2026-11-06')).toEqual([]);
     expect(weeklySetGains(backExtension, week, '2026-11-07', '2026-11-06')).toEqual([]);
     expect(weeklySetGains(backExtension, undefined, '2026-11-06', '2026-11-06')).toEqual([]);
+  });
+});
+
+describe('exerciseSetGains', () => {
+  const credits = exercise([
+    { muscle_name: 'Lower back', sets: 1 },
+    { muscle_name: 'Glutes', sets: 0.5 },
+  ]);
+
+  it('covers every set of the exercise, taking the earlier ones back off the starting total', () => {
+    // The live week (6 and 9.5) already counts two earlier sets; a third is ticked now.
+    expect(exerciseSetGains(credits, week, '2026-11-06', '2026-11-06', 2, 1)).toEqual([
+      { muscle: 'Lower back', before: 4, gain: 3, after: 7 },
+      { muscle: 'Glutes', before: 8.5, gain: 1.5, after: 10 },
+    ]);
+  });
+
+  it('shows the earlier sets when the last tick is a warm-up, and nothing with no working sets', () => {
+    expect(exerciseSetGains(credits, week, '2026-11-06', '2026-11-06', 2, 0)).toEqual([
+      { muscle: 'Lower back', before: 4, gain: 2, after: 6 },
+      { muscle: 'Glutes', before: 8.5, gain: 1, after: 9.5 },
+    ]);
+    expect(exerciseSetGains(credits, week, '2026-11-06', '2026-11-06', 0, 0)).toEqual([]);
+  });
+
+  it('never starts below zero when the week has not caught up with the earlier sets', () => {
+    const empty = { ...week, muscle_groups: [] };
+    expect(exerciseSetGains(credits, empty, '2026-11-06', '2026-11-06', 2, 1)).toEqual([
+      { muscle: 'Lower back', before: 0, gain: 3, after: 3 },
+      { muscle: 'Glutes', before: 0, gain: 1.5, after: 1.5 },
+    ]);
   });
 });

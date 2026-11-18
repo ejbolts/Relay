@@ -6,11 +6,21 @@ import {
   type AuthFieldErrors,
   type AuthMode,
 } from './authForm';
+import {
+  applyColourTheme,
+  applyDarkStyle,
+  applyLightStyle,
+  colourThemePreference,
+  darkStylePreference,
+  lightStylePreference,
+} from './colourThemes';
+import { ForgotPasswordDialog } from './ForgotPasswordDialog';
+import { Icon } from './Icon';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
-import { pendingFriendInvite } from './friendInvite';
-import { Icon } from './Icon';
+import { pendingRegistrationInvite } from './friendInvite';
 import { motionReduced } from './motion';
+import { requestPhonePushPermissionFromTap } from './push';
 import { SampleProfileDialog } from './SampleProfileDialog';
 import type { AuthConfig, User } from './types';
 
@@ -61,6 +71,7 @@ function AuthField({
   error,
   hint,
   help,
+  labelAction,
   children,
 }: {
   id: string;
@@ -69,24 +80,29 @@ function AuthField({
   hint?: string;
   /** A short explanation shown under the label when its ? button is tapped. */
   help?: ReactNode;
+  /** A link-style control at the end of the label row, such as Forgot password. */
+  labelAction?: ReactNode;
   children: ReactNode;
 }) {
   const [helpOpen, setHelpOpen] = useState(false);
   return (
     <div className="auth-field">
-      {help ? (
+      {help || labelAction ? (
         <div className="auth-label-row">
           <label htmlFor={id}>{label}</label>
-          <button
-            type="button"
-            className="auth-help-button"
-            aria-label={`About ${label.toLowerCase()}`}
-            aria-expanded={helpOpen}
-            aria-controls={`${id}-help`}
-            onClick={() => setHelpOpen((current) => !current)}
-          >
-            ?
-          </button>
+          {help && (
+            <button
+              type="button"
+              className="auth-help-button"
+              aria-label={`About ${label.toLowerCase()}`}
+              aria-expanded={helpOpen}
+              aria-controls={`${id}-help`}
+              onClick={() => setHelpOpen((current) => !current)}
+            >
+              ?
+            </button>
+          )}
+          {labelAction}
         </div>
       ) : (
         <label htmlFor={id}>{label}</label>
@@ -116,7 +132,33 @@ function describedBy(id: string, error?: string, hint?: string): string | undefi
   return hint ? `${id}-hint` : undefined;
 }
 
+// How many sign-in style screens are showing; the person's own theme returns when the last goes.
+let blueScreens = 0;
+
+/**
+ * Sign-in, create-account, password-change and connection screens always look the same: plain grey
+ * Default surfaces with the original Blue accent, whatever accent or Stained/OLED style the device
+ * has saved. Only the page is recoloured; the saved choices are untouched and come back as soon as
+ * the screen closes.
+ */
+function useBlueSignInTheme() {
+  useLayoutEffect(() => {
+    blueScreens += 1;
+    applyDarkStyle('default');
+    applyLightStyle('default');
+    applyColourTheme('blue');
+    return () => {
+      blueScreens -= 1;
+      if (blueScreens) return;
+      applyDarkStyle(darkStylePreference());
+      applyLightStyle(lightStylePreference());
+      applyColourTheme(colourThemePreference());
+    };
+  }, []);
+}
+
 export function AuthBrand() {
+  useBlueSignInTheme();
   return (
     <header className="auth-brand">
       <div className="auth-brand-mark">
@@ -143,7 +185,7 @@ export function AuthScreen({
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCode, setInviteCode] = useState(() => pendingRegistrationInvite() ?? '');
   const [showPassword, setShowPassword] = useState(false);
   const [inviteRevealed, setInviteRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -151,7 +193,7 @@ export function AuthScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
-  const [invited] = useState(() => pendingFriendInvite() !== null);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const screenRef = useRef<HTMLElement>(null);
   const shellTopRef = useRef<number | null>(null);
@@ -209,6 +251,8 @@ export function AuthScreen({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
+    // Phone alerts start on for each account; this tap is the only chance to ask permission.
+    requestPhonePushPermissionFromTap();
     setSubmitting(true);
     setError(null);
     setNotice(null);
@@ -305,17 +349,6 @@ export function AuthScreen({
             </p>
           )}
 
-          {invited && !notice && (
-            <p className="auth-note auth-invite-note">
-              <Icon name="people" />
-              <span>
-                {registrationOpen
-                  ? 'Sign in or create an account to send your friend request.'
-                  : 'Sign in to send your friend request.'}
-              </span>
-            </p>
-          )}
-
           {notice && (
             <p className="auth-note" role="status">
               {notice}
@@ -393,6 +426,17 @@ export function AuthScreen({
               label="Password"
               error={fieldErrors.password}
               hint={creating ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
+              labelAction={
+                creating ? undefined : (
+                  <button
+                    type="button"
+                    className="auth-forgot-password"
+                    onClick={() => setForgotOpen(true)}
+                  >
+                    Forgot password?
+                  </button>
+                )
+              }
             >
               <div className="auth-password">
                 <input
@@ -417,12 +461,14 @@ export function AuthScreen({
                 <button
                   type="button"
                   className="auth-reveal"
+                  // One name with a pressed state; the eye shows what a tap will do.
+                  aria-label="Show password"
                   aria-pressed={showPassword}
                   aria-controls={ids.password}
+                  title={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword((current) => !current)}
                 >
-                  {showPassword ? 'Hide' : 'Show'}
-                  <span className="sr-only"> password</span>
+                  <Icon name={showPassword ? 'hide' : 'eye'} />
                 </button>
               </div>
             </AuthField>
@@ -487,6 +533,9 @@ export function AuthScreen({
               username={username}
               onClose={() => setSampleOpen(false)}
             />
+          )}
+          {!creating && forgotOpen && (
+            <ForgotPasswordDialog initialUsername={username} onClose={() => setForgotOpen(false)} />
           )}
         </section>
       </div>

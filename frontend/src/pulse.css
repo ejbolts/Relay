@@ -16,19 +16,27 @@
 }
 
 :root {
+  /* Default dark: the original Relay palette. Popups share the card surface. */
   --p-page: #0b0d0f;
   --p-surface: #15181b;
   --p-surface-2: #1d2125;
   --p-surface-3: #272c31;
+  --p-surface-raised: #15181b;
+  --p-raised-2: #1d2125;
+  --p-raised-3: #272c31;
+  --p-raised-line: rgb(255 255 255 / 7%);
+  --p-raised-line-strong: rgb(255 255 255 / 12%);
   --p-line: rgb(255 255 255 / 7%);
   --p-line-strong: rgb(255 255 255 / 12%);
+  --p-card-shadow: none;
+  --p-tab-bar-bg: rgb(11 13 15 / 86%);
   --p-ink: #f3f5f6;
   --p-ink-2: #b4bcc2;
   --p-muted: #828b92;
-  --p-accent: #3987e5;
-  --p-accent-hover: #4b94ea;
-  --p-accent-text: #6da7ec;
-  --p-accent-soft: rgb(57 135 229 / 15%);
+  --p-accent: #2c74d0;
+  --p-accent-hover: #357bd6;
+  --p-accent-text: #7fb4f1;
+  --p-accent-soft: rgb(44 116 208 / 20%);
   --accent: var(--p-accent);
   --accent-dark: var(--p-accent-hover);
   --green: var(--p-accent);
@@ -45,11 +53,144 @@
   font-feature-settings: 'cv11', 'ss03';
 }
 
+/* Dark styles, chosen in Appearance. Light mode ignores them. */
+:root[data-dark-style='oled']:not([data-colour-mode='light']) {
+  /* True black page and cards; bright outlines carry the structure instead of fills. */
+  --p-page: #000000;
+  --p-surface: #000000;
+  --p-surface-2: #121417;
+  --p-surface-3: #1f2226;
+  --p-surface-raised: #000000;
+  --p-raised-2: #15181b;
+  --p-raised-3: #23272b;
+  --p-raised-line: rgb(255 255 255 / 16%);
+  --p-raised-line-strong: rgb(255 255 255 / 42%);
+  --p-line: rgb(255 255 255 / 14%);
+  --p-line-strong: rgb(255 255 255 / 24%);
+  --p-card-border: rgb(255 255 255 / 22%);
+  --p-card-shadow: none;
+  --p-tab-bar-bg: rgb(0 0 0 / 92%);
+  --p-ink: #ffffff;
+  --p-ink-2: #d4d9dd;
+  --p-muted: #a8b0b6;
+  --p-grid: #1f2327;
+  --p-axis: #3d434a;
+  --p-deemph: #33393f;
+  --p-danger: #f47a7a;
+}
+
+:root[data-dark-style='stained']:not([data-colour-mode='light']) {
+  /* Surfaces take a faint tint of the accent theme, so layers differ by hue as well as lightness. */
+  --p-page: color-mix(in srgb, var(--p-accent) 7%, #0a0d12);
+  --p-surface: color-mix(in srgb, var(--p-accent) 13%, #151a21);
+  --p-surface-2: color-mix(in srgb, var(--p-accent) 17%, #1d242d);
+  --p-surface-3: color-mix(in srgb, var(--p-accent) 23%, #262e38);
+  --p-surface-raised: color-mix(in srgb, var(--p-accent) 17%, #1a2129);
+  --p-raised-2: color-mix(in srgb, var(--p-accent) 23%, #232b35);
+  --p-raised-3: color-mix(in srgb, var(--p-accent) 28%, #2c3541);
+  --p-raised-line: color-mix(in srgb, var(--p-accent-text) 18%, transparent);
+  --p-raised-line-strong: color-mix(in srgb, var(--p-accent-text) 40%, transparent);
+  --p-line: color-mix(in srgb, var(--p-accent-text) 14%, transparent);
+  --p-line-strong: color-mix(in srgb, var(--p-accent-text) 26%, transparent);
+  --p-card-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--p-accent-text) 12%, transparent),
+    0 6px 18px rgb(0 0 0 / 40%);
+  --p-tab-bar-bg: color-mix(in srgb, var(--p-surface) 92%, transparent);
+  --p-ink-2: color-mix(in srgb, var(--p-accent-text) 18%, #ccd3d9);
+  --p-muted: color-mix(in srgb, var(--p-accent-text) 18%, #a1abb3);
+  --p-grid: color-mix(in srgb, var(--p-accent) 18%, #262d35);
+  --p-axis: color-mix(in srgb, var(--p-accent) 20%, #3e4750);
+  --p-deemph: color-mix(in srgb, var(--p-accent) 20%, #37404a);
+  --p-danger: #f47a7a;
+}
+
 html,
 body,
 .tracker-app {
-  background: var(--p-page);
   color: var(--p-ink);
+}
+
+/* Only the root paints the page colour, so the sun ray and grain below can sit between it and
+   the app's content without giving the app its own stacking context. */
+html {
+  background: var(--p-page);
+}
+
+/* Overrides the older body and app backgrounds in styles.css. */
+body,
+.tracker-app {
+  background: transparent;
+}
+
+/* Sun ray: a broad, soft diagonal band in the accent colour (cobalt on the default Blue theme)
+   that drifts slowly behind the sign-in and create-account screens only; the app itself keeps a
+   plain page colour. Fixed to the viewport so its oversized box adds no overflow. */
+:root {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 17%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 6%, transparent);
+  --sun-grain-opacity: 0.085;
+}
+
+:root[data-colour-mode='light'] {
+  --sun-ray: color-mix(in srgb, var(--p-accent) 11%, transparent);
+  --sun-ray-soft: color-mix(in srgb, var(--p-accent) 4%, transparent);
+  --sun-grain-opacity: 0.05;
+}
+
+.auth-screen::before,
+.auth-screen::after {
+  position: fixed;
+  z-index: -1;
+  content: '';
+  pointer-events: none;
+}
+
+/* One broad, soft diagonal ray that glides slowly back and forth. The element is oversized so
+   the moving ray never shows an edge. */
+.auth-screen::before {
+  inset: -50%;
+  background: linear-gradient(
+    118deg,
+    transparent 34%,
+    var(--sun-ray-soft) 43%,
+    var(--sun-ray) 50%,
+    var(--sun-ray-soft) 57%,
+    transparent 66%
+  );
+  /* Box coordinates: transparent at the viewport top, which iOS paints behind the status bar,
+     and full strength about a quarter of the way down, so there is no hard line under it. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  mask-image: linear-gradient(to bottom, transparent 27%, #000 42%);
+  animation: sun-ray-drift 20s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Fine metal grain: monochrome noise plus a faint horizontal brushed streak. */
+.auth-screen::after {
+  inset: -10vh 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)' opacity='.45'/%3E%3C/svg%3E");
+  opacity: var(--sun-grain-opacity);
+}
+
+@keyframes sun-ray-drift {
+  from {
+    transform: translate3d(-14%, 6%, 0) rotate(-2deg);
+  }
+  to {
+    transform: translate3d(13%, -5%, 0) rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-screen::before {
+    animation: none;
+  }
+}
+
+[data-reduce-motion] .auth-screen::before {
+  animation: none;
 }
 
 body {
@@ -64,10 +205,6 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-.tracker-app {
-  background: var(--p-page);
-}
-
 .num,
 .tabular {
   font-variant-numeric: tabular-nums;
@@ -75,7 +212,7 @@ body {
 
 .content-page {
   width: min(100%, 720px);
-  padding: calc(env(safe-area-inset-top) + 0.6rem) 0.875rem 2.5rem;
+  padding: calc(env(safe-area-inset-top) + 1.1rem) 0.875rem 2.5rem;
 }
 
 .tracker-app.has-tab-bar .content-page {
@@ -136,27 +273,6 @@ body {
   line-height: 1.1;
 }
 
-.offline-badge {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.3rem;
-  border: 1px solid var(--p-line);
-  border-radius: 999px;
-  padding: 0.25rem 0.6rem 0.25rem 0.45rem;
-  color: var(--p-muted);
-  font-size: 0.75rem;
-  font-weight: 650;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.offline-badge .pulse-icon {
-  width: 0.95rem;
-  height: 0.95rem;
-  stroke-width: 2;
-}
-
 .page-header-actions {
   display: flex;
   flex-shrink: 0;
@@ -188,7 +304,8 @@ body {
   display: contents;
 }
 
-.today-screen > header.page-header .page-eyebrow {
+.today-screen > header.page-header .page-eyebrow,
+.today-screen > header.page-header .page-eyebrow-row {
   grid-column: 1 / -1;
 }
 
@@ -264,10 +381,11 @@ body {
   display: block;
   width: 100%;
   margin: 0.75rem 0 0;
-  border: 1px solid var(--p-line);
+  border: 1px solid var(--p-card-border, var(--p-line));
   border-radius: var(--p-radius);
   padding: 1rem;
   background: var(--p-surface);
+  box-shadow: var(--p-card-shadow);
   color: var(--p-ink);
   text-align: left;
 }
@@ -413,11 +531,28 @@ button.pulse-card:hover {
   font-weight: 600;
 }
 
-.history-show-more-error {
-  margin: 0.4rem 0 0;
+.history-page-status {
+  margin-top: 1.125rem;
+  border: 1px solid var(--p-line);
+  border-radius: 18px;
+  padding: 1.25rem 1rem;
+  background: var(--p-surface);
   color: var(--p-muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
+}
+
+.history-page-status p {
+  margin: 0;
+}
+
+.history-page-status .show-more-button {
+  margin-top: 0.75rem;
+}
+
+.history-session-pages > .pagination-controls {
+  border-top: 0;
+  margin-top: 0.5rem;
 }
 
 /* The leading calendar column while older months load; it keeps the month width so a fast
@@ -701,79 +836,28 @@ button.pulse-card:hover {
   color: var(--p-gold);
 }
 
-.live-workout-card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0.25rem 1rem;
-  margin-bottom: 0.75rem;
-  border-color: rgb(57 135 229 / 35%);
-  background: linear-gradient(160deg, #15263a 0%, var(--p-surface) 70%);
-}
-
-.live-workout-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--p-ink-2);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.live-workout-label i,
 .app-tab-start .live-dot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
   background: var(--p-accent);
-  box-shadow: 0 0 0 0 rgb(57 135 229 / 55%);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-accent) 55%, transparent);
   animation: pulse-live 1.6s ease-out infinite;
 }
 
 /* A paused workout keeps a still gold dot and a gold, frozen time. */
-.app-tab-start.live .live-dot.paused,
-.live-workout-card.is-paused .live-workout-label i {
+.app-tab-start.live .live-dot.paused {
   background: var(--p-gold);
   box-shadow: none;
   animation: none;
 }
 
-.live-workout-card.is-paused .live-workout-duration {
-  color: var(--p-gold);
-}
-
-.live-workout-duration {
-  grid-row: 2;
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.live-workout-resume {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  border-radius: 12px;
-  padding: 0.625rem 0.875rem;
-  background: var(--p-accent);
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.live-workout-resume .pulse-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
 @keyframes pulse-live {
   70% {
-    box-shadow: 0 0 0 0.45rem rgb(57 135 229 / 0%);
+    box-shadow: 0 0 0 0.45rem transparent;
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(57 135 229 / 0%);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -1030,7 +1114,7 @@ button.pulse-card:hover {
   position: relative;
   overflow: hidden;
   border-radius: 4px;
-  background: #1c3350;
+  background: color-mix(in srgb, var(--p-accent) 24%, transparent);
 }
 
 .pulse-meter i {
@@ -1128,9 +1212,38 @@ button.pulse-card:hover {
   font-size: 0.6875rem;
 }
 
-.quick-check-in-heading > span.logged {
+.quick-check-in-status {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.quick-check-in-status > span {
+  white-space: nowrap;
+}
+
+.quick-check-in-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem 0.2rem 0.4rem;
+  background: color-mix(in srgb, var(--p-good) 14%, transparent);
   color: var(--p-good);
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.quick-check-in-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.quick-check-in-status .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .quick-check-in-row + .quick-check-in-row {
@@ -1284,7 +1397,8 @@ button.pulse-card:hover {
 }
 
 .today-loading-skeleton .skeleton-block,
-.friends-loading-skeleton .skeleton-block {
+.friends-loading-skeleton .skeleton-block,
+.feed-loading-skeleton .skeleton-block {
   display: block;
   border-radius: 8px;
   background: linear-gradient(
@@ -1351,7 +1465,7 @@ button.pulse-card:hover {
   border-top: 1px solid var(--p-line);
   padding: 0.4375rem max(0.5rem, env(safe-area-inset-right)) env(safe-area-inset-bottom)
     max(0.5rem, env(safe-area-inset-left));
-  background: rgb(11 13 15 / 86%);
+  background: var(--p-tab-bar-bg);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
@@ -1455,7 +1569,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   border-radius: 10px;
   background: var(--p-accent);
   color: #fff;
-  box-shadow: 0 6px 18px rgb(57 135 229 / 32%);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--p-accent) 32%, transparent);
 }
 
 .app-tab-start .pulse-icon {
@@ -1467,8 +1581,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .app-tab-start.live .app-tab-start-bubble {
-  background: #1b3552;
-  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 55%);
+  background: color-mix(in srgb, var(--p-accent) 30%, #0b0f14);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent-text) 55%, transparent);
 }
 
 .app-tab-start.live .live-dot {
@@ -1490,8 +1604,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .overlay-screen-header::before {
   background: linear-gradient(
     180deg,
-    rgb(11 13 15 / 97%) 0%,
-    rgb(11 13 15 / 90%) 62%,
+    color-mix(in srgb, var(--p-page) 97%, transparent) 0%,
+    color-mix(in srgb, var(--p-page) 90%, transparent) 62%,
     transparent 100%
   );
 }
@@ -1632,7 +1746,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .calendar-panel .calendar-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.125rem;
+  /* Room between days so neighbouring coloured outlines never touch. */
+  gap: 0.375rem;
 }
 
 .calendar-panel .calendar-weekdays span {
@@ -1670,14 +1785,36 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 600;
 }
 
-.calendar-panel .calendar-day.trained:not(.in-progress) {
-  border: 1px solid var(--p-good);
-  transition: border-color 200ms ease;
+/* A trained day is outlined in its workout colour; a day that mixes types splits the outline
+   between them. With every type on the day switched off in the legend, it turns neutral grey. */
+.calendar-panel .calendar-day.trained:not(.in-progress)::before,
+.calendar-panel .calendar-day.scheduled::before,
+.week-strip-day.trained:not(.in-progress)::before {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  background: var(--day-ring, var(--p-axis));
+  background-origin: border-box;
+  background-repeat: no-repeat;
+  content: '';
+  pointer-events: none;
+  /* Native border geometry keeps the inner curve concentric and snaps its width consistently.
+     Mask out the padding box so mixed-colour outlines preserve the background underneath. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) padding-box exclude,
+    linear-gradient(#000 0 0);
 }
 
-/* Every workout type on this day is switched off in the legend; the date itself stays legible. */
-.calendar-panel .calendar-day.trained.filtered-out:not(.in-progress) {
-  border-color: var(--p-axis);
+/* A day the split plans with nothing logged: a faint outline in that workout's colour. Future
+   days are already faded as a whole; today and missed past days fade the outline to match. */
+.calendar-panel .calendar-day.scheduled:not(.future)::before {
+  opacity: 0.32;
 }
 
 .calendar-panel .calendar-day.today {
@@ -1691,8 +1828,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .calendar-panel .calendar-day.in-progress {
-  background: rgb(57 135 229 / 14%);
-  box-shadow: inset 0 0 0 1px rgb(57 135 229 / 45%);
+  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 /* The live dot already marks the day; drop the legacy corner dot that stacked under it. */
@@ -1727,6 +1864,103 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .calendar-day-dots .calendar-live-dot {
   background: var(--p-accent);
+}
+
+/* ───────── This week ───────── */
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* Today's ring sits 4px outside its tile; keep clear space beyond it. */
+  gap: 0.5rem;
+}
+
+/* Every tile is laid out from the top with room for two workout names, so the weekday letters
+   and dates stay level whether a day has none, one or two. */
+.week-strip-day {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.5rem 0.125rem 0.4375rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.week-strip-weekday {
+  color: var(--p-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 0.875rem;
+}
+
+.week-strip-date {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+}
+
+.week-strip-types {
+  width: 100%;
+  height: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.125rem;
+}
+
+.week-strip-type {
+  max-width: 100%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--type-color, var(--p-muted)) 65%, var(--p-ink));
+  font-size: 0.5625rem;
+  font-weight: 600;
+  line-height: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-strip-type.is-off {
+  color: var(--p-muted);
+}
+
+.week-strip-types .calendar-live-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  margin-top: 0.1875rem;
+  border-radius: 50%;
+  background: var(--p-accent);
+}
+
+.week-strip-day.future {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--p-line-strong);
+}
+
+.week-strip-day.future .week-strip-date {
+  color: var(--p-muted);
+  font-weight: 500;
+}
+
+.week-strip-day.in-progress {
+  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
+}
+
+.week-strip-day.today {
+  outline: 2px solid var(--p-ink);
+  outline-offset: 2px;
+}
+
+.week-strip-day:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
 }
 
 .category-legend {
@@ -1811,8 +2045,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   .category-legend i,
   .category-legend-label,
   .category-legend-state .pulse-icon,
-  .calendar-day-dots i,
-  .calendar-panel .calendar-day.trained:not(.in-progress) {
+  .calendar-day-dots i {
     transition: none;
   }
 }
@@ -1945,41 +2178,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   background: var(--p-surface-2);
 }
 
-.history-screen .history-workout-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr));
-  gap: 0;
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-}
-
-.history-screen .history-workout-stats span {
-  display: block;
-  border: 0;
-  padding: 0.5rem 0.625rem;
-  background: var(--p-surface);
-}
-
-.history-screen .history-workout-stats span + span {
-  border-left: 1px solid var(--p-line);
-}
-
-.history-screen .history-workout-stats small {
-  display: block;
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-}
-
-.history-screen .history-workout-stats strong {
-  display: block;
-  background: none;
-  color: var(--p-ink);
-  font-size: 0.875rem;
-  font-weight: 650;
-}
-
 .history-movement {
   border-top: 1px solid var(--p-line);
   padding: 0.75rem 0 0.25rem;
@@ -2037,7 +2235,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   flex: 1;
   border: 1px solid var(--p-line-strong);
   border-radius: 12px;
-  padding: 0 0.875rem;
+  padding: 0 0.625rem;
   background: var(--p-surface);
   color: var(--p-ink);
   font-size: 0.8125rem;
@@ -2054,6 +2252,24 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   color: var(--p-danger);
 }
 
+.history-screen .workout-actions .workout-export-error {
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+/* Too narrow for one row of four: two even rows instead of a stray last button. */
+@media (max-width: 359px) {
+  .history-screen .workout-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-screen .workout-actions .resume-workout-button {
+    grid-column: auto;
+  }
+}
+
 /* Set flow inside history: compact pills without “rest not set” noise. */
 .history-set-flow {
   display: flex;
@@ -2063,8 +2279,9 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .history-set-pill {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.375rem;
+  gap: 0.15rem 0.375rem;
   border: 1px solid var(--p-line);
   border-radius: 9px;
   padding: 0.3125rem 0.5rem;
@@ -2072,22 +2289,31 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-size: 0.75rem;
 }
 
-.history-set-pill[data-set-type='normal'] {
+/* A narrow pill wraps between its parts rather than inside a weight or label. */
+.history-set-pill > * {
+  white-space: nowrap;
+}
+
+.history-set-pill[data-set-type='normal'],
+.history-set-table [data-set-type='normal'] {
   --history-set-rgb: 35 166 62;
   --history-set-ink: #7fdc92;
 }
 
-.history-set-pill[data-set-type='warmup'] {
+.history-set-pill[data-set-type='warmup'],
+.history-set-table [data-set-type='warmup'] {
   --history-set-rgb: 240 140 40;
   --history-set-ink: #f59a3c;
 }
 
-.history-set-pill[data-set-type='drop'] {
+.history-set-pill[data-set-type='drop'],
+.history-set-table [data-set-type='drop'] {
   --history-set-rgb: 150 110 240;
   --history-set-ink: #b597ff;
 }
 
-.history-set-pill[data-set-type='failure'] {
+.history-set-pill[data-set-type='failure'],
+.history-set-table [data-set-type='failure'] {
   --history-set-rgb: 230 103 103;
   --history-set-ink: #ff7a7a;
 }
@@ -2097,19 +2323,23 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   background: rgb(var(--history-set-rgb) / 12%);
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='normal'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='normal'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='normal'] {
   --history-set-ink: #256b39;
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='warmup'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='warmup'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='warmup'] {
   --history-set-ink: #955013;
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='drop'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='drop'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='drop'] {
   --history-set-ink: #6940ae;
 }
 
-:root[data-colour-mode='light'] .history-set-pill[data-set-type='failure'] {
+:root[data-colour-mode='light'] .history-set-pill[data-set-type='failure'],
+:root[data-colour-mode='light'] .history-set-table [data-set-type='failure'] {
   --history-set-ink: #a62736;
 }
 
@@ -2360,16 +2590,30 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 @media (max-width: 480px) {
-  .social-screen .friend-group li {
-    flex-wrap: wrap;
+  .social-screen .friend-group li:has(> .shared-connection-actions) {
+    flex-wrap: nowrap;
   }
 
-  .social-screen .friend-group li:has(.shared-connection-actions) .friend-open {
-    flex-basis: 100%;
+  .social-screen .friend-group li:has(> .shared-connection-actions) > .friend-open {
+    flex-basis: 0;
+    gap: 0.5rem;
   }
 
-  .social-screen .shared-connection-actions {
+  .social-screen .friend-group .shared-connection-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .social-screen .friend-group .shared-connection-actions {
+    flex: 0 0 auto;
+    gap: 0.375rem;
     margin-left: auto;
+  }
+
+  .social-screen .friend-group .shared-connection-actions > button {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.6rem;
   }
 }
 
@@ -2554,6 +2798,28 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   list-style: none;
 }
 
+.session-year-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  border-bottom: 1px solid var(--p-accent);
+  padding: 0.75rem 0 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.session-year:first-of-type .session-year-header {
+  padding-top: 0.25rem;
+}
+
+.session-year-header small {
+  color: var(--p-muted);
+  font-size: 0.71875rem;
+  font-weight: 400;
+}
+
 .progress-sessions li + li {
   border-top: 1px solid var(--p-line);
 }
@@ -2689,6 +2955,11 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   stroke-dasharray: 0.1 5;
 }
 
+.pulse-chart-goal-band {
+  fill: var(--accent);
+  fill-opacity: 0.12;
+}
+
 .pulse-chart-goal text {
   fill: var(--p-ink-2);
   font-size: 10.5px;
@@ -2721,6 +2992,51 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   pointer-events: none;
 }
 
+.pulse-chart-tooltip > span:first-of-type {
+  padding-right: 1.25rem;
+}
+
+/* Closes the popup so the chart underneath can be read again; 44px touch area. */
+.pulse-chart-tooltip-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: #b9bfc4;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pulse-chart-tooltip-close::before {
+  position: absolute;
+  inset: -0.625rem;
+  content: '';
+}
+
+.pulse-chart-tooltip-close:hover,
+.pulse-chart-tooltip-close:focus-visible {
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+}
+
+.pulse-chart-tooltip-close:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
+.pulse-chart-tooltip-close .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .pulse-chart-tooltip span,
 .pulse-chart-tooltip small {
   color: #b9bfc4;
@@ -2732,7 +3048,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 650;
 }
 
-.pulse-chart-tooltip button {
+.pulse-chart-tooltip-open {
   margin-top: 0.25rem;
   border: 0;
   border-radius: 7px;
@@ -2779,13 +3095,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-size: 1.25rem;
   font-weight: 650;
   letter-spacing: -0.01em;
-}
-
-.body-screen .body-trend-stat-controls select {
-  min-height: 1.75rem;
-  border-radius: 8px;
-  padding: 0 1.5rem 0 0.5rem;
-  font-size: 0.75rem;
 }
 
 .body-screen .body-trend-panel {
@@ -2875,6 +3184,17 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-variant-numeric: tabular-nums;
 }
 
+/* The planned rep target and what to do next, on its own line so it is never cut short. */
+.logger-screen .movement-card > .movement-rep-target {
+  margin: 0;
+  padding: 0 1rem 0.625rem;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
 .movement-last-session {
   margin: 0.125rem 0 0 !important;
   overflow: hidden;
@@ -2899,9 +3219,9 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .logger-screen .add-exercise-button {
-  border: 1px dashed rgb(57 135 229 / 45%);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 60%, transparent);
   border-radius: 16px;
-  background: var(--p-accent-soft);
+  background: transparent;
   color: var(--p-accent-text);
   font-weight: 600;
 }
@@ -2933,8 +3253,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .video-content .picker {
-  border: 2px dotted rgb(57 135 229 / 75%);
-  background: rgb(57 135 229 / 8%);
+  border: 2px dotted color-mix(in srgb, var(--p-accent) 75%, transparent);
+  background: color-mix(in srgb, var(--p-accent) 8%, transparent);
 }
 
 .video-content .picker,
@@ -2951,7 +3271,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   height: 2.75rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 50%;
-  background: rgb(21 24 27 / 94%);
+  background: color-mix(in srgb, var(--p-surface) 94%, transparent);
   box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
   color: var(--p-ink-2);
   opacity: 0;
@@ -2986,10 +3306,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-workout-label i,
   .app-tab-start .live-dot,
   .today-loading-skeleton .skeleton-block,
-  .friends-loading-skeleton .skeleton-block {
+  .friends-loading-skeleton .skeleton-block,
+  .feed-loading-skeleton .skeleton-block {
     animation: none;
   }
 }
@@ -3036,6 +3356,11 @@ html.edge-swipe-ready .edge-swipe-indicator {
   margin: 0;
   color: var(--p-ink);
   font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.history-screen .history-card-summary .history-card-metric {
+  font-weight: 650;
 }
 
 .history-screen .history-card-summary .history-card-copy strong {
@@ -3193,6 +3518,18 @@ html.edge-swipe-ready .edge-swipe-indicator {
   background: var(--p-accent);
 }
 
+/* Body trend draws its line in the page ink (white in dark mode) rather than the accent. */
+.body-screen .pulse-chart-line,
+.body-screen .chart-legend .legend-line {
+  stroke: var(--p-ink);
+  background: var(--p-ink);
+}
+
+.body-screen .pulse-chart-marker,
+.body-screen .pulse-chart-cursor circle {
+  fill: var(--p-ink);
+}
+
 .chart-legend .legend-goal {
   width: 0.875rem;
   height: 0;
@@ -3201,25 +3538,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .body-screen .body-reference-stats {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.body-screen .body-reference-stats > .body-trend-stat {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-}
-
-.body-screen .body-reference-stats > .body-trend-stat > strong {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  font-size: 1.375rem;
-}
-
-.body-screen .body-trend-stat-controls {
-  display: flex;
-  gap: 0.375rem;
 }
 
 .progress-screen .progress-exercise-combobox {
@@ -3346,6 +3664,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
   background: transparent;
 }
 
+.logger-screen .movement-card.superset-card {
+  border: 1px solid rgb(167 139 250 / 55%);
+}
+
 .logger-screen .movement-card > .superset-ribbon {
   border-radius: calc(var(--p-radius) - 1px) calc(var(--p-radius) - 1px) 0 0;
 }
@@ -3378,8 +3700,15 @@ html.edge-swipe-ready .edge-swipe-indicator {
   gap: 0.15rem;
 }
 
-.logger-screen .movement-header-actions .exercise-muscle-help-button {
-  width: 2.25rem;
+.logger-screen .movement-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.logger-screen .movement-title-row > h2 {
+  min-width: 0;
 }
 
 .segmented-control button {
@@ -3737,16 +4066,12 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 /* An open set is edited in place on a blue row, and reads as being edited even if already logged. */
 .logger-screen .set-grid .set-details.is-open {
-  border-color: rgb(57 135 229 / 28%);
+  border-color: color-mix(in srgb, var(--p-accent) 28%, transparent);
   background: var(--p-accent-soft);
 }
 
 .logger-screen .set-details.is-open .set-drag-handle {
   color: #8c9692;
-}
-
-.logger-screen .set-details.is-open .completed-set-menu {
-  color: #5598e7;
 }
 
 .logger-screen .set-grid .set-editor {
@@ -3796,7 +4121,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .logger-screen .set-editor select:focus {
   border-color: var(--p-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(57 135 229 / 28%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-accent) 28%, transparent);
 }
 
 .logger-screen .set-editor .row-complete-button:not(.done) {
@@ -3811,6 +4136,19 @@ html.edge-swipe-ready .edge-swipe-indicator {
   gap: 0.375rem;
 }
 
+/* Shown under the inputs when the tick is pressed on a set with nothing entered. */
+.logger-screen .set-entry-error {
+  margin: 0;
+  color: var(--p-danger);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.logger-screen .set-editor input[aria-invalid='true'] {
+  border-color: var(--p-danger);
+  box-shadow: 0 0 0 1px var(--p-danger);
+}
+
 .logger-screen .set-editor-note,
 .logger-screen .set-editor-metrics input {
   width: 100%;
@@ -3821,7 +4159,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   border: 1px solid var(--p-line);
   border-radius: 10px;
   padding: 0 0.625rem;
-  background: rgb(11 13 15 / 45%);
+  background: color-mix(in srgb, var(--p-page) 55%, transparent);
   color: var(--p-ink);
   font: inherit;
   font-size: 0.8125rem;
@@ -3884,7 +4222,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px dashed rgb(57 135 229 / 55%);
+  border: 1px dashed color-mix(in srgb, var(--p-accent) 55%, transparent);
   border-radius: 10px;
   padding: 0 0.75rem;
   background: transparent;
@@ -3994,6 +4332,34 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-size: 0.6875rem;
 }
 
+/* Rest on the left, Delete on the right: the open set carries its own actions. */
+.logger-screen .set-editor-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.logger-screen .set-editor-delete {
+  min-height: 2.75rem;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  color: var(--p-danger);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.logger-screen .set-editor-delete .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
 .logger-screen .set-editor-rest select {
   min-height: 2rem;
   width: auto;
@@ -4013,15 +4379,19 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .machine-photo-summary {
+  --machine-thumb: 2rem;
   min-height: 2.75rem;
   padding: 0.375rem 0.625rem;
 }
 
 .logger-screen .machine-photo-summary > img,
-.logger-screen .machine-photo-placeholder {
-  width: 2rem;
-  height: 2rem;
+.logger-screen .machine-photo-placeholder,
+.logger-screen .machine-photo-stack > img {
   border-radius: 8px;
+}
+
+.logger-screen .machine-photo-stack > img {
+  box-shadow: 0 0 0 2px var(--p-surface-2);
 }
 
 .logger-screen .machine-photo-summary-copy strong {
@@ -4035,7 +4405,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen .add-set-button {
-  margin: 0.5rem 0.875rem 0;
+  margin: 0.5rem 0.875rem 0.375rem;
   border: 0;
   border-radius: 12px;
   background: var(--p-surface-2);
@@ -4183,6 +4553,17 @@ html.edge-swipe-ready .edge-swipe-indicator {
   animation: undo-toast-timer var(--undo-toast-duration, 4s) linear forwards;
 }
 
+/* A notice explaining why an action didn't happen; its countdown is the warning colour. */
+.logger-notice-toast > span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.logger-notice-toast::after {
+  background: var(--p-danger);
+}
+
 @keyframes undo-toast-in {
   from {
     opacity: 0;
@@ -4232,7 +4613,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-screen.has-rest-notch {
-  padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
 }
 
 .logger-bottom-toasts.has-rest-pill {
@@ -4240,7 +4621,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .logger-bottom-toasts.has-rest-notch {
-  bottom: calc(3rem + env(safe-area-inset-bottom));
+  bottom: calc(4rem + env(safe-area-inset-bottom));
 }
 
 /* ───────── Rest timer dock: the rest pill, or a notch on the bottom edge ───────── */
@@ -4362,29 +4743,21 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-weight: 800;
 }
 
-/* Hidden rest, or no rest: a 36px tab on the bottom edge with a 44px touch area. */
+/* Hidden rest: a compact floating pill with a 44px touch area. */
 .rest-notch {
-  bottom: 0;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
   min-width: 3.25rem;
-  height: calc(2.25rem + env(safe-area-inset-bottom));
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  isolation: isolate;
   border: 1px solid var(--p-line-strong);
-  border-bottom: 0;
-  border-radius: 0.875rem 0.875rem 0 0;
-  padding: 0 0.75rem env(safe-area-inset-bottom);
+  border-radius: 999px;
+  padding: 0 0.875rem;
   background: var(--p-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
   color: var(--p-accent-text);
-}
-
-.rest-notch::before {
-  position: absolute;
-  z-index: -1;
-  inset: -0.5rem -1px 0;
-  content: '';
 }
 
 .rest-notch .pulse-icon {
@@ -4397,6 +4770,88 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-size: 0.875rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+/* Rest complete: the bell rings in short bursts until the next set is logged or it is tapped. */
+.ringing-bell {
+  display: inline-grid;
+  place-items: center;
+  transform-origin: 50% 10%;
+  animation: bell-ring 1.5s ease-in-out infinite;
+}
+
+@keyframes bell-ring {
+  0%,
+  45%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  5% {
+    transform: rotate(18deg);
+  }
+
+  10% {
+    transform: rotate(-16deg);
+  }
+
+  15% {
+    transform: rotate(13deg);
+  }
+
+  20% {
+    transform: rotate(-10deg);
+  }
+
+  25% {
+    transform: rotate(7deg);
+  }
+
+  30% {
+    transform: rotate(-4deg);
+  }
+
+  35% {
+    transform: rotate(2deg);
+  }
+}
+
+/* A quicker pulse than the live dot's, so a finished rest stands out at a glance. */
+@keyframes rest-done-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-accent) 60%, transparent);
+  }
+
+  70% {
+    box-shadow: 0 0 0 0.6rem transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* On the workout: the bottom-edge notch rings with the time since the rest ended. */
+.rest-notch.rest-done-bell {
+  border-color: var(--p-accent);
+  animation:
+    rest-dock-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    rest-done-pulse 0.9s ease-out infinite;
+}
+
+.rest-done-bell strong {
+  color: var(--p-accent-text);
+}
+
+/* On the tab bar: the Start button's timer becomes the ringing bell. */
+.app-tab-start.ringing .app-tab-start-bubble {
+  background: var(--p-accent);
+  color: #fff;
+  animation: rest-done-pulse 0.9s ease-out infinite;
+}
+
+.app-tab-start.ringing > span:last-child {
+  color: var(--p-accent-text);
 }
 
 /* Paused: the same controls in gold, with the play icon. */
@@ -4422,6 +4877,12 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 @media (prefers-reduced-motion: reduce) {
   .workout-timer-dock {
+    animation: none;
+  }
+
+  .rest-done-bell,
+  .ringing-bell,
+  .app-tab-start.ringing .app-tab-start-bubble {
     animation: none;
   }
 
@@ -4467,7 +4928,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .calendar-create-dialog,
 .calendar-day-detail,
 .superset-picker,
-.workout-close-dialog,
 .set-entry-confirmation {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
@@ -4476,14 +4936,38 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-ink);
 }
 
+/* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
+:root:not([data-colour-mode='light'])
+  :is(
+    .popup-dialog,
+    .notification-dialog,
+    .exercise-picker,
+    .pr-summary,
+    .calendar-create-dialog,
+    .calendar-day-detail,
+    .superset-picker,
+    .set-entry-confirmation,
+    .relay-tip-popover,
+    .relay-tip-nudge
+  ) {
+  --p-surface: var(--p-surface-raised);
+  --p-surface-2: var(--p-raised-2);
+  --p-surface-3: var(--p-raised-3);
+  --p-line: var(--p-raised-line);
+  --p-line-strong: var(--p-raised-line-strong);
+}
+
 .popup-dialog > header,
 .notification-dialog > header {
   border-bottom: 1px solid var(--p-line);
 }
 
+.popup-dialog > header {
+  background: color-mix(in srgb, var(--p-surface) 97%, transparent);
+}
+
 .popup-dialog h2,
 .notification-dialog h2,
-.workout-close-dialog h2,
 .calendar-create-dialog h2,
 .calendar-day-detail h2,
 .superset-picker h2,
@@ -4583,9 +5067,21 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .exercise-picker .exercise-filter-selects select {
   border: 1px solid var(--p-line-strong);
   border-radius: 12px;
+  padding-left: 0.75rem;
   background-color: var(--p-surface-2);
   color: var(--p-ink);
   font-size: 0.875rem;
+}
+
+/* Body part, Equipment and + share one row at every phone width, with even space under it. */
+.exercise-picker .exercise-filter-selects {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
+  gap: 0.5rem;
+  padding-bottom: 0.875rem;
+}
+
+.exercise-picker .exercise-filter-selects > select:first-child {
+  grid-column: auto;
 }
 
 .exercise-picker .create-exercise-trigger {
@@ -4634,6 +5130,21 @@ html.edge-swipe-ready .edge-swipe-indicator {
 .exercise-picker .exercise-option-tags em + em::before {
   margin: 0 0.3rem;
   content: '·';
+}
+
+.exercise-picker .exercise-option-tags em.exercise-option-last-done {
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.exercise-option-last-done .pulse-icon {
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.2rem;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
 }
 
 small.custom-exercise-label,
@@ -4697,42 +5208,16 @@ small.custom-exercise-label,
   letter-spacing: 0.06em;
 }
 
-.workout-close-actions .discard-workout-button {
-  border: 0;
-  background: var(--p-danger);
-  color: #fff;
-}
-
-.workout-close-actions button {
-  min-height: 3rem;
-  border-radius: 14px;
-  font-weight: 650;
-}
-
-.workout-close-actions button:not(.discard-workout-button) {
-  border: 1px solid var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
-
-.workout-close-warning {
-  border-color: rgb(230 103 103 / 40%);
-  background: rgb(230 103 103 / 12%);
-  color: var(--p-danger);
-}
-
 @media (max-width: 480px) {
   /* Stacked actions keep labels on one line; the primary action sits on top. */
-  .popup-dialog-actions,
-  .workout-close-actions {
+  .popup-dialog-actions {
     display: flex;
     flex-direction: column-reverse;
     align-items: stretch;
     gap: 0.5rem;
   }
 
-  .popup-dialog-actions > button,
-  .workout-close-actions > button {
+  .popup-dialog-actions > button {
     width: 100%;
     white-space: nowrap;
   }
@@ -4740,6 +5225,33 @@ small.custom-exercise-label,
 
 .popup-dialog-actions {
   padding-top: 0.875rem;
+}
+
+.workout-discard-dialog .popup-dialog-actions .discard-workout-button {
+  background: var(--p-danger);
+}
+
+.inactive-workout-dialog > p {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 1rem 1rem 0;
+  line-height: 1.5;
+}
+
+.inactive-workout-dialog > p > span {
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+
+.inactive-workout-actions {
+  margin-top: 1rem;
+  padding: 0.875rem 1rem 1rem;
+}
+
+.inactive-workout-actions button.inactive-workout-discard {
+  margin-right: auto;
+  color: var(--p-danger);
 }
 
 .exercise-picker .exercise-picker-actions:not(.single-action) {
@@ -4868,16 +5380,13 @@ html {
 .history-screen > .cached-tab-panel > .progress-screen,
 .history-screen > .cached-tab-panel > .cardio-screen,
 .history-screen > .cached-tab-panel > .history-calendar-panel,
-.history-screen > .cached-tab-panel > .history-week {
+.history-session-pages > .history-week,
+.history-session-pages > .history-page-status {
   animation: rise-in 320ms var(--ease-out) backwards;
 }
 
-.history-screen > .cached-tab-panel > .history-week:nth-of-type(2) {
+.history-session-pages > .history-week:nth-of-type(2) {
   animation-delay: 40ms;
-}
-
-.history-screen > .cached-tab-panel > .history-week:nth-of-type(n + 3) {
-  animation-delay: 80ms;
 }
 
 .history-screen .history-detail {
@@ -4922,13 +5431,8 @@ html {
   }
 }
 
-.logger-screen .set-type-menu,
-.logger-screen .set-actions-menu-popover {
+.logger-screen .set-type-menu {
   animation: menu-pop 180ms var(--ease-out) backwards;
-}
-
-.logger-screen .set-actions-menu-popover {
-  transform-origin: top right;
 }
 
 /* Press feedback */
@@ -5079,7 +5583,7 @@ button.pulse-card:active,
   border-radius: 50%;
   background: var(--p-accent);
   color: #fff;
-  box-shadow: 0 8px 22px rgb(57 135 229 / 40%);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--p-accent) 40%, transparent);
   transition: transform 160ms var(--ease-out);
 }
 
@@ -5259,6 +5763,13 @@ html[data-reduce-motion] ::backdrop {
   font-weight: 600;
 }
 
+/* On the calendar it is an icon beside the title, like the Exercises list's filter. */
+.history-machine-filter {
+  justify-content: center;
+  width: 2.5rem;
+  padding: 0;
+}
+
 .history-machine-filter:hover,
 .machine-filter-actions button:hover {
   border-color: var(--p-accent);
@@ -5285,7 +5796,7 @@ html[data-reduce-motion] ::backdrop {
   grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: 0.85rem;
   align-items: start;
-  border-color: rgb(57 135 229 / 45%);
+  border-color: color-mix(in srgb, var(--p-accent) 45%, transparent);
 }
 
 .machine-filter-banner > img {
@@ -5442,6 +5953,8 @@ html[data-reduce-motion] ::backdrop {
 
 .machine-filter-list small:last-child {
   color: var(--p-ink-2);
+  /* "Last used 16 Nov 2026 · yesterday" wraps rather than losing its end. */
+  white-space: normal;
 }
 
 .machine-filter-list small.unused {
@@ -5471,4 +5984,378 @@ html[data-reduce-motion] ::backdrop {
   font-size: 0.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Equipment photo disclosure: a drawn chevron, centred on the row, instead of a text glyph. */
+.machine-photo-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--p-ink-2);
+}
+
+.machine-photo-chevron .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.logger-screen .exercise-complete-button .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/*
+ * Larger touch areas for the workout logger's small controls. Visible sizes and layout stay as
+ * they are: each control's hit area grows into the spacing around it, up to the next control,
+ * so a slightly-off tap still lands on the nearest one.
+ */
+.logger-screen .completed-set-summary .set-number-cell,
+.logger-screen .completed-set-summary > .row-complete-button,
+.logger-screen .completed-summary-actions > .set-drag-handle,
+.logger-screen .movement-header-actions > .movement-expand-toggle,
+.logger-screen .movement-header-actions .plate-calculator-button,
+.logger-screen .movement-header-actions > .exercise-complete-button,
+.logger-screen .movement-header-actions > .movement-overflow > summary,
+.logger-screen > .overlay-screen-header .overlay-header-back,
+.logger-screen > .overlay-screen-header .overlay-header-action {
+  position: relative;
+}
+
+.logger-screen .completed-set-summary .set-number-cell::before,
+.logger-screen .completed-set-summary > .row-complete-button::before,
+.logger-screen .completed-summary-actions > .set-drag-handle::before,
+.logger-screen .movement-header-actions > .movement-expand-toggle::before,
+.logger-screen .movement-header-actions .plate-calculator-button::before,
+.logger-screen .movement-header-actions > .exercise-complete-button::before,
+.logger-screen .movement-header-actions > .movement-overflow > summary::before {
+  position: absolute;
+  top: 50%;
+  right: var(--touch-right, 0);
+  left: var(--touch-left, 0);
+  height: var(--touch-height, 44px);
+  transform: translateY(-50%);
+  content: '';
+}
+
+/* A set row is 48px tall: its controls take the whole height and share the gaps between them. */
+.logger-screen .completed-set-summary .set-number-cell,
+.logger-screen .completed-set-summary > .row-complete-button,
+.logger-screen .completed-summary-actions > .set-drag-handle {
+  --touch-height: 48px;
+}
+
+.logger-screen .completed-set-summary .set-number-cell {
+  --touch-left: -10px;
+  --touch-right: -4px;
+}
+
+.logger-screen .completed-set-summary > .row-complete-button {
+  --touch-left: -3px;
+  --touch-right: -3px;
+}
+
+/* The handle is the only control after the tick, so it takes the whole column. */
+.logger-screen .completed-summary-actions > .set-drag-handle {
+  --touch-left: -4px;
+  --touch-right: -10px;
+  width: 100%;
+}
+
+.logger-screen .movement-header-actions > .movement-expand-toggle,
+.logger-screen .movement-header-actions .plate-calculator-button,
+.logger-screen .movement-header-actions > .exercise-complete-button,
+.logger-screen .movement-header-actions > .movement-overflow > summary {
+  --touch-left: -1px;
+  --touch-right: -1px;
+}
+
+.logger-screen > .overlay-screen-header .overlay-header-back::before,
+.logger-screen > .overlay-screen-header .overlay-header-action::before {
+  position: absolute;
+  inset: -2px;
+  content: '';
+}
+
+/* ───────── Frosted glass ─────────
+   Cards on the main screens and the tab bar let the sun ray show through, blurred. The level is
+   chosen in Settings > App theme (html[data-glass]); `off` keeps everything solid.
+   The blur lives on a ::before layer behind each card rather than on the card itself, because
+   backdrop-filter on the card would trap fixed-position menus and full-screen views inside it.
+   The card keeps a translucent fill, so it still reads as a card where nothing can be blurred.
+   The tab bar stays more opaque than the cards because text scrolls right behind it. */
+
+:root {
+  --glass-alpha: 66%;
+  --glass-control-alpha: 70%;
+  --glass-bar-alpha: 80%;
+  --glass-blur: 18px;
+}
+
+:root[data-glass='subtle'] {
+  --glass-alpha: 82%;
+  --glass-control-alpha: 85%;
+  --glass-bar-alpha: 92%;
+  --glass-blur: 12px;
+}
+
+:root[data-glass='strong'] {
+  --glass-alpha: 46%;
+  --glass-control-alpha: 55%;
+  --glass-bar-alpha: 66%;
+  --glass-blur: 26px;
+}
+
+/* Solid copies of the surface colours, resolved on the root for whichever mode and style is on. */
+:root {
+  --p-surface-solid: var(--p-surface);
+  --p-surface-2-solid: var(--p-surface-2);
+  --p-surface-3-solid: var(--p-surface-3);
+  --p-page-solid: var(--p-page);
+}
+
+/* Inside the main screens the shared surfaces turn translucent, so every card, tile, button and
+   control drawn with them is frosted too. Wells drawn in the page colour do the same inside cards. */
+:where(:root:not([data-glass='off'])) .tracker-content {
+  --p-surface: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-content
+  :is(.pulse-card, .panel, .settings-category-card, .home-section-stat .pulse-kpi) {
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+}
+
+/* Menus, popovers, sheets, dialogs and toasts float over content, so they stay solid. */
+:where(:root:not([data-glass='off']))
+  .tracker-content
+  :is(
+    dialog,
+    [role='dialog'],
+    [role='menu'],
+    [role='listbox'],
+    [role='tooltip'],
+    [class*='menu'],
+    [class*='popover'],
+    [class*='dropdown'],
+    [class*='sheet']:not([class*='live-workout-sheet']),
+    [class*='toast'],
+    .overlay-screen-header
+  ) {
+  --p-surface: var(--p-surface-solid);
+  --p-surface-2: var(--p-surface-2-solid);
+  --p-surface-3: var(--p-surface-3-solid);
+  --p-page: var(--p-page-solid);
+}
+
+/* Zero specificity, so a card's own position (sticky, absolute) still wins. */
+:where(:root:not([data-glass='off']))
+  :where(.tracker-app)
+  :where(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure,
+    .exercise-list-rows
+  ) {
+  position: relative;
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-app
+  :is(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure,
+    .exercise-list-rows
+  ) {
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+}
+
+:where(:root:not([data-glass='off']))
+  .tracker-app
+  :is(
+    .pulse-card,
+    .panel,
+    .settings-category-card,
+    .settings-profile-link,
+    .home-section-stat .pulse-kpi,
+    .body-screen .body-reference-stats,
+    .workout-details-disclosure,
+    .exercise-list-rows
+  )::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+:root:not([data-glass='off']) .app-tab-bar {
+  background: color-mix(in srgb, var(--p-tab-bar-bg) var(--glass-bar-alpha), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+}
+
+:root[data-colour-mode='light']:not([data-glass='off']) .app-tab-bar {
+  background: rgb(255 255 255 / calc(var(--glass-bar-alpha) * 0.88));
+}
+
+/* The Body summary draws its dividers through 1px gaps over a line-coloured backing, which
+   tints see-through cells grey. With glass on, the grid itself is frosted and the cells draw
+   their own dividers. */
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats {
+  gap: 0;
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > div {
+  background: transparent;
+  box-shadow: inset -1px 0 0 var(--p-line);
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > div:nth-child(3) {
+  box-shadow: none;
+}
+
+:where(:root:not([data-glass='off'])) .body-screen .body-reference-stats > .body-trend-stat {
+  margin-top: 0;
+  border-top: 1px solid var(--p-line);
+  box-shadow: none;
+}
+
+/* The sign-in and account creation card is frosted too, with its tabs, inputs and notes. */
+:where(:root:not([data-glass='off'])) .auth-screen .auth-card {
+  position: relative;
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off'])) .auth-screen .auth-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* The exercise picker fills the phone screen, so it drops its rounded corners there. */
+@media (max-width: 620px) {
+  .exercise-picker-backdrop .exercise-picker {
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+/* On phones, Add exercise slides the full-screen picker up from the bottom, like the logger. */
+@media (max-width: 620px) {
+  .exercise-picker-backdrop .exercise-picker {
+    animation: exercise-picker-in 400ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+  }
+}
+
+@media (max-width: 620px) and (prefers-reduced-motion: reduce) {
+  .exercise-picker-backdrop .exercise-picker {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
+  animation: none;
+}
+
+@keyframes exercise-picker-in {
+  from {
+    translate: 0 100%;
+  }
+
+  to {
+    translate: 0 0;
+  }
+}
+
+/* On phones the frosted picker covers the whole app, so the dimming behind it would only darken
+   the glass; the picker's own blur does the work instead. */
+@media (max-width: 620px) {
+  :where(:root:not([data-glass='off'])) .exercise-picker-backdrop {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* The exercise picker is frosted over the app, with its search, filters and rows. */
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker {
+  background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
+  --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
+  --p-surface-2: color-mix(
+    in srgb,
+    var(--p-surface-2-solid) var(--glass-control-alpha),
+    transparent
+  );
+  --p-surface-3: color-mix(
+    in srgb,
+    var(--p-surface-3-solid) var(--glass-control-alpha),
+    transparent
+  );
+}
+
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* The picker's exercise list drops its older solid backing so the rows are frosted too. */
+:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-list {
+  background: transparent;
+}
+
+/* The plate calculator button is a frosted chip like the other header controls. */
+:where(:root:not([data-glass='off'])) .logger-screen .plate-calculator-button {
+  background: color-mix(in srgb, var(--p-surface-2-solid) var(--glass-control-alpha), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* With glass on, the Exercises list sits on a frosted card like the other sections. */
+:where(:root:not([data-glass='off'])) .tracker-content .exercise-list-rows {
+  border: 1px solid var(--p-card-border, var(--p-line));
+  border-radius: var(--p-radius);
+  padding: 0 0.875rem;
 }

@@ -1,4 +1,6 @@
-import type { User } from './types';
+import type { Sex, User } from './types';
+
+export const SEX_LABELS: Record<Sex, string> = { male: 'Male', female: 'Female' };
 
 export function profileInitial(user: Pick<User, 'display_name' | 'username'>): string {
   const source = user.display_name.trim() || user.username.trim();

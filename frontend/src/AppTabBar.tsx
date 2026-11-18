@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MainTab } from './appNavigation';
 import { Icon, type IconName } from './Icon';
-import { formatElapsed, useElapsedSeconds, useLiveWorkoutClock } from './elapsed';
+import { formatElapsed, useLiveWorkoutClock } from './elapsed';
+import { liveWorkoutDurationSeconds, type LiveWorkoutSummary } from './liveWorkoutSummary';
 import { useRestCountdown } from './restTimer';
 import { formatSeconds } from './utils';
 import type { useHomeLayout } from './useHomeLayout';
+import { RestOvertime, RingingBell } from './WorkoutRestTimer';
 
 const TABS: Array<{ tab: MainTab; label: string; icon: IconName }> = [
   { tab: 'dashboard', label: 'Home', icon: 'home' },
@@ -25,6 +27,9 @@ export function AppTabBar({
   active,
   workoutStartedAt,
   restEndsAt = null,
+  restDoneAt = null,
+  liveSummary = null,
+  inert = false,
   workoutSaving = false,
   onSelect,
   onStart,
@@ -35,6 +40,14 @@ export function AppTabBar({
   workoutStartedAt: number | null;
   /** While the live workout's rest runs, the button shows a timer counting it down. */
   restEndsAt?: number | null;
+  /** When the rest ran out, while the next set waits: the button's bell rings until then. */
+  restDoneAt?: number | null;
+  /** Lets the live timer include time from before a workout was resumed. */
+  liveSummary?: Pick<
+    LiveWorkoutSummary,
+    'previousDurationMinutes' | 'durationOverrideMinutes'
+  > | null;
+  inert?: boolean;
   workoutSaving?: boolean;
   onSelect: (tab: MainTab) => void;
   /** Resumes the live workout, or starts one when there is no Start menu. */
@@ -46,12 +59,22 @@ export function AppTabBar({
   const live = workoutStartedAt !== null && !workoutSaving;
   const restLeft = useRestCountdown(live ? restEndsAt : null);
   const resting = restLeft > 0;
+  const ringing = live && !resting && restDoneAt !== null;
   const editing = Boolean(homeLayout?.editing);
   const busy = Boolean(homeLayout?.saving || homeLayout?.dragging);
   const menuAvailable = Boolean(startMenu) && workoutStartedAt === null && !workoutSaving;
   const [menuOpen, setMenuOpen] = useState(false);
   const open = menuOpen && menuAvailable && !editing;
   const startButton = useRef<HTMLButtonElement>(null);
+  const startVisible = live && !inert;
+
+  // Minimising the live workout hides the focused control in its sheet; Start takes over focus.
+  useEffect(() => {
+    if (!startVisible) return;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.closest('[hidden]'))
+      startButton.current?.focus({ preventScroll: true });
+  }, [startVisible]);
 
   // A workout starting elsewhere, or Home's layout editor opening, dismisses the menu for good.
   useEffect(() => {
@@ -146,7 +169,14 @@ export function AppTabBar({
           </div>
         </>
       )}
+      {ringing && !inert && (
+        <span className="sr-only" role="status">
+          Rest complete.
+        </span>
+      )}
       <nav
+        inert={inert}
+        aria-hidden={inert || undefined}
         className={`app-tab-bar${editing ? ' is-editing-home' : ''}`}
         aria-label={editing ? 'Home layout controls' : 'Main navigation'}
       >
@@ -155,7 +185,7 @@ export function AppTabBar({
           <button
             type="button"
             ref={startButton}
-            className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${open ? ' menu-open' : ''}`}
+            className={`app-tab app-tab-start ${live ? 'live' : ''}${resting ? ' resting' : ''}${ringing ? ' ringing' : ''}${open ? ' menu-open' : ''}`}
             data-guide-target="start"
             aria-expanded={menuAvailable ? open : undefined}
             aria-controls={menuAvailable ? 'start-menu' : undefined}
@@ -164,9 +194,11 @@ export function AppTabBar({
                 ? 'Saving workout'
                 : resting
                   ? `Resume active workout, rest ${formatSeconds(restLeft)} left`
-                  : live
-                    ? 'Resume active workout'
-                    : 'Start workout'
+                  : ringing
+                    ? 'Rest complete. Resume workout at the next set'
+                    : live
+                      ? 'Resume active workout'
+                      : 'Start workout'
             }
             disabled={workoutSaving}
             onClick={() => (menuAvailable ? setMenuOpen(!open) : onStart())}
@@ -174,6 +206,8 @@ export function AppTabBar({
             <span className="app-tab-start-bubble">
               {resting ? (
                 <Icon name="timer" />
+              ) : ringing ? (
+                <RingingBell />
               ) : live ? (
                 <LiveDot startedAt={workoutStartedAt} />
               ) : (
@@ -185,8 +219,10 @@ export function AppTabBar({
                 'Saving'
               ) : resting ? (
                 <span className="num">{formatSeconds(restLeft)}</span>
+              ) : ringing ? (
+                <RestOvertime endedAt={restDoneAt} className="num" />
               ) : live ? (
-                <LiveElapsed startedAt={workoutStartedAt} />
+                <LiveElapsed startedAt={workoutStartedAt} summary={liveSummary} />
               ) : (
                 'Start'
               )}
@@ -247,7 +283,17 @@ function LiveDot({ startedAt }: { startedAt: number }) {
   return <i className={`live-dot${paused ? ' paused' : ''}`} aria-hidden="true" />;
 }
 
-function LiveElapsed({ startedAt }: { startedAt: number }) {
-  const elapsed = useElapsedSeconds(startedAt);
-  return <span className="num">{formatElapsed(elapsed)}</span>;
+function LiveElapsed({
+  startedAt,
+  summary,
+}: {
+  startedAt: number;
+  summary: Pick<LiveWorkoutSummary, 'previousDurationMinutes' | 'durationOverrideMinutes'> | null;
+}) {
+  const { elapsed } = useLiveWorkoutClock(startedAt);
+  return (
+    <span className="num app-tab-live-time">
+      {formatElapsed(liveWorkoutDurationSeconds(summary, elapsed))}
+    </span>
+  );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SHARED_WORKOUT_CHANGED } from './activeWorkoutEvents';
 import {
   ADMIN_ACTIVITY_SUBSCRIPTION_EVENT,
   hasAdminActivitySubscribers,
@@ -8,7 +9,7 @@ import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import { notifyNotificationsChanged } from './notificationEvents';
 import type { FriendPresence, LiveWorkout } from './types';
 import { workoutNameForCategory } from './workoutCategory';
-import { draftPause, pausedMsAt } from './workoutPause';
+import { clockOffsetMsAt, draftPause } from './workoutPause';
 import {
   ACTIVE_WORKOUT_CHANGE_EVENT,
   ACTIVE_WORKOUT_DRAFT_KEY,
@@ -65,7 +66,7 @@ export function liveWorkoutReport(now = Date.now()): (LiveWorkout & { expires_at
   return {
     name: draft.name.trim() || workoutNameForCategory(draft.category),
     kind: draft.category === 'cardio' ? 'cardio' : 'strength',
-    started_at: new Date(draft.startedAt + pausedMsAt(draftPause(draft), now)).toISOString(),
+    started_at: new Date(draft.startedAt + clockOffsetMsAt(draftPause(draft), now)).toISOString(),
     expires_at: new Date(Math.ceil(finishAt / EXPIRY_STEP_MS) * EXPIRY_STEP_MS).toISOString(),
   };
 }
@@ -120,12 +121,17 @@ export function usePresenceConnection(userId: string | null): void {
         adminSubscribed = false;
         sendAdminSubscription();
         notifyNotificationsChanged();
+        window.dispatchEvent(new Event(SHARED_WORKOUT_CHANGED));
       };
       current.onmessage = (event: MessageEvent) => {
         if (stopped || socket !== current) return;
         try {
           const message: unknown = JSON.parse(String(event.data));
           if (message && typeof message === 'object' && 'type' in message) {
+            if (message.type === 'active_workout') {
+              window.dispatchEvent(new Event(SHARED_WORKOUT_CHANGED));
+              return;
+            }
             if (message.type === 'admin_activity_sync') {
               publishAdminActivity(null);
               return;

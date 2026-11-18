@@ -17,7 +17,7 @@ When asked for a Tailscale URL for this project, include the preview URL and a v
 
 ## Efficient development verification
 
-- **Do not run the full frontend or backend suites locally.** GitHub's **Checks** workflow runs the relevant full suites for feature PRs based on changed files, and both suites for PRs into `main`, `main` pushes and manual runs. It is the gate for full-suite regressions. Accept that a CI failure may need a follow-up fix and push.
+- **Do not run the full frontend or backend suites locally.** GitHub's **Checks** workflow selects stylesheet, related-test or full frontend checks and the applicable backend suite for feature PRs, and both suites for PRs into `main`, `main` pushes and manual runs. It is the gate for full-suite regressions. Accept that a CI failure may need a follow-up fix and push.
 - **Always run new and changed tests locally**, together with the tests related to changed files, using the scoped commands in [the technical reference](docs/TECHNICAL-REFERENCE.md#checks). When adding a feature, add tests for it and confirm they pass before pushing. Also run file-level formatting/lint and the typecheck for edited code. Reuse passing results while their inputs remain unchanged.
 - When resolving merge conflicts, run the tests related to conflicted and auto-merged files rather than the whole suite.
 - Run a full suite locally only when changing that suite's test infrastructure or configuration (for example, the Vitest setup, pytest fixtures or the **Checks** workflow), or when the user asks. To investigate a CI failure, rerun only the failing tests locally.
@@ -32,6 +32,15 @@ When asked for a Tailscale URL for this project, include the preview URL and a v
 - Keep personal Tailscale hostnames, tailnet identifiers, private IP addresses and other installation-specific URLs out of new or updated committed content, including documentation, source examples, tests and release notes. Use generic examples such as `https://gym.example.com` or loopback URLs such as `http://127.0.0.1:8000`; obtain actual deployment addresses from local configuration or `tailscale serve status`.
 - Apply the same rule to PR titles, descriptions, comments and shared screenshots or recordings. Before committing or publishing a PR update, inspect the staged additions, PR text and selected evidence for private URLs; omit or redact them, including browser address bars. Do not repeat a removed private URL in commit messages or PR explanations.
 - Private replies to the user may include the actual clickable local or Tailscale URL. Keep actual host/address details in private replies or local verification notes; describe the environment generically in PRs while retaining the relevant port, branch/commit and sample-data isolation details.
+
+## Backward-compatible API changes
+
+Installed apps keep running their loaded release until they are refreshed, so every backend change must keep working with releases that are already deployed. See [App versions and API compatibility](docs/TECHNICAL-REFERENCE.md#app-versions-and-api-compatibility).
+
+- Make API changes additive: new request fields are optional with a default, new response fields are additions, and existing fields, endpoints and meanings stay as they are. Frontend code must tolerate unknown enum values and missing new fields.
+- When a full-replace save (for example `PUT /api/workouts/{id}`) gains a field, register it in `FIELDS_ADDED_IN` in `backend/app/client_versions.py` with the release that introduces it, and make sure that endpoint preserves registered fields, so older apps cannot wipe it.
+- Remove or change something older apps send or read in two steps: first ship a release that no longer depends on it, then remove it once **Admin > App versions in use** shows no sign-ins on older releases (including *Not reported*) for the last 30 days. If it cannot wait, raise `MIN_WRITE_CLIENT_VERSION` to the first release that no longer needs it, in the same change, and explain why in the PR. Never set it above the release being deployed.
+- Changing a stored device format (such as the active workout draft) must migrate older data rather than discard it.
 
 ## Release versions and announcements
 

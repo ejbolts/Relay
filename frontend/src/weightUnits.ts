@@ -48,6 +48,7 @@ export function recordDisplayValue(
   record: Pick<PersonalRecord, 'value' | 'unit'>,
   unit: WeightUnit,
 ): string {
+  if (record.unit === '× BW') return `${record.value.toFixed(2)}× BW`;
   if (record.unit !== 'kg' && record.unit !== 'lb') {
     return `${Number(record.value.toFixed(1))} ${record.unit}`;
   }

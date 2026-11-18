@@ -20,28 +20,228 @@
   font-size: 12px;
   font-weight: 600;
 }
-.body-sizes-empty,
-.body-sizes-date {
+.body-sizes-empty {
   color: var(--p-muted);
   font-size: 13px;
 }
-.body-sizes-grid {
+.body-sizes-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 2px;
+  background: var(--p-surface-2);
+}
+.body-sizes-stepper time {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.body-sizes-stepper button {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px 12px;
-  margin: 16px 0 20px;
+  place-items: center;
+  width: 44px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--p-ink-2);
 }
-.body-sizes-grid dt {
-  font-size: 12px;
+.body-sizes-stepper button:disabled {
+  opacity: 0.3;
+}
+.body-figure-frame {
+  position: relative;
+  max-width: 440px;
+  margin: 10px auto 0;
+}
+.body-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-variant-numeric: tabular-nums;
+}
+.body-figure-edge,
+.body-figure-hairline {
+  fill: none;
+  stroke: var(--p-muted);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.body-figure-outline,
+.body-figure-extra {
+  fill: var(--p-surface-2);
+  stroke: none;
+}
+.body-figure-hairline {
+  stroke-linecap: round;
+}
+.body-figure-label {
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.body-figure-hit {
+  fill: transparent;
+}
+.body-figure-label:hover .body-figure-hit,
+.body-figure-label:active .body-figure-hit {
+  fill: var(--p-surface-2);
+}
+.body-figure-label:focus-visible .body-figure-hit {
+  fill: var(--p-surface-2);
+  stroke: var(--p-accent);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+.body-figure-leader {
+  stroke: var(--p-line-strong);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.body-figure-band {
+  stroke: var(--p-accent-text);
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+/* A part not measured yet keeps its band and leader, fainter, with an empty label to tap. */
+.body-figure-label.empty .body-figure-band {
+  opacity: 0.4;
+}
+/* The number box typed into in place of a value; 16px text keeps iOS from zooming. */
+.body-figure-editor {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 34px;
+  border: 1px solid var(--p-accent);
+  border-radius: 10px;
+  padding: 0 8px;
+  background: var(--p-surface-2);
   color: var(--p-muted);
-  margin-bottom: 5px;
+  font-size: 13px;
 }
-.body-sizes-grid dd {
-  margin: 0;
+.body-figure-editor input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: var(--p-ink);
-  font-size: 20px;
+  font: inherit;
+  font-size: 16px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.body-figure-editor.right input {
+  text-align: right;
+}
+.body-figure-editor:has(input[aria-invalid='true']) {
+  border-color: var(--p-danger);
+}
+.body-figure-error {
+  margin: 6px 0 0;
+  text-align: center;
+}
+.body-sizes-figure-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 36px;
+  margin: 6px auto 0;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.body-sizes-figure-locked .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.body-sizes-figure-locked .pulse-icon:last-of-type {
+  color: var(--p-muted);
+}
+/* Sizes inside the figure are in its own units, so the labels scale with the drawing. */
+.body-figure-name {
+  fill: var(--p-muted);
+  font-size: 23px;
+}
+.body-figure-value {
+  fill: var(--p-ink);
+  font-size: 34px;
+  font-weight: 650;
+}
+.body-figure-unit {
+  fill: var(--p-muted);
+  font-size: 22px;
+  font-weight: 400;
+}
+.body-sizes-card .segmented-control.body-sizes-figure-kind {
+  width: fit-content;
+  margin: 6px auto 0;
+  background: var(--p-surface-2);
+}
+.body-sizes-card .segmented-control.body-sizes-figure-kind button {
+  flex: none;
+  min-width: 76px;
+}
+.body-sizes-changes {
+  margin-top: 18px;
+}
+.body-sizes-changes h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.body-sizes-changes ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.body-sizes-changes li {
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.body-sizes-changes b {
+  margin-left: 5px;
+  color: var(--p-ink);
+  font-weight: 650;
+}
+.body-sizes-entry-actions {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 18px;
+}
+.body-sizes-entry-actions button {
+  flex: 1;
+  min-height: 40px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.body-sizes-entry-actions button.danger {
+  color: var(--p-danger);
 }
 .body-sizes-history {
   border-top: 1px solid var(--p-line);
@@ -124,8 +324,24 @@
 .body-sizes-date-input {
   display: grid;
   gap: 6px;
+  min-width: 0;
   font-size: 12px;
   color: var(--p-muted);
+}
+/* iOS sizes native date fields to their content, which pushed this one past the dialog's
+   right edge; fill the field instead, as the training block form does. */
+.body-sizes-date-input input[type='date'] {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-inline-size: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+.body-sizes-date-input input[type='date']::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
 }
 .body-sizes-delete > p {
   margin: 16px;

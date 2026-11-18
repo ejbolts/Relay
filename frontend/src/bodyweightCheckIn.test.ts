@@ -99,3 +99,21 @@ describe('bodyweight check-in persistence', () => {
     await expect(undo()).rejects.toThrow('Undo failed');
   });
 });
+
+it('saves weight and fat atomically and restores the original entry on undo', async () => {
+  const save = vi.spyOn(api, 'saveBodyMeasurement').mockResolvedValue(previous);
+  const undo = await saveBodyweightCheckIn(previous, previous.measurement_date, 85, 19);
+  expect(save).toHaveBeenCalledExactlyOnceWith({
+    measurement_date: previous.measurement_date,
+    weight_kg: 85,
+    body_fat_pct: 19,
+    notes: previous.notes,
+  });
+  await undo();
+  expect(save).toHaveBeenLastCalledWith({
+    measurement_date: previous.measurement_date,
+    weight_kg: previous.weight_kg,
+    body_fat_pct: previous.body_fat_pct,
+    notes: previous.notes,
+  });
+});

@@ -31,7 +31,12 @@ afterEach(async () => {
 async function render(today: number | null = null) {
   await act(async () =>
     root.render(
-      <DashboardQuickBodyweight latestBodyweight={84.2} todayBodyweight={today} onSave={save} />,
+      <DashboardQuickBodyweight
+        latestBodyweight={84.2}
+        priorBodyweight={83.9}
+        todayBodyweight={today}
+        onSave={save}
+      />,
     ),
   );
 }
@@ -55,7 +60,7 @@ async function clickUndo() {
 }
 
 describe('daily bodyweight check-in', () => {
-  it('renders independent fixed weight, fat and combined variants without a mode selector', async () => {
+  it('renders the configured weight, fat and combined options without an inline mode selector', async () => {
     const saveFat = vi.fn().mockResolvedValue(undo);
     const view = (mode: 'weight' | 'fat' | 'combined') => (
       <DashboardQuickBodyweight
@@ -140,19 +145,30 @@ describe('daily bodyweight check-in', () => {
     expect(row.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
     await act(async () =>
       row
-        .querySelector('form')!
-        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+        .querySelector<HTMLButtonElement>('button[type=submit]')!
+        .form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
     expect(saveFat).not.toHaveBeenCalled();
   });
-  it('shows one saved-today summary and a temporary five-second undo popup after save', async () => {
+  it('keeps the saved value beside a tick while editing and shows a five-second undo popup', async () => {
     await render();
     expect(toast()).toBeNull();
+    expect(container.querySelector('[role="status"]')!.textContent).toBe('Last 83.9 kg');
     await submit();
     expect(save).toHaveBeenCalledExactlyOnceWith(84.2);
     await render(84.2);
-    expect(container.textContent).toContain('Saved today · 84.2 kg');
-    expect(container.textContent!.match(/saved today/gi)).toHaveLength(1);
+    const status = container.querySelector('.quick-check-in-status')!;
+    expect(status.getAttribute('aria-label')).toBe('Prior: 83.9 kg; Saved today: 84.2 kg');
+    const change = status.querySelector('.quick-check-in-change')!;
+    expect(change.textContent).toBe('0.3');
+    expect(change.querySelector('svg')).not.toBeNull();
+    expect(status.querySelector('.quick-check-in-today svg')).not.toBeNull();
+    expect(status.textContent).toBe('0.384.2 kg');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Increase by 0.1 kg"]')!.click(),
+    );
+    expect(container.querySelector('input')!.value).toBe('84.3');
+    expect(status.textContent).toBe('0.384.2 kg');
     expect(container.querySelector('.quick-bodyweight-message')).toBeNull();
     expect(toast()!.getAttribute('style')).toContain('5000ms');
     await act(async () => vi.advanceTimersByTime(4999));
@@ -300,5 +316,57 @@ describe('independent Home check-in cards', () => {
     await clickUndo();
     expect(fatUndo).toHaveBeenCalledTimes(2);
     expect(toast()).toBeNull();
+  });
+});
+
+describe('combined single-button check-in', () => {
+  async function combined(today: number | null = null, fat = 18) {
+    await act(async () =>
+      root.render(
+        <DashboardQuickBodyweight
+          mode="combined-single"
+          latestBodyweight={84.2}
+          todayBodyweight={today}
+          latestBodyFat={fat}
+          onSave={save}
+          onSaveBodyFat={vi.fn()}
+        />,
+      ),
+    );
+  }
+  it('saves both values together without a previous weigh-in and undoes them once', async () => {
+    await combined();
+    expect(container.querySelectorAll('button[type=submit]')).toHaveLength(1);
+    expect(container.querySelector('.pulse-card-header button[type=submit]')).not.toBeNull();
+    expect(container.querySelector('.is-paired')).not.toBeNull();
+    expect(container.textContent).not.toContain('Log today');
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Increase body fat by 0.1%"]')!
+        .click(),
+    );
+    await submit();
+    expect(save).toHaveBeenCalledExactlyOnceWith(84.2, 18.1);
+    expect(toast()?.textContent).toContain('Check-in saved');
+    await clickUndo();
+    expect(undo).toHaveBeenCalledOnce();
+  });
+  it('validates both fields before saving either value', async () => {
+    await combined(null, 75);
+    await submit();
+    expect(save).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('1% to 70%');
+  });
+  it('keeps both entries available after a failed save', async () => {
+    save.mockRejectedValueOnce(new Error('Check-in failed'));
+    await combined(84);
+    await submit();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Check-in failed');
+    expect(
+      container.querySelector<HTMLInputElement>('[aria-label="Body fat percentage"]')?.value,
+    ).toBe('18');
+    expect(toast()).toBeNull();
+    await submit();
+    expect(save).toHaveBeenCalledTimes(2);
   });
 });

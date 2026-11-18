@@ -8,6 +8,7 @@ export async function saveBodyweightCheckIn(
   previous: BodyMeasurement | null,
   date: string,
   weight: number,
+  bodyFat?: number,
 ): Promise<UndoBodyweightCheckIn> {
   const original = previous
     ? {
@@ -20,7 +21,7 @@ export async function saveBodyweightCheckIn(
   const saved = await api.saveBodyMeasurement({
     measurement_date: date,
     weight_kg: weight,
-    body_fat_pct: original?.body_fat_pct ?? null,
+    body_fat_pct: bodyFat ?? original?.body_fat_pct ?? null,
     notes: original?.notes ?? null,
   });
   return async () => {

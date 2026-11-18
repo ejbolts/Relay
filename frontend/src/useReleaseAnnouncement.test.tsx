@@ -16,13 +16,25 @@ let root: Root;
 let container: HTMLDivElement;
 let announcement: ReturnType<typeof useReleaseAnnouncement>;
 
-function Harness({ userId }: { userId: string | null }) {
-  announcement = useReleaseAnnouncement(userId);
+type Notices = Parameters<typeof useReleaseAnnouncement>[2];
+
+function Harness({
+  userId,
+  createdAt,
+  notices,
+}: {
+  userId: string | null;
+  createdAt?: string | null;
+  notices?: Notices;
+}) {
+  announcement = useReleaseAnnouncement(userId, createdAt, notices);
   return <p>{announcement.open ? announcement.release.title : 'No announcement'}</p>;
 }
 
-async function render(userId: string | null) {
-  await act(async () => root.render(<Harness userId={userId} />));
+async function render(userId: string | null, createdAt?: string | null, notices?: Notices) {
+  await act(async () =>
+    root.render(<Harness userId={userId} createdAt={createdAt} notices={notices} />),
+  );
 }
 
 beforeEach(() => {
@@ -164,5 +176,50 @@ describe('installed release announcements', () => {
     await render(userId);
     expect(announcement.open).toBe(false);
     expect(announcement.checked).toBe(true);
+  });
+
+  it('waits for the account before announcing, then skips a release seen on another device', async () => {
+    const record = vi.fn();
+    await render('second-device', null, { ready: false, notices: null, record });
+    expect(announcement.checked).toBe(false);
+    expect(announcement.open).toBe(false);
+
+    await render('second-device', null, {
+      ready: true,
+      notices: { release_seen: metadata.version, weekly_review_seen: null },
+      record,
+    });
+    expect(announcement.checked).toBe(true);
+    expect(announcement.open).toBe(false);
+    expect(announcement.noticeUnread).toBe(false);
+    // Remembered here too, so a later offline visit stays quiet.
+    expect(
+      window.localStorage.getItem(`gym-logger-release-seen:second-device:${metadata.version}`),
+    ).toBe('1');
+  });
+
+  it('announces an older release seen elsewhere, and records the dismissal for the account', async () => {
+    const record = vi.fn();
+    await render('upgraded', null, {
+      ready: true,
+      notices: { release_seen: '0.0.1', weekly_review_seen: null },
+      record,
+    });
+    expect(announcement.open).toBe(true);
+    await act(async () => announcement.dismiss());
+    expect(announcement.open).toBe(false);
+    expect(record).toHaveBeenCalledWith({ release_seen: metadata.version });
+  });
+
+  it('does not announce a release to an account created on or after its date', async () => {
+    await render('new-account', `${metadata.date}T09:00:00Z`);
+    expect(announcement.open).toBe(false);
+    expect(announcement.noticeUnread).toBe(false);
+    // Settings can still open it on request.
+    await act(async () => announcement.show());
+    expect(announcement.open).toBe(true);
+
+    await render('older-account', '2020-01-01T09:00:00Z');
+    expect(announcement.open).toBe(true);
   });
 });

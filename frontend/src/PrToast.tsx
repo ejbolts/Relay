@@ -3,12 +3,14 @@ import { formatWeight } from './weightUnits';
 import { useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import './prToast.css';
+import { bodyweightContext } from './relativeStrength';
 
 export interface PrToastEntry {
   exercise: string;
   labels: string[];
   reps: number;
   weightKg: number;
+  bodyweightKg?: number | null;
 }
 
 export const PR_TOAST_MS = 5000;
@@ -38,6 +40,12 @@ export function PrToast({ entries, onClose }: { entries: PrToastEntry[]; onClose
             <span>{entry.exercise}</span>
             <small>
               {entry.reps} reps at {formatWeight(entry.weightKg, weightUnit)}
+              {entry.bodyweightKg != null && (
+                <>
+                  <br />
+                  {bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}
+                </>
+              )}
             </small>
           </div>
         ))}

@@ -342,6 +342,60 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(api.lastUsedMachinePhotos).not.toHaveBeenCalledWith(rowPull.id);
   });
 
+  it("pre-fills an exercise added on a chosen machine from that machine's last session", async () => {
+    writeActiveWorkoutDraft({ ...readActiveWorkoutDraft()!, movements: [] });
+    HTMLElement.prototype.scrollTo = vi.fn();
+    onTestFinished(() => {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
+    });
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.add-exercise-button')!);
+    await click(
+      document
+        .querySelector(`[data-exercise-id="${legPress.id}"]`)!
+        .querySelector<HTMLButtonElement>('.exercise-option-select')!,
+    );
+    const homeCard = document.querySelector<HTMLButtonElement>(
+      `.exercise-machine-card[data-machine-id="${homeGym.id}"]`,
+    )!;
+    if (homeCard.getAttribute('aria-pressed') !== 'true') await click(homeCard);
+    await click(document.querySelector<HTMLButtonElement>('.add-selected-button')!);
+
+    const [movement] = readActiveWorkoutDraft()!.movements;
+    expect(movement.machinePhotoIds).toEqual([homeGym.id]);
+    // The latest session overall was on the travel gym's machine at 140 kg.
+    expect(movement.sets.map((item) => item.weight_kg)).toEqual([180]);
+    expect(container.querySelector('.movement-last-session')?.textContent).toContain('12 Oct');
+  });
+
+  it('edits settings for an existing machine and saves to that machine', async () => {
+    await act(async () => root.render(<App />));
+    await click(button(`Expand ${homeGym.caption}`));
+    await click(button('Edit machine settings'));
+    expect(api.getMachineSettings).toHaveBeenCalledWith(legPress.id, homeGym.id);
+    const input = container.querySelector<HTMLInputElement>('[aria-label="Setting 1 name"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, 'Seat');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const value = container.querySelector<HTMLInputElement>('[aria-label="Seat value"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(value, '4');
+      value.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(button('Save'));
+    expect(api.saveMachineSettings).toHaveBeenCalledWith(
+      legPress.id,
+      [{ name: 'Seat', value: '4' }],
+      homeGym.id,
+    );
+    expect(container.querySelector('.machine-settings')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Machine settings saved',
+    );
+  });
   it('shows when each saved machine was last used', async () => {
     await act(async () => root.render(<App />));
     const card = container.querySelector('.machine-photo-rail article')!;
@@ -470,6 +524,47 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(readActiveWorkoutDraft()?.movements[0].sets).toEqual(before.movements[0].sets);
   });
 
+  it('swaps the suggested set and last date to each machine as it is pinned', async () => {
+    const draft = readActiveWorkoutDraft()!;
+    writeActiveWorkoutDraft({
+      ...draft,
+      movements: [
+        {
+          ...draft.movements[0],
+          sets: [
+            {
+              ...createWorkoutSet('strength', undefined, false),
+              key: 'suggested',
+              reps: 8,
+              weight_kg: 100,
+              fromPrevious: true,
+            },
+          ],
+        },
+      ],
+    });
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(travelGym, 1, '2026-10-14'),
+      usage(homeGym, 2, '2025-10-12'),
+    ]);
+    await act(async () => root.render(<App />));
+    const rail = () => container.querySelectorAll<HTMLElement>('.machine-photo-rail article');
+    const lastSession = () => container.querySelector('.movement-last-session')?.textContent;
+    const suggestion = () => {
+      const [{ key, weight_kg, reps }] = readActiveWorkoutDraft()!.movements[0].sets;
+      return { key, weight_kg, reps };
+    };
+    expect(lastSession()).toContain('14 Oct');
+
+    await click(button('Pin to sets', rail()[1]));
+    expect(lastSession()).toContain('12 Oct');
+    expect(suggestion()).toEqual({ key: 'suggested', weight_kg: 180, reps: 10 });
+
+    await click(button('Pin to sets', rail()[0]));
+    expect(lastSession()).toContain('14 Oct');
+    expect(suggestion()).toEqual({ key: 'suggested', weight_kg: 140, reps: 10 });
+  });
+
   it('keeps the photo and draft on failure and can retry deleting the last photo', async () => {
     vi.mocked(api.deleteMachinePhoto)
       .mockRejectedValueOnce(new Error('Could not delete the photo. Try again.'))
@@ -514,6 +609,120 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(picker.textContent).toContain('Choose photo');
   });
 
+  it('stacks every pinned machine in the collapsed summary, latest pin in front', async () => {
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, '2025-10-12'),
+      usage(travelGym, 1, '2025-10-01'),
+    ]);
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].machinePhotoIds = [travelGym.id, homeGym.id];
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    const summary = container.querySelector<HTMLElement>('.machine-photo-summary')!;
+    expect(
+      [...summary.querySelectorAll('.machine-photo-stack img')].map((img) =>
+        img.getAttribute('src'),
+      ),
+    ).toEqual([homeGym.thumbnail_url, travelGym.thumbnail_url]);
+    expect(summary.querySelector(':scope > img')).toBeNull();
+    // The latest machine is named in the row's title; the line under it counts the rest.
+    expect(summary.querySelector('strong')?.textContent).toBe('Home gym Hammer press');
+    expect(summary.querySelector('small')?.textContent).toBe('+1 more');
+    expect(summary.textContent).toContain('2 pinned');
+  });
+
+  it('blocks finishing until each contributing set has a machine, and recovers assignments', async () => {
+    const save = vi.spyOn(api, 'createWorkout').mockResolvedValue(recentTravel);
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, null),
+      usage(travelGym, 1, null),
+    ]);
+    const draft = readActiveWorkoutDraft()!;
+    const movement = draft.movements[0];
+    movement.machinePhotoIds = [homeGym.id, travelGym.id];
+    // Working sets, so finishing goes straight to the confirmation rather than the warm-up review.
+    const working = { ...movement.sets[0], set_type: 'normal' as const, warmup: false };
+    movement.sets = [
+      { ...working, completed: true },
+      { ...working, key: 'set-2', completed: false, weight_kg: 100 },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    const finish = () => button('Finish Leg Press');
+    await click(finish());
+    expect(document.querySelector('dialog[open]')?.textContent).toContain(
+      'multiple machines pinned',
+    );
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(false);
+    expect(readActiveWorkoutDraft()?.movements[0].sets[1].completed).toBe(false);
+    await click(button('Choose machines'));
+    // Finishing the workout explains the missing machines straight away, without a confirmation.
+    await click(button('Finish workout'));
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+    expect(document.querySelector('dialog[open]')?.textContent).toContain(
+      'multiple machines pinned',
+    );
+    await click(button('Choose machines'));
+    const selects = container.querySelectorAll<HTMLSelectElement>('.set-machine-select');
+    for (const [index, id] of [homeGym.id, travelGym.id].entries()) {
+      await act(async () => {
+        selects[index].value = id;
+        selects[index].dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<App />));
+    expect(
+      [...container.querySelectorAll<HTMLSelectElement>('.set-machine-select')].map((s) => s.value),
+    ).toEqual([homeGym.id, travelGym.id]);
+    await click(finish());
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
+    expect(readActiveWorkoutDraft()?.movements[0].sets.every((set) => set.completed)).toBe(true);
+    expect(readActiveWorkoutDraft()?.movements[0].sets.map((set) => set.machine_photo_id)).toEqual([
+      homeGym.id,
+      travelGym.id,
+    ]);
+    await click(button('Finish workout'));
+    await click(button('Finish workout', document.querySelector('dialog[open]')!));
+    expect(save).toHaveBeenCalled();
+    expect(save.mock.calls[0][0].movements[0].sets.map((set) => set.machine_photo_id)).toEqual([
+      homeGym.id,
+      travelGym.id,
+    ]);
+  });
+
+  it('reopens a finished exercise when adding a second pin and clears assignments on unpin', async () => {
+    vi.mocked(api.listMachinePhotos).mockResolvedValue([
+      usage(homeGym, 2, null),
+      usage(travelGym, 1, null),
+    ]);
+    pinHomeMachine();
+    const draft = readActiveWorkoutDraft()!;
+    draft.movements[0].sets[0].completed = true;
+    draft.movements[0].isComplete = true;
+    writeActiveWorkoutDraft(draft);
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLElement>('.movement-card > header')!);
+    const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
+    await click(button('Pin to sets', picker.querySelectorAll('article')[1]));
+    expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(false);
+    await click(button('Finish Leg Press'));
+    expect(document.querySelector('dialog[open]')?.textContent).toContain(
+      'multiple machines pinned',
+    );
+    await click(button('Choose machines'));
+    const select = container.querySelector<HTMLSelectElement>('.set-machine-select')!;
+    await act(async () => {
+      select.value = travelGym.id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await click(button('✓ Pinned', picker.querySelectorAll('article')[1]));
+    expect(readActiveWorkoutDraft()?.movements[0].sets[0].machine_photo_id).toBeNull();
+    expect(container.querySelector('.set-machine-select')).toBeNull();
+  });
+
   it('records a pinned machine settings without showing an editor in the photo section', async () => {
     pinHomeMachine();
     const saved = [{ name: 'Seat', value: '5' }];
@@ -537,7 +746,9 @@ describe('saving and pinning a machine photo while logging', () => {
       ],
     });
     await act(async () => root.render(<App />));
-    await click(button(`Muscle set credits for ${legPress.name}`));
+    // Credits open from the exercise menu, not from a button beside the name.
+    expect(container.querySelector('.movement-card .exercise-muscle-help-button')).toBeNull();
+    await click(button('Muscle credits'));
     const dialog = document.querySelector<HTMLDialogElement>('.exercise-muscle-dialog')!;
     expect(dialog.open).toBe(true);
     expect(dialog.textContent).not.toContain('For each completed working set');
@@ -577,10 +788,12 @@ describe('saving and pinning a machine photo while logging', () => {
       'Travel gym Cybex press',
     ]);
     expect(pinned[0].querySelector('.machine-last-used')?.textContent).toBe('Not used yet');
-    expect(picker.querySelector('.machine-photo-summary')?.textContent).toContain('1 pinned');
-    expect(picker.querySelector('.machine-photo-summary small')?.textContent).toBe(
+    // One chosen machine is simply named: no count, no second line.
+    expect(picker.querySelector('.machine-photo-summary strong')?.textContent).toBe(
       'Travel gym Cybex press',
     );
+    expect(picker.querySelector('.machine-photo-summary')?.textContent).not.toContain('pinned');
+    expect(picker.querySelector('.machine-photo-summary small')).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].machinePhotoIds).toEqual([created.id]);
   });
 
@@ -699,7 +912,7 @@ describe('saving and pinning a machine photo while logging', () => {
     });
     await act(async () => root.render(<App />));
     const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
-    await click(button('Select', picker));
+    await click(button('Merge', picker));
     const tiles = picker.querySelectorAll<HTMLButtonElement>('.machine-merge-grid button');
     await click(tiles[0]);
     await click(tiles[1]);
@@ -757,24 +970,37 @@ describe('filtering History by machine', () => {
     ]);
     await act(async () => root.render(<App />));
     await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
-    const pills = [...container.querySelectorAll('.history-set-pill')];
-    expect(pills.map((item) => item.getAttribute('data-set-type'))).toEqual([
+    const table = container.querySelector('.history-set-table table')!;
+    expect([...table.querySelectorAll('thead th')].map((item) => item.textContent)).toEqual([
+      'Set',
+      'Weight',
+      'Reps',
+      'RPE',
+    ]);
+    const rows = [...table.querySelectorAll<HTMLTableRowElement>('tbody tr')];
+    expect(rows.map((item) => item.getAttribute('data-set-type'))).toEqual([
       'warmup',
       'warmup',
       'normal',
       'drop',
       'failure',
     ]);
-    expect(pills.map((item) => item.querySelector('em')?.textContent)).toEqual([
+    // Set types take the place of the number, as they do while logging; working sets count from 1.
+    expect(
+      rows.map((item) => item.querySelector('.history-set-number')?.firstChild?.textContent),
+    ).toEqual(['W', 'W', '1', 'D', 'A']);
+    expect(rows.map((item) => item.querySelector('.sr-only')?.textContent ?? null)).toEqual([
       'Warm-up',
       'Warm-up',
-      '',
-      'Drop',
+      null,
+      'Drop set',
       'Attempted',
     ]);
-    expect(pills.every((item) => item.querySelector('span')?.textContent === '140 kg × 10')).toBe(
-      true,
-    );
+    expect(
+      rows.every(
+        (item) => item.cells[1].textContent === '140 kg' && item.cells[2].textContent === '10',
+      ),
+    ).toBe(true);
   });
 
   it('replaces the Training header with an exercise back header and restores the searched list', async () => {
@@ -815,11 +1041,21 @@ describe('filtering History by machine', () => {
     expect(container.querySelector('[aria-label="Workout calendar"]')).not.toBeNull();
   });
 
+  it('opens a session straight onto its exercises, without a totals grid or an add-photo tile', async () => {
+    await act(async () => root.render(<App />));
+    await click(container.querySelector<HTMLButtonElement>('.history-card-summary')!);
+    const detail = container.querySelector('.history-card.open .history-detail')!;
+    expect(detail.querySelector('[aria-label="Workout totals"]')).toBeNull();
+    expect(detail.querySelector('.workout-photo-add')).toBeNull();
+    expect(detail.firstElementChild?.classList.contains('history-movement')).toBe(true);
+  });
+
   it('finds the last session on one machine among later sessions at other gyms', async () => {
     await act(async () => root.render(<App />));
-    expect(historyCardTitles()).toHaveLength(1);
-    await click(container.querySelector<HTMLButtonElement>('.show-more-button')!);
-    expect(historyCardTitles()).toHaveLength(4);
+    expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+    // Beside the calendar's title it is an icon; its name is the accessible label.
+    expect(button('Filter by machine').textContent).toBe('');
+    expect(container.querySelector('.page-eyebrow')?.textContent).toBe('4 workouts logged');
 
     await click(button('Filter by machine'));
     const dialog = document.querySelector<HTMLElement>('.machine-filter-dialog')!;
@@ -849,7 +1085,74 @@ describe('filtering History by machine', () => {
 
     await click(button('Close', banner));
     expect(container.querySelector('.machine-filter-banner')).toBeNull();
-    expect(historyCardTitles()).toHaveLength(4);
+    expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+  });
+
+  it('pages through Sessions two calendar weeks at a time and jumps to a chosen page', async () => {
+    await act(async () => root.render(<App />));
+    const pages = () => container.querySelector<HTMLElement>('.history-session-pages')!;
+    const status = () => pages().querySelector('.pagination-status')?.textContent;
+    expect(
+      [...pages().querySelectorAll('.history-week-header h2')].map((h) => h.textContent),
+    ).toEqual(['12–18 Oct']);
+    expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
+    // Back to the week of 1 September 2025.
+    expect(status()).toBe('Page 1 of 30');
+    expect(button('Previous workout history page', pages()).disabled).toBe(true);
+
+    await click(button('Next workout history page', pages()));
+    expect(status()).toBe('Page 2 of 30');
+    expect(historyCardTitles()).toEqual([]);
+    expect(pages().querySelector('.history-page-status')?.textContent).toBe(
+      'No workouts from 21 Sep to 4 Oct 2026',
+    );
+
+    await click(button('Choose a workout history page', pages()));
+    const menu = pages().querySelector<HTMLElement>('.pagination-page-menu')!;
+    expect(menu.querySelectorAll('button')).toHaveLength(30);
+    await click(button('Go to page 27', menu));
+    expect(pages().querySelector('.pagination-page-menu')).toBeNull();
+    expect(status()).toBe('Page 27 of 30');
+    expect(historyCardTitles()).toEqual(['Legs 2025-10-12']);
+    // Cards from an earlier year show it.
+    expect(container.querySelector('.history-card-copy small')?.textContent).toMatch(/12 Oct 2025/);
+
+    await click(button('Previous workout history page', pages()));
+    expect(status()).toBe('Page 26 of 30');
+  });
+
+  it('loads older months when jumping to a page before the loaded history', async () => {
+    // Startup loads whole months back from today, so fix today for the older windows.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-16T12:00:00'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: null,
+      heatmap: [],
+      history: {
+        total_workouts: 4,
+        first_workout_date: '2025-09-01',
+        last_workout_date: '2026-10-14',
+        has_sample_workouts: false,
+      },
+    } as unknown as DashboardData);
+    vi.mocked(api.listWorkouts).mockResolvedValue([recentTravel]);
+    const load = vi.spyOn(api, 'listOlderHistory').mockImplementation(async (start, end) => ({
+      workouts: workouts.filter((item) => item.workout_date >= start && item.workout_date <= end),
+      heatmap: [],
+    }));
+    await act(async () => root.render(<App />));
+    const pages = () => container.querySelector<HTMLElement>('.history-session-pages')!;
+    // The summary's first workout sets the page count before older months load.
+    expect(pages().querySelector('.pagination-status')?.textContent).toBe('Page 1 of 30');
+
+    await click(button('Choose a workout history page', pages()));
+    await click(button('Go to page 27', pages()));
+    // Each six-month read finishes before the next starts, until page 27's weeks are loaded.
+    await act(() => vi.waitFor(() => expect(historyCardTitles()).toEqual(['Legs 2025-10-12'])));
+    expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-01-01', '2025-07-01']);
   });
 
   it('filters from a pinned photo in a workout and explains an unused machine', async () => {

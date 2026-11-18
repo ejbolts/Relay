@@ -24,6 +24,8 @@ function session(id: string, day: number, machine: string | null, weight: number
     workout_id: id,
     workout_date: `2026-10-${String(day).padStart(2, '0')}`,
     best_weight_kg: weight,
+    relative_strength: weight / (day === 1 ? 60 : 100),
+    bodyweight_kg: day === 1 ? 60 : 100,
     best_reps: 8,
     estimated_1rm: weight,
     volume_kg: weight * 10,
@@ -124,7 +126,9 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(hero()).toBe('69kg');
   expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(2);
 
-  await click(button('Machine weights'));
+  // Named for what it does, and filled in once weights are normalised.
+  expect(button('Normalise').getAttribute('aria-label')).toBe('Normalise machine weights');
+  await click(button('Normalise'));
   await click(document.querySelector('[role="switch"][aria-label="Normalise weights"]')!);
   // The most used machine becomes the reference and leads the tree, with an arrow to Life Fitness.
   const items = [...document.querySelectorAll('.machine-weights-list.is-tree > li')];
@@ -144,6 +148,13 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('85.6');
   expect(factor()).toBe('×1.24');
   expect(items[1].querySelector('.machine-weights-ratio')?.textContent).toBe('×1.24');
+  // Each weight is named under its box, and the suggestion sits inside its likely range.
+  expect(
+    [...items[1].querySelectorAll('.machine-weights-side-name')].map((name) => name.textContent),
+  ).toEqual(['This machineLife Fitness', '★ ReferenceHammer']);
+  const fit = () => document.querySelector('.machine-weights-fit')?.textContent;
+  expect(fit()).toBe('In range');
+  expect(items[1].querySelector('.machine-weights-marker')).toBeTruthy();
   const suggestedLine = previewLine();
   expect(suggestedLine).toBeTruthy();
 
@@ -157,8 +168,10 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(factor()).toBe('×1.50');
   expect(items[1].querySelector('.machine-weights-ratio')?.textContent).toBe('×1.50');
   expect(previewLine()).not.toBe(suggestedLine);
+  expect(fit()).toBe('Outside range');
   await click(button('Use suggested ×1.24 for Life Fitness'));
   expect(factor()).toBe('×1.24');
+  expect(fit()).toBe('In range');
 
   // Changing your weight keeps the conversion.
   await type('Weight on Life Fitness', '40');
@@ -193,4 +206,16 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(host.querySelector('.progress-hero-caption')?.textContent).toContain(
     'Est. 1RM in Hammer weights',
   );
+});
+
+it("shows the strongest lift-to-bodyweight ratio with that set's bodyweight", async () => {
+  const relative = () =>
+    [...host.querySelectorAll('[aria-label="Personal bests"] > div')].find((card) =>
+      card.textContent?.includes('Relative strength'),
+    )!;
+  expect(relative().querySelector('b')?.textContent).toBe('1.33× BW');
+  expect(relative().querySelector('small')?.textContent).toContain('at 60 kg BW');
+  await click(button('Life Fitness'));
+  expect(relative().querySelector('b')?.textContent).toBe('0.69× BW');
+  expect(relative().querySelector('small')?.textContent).toContain('at 100 kg BW');
 });

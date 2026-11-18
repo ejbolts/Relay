@@ -179,7 +179,7 @@ it('can reveal untrained muscles before the first workout of the week', async ()
   expect(host.textContent).toContain('No working sets logged yet');
   await act(async () => host.querySelector<HTMLButtonElement>('.muscle-sets-expand')!.click());
   expect(host.querySelectorAll('.muscle-bars > li')).toHaveLength(1);
-  expect(host.querySelector('.num')?.textContent).toBe('0');
+  expect(host.querySelector('.muscle-set-count')?.textContent).toBe('0 / 10');
 });
 
 function week(start: string, sets: Record<string, number>): WeeklySets {
@@ -199,7 +199,7 @@ function week(start: string, sets: Record<string, number>): WeeklySets {
 const rows = () =>
   [...host.querySelectorAll('.muscle-bars > li')].map((row) => [
     row.querySelector('.muscle-name-button')?.textContent,
-    row.querySelector('.num')?.childNodes[0]?.textContent,
+    row.querySelector('.muscle-set-count')?.childNodes[0]?.textContent,
     row.querySelector('.muscle-set-change')?.textContent ?? null,
     row.querySelector('.muscle-bar-previous') !== null,
   ]);
@@ -219,7 +219,7 @@ it('compares each muscle with the week before and steps back through earlier wee
   expect(weekLabel()).toBe('This week');
   expect(arrow('Next week').disabled).toBe(true);
   expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe(
-    'Week of 26 OctWeek of 19 OctGoal 10',
+    'Current weekLast weekGoal 10',
   );
   // Calves were trained only the week before, so their drop still shows.
   expect(rows()).toEqual([
@@ -227,20 +227,30 @@ it('compares each muscle with the week before and steps back through earlier wee
     ['Quads', '8', '±0', true],
     ['Calves', '0', '−4', true],
   ]);
+  // The week is still going, so a shortfall reads as sets to go rather than a red drop.
+  const chestChange = host.querySelector('.muscle-bars > li .muscle-set-change')!;
+  expect(chestChange.className).toBe('muscle-set-change is-pending');
+  expect(chestChange.getAttribute('aria-label')).toBe('3 to match the week before');
 
   await act(async () => arrow('Previous week').click());
   expect(weekLabel()).toBe('Last week');
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe(
+    'Last week2 weeks agoGoal 10',
+  );
   expect(rows()).toEqual([
     ['Chest', '12', '+2', true],
     ['Quads', '8', '−1.5', true],
     ['Calves', '4', '+4', false],
   ]);
+  expect(host.querySelectorAll('.muscle-set-change')[1].className).toBe(
+    'muscle-set-change is-down',
+  );
 
   // The oldest week has nothing before it to compare with.
   await act(async () => arrow('Previous week').click());
   expect(weekLabel()).toBe('2 weeks ago');
   expect(arrow('Previous week').disabled).toBe(true);
-  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe('Week of 12 OctGoal 10');
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toBe('2 weeks agoGoal 10');
   expect(rows()).toEqual([
     ['Chest', '10', null, false],
     ['Quads', '9.5', null, false],
@@ -282,4 +292,39 @@ it('works without earlier weeks from an older cached dashboard', async () => {
   expect(arrow('Next week').disabled).toBe(true);
   expect(host.querySelector('.muscle-set-change')).toBeNull();
   expect(host.querySelector('.muscle-bar-previous')).toBeNull();
+});
+
+it('positions each target independently on the volume scale and uses it in the contribution sheet', async () => {
+  await act(async () =>
+    root.render(
+      <MuscleSetsCard
+        weeklySets={week('2026-10-26', { Chest: 6, Quads: 6, Calves: 6 })}
+        goal={10}
+        goals={{ Chest: 18, Quads: 6 }}
+      />,
+    ),
+  );
+  const bars = [...host.querySelectorAll<HTMLElement>('.muscle-bar-track')];
+  expect(bars.map((bar) => bar.getAttribute('aria-valuemax'))).toEqual(['10', '18', '6']);
+  const byName = (name: string) =>
+    bars.find((bar) => bar.getAttribute('aria-label') === `${name} weekly target`)!;
+  expect(parseFloat(byName('Chest').querySelector('i')!.style.width)).toBeCloseTo(29, 0);
+  expect(byName('Quads').querySelector('i')!.style.width).toBe(
+    byName('Chest').querySelector('i')!.style.width,
+  );
+  expect(Number(byName('Chest').style.getPropertyValue('--muscle-goal-ratio'))).toBeCloseTo(
+    18 / 20.7,
+  );
+  expect(Number(byName('Quads').style.getPropertyValue('--muscle-goal-ratio'))).toBeCloseTo(
+    6 / 20.7,
+  );
+  expect(host.querySelector('.muscle-set-goal-key')?.textContent).toContain('Weekly target');
+  await act(async () =>
+    host
+      .querySelector<HTMLButtonElement>('[aria-label="Exercises contributing to Chest"]')!
+      .click(),
+  );
+  const progress = document.querySelector('dialog [role="progressbar"]')!;
+  expect(progress.getAttribute('aria-valuemax')).toBe('18');
+  expect(progress.getAttribute('aria-valuetext')).toBe('6 of 18 sets');
 });

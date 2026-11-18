@@ -104,4 +104,13 @@ describe('Start menu', () => {
     expect(option('Up next').getAttribute('aria-label')).toBe('Up next');
     expect(container.querySelector('.start-menu-detail')).toBeNull();
   });
+
+  it('offers exactly three choices: Cardio, Up next and Empty', async () => {
+    await act(async () => start().click());
+    expect(
+      [...container.querySelectorAll('.start-menu-option')].map(
+        (item) => item.getAttribute('aria-label') ?? item.textContent,
+      ),
+    ).toEqual(['Cardio', 'Up next: Pull day', 'Empty workout']);
+  });
 });

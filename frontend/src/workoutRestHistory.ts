@@ -1,6 +1,7 @@
 import { setKindOf } from './setFieldValues';
 import type { WorkoutSetInput } from './types';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
+import { DEFAULT_REST_SECONDS } from './workoutSets';
 
 /** Match the nth set of its kind, so an extra warm-up cannot shift working-set history. */
 export function previousSetRests(
@@ -9,11 +10,37 @@ export function previousSetRests(
   history: ExerciseHistoryEntry[],
 ) {
   const kind = setKindOf(sets[index]);
-  const ordinal = sets.slice(0, index).filter((set) => setKindOf(set) === kind).length;
+  const machine = sets[index].machine_photo_id;
+  const ordinal = sets
+    .slice(0, index)
+    .filter(
+      (set) => setKindOf(set) === kind && (!machine || set.machine_photo_id === machine),
+    ).length;
   return history.flatMap((entry) => {
     const previous = entry.sets.filter((set) => setKindOf(set) === kind)[ordinal];
     return previous
       ? [{ workoutId: entry.workoutId, date: entry.workoutDate, seconds: previous.rest_seconds }]
       : [];
   });
+}
+
+/**
+ * The rest to give a set that has none shown: its own hidden rest, else what this set had last
+ * time, else the nearest rest in this exercise, else the default.
+ */
+export function restToAdd(
+  sets: WorkoutSetInput[],
+  index: number,
+  history: ExerciseHistoryEntry[],
+): number {
+  const own = sets[index].rest_seconds;
+  if (own && own > 0) return own;
+  const previous = previousSetRests(sets, index, history).find((rest) => (rest.seconds ?? 0) > 0);
+  if (previous?.seconds) return previous.seconds;
+  for (let distance = 1; distance < sets.length; distance += 1) {
+    for (const other of [sets[index - distance], sets[index + distance]]) {
+      if (other?.rest_seconds && other.rest_seconds > 0) return other.rest_seconds;
+    }
+  }
+  return DEFAULT_REST_SECONDS;
 }

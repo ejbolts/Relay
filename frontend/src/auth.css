@@ -8,9 +8,42 @@
   justify-items: center;
   padding: calc(env(safe-area-inset-top) + 1.5rem) max(1rem, env(safe-area-inset-right))
     calc(env(safe-area-inset-bottom) + 1.5rem) max(1rem, env(safe-area-inset-left));
+  /* Keeps its own sun ray and grain (pulse.css) behind the content but above this background. */
+  isolation: isolate;
+  /* The top fades to the page colour, which iOS also paints behind the status bar, so the
+     ray and glow never end in a hard line under it. */
   background:
-    radial-gradient(circle at 50% -10%, rgb(57 135 229 / 16%), transparent 24rem), var(--p-page);
+    linear-gradient(to bottom, var(--p-page) 0, transparent 9rem),
+    radial-gradient(
+      circle at 50% -10%,
+      color-mix(in srgb, var(--p-accent) 20%, transparent),
+      transparent 24rem
+    ),
+    radial-gradient(130% 90% at 50% 45%, transparent 45%, var(--auth-vignette) 100%), var(--p-page);
   color: var(--p-ink);
+  --auth-vignette: rgb(0 0 0 / 45%);
+}
+
+:root[data-colour-mode='light'] .auth-screen {
+  --auth-vignette: rgb(16 24 32 / 6%);
+}
+
+/* In dark mode the sign-in screens sit on near black with darker cards and a lighter grain, so the
+   blue beam carries the colour. The page behind the iOS status bar matches. */
+:root:not([data-colour-mode='light']) .auth-screen {
+  --p-page: #050607;
+  --p-page-solid: #050607;
+  --p-surface: #0c0e10;
+  --p-surface-solid: #0c0e10;
+  --p-surface-2: #121417;
+  --p-surface-2-solid: #121417;
+  --p-surface-3: #191c1f;
+  --p-surface-3-solid: #191c1f;
+  --sun-grain-opacity: 0.045;
+}
+
+html:not([data-colour-mode='light']):has(.auth-screen) {
+  background: #050607;
 }
 
 .auth-shell {
@@ -169,7 +202,7 @@
 }
 
 .auth-password input {
-  padding-right: 4.5rem !important;
+  padding-right: 3.25rem !important;
 }
 
 .auth-handle {
@@ -192,20 +225,28 @@
   pointer-events: none;
 }
 
+/* An eye to show the password, or the eye with a line through it to hide it again. */
 .auth-reveal {
   position: absolute;
   top: 50%;
-  right: 0.35rem;
-  min-width: 3.4rem;
-  min-height: 2.2rem;
+  right: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-height: 0;
   border: 0;
   border-radius: 8px;
+  padding: 0;
   background: transparent;
   color: var(--p-accent-text);
-  font-size: 0.8125rem;
-  font-weight: 650;
   transform: translateY(-50%);
   touch-action: manipulation;
+}
+
+.auth-reveal .pulse-icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .auth-error-region:empty {
@@ -1075,4 +1116,142 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 
 .admin-user-workout dd {
   color: var(--p-accent-text);
+}
+
+.admin-user-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-temp-password {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: var(--p-surface);
+}
+
+.admin-temp-password code {
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: var(--p-page);
+  color: var(--p-ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.admin-temp-password small {
+  color: var(--p-ink-2);
+}
+
+.admin-temp-password-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+/* ───────── Forgot password: the sign-in link, its dialog, and the admin console's request ───────── */
+
+.auth-forgot-password {
+  position: relative;
+  margin-left: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+/* A larger invisible target for fingers. */
+.auth-forgot-password::after {
+  position: absolute;
+  inset: -0.6rem -0.4rem;
+  content: '';
+}
+
+.popup-dialog.forgot-password-dialog {
+  width: min(24rem, calc(100vw - 2rem));
+}
+
+.forgot-password-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.forgot-password-body .inline-error {
+  margin: 0;
+}
+
+.forgot-password-dialog .popup-dialog-actions {
+  margin: 0;
+  padding: 0.875rem 1rem 1rem;
+}
+
+.forgot-password-sent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.forgot-password-sent-icon {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.forgot-password-sent-icon .pulse-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.forgot-password-sent p {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  color: var(--p-ink-2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.forgot-password-sent strong {
+  overflow-wrap: anywhere;
+  color: var(--p-ink);
+  font-size: 0.9375rem;
+}
+
+.admin-user.has-reset-request {
+  border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--p-accent-soft) 45%, var(--p-surface-2));
+}
+
+.admin-user:focus {
+  outline: none;
+}
+
+.admin-user:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.admin-tag.is-request {
+  border-color: color-mix(in srgb, var(--p-accent) 50%, transparent);
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.admin-user-stats .admin-user-request dd {
+  color: var(--p-accent-text);
+  font-weight: 650;
 }

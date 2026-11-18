@@ -3,7 +3,7 @@
   max-height: calc(85dvh - env(safe-area-inset-bottom));
   margin: auto auto max(0.5rem, env(safe-area-inset-bottom));
   border-radius: 24px;
-  animation: none;
+  animation: reaction-sheet-in 360ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
   transform: translateY(var(--sheet-offset, 0px));
   transition: transform 180ms ease-out;
 }
@@ -11,8 +11,37 @@
   transition: none;
   user-select: none;
 }
+/* It slides up when it opens and back down when it closes. The slide moves the separate translate
+   property, so a drag (which moves transform) neither restarts nor fights it. */
+.popup-dialog.reaction-people-sheet.is-closing[open] {
+  animation: reaction-sheet-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+}
 .popup-dialog.reaction-people-sheet[open]::backdrop {
-  animation: none;
+  animation: fade-in 240ms ease both;
+}
+.popup-dialog.reaction-people-sheet.is-closing[open]::backdrop {
+  animation: reaction-sheet-backdrop-out 240ms ease both;
+}
+@keyframes reaction-sheet-in {
+  from {
+    translate: 0 calc(100% + 1.5rem);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+@keyframes reaction-sheet-out {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(100% + 1.5rem);
+  }
+}
+@keyframes reaction-sheet-backdrop-out {
+  to {
+    opacity: 0;
+  }
 }
 .reaction-people-sheet > header {
   position: sticky;
@@ -45,6 +74,13 @@
   min-height: 4.25rem;
   border-bottom: 1px solid var(--p-line);
 }
+.reaction-people-list li.is-highlighted {
+  margin: 0 -0.625rem;
+  padding: 0 0.625rem;
+  border-bottom-color: transparent;
+  border-radius: 14px;
+  background: var(--p-accent-soft);
+}
 .reaction-people-list li:last-child {
   border-bottom: 0;
 }
@@ -66,4 +102,12 @@
   .popup-dialog.reaction-people-sheet[open] {
     transition: none;
   }
+  .popup-dialog.reaction-people-sheet[open],
+  .popup-dialog.reaction-people-sheet[open]::backdrop {
+    animation: none;
+  }
+}
+html[data-reduce-motion] .popup-dialog.reaction-people-sheet[open],
+html[data-reduce-motion] .popup-dialog.reaction-people-sheet[open]::backdrop {
+  animation: none;
 }

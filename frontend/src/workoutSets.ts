@@ -59,6 +59,7 @@ export function suggestNextSetFromLoggedSet<T extends WorkoutSetInput & { fromPr
     return sets;
   }
   if (!isWorkingKind(logged) || !isWorkingKind(next)) return sets;
+  if (next.machine_photo_id !== logged.machine_photo_id) return sets;
   if (next.weight_kg === logged.weight_kg && next.reps === logged.reps) return sets;
 
   return sets.map((item, index) =>
@@ -119,7 +120,24 @@ export function restTimerSecondsAfterSetUpdate(
   return seconds !== null && seconds > 0 ? seconds : null;
 }
 
-function hasRecordedPerformance(kind: ExerciseKind, item: WorkoutSetInput): boolean {
+/**
+ * Whether a set has something to log: reps for strength (weight is optional for bodyweight
+ * lifts), or any measurement for cardio. Bodyweight and percentile are attached automatically,
+ * so they do not count as an entry.
+ */
+export function hasRecordedPerformance(
+  kind: ExerciseKind,
+  item: Pick<
+    WorkoutSetInput,
+    | 'reps'
+    | 'duration_seconds'
+    | 'distance_km'
+    | 'calories_kcal'
+    | 'average_heart_rate_bpm'
+    | 'incline_percent'
+    | 'speed_kph'
+  >,
+): boolean {
   if (kind === 'cardio') {
     return [
       item.duration_seconds,
@@ -130,9 +148,7 @@ function hasRecordedPerformance(kind: ExerciseKind, item: WorkoutSetInput): bool
       item.speed_kph,
     ].some((value) => value != null);
   }
-  return [item.reps, item.weight_kg, item.bodyweight_kg, item.percentile].some(
-    (value) => value != null,
-  );
+  return item.reps != null;
 }
 
 /**

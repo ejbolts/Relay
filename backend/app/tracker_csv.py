@@ -63,6 +63,7 @@ SESSION_METRICS = {
     "Cardio session incline (%)": ("incline_percent", float, 0, 100),
     "Average power (W)": ("average_power_watts", int, 1, 3_000),
     "Average METs": ("average_mets", float, 0, 50),
+    "Elevation gain (m)": ("elevation_gain_m", float, 0, 30_000),
 }
 CARDIO_HEADERS = ("Exercise kind", *SET_METRICS, *SESSION_METRICS)
 # Exports always write every column; hand-made files need only these.
@@ -378,6 +379,13 @@ def parse_rows(raw: bytes) -> tuple[list[ParsedRow], list[str]]:
 
 def infer_exercise(name: str) -> tuple[WorkoutCategory, ExerciseKind, str, str | None]:
     lowered = name.casefold()
+    if "neck" in lowered:
+        if any(word in lowered for word in ("lateral", "side")):
+            return WorkoutCategory.UPPER, ExerciseKind.STRENGTH, "Lateral neck flexors", None
+        if any(word in lowered for word in ("extension", "reverse")):
+            return WorkoutCategory.UPPER, ExerciseKind.STRENGTH, "Neck extensors", None
+        if any(word in lowered for word in ("flexion", "curl")):
+            return WorkoutCategory.UPPER, ExerciseKind.STRENGTH, "Neck flexors", None
     if any(
         phrase in lowered
         for phrase in ("crunch", "sit up", "sit-up", "knee raise", "leg raise", "plank")

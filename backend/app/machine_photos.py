@@ -4,7 +4,13 @@ from fastapi import HTTPException
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 
-from .models import MachinePhoto, TrainingWorkout, WorkoutMovement, movement_machine_photos
+from .models import (
+    MachinePhoto,
+    TrainingWorkout,
+    WorkoutMovement,
+    WorkoutSet,
+    movement_machine_photos,
+)
 
 
 def canonical_photo(db: Session, photo: MachinePhoto) -> MachinePhoto:
@@ -98,6 +104,12 @@ def merge_machine_photos(
         update(MachinePhoto)
         .where(MachinePhoto.id.in_(sources))
         .values(merged_into_id=keep_photo_id),
+        execution_options={"synchronize_session": False},
+    )
+    db.execute(
+        update(WorkoutSet)
+        .where(WorkoutSet.machine_photo_id.in_(sources))
+        .values(machine_photo_id=keep_photo_id),
         execution_options={"synchronize_session": False},
     )
     db.expire_all()

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { SharedProfileScreen } from './SharedProfiles';
+import { clearSharedProfileCache, prefetchSharedProfile } from './sharedProfileCache';
 import type { SharedProfile, SharedWorkoutPage, TrackedWorkout, User } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
@@ -89,21 +90,26 @@ function renderProfile(
         active={active}
         onOpenSplits={onOpenSplits}
         onChooseSharing={() => {}}
-        renderWorkouts={({ workouts, renderWorkoutAction }) => (
-          <ul>
-            {workouts.map((item) => (
-              <li key={item.id}>
-                {item.name}
-                {renderWorkoutAction?.(item)}
-              </li>
-            ))}
-          </ul>
+        renderWorkouts={({ workouts, hasMore, onLoadMore }) => (
+          <>
+            <ul>
+              {workouts.map((item) => (
+                <li key={item.id}>{item.name}</li>
+              ))}
+            </ul>
+            {hasMore && (
+              <button type="button" onClick={onLoadMore}>
+                Load older
+              </button>
+            )}
+          </>
         )}
       />,
     ),
   );
 }
 beforeEach(async () => {
+  clearSharedProfileCache();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
@@ -151,6 +157,56 @@ function button(prefix: string) {
 }
 
 describe('shared profile friend control', () => {
+  it('renders the shared maintenance band and its current status', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      body_weight: [
+        { measurement_date: '2026-10-17', weight_kg: 84, body_fat_pct: null },
+        { measurement_date: '2026-10-16', weight_kg: 84.5, body_fat_pct: null },
+      ],
+      goals: {
+        body_weight: {
+          start_date: '2026-10-01',
+          target_date: '2026-12-31',
+          start_weight_kg: 84,
+          target_weight_kg: 84,
+          maintenance_min_kg: 82,
+          maintenance_max_kg: 86,
+        },
+        zone2: {
+          week_start: '2026-10-12',
+          week_end: '2026-10-18',
+          goal_minutes: 150,
+          completed_minutes: 0,
+          remaining_minutes: 150,
+          percentage: 0,
+          complete: false,
+        },
+      },
+    });
+    await renderProfile('friend', undefined, true, 'range-update');
+    expect(container.textContent).toContain('Maintain 82–86 kg until');
+    expect(container.textContent).toContain('In range');
+    expect(container.querySelector('.pulse-chart-goal-band')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Body-weight goal progress"]')).toBeNull();
+  });
+  it('opens a visible shared profile photo in the square viewer', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      profile_photo_url: '/api/sharing/profiles/friend/photo?v=sample',
+      can_view: false,
+    });
+    await renderProfile('friend-with-photo');
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.profile-photo-view')!.click(),
+    );
+    expect(document.querySelector('dialog img')?.getAttribute('src')).toBe(
+      '/api/sharing/profiles/friend/photo?v=sample',
+    );
+    await act(async () => document.querySelector<HTMLButtonElement>('dialog button')!.click());
+    expect(document.querySelector('dialog')).toBeNull();
+  });
+
   it('shows Friends with a menu holding the start month, Remove friend and Block', async () => {
     expect(container.textContent).not.toContain('Public');
     expect(container.querySelector('.profile-joined')?.textContent).toBe('Joined October 2026');
@@ -248,10 +304,8 @@ describe('own profile', () => {
     expect(container.textContent).not.toContain('Change password');
     expect(container.textContent).not.toContain('Profile sharing');
     expect(container.querySelector('.profile-account-id')).toBeNull();
-    // Your own workouts offer comments but no reaction picker.
-    expect(
-      container.querySelector('.discussion-comments-button')?.getAttribute('aria-label'),
-    ).toContain('comments on');
+    // Workouts on a profile carry no reaction or comment controls; those live in the feed.
+    expect(container.querySelector('.discussion-comments-button')).toBeNull();
     expect(container.querySelector('.friend-react-button')).toBeNull();
     expect(container.querySelector('.profile-friend-actions')).toBeNull();
     await act(async () => button('Edit profile').click());
@@ -282,6 +336,121 @@ describe('own profile', () => {
   });
 });
 
+describe('shared body measurements', () => {
+  it('keeps a single consistency calendar beside them across refreshes', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      sex: 'female',
+      body_sizes: [
+        {
+          measurement_date: '2026-10-17',
+          neck_cm: null,
+          shoulders_cm: null,
+          chest_cm: null,
+          waist_cm: 76,
+          hips_cm: 98,
+          left_arm_cm: null,
+          right_arm_cm: null,
+          left_thigh_cm: null,
+          right_thigh_cm: null,
+          left_calf_cm: null,
+          right_calf_cm: null,
+          wrist_cm: null,
+        },
+      ],
+    });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    clearSharedProfileCache();
+    await renderProfile('friend', undefined, true, 'one');
+    await renderProfile('friend', undefined, true, 'two');
+    await renderProfile('friend', undefined, true, 'three');
+    expect(container.querySelectorAll('.calendar-panel')).toHaveLength(1);
+    // Two cards sharing a React key is what multiplied the calendar on refreshes.
+    expect(errors.mock.calls.flat().join(' ')).not.toContain('same key');
+    const card = container.querySelector('section[aria-labelledby="shared-body-sizes-title"]')!;
+    expect(card.querySelector('.body-figure')?.getAttribute('data-figure')).toBe('female');
+    expect(
+      container.querySelectorAll('section[aria-labelledby="shared-body-sizes-title"]'),
+    ).toHaveLength(1);
+  });
+});
+
+describe('opening a profile loaded in the background', () => {
+  async function reopen(targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>) {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderProfile('friend', undefined, true, null, undefined, targetWorkout);
+  }
+
+  it('shows an outline of the profile, not bare text, while a first visit loads', async () => {
+    clearSharedProfileCache();
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await reopen();
+    const status = container.querySelector('.profile-loading-skeleton[role="status"]')!;
+    expect(status.textContent).toBe('Loading profile…');
+    expect(status.querySelectorAll('.skeleton-block').length).toBeGreaterThan(3);
+  });
+
+  it('shows the loaded copy at once, then replaces it with the latest from the server', async () => {
+    let answer!: (value: SharedProfile) => void;
+    vi.mocked(api.sharing.profile).mockImplementation(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    await reopen();
+    expect(container.querySelector('.profile-loading-skeleton')).toBeNull();
+    expect(container.textContent).toContain('Sample Friend');
+    expect(container.textContent).toContain('First workout');
+    expect(container.textContent).not.toContain('Loading workouts');
+    await act(async () => answer({ ...profile, display_name: 'Renamed Friend' }));
+    expect(container.textContent).toContain('Renamed Friend');
+    expect(container.textContent).toContain('First workout');
+  });
+
+  it('opens a linked workout from the cached first page, and waits when it is not there', async () => {
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await reopen(workout);
+    expect(container.textContent).toContain('First workout');
+    expect(container.textContent).not.toContain('no longer available');
+
+    await reopen({ id: 'older', workout_date: '2026-09-01' });
+    expect(container.textContent).toContain('Sample Friend');
+    expect(container.textContent).not.toContain('First workout');
+    expect(container.textContent).toContain('Loading workouts');
+  });
+
+  it('joins a background load still under way instead of loading the profile twice', async () => {
+    clearSharedProfileCache();
+    vi.mocked(api.sharing.profile).mockClear();
+    vi.mocked(api.sharing.workouts).mockClear();
+    let answer!: (value: SharedProfile) => void;
+    vi.mocked(api.sharing.profile).mockImplementation(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    void prefetchSharedProfile(null, 'friend');
+    await reopen();
+    expect(container.querySelector('.profile-loading-skeleton')).not.toBeNull();
+    await act(async () => answer(profile));
+    expect(api.sharing.profile).toHaveBeenCalledTimes(1);
+    expect(api.sharing.workouts).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('First workout');
+  });
+
+  it('forgets the copy when the friendship changes, so access is read again', async () => {
+    vi.spyOn(api.sharing, 'removeFriend').mockResolvedValue();
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      can_view: false,
+      friend_status: 'none',
+    });
+    await act(async () => button('Friends').click());
+    await act(async () => button('Remove friend').click());
+    vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
+    await reopen();
+    expect(container.textContent).toContain('as a friend to see their training');
+    expect(container.textContent).not.toContain('First workout');
+  });
+});
+
 describe('shared history filtering', () => {
   it('reports a removed linked workout, but not after selecting a different filter', async () => {
     await act(async () => root.unmount());
@@ -297,11 +466,45 @@ describe('shared history filtering', () => {
       'This workout is no longer available.',
     );
     await act(async () =>
-      container.querySelector<HTMLElement>('.shared-workout-filters summary')!.click(),
+      container.querySelector<HTMLElement>('.shared-workout-filter-toggle')!.click(),
     );
     await chooseType('push');
     expect(container.textContent).not.toContain('This workout is no longer available.');
     expect(container.textContent).toContain('No workouts match these filters.');
+  });
+
+  it('opens the filters from an icon beside the Workouts title and counts those set', async () => {
+    const header = container.querySelector('.shared-workouts-header')!;
+    expect(header.textContent).toBe('Workouts');
+    const toggle = header.querySelector<HTMLButtonElement>('.shared-workout-filter-toggle')!;
+    const panel = container.querySelector<HTMLElement>('.shared-workout-filters')!;
+    expect(toggle.getAttribute('aria-label')).toBe('Filter workouts');
+    expect(toggle.getAttribute('aria-controls')).toBe(panel.id);
+    expect(panel.hidden).toBe(true);
+    await act(async () => toggle.click());
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.hidden).toBe(false);
+    await chooseType('lower');
+    expect(toggle.getAttribute('aria-label')).toBe('Filter workouts, 1 set');
+    expect(toggle.textContent).toBe('1');
+    await act(async () => toggle.click());
+    expect(panel.hidden).toBe(true);
+  });
+
+  it('offers a retry when older workouts fail to load', async () => {
+    vi.mocked(api.sharing.workouts).mockRejectedValueOnce(new Error('Offline'));
+    await act(async () => button('Load older').click());
+    expect(container.querySelector('.shared-workouts [role="alert"]')?.textContent).toContain(
+      'Retry loading older workouts',
+    );
+    vi.mocked(api.sharing.workouts).mockResolvedValueOnce({
+      total: 2,
+      workouts: [{ ...workout, id: 'older', name: 'Older workout' }],
+      personal_records: [],
+    });
+    await act(async () => button('Retry loading older workouts').click());
+    expect(container.textContent).toContain('Older workout');
+    expect(container.textContent).not.toContain('Retry loading older workouts');
   });
 
   it('preserves friends-only access for a linked workout', async () => {
@@ -370,7 +573,7 @@ describe('shared history filtering', () => {
       workouts: [{ ...workout, id: 'older', name: 'Older workout' }],
       personal_records: [],
     });
-    await act(async () => button('Show more').click());
+    await act(async () => button('Load older').click());
     expect(api.sharing.workouts).toHaveBeenLastCalledWith(
       'friend',
       1,
@@ -388,7 +591,7 @@ describe('shared history filtering', () => {
           finish = resolve;
         }),
     );
-    await act(async () => button('Show more').click());
+    await act(async () => button('Load older').click());
     await chooseType('push');
     await act(async () =>
       finish({
@@ -453,39 +656,11 @@ it('hides the Time trained range when the server sends only lifetime totals', as
   expect(card.textContent).toContain('4h 33min');
 });
 
-it('shows lifetime time separately from history filters and reacts on a shared workout', async () => {
+it('shows lifetime time separately from history filters, with no reaction controls', async () => {
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('3h 33min');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('1h 20min');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('4h 33min');
-  const react = vi
-    .spyOn(api.sharing, 'react')
-    .mockResolvedValue({ counts: [{ reaction: 'love', count: 1 }], yours: 'love' });
-  const remove = vi
-    .spyOn(api.sharing, 'removeReaction')
-    .mockResolvedValue({ counts: [], yours: null });
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('.friend-react-button')!.click(),
-  );
-  await act(async () =>
-    [...container.querySelectorAll<HTMLButtonElement>('.friend-react-picker button')]
-      .find((b) => b.getAttribute('aria-label') === 'Love')!
-      .click(),
-  );
-  expect(react).toHaveBeenCalledWith('first', 'love');
-  expect(container.querySelector('.friend-react-button')?.textContent).toBe('❤️');
-  expect(container.querySelector('.discussion-reaction-summary')?.textContent).toBe('❤️ 1');
-  expect(container.querySelector('.friend-react-button')?.getAttribute('aria-label')).toContain(
-    'Love',
-  );
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('.friend-react-button')!.click(),
-  );
-  await act(async () =>
-    [...container.querySelectorAll<HTMLButtonElement>('.friend-react-picker button')]
-      .find((b) => b.getAttribute('aria-label') === 'Love')!
-      .click(),
-  );
-  expect(remove).toHaveBeenCalledWith('first');
+  expect(container.querySelector('.friend-react-button')).toBeNull();
   await chooseType('push');
   expect(container.querySelector('.profile-training-time')?.textContent).toContain('4h 33min');
   expect(container.querySelector('.workout-discussion')).toBeNull();

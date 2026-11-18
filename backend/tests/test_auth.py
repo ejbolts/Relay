@@ -65,6 +65,8 @@ PUBLIC_ROUTES = {
     ("POST", "/api/auth/register"),
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/logout"),
+    # Asking the admins for a temporary password happens while signed out.
+    ("POST", "/api/auth/password-reset-request"),
 }
 
 
@@ -171,7 +173,9 @@ def test_register_requires_explicit_login_before_access(anonymous_client):
         "is_admin",
         "can_upload_videos",
         "created_at",
+        "must_change_password",
         "profile_photo_url",
+        "sex",
     }
     assert body["profile_photo_url"] is None
     assert body["username"] == "lifter"
@@ -358,6 +362,40 @@ def test_auth_config_reports_the_invite_code(anonymous_client):
     config = anonymous_client.get("/api/auth/config")
     assert config.status_code == 200
     assert config.json() == {"registration_open": True, "invite_code_required": True}
+
+
+def test_friend_invite_code_requires_sign_in(anonymous_client):
+    response = anonymous_client.get("/api/auth/friend-invite")
+    assert response.status_code == 401
+    assert TEST_INVITE_CODE not in response.text
+
+
+def test_members_can_include_the_registration_code_in_friend_links(client, other_client):
+    # Ordinary members can onboard friends too; the public config never exposes the code.
+    response = other_client.get("/api/auth/friend-invite")
+    assert response.status_code == 200
+    assert response.json() == {"invite_code": TEST_INVITE_CODE}
+    assert response.headers["cache-control"] == "no-store"
+    assert TEST_INVITE_CODE not in other_client.get("/api/auth/config").text
+    browser = TestClient(client.app)
+    registered = browser.post(
+        "/api/auth/register",
+        json={
+            "username": "invited",
+            "display_name": "Invited",
+            "password": TEST_PASSWORD,
+            "invite_code": response.json()["invite_code"],
+        },
+    )
+    assert registered.status_code == 201
+    assert registered.json()["username"] == "invited"
+
+
+@pytest.mark.parametrize("registration_open, code", [(False, "sample-code"), (True, None)])
+def test_friend_links_omit_unused_registration_codes(client, registration_open, code):
+    with app_client(allow_registration=registration_open, registration_invite_code=code) as browser:
+        assert login(browser, "owner").status_code == 200
+        assert browser.get("/api/auth/friend-invite").json() == {"invite_code": None}
 
 
 def test_public_safe_defaults():
@@ -828,6 +866,8 @@ ACCOUNT_TABLES = {
     "workout_comments",
     "comment_reactions",
     "live_workouts",
+    "active_workout_sync",
+    "workout_photos",
 }
 
 

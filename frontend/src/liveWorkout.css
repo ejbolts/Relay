@@ -1,0 +1,416 @@
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .live-workout-sheet,
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .live-workout-sheet-backdrop {
+  animation: none;
+}
+
+body.live-workout-sheet-open {
+  overflow: hidden;
+}
+
+.live-workout-sheet {
+  position: fixed;
+  z-index: 85;
+  inset: 0;
+  top: var(--app-banner-height, 0px);
+  width: 100%;
+  max-width: none;
+  height: calc(100dvh - var(--app-banner-height, 0px));
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  overflow: clip;
+  background: var(--p-page);
+  color: var(--p-ink);
+  transition: transform 280ms cubic-bezier(0.22, 0.72, 0.1, 1);
+}
+
+.tracker-app .live-workout-sheet .overlay-screen-header {
+  top: 0;
+}
+
+.live-workout-sheet-backdrop {
+  position: fixed;
+  z-index: 84;
+  inset: 0;
+  background: rgb(0 0 0 / 16%);
+  transition: opacity 280ms ease;
+}
+
+.live-workout-sheet[hidden],
+.live-workout-sheet-backdrop[hidden] {
+  display: none;
+}
+
+.live-workout-sheet.is-dragging,
+.live-workout-sheet-backdrop.is-dragging {
+  transition: none;
+}
+
+.live-workout-sheet-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  padding-top: var(--overlay-header-content-offset);
+  scroll-padding-top: var(--overlay-header-content-offset);
+}
+
+.tracker-app.has-compact-logger .live-workout-sheet .content-page {
+  padding-top: 0;
+}
+
+/* Starting or reopening a workout slides the sheet up from the bottom, the reverse of minimising.
+   The chain matches the rule above that switches off the panel's own entrance animation. */
+.live-workout-sheet.is-opening,
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .live-workout-sheet.is-opening {
+  animation: live-workout-sheet-in 420ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+}
+
+.live-workout-sheet-backdrop.is-opening,
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .live-workout-sheet-backdrop.is-opening {
+  animation: live-workout-backdrop-in 320ms ease both;
+}
+
+@keyframes live-workout-sheet-in {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes live-workout-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-workout-sheet,
+  .live-workout-sheet-backdrop {
+    transition: none;
+  }
+  .live-workout-sheet.is-opening,
+  .live-workout-sheet-backdrop.is-opening {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .live-workout-sheet.is-opening,
+html[data-reduce-motion] .live-workout-sheet-backdrop.is-opening {
+  animation: none;
+}
+
+html[data-reduce-motion] .live-workout-sheet,
+html[data-reduce-motion] .live-workout-sheet-backdrop {
+  transition: none;
+}
+
+.tracker-app.has-compact-logger {
+  --overlay-header-height: calc(5.4rem + env(safe-area-inset-top));
+  --overlay-header-content-offset: calc(var(--overlay-header-height) + 0.55rem);
+}
+
+/* Sliding this wrapper would make the fixed header/footer anchor to the whole workout. */
+.tracker-app.has-compact-logger
+  .tracker-content
+  > .cached-tab-panel:not([hidden])
+  > .workout-browser {
+  animation: fade-in 180ms ease backwards;
+}
+
+.live-workout-header.overlay-screen-header {
+  display: block;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0.5rem env(safe-area-inset-left);
+  border-bottom: 1px solid var(--p-line);
+  border-radius: 0;
+  background: var(--p-surface);
+  touch-action: none;
+}
+
+.live-workout-header::before {
+  display: none;
+}
+
+.live-workout-header.is-pulling {
+  transition: none;
+}
+
+.workout-sheet-grab {
+  width: 100%;
+  height: 1.25rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.workout-sheet-grab span {
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--p-muted);
+  opacity: 0.65;
+}
+
+.live-workout-toolbar {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding-inline: 0.875rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.75rem 2.75rem auto;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.live-workout-add,
+.live-workout-options,
+.live-workout-finish {
+  width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 0.75rem;
+  padding: 0;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+}
+
+.live-workout-toolbar .overlay-header-back svg,
+.live-workout-add .pulse-icon,
+.live-workout-options .pulse-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.live-workout-add,
+.live-workout-options {
+  color: var(--p-accent-text);
+}
+
+/* A word, not a tick: ticks belong to sets and exercises. */
+.live-workout-finish {
+  width: auto;
+  padding-inline: 0.875rem;
+  border-color: color-mix(in srgb, var(--p-good) 55%, transparent);
+  color: var(--p-good);
+  font-size: 0.875rem;
+  font-weight: 750;
+}
+
+.live-workout-toolbar .overlay-header-copy {
+  text-align: left;
+  min-width: 0;
+}
+
+.live-workout-toolbar .overlay-header-copy > strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.live-workout-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.live-workout-header .live-workout-meta .workout-header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: inherit;
+  color: var(--p-good);
+}
+
+/* The clock and set count are short; never shrink the ticking clock into an ellipsis. */
+.live-workout-header .live-workout-meta > * {
+  flex: none;
+}
+
+.live-workout-header .live-workout-meta .workout-header-duration {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.live-workout-meta .workout-header-meta::before {
+  display: inline-block;
+  width: 0.3rem;
+  height: 0.3rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  vertical-align: 0.1em;
+}
+
+.live-workout-header .live-workout-meta .workout-header-meta.is-paused {
+  color: var(--p-gold);
+}
+
+.live-workout-menu {
+  position: absolute;
+  top: calc(100% - 0.25rem);
+  right: max(0.75rem, calc((100% - 720px) / 2));
+  width: min(16rem, calc(100% - 1.5rem));
+  border: 1px solid var(--p-line-strong);
+  border-radius: 0.875rem;
+  padding: 0.375rem;
+  background: var(--p-surface-2);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  touch-action: auto;
+}
+
+.live-workout-menu button {
+  width: 100%;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  color: var(--p-ink);
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.live-workout-menu button:hover,
+.live-workout-menu button:focus-visible {
+  background: var(--p-surface-3);
+}
+
+.live-workout-menu .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--p-accent-text);
+}
+
+.live-workout-menu .danger {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--p-line);
+  border-radius: 0;
+  color: var(--p-danger);
+}
+
+.live-workout-menu .danger .pulse-icon {
+  color: inherit;
+}
+
+.workout-details-disclosure > summary {
+  display: none;
+}
+
+.is-live-workout .workout-details-disclosure {
+  margin-bottom: 0.875rem;
+  border: 1px solid var(--p-line);
+  border-radius: 0.875rem;
+  background: var(--p-surface);
+}
+
+.is-live-workout .workout-details-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.875rem;
+  list-style: none;
+  cursor: pointer;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+}
+
+.workout-details-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workout-details-disclosure > summary .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.workout-details-disclosure[open] > summary .pulse-icon {
+  rotate: 180deg;
+}
+
+.logger-screen.is-live-workout .workout-details {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.is-live-workout .live-workout-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.logger-screen.is-live-workout .live-workout-actions button {
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  border: 0;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.logger-screen.is-live-workout .live-workout-actions .add-exercise-button {
+  border: 1px solid var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-accent-text);
+  font-weight: 650;
+}
+
+.logger-screen.is-live-workout {
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+
+.logger-screen.is-live-workout.has-rest-pill {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.logger-screen.is-live-workout.has-rest-notch {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-workout-header {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .live-workout-header {
+  transition: none;
+}

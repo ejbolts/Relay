@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
+import jsQR from 'jsqr';
 import { FriendInviteButton } from './FriendQrCode';
 import type { SharingSettings, User } from './types';
 
@@ -28,6 +29,7 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('navigator', { clipboard: { writeText } });
   writeText.mockResolvedValue(undefined);
+  vi.spyOn(api.auth, 'friendInvite').mockResolvedValue({ invite_code: null });
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
@@ -82,6 +84,44 @@ it('opens from the labelled shortcut beside people search', async () => {
   sharing('public');
   const dialog = await open(true);
   expect(dialog.querySelector('svg.qr-code')).not.toBeNull();
+});
+
+it('includes the registration code in both the QR code and copied link', async () => {
+  sharing('public');
+  vi.mocked(api.auth.friendInvite).mockResolvedValue({ invite_code: 'sample + & code' });
+  const dialog = await open();
+  const expected = `${window.location.origin}/#friend=${user.id}&invite=sample%20%2B%20%26%20code`;
+  const svg = dialog.querySelector('svg.qr-code')!;
+  const size = Number(svg.getAttribute('viewBox')!.split(' ')[2]);
+  const scale = 5;
+  const width = size * scale;
+  const pixels = new Uint8ClampedArray(width * width * 4).fill(255);
+  // Decode the rendered QR modules, rather than only checking the copied URL.
+  for (const module of svg
+    .querySelector('path')!
+    .getAttribute('d')!
+    .matchAll(/M(\d+) (\d+)/g)) {
+    for (let y = Number(module[2]) * scale; y < (Number(module[2]) + 1) * scale; y++) {
+      for (let x = Number(module[1]) * scale; x < (Number(module[1]) + 1) * scale; x++) {
+        const offset = (y * width + x) * 4;
+        pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = 0;
+      }
+    }
+  }
+  expect(jsQR(pixels, width, width)?.data).toBe(expected);
+  const copy = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Copy link')!;
+  await act(async () => copy.click());
+  expect(writeText).toHaveBeenCalledWith(expected);
+});
+
+it('keeps friend links working when an older server cannot supply a registration code', async () => {
+  sharing('public');
+  vi.mocked(api.auth.friendInvite).mockRejectedValue(new Error('Not found'));
+  const dialog = await open();
+  expect(dialog.querySelector('svg.qr-code')).not.toBeNull();
+  const copy = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Copy link')!;
+  await act(async () => copy.click());
+  expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/#friend=${user.id}`);
 });
 
 it('uses the share sheet when the device has one', async () => {

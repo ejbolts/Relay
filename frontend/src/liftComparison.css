@@ -1,0 +1,616 @@
+/* Head to head: your best lifts against another member's, on their profile. Whoever leads takes
+   the theme's accent colour, in the score, the bars and the figures alike; the other side is grey. */
+
+.head-to-head-score {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.25rem;
+}
+
+.head-to-head-side {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+}
+
+.head-to-head-side.them {
+  justify-content: flex-end;
+}
+
+.head-to-head-side b {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head-to-head-side.ahead {
+  color: var(--p-ink);
+}
+
+.head-to-head-side .profile-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  box-shadow: 0 0 0 2px var(--p-deemph);
+  font-size: 0.9375rem;
+}
+
+.head-to-head-side.ahead .profile-avatar {
+  box-shadow: 0 0 0 2px var(--p-accent);
+}
+
+.head-to-head-score strong {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.head-to-head-score strong span.ahead {
+  color: var(--p-accent-text);
+}
+
+.head-to-head-score strong i {
+  color: var(--p-muted);
+  font-size: 1.125rem;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.head-to-head-lifts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.head-to-head-lifts li + li {
+  border-top: 1px solid var(--p-line);
+}
+
+.head-to-head-lifts li > button,
+.head-to-head-lifts li > div {
+  display: grid;
+  gap: 0.375rem;
+  width: 100%;
+  border: 0;
+  padding: 0.75rem 0;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.head-to-head-lifts li:last-child > button,
+.head-to-head-lifts li:last-child > div {
+  padding-bottom: 0;
+}
+
+.head-to-head-values {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr) minmax(4.5rem, auto);
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.head-to-head-values > span {
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.head-to-head-values b {
+  color: var(--p-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.head-to-head-values b:last-child {
+  text-align: right;
+}
+
+[data-leader='you'] .head-to-head-values b:first-child,
+[data-leader='them'] .head-to-head-values b:last-child {
+  color: var(--p-accent-text);
+  font-weight: 700;
+}
+
+/* Level, or logged by one side only: nobody leads, so nothing is highlighted. */
+[data-leader='level'] .head-to-head-values b,
+[data-leader='none'] .head-to-head-values b {
+  color: var(--p-ink);
+}
+
+.head-to-head-bar {
+  display: flex;
+  gap: 2px;
+  height: 0.375rem;
+}
+
+.head-to-head-bar i {
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--p-deemph);
+}
+
+.head-to-head-bar i:last-child {
+  flex: 1;
+}
+
+[data-leader='you'] .head-to-head-bar i:first-child,
+[data-leader='them'] .head-to-head-bar i:last-child {
+  background: var(--p-accent);
+}
+
+.head-to-head-sets {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+/* A lift that has just been added rises into the card (useFlipAnimation), and its bars then grow
+   in from the outside edges, each after its own row has arrived. */
+.head-to-head-lifts li.is-new .head-to-head-bar i {
+  animation: head-to-head-bar-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--enter-delay, 0ms) + 160ms);
+  transform-origin: left center;
+}
+
+.head-to-head-lifts li.is-new .head-to-head-bar i:last-child {
+  transform-origin: right center;
+}
+
+@keyframes head-to-head-bar-in {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* The card itself fades up when it first appears on the profile. */
+.head-to-head {
+  animation: rise-in 280ms var(--ease-out, ease-out) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head-to-head,
+  .head-to-head-lifts li.is-new .head-to-head-bar i {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .head-to-head,
+html[data-reduce-motion] .head-to-head-lifts li.is-new .head-to-head-bar i {
+  animation: none;
+}
+
+/* Friends: one of your lifts, ranked against the friends who have logged it. */
+
+.lift-leaderboard ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lift-leaderboard li + li {
+  border-top: 1px solid var(--p-line);
+}
+
+.lift-leaderboard li > button,
+.lift-leaderboard li > div {
+  display: grid;
+  grid-template-columns: 1.25rem 2.25rem minmax(0, 1fr) auto 1rem;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.5rem;
+  border: 0;
+  padding: 0.5rem 0;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.lift-leaderboard li.is-you {
+  margin: 0 -0.625rem;
+  border-top-color: transparent;
+  border-radius: 14px;
+  padding: 0 0.625rem;
+  background: var(--p-accent-soft);
+}
+
+.lift-leaderboard li.is-you + li {
+  border-top-color: transparent;
+}
+
+.lift-leaderboard-rank {
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.lift-leaderboard li:first-child .lift-leaderboard-rank {
+  color: var(--p-gold);
+}
+
+.lift-leaderboard .profile-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.9375rem;
+}
+
+.lift-leaderboard-name {
+  display: grid;
+  min-width: 0;
+}
+
+.lift-leaderboard-name strong {
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lift-leaderboard-name small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.lift-leaderboard li b {
+  font-size: 0.9375rem;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lift-leaderboard li .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--p-muted);
+}
+
+/* Lifts to compare: the bottom sheet that chooses which lifts a head to head shows. Its search
+   stays in place and only the list scrolls. */
+
+.popup-dialog.lift-picker[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(32rem, calc(100% - 1.5rem));
+  height: min(44rem, calc(100dvh - 2rem));
+  margin: auto auto max(0.75rem, env(safe-area-inset-bottom));
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 24px;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  /* It slides up when it opens and back down when it closes. The slide moves the separate
+     translate property, so a drag (which moves transform) neither restarts nor fights it. */
+  animation: lift-picker-in 360ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+  transform: translateY(var(--sheet-offset, 0px));
+  transition: transform 180ms ease-out;
+}
+
+.popup-dialog.lift-picker.is-closing[open] {
+  animation: lift-picker-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.popup-dialog.lift-picker[open]::backdrop {
+  animation: fade-in 240ms ease both;
+}
+
+.popup-dialog.lift-picker.is-closing[open]::backdrop {
+  animation: lift-picker-backdrop-out 240ms ease both;
+}
+
+@keyframes lift-picker-in {
+  from {
+    translate: 0 calc(100% + 1.5rem);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+@keyframes lift-picker-out {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(100% + 1.5rem);
+  }
+}
+
+@keyframes lift-picker-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.popup-dialog.lift-picker.sheet-dragging {
+  transition: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup-dialog.lift-picker[open] {
+    transition: none;
+  }
+
+  .popup-dialog.lift-picker[open],
+  .popup-dialog.lift-picker[open]::backdrop {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .popup-dialog.lift-picker[open],
+html[data-reduce-motion] .popup-dialog.lift-picker[open]::backdrop {
+  animation: none;
+}
+
+.popup-dialog.lift-picker > header {
+  flex: none;
+  border-bottom: 0;
+  padding: 1.5rem 1.25rem 0.625rem;
+  background: var(--p-surface);
+  touch-action: none;
+}
+
+.popup-dialog.lift-picker > header::before {
+  content: '';
+  position: absolute;
+  top: 0.625rem;
+  left: calc(50% - 1.125rem);
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: 8px;
+  background: var(--p-muted);
+}
+
+.popup-dialog.lift-picker .popup-dialog-close {
+  width: auto;
+  min-height: 2.75rem;
+  /* Even padding on both sides keeps the focus ring clear of the text; the negative margin
+     keeps "Done" lined up with the sheet's right edge. */
+  margin-right: -0.75rem;
+  border: 0;
+  padding: 0 0.75rem;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.lift-picker-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 1rem;
+}
+
+.lift-picker-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.875rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 13px;
+  padding: 0 0.8rem;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+}
+
+.lift-picker-search:focus-within {
+  border-color: var(--p-accent);
+}
+
+.lift-picker-search > .pulse-icon {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.lift-picker-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  color: var(--p-ink);
+  font: inherit;
+  /* Sixteen pixels keeps iPhone from zooming the page when the field takes focus. */
+  font-size: 1rem;
+  outline: none;
+}
+
+.lift-picker-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.lift-picker-search button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: none;
+  color: var(--p-muted);
+}
+
+.lift-picker-search button .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.lift-picker-body > .inline-error,
+.lift-picker-limit {
+  flex: none;
+  margin: 0.625rem 0.25rem 0;
+  font-size: 0.8125rem;
+}
+
+.lift-picker-limit {
+  color: var(--p-muted);
+}
+
+.lift-picker-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0.5rem -1rem 0;
+  padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.lift-picker-list li + li {
+  border-top: 1px solid var(--p-line);
+}
+
+.lift-picker-list button {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.5rem;
+  border: 0;
+  padding: 0.5rem 0.25rem;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.lift-picker-list button:active {
+  background: var(--p-surface-2);
+}
+
+.lift-picker-list button:disabled {
+  opacity: 0.45;
+}
+
+.lift-picker-check {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1.5px solid var(--p-line-strong);
+  border-radius: 50%;
+  color: var(--p-on-accent, #fff);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+[aria-pressed='true'] > .lift-picker-check {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+}
+
+/* The tick pops in when a lift is chosen and shrinks away when it is removed. Lifts already
+   chosen when the sheet opens start ticked, without the pop. */
+.lift-picker-check .pulse-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 120ms ease,
+    transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+
+[aria-pressed='true'] > .lift-picker-check .pulse-icon {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lift-picker-check,
+  .lift-picker-check .pulse-icon {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .lift-picker-check,
+html[data-reduce-motion] .lift-picker-check .pulse-icon {
+  transition: none;
+}
+
+.lift-picker-copy {
+  display: grid;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.lift-picker-copy strong {
+  font-size: 0.9375rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.lift-picker-copy .exercise-search-match {
+  color: var(--p-accent-text);
+  font-weight: 750;
+}
+
+.lift-picker-copy small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+/* The member's best for a lift they have logged too, beside their photo. */
+.lift-picker-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lift-picker-preview .profile-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.6875rem;
+}
+
+.lift-picker-preview > .num {
+  display: grid;
+  justify-items: end;
+  white-space: nowrap;
+}
+
+.lift-picker-preview b {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.lift-picker-preview small {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+}
+
+.lift-picker-empty {
+  margin: 1.25rem 0;
+  color: var(--p-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}

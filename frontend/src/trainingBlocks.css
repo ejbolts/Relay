@@ -1,0 +1,544 @@
+.training-block-dialog .training-block-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 9px;
+  padding: 0.4rem 0.75rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.training-block-dialog .training-block-new {
+  /* Sits beside the close button rather than centred between it and the title. */
+  margin-left: auto;
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: white;
+}
+.training-block-new .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.popup-dialog.training-block-dialog {
+  width: min(460px, calc(100vw - 24px));
+}
+.training-block-dialog .badge {
+  margin-left: 8px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--p-good) 15%, transparent);
+  color: var(--p-good);
+  font-size: 0.65rem;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+/* Block picker */
+.training-block-pick {
+  list-style: none;
+  margin: 0 16px 14px;
+  padding: 0;
+  max-height: min(360px, 50dvh);
+  overflow-y: auto;
+}
+.training-block-dialog .training-block-pick button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--p-line);
+  border-radius: 0;
+  padding: 12px 2px;
+  background: none;
+  color: var(--p-ink);
+  text-align: left;
+}
+.training-block-pick strong,
+.training-block-pick small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.training-block-pick small {
+  margin-top: 2px;
+  color: var(--p-muted);
+  font-size: 0.78rem;
+}
+.training-block-radio {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--p-muted);
+  border-radius: 50%;
+}
+[aria-checked='true'] > .training-block-radio {
+  border-color: var(--p-accent);
+}
+[aria-checked='true'] > .training-block-radio::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--p-accent);
+}
+
+/* Blocks page */
+.training-block-page {
+  padding: 16px;
+}
+.training-block-bar {
+  display: flex;
+  gap: 2px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 9px;
+}
+.training-block-bar {
+  min-width: 0;
+}
+.training-block-segment {
+  min-width: 10px;
+  overflow: hidden;
+  padding: 0 6px;
+  color: #0b0d0f;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 34px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.training-block-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0 14px;
+  color: var(--p-muted);
+  font-size: 0.7rem;
+}
+.training-block-segment.current,
+.training-block-swatch.current {
+  background: var(--p-accent-text);
+}
+.training-block-segment.tone-0,
+.training-block-swatch.tone-0 {
+  background: #8aa4bd;
+}
+.training-block-segment.tone-1,
+.training-block-swatch.tone-1 {
+  background: #c9a35a;
+}
+.training-block-segment.tone-2,
+.training-block-swatch.tone-2 {
+  background: #a493cc;
+}
+.training-block-segment.tone-3,
+.training-block-swatch.tone-3 {
+  background: #6fb59a;
+}
+.training-block-segment.earlier,
+.training-block-swatch.earlier {
+  background: repeating-linear-gradient(135deg, var(--p-surface-3) 0 5px, var(--p-deemph) 5px 10px);
+  color: var(--p-ink-2);
+}
+.training-block-cards {
+  display: grid;
+  gap: 9px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.training-block-cards li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--p-surface-2);
+}
+.training-block-cards li > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.training-block-cards small {
+  display: block;
+  margin-top: 2px;
+  color: var(--p-muted);
+  font-size: 0.78rem;
+}
+.training-block-swatch {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 6px;
+  border-radius: 4px;
+}
+.training-block-dialog .training-block-cards li > button {
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 9px;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: var(--p-ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* New / edit form */
+/* The first field starts clear of the title bar. */
+.training-block-form {
+  padding: 12px 16px 16px;
+}
+.training-block-form fieldset {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.training-block-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+}
+.training-block-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 0.72rem;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  font: inherit;
+}
+.training-block-form label {
+  min-width: 0;
+}
+/* iOS sizes native date fields to their content, which cropped the dates and let the form
+   scroll sideways; fill the field instead, as the video date field does. */
+.training-block-form input[type='date'] {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-inline-size: 0;
+  min-height: 2.9rem;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+.training-block-form input[type='date']::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
+}
+.training-block-starts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.training-block-starts.plan {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.training-block-cards .training-block-plan {
+  color: var(--p-accent-text);
+  font-weight: 600;
+}
+.training-block-starts > span {
+  grid-column: 1 / -1;
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+}
+.training-block-dialog .training-block-starts button {
+  min-height: 56px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  text-align: left;
+}
+.training-block-dialog .training-block-starts button[aria-checked='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+}
+.training-block-starts strong,
+.training-block-starts small {
+  display: block;
+}
+.training-block-starts strong {
+  font-size: 0.82rem;
+}
+.training-block-starts small {
+  margin-top: 2px;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+}
+.training-block-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.training-block-actions.split {
+  margin: 0 16px 16px;
+}
+.training-block-actions.split button {
+  flex: 1;
+}
+.training-block-dialog .training-block-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+.training-block-actions .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.training-block-dialog .training-block-actions .primary-action {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: white;
+}
+.training-block-dialog .training-block-actions .danger-button {
+  margin-right: auto;
+  color: var(--p-danger);
+}
+.training-block-dialog > p,
+.training-block-dialog > .training-block-actions:not(.split) {
+  margin: 16px;
+}
+.training-block-dialog .error-message {
+  margin: 16px;
+}
+
+.logger-screen .completed-set-weight:has(.pr-badge) {
+  flex-wrap: wrap;
+}
+.logger-screen .set-weight-value,
+.logger-screen .completed-set-weight .pr-badge {
+  white-space: nowrap;
+}
+
+/* Home indicator */
+button.pulse-card.training-block-home {
+  display: grid;
+  /* Long names and timelines shrink to the card instead of widening it. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.training-block-home-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.training-block-home-top em {
+  color: var(--p-accent-text);
+  font-style: normal;
+  font-weight: 700;
+}
+.training-block-home-top em.past {
+  color: var(--p-gold);
+}
+.training-block-home > strong {
+  overflow: hidden;
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.training-block-home-week {
+  color: var(--p-ink-2);
+  font-size: 0.8rem;
+}
+.training-block-home-bar {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+.training-block-home-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-accent);
+}
+.training-block-home-bar.past > span {
+  background: var(--p-gold);
+}
+.training-block-home .training-block-timeline {
+  margin-top: 8px;
+}
+.training-block-home .training-block-axis {
+  margin-bottom: 0;
+}
+.training-block-style-preview {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  width: 100%;
+  height: 34px;
+  padding: 0 6px;
+}
+.training-block-style-preview .bar {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--p-accent) 65%, var(--p-surface-3) 65%);
+}
+.training-block-style-preview .strip {
+  display: flex;
+  gap: 2px;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+.training-block-style-preview .strip i {
+  flex: 3;
+  background: #8aa4bd;
+}
+.training-block-style-preview .strip i:nth-child(2) {
+  flex: 2;
+  background: #c9a35a;
+}
+.training-block-style-preview .strip i:last-child {
+  flex: 1;
+  background: var(--p-accent-text);
+}
+
+.training-block-starts.plan.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.training-block-dialog .badge.deload {
+  background: color-mix(in srgb, var(--p-gold) 15%, transparent);
+  color: var(--p-gold);
+}
+
+/* Finished block: Home card call to action and the summary dialog */
+.training-block-home-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  color: var(--p-accent-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.training-block-home-cta .pulse-icon {
+  width: 16px;
+  height: 16px;
+}
+.training-block-home.is-finished .training-block-home-top em {
+  color: var(--p-good);
+}
+.training-block-summary-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+.training-block-summary .training-block-form {
+  padding-top: 14px;
+}
+.training-block-summary-body > p,
+.training-block-summary-body .error-message {
+  margin: 0;
+}
+.training-block-summary-range {
+  color: var(--p-ink-2);
+  font-size: 0.85rem;
+}
+.training-block-summary-compare {
+  color: var(--p-muted);
+  font-size: 0.78rem;
+}
+.training-block-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.training-block-tile {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--p-surface-2);
+}
+.training-block-tile dt {
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.training-block-tile dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.training-block-tile small {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--p-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.training-block-tile small.is-up {
+  color: var(--p-good);
+}
+.training-block-tile small .pulse-icon {
+  width: 12px;
+  height: 12px;
+}
+.training-block-summary-actions {
+  display: grid;
+  gap: 8px;
+}
+.training-block-dialog .training-block-summary-actions button {
+  min-height: 44px;
+  margin: 0;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-weight: 600;
+}
+.training-block-dialog .training-block-summary-actions .primary-action {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: white;
+}
+.training-block-summary-body .training-block-actions {
+  margin: 0;
+}
+
+/* However short it is against long history, the current block stays wide enough to read. */
+.training-block-segment.current {
+  flex-shrink: 0;
+  min-width: min(5.5rem, 34%);
+}

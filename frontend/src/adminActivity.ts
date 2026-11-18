@@ -28,9 +28,23 @@ export function onAdminActivity(listener: Listener): () => void {
   };
 }
 
+/**
+ * Accounts waiting for a password reset first, otherwise in the server's order. Sorted only when
+ * the list loads, so a card stays in place after its request is handled until the next refresh.
+ */
+export function resetRequestsFirst(users: AdminUser[]): AdminUser[] {
+  return [...users].sort(
+    (a, b) =>
+      Number(Boolean(b.password_reset_requested_at)) -
+      Number(Boolean(a.password_reset_requested_at)),
+  );
+}
+
 /** Update only user cards; incoming activity never reloads editable server settings. */
 export function useAdminUsers(active: boolean) {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  /** Counts the server lists applied, so a caller can wait for one loaded after a request. */
+  const [snapshots, setSnapshots] = useState(0);
   const generation = useRef(0);
   const revision = useRef(0);
   const updates = useRef(new Map<string, { revision: number; presence: FriendPresence }>());
@@ -40,13 +54,14 @@ export function useAdminUsers(active: boolean) {
     const snapshot = await api.admin.users();
     if (request !== generation.current) return;
     setUsers(
-      snapshot.map((user) => {
+      resetRequestsFirst(snapshot).map((user) => {
         const update = updates.current.get(user.id);
         return update && update.revision > before
           ? { ...user, presence: update.presence, last_active_at: update.presence.last_active_at }
           : user;
       }),
     );
+    setSnapshots((count) => count + 1);
   }, []);
 
   const invalidate = useCallback(() => {
@@ -91,5 +106,5 @@ export function useAdminUsers(active: boolean) {
     };
   }, [active, loadUsers, invalidate]);
 
-  return { users, setUsers, loadUsers };
+  return { users, setUsers, loadUsers, snapshots };
 }

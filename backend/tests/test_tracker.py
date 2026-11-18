@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import uuid
 from datetime import date, timedelta
 from io import BytesIO, StringIO
 
@@ -391,6 +392,7 @@ def test_workout_sets_notes_rest_and_rpe_are_saved(client):
     workout = response.json()
     assert workout["category"] == "push"
     assert workout["movements"][0]["sets"][0] == {
+        "machine_photo_id": None,
         "id": workout["movements"][0]["sets"][0]["id"],
         "order_index": 0,
         "reps": 5,
@@ -680,6 +682,26 @@ def test_workout_snapshot_revision_changes_after_mutations(client):
     }
 
 
+def test_workout_saves_report_the_revision_they_reached(client):
+    exercise = client.get("/api/exercises").json()[0]
+    payload = {**workout_payload(exercise["id"]), "client_session_id": str(uuid.uuid4())}
+
+    created = client.post("/api/workouts", json=payload)
+    after_create = client.get("/api/workouts/revision").json()["revision"]
+    replayed = client.post("/api/workouts", json=payload)
+    updated = client.put(
+        f"/api/workouts/{created.json()['id']}", json=workout_payload(exercise["id"])
+    )
+    after_update = client.get("/api/workouts/revision").json()["revision"]
+
+    assert created.status_code == 201
+    assert created.headers["X-Workout-Revision"] == after_create
+    assert replayed.json()["id"] == created.json()["id"]
+    assert replayed.headers["X-Workout-Revision"] == after_create
+    assert updated.status_code == 200
+    assert updated.headers["X-Workout-Revision"] == after_update != after_create
+
+
 def test_workout_requires_a_completed_set(client):
     exercise = client.get("/api/exercises").json()[0]
     payload = workout_payload(exercise["id"])
@@ -744,7 +766,7 @@ def test_csv_import_and_export_use_supplied_column_format(client):
         "Distance (km),Calories (kcal),Average heart rate (bpm),Speed (km/h),Incline (%),"
         "Cardio session calories (kcal),Cardio session average heart rate (bpm),"
         "Cardio session distance (km),Average speed (km/h),Cardio session incline (%),"
-        "Average power (W),Average METs"
+        "Average power (W),Average METs,Elevation gain (m)"
     )
     assert "2026-07-17,Machine Reverse Fly,45,99.2,10,83.6,184.3,38,1" in decoded
 

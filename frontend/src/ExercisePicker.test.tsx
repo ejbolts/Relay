@@ -4,7 +4,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExercisePicker } from './App';
 import { api } from './api';
+import { formatLastDone } from './exerciseLastDone';
 import type { Exercise, MachinePhotoUsage } from './types';
+import { localDate } from './utils';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -120,19 +122,28 @@ async function setValue(selector: string, value: string) {
 const names = () =>
   [...document.querySelectorAll('.exercise-option-copy > strong')].map((item) => item.textContent);
 
-it('combines equipment, category, favourites and search instead of bypassing filters', async () => {
+it('combines equipment, body part and search instead of bypassing filters', async () => {
   await setValue('[aria-label="Equipment"]', 'Cable');
   await setValue('[aria-label="Body part"]', 'pull');
-  await setValue('[aria-label="Exercise category"]', 'favorites');
   await setValue('.exercise-search', 'bicep curl');
   expect(names()).toEqual(['Cable Biceps Curl']);
   await setValue('[aria-label="Equipment"]', 'Dumbbell');
-  expect(names()).toEqual([]);
-  expect(document.querySelector('.muted-empty')?.textContent).toContain('No exercises match');
-  await setValue('[aria-label="Exercise category"]', 'recent');
   expect(names()).toEqual(['Dumbbell Curl']);
   await setValue('[aria-label="Body part"]', 'push');
   expect(names()).toEqual([]);
+  expect(document.querySelector('.muted-empty')?.textContent).toContain('No exercises match');
+});
+
+it('offers Body part and Equipment menus with no separate category menu', () => {
+  const bodyPart = document.querySelector<HTMLSelectElement>('[aria-label="Body part"]')!;
+  const equipment = document.querySelector<HTMLSelectElement>('[aria-label="Equipment"]')!;
+  expect(bodyPart.options[0]!.textContent).toBe('Body part');
+  expect([...equipment.options].map((option) => option.textContent).slice(0, 2)).toEqual([
+    'Equipment',
+    'Custom',
+  ]);
+  expect(document.querySelector('[aria-label="Exercise category"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Custom exercises"]')).toBeNull();
 });
 
 it('retains a chosen variant across filter changes and submits its own ID', async () => {
@@ -149,22 +160,70 @@ it('retains a chosen variant across filter changes and submits its own ID', asyn
   expect(onChoose).toHaveBeenCalledWith([exercises[1]], {});
 });
 
-it('filters custom exercises independently of category, equipment and search', async () => {
-  const custom = document.querySelector<HTMLButtonElement>('[aria-label="Custom exercises"]')!;
-  await act(async () => custom.click());
+it('leaves hidden exercises out of every list, including search', async () => {
+  const shown = names();
+  const hiddenName = shown[0]!;
+  await act(async () =>
+    root.render(
+      <ExercisePicker
+        exercises={exercises.map((item) =>
+          item.name === hiddenName ? { ...item, hidden: true } : item,
+        )}
+        excludedIds={['single']}
+        recentExerciseIds={['cable', 'db']}
+        onChoose={onChoose}
+        onClose={vi.fn()}
+        onFavoriteChange={vi.fn()}
+        onCreateExercise={vi.fn()}
+      />,
+    ),
+  );
+  expect(names()).not.toContain(hiddenName);
+  await setValue('.exercise-search', hiddenName);
+  expect(names()).not.toContain(hiddenName);
+});
+
+it('shows only custom exercises when Custom is picked from the Equipment menu', async () => {
+  await setValue('[aria-label="Equipment"]', ':custom');
   expect(names()).toEqual(['Dumbbell Curl']);
-  await setValue('[aria-label="Equipment"]', 'Dumbbell');
   await setValue('[aria-label="Body part"]', 'pull');
   await setValue('.exercise-search', 'bicep curl');
   expect(names()).toEqual(['Dumbbell Curl']);
-  await setValue('[aria-label="Exercise category"]', 'favorites');
-  expect(names()).toEqual([]);
-  await setValue('[aria-label="Exercise category"]', 'all');
+  // Picking a piece of equipment replaces Custom rather than combining with it.
   await setValue('[aria-label="Equipment"]', 'Cable');
-  expect(names()).toEqual([]);
-  await act(async () => custom.click());
-  expect(custom.getAttribute('aria-pressed')).toBe('false');
   expect(names()).toEqual(['Cable Biceps Curl']);
+  await setValue('[aria-label="Equipment"]', '');
+  await setValue('.exercise-search', '');
+  expect(names()).toContain('Cable Biceps Curl');
+  expect(names()).toContain('Dumbbell Curl');
+});
+
+it('shows when each exercise was last done and skips unlogged ones', async () => {
+  const today = localDate();
+  await act(async () =>
+    root.render(
+      <ExercisePicker
+        exercises={exercises}
+        excludedIds={['single']}
+        recentExerciseIds={['cable', 'db']}
+        lastDoneDates={
+          new Map([
+            ['cable', today],
+            ['db', '2020-01-15'],
+          ])
+        }
+        onChoose={onChoose}
+        onClose={vi.fn()}
+        onFavoriteChange={vi.fn()}
+        onCreateExercise={vi.fn()}
+      />,
+    ),
+  );
+  const lastDone = (id: string) =>
+    document.querySelector(`[data-exercise-id="${id}"] .exercise-option-last-done`);
+  expect(lastDone('cable')?.textContent).toBe(`Last done ${formatLastDone(today, today)}`);
+  expect(lastDone('db')?.textContent).toBe(`Last done ${formatLastDone('2020-01-15', today)}`);
+  expect(lastDone('push')).toBeNull();
 });
 
 describe('choosing a machine beneath an exercise', () => {

@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   compactSetSummary,
+  groupByYear,
   groupWorkoutsByWeek,
+  latestTopSets,
   mostTrainedExerciseId,
   niceTicks,
   recentStrengthRecords,
   sessionTemplateFor,
+  setLabel,
   trainingDayGrid,
+  upNextSetLabel,
   weekGroupLabel,
   weekStartFor,
   weeklyBestPoints,
@@ -112,6 +116,20 @@ const workouts = [
   ]),
   workout('w1', '2026-09-26', 'pull', [{ exercise: deadlift, sets: [trackedSet(155, 5)] }]),
 ];
+
+it('does not template a Cardio session from a strength workout filed as Cardio', () => {
+  const run = exercise('run', 'Treadmill Run', 'cardio');
+  const cardio = workout('cardio', '2026-10-01', 'cardio', [
+    { exercise: run, sets: [trackedSet(0, 0)] },
+  ]);
+  const mislabelled = workout('legs', '2026-10-03', 'cardio', [
+    { exercise: squat, sets: [trackedSet(125, 7)] },
+  ]);
+  expect(sessionTemplateFor([mislabelled, cardio], 'cardio', '2026-10-04')?.sourceWorkout.id).toBe(
+    'cardio',
+  );
+  expect(sessionTemplateFor([mislabelled], 'cardio', '2026-10-04')).toBeNull();
+});
 
 it('keeps custom-type templates separate from other custom and built-in Other sessions', () => {
   const a = {
@@ -334,5 +352,87 @@ describe('training summary helpers', () => {
       record('d', '2026-10-05', 'estimated_1rm'),
     ];
     expect(recentStrengthRecords(records, 2).map((item) => item.id)).toEqual(['c', 'b']);
+  });
+});
+
+describe('groupByYear', () => {
+  it('splits newest-first sessions into year runs', () => {
+    const dates = ['2026-03-12', '2025-09-14', '2024-02-14', '2024-02-11', '2023-12-28'];
+    expect(groupByYear(dates, (date) => date)).toEqual([
+      { year: '2026', items: ['2026-03-12'] },
+      { year: '2025', items: ['2025-09-14'] },
+      { year: '2024', items: ['2024-02-14', '2024-02-11'] },
+      { year: '2023', items: ['2023-12-28'] },
+    ]);
+  });
+
+  it('returns no groups for an empty list', () => {
+    expect(groupByYear([], (date: string) => date)).toEqual([]);
+  });
+});
+
+describe('Up next set labels', () => {
+  const pullUp = { ...exercise('pull-up', 'Pull-up'), equipment: 'Bodyweight' };
+  const planned = (weight: number | null, reps = 6) => ({
+    ...trackedSet(0, reps),
+    weight_kg: weight,
+    completed: false,
+  });
+
+  it('uses the newest top set for a planned exercise without a weight', () => {
+    const latest = latestTopSets(workouts, '2026-10-06');
+    expect(
+      upNextSetLabel(
+        {
+          exercise: squat,
+          topSet: planned(null),
+          plannedSets: [
+            { reps: 6, weight_kg: null },
+            { reps: 6, weight_kg: null },
+          ] as never,
+          summary: '2 sets',
+        },
+        latest.get('squat'),
+      ),
+    ).toEqual({ text: '125×7', title: '125 kg × 7' });
+  });
+
+  it('keeps a planned weight, and shows sets and target reps before any history', () => {
+    expect(
+      upNextSetLabel({ exercise: squat, topSet: planned(100), summary: '100 kg × 6' }, undefined),
+    ).toEqual({ text: '100×6', title: '100 kg × 6' });
+    expect(
+      upNextSetLabel(
+        {
+          exercise: squat,
+          topSet: planned(null),
+          plannedSets: [{}, {}, {}] as never,
+          repRange: { min: 8, max: 12 },
+          summary: '3 sets',
+        },
+        undefined,
+      ),
+    ).toEqual({ text: '3×8–12', title: '3 sets of 8–12 reps' });
+  });
+
+  it('shows reps for bodyweight sets instead of 0 kg', () => {
+    const latest = latestTopSets(
+      [workout('bw', '2026-10-01', 'pull', [{ exercise: pullUp, sets: [trackedSet(0, 9)] }])],
+      '2026-10-06',
+    );
+    expect(
+      upNextSetLabel(
+        { exercise: pullUp, topSet: planned(null), summary: '3 sets' },
+        latest.get('pull-up'),
+      ),
+    ).toEqual({ text: '9 reps', title: '9 reps' });
+    expect(setLabel(trackedSet(0, 9))).toBe('9 reps');
+    expect(setLabel(trackedSet(60, 9))).toBe('60 kg × 9');
+  });
+
+  it('ignores workouts after today when finding the latest set', () => {
+    const latest = latestTopSets(workouts, '2026-10-04');
+    expect(latest.has('squat')).toBe(false);
+    expect(latest.get('deadlift')?.weight_kg).toBe(157.5);
   });
 });

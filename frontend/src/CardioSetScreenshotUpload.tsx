@@ -1,3 +1,4 @@
+import { useTips } from './Tips';
 import { useRef, useState } from 'react';
 import { api } from './api';
 import type { CardioScreenshotScan } from './types';
@@ -9,6 +10,7 @@ export function CardioSetScreenshotUpload({
 }: {
   onScan: (scan: CardioScreenshotScan) => void;
 }) {
+  const tips = useTips();
   const busy = useRef(false);
   const [phase, setPhase] = useState<'paste' | 'scan' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export function CardioSetScreenshotUpload({
       }
       setPhase('scan');
       const scan = await api.scanCardioScreenshot(file);
+      tips.learn('cardio');
       onScan(scan);
       // Completion is shown by the set's existing checkmark; keep scan warnings visible.
       if (scan.warning) setError(scan.warning);

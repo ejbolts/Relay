@@ -5,11 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { BodySizesCard } from './BodySizesCard';
 import { BODY_SIZE_FIELDS, type BodySizeLog } from './bodySizes';
+import type { User } from './types';
+import { UserContext } from './userContext';
+import { localDate } from './utils';
 
 let unit = 'kg';
 vi.mock('./trainingPreferencesContext', () => ({ useWeightUnit: () => unit }));
 vi.mock('./api', () => ({
-  api: { listBodySizes: vi.fn(), saveBodySizes: vi.fn(), deleteBodySizes: vi.fn() },
+  api: {
+    listBodySizes: vi.fn(),
+    saveBodySizes: vi.fn(),
+    deleteBodySizes: vi.fn(),
+    updateProfile: vi.fn(),
+  },
 }));
 let root: Root;
 let host: HTMLDivElement;
@@ -40,6 +48,23 @@ async function selectPart(value: string) {
     select.value = value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
+}
+function figureBox() {
+  const box = host.querySelector<HTMLInputElement>('.body-figure-editor input');
+  if (!box) throw new Error('No measurement box on the figure');
+  return box;
+}
+function typeInto(box: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, value);
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function press(box: HTMLInputElement, key: string) {
+  box.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+}
+function pick(field: string) {
+  host
+    .querySelector(`[data-field="${field}"]`)!
+    .dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 async function render(rows: BodySizeLog[] = []) {
   vi.mocked(api.listBodySizes).mockResolvedValue(rows);
@@ -135,7 +160,7 @@ describe('BodySizesCard', () => {
   });
   it('requires one measurement and saves a circumference without requiring weight', async () => {
     await render();
-    expect(host.textContent).toContain('No body measurements yet');
+    expect(host.querySelectorAll('.body-figure-label.empty')).toHaveLength(12);
     await act(async () => button('Log measurements').click());
     await act(async () => button('Save measurements').click());
     expect(document.body.textContent).toContain('Enter at least one body measurement.');
@@ -164,7 +189,7 @@ describe('BodySizesCard', () => {
     await act(async () => button('Delete').click());
     await act(async () => button('Delete measurements').click());
     expect(api.deleteBodySizes).toHaveBeenCalledWith('2026-10-20');
-    expect(host.textContent).toContain('No body measurements yet');
+    expect(host.querySelectorAll('.body-figure-label.empty')).toHaveLength(12);
   });
   it('converts inches and preserves unchanged stored precision when editing', async () => {
     unit = 'lb';
@@ -190,6 +215,265 @@ describe('BodySizesCard', () => {
     expect(host.textContent).toContain('82 cm');
     await act(async () => button('Update measurements').click());
     expect(host.textContent).toContain('81 cm');
+  });
+  it('steps back through earlier entries and lists what changed since the one before', async () => {
+    await render([
+      row('2026-10-25', { waist_cm: 81, chest_cm: 103, neck_cm: 38 }),
+      row('2026-10-18', { waist_cm: 82, chest_cm: 102.5, neck_cm: 38 }),
+      row('2026-10-11', { waist_cm: 82 }),
+    ]);
+    const stepper = host.querySelector('.body-sizes-stepper')!;
+    const [earlier, later] = [...stepper.querySelectorAll('button')];
+    const changes = () =>
+      [...host.querySelectorAll('.body-sizes-changes li')].map((item) => item.textContent);
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-25');
+    expect(later.disabled).toBe(true);
+    expect(host.querySelector('.body-sizes-changes h3')?.textContent).toContain('18');
+    // Neck did not change, so it is left out.
+    expect(changes()).toEqual(['Chest↑ 0.5', 'Waist↓ 1']);
+    expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist81 cm');
+    await act(async () => earlier.click());
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-18');
+    expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist82 cm');
+    // Only waist was measured on both days, and it is unchanged.
+    expect(host.querySelector('.body-sizes-changes')).toBeNull();
+    await act(async () => earlier.click());
+    expect(earlier.disabled).toBe(true);
+    expect(host.querySelector('[data-field="chest_cm"]')?.classList.contains('empty')).toBe(true);
+    // Edit and Delete act on the entry being shown.
+    await act(async () => button('Delete').click());
+    await act(async () => button('Delete measurements').click());
+    expect(api.deleteBodySizes).toHaveBeenCalledWith('2026-10-11');
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-25');
+  });
+  it('types a measurement tapped on the figure straight into the shown date', async () => {
+    await render([
+      row('2026-10-25', { waist_cm: 81, chest_cm: 103 }),
+      row('2026-10-18', { waist_cm: 82, chest_cm: 102 }),
+    ]);
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[aria-label="Earlier measurements"]')!.click(),
+    );
+    const waist = host.querySelector('[data-field="waist_cm"]')!;
+    expect(waist.getAttribute('aria-label')).toBe('Update waist, 82 cm');
+    await act(async () => waist.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    // No dialog: the value is edited on the figure.
+    expect(document.querySelector('dialog')).toBeNull();
+    let box = figureBox();
+    expect(document.activeElement).toBe(box);
+    expect(box.value).toBe('82');
+    await act(async () => typeInto(box, '81.5'));
+    await act(async () => press(box, 'Enter'));
+    expect(api.saveBodySizes).toHaveBeenCalledWith(
+      expect.objectContaining({ measurement_date: '2026-10-18', waist_cm: 81.5, chest_cm: 102 }),
+    );
+    expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist81.5 cm');
+    expect(host.querySelector('.body-figure-editor')).toBeNull();
+
+    // A blank part is added to the same entry, keeping the rest of it.
+    const neck = host.querySelector('[data-field="neck_cm"]')!;
+    expect(neck.getAttribute('aria-label')).toBe('Add neck');
+    await act(async () => neck.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    box = figureBox();
+    expect(box.value).toBe('');
+    await act(async () => typeInto(box, '38,5'));
+    await act(async () => box.blur());
+    expect(api.saveBodySizes).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        measurement_date: '2026-10-18',
+        neck_cm: 38.5,
+        waist_cm: 81.5,
+        chest_cm: 102,
+      }),
+    );
+    expect(host.querySelector('[data-field="neck_cm"]')?.textContent).toBe('Neck38.5 cm');
+  });
+  it('rejects an impossible value beside the figure and saves nothing for an empty or unchanged box', async () => {
+    unit = 'lb';
+    await render([row('2026-10-25', { waist_cm: 81.28 })]);
+    await act(async () => pick('chest_cm'));
+    await act(async () => typeInto(figureBox(), '0'));
+    await act(async () => press(figureBox(), 'Enter'));
+    expect(host.querySelector('#body-figure-error')?.textContent).toBe(
+      'Chest must be above 0 and up to 118.11 in.',
+    );
+    expect(figureBox().getAttribute('aria-invalid')).toBe('true');
+    await act(async () => press(figureBox(), 'Escape'));
+    expect(host.querySelector('#body-figure-error')).toBeNull();
+    await act(async () => pick('chest_cm'));
+    await act(async () => press(figureBox(), 'Enter'));
+    // An inch value shown rounded is not rewritten when left as it was.
+    await act(async () => pick('waist_cm'));
+    expect(figureBox().value).toBe('32');
+    await act(async () => press(figureBox(), 'Enter'));
+    expect(api.saveBodySizes).not.toHaveBeenCalled();
+  });
+  it('shows the empty figure before anything is logged and starts today’s entry from it', async () => {
+    await render([]);
+    expect(host.querySelector('.body-sizes-stepper time')?.getAttribute('datetime')).toBe(
+      localDate(),
+    );
+    expect(host.querySelectorAll('.body-figure-label.empty')).toHaveLength(12);
+    expect(host.textContent).not.toContain('Delete');
+    await act(async () => pick('hips_cm'));
+    await act(async () => typeInto(figureBox(), '95'));
+    await act(async () => press(figureBox(), 'Enter'));
+    expect(api.saveBodySizes).toHaveBeenCalledWith(
+      expect.objectContaining({ measurement_date: localDate(), hips_cm: 95, waist_cm: null }),
+    );
+    expect(button('Delete')).toBeTruthy();
+  });
+  it('sends quick figure saves one after another, so the later one keeps both changes', async () => {
+    const pending: ((value: BodySizeLog) => void)[] = [];
+    vi.mocked(api.saveBodySizes).mockImplementation(
+      (payload) =>
+        new Promise((resolve) => {
+          pending.push(() => resolve(payload));
+        }),
+    );
+    await render([row('2026-10-25', { waist_cm: 81 })]);
+    await act(async () => pick('neck_cm'));
+    await act(async () => typeInto(figureBox(), '38'));
+    await act(async () => press(figureBox(), 'Enter'));
+    await act(async () => pick('chest_cm'));
+    await act(async () => typeInto(figureBox(), '101'));
+    await act(async () => press(figureBox(), 'Enter'));
+    // The second save waits for the first.
+    expect(api.saveBodySizes).toHaveBeenCalledTimes(1);
+    await act(async () => pending[0]({} as BodySizeLog));
+    expect(api.saveBodySizes).toHaveBeenCalledTimes(2);
+    expect(api.saveBodySizes).toHaveBeenLastCalledWith(
+      expect.objectContaining({ neck_cm: 38, chest_cm: 101, waist_cm: 81 }),
+    );
+    await act(async () => pending[1]({} as BodySizeLog));
+  });
+  it('reports a failed figure save and reloads what is stored', async () => {
+    await render([row('2026-10-25', { waist_cm: 81 })]);
+    vi.mocked(api.saveBodySizes).mockRejectedValueOnce(new Error('Offline'));
+    await act(async () => pick('neck_cm'));
+    await act(async () => typeInto(figureBox(), '38'));
+    await act(async () => press(figureBox(), 'Enter'));
+    expect(host.querySelector('#body-figure-error')?.textContent).toBe('Offline');
+    expect(api.listBodySizes).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-field="neck_cm"]')?.textContent).toBe('Neck');
+  });
+  it('hides the stepper arrows for a single entry and shows a newly saved date', async () => {
+    await render([row('2026-10-20', { waist_cm: 82 })]);
+    expect(host.querySelectorAll('.body-sizes-stepper button')).toHaveLength(0);
+    await act(async () => button('Log measurements').click());
+    await act(async () => {
+      input('Date', '2026-10-01');
+      input('Hips', '95');
+    });
+    await act(async () => button('Save measurements').click());
+    const stepper = host.querySelector('.body-sizes-stepper')!;
+    expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-01');
+    expect(stepper.querySelectorAll('button')).toHaveLength(2);
+    expect(host.querySelector('[data-field="hips_cm"]')?.textContent).toBe('Hips95 cm');
+  });
+  it('switches the body outline and remembers it for the account on this device', async () => {
+    const session = {
+      user: { id: 'figure-test-user' } as User,
+      updateUser: () => undefined,
+      signOut: async () => undefined,
+      accountDeleted: async () => undefined,
+    };
+    const card = (
+      <UserContext.Provider value={session}>
+        <BodySizesCard />
+      </UserContext.Provider>
+    );
+    vi.mocked(api.listBodySizes).mockResolvedValue([row('2026-10-20', { waist_cm: 82 })]);
+    await act(async () => root.render(card));
+    const outline = () => host.querySelector('.body-figure')?.getAttribute('data-figure');
+    const choice = (name: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role=radio]')].find(
+        (item) => item.textContent === name,
+      )!;
+    expect(outline()).toBe('male');
+    expect(choice('Male').getAttribute('aria-checked')).toBe('true');
+    await act(async () => choice('Female').click());
+    expect(outline()).toBe('female');
+    expect(choice('Female').getAttribute('aria-checked')).toBe('true');
+    expect(window.localStorage.getItem('gym-logger-body-figure:figure-test-user')).toBe('female');
+    // A fresh card for the same account starts on the saved outline.
+    act(() => root.unmount());
+    root = createRoot(host);
+    await act(async () => root.render(card));
+    expect(outline()).toBe('female');
+    window.localStorage.removeItem('gym-logger-body-figure:figure-test-user');
+  });
+  it.each(['male', 'female'] as const)(
+    'locks the outline to the %s sex set on the profile',
+    async (sex) => {
+      const userId = `figure-locked-${sex}`;
+      // A different outline chosen on this device before the sex was set no longer applies.
+      window.localStorage.setItem(
+        `gym-logger-body-figure:${userId}`,
+        sex === 'male' ? 'female' : 'male',
+      );
+      const session = {
+        user: { id: userId, sex } as User,
+        updateUser: () => undefined,
+        signOut: async () => undefined,
+        accountDeleted: async () => undefined,
+      };
+      vi.mocked(api.listBodySizes).mockResolvedValue([row('2026-10-20', { waist_cm: 82 })]);
+      await act(async () =>
+        root.render(
+          <UserContext.Provider value={session}>
+            <BodySizesCard />
+          </UserContext.Provider>,
+        ),
+      );
+      expect(host.querySelector('.body-figure')?.getAttribute('data-figure')).toBe(sex);
+      expect(host.querySelector('[role=radiogroup]')).toBeNull();
+      const locked = host.querySelector('.body-sizes-figure-locked')!;
+      expect(locked.textContent).toBe(`${sex === 'male' ? 'Male' : 'Female'}, set on your profile`);
+      window.localStorage.removeItem(`gym-logger-body-figure:${userId}`);
+    },
+  );
+  it('offers to save the picked outline as the account sex until the profile has one', async () => {
+    const updateUser = vi.fn();
+    const session = {
+      user: { id: 'figure-offer-user' } as User,
+      updateUser,
+      signOut: async () => undefined,
+      accountDeleted: async () => undefined,
+    };
+    vi.mocked(api.listBodySizes).mockResolvedValue([row('2026-10-20', { waist_cm: 82 })]);
+    vi.mocked(api.updateProfile).mockResolvedValue({
+      id: 'figure-offer-user',
+      sex: 'female',
+    } as User);
+    await act(async () =>
+      root.render(
+        <UserContext.Provider value={session}>
+          <BodySizesCard />
+        </UserContext.Provider>,
+      ),
+    );
+    const choice = (name: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role=radio]')].find(
+        (item) => item.textContent === name,
+      )!;
+    const offer = () => document.querySelector<HTMLDialogElement>('dialog.profile-sex-confirm');
+
+    // Not now keeps the outline on this device without saving anything.
+    await act(async () => choice('Female').click());
+    expect(host.querySelector('.body-figure')?.getAttribute('data-figure')).toBe('female');
+    expect(offer()?.querySelector('h2')?.textContent).toBe('Save your sex as Female?');
+    await act(async () => button('Not now').click());
+    expect(offer()).toBeNull();
+    expect(api.updateProfile).not.toHaveBeenCalled();
+
+    await act(async () => choice('Male').click());
+    await act(async () => choice('Female').click());
+    await act(async () => button('Save').click());
+    expect(api.updateProfile).toHaveBeenCalledExactlyOnceWith({ sex: 'female' });
+    expect(updateUser).toHaveBeenCalledWith(expect.objectContaining({ sex: 'female' }));
+    expect(offer()).toBeNull();
+    window.localStorage.removeItem('gym-logger-body-figure:figure-offer-user');
   });
   it('changing the date loads that dates measurements instead of overwriting from another day', async () => {
     await render([row('2026-10-20', { waist_cm: 82 }), row('2026-10-19', { chest_cm: 100 })]);

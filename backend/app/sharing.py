@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple, get_args
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, case, delete, exists, func, or_, select
@@ -33,6 +33,8 @@ from sqlalchemy.orm import Session, selectinload
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
+from .body_sizes import PREFIX as BODY_SIZES_PREFIX
+from .body_sizes import BodySizeLog
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
@@ -49,14 +51,18 @@ from .models import (
     ProfileSharing,
     TrainingWorkout,
     User,
+    UserSetting,
     WorkoutCategory,
     WorkoutMovement,
+    WorkoutPhoto,
     WorkoutReaction,
     movement_machine_photos,
     utc_now,
 )
 from .photo_storage import profile_photo_path
 from .presence import FriendPresence, hub, presence_by_member
+from .profile_sex import Sex, known_sex
+from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
     HeatmapDay,
@@ -99,6 +105,7 @@ class SharingChoices(BaseModel):
     visibility: Visibility = PRIVATE
     share_notes: bool = False
     share_body_weight: bool = False
+    share_body_sizes: bool = False
     share_goals: bool = False
     share_machine_photos: bool = False
     share_online_status: bool = True
@@ -112,6 +119,7 @@ class SharingRead(SharingChoices):
 class SharedContent(BaseModel):
     notes: bool
     body_weight: bool
+    body_sizes: bool = False
     goals: bool
     machine_photos: bool
 
@@ -120,6 +128,8 @@ class SharedProfileSummary(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    # Shown only to those who can view the profile.
+    sex: Sex | None = None
     member_since: datetime
     # Private profiles are returned only to their owner.
     visibility: Visibility
@@ -164,6 +174,8 @@ class SharedBodyWeightGoal(BaseModel):
     target_date: date
     start_weight_kg: float
     target_weight_kg: float
+    maintenance_min_kg: float | None = None
+    maintenance_max_kg: float | None = None
 
 
 class SharedGoals(BaseModel):
@@ -206,6 +218,8 @@ class SharedConsistencyRead(BaseModel):
 class SharedProfileRead(SharedProfileSummary):
     # None when the profile cannot be viewed or does not share that part.
     body_weight: list[SharedBodyMeasurement] | None = None
+    # Newest first, without the ankle, which the app no longer shows.
+    body_sizes: list[BodySizeLog] | None = None
     goals: SharedGoals | None = None
     cardio_sessions: list[SharedCardioSession] | None = None
     cardio_total: int | None = None
@@ -282,6 +296,28 @@ class FriendFeedRead(BaseModel):
     with_sessions: int
 
 
+class TimelineMember(BaseModel):
+    id: str
+    display_name: str
+    profile_photo_url: str | None
+    is_you: bool = False
+
+
+class TimelineItem(BaseModel):
+    member: TimelineMember
+    workout: TrainingWorkoutRead
+    reactions: WorkoutReactions
+    # Weight and reps records set in the workout, as counted on the member's history.
+    record_count: int = 0
+
+
+class TimelineRead(BaseModel):
+    """Social's feed: your workouts and your friends', newest first, a page at a time."""
+
+    items: list[TimelineItem]
+    has_more: bool = False
+
+
 class FriendLatest(BaseModel):
     workout: TrainingWorkoutRead
     reactions: WorkoutReactions
@@ -338,6 +374,7 @@ def sharing_choices(db: Session, user_id: str) -> ProfileSharing:
         visibility=PRIVATE,
         share_notes=False,
         share_body_weight=False,
+        share_body_sizes=False,
         share_goals=False,
         share_machine_photos=False,
         share_online_status=True,
@@ -529,6 +566,7 @@ def profile_summary(
         id=member.id,
         display_name=member.display_name,
         profile_photo_url=photo_url(member),
+        sex=known_sex(member.sex) if viewable else None,
         member_since=as_utc(member.created_at),
         visibility=sharing.visibility,
         is_you=member.id == viewer.id,
@@ -544,6 +582,7 @@ def profile_summary(
             SharedContent(
                 notes=sharing.share_notes,
                 body_weight=sharing.share_body_weight,
+                body_sizes=sharing.share_body_sizes,
                 goals=sharing.share_goals,
                 machine_photos=sharing.share_machine_photos,
             )
@@ -570,6 +609,11 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
     shared = TrainingWorkoutRead.model_validate(workout)
     if not sharing.share_notes:
         shared.notes = None
+    # Photos of the session are part of the workout: whoever can see it sees them.
+    for photo in shared.photos:
+        base = f"/api/sharing/profiles/{sharing.user_id}/workout-photos/{photo.id}"
+        photo.thumbnail_url = f"{base}?variant=thumbnail"
+        photo.full_url = f"{base}?variant=full"
     for movement in shared.movements:
         movement.exercise.is_favorite = False
         if sharing.share_machine_photos:
@@ -581,6 +625,8 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
             movement.notes = None
             movement.machine_settings = []
         for item in movement.sets:
+            if not sharing.share_machine_photos:
+                item.machine_photo_id = None
             if not sharing.share_notes:
                 item.notes = None
             if not sharing.share_body_weight:
@@ -671,6 +717,25 @@ def pending_request_count(db: Session, user_id: str) -> int:
         )
         or 0
     )
+
+
+def shared_body_sizes(db: Session, user_id: str) -> list[BodySizeLog]:
+    """The member's tape measurements, newest first, leaving out days with only an ankle."""
+    rows = db.scalars(
+        select(UserSetting.value)
+        .where(UserSetting.user_id == user_id, UserSetting.key.startswith(BODY_SIZES_PREFIX))
+        .order_by(UserSetting.key.desc())
+    )
+    logs = [BodySizeLog.model_validate_json(value) for value in rows]
+    return [
+        log.model_copy(update={"ankle_cm": None})
+        for log in logs
+        if any(
+            value is not None
+            for key, value in log.model_dump().items()
+            if key not in ("measurement_date", "ankle_cm")
+        )
+    ]
 
 
 def sharing_read(db: Session, sharing: ProfileSharing) -> SharingRead:
@@ -802,6 +867,8 @@ def shared_consistency(db: Session, user_id: str) -> SharedConsistencyRead:
         db.scalars(
             select(TrainingWorkout)
             .where(TrainingWorkout.user_id == user_id, TrainingWorkout.is_sample.is_(False))
+            # Within a day, match Home's order so a mixed day's colours sit in the same places.
+            .order_by(TrainingWorkout.workout_date, TrainingWorkout.created_at.desc())
             .options(*workout_options())
         )
     )
@@ -856,6 +923,7 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
     return SharedProfileRead(
         **summary.model_dump(),
         body_weight=body_weight,
+        body_sizes=shared_body_sizes(db, member.id) if sharing.share_body_sizes else None,
         goals=shared_goals(db, member.id) if sharing.share_goals else None,
         # Cardio is shared with workouts; its notes still follow the notes choice.
         cardio_sessions=cardio.sessions,
@@ -934,15 +1002,31 @@ def list_shared_workouts(
         db.scalars(
             select(PersonalRecord)
             .where(PersonalRecord.workout_id.in_([workout.id for workout in workouts]))
-            .options(selectinload(PersonalRecord.exercise))
+            .options(
+                selectinload(PersonalRecord.exercise), selectinload(PersonalRecord.workout_set)
+            )
         )
         if workouts
         else []
     )
+    bodyweights = BodyweightHistory(db, member.id) if sharing.share_body_weight else None
     return SharedWorkoutPage(
         total=total,
         workouts=[shared_workout(workout, sharing) for workout in workouts],
-        personal_records=[PersonalRecordRead.model_validate(record) for record in records],
+        personal_records=[
+            PersonalRecordRead.model_validate(record).model_copy(
+                update={
+                    "bodyweight_kg": bodyweights.on(
+                        record.achieved_date, record.workout_set.bodyweight_kg
+                    )
+                    if bodyweights
+                    else None
+                }
+            )
+            for record in records
+            if sharing.share_body_weight
+            or record.record_type != PersonalRecordType.RELATIVE_STRENGTH
+        ],
         reactions=reaction_summaries(db, user.id, [workout.id for workout in workouts]),
     )
 
@@ -1045,6 +1129,42 @@ def get_shared_machine_photo(
     return FileResponse(
         path, media_type=photo.media_type, headers={"Cache-Control": "private, no-cache"}
     )
+
+
+@sharing_router.get("/profiles/{user_id}/workout-photos/{photo_id}")
+def get_shared_workout_photo(
+    user_id: str,
+    photo_id: str,
+    request: Request,
+    user: CurrentUser,
+    db: Db,
+    settings: AppSettings,
+    variant: Annotated[str, Query(pattern="^(thumbnail|full)$")] = "full",
+) -> Response:
+    member, _sharing = viewable_member(db, user, user_id)
+    photo = db.scalar(
+        select(WorkoutPhoto)
+        .join(TrainingWorkout, TrainingWorkout.id == WorkoutPhoto.workout_id)
+        .where(
+            WorkoutPhoto.id == photo_id,
+            WorkoutPhoto.user_id == member.id,
+            TrainingWorkout.user_id == member.id,
+            TrainingWorkout.is_sample.is_(False),
+        )
+    )
+    if photo is None:
+        raise api_error(404, "workout_photo_not_found", "That workout photo is not shared.")
+    filename = photo.thumbnail_filename if variant == "thumbnail" else photo.full_filename
+    root = settings.machine_photos_dir.resolve()
+    path = (root / filename).resolve()
+    if root not in path.parents or not path.is_file():
+        raise api_error(404, "workout_photo_not_found", "That workout photo is not shared.")
+    # Checked again on every use, so it disappears as soon as the owner stops sharing. A stored
+    # photo never changes, so a browser that already holds it is told so instead of sent it again.
+    headers = {"Cache-Control": "private, no-cache", "ETag": f'"{photo.id}-{variant}"'}
+    if headers["ETag"] in request.headers.get("if-none-match", ""):
+        return Response(status_code=304, headers=headers)
+    return FileResponse(path, media_type=photo.media_type, headers=headers)
 
 
 def accept_request(friendship: Friendship) -> None:
@@ -1239,6 +1359,85 @@ def friend_feed(
                 reactions=reactions[workout.id],
             )
             for workout, member, sharing in rows
+        ],
+    )
+
+
+@sharing_router.get("/timeline", response_model=TimelineRead)
+def workout_timeline(
+    user: CurrentUser,
+    db: Db,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=MAX_WORKOUT_PAGE)] = 10,
+) -> TimelineRead:
+    """Social's feed: every shared workout by you and your friends, newest first."""
+    require_sharing(db, user)
+    newest_first = (
+        TrainingWorkout.workout_date.desc(),
+        TrainingWorkout.created_at.desc(),
+        TrainingWorkout.id.desc(),
+    )
+    rows = db.execute(
+        select(TrainingWorkout, User)
+        .join(User, User.id == TrainingWorkout.user_id)
+        .where(
+            or_(
+                TrainingWorkout.user_id == user.id,
+                TrainingWorkout.user_id.in_(shared_friend_ids(db, user.id)),
+            ),
+            TrainingWorkout.is_sample.is_(False),
+        )
+        .options(*workout_options())
+        .order_by(*newest_first)
+        .offset(offset)
+        # One more than the page, to know whether another page follows.
+        .limit(limit + 1)
+    ).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    workout_ids = [workout.id for workout, _ in rows]
+    sharings = {
+        sharing.user_id: sharing
+        for sharing in db.scalars(
+            select(ProfileSharing).where(
+                ProfileSharing.user_id.in_({member.id for _, member in rows})
+            )
+        )
+    }
+    reactions = reaction_summaries(db, user.id, workout_ids)
+    records = (
+        dict(
+            db.execute(
+                select(PersonalRecord.workout_id, func.count())
+                .where(
+                    PersonalRecord.workout_id.in_(workout_ids),
+                    PersonalRecord.record_type.in_(
+                        (PersonalRecordType.WEIGHT, PersonalRecordType.REPS_AT_WEIGHT)
+                    ),
+                )
+                .group_by(PersonalRecord.workout_id)
+            ).all()
+        )
+        if workout_ids
+        else {}
+    )
+    return TimelineRead(
+        has_more=has_more,
+        items=[
+            TimelineItem(
+                member=TimelineMember(
+                    id=member.id,
+                    display_name=member.display_name,
+                    profile_photo_url=photo_url(member),
+                    is_you=member.id == user.id,
+                ),
+                workout=shared_workout(
+                    workout, sharings.get(member.id) or sharing_choices(db, member.id)
+                ),
+                reactions=reactions[workout.id],
+                record_count=records.get(workout.id, 0),
+            )
+            for workout, member in rows
         ],
     )
 

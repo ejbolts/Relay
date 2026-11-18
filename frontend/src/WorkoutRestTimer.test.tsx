@@ -28,6 +28,20 @@ describe('workout header time', () => {
     expect(paused).toContain('aria-label="Resume workout"');
   });
 
+  it('makes the live time a button that opens its correction when one is offered', () => {
+    const markup = renderToStaticMarkup(
+      <WorkoutHeaderMeta
+        durationLabel="Live 12:04"
+        onTogglePause={() => {}}
+        onEditTime={() => {}}
+      />,
+    );
+    expect(markup).toContain(
+      '<button type="button" class="workout-header-duration workout-header-time-button" aria-label="Correct workout time, Live 12:04">Live 12:04</button>',
+    );
+    expect(markup).toContain('aria-label="Pause workout"');
+  });
+
   it('marks a paused workout beside its frozen time', () => {
     const markup = renderToStaticMarkup(<WorkoutHeaderMeta durationLabel="28:14" paused />);
     expect(markup).toContain('class="workout-header-meta is-paused"');

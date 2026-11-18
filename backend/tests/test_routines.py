@@ -156,7 +156,8 @@ def test_capture_only_copies_planned_fields_and_activation_drives_workout_sugges
     revision = client.get("/api/workouts/revision").json()["revision"]
     assert (
         client.post(
-            f"/api/routines/{routine['id']}/use", json={"start_date": "2026-10-29"}
+            f"/api/routines/{routine['id']}/use",
+            json={"start_date": "2026-10-29", "progression": "calendar"},
         ).status_code
         == 200
     )

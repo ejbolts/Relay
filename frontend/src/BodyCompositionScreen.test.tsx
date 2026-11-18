@@ -46,13 +46,15 @@ describe('BodyCompositionScreen', () => {
     expect(markup).toContain('Set a goal');
     expect(markup).not.toContain('aria-label="Add bodyweight"');
     expect(markup).toContain('Log weigh-in');
+    // Logging comes before the chart, so it needs no scrolling.
+    expect(markup.indexOf('Log weigh-in')).toBeLessThan(markup.indexOf('body-trend-panel'));
     expect(markup).toContain('<h1>Body</h1>');
     expect(markup).toContain('role="tab" aria-selected="true">Daily</button>');
     expect(markup).toContain('role="tab" aria-selected="false">Avg Week</button>');
     expect(markup).toContain('role="tab" aria-selected="false">Avg Monthly</button>');
   });
 
-  it('shows the configured bodyweight trend statistic and duration as dropdowns', () => {
+  it('uses the saved trend statistic for history without a trend summary', () => {
     const measurements: BodyMeasurement[] = [
       {
         id: 'latest',
@@ -84,13 +86,9 @@ describe('BodyCompositionScreen', () => {
       />,
     );
 
-    expect(markup).toContain('aria-label="Bodyweight trend statistic"');
-    expect(markup).toContain('<option value="median" selected="">Median</option>');
-    expect(markup).toContain('aria-label="Bodyweight trend duration"');
-    expect(markup).toContain('<option value="14d" selected="">14 days</option>');
-    expect(markup).toContain('<option value="6m">6 months</option>');
-    expect(markup).toContain('<option value="1y">1 year</option>');
-    expect(markup).toContain('<strong>84.0 kg</strong>');
+    expect(markup).not.toContain('Bodyweight trend statistic');
+    expect(markup).not.toContain('Bodyweight trend duration');
+    expect(markup).not.toContain('body-trend-stat');
     expect(markup).toContain('role="tab" aria-selected="false">Median Week</button>');
     expect(markup).toContain('role="tab" aria-selected="false">Median Monthly</button>');
   });

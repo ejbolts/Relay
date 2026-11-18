@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS, reactionEmoji } from './friendFeedData';
+import { motionReduced } from './motion';
+import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import type { WorkoutComment, WorkoutReactions } from './types';
@@ -11,11 +13,20 @@ export function WorkoutComments({
   onOpenMember,
   onCountChange,
   active = true,
+  replyTo,
+  focusComment,
+  onLayoutChange,
 }: {
   workoutId: string;
+  /** A comment to reply to once it loads, such as one opened from a notification. */
+  replyTo?: string;
+  /** A comment to find, scroll to and highlight, such as one opened from a notification. */
+  focusComment?: string;
   onOpenMember?: (person: WorkoutComment['author']) => void;
   onCountChange: (count: number, summary?: WorkoutReactions) => void;
   active?: boolean;
+  /** Let an enclosing card own the height glide, including asynchronous comment loads. */
+  onLayoutChange?: (key: string) => void;
 }) {
   const [items, setItems] = useState<WorkoutComment[]>([]);
   const [next, setNext] = useState<number | null>(null);
@@ -28,19 +39,44 @@ export function WorkoutComments({
   const [picker, setPicker] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<WorkoutComment | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const focused = useRef<HTMLElement>(null);
+  const wanted = replyTo ?? focusComment;
+  const section = useRef<HTMLElement>(null);
+  const layoutKey = JSON.stringify([
+    active,
+    loading,
+    items.map((item) => [item.id, item.body, item.reactions.counts]),
+    picker,
+    reply?.id,
+    editing?.id,
+    next,
+    error,
+  ]);
+  useHeightAnimation(section, onLayoutChange ? '' : layoutKey);
+  useLayoutEffect(() => onLayoutChange?.(layoutKey), [layoutKey, onLayoutChange]);
   const countRef = useRef(onCountChange);
   countRef.current = onCountChange;
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    api.sharing
-      .comments(workoutId)
-      .then((page) => {
+    (async () => {
+      let page = await api.sharing.comments(workoutId);
+      const rows = [...page.items];
+      // Load further pages only until the comment being replied to or opened appears.
+      while (wanted && page.next_offset !== null && !rows.some((row) => row.id === wanted)) {
+        page = await api.sharing.comments(workoutId, page.next_offset);
+        rows.push(...page.items);
+      }
+      return { page, rows };
+    })()
+      .then(({ page, rows }) => {
         if (cancelled) return;
-        setItems(page.items);
+        setItems(rows);
         setNext(page.next_offset);
         countRef.current(page.total, page.reactions);
+        const target = replyTo ? rows.find((row) => row.id === replyTo) : undefined;
+        if (target) setReply(target);
       })
       .catch((reason) => {
         if (!cancelled) setError(authErrorMessage(reason));
@@ -51,7 +87,23 @@ export function WorkoutComments({
     return () => {
       cancelled = true;
     };
-  }, [workoutId, active]);
+  }, [workoutId, active, replyTo, wanted]);
+
+  useEffect(() => {
+    if (!loading && reply && reply.id === replyTo) input.current?.focus();
+  }, [loading, reply, replyTo]);
+
+  useEffect(() => {
+    if (loading || !focusComment) return;
+    // After the card that holds the thread has scrolled into view.
+    const frame = requestAnimationFrame(() =>
+      focused.current?.scrollIntoView?.({
+        block: 'center',
+        behavior: motionReduced() ? 'auto' : 'smooth',
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [loading, focusComment]);
 
   async function refresh() {
     // Retain all loaded roots after mutations.
@@ -93,7 +145,11 @@ export function WorkoutComments({
   }
   function renderComment(item: WorkoutComment) {
     return (
-      <article key={item.id} className="workout-comment">
+      <article
+        key={item.id}
+        ref={item.id === focusComment ? focused : undefined}
+        className={`workout-comment${item.id === focusComment ? ' is-highlighted' : ''}`}
+      >
         <ProfileAvatar
           className="shared-profile-avatar small"
           user={{ ...item.author, username: '' }}
@@ -214,7 +270,7 @@ export function WorkoutComments({
     );
   }
   return (
-    <section className="workout-comments" aria-label="Workout comments">
+    <section ref={section} className="workout-comments" aria-label="Workout comments">
       {deleting && (
         <PopupDialog title="Delete comment?" onClose={() => !busy && setDeleting(null)}>
           <p>

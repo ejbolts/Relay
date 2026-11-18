@@ -4,6 +4,7 @@ import { App } from './App';
 import { AppTabBar } from './AppTabBar';
 import { TodayScreen, type TodayScreenProps } from './TodayScreen';
 import { useHomeLayout } from './useHomeLayout';
+import { defaultHomeLayout, updateHomeSectionSettings, type HomeLayout } from './homeLayout';
 import type {
   DashboardData,
   PersonalRecord,
@@ -62,14 +63,28 @@ function renderSignedIn(hash: string, user: User) {
   );
 }
 
-function TodayPreview(props: Omit<TodayScreenProps, 'home'>) {
+function TodayPreview({
+  layout,
+  editing = false,
+  ...props
+}: Omit<TodayScreenProps, 'home'> & {
+  layout?: HomeLayout;
+  editing?: boolean;
+}) {
   const home = useHomeLayout();
-  return <TodayScreen home={home} {...props} />;
+  return (
+    <TodayScreen
+      home={{ ...home, layout: layout ?? home.layout, draft: layout ?? home.draft, editing }}
+      {...props}
+    />
+  );
 }
 
 function renderToday(
   overrides: Partial<Parameters<typeof TodayScreen>[0]> = {},
   weightUnit: WeightUnit = 'kg',
+  layout?: HomeLayout,
+  editing = false,
 ) {
   return renderToStaticMarkup(
     <TrainingPreferencesContext.Provider
@@ -85,6 +100,8 @@ function renderToday(
       }}
     >
       <TodayPreview
+        layout={layout}
+        editing={editing}
         data={
           {
             workouts_this_week: 4,
@@ -132,7 +149,6 @@ function renderToday(
         onSaveBodyweight={vi.fn()}
         onStartTemplate={vi.fn()}
         onStartEmpty={vi.fn()}
-        onResumeWorkout={vi.fn()}
         onOpenHistory={vi.fn()}
         onOpenProgress={vi.fn()}
         onOpenCardio={vi.fn()}
@@ -294,8 +310,8 @@ describe('App startup', () => {
       const markup = renderSignedIn(hash, account);
 
       expect(markup).toContain('<h1>Social</h1>');
-      expect(markup).toContain('friends-loading-skeleton');
-      expect(markup).toContain('aria-label="Loading your friends"');
+      expect(markup).toContain('feed-loading-skeleton');
+      expect(markup).toContain('aria-label="Loading the feed"');
       expect(markup).not.toContain('today-loading-skeleton');
       expect(markup).not.toContain('Loading your training summary');
       expect(markup).toContain('aria-label="Main navigation"');
@@ -321,6 +337,67 @@ describe('App startup', () => {
     expect(markup).toContain('aria-label="Video logger"');
     expect(markup).toContain('aria-label="Settings"');
     expect(markup).not.toContain('live-workout-card');
+  });
+
+  it('uses the same eight weeks for the activity bars and averages, including the current week', () => {
+    const workouts: TrackedWorkout[] = ['2026-08-03', '2026-09-21', '2026-10-05'].map((date) => ({
+      id: date,
+      name: 'Sample workout',
+      workout_date: date,
+      category: 'upper',
+      notes: null,
+      duration_minutes: 30,
+      start_time: null,
+      end_time: null,
+      is_sample: true,
+      created_at: `${date}T10:00:00Z`,
+      updated_at: `${date}T10:00:00Z`,
+      movements: [],
+    }));
+    const markup = renderToday({ workouts });
+    const charts = [...markup.matchAll(/class="pulse-sparkbars"[^>]*>(.*?)<\/div>/g)];
+
+    expect(charts).toHaveLength(2);
+    expect(charts[0][0]).toContain('aria-label="Workouts per week, last 8 weeks"');
+    expect(charts[1][0]).toContain('aria-label="Cardio sessions per week, last 8 weeks"');
+    expect([...charts[0][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual([
+      8, 8, 8, 8, 8, 100, 8, 100,
+    ]);
+    expect([...charts[1][1].matchAll(/height:(\d+)%/g)].map((match) => Number(match[1]))).toEqual(
+      Array(8).fill(8),
+    );
+    expect(markup).toContain('Workouts</span><strong>1</strong><em>8-wk avg 0.3</em>');
+    expect(markup).toContain('Cardio sessions</span><strong>0</strong><em>8-wk avg 0.0</em>');
+    expect(markup).toContain('Last 12 weeks');
+  });
+
+  it.each([4, 8, 12] as const)(
+    'uses the saved %i-week workout window independently of cardio',
+    (weeks) => {
+      const layout = updateHomeSectionSettings(
+        updateHomeSectionSettings(defaultHomeLayout(), 'workouts', { weeks }),
+        'cardio_sessions',
+        { weeks: 12 },
+      );
+      const markup = renderToday({}, 'kg', layout);
+      const charts = [...markup.matchAll(/class="pulse-sparkbars"[^>]*>(.*?)<\/div>/g)];
+      expect(charts[0][0]).toContain(`Workouts per week, last ${weeks} weeks`);
+      expect([...charts[0][1].matchAll(/height:/g)]).toHaveLength(weeks);
+      expect(markup).toContain(`${weeks}-wk avg 0.0`);
+      expect(charts[1][0]).toContain('Cardio sessions per week, last 12 weeks');
+      expect([...charts[1][1].matchAll(/height:/g)]).toHaveLength(12);
+      expect(markup).toContain('12-wk avg 0.0');
+    },
+  );
+
+  it('offers a dedicated activity customiser only while editing Home', () => {
+    const normal = renderToday();
+    expect(normal).not.toContain('aria-label="Customise Workouts"');
+    expect(normal).not.toContain('aria-label="Customise Cardio sessions"');
+    const editing = renderToday({}, 'kg', defaultHomeLayout(), true);
+    expect(editing).toContain('aria-label="Customise Workouts"');
+    expect(editing).toContain('aria-label="Customise Cardio sessions"');
+    expect(editing).toContain('aria-label="Customise Cardio zone goals"');
   });
 
   it('shows each personal zone goal using only its qualifying minutes', () => {
@@ -375,14 +452,59 @@ describe('App startup', () => {
     expect(Math.max(...labels)).toBeLessThan(unit === 'kg' ? 90 : 200);
   });
 
-  it('replaces the recommendation with a resumable live workout', () => {
+  it('replaces the recommendation while a workout is live', () => {
     const markup = renderToday({ workoutStartedAt: Date.now() - 65_000, todayBodyweight: 84.1 });
 
-    expect(markup).toContain('live-workout-card');
-    expect(markup).toContain('Workout live');
-    expect(markup).toContain('1:05');
-    expect(markup).toContain('Saved today · 84.1 kg');
+    expect(markup).not.toContain('live-workout-card');
+    expect(markup).toContain('aria-label="Saved today: 84.1 kg"');
     expect(markup).not.toContain('next-session-title');
+  });
+
+  it('offers to resume the running workout where Up next sits', () => {
+    const markup = renderToday({
+      workoutStartedAt: Date.now() - 65_000,
+      liveWorkoutName: 'Lower body workout',
+      onResumeWorkout: vi.fn(),
+    });
+
+    expect(markup).toContain('live-session-title');
+    expect(markup).toContain('Lower body workout');
+    expect(markup).toContain('Resume');
+    // No second way to start a workout while one is running.
+    expect(markup).not.toContain('next-session-title');
+    expect(markup).not.toContain('Start workout');
+  });
+
+  it('shows the last check-in before today, independently finding the prior body-fat value', () => {
+    const measurements = [
+      { measurement_date: '2026-10-08', weight_kg: 90, body_fat_pct: 20 },
+      { measurement_date: '2026-10-07', weight_kg: 84.1, body_fat_pct: 14 },
+      { measurement_date: '2026-10-06', weight_kg: 84.2, body_fat_pct: null },
+      { measurement_date: '2026-10-05', weight_kg: 84.5, body_fat_pct: 14.2 },
+    ].map((item, index) => ({
+      ...item,
+      id: String(index),
+      notes: null,
+      is_sample: true,
+      created_at: `${item.measurement_date}T00:00:00Z`,
+    }));
+    const markup = renderToday({
+      today: '2026-10-07',
+      measurements,
+      todayBodyweight: 84.1,
+      todayBodyFat: 14,
+      onSaveBodyFat: vi.fn(),
+    });
+    expect(markup).toContain('aria-label="Prior: 84.2 kg; Saved today: 84.1 kg"');
+    expect(markup).toContain('aria-label="Prior: 14.2%; Saved today: 14.0%"');
+    expect(markup).not.toContain('Prior: 90.0 kg');
+    const firstCheckIn = renderToday({
+      today: '2026-10-07',
+      measurements: measurements.filter((item) => item.measurement_date >= '2026-10-07'),
+      todayBodyweight: 84.1,
+    });
+    expect(firstCheckIn).toContain('aria-label="Saved today: 84.1 kg"');
+    expect(firstCheckIn).not.toContain('Prior:');
   });
 
   it('marks the active tab and shows live time on the Start button', () => {
@@ -437,7 +559,7 @@ describe('App startup', () => {
   });
 
   it.each([
-    ['settings', 'Settings', 'Preferences • privacy • data'],
+    ['settings', 'Settings', null],
     ['videos', 'Videos', 'Workout clips • uploads'],
   ])('renders the overlay header on the %s screen', (tab, title, subtitle) => {
     stubWindow(`#${tab}`);
@@ -448,7 +570,9 @@ describe('App startup', () => {
     expect(markup).toContain('with-overlay-header');
     expect(markup).toContain('aria-label="Go back"');
     expect(markup).toContain(`<strong>${title}</strong>`);
-    expect(markup).toContain(`<span>${subtitle}</span>`);
+    // Settings needs no line under its title; its sections say what is inside.
+    if (subtitle) expect(markup).toContain(`<span>${subtitle}</span>`);
+    else expect(markup).not.toContain('Preferences');
   });
 
   it.each(['dashboard', 'history', 'progress', 'cardio', 'body'])(

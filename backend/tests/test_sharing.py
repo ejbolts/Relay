@@ -14,10 +14,38 @@ from app.models import Friendship, PersonalRecord, ProfileSharing, TrainingWorko
 NOTHING_EXTRA = {
     "share_notes": False,
     "share_body_weight": False,
+    "share_body_sizes": False,
     "share_goals": False,
     "share_machine_photos": False,
 }
 EVERYTHING = {key: True for key in NOTHING_EXTRA}
+
+
+def test_relative_records_cannot_reveal_unshared_bodyweight(client, other_client):
+    from test_personal_records import exercise, log
+
+    share(client, **NOTHING_EXTRA)
+    share(other_client)
+    bench = exercise(client)
+    log(client, bench["id"], [{"weight_kg": 100, "bodyweight_kg": 100, "reps": 8}])
+    log(client, bench["id"], [{"weight_kg": 105, "bodyweight_kg": 80, "reps": 8}], "2026-01-15")
+    path = f"/api/sharing/profiles/{client.user['id']}/workouts"
+    page = other_client.get(path).json()
+    assert {row["record_type"] for row in page["personal_records"]} == {"weight"}
+    assert all(row["bodyweight_kg"] is None for row in page["personal_records"])
+    assert all(
+        item["bodyweight_kg"] is None
+        for workout in page["workouts"]
+        for movement in workout["movements"]
+        for item in movement["sets"]
+    )
+    share(client, **{**NOTHING_EXTRA, "share_body_weight": True})
+    page = other_client.get(path).json()
+    relative = next(
+        row for row in page["personal_records"] if row["record_type"] == "relative_strength"
+    )
+    assert relative["value"] == 1.3125
+    assert relative["bodyweight_kg"] == 80
 
 
 def share(test_client: TestClient, visibility: str = "public", **choices: bool) -> dict:
@@ -152,6 +180,55 @@ def test_shared_consistency_uses_owner_history_and_respects_access(client, other
     # Going private hides the profile entirely, including the calendar.
     share(other_client, "private")
     assert profile(client, other_client).status_code == 404
+
+
+def test_shared_calendar_orders_mixed_day_colours_like_home(client, other_client):
+    share(other_client)
+    exercise = named(other_client, "Barbell Bench Press")["id"]
+    for category in ["push", "pull", "lower"]:
+        response = other_client.post(
+            "/api/workouts",
+            json={
+                "name": f"{category} training",
+                "workout_date": date.today().isoformat(),
+                "category": category,
+                "movements": [{"exercise_id": exercise, "sets": [{"reps": 8, "weight_kg": 40}]}],
+            },
+        )
+        assert response.status_code == 201, response.text
+    # Several days so the sort must keep dates ascending, as before.
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    other_client.post(
+        "/api/workouts",
+        json={
+            "name": "Earlier",
+            "workout_date": yesterday,
+            "category": "push",
+            "movements": [{"exercise_id": exercise, "sets": [{"reps": 8, "weight_kg": 40}]}],
+        },
+    )
+    with SessionLocal() as db:
+        # Logged in order, so Home lists the newest first: the reverse of insertion order.
+        rows = db.scalars(
+            select(TrainingWorkout)
+            .where(TrainingWorkout.user_id == other_client.user["id"])
+            .order_by(TrainingWorkout.id)
+        ).all()
+        rows = sorted(rows, key=lambda row: row.created_at)
+        for index, row in enumerate(rows):
+            row.created_at = datetime(2026, 1, 1, 9, 0) + timedelta(minutes=10 * index)
+        db.commit()
+
+    shared = profile(client, other_client).json()["consistency"]["heatmap"]
+    home = {
+        day["workout_date"]: day for day in other_client.get("/api/dashboard").json()["heatmap"]
+    }
+    assert [day["workout_date"] for day in shared] == [yesterday, date.today().isoformat()]
+    for day in shared:
+        assert [item["id"] for item in day["workout_types"]] == [
+            item["id"] for item in home[day["workout_date"]]["workout_types"]
+        ]
+    assert [item["id"] for item in shared[-1]["workout_types"]] == ["lower", "pull", "push"]
 
 
 def detailed_workout(exercise_id: str, photo_id: str, name: str = "Push day") -> dict:
@@ -464,13 +541,14 @@ def test_shared_profile_includes_only_the_chosen_parts(client, other_client):
         ).all()
     assert view["record_count"] == len(records) > 0
     assert view["shares"] == {
-        key: False for key in ("notes", "body_weight", "goals", "machine_photos")
+        key: False for key in ("notes", "body_weight", "body_sizes", "goals", "machine_photos")
     }
     # The profile photo is always shared.
     assert other_client.get(view["profile_photo_url"]).headers["cache-control"] == (
         "private, no-cache"
     )
     assert view["body_weight"] is None and view["goals"] is None
+    assert view["body_sizes"] is None
     # Cardio is shared with workouts, without its notes unless notes are shared.
     [cardio] = view["cardio_sessions"]
     assert cardio["activity_type"] == "Bike" and cardio["duration_minutes"] == 40
@@ -760,3 +838,37 @@ def test_friends_only_search_request_and_notification_accept(client, other_clien
     other_client.post(f"/api/sharing/friends/{target}")
     assert client.delete(f"/api/sharing/friends/{requester}").status_code == 204
     assert client.get("/api/sharing/notifications").json()["requests"] == []
+
+
+def test_body_measurements_are_shared_only_when_chosen(client, other_client):
+    share(client, "public")
+    share(other_client, "public")
+    entries = [
+        {"measurement_date": "2026-10-20", "waist_cm": 82, "ankle_cm": 23},
+        {"measurement_date": "2026-10-27", "waist_cm": 81, "chest_cm": 102},
+        # A day with only an ankle has nothing left to show once the ankle is left out.
+        {"measurement_date": "2026-10-13", "ankle_cm": 23},
+    ]
+    for entry in entries:
+        assert client.put("/api/body-sizes", json=entry).status_code == 200
+    assert profile(other_client, client).json()["body_sizes"] is None
+
+    share(client, "public", share_body_sizes=True)
+    view = profile(other_client, client).json()
+    assert view["shares"]["body_sizes"] is True
+    assert [(day["measurement_date"], day["waist_cm"]) for day in view["body_sizes"]] == [
+        ("2026-10-27", 81),
+        ("2026-10-20", 82),
+    ]
+    assert view["body_sizes"][0]["chest_cm"] == 102
+    assert all(day["ankle_cm"] is None for day in view["body_sizes"])
+    # The owner's own log keeps the ankle it already had.
+    assert client.get("/api/body-sizes").json()[1]["ankle_cm"] == 23
+
+    # Friends-only profiles show them to friends alone; private ones to nobody.
+    share(client, "followers", share_body_sizes=True)
+    assert profile(other_client, client).json()["body_sizes"] is None
+    befriend(other_client, client)
+    assert len(profile(other_client, client).json()["body_sizes"]) == 2
+    share(client, "private", share_body_sizes=True)
+    assert profile(other_client, client).status_code == 404

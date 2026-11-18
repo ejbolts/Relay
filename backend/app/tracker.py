@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -27,11 +27,13 @@ from .account_limits import (
     load_account_limits,
     refuse,
 )
+from .active_workouts import check_repeated_finish, finish_shared_draft
 from .auth import CurrentUser, as_utc, get_current_user
 from .body_measurement_csv import export_body_measurements, import_body_measurements
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
 from .body_sizes import BodySizeLog
 from .cardio_energy import cardio_energy_periods
+from .cardio_estimates import attach_body_weights
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
 from .cardio_zones import (
     CardioPreferences,
@@ -39,6 +41,12 @@ from .cardio_zones import (
     cardio_preferences,
     classify_session,
     effective_zone,
+)
+from .client_versions import (
+    ClientVersion,
+    fields_unknown_to,
+    preserve_fields,
+    preserve_unknown_workout_fields,
 )
 from .config import Settings, get_settings
 from .database import get_db
@@ -48,6 +56,7 @@ from .exercise_merge import exercise_aliases, merge_exercise, resolve_exercise_i
 from .machine_photos import canonical_photo, merge_machine_photos
 from .machine_settings import MachineSettingsUpdate, settings_key
 from .models import (
+    ActiveWorkoutSync,
     BodyMeasurement,
     BodyWeightGoal,
     CardioSession,
@@ -59,12 +68,14 @@ from .models import (
     MachinePhoto,
     MuscleRole,
     PersonalRecord,
+    PersonalRecordType,
     SupersetGroup,
     TrainingWorkout,
     User,
     UserSetting,
     WorkoutCategory,
     WorkoutMovement,
+    WorkoutPhoto,
     WorkoutSet,
     WorkoutType,
     movement_machine_photos,
@@ -74,7 +85,9 @@ from .photo_storage import (
     delete_machine_photo_files,
     store_machine_photo,
 )
+from .presence import hub as presence_hub
 from .processing import backfill_completed_video_links
+from .relative_strength import BodyweightHistory, relative_strength
 from .tracker_csv import (
     CsvImportError,
     ImportPlan,
@@ -85,6 +98,8 @@ from .tracker_csv import (
     plan_import,
 )
 from .tracker_schemas import (
+    BlockHistoryBaselineRead,
+    BlockStatsRead,
     BodyMeasurementCreate,
     BodyMeasurementCsvImportRead,
     BodyMeasurementRead,
@@ -98,6 +113,7 @@ from .tracker_schemas import (
     CardioScreenshotRead,
     CardioSessionCreate,
     CardioSessionRead,
+    CardioWeekRead,
     CsvImportPreviewRead,
     CsvImportRead,
     CsvImportSessionRead,
@@ -112,7 +128,7 @@ from .tracker_schemas import (
     ExerciseProgressRead,
     ExerciseRead,
     ExerciseTrendPointRead,
-    FfmiProfile,
+    ExerciseUpdate,
     HeatmapDay,
     ImportBatchRead,
     ImportUndoRead,
@@ -126,9 +142,11 @@ from .tracker_schemas import (
     MuscleVolumeRead,
     PersonalRecordRead,
     ProgressPoint,
+    TrainingBlockSummaryRead,
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
     TrainingSplit,
+    TrainingSplitRead,
     TrainingTimeRead,
     TrainingWorkoutCreate,
     TrainingWorkoutRead,
@@ -140,6 +158,7 @@ from .tracker_schemas import (
     WeightRepsRead,
     WorkoutCacheRevisionRead,
     WorkoutHistorySummaryRead,
+    WorkoutPhotoRead,
     WorkoutRecommendationRead,
     WorkoutSetRead,
     WorkoutSnapshotRead,
@@ -149,6 +168,7 @@ from .tracker_schemas import (
     WorkoutTypeUpdate,
     Zone2WeekRead,
 )
+from .training_blocks import TrainingBlock, block_on, training_blocks
 from .training_metrics import (
     estimated_one_rep_max,
     get_setting,
@@ -156,19 +176,29 @@ from .training_metrics import (
     is_working_set,
     muscle_credits,
     muscle_volume,
+    normalized_weight,
+    personal_record_events,
     preferred_weight_unit,
     rebuild_personal_records,
     seed_muscle_mappings,
     set_setting,
     start_of_week,
+    workout_query,
 )
 from .training_split import (
     TRAINING_SPLIT_KEY,
     saved_training_split,
+    split_read,
     split_recommendation,
     validate_split_types,
 )
 from .training_time import training_time_totals
+from .weight_factors import normalising_factors
+from .workout_photos import (
+    MAX_PHOTOS_PER_WORKOUT,
+    delete_workout_photo_files,
+    workout_photo_files,
+)
 from .workout_types import (
     ARCHIVED_KEY,
     DEFAULT_NAMES,
@@ -188,6 +218,8 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 WORKOUT_CACHE_REVISION_KEY = "workout_cache_revision"
+# Saves report the revision their data reached, so the app can refresh without asking for it.
+WORKOUT_REVISION_HEADER = "X-Workout-Revision"
 WORKOUT_TYPE_COLORS_KEY = "workout_type_colors"
 DEFAULT_WORKOUT_TYPE_COLORS = WorkoutTypeColors(
     upper="#8b5cf6",
@@ -206,6 +238,11 @@ def workout_cache_revision(db: Session, user_id: str) -> str:
 
 def bump_workout_cache_revision(db: Session, user_id: str) -> None:
     set_setting(db, user_id, WORKOUT_CACHE_REVISION_KEY, str(uuid.uuid4()))
+
+
+def report_workout_revision(response: Response, db: Session, user_id: str) -> None:
+    # Read after the save commits: later reads can only be newer than this revision.
+    response.headers[WORKOUT_REVISION_HEADER] = workout_cache_revision(db, user_id)
 
 
 def get_owned(db: Session, model, item_id: str, user_id: str):
@@ -304,6 +341,21 @@ DEFAULT_EXERCISES = (
     ("Cable Crunch", WorkoutCategory.FULL_BODY, "Core", "Cable"),
     ("Crunch", WorkoutCategory.FULL_BODY, "Core", "Bodyweight"),
     ("Band Row", WorkoutCategory.PULL, "Mid / Upper Back", "Resistance band"),
+    # Neck work, grouped by direction: flexion (front), lateral flexion (side), extension (back).
+    ("Machine Neck Flexion", WorkoutCategory.UPPER, "Neck flexors", "Machine"),
+    ("Plate Neck Flexion", WorkoutCategory.UPPER, "Neck flexors", "Weight plate"),
+    ("Band Neck Flexion", WorkoutCategory.UPPER, "Neck flexors", "Resistance band"),
+    ("Machine Lateral Neck Flexion", WorkoutCategory.UPPER, "Lateral neck flexors", "Machine"),
+    ("Plate Lateral Neck Flexion", WorkoutCategory.UPPER, "Lateral neck flexors", "Weight plate"),
+    (
+        "Band Lateral Neck Flexion",
+        WorkoutCategory.UPPER,
+        "Lateral neck flexors",
+        "Resistance band",
+    ),
+    ("Machine Neck Extension", WorkoutCategory.UPPER, "Neck extensors", "Machine"),
+    ("Plate Neck Extension", WorkoutCategory.UPPER, "Neck extensors", "Weight plate"),
+    ("Band Neck Extension", WorkoutCategory.UPPER, "Neck extensors", "Resistance band"),
 )
 
 DEFAULT_CARDIO = (
@@ -602,6 +654,7 @@ def workout_options():
         .selectinload(WorkoutMovement.machine_photos)
         .selectinload(MachinePhoto.merged_photos),
         selectinload(TrainingWorkout.movements).selectinload(WorkoutMovement.superset_group),
+        selectinload(TrainingWorkout.photos),
     )
 
 
@@ -614,6 +667,31 @@ def load_workout(db: Session, user_id: str, workout_id: str) -> TrainingWorkout:
     if not workout:
         raise HTTPException(status_code=404, detail="Workout was not found.")
     return workout
+
+
+WORKOUT_CHANGED_ELSEWHERE = "This workout was changed on another device after you opened it here."
+
+
+def advance_workout_revision(
+    db: Session, workout: TrainingWorkout, base_revision: int | None = None
+) -> None:
+    """Record a change to the workout's content by advancing its revision.
+
+    With ``base_revision`` the change is refused (409, nothing saved) unless the workout is still
+    at the revision the editor loaded. Checking and advancing is one statement, so two saves based
+    on the same revision cannot both pass.
+    """
+    statement = (
+        update(TrainingWorkout)
+        .where(TrainingWorkout.id == workout.id)
+        .values(revision=TrainingWorkout.revision + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if base_revision is not None:
+        statement = statement.where(TrainingWorkout.revision == base_revision)
+    if db.execute(statement).rowcount != 1:
+        raise api_error(409, "workout_conflict", WORKOUT_CHANGED_ELSEWHERE)
+    db.expire(workout, ["revision"])
 
 
 def replace_workout_contents(
@@ -698,7 +776,21 @@ def replace_workout_contents(
                 }.values()
             )
         for set_index, set_payload in enumerate(movement_payload.sets):
-            movement.sets.append(WorkoutSet(order_index=set_index, **set_payload.model_dump()))
+            values = set_payload.model_dump()
+            if set_payload.machine_photo_id is not None:
+                photo = get_owned(db, MachinePhoto, set_payload.machine_photo_id, user_id)
+                canonical = canonical_photo(db, photo) if photo else None
+                if canonical is None or canonical.id not in {
+                    item.id for item in movement.machine_photos
+                }:
+                    raise HTTPException(422, "A set's machine must be pinned to its exercise.")
+                values["machine_photo_id"] = canonical.id
+            elif (
+                len(movement.machine_photos) == 1
+                and "machine_photo_id" not in set_payload.model_fields_set
+            ):
+                values["machine_photo_id"] = movement.machine_photos[0].id
+            movement.sets.append(WorkoutSet(order_index=set_index, **values))
         workout.movements.append(movement)
 
 
@@ -717,6 +809,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             "average_heart_rate_bpm": session.average_heart_rate_bpm,
             "average_power_watts": session.average_power_watts,
             "average_mets": session.average_mets,
+            "elevation_gain_m": session.elevation_gain_m,
         }
         for session in existing.values()
     }
@@ -777,6 +870,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
         )
         session.average_power_watts = manual_metrics.get("average_power_watts")
         session.average_mets = manual_metrics.get("average_mets")
+        session.elevation_gain_m = manual_metrics.get("elevation_gain_m")
         distances = [item.distance_km for item in completed_sets if item.distance_km is not None]
         speed_sets = [item for item in completed_sets if item.speed_kph is not None]
         incline_sets = [item for item in completed_sets if item.incline_percent is not None]
@@ -824,11 +918,26 @@ def sync_all_workout_cardio_sessions(db: Session, user_id: str | None = None) ->
         sync_workout_cardio_sessions(db, workout)
 
 
+HIDDEN_EXERCISES_KEY = "hidden_exercises"
+
+
+def hidden_exercise_ids(db: Session, user_id: str) -> set[str]:
+    """Exercises the account has hidden from its lists, stored with its other settings."""
+    try:
+        values = json.loads(get_setting(db, user_id, HIDDEN_EXERCISES_KEY, "[]"))
+    except ValueError:
+        return set()
+    return (
+        {value for value in values if isinstance(value, str)} if isinstance(values, list) else set()
+    )
+
+
 def exercise_read(db: Session, user_id: str, exercise: Exercise) -> ExerciseRead:
     aliases = exercise_aliases(db, user_id)
     return ExerciseRead.model_validate(exercise).model_copy(
         update={
-            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id]
+            "merged_from_ids": [old for old, target in aliases.items() if target == exercise.id],
+            "hidden": exercise.id in hidden_exercise_ids(db, user_id),
         }
     )
 
@@ -843,10 +952,12 @@ def list_exercises(
     if search:
         query = query.where(Exercise.name.ilike(f"%{search.strip()}%"))
     aliases = exercise_aliases(db, user.id)
+    hidden = hidden_exercise_ids(db, user.id)
     return [
         ExerciseRead.model_validate(item).model_copy(
             update={
-                "merged_from_ids": [old for old, target in aliases.items() if target == item.id]
+                "merged_from_ids": [old for old, target in aliases.items() if target == item.id],
+                "hidden": item.id in hidden,
             }
         )
         for item in db.scalars(query)
@@ -882,6 +993,8 @@ def save_body_measurement(
     else:
         measurement = BodyMeasurement(user_id=user.id, **payload.model_dump())
         db.add(measurement)
+    db.flush()
+    rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(measurement)
@@ -943,6 +1056,7 @@ async def import_body_measurement_csv(
         db.rollback()
         raise HTTPException(status_code=422, detail=str(error)) from error
     if summary.measurements_created or summary.measurements_updated:
+        rebuild_personal_records(db, user.id)
         bump_workout_cache_revision(db, user.id)
     db.commit()
     return BodyMeasurementCsvImportRead(**summary.__dict__)
@@ -954,6 +1068,8 @@ def delete_body_measurement(measurement_id: str, db: DbSession, user: CurrentUse
     if not measurement:
         raise HTTPException(status_code=404, detail="Body measurement was not found.")
     db.delete(measurement)
+    db.flush()
+    rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
 
@@ -1017,6 +1133,67 @@ def merge_custom_exercise(
     db.commit()
     db.refresh(target)
     return exercise_read(db, user.id, target)
+
+
+@router.patch("/exercises/{exercise_id}", response_model=ExerciseRead)
+def update_exercise(
+    exercise_id: str, payload: ExerciseUpdate, db: DbSession, user: CurrentUser
+) -> ExerciseRead:
+    """Rename or re-describe a custom exercise, or hide one from lists, keeping its history."""
+    exercise = get_owned(db, Exercise, exercise_id, user.id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise was not found.")
+    if payload.name is not None and payload.name != exercise.name:
+        if not exercise.is_custom:
+            raise HTTPException(status_code=422, detail="Only your own exercises can be renamed.")
+        name = canonical_exercise_name(payload.name)
+        if any(
+            canonical_exercise_name(other).casefold() == name.casefold()
+            for other in db.scalars(
+                select(Exercise.name).where(Exercise.user_id == user.id, Exercise.id != exercise.id)
+            )
+        ):
+            raise HTTPException(
+                status_code=409, detail="An exercise with that name already exists."
+            )
+        exercise.name = name
+    changes_equipment = "equipment" in payload.model_fields_set
+    if changes_equipment or payload.muscle_set_credits is not None:
+        if not exercise.is_custom:
+            raise HTTPException(status_code=422, detail="Only your own exercises can be changed.")
+        if changes_equipment:
+            exercise.equipment = payload.equipment
+        if payload.muscle_set_credits is not None:
+            if exercise.kind == ExerciseKind.CARDIO or exercise.category == WorkoutCategory.CARDIO:
+                raise HTTPException(
+                    status_code=422, detail="Cardio exercises have no muscle credits."
+                )
+            # History is credited from the exercise's current muscles, so past weeks follow.
+            exercise.muscle_contributions.clear()
+            db.flush()
+            exercise.muscle_contributions = [
+                ExerciseMuscleContribution(
+                    muscle_name=credit.muscle_name,
+                    role=MuscleRole.PRIMARY if credit.sets == 1 else MuscleRole.SECONDARY,
+                    contribution_factor=credit.sets,
+                )
+                for credit in payload.muscle_set_credits
+            ]
+            exercise.muscle_group = payload.muscle_set_credits[0].muscle_name
+    if payload.hidden is not None:
+        hidden = hidden_exercise_ids(db, user.id)
+        hidden = hidden | {exercise.id} if payload.hidden else hidden - {exercise.id}
+        set_setting(db, user.id, HIDDEN_EXERCISES_KEY, json.dumps(sorted(hidden)))
+    bump_workout_cache_revision(db, user.id)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="An exercise with that name already exists."
+        ) from error
+    db.refresh(exercise)
+    return exercise_read(db, user.id, exercise)
 
 
 @router.patch("/exercises/{exercise_id}/favorite", response_model=ExerciseRead)
@@ -1364,6 +1541,103 @@ def delete_machine_photo(
         delete_machine_photo_files(settings, full_filename, thumbnail_filename)
 
 
+@router.post("/workouts/{workout_id}/photos", response_model=WorkoutPhotoRead, status_code=201)
+async def upload_workout_photo(
+    workout_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    file: Annotated[UploadFile, File(...)],
+) -> WorkoutPhoto:
+    """Add a photo of the whole session. Friends who can see the workout see it too."""
+    workout = get_owned(db, TrainingWorkout, workout_id, user.id)
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout was not found.")
+    if len(workout.photos) >= MAX_PHOTOS_PER_WORKOUT:
+        raise api_error(
+            422,
+            "too_many_workout_photos",
+            f"A workout can have up to {MAX_PHOTOS_PER_WORKOUT} photos.",
+        )
+    limits = load_account_limits(db, settings)
+    check_account_total(
+        db,
+        user,
+        WorkoutPhoto,
+        limits.workout_photos_per_account,
+        "workout_photos_per_account",
+        PHOTO_NOT_UPLOADED,
+    )
+    try:
+        stored = await store_machine_photo(
+            upload=file,
+            settings=settings,
+            max_bytes=limits.photo_upload_megabytes * 1024 * 1024,
+        )
+    except PhotoValidationError as error:
+        raise api_error(error.status_code, error.code, error.message) from error
+
+    photo = WorkoutPhoto(
+        user_id=user.id,
+        workout_id=workout.id,
+        original_filename=stored.original_filename,
+        full_filename=stored.full_filename,
+        thumbnail_filename=stored.thumbnail_filename,
+        media_type="image/webp",
+        file_size=stored.file_size,
+        width=stored.width,
+        height=stored.height,
+    )
+    try:
+        db.add(photo)
+        # Other devices reload the workout; its own revision is for edits to what was logged.
+        bump_workout_cache_revision(db, user.id)
+        db.commit()
+        db.refresh(photo)
+        return photo
+    except Exception:
+        db.rollback()
+        delete_machine_photo_files(settings, stored.full_filename, stored.thumbnail_filename)
+        raise
+
+
+@router.get("/workout-photos/{photo_id}/image")
+def get_workout_photo_image(
+    photo_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    variant: str = Query(default="full", pattern="^(thumbnail|full)$"),
+) -> FileResponse:
+    photo = get_owned(db, WorkoutPhoto, photo_id, user.id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Workout photo was not found.")
+    filename = photo.thumbnail_filename if variant == "thumbnail" else photo.full_filename
+    root = settings.machine_photos_dir.resolve()
+    path = (root / filename).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(status_code=404, detail="Workout photo file was not found.")
+    return FileResponse(
+        path,
+        media_type=photo.media_type,
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+
+@router.delete("/workout-photos/{photo_id}", status_code=204)
+def delete_workout_photo(
+    photo_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+) -> None:
+    photo = get_owned(db, WorkoutPhoto, photo_id, user.id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Workout photo was not found.")
+    files = [(photo.full_filename, photo.thumbnail_filename)]
+    db.delete(photo)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    delete_workout_photo_files(settings, files)
+
+
 def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
     unit = preferred_weight_unit(db, user_id)
     week_start_value = get_setting(db, user_id, "week_start", "monday")
@@ -1384,11 +1658,26 @@ def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
             muscle_set_goal = 10
     except ValueError:
         muscle_set_goal = 10
+    try:
+        muscle_set_goals = (
+            TrainingPreferencesUpdate(
+                preferred_weight_unit=unit,
+                week_start=week_start_value,
+                zone2_goal_minutes=zone2_goal,
+                weekly_muscle_set_goals=json.loads(
+                    get_setting(db, user_id, "weekly_muscle_set_goals", "{}")
+                ),
+            ).weekly_muscle_set_goals
+            or {}
+        )
+    except (ValueError, TypeError):
+        muscle_set_goals = {}
     return TrainingPreferencesRead(
         preferred_weight_unit=unit,
         week_start=week_start_value,
         zone2_goal_minutes=zone2_goal,
         weekly_muscle_set_goal=muscle_set_goal,
+        weekly_muscle_set_goals=muscle_set_goals,
     )
 
 
@@ -1456,44 +1745,24 @@ def delete_body_sizes(measurement_date: date, db: DbSession, user: CurrentUser) 
     return Response(status_code=204)
 
 
-FFMI_PROFILE_KEY = "ffmi_profile"
+@router.get("/training-split", response_model=TrainingSplitRead | None)
+def get_training_split(
+    db: DbSession, user: CurrentUser, on_date: date | None = None
+) -> TrainingSplitRead | None:
+    return split_read(db, user.id, saved_training_split(db, user.id), on_date or date.today())
 
 
-def ffmi_profile(db: Session, user_id: str) -> FfmiProfile:
-    try:
-        return FfmiProfile.model_validate_json(get_setting(db, user_id, FFMI_PROFILE_KEY, "{}"))
-    except ValueError:
-        return FfmiProfile()
-
-
-@router.get("/ffmi-profile", response_model=FfmiProfile)
-def get_ffmi_profile(db: DbSession, user: CurrentUser) -> FfmiProfile:
-    return ffmi_profile(db, user.id)
-
-
-@router.put("/ffmi-profile", response_model=FfmiProfile)
-def update_ffmi_profile(payload: FfmiProfile, db: DbSession, user: CurrentUser) -> FfmiProfile:
-    set_setting(db, user.id, FFMI_PROFILE_KEY, payload.model_dump_json())
-    db.commit()
-    return ffmi_profile(db, user.id)
-
-
-@router.get("/training-split", response_model=TrainingSplit | None)
-def get_training_split(db: DbSession, user: CurrentUser) -> TrainingSplit | None:
-    return saved_training_split(db, user.id)
-
-
-@router.put("/training-split", response_model=TrainingSplit)
+@router.put("/training-split", response_model=TrainingSplitRead)
 def update_training_split(
-    payload: TrainingSplit, db: DbSession, user: CurrentUser
-) -> TrainingSplit:
+    payload: TrainingSplit, db: DbSession, user: CurrentUser, on_date: date | None = None
+) -> TrainingSplitRead:
     validate_split_types(db, user.id, payload)
     # Editing the schedule directly returns it to history-based workout suggestions.
     payload.routine_id = None
     set_setting(db, user.id, TRAINING_SPLIT_KEY, payload.model_dump_json())
     bump_workout_cache_revision(db, user.id)
     db.commit()
-    return payload
+    return split_read(db, user.id, payload, on_date or date.today())
 
 
 @router.get("/workout-type-colors", response_model=WorkoutTypeColors)
@@ -1601,6 +1870,10 @@ def update_training_preferences(
     set_setting(db, user.id, "zone2_goal_minutes", str(payload.zone2_goal_minutes))
     if payload.weekly_muscle_set_goal is not None:
         set_setting(db, user.id, "weekly_muscle_set_goal", str(payload.weekly_muscle_set_goal))
+    if payload.weekly_muscle_set_goals is not None:
+        set_setting(
+            db, user.id, "weekly_muscle_set_goals", json.dumps(payload.weekly_muscle_set_goals)
+        )
     db.flush()
     rebuild_personal_records(db, user.id)
     db.commit()
@@ -1645,6 +1918,7 @@ def cardio_overview(db: DbSession, user: CurrentUser) -> CardioOverviewRead:
     personal = cardio_preferences(db, user.id)
     for session in sessions:
         classify_session(session, personal)
+    attach_body_weights(db, user.id, sessions)
     return CardioOverviewRead(
         cardio_preferences=personal,
         goal_weeks=cardio_goal_weeks(sessions, current_start, personal, date.today()),
@@ -1741,6 +2015,7 @@ def create_cardio_session(
             incline_percent=payload.incline_percent,
             average_power_watts=payload.average_power_watts,
             average_mets=payload.average_mets,
+            elevation_gain_m=payload.elevation_gain_m,
             source_exercise_id=exercise.id,
             intensity=None,
             zone=payload.zone,
@@ -1755,6 +2030,7 @@ def create_cardio_session(
         bump_workout_cache_revision(db, user.id)
         db.commit()
         db.refresh(session)
+        attach_body_weights(db, user.id, [session])
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
@@ -1763,6 +2039,7 @@ def create_cardio_session(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -1783,6 +2060,7 @@ def update_cardio_session(
         "incline_percent",
         "average_power_watts",
         "average_mets",
+        "elevation_gain_m",
     }
     for key, value in payload.model_dump(exclude={"exercise_id"}).items():
         if key in optional_metrics and key not in payload.model_fields_set:
@@ -1795,6 +2073,7 @@ def update_cardio_session(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -1811,6 +2090,7 @@ def update_cardio_calories(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -1879,6 +2159,8 @@ def sync_cardio_session_metrics_to_workout_sets(
     if "incline_percent" in fields:
         for workout_set in completed_sets:
             workout_set.incline_percent = session.incline_percent
+    # The workout's sets changed, so an editor still holding the old ones must not overwrite them.
+    advance_workout_revision(db, workout)
     return True
 
 
@@ -1897,6 +2179,7 @@ def update_cardio_metrics(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     db.refresh(session)
+    attach_body_weights(db, user.id, [session])
     return session
 
 
@@ -1944,7 +2227,11 @@ def create_body_weight_goal(
 
 @router.put("/body-weight-goals/{goal_id}", response_model=BodyWeightGoalRead)
 def update_body_weight_goal(
-    goal_id: str, payload: BodyWeightGoalCreate, db: DbSession, user: CurrentUser
+    goal_id: str,
+    payload: BodyWeightGoalCreate,
+    db: DbSession,
+    user: CurrentUser,
+    client_version: ClientVersion = None,
 ) -> BodyWeightGoal:
     goal = get_owned(db, BodyWeightGoal, goal_id, user.id)
     if not goal:
@@ -1957,7 +2244,11 @@ def update_body_weight_goal(
         ):
             if other.id != goal_id:
                 other.active = False
-    values = payload.model_dump()
+    values = BodyWeightGoalCreate.model_validate(
+        preserve_fields(
+            payload.model_dump(), goal, fields_unknown_to(client_version, "body_weight_goal")
+        )
+    ).model_dump()
     for key, value in values.items():
         setattr(goal, key, value)
     bump_workout_cache_revision(db, user.id)
@@ -1982,7 +2273,8 @@ def list_personal_records(
     user: CurrentUser,
     exercise_id: str | None = None,
     workout_id: str | None = None,
-) -> list[PersonalRecord]:
+    include_blocks: bool = False,
+) -> list[PersonalRecordRead]:
     query = (
         select(PersonalRecord)
         .where(PersonalRecord.user_id == user.id)
@@ -1992,10 +2284,152 @@ def list_personal_records(
         query = query.where(PersonalRecord.exercise_id == exercise_id)
     if workout_id:
         query = query.where(PersonalRecord.workout_id == workout_id)
-    return list(
-        db.scalars(
+    bodyweights = BodyweightHistory(db, user.id)
+    records = [
+        PersonalRecordRead.model_validate(record).model_copy(
+            update={
+                "bodyweight_kg": bodyweights.on(
+                    record.achieved_date, record.workout_set.bodyweight_kg
+                )
+            }
+        )
+        for record in db.scalars(
             query.order_by(PersonalRecord.achieved_date.desc(), PersonalRecord.created_at.desc())
         )
+    ]
+    if include_blocks:
+        config = training_blocks(db, user.id)
+        if config.blocks:
+            workouts = list(
+                db.scalars(
+                    workout_query(user.id).where(
+                        TrainingWorkout.workout_date >= config.blocks[0].start_date
+                    )
+                )
+            )
+            grouped = defaultdict(list)
+            for workout in workouts:
+                block = block_on(config, workout.workout_date)
+                if block:
+                    grouped[block.id].append(workout)
+            unit = preferred_weight_unit(db, user.id)
+            for block in config.blocks:
+                for workout, movement, item, record_type in personal_record_events(
+                    grouped[block.id], bodyweights
+                ):
+                    if (workout_id and workout.id != workout_id) or (
+                        exercise_id and movement.exercise_id != exercise_id
+                    ):
+                        continue
+                    weight = normalized_weight(item.weight_kg, unit)
+                    bodyweight = bodyweights.on(workout.workout_date, item.bodyweight_kg)
+                    relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
+                    records.append(
+                        PersonalRecordRead(
+                            id=f"block:{block.id}:{item.id}:{record_type.value}",
+                            scope="block",
+                            block_id=block.id,
+                            block_name=block.name,
+                            exercise_id=movement.exercise_id,
+                            workout_id=workout.id,
+                            set_id=item.id,
+                            achieved_date=workout.workout_date,
+                            record_type=record_type,
+                            value=relative_strength(item.weight_kg, bodyweight)
+                            if relative
+                            else weight
+                            if record_type == PersonalRecordType.WEIGHT
+                            else float(item.reps),
+                            unit="× BW"
+                            if relative
+                            else unit
+                            if record_type == PersonalRecordType.WEIGHT
+                            else "reps",
+                            normalized_weight=weight,
+                            weight_kg=item.weight_kg,
+                            bodyweight_kg=bodyweight,
+                            formula="weight / bodyweight" if relative else None,
+                            exercise_name=movement.exercise.name,
+                        )
+                    )
+    # One achievement per metric/set: lifetime wins if it is also a block record.
+    lifetime = {
+        (record.set_id, record.record_type) for record in records if record.scope == "all_time"
+    }
+    return sorted(
+        [
+            record
+            for record in records
+            if record.scope == "all_time" or (record.set_id, record.record_type) not in lifetime
+        ],
+        key=lambda record: record.achieved_date,
+        reverse=True,
+    )
+
+
+def block_stats(
+    block: TrainingBlock,
+    workouts: list[TrainingWorkout],
+    records: list[PersonalRecordRead],
+    today: date,
+) -> BlockStatsRead:
+    """Totals for the days a block owns: from its start until the next block or today."""
+
+    def owns(day: date) -> bool:
+        return block.start_date <= day <= today and (block.end_date is None or day < block.end_date)
+
+    owned = [workout for workout in workouts if owns(workout.workout_date)]
+    set_count, volume = 0, 0.0
+    for workout in owned:
+        for movement in workout.movements:
+            if movement.exercise.kind != ExerciseKind.STRENGTH:
+                continue
+            for item in movement.sets:
+                if is_working_set(item):
+                    set_count += 1
+                    volume += (item.weight_kg or 0) * (item.reps or 0)
+    return BlockStatsRead(
+        block_id=block.id,
+        name=block.name,
+        start_date=block.start_date,
+        deload=block.deload,
+        workout_count=len(owned),
+        set_count=set_count,
+        volume_kg=round(volume, 1),
+        pr_count=sum(1 for record in records if owns(record.achieved_date)),
+    )
+
+
+@router.get("/training-blocks/{block_id}/summary", response_model=TrainingBlockSummaryRead)
+def training_block_summary(
+    block_id: str, db: DbSession, user: CurrentUser
+) -> TrainingBlockSummaryRead:
+    config = training_blocks(db, user.id)
+    block = next((item for item in config.blocks if item.id == block_id), None)
+    if block is None:
+        raise HTTPException(404, "Training block was not found.")
+    # A deload has nothing to compare with; other blocks compare with the last regular one.
+    previous = None
+    if not block.deload:
+        earlier = [
+            item for item in config.blocks if item.start_date < block.start_date and not item.deload
+        ]
+        previous = earlier[-1] if earlier else None
+    today = date.today()
+    first = (previous or block).start_date
+    workouts = list(
+        db.scalars(
+            workout_query(user.id).where(
+                TrainingWorkout.workout_date >= first, TrainingWorkout.workout_date <= today
+            )
+        )
+    )
+    records = list_personal_records(
+        db=db, user=user, exercise_id=None, workout_id=None, include_blocks=True
+    )
+    return TrainingBlockSummaryRead(
+        block=block_stats(block, workouts, records, today),
+        previous=block_stats(previous, workouts, records, today) if previous else None,
     )
 
 
@@ -2099,6 +2533,7 @@ def exercise_history_baselines(
             TrainingWorkout.name.label("workout_name"),
             Exercise.kind,
             WorkoutSet.weight_kg,
+            WorkoutSet.bodyweight_kg,
             WorkoutSet.reps,
             WorkoutSet.completed,
             WorkoutSet.warmup,
@@ -2117,6 +2552,11 @@ def exercise_history_baselines(
             WorkoutMovement.order_index,
         )
     )
+    config = training_blocks(db, user.id)
+    block_weights = defaultdict(lambda: defaultdict(dict))
+    bodyweights = BodyweightHistory(db, user.id)
+    relative_bests = {}
+    block_relative_bests = defaultdict(dict)
     reps_by_weight: dict[str, dict[float, int]] = {}
     latest: dict[str, ExerciseLatestSessionRead] = {}
     latest_movement_ids: dict[str, str] = {}
@@ -2143,6 +2583,18 @@ def exercise_history_baselines(
         # Four decimals absorb unit-conversion noise, as in the client's comparison.
         weight = round(row.weight_kg, 4)
         weights[weight] = max(weights.get(weight, 0), row.reps)
+        ratio = relative_strength(
+            row.weight_kg, bodyweights.on(row.workout_date, row.bodyweight_kg)
+        )
+        if ratio is not None:
+            relative_bests[row.exercise_id] = max(relative_bests.get(row.exercise_id, 0), ratio)
+        block = block_on(config, row.workout_date)
+        if block:
+            if ratio is not None:
+                scoped_relative = block_relative_bests[row.exercise_id]
+                scoped_relative[block.id] = max(scoped_relative.get(block.id, 0), ratio)
+            scoped = block_weights[row.exercise_id][block.id]
+            scoped[weight] = max(scoped.get(weight, 0), row.reps)
 
     if latest_movement_ids:
         for item in db.scalars(
@@ -2160,12 +2612,25 @@ def exercise_history_baselines(
     return [
         ExerciseHistoryBaselineRead(
             exercise_id=exercise_id,
+            best_relative_strength=relative_bests.get(exercise_id),
             best_weight_kg=max(weights) if weights else None,
             reps_by_weight=[
                 WeightRepsRead(weight_kg=weight, reps=reps)
                 for weight, reps in sorted(weights.items())
             ],
             latest=latest.get(exercise_id),
+            block_bests=[
+                BlockHistoryBaselineRead(
+                    block_id=block_id,
+                    best_relative_strength=block_relative_bests[exercise_id].get(block_id),
+                    best_weight_kg=max(values) if values else None,
+                    reps_by_weight=[
+                        WeightRepsRead(weight_kg=weight, reps=reps)
+                        for weight, reps in sorted(values.items())
+                    ],
+                )
+                for block_id, values in block_weights[exercise_id].items()
+            ],
         )
         for exercise_id, weights in reps_by_weight.items()
     ]
@@ -2173,7 +2638,11 @@ def exercise_history_baselines(
 
 @router.post("/workouts", response_model=TrainingWorkoutRead, status_code=201)
 def create_workout(
-    payload: TrainingWorkoutCreate, db: DbSession, user: CurrentUser, settings: SettingsDependency
+    payload: TrainingWorkoutCreate,
+    db: DbSession,
+    user: CurrentUser,
+    settings: SettingsDependency,
+    response: Response,
 ) -> TrainingWorkout:
     user_id = user.id
     client_session_id = str(payload.client_session_id) if payload.client_session_id else None
@@ -2192,7 +2661,29 @@ def create_workout(
 
     existing = saved_session()
     if existing is not None:
+        check_repeated_finish(existing, payload)
+        report_workout_revision(response, db, user_id)
         return existing
+    try:
+        workout = insert_workout(db, user, settings, payload)
+    except IntegrityError:
+        db.rollback()
+        existing = saved_session()
+        if existing is not None:
+            check_repeated_finish(existing, payload)
+            report_workout_revision(response, db, user_id)
+            return existing
+        raise
+    saved = load_workout(db, user.id, workout.id)
+    report_workout_revision(response, db, user_id)
+    return saved
+
+
+def insert_workout(
+    db: Session, user: User, settings: Settings, payload: TrainingWorkoutCreate
+) -> TrainingWorkout:
+    """Save a new workout and end its live draft; shared by the API and auto-save."""
+    client_session_id = str(payload.client_session_id) if payload.client_session_id else None
     limits = load_account_limits(db, settings)
     check_workout_size(payload, limits, user)
     check_account_total(
@@ -2204,7 +2695,7 @@ def create_workout(
         WORKOUT_NOT_SAVED,
     )
     workout = TrainingWorkout(
-        user_id=user_id,
+        user_id=user.id,
         client_session_id=client_session_id,
         name=payload.name,
         workout_date=payload.workout_date,
@@ -2215,24 +2706,19 @@ def create_workout(
         end_time=payload.end_time,
     )
     db.add(workout)
-    try:
-        # Reserve the session before writing its contents. A second device/tab or a
-        # retry after a lost response must not insert another completed workout.
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        existing = saved_session()
-        if existing is not None:
-            return existing
-        raise
+    # Reserve the session before writing its contents (IntegrityError for a duplicate). A
+    # second device/tab or a retry after a lost response must not insert another workout.
+    db.flush()
     replace_workout_contents(db, user.id, workout, payload, is_new=True)
+    finish_shared_draft(db, user.id, client_session_id, payload.active_workout_revision)
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
-    return load_workout(db, user.id, workout.id)
+    presence_hub.active_workout_changed(user.id)
+    return workout
 
 
 @router.get("/workouts/export.csv")
@@ -2241,6 +2727,7 @@ def export_workout_csv(
     user: CurrentUser,
     start_date: date | None = None,
     end_date: date | None = None,
+    workout_id: str | None = None,
 ) -> Response:
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=422, detail="Start date must not be after end date.")
@@ -2250,6 +2737,24 @@ def export_workout_csv(
         .options(*workout_options())
         .order_by(TrainingWorkout.workout_date, TrainingWorkout.created_at)
     )
+    if workout_id:
+        # One saved session, with only the cardio logged inside it.
+        workouts = list(db.scalars(statement.where(TrainingWorkout.id == workout_id)))
+        if not workouts:
+            raise HTTPException(status_code=404, detail="Workout not found.")
+        cardio_sessions = db.scalars(
+            select(CardioSession).where(
+                CardioSession.user_id == user.id,
+                CardioSession.source_workout_id == workout_id,
+            )
+        )
+        content = export_workouts(workouts, list(cardio_sessions))
+        filename = f"workout-{workouts[0].workout_date.isoformat()}.csv"
+        return Response(
+            content=content.encode("utf-8-sig"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     if start_date:
         statement = statement.where(TrainingWorkout.workout_date >= start_date)
     if end_date:
@@ -2355,7 +2860,9 @@ def list_import_batches(db: DbSession, user: CurrentUser) -> list[ImportBatchRea
 
 
 @router.delete("/workouts/import/batches/{batch_id}", response_model=ImportUndoRead)
-def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> ImportUndoRead:
+def undo_import_batch(
+    batch_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+) -> ImportUndoRead:
     # Serialize undo with imports so another batch cannot claim entries being removed.
     db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     batch = get_owned(db, ImportBatch, batch_id, user.id)
@@ -2367,6 +2874,9 @@ def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> Import
                 TrainingWorkout.user_id == user.id, TrainingWorkout.id.in_(batch.workout_ids)
             )
         )
+    )
+    photo_files = workout_photo_files(
+        db, WorkoutPhoto.workout_id.in_([workout.id for workout in workouts])
     )
     for workout in workouts:
         db.execute(
@@ -2404,6 +2914,7 @@ def undo_import_batch(batch_id: str, db: DbSession, user: CurrentUser) -> Import
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
+    delete_workout_photo_files(settings, photo_files)
     return ImportUndoRead(
         workouts_removed=len(workouts),
         body_measurements_removed=removed,
@@ -2531,38 +3042,83 @@ def update_workout(
     db: DbSession,
     user: CurrentUser,
     settings: SettingsDependency,
+    response: Response,
+    client_version: ClientVersion = None,
 ) -> TrainingWorkout:
     workout = load_workout(db, user.id, workout_id)
+    if payload.active_workout_revision is not None:
+        active = db.get(ActiveWorkoutSync, user.id)
+        if (
+            active
+            and active.draft is None
+            and payload.active_workout_session_id
+            and active.session_id == str(payload.active_workout_session_id)
+        ):
+            check_repeated_finish(workout, payload)
+            report_workout_revision(response, db, user.id)
+            return workout
+    replace_workout(db, user, settings, workout, payload, client_version)
+    saved = load_workout(db, user.id, workout.id)
+    report_workout_revision(response, db, user.id)
+    return saved
+
+
+def replace_workout(
+    db: Session,
+    user: User,
+    settings: Settings,
+    workout: TrainingWorkout,
+    payload: TrainingWorkoutCreate,
+    client_version: str | None,
+) -> None:
+    """Replace a saved workout, ending a resumed live draft; shared by the API and auto-save."""
+    # Refuse a stale editor before changing anything. Without a base revision (an older app
+    # version) the workout is replaced unconditionally, as it was before revisions existed.
+    advance_workout_revision(db, workout, payload.base_revision)
+    payload = preserve_unknown_workout_fields(payload, workout, client_version)
     check_workout_size(payload, load_account_limits(db, settings), user, existing=workout)
     replace_workout_contents(db, user.id, workout, payload)
+    finish_shared_draft(
+        db,
+        user.id,
+        str(payload.active_workout_session_id) if payload.active_workout_session_id else None,
+        payload.active_workout_revision,
+    )
     db.flush()
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
-    return load_workout(db, user.id, workout.id)
+    presence_hub.active_workout_changed(user.id)
 
 
 @router.delete("/workouts/{workout_id}", status_code=204)
-def delete_workout(workout_id: str, db: DbSession, user: CurrentUser) -> None:
+def delete_workout(
+    workout_id: str, db: DbSession, user: CurrentUser, settings: SettingsDependency
+) -> None:
     workout = load_workout(db, user.id, workout_id)
+    photo_files = workout_photo_files(db, WorkoutPhoto.workout_id == workout.id)
     db.execute(delete(CardioSession).where(CardioSession.source_workout_id == workout.id))
     db.delete(workout)
     db.flush()
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
+    delete_workout_photo_files(settings, photo_files)
 
 
 @router.delete("/sample-data", status_code=204)
-def delete_sample_data(db: DbSession, user: CurrentUser) -> None:
+def delete_sample_data(db: DbSession, user: CurrentUser, settings: SettingsDependency) -> None:
     samples = list(
         db.scalars(
             select(TrainingWorkout).where(
                 TrainingWorkout.user_id == user.id, TrainingWorkout.is_sample.is_(True)
             )
         )
+    )
+    photo_files = workout_photo_files(
+        db, WorkoutPhoto.workout_id.in_([workout.id for workout in samples])
     )
     for workout in samples:
         db.delete(workout)
@@ -2576,6 +3132,7 @@ def delete_sample_data(db: DbSession, user: CurrentUser) -> None:
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
+    delete_workout_photo_files(settings, photo_files)
 
 
 def completed_working_sets(workout: TrainingWorkout) -> list[WorkoutSet]:
@@ -2867,6 +3424,7 @@ def dashboard(
     cardio_sessions = list(
         db.scalars(select(CardioSession).where(CardioSession.user_id == user.id))
     )
+    attach_body_weights(db, user.id, cardio_sessions)
     cardio_week_start = start_of_week(today, preferences.week_start)
     cardio_minutes_this_week = sum(
         session.duration_minutes
@@ -2874,10 +3432,24 @@ def dashboard(
         if cardio_week_start <= session.session_date <= today
     )
     muscle_totals = muscle_volume(workouts, week_start, today)
+    personal_cardio = cardio_preferences(db, user.id)
+    cardio_weeks = []
+    for weeks_ago in range(WEEKLY_SETS_HISTORY_WEEKS + 1):
+        start = cardio_week_start - timedelta(weeks=weeks_ago)
+        cardio_weeks.append(
+            CardioWeekRead(
+                week_start=start,
+                total_minutes=sum(
+                    session.duration_minutes
+                    for session in cardio_sessions
+                    if start <= session.session_date <= min(start + timedelta(days=6), today)
+                ),
+                goals=cardio_goal_weeks(cardio_sessions, start, personal_cardio, today),
+            )
+        )
     return DashboardRead(
-        cardio_goals=cardio_goal_weeks(
-            cardio_sessions, cardio_week_start, cardio_preferences(db, user.id), today
-        ),
+        cardio_goals=cardio_goal_weeks(cardio_sessions, cardio_week_start, personal_cardio, today),
+        cardio_weeks=cardio_weeks,
         workouts_this_week=len(this_week),
         sets_this_week=sum(len(completed_working_sets(workout)) for workout in this_week),
         volume_this_week_kg=round(volume_this_week, 1),
@@ -2891,6 +3463,7 @@ def dashboard(
             split_recommendation(db, user.id, today)
             or workout_recommendation(workouts, today, earlier_rotation)
         ),
+        training_split=split_read(db, user.id, saved_training_split(db, user.id), today),
         weekly_sets=weekly_sets(workouts, today, preferences.week_start),
         weekly_sets_history=[
             weekly_sets(workouts, today, preferences.week_start, weeks_ago)
@@ -2912,7 +3485,9 @@ def dashboard(
 
 
 @router.get("/progress", response_model=list[ExerciseLibrarySummaryRead])
-def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[ExerciseLibrarySummaryRead]:
+def exercise_library_progress(
+    db: DbSession, user: CurrentUser, block_id: str | None = None
+) -> list[ExerciseLibrarySummaryRead]:
     """Account-owned strength summaries, with an eight-week sparkline up to each lift's latest."""
     today = date.today()
     rows = db.execute(
@@ -2932,8 +3507,20 @@ def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[Exercise
             TrainingWorkout.workout_date <= today,
         )
     )
+    block = None
+    if block_id:
+        block = next((b for b in training_blocks(db, user.id).blocks if b.id == block_id), None)
+        if block is None:
+            raise HTTPException(404, "Training block was not found.")
+    # Exercises with machine weights normalised report every machine in the reference machine's
+    # weights, as the progress chart's "All machines" view does.
+    factors = normalising_factors(db, user.id)
     sessions: dict[str, dict[tuple[date, str], float]] = defaultdict(dict)
     for item, exercise_id, workout_date, workout_id in rows:
+        if block and (
+            workout_date < block.start_date or (block.end_date and workout_date >= block.end_date)
+        ):
+            continue
         if not is_working_set(item):
             continue
         key = (workout_date, workout_id)
@@ -2942,6 +3529,8 @@ def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[Exercise
             if is_pr_eligible(item)
             else 0.0
         )
+        if exercise_id in factors and item.machine_photo_id:
+            estimate *= factors[exercise_id].get(item.machine_photo_id, 1.0)
         sessions[exercise_id][key] = max(sessions[exercise_id].get(key, 0), estimate)
     summaries = []
     for exercise_id, values in sessions.items():
@@ -2975,6 +3564,7 @@ def exercise_library_progress(db: DbSession, user: CurrentUser) -> list[Exercise
                 if change is not None
                 else None,
                 trend=trend,
+                normalised=exercise_id in factors,
             )
         )
     return summaries
@@ -2986,7 +3576,12 @@ def movement_machine_id(movement: WorkoutMovement) -> str | None:
     return machine_ids.pop() if len(machine_ids) == 1 else None
 
 
-def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) -> ProgressPoint:
+def progress_point(
+    workout_date: date,
+    workout_id: str,
+    sets: list[WorkoutSet],
+    bodyweights: BodyweightHistory | None = None,
+) -> ProgressPoint:
     best_set = max(sets, key=lambda item: ((item.weight_kg or 0), (item.reps or 0)))
     best_e1rm = max(
         (
@@ -2996,7 +3591,36 @@ def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) 
         ),
         default=0.0,
     )
+    relative_sets = [
+        (
+            relative_strength(
+                item.weight_kg,
+                bodyweights.on(workout_date, item.bodyweight_kg)
+                if bodyweights
+                else item.bodyweight_kg,
+            ),
+            item,
+        )
+        for item in sets
+        if is_pr_eligible(item)
+    ]
+    best_relative = max(
+        (entry for entry in relative_sets if entry[0] is not None),
+        key=lambda entry: entry[0],
+        default=None,
+    )
+    relative_bodyweight = (
+        (
+            bodyweights.on(workout_date, best_relative[1].bodyweight_kg)
+            if bodyweights
+            else best_relative[1].bodyweight_kg
+        )
+        if best_relative
+        else None
+    )
     return ProgressPoint(
+        relative_strength=best_relative[0] if best_relative else None,
+        bodyweight_kg=relative_bodyweight,
         workout_date=workout_date,
         workout_id=workout_id,
         best_weight_kg=best_set.weight_kg or 0,
@@ -3008,7 +3632,9 @@ def progress_point(workout_date: date, workout_id: str, sets: list[WorkoutSet]) 
 
 
 @router.get("/progress/{exercise_id}", response_model=ExerciseProgressRead)
-def exercise_progress(exercise_id: str, db: DbSession, user: CurrentUser) -> ExerciseProgressRead:
+def exercise_progress(
+    exercise_id: str, db: DbSession, user: CurrentUser, block_id: str | None = None
+) -> ExerciseProgressRead:
     exercise = get_owned(db, Exercise, exercise_id, user.id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise was not found.")
@@ -3024,21 +3650,35 @@ def exercise_progress(exercise_id: str, db: DbSession, user: CurrentUser) -> Exe
             .order_by(WorkoutMovement.workout_id)
         )
     )
+    if block_id:
+        block = next((b for b in training_blocks(db, user.id).blocks if b.id == block_id), None)
+        if block is None:
+            raise HTTPException(404, "Training block was not found.")
+        movements = [
+            m
+            for m in movements
+            if m.workout.workout_date >= block.start_date
+            and (block.end_date is None or m.workout.workout_date < block.end_date)
+        ]
+    bodyweights = BodyweightHistory(db, user.id)
     grouped: dict[tuple[date, str], list[WorkoutSet]] = defaultdict(list)
     by_machine: dict[tuple[date, str, str | None], list[WorkoutSet]] = defaultdict(list)
     for movement in movements:
         working = [item for item in movement.sets if is_working_set(item)]
         grouped[(movement.workout.workout_date, movement.workout_id)].extend(working)
-        machine_id = movement_machine_id(movement)
-        by_machine[(movement.workout.workout_date, movement.workout_id, machine_id)].extend(working)
+        for item in working:
+            machine_id = item.machine_photo_id
+            by_machine[(movement.workout.workout_date, movement.workout_id, machine_id)].append(
+                item
+            )
     points = [
-        progress_point(workout_date, workout_id, sets)
+        progress_point(workout_date, workout_id, sets, bodyweights)
         for (workout_date, workout_id), sets in sorted(grouped.items())
         if sets
     ]
     machine_points = [
         MachineProgressPoint(
-            **progress_point(workout_date, workout_id, sets).model_dump(),
+            **progress_point(workout_date, workout_id, sets, bodyweights).model_dump(),
             machine_photo_id=machine_id,
         )
         for (workout_date, workout_id, machine_id), sets in sorted(

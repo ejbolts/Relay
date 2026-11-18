@@ -315,6 +315,14 @@ describe('next set suggestion after logging a set', () => {
     expect(next.fromPrevious).toBe(true);
   });
 
+  it('keeps another machine’s suggested weight, and repeats sets on the same machine', () => {
+    const first = { ...logged, machine_photo_id: 'a' };
+    const other = { ...suggested, machine_photo_id: 'b' };
+    expect(suggestNextSetFromLoggedSet('strength', [first, other], 0)[1]).toBe(other);
+    const same = { ...suggested, machine_photo_id: 'a' };
+    expect(suggestNextSetFromLoggedSet('strength', [first, same], 0)[1].weight_kg).toBe(87.5);
+  });
+
   it('only changes the set immediately after the logged one', () => {
     const third = { ...suggested, reps: 8 };
     const sets = suggestNextSetFromLoggedSet('strength', [logged, suggested, third], 0);
@@ -376,6 +384,20 @@ describe('completeRemainingSets', () => {
     expect(result[1]).toMatchObject({ weight_kg: 62.5, reps: 8, fromPrevious: false });
     expect(result[0]).toBe(sets[0]);
     expect(result[3]).toBe(sets[3]);
+  });
+
+  it('leaves strength sets without reps unticked, even with weight or bodyweight attached', () => {
+    const sets = [
+      strengthSet({ weight_kg: 100 }),
+      strengthSet({ bodyweight_kg: 83.3, percentile: 40 }),
+      strengthSet({ reps: 12 }),
+    ];
+
+    expect(completeRemainingSets('strength', sets).map((item) => item.completed)).toEqual([
+      false,
+      false,
+      true,
+    ]);
   });
 
   it('logs cardio sets that have a recorded metric', () => {

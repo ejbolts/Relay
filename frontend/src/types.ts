@@ -1,3 +1,4 @@
+import type { BodySizeLog } from './bodySizes';
 export type SessionStatus =
   | 'draft'
   | 'uploading'
@@ -98,7 +99,7 @@ export type ExerciseKind = 'strength' | 'cardio';
 
 export type SetType = 'warmup' | 'normal' | 'drop';
 export type PersonalRecordType =
-  'weight' | 'reps_at_weight' | 'estimated_1rm' | 'duration' | 'distance';
+  'weight' | 'reps_at_weight' | 'relative_strength' | 'estimated_1rm' | 'duration' | 'distance';
 
 export interface MuscleContribution {
   muscle_name: string;
@@ -116,6 +117,8 @@ export interface Exercise {
   equipment: string | null;
   is_custom: boolean;
   is_favorite: boolean;
+  /** Left out of exercise pickers and lists; history and progress are kept. */
+  hidden?: boolean;
   muscle_contributions: MuscleContribution[];
   muscle_set_credits?: { muscle_name: string; sets: number }[];
   default_muscle_set_credits?: { muscle_name: string; sets: number }[];
@@ -149,6 +152,16 @@ export interface MachinePhoto extends MachinePhotoImage {
   images?: MachinePhotoImage[];
 }
 
+/** A photo of the whole session. Friends who can see the workout see it too. */
+export interface WorkoutPhoto {
+  id: string;
+  thumbnail_url: string;
+  full_url: string;
+  width: number;
+  height: number;
+  created_at: string;
+}
+
 /** A saved machine with when, and how often, saved workouts have pinned it. */
 export interface MachinePhotoUsage extends MachinePhoto {
   exercise_name: string;
@@ -157,6 +170,7 @@ export interface MachinePhotoUsage extends MachinePhoto {
 }
 
 export interface TrackedSet {
+  machine_photo_id?: string | null;
   id: string;
   order_index: number;
   reps: number | null;
@@ -209,9 +223,16 @@ export interface TrackedWorkout {
   start_time: string | null;
   end_time: string | null;
   is_sample: boolean;
+  /**
+   * Advances with every saved change. Editors send the revision they loaded so a stale device
+   * cannot overwrite newer edits. Absent only from data cached before revisions existed.
+   */
+  revision?: number;
   created_at: string;
   updated_at: string;
   movements: TrackedMovement[];
+  /** Absent from data saved before workouts could carry photos. */
+  photos?: WorkoutPhoto[];
 }
 
 export interface WorkoutCacheRevision {
@@ -223,6 +244,7 @@ export interface WorkoutSnapshot extends WorkoutCacheRevision {
 }
 
 export interface WorkoutSetInput {
+  machine_photo_id?: string | null;
   reps: number | null;
   weight_kg: number | null;
   rpe: number | null;
@@ -245,6 +267,8 @@ export interface WorkoutSetInput {
 
 export interface WorkoutInput {
   client_session_id?: string;
+  active_workout_revision?: number;
+  active_workout_session_id?: string;
   name: string;
   workout_date: string;
   category: WorkoutCategory;
@@ -261,6 +285,8 @@ export interface WorkoutInput {
     superset_key?: string | null;
     sets: WorkoutSetInput[];
   }>;
+  /** Edits: the revision the editor loaded. Omitted, the save replaces the workout regardless. */
+  base_revision?: number;
 }
 
 export interface HeatmapDay {
@@ -339,12 +365,22 @@ export interface WorkoutRecommendation {
   routine_day?: RoutineDay | null;
 }
 
+export type SplitProgression = 'calendar' | 'workouts';
+
 export interface TrainingSplit {
   name: string;
   enabled: boolean;
   start_date: string;
+  /** Splits follow logged workouts unless set to calendar, which pins each day to a date. */
+  progression?: SplitProgression;
   steps: { workout_type_id: string | null }[];
   routine_id?: string | null;
+  /** Where a workout-following split stands, from the server's replay of logged workouts. */
+  next_step?: number | null;
+  rest_saved?: boolean;
+  next_date?: string | null;
+  /** Past days whose planned workout was not done, from the server's replay (last year only). */
+  missed_days?: { workout_date: string; workout_type_id: string }[];
 }
 
 export interface RoutineSet {
@@ -356,10 +392,29 @@ export interface RoutineSet {
   set_type: SetType;
 }
 
+/** The reps to aim for in each working set of a planned exercise. */
+export interface RepRange {
+  min: number;
+  max: number;
+}
+
 export interface RoutineDay {
   workout_type_id: string | null;
   workout_type: WorkoutType | null;
-  movements: { exercise_id: string; exercise: Exercise; sets: RoutineSet[] }[];
+  movements: {
+    exercise_id: string;
+    exercise: Exercise;
+    sets: RoutineSet[];
+    rep_range?: RepRange | null;
+  }[];
+}
+
+export type RoutineMovement = RoutineDay['movements'][number];
+
+/** Exercises saved to one workout type, filled in when a workout of that type starts. */
+export interface WorkoutTypeExercises {
+  workout_type_id: string;
+  movements: RoutineMovement[];
 }
 
 export interface Routine {
@@ -410,8 +465,17 @@ export interface TrainingTime {
   total_minutes: number;
 }
 
+/** Cardio for one week: all minutes, and each goal zone's progress. */
+export interface CardioWeek {
+  week_start: string;
+  total_minutes: number;
+  goals: CardioGoalWeek[];
+}
+
 export interface DashboardData {
   cardio_goals?: CardioGoalWeek[];
+  /** The current week then earlier weeks, newest first; absent from dashboards cached by earlier releases. */
+  cardio_weeks?: CardioWeek[];
   workouts_this_week: number;
   sets_this_week: number;
   volume_this_week_kg: number;
@@ -430,6 +494,8 @@ export interface DashboardData {
   recent_workouts: TrackedWorkout[];
   /** Whole-log facts; absent from dashboards cached by earlier releases. */
   history?: WorkoutHistorySummary | null;
+  /** The saved split and its progress; absent from servers and caches before it was added. */
+  training_split?: TrainingSplit | null;
 }
 
 export interface WorkoutHistorySummary {
@@ -439,8 +505,66 @@ export interface WorkoutHistorySummary {
   has_sample_workouts: boolean;
 }
 
+export interface TrainingBlock {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string | null;
+  /** Optional inclusive target for “days left”; it never ends the block. */
+  planned_end_date?: string | null;
+  /** A recovery block: its summary has no comparison and later blocks skip it. */
+  deload?: boolean;
+  /** The block's #rrggbb colour on timelines; absent uses the app's palette. */
+  color?: string | null;
+  /** Derived by the server on read. */
+  workout_count?: number;
+}
+
+export interface TrainingBlockInput {
+  name: string;
+  start_date: string;
+  planned_end_date: string | null;
+  /** Omit to keep the saved value when editing. */
+  deload?: boolean;
+  /** Null uses the app's palette; omit to keep the saved colour when editing. */
+  color?: string | null;
+}
+
+export interface BlockStats {
+  block_id: string;
+  name: string;
+  start_date: string;
+  deload?: boolean;
+  workout_count: number;
+  set_count: number;
+  volume_kg: number;
+  /** Weight and volume PRs dated inside the block. */
+  pr_count: number;
+}
+
+/** A block's totals next to the last regular block before it. */
+export interface TrainingBlockSummary {
+  block: BlockStats;
+  previous: BlockStats | null;
+}
+
+export interface TrainingBlocks {
+  blocks: TrainingBlock[];
+  /** Workouts dated before the first block. */
+  earlier_workout_count?: number;
+  /** Date of the earliest logged workout. */
+  history_start?: string | null;
+}
+
 /** An exercise's history before the loaded window, condensed by the server. */
 export interface ExerciseHistoryBaseline {
+  best_relative_strength?: number | null;
+  block_bests?: Array<{
+    best_relative_strength?: number | null;
+    block_id: string;
+    best_weight_kg: number | null;
+    reps_by_weight: Array<{ weight_kg: number; reps: number }>;
+  }>;
   exercise_id: string;
   best_weight_kg: number | null;
   reps_by_weight: Array<{ weight_kg: number; reps: number }>;
@@ -459,6 +583,10 @@ export interface MuscleVolume {
 }
 
 export interface PersonalRecord {
+  bodyweight_kg?: number | null;
+  scope?: 'all_time' | 'block';
+  block_id?: string | null;
+  block_name?: string | null;
   id: string;
   exercise_id: string;
   workout_id: string;
@@ -473,19 +601,13 @@ export interface PersonalRecord {
   exercise_name: string | null;
 }
 
-export interface FfmiProfile {
-  sex: 'male' | 'female' | null;
-  height_cm: number | null;
-  wrist_cm: number | null;
-  ankle_cm: number | null;
-  target_body_fat_pct: number;
-}
-
 export interface TrainingPreferences {
   preferred_weight_unit: 'kg' | 'lb';
   week_start: 'monday' | 'sunday' | 'saturday';
   zone2_goal_minutes: number;
   weekly_muscle_set_goal: number;
+  /** Absent on older servers and cached preferences. */
+  weekly_muscle_set_goals?: Record<string, number>;
 }
 
 export interface HeartRateZone {
@@ -534,6 +656,7 @@ export interface CardioSessionInput {
   incline_percent?: number | null;
   average_power_watts?: number | null;
   average_mets?: number | null;
+  elevation_gain_m?: number | null;
   intensity: string | null;
   zone: string | null;
   qualifies_zone2: boolean;
@@ -546,6 +669,9 @@ export interface CardioSession extends CardioSessionInput {
   workout_context?: 'pure_cardio' | 'workout_plus_cardio';
   performed_after_strength?: boolean;
   source_workout_name?: string | null;
+  /** Calculated by the server for when the logged value is blank. */
+  estimated_mets?: number | null;
+  estimated_elevation_gain_m?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -558,6 +684,7 @@ export interface CardioScreenshotScan {
   average_heart_rate_bpm: number | null;
   distance_km: number | null;
   average_speed_kph: number | null;
+  elevation_gain_m?: number | null;
   fields_found: string[];
   warning: string | null;
 }
@@ -592,13 +719,14 @@ export interface CardioEnergyPeriod {
   previous_average_incline_percent: number | null;
   average_mets: number | null;
   previous_average_mets: number | null;
-  met_minutes: number;
-  previous_met_minutes: number | null;
+  elevation_gain_m?: number;
+  previous_elevation_gain_m?: number | null;
   heart_rate_sessions: number;
   distance_sessions: number;
   speed_sessions: number;
   incline_sessions: number;
   mets_sessions: number;
+  elevation_sessions?: number;
 }
 
 export interface CardioMetricsInput {
@@ -609,6 +737,7 @@ export interface CardioMetricsInput {
   incline_percent: number | null;
   average_power_watts?: number | null;
   average_mets?: number | null;
+  elevation_gain_m?: number | null;
 }
 
 export interface BodyWeightGoalInput {
@@ -616,6 +745,8 @@ export interface BodyWeightGoalInput {
   target_date: string;
   start_weight_kg: number;
   target_weight_kg: number;
+  maintenance_min_kg?: number | null;
+  maintenance_max_kg?: number | null;
   active: boolean;
 }
 
@@ -625,6 +756,8 @@ export interface BodyWeightGoal extends BodyWeightGoalInput {
 }
 
 export interface ProgressPoint {
+  relative_strength?: number | null;
+  bodyweight_kg?: number | null;
   workout_date: string;
   workout_id: string;
   best_weight_kg: number;
@@ -655,6 +788,32 @@ export interface ExerciseLibrarySummary {
   change_kg: number | null;
   change_percent: number | null;
   trend: { date: string; estimated_1rm: number }[];
+  /** Estimates are in the reference machine's weights; missing from older servers. */
+  normalised?: boolean;
+}
+
+export interface ArchiveCounts {
+  workouts: number;
+  cardio_sessions: number;
+  body_check_ins: number;
+  custom_exercises: number;
+  photos: number;
+  /** Absent from servers that predate workout photos. */
+  workout_photos?: number;
+}
+
+/** What restoring a full backup would bring back, next to what the account holds now. */
+export interface ArchivePreview {
+  created_at: string | null;
+  username: string | null;
+  archive: ArchiveCounts;
+  current: ArchiveCounts;
+  photos_skipped: number;
+}
+
+export interface ArchiveRestored {
+  restored: ArchiveCounts;
+  photos_skipped: number;
 }
 
 export interface CsvImportResult {
@@ -715,8 +874,12 @@ export interface User {
   is_admin: boolean;
   can_upload_videos: boolean;
   created_at: string;
+  /** Set after an admin reset: a new password must be chosen before the app can be used. */
+  must_change_password?: boolean;
   /** Versioned URL of the account's profile photo; null when it has none. */
   profile_photo_url?: string | null;
+  /** Set once by the owner; after that only an administrator can change it. */
+  sex?: Sex | null;
 }
 
 /** Who may upload workout videos: nobody, administrators only, or every account. */
@@ -728,15 +891,30 @@ export interface AdminUser {
   display_name: string;
   is_admin: boolean;
   disabled_at: string | null;
+  /** An admin reset the password and the person has not chosen a new one yet. */
+  must_change_password: boolean;
+  /** The person asked for a temporary password from the sign-in screen and is still waiting. */
+  password_reset_requested_at?: string | null;
   created_at: string;
   last_active_at: string | null;
   /** Admin-only live activity, including accounts that do not share with friends. */
   presence?: FriendPresence;
   signed_in_devices: number;
+  /** Versions of all unexpired sign-ins, newest first; null means not reported. */
+  client_versions?: { version: string | null; devices: number }[];
   workouts: number;
   photos: number;
   photo_bytes: number;
   video_sessions: number;
+  sex?: Sex | null;
+}
+
+/** A signed-out person waiting for an administrator to give them a temporary password. */
+export interface PasswordResetRequest {
+  user_id: string;
+  username: string;
+  display_name: string;
+  requested_at: string;
 }
 
 export interface ServerSettings {
@@ -751,6 +929,7 @@ export interface AccountLimits {
   cardio_sessions_per_account: number;
   custom_exercises_per_account: number;
   photos_per_account: number;
+  workout_photos_per_account: number;
   saves_per_minute: number;
   exercises_per_workout: number;
   sets_per_workout: number;
@@ -780,6 +959,18 @@ export interface ServerStatus {
   photo_bytes: number;
   video_file_bytes: number;
   video_queue: Record<string, number>;
+  /** Releases used by sign-ins in the last 30 days, newest first. */
+  client_versions?: ClientVersionUsage[];
+  /** Saves from older releases are refused; null accepts every release. */
+  minimum_write_version?: string | null;
+}
+
+export interface ClientVersionUsage {
+  /** Null for sign-ins not used since releases started reporting their version. */
+  version: string | null;
+  users: number;
+  sessions: number;
+  last_seen_at: string;
 }
 
 export interface AuthConfig {
@@ -802,7 +993,11 @@ export interface RegisterInput {
 export interface ProfileUpdateInput {
   display_name?: string;
   username?: string;
+  /** Accepted once: the server refuses to change a sex that is already set. */
+  sex?: Sex;
 }
+
+export type Sex = 'male' | 'female';
 export interface AppFeedback {
   id: string;
   username: string;
@@ -820,6 +1015,8 @@ export interface SharingChoices {
   visibility: ProfileVisibility;
   share_notes: boolean;
   share_body_weight: boolean;
+  /** Tape measurements, drawn on the profile's body outline. */
+  share_body_sizes: boolean;
   share_goals: boolean;
   share_machine_photos: boolean;
   /** Friends see whether you are online and when you were last active. */
@@ -840,6 +1037,8 @@ export interface SharedProfileSummary {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  /** Sent only to those who can view the profile. */
+  sex?: Sex | null;
   member_since: string;
   /** Private is returned only when viewing your own profile. */
   visibility: ProfileVisibility;
@@ -859,6 +1058,7 @@ export interface SharedProfileSummary {
   shares: {
     notes: boolean;
     body_weight: boolean;
+    body_sizes?: boolean;
     goals: boolean;
     machine_photos: boolean;
   } | null;
@@ -920,6 +1120,41 @@ export interface FriendConnections {
   blocked: SharingConnection[];
 }
 
+/** A member's best set of one lift: the working set with their highest estimated one-rep max. */
+export interface LiftBest {
+  /** The member's own exercise. */
+  exercise_id: string;
+  weight_kg: number;
+  reps: number;
+  estimated_1rm: number;
+  achieved_date: string;
+  /** The member normalises this exercise's machines, so the weights are its reference machine's. */
+  normalised: boolean;
+}
+
+/** One of your strength exercises, with each member's best when they have logged it. */
+export interface LiftComparison {
+  exercise_id: string;
+  name: string;
+  muscle_group: string;
+  equipment: string | null;
+  yours: LiftBest | null;
+  theirs: LiftBest | null;
+}
+
+export interface LiftComparisons {
+  /** The exercises your head to heads show, in the order you added them. */
+  selected: string[];
+  /** Every exercise you can choose, by name. */
+  lifts: LiftComparison[];
+}
+
+export interface LiftRanking {
+  member: Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
+  is_you: boolean;
+  best: LiftBest;
+}
+
 export type WorkoutReactionKind = 'like' | 'love' | 'strong' | 'fire' | 'clap' | 'trophy' | 'run';
 
 export interface WorkoutReactions {
@@ -979,6 +1214,23 @@ export interface FriendFeedItem {
   };
   workout: TrackedWorkout;
   reactions: WorkoutReactions;
+}
+
+/** One workout in Social's feed: yours or a friend's, with only what its owner shares. */
+export interface TimelineItem {
+  member: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+    is_you: boolean;
+  };
+  workout: TrackedWorkout;
+  reactions: WorkoutReactions;
+  /** Weight and reps records set in the workout. */
+  record_count: number;
+}
+
+export interface Timeline {
+  /** Newest first. */
+  items: TimelineItem[];
+  has_more: boolean;
 }
 
 export interface FriendFeed {
@@ -1053,6 +1305,8 @@ export interface SharedConsistency {
 export interface SharedProfile extends SharedProfileSummary {
   consistency?: SharedConsistency | null;
   body_weight: SharedBodyMeasurement[] | null;
+  /** Newest first; absent or null unless the member shares them. */
+  body_sizes?: BodySizeLog[] | null;
   goals: SharedGoals | null;
   cardio_sessions: SharedCardioSession[] | null;
   cardio_total?: number | null;

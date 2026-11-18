@@ -45,7 +45,7 @@
   text-align: center;
 }
 
-/* Key: this week's bar, the outline of the week before and the dotted goal. */
+/* Key: this week's bar, the outline of the week before and each muscle's target tick. */
 .muscle-key-item {
   display: inline-flex;
   align-items: center;
@@ -56,6 +56,12 @@
   height: 0.5rem;
   border-radius: 0 3px 3px 0;
   background: var(--p-accent);
+}
+.muscle-sets-card .muscle-key-goal {
+  width: 2px;
+  height: 0.75rem;
+  border-radius: 2px;
+  background: var(--p-ink);
 }
 .muscle-key-swatch.is-previous,
 .muscle-bar-track .muscle-bar-previous {
@@ -71,12 +77,36 @@
   transition: width 260ms var(--ease-out);
 }
 .muscle-sets-card .muscle-bars {
-  --muscle-value-width: 2.75rem;
+  --muscle-value-width: 4rem;
+}
+.muscle-sets-card .muscle-bars::after {
+  content: none;
+}
+.muscle-sets-card .muscle-bar-track::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  left: calc(100% * var(--muscle-goal-ratio));
+  width: 2px;
+  border-radius: 2px;
+  background: var(--p-ink);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+.muscle-row-target {
+  color: var(--p-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 .muscle-sets-card .muscle-bars b {
   display: grid;
   justify-items: end;
   line-height: 1.15;
+}
+.muscle-set-count {
+  white-space: nowrap;
 }
 .muscle-set-change {
   font-size: 0.6875rem;
@@ -88,7 +118,8 @@
 .muscle-set-change.is-down {
   color: var(--p-danger);
 }
-.muscle-set-change.is-same {
+.muscle-set-change.is-same,
+.muscle-set-change.is-pending {
   color: var(--p-muted);
 }
 @container (max-width: 290px) {
@@ -108,16 +139,26 @@
   overflow-wrap: anywhere;
 }
 .muscle-name-button:hover,
-.muscle-name-button:focus-visible {
+.muscle-name-button:focus-visible,
+.muscle-bars li:hover .muscle-name-button {
   color: var(--p-accent);
+}
+/* The name button stretches over its whole row, so tapping the bar or the value opens it too. */
+.muscle-sets-card .muscle-bars li {
+  position: relative;
+}
+.muscle-bars .muscle-name-button::after {
+  content: '';
+  position: absolute;
+  inset: -0.1875rem 0;
+  z-index: 2;
+  cursor: pointer;
 }
 .popup-dialog.muscle-contribution-sheet[open] {
   width: min(30rem, calc(100% - 1.5rem));
   max-height: calc(100dvh - 2rem);
   margin: auto auto max(0.75rem, env(safe-area-inset-bottom));
   border-radius: 24px;
-  /* The shared pop-in animation would restart whenever a drag snaps back. */
-  animation: none;
   transform: translateY(var(--sheet-offset, 0px));
   transition: transform 180ms ease-out;
 }
@@ -142,10 +183,43 @@
   background: var(--p-surface);
   touch-action: none;
 }
+/* Slides up from the bottom when it opens. It animates the separate translate property, so a
+   drag snapping back (which moves transform) never restarts it. */
+.popup-dialog.muscle-contribution-sheet[open] {
+  animation: muscle-sheet-in 420ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
+}
+
+@keyframes muscle-sheet-in {
+  from {
+    translate: 0 calc(100% + 1.5rem);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+/* A light dim and blur, like the Start menu, so Home stays visible behind the sheet. */
+.popup-dialog.muscle-contribution-sheet::backdrop {
+  background: rgb(5 6 8 / 50%);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+:root[data-colour-mode='light'] .popup-dialog.muscle-contribution-sheet::backdrop {
+  background: rgb(243 245 247 / 55%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .popup-dialog.muscle-contribution-sheet {
     transition: none;
   }
+  .popup-dialog.muscle-contribution-sheet[open] {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .popup-dialog.muscle-contribution-sheet[open] {
+  animation: none;
 }
 .muscle-contribution-sheet .popup-dialog-close {
   width: auto;

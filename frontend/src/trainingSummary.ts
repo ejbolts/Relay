@@ -2,6 +2,7 @@ import { formatWeight, formatWeightNumber, weightFromKg, type WeightUnit } from 
 import type {
   Exercise,
   PersonalRecord,
+  RepRange,
   RoutineSet,
   TrackedSet,
   TrackedWorkout,
@@ -242,6 +243,20 @@ export function shortDate(value: string): string {
   return `${SHORT_DAYS[date.getDay()]} ${date.getDate()} ${SHORT_MONTHS[date.getMonth()]}`;
 }
 
+export type YearGroup<T> = { year: string; items: T[] };
+
+/** Groups date-ordered items into consecutive runs that share a calendar year. */
+export function groupByYear<T>(items: T[], dateOf: (item: T) => string): YearGroup<T>[] {
+  const groups: YearGroup<T>[] = [];
+  for (const item of items) {
+    const year = dateOf(item).slice(0, 4);
+    const last = groups[groups.length - 1];
+    if (last?.year === year) last.items.push(item);
+    else groups.push({ year, items: [item] });
+  }
+  return groups;
+}
+
 /** “5 Oct” */
 export function dayMonth(value: string): string {
   const date = parseLocalDate(value);
@@ -259,16 +274,66 @@ export function topWorkingSet(sets: TrackedSet[]): TrackedSet | null {
   }, null);
 }
 
+/** Each exercise's top working set from its newest workout on or before `today`. */
+export function latestTopSets(workouts: TrackedWorkout[], today: string): Map<string, TrackedSet> {
+  const latest = new Map<string, { date: string; set: TrackedSet }>();
+  for (const workout of workouts) {
+    if (workout.workout_date > today) continue;
+    for (const movement of workout.movements) {
+      const top = topWorkingSet(movement.sets);
+      const known = latest.get(movement.exercise.id);
+      if (top && (!known || workout.workout_date > known.date)) {
+        latest.set(movement.exercise.id, { date: workout.workout_date, set: top });
+      }
+    }
+  }
+  return new Map([...latest].map(([id, { set }]) => [id, set]));
+}
+
+/**
+ * The compact set shown for an exercise in Home's Up next list: the planned weight when the plan
+ * has one, otherwise the last top set the logger will suggest, otherwise the planned sets.
+ */
+export function upNextSetLabel(
+  item: SessionTemplateExercise,
+  latest: TrackedSet | undefined,
+  unit: WeightUnit = 'kg',
+): { text: string; title: string } {
+  if (item.exercise.kind === 'cardio') return { text: item.summary, title: item.summary };
+  const planned = item.topSet?.weight_kg != null ? item.topSet : null;
+  const shown = planned ?? latest ?? null;
+  if (shown && (shown.weight_kg ?? 0) > 0) {
+    const text = `${formatWeightNumber(shown.weight_kg ?? 0, unit)}×${shown.reps ?? '–'}`;
+    return { text, title: `${formatWeight(shown.weight_kg ?? 0, unit)} × ${shown.reps ?? '–'}` };
+  }
+  if (shown?.reps) return { text: `${shown.reps} reps`, title: `${shown.reps} reps` };
+  const sets = item.plannedSets?.length ?? 0;
+  const reps = item.repRange
+    ? `${item.repRange.min}–${item.repRange.max}`
+    : (item.topSet?.reps ?? null);
+  if (sets && reps !== null) {
+    return {
+      text: `${sets}×${reps}`,
+      title: `${sets} ${sets === 1 ? 'set' : 'sets'} of ${reps} reps`,
+    };
+  }
+  return { text: item.summary, title: item.summary };
+}
+
 export function setLabel(
   item: Pick<TrackedSet, 'weight_kg' | 'reps'>,
   unit: WeightUnit = 'kg',
 ): string {
+  // Bodyweight sets are saved at 0 kg; "8 reps" reads better than "0 kg × 8".
+  if (!item.weight_kg && item.reps !== null) return `${item.reps} reps`;
   return `${formatWeight(item.weight_kg ?? 0, unit)} × ${item.reps ?? '–'}`;
 }
 
 export interface SessionTemplateExercise {
   exercise: Exercise;
   plannedSets?: RoutineSet[];
+  /** The plan's target reps for this exercise, if it set one. */
+  repRange?: RepRange;
   topSet: TrackedSet | null;
   /** “157.5 kg × 5” for strength, “30 min · 4.8 km” for cardio. */
   summary: string;
@@ -292,6 +357,8 @@ export interface SessionTemplate {
   category: WorkoutCategory;
   sourceWorkout: TrackedWorkout;
   exercises: SessionTemplateExercise[];
+  /** Planned exercises from a split day or a workout type, rather than the last session. */
+  planned?: 'routine' | 'type';
 }
 
 /** The newest saved workout of a type, used to pre-fill the recommended next session. */
@@ -308,7 +375,11 @@ export function sessionTemplateFor(
         workout.category === category &&
         (workout.workout_type_id ?? null) === workoutTypeId &&
         workout.workout_date <= today &&
-        workout.movements.length > 0,
+        workout.movements.length > 0 &&
+        // A strength session filed as Cardio is not a cardio session to repeat.
+        (category !== 'cardio' ||
+          workoutTypeId !== null ||
+          workout.movements.some((movement) => movement.exercise.kind === 'cardio')),
     )
     .sort(
       (left, right) =>
@@ -317,8 +388,16 @@ export function sessionTemplateFor(
         right.created_at.localeCompare(left.created_at),
     )[0];
   if (!source) return null;
+  return { ...sessionTemplateFromWorkout(source, unit), category };
+}
+
+/** Pre-fills a workout from one saved workout: its exercises, in order, with their top sets. */
+export function sessionTemplateFromWorkout(
+  source: TrackedWorkout,
+  unit: WeightUnit = 'kg',
+): SessionTemplate {
   return {
-    category,
+    category: source.category,
     sourceWorkout: source,
     exercises: [...source.movements]
       .sort((left, right) => left.order_index - right.order_index)
@@ -379,7 +458,9 @@ export function weekGroupLabel(weekStart: string, today: string, weekStartDay: n
 export function recentStrengthRecords(records: PersonalRecord[], limit = 3): PersonalRecord[] {
   const seen = new Set<string>();
   return records
-    .filter((record) => record.record_type === 'reps_at_weight' || record.record_type === 'weight')
+    .filter((record) =>
+      ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
+    )
     .filter((record) => record.value > 0)
     .sort(
       (left, right) =>
@@ -400,7 +481,7 @@ export function recentStrengthRecords(records: PersonalRecord[], limit = 3): Per
 export function recordCountsByWorkout(records: PersonalRecord[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const record of records) {
-    if (record.record_type !== 'reps_at_weight' && record.record_type !== 'weight') continue;
+    if (!['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type)) continue;
     counts.set(record.workout_id, (counts.get(record.workout_id) ?? 0) + 1);
   }
   return counts;

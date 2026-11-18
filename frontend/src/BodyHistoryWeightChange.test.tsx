@@ -7,6 +7,7 @@ import { BodyCompositionScreen } from './App';
 import { TrainingPreferencesContext } from './trainingPreferencesContext';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
 import type { WeightUnit } from './weightUnits';
+import type { BodyTrendStatistic } from './bodyTrend';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -58,6 +59,7 @@ async function render(
   measurements: BodyMeasurement[],
   goals: BodyWeightGoal[],
   unit: WeightUnit = 'kg',
+  statistic: BodyTrendStatistic = 'average',
 ) {
   vi.spyOn(api, 'listBodyWeightGoals').mockResolvedValue(goals);
   await act(async () =>
@@ -79,6 +81,7 @@ async function render(
           onSave={vi.fn()}
           onDelete={vi.fn()}
           onDataChange={vi.fn()}
+          trendPreference={{ duration: '30d', statistic }}
         />
       </TrainingPreferencesContext.Provider>,
     ),
@@ -251,25 +254,18 @@ describe('Body history goal-aware arrows', () => {
     expect(container.querySelectorAll('.body-history-weight-change')).toHaveLength(0);
   });
 
-  it('updates period comparisons when the selected statistic changes', async () => {
-    await render(
-      [
-        measurement('2026-10-07', 100),
-        measurement('2026-10-06', 80),
-        measurement('2026-10-05', 80),
-        measurement('2026-09-07', 82),
-      ],
-      [goal(90, 75)],
-    );
+  it('updates period comparisons when the saved statistic changes', async () => {
+    const checkIns = [
+      measurement('2026-10-07', 100),
+      measurement('2026-10-06', 80),
+      measurement('2026-10-05', 80),
+      measurement('2026-09-07', 82),
+    ];
+    await render(checkIns, [goal(90, 75)]);
     await selectTab('Avg Week');
     expect(arrow(rows()[0])?.classList.contains('unfavorable')).toBe(true);
-    const select = container.querySelector<HTMLSelectElement>(
-      '[aria-label="Bodyweight trend statistic"]',
-    )!;
-    await act(async () => {
-      select.value = 'median';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await render(checkIns, [goal(90, 75)], 'kg', 'median');
+    await selectTab('Median Week');
     expect(arrow(rows()[0])?.classList.contains('favorable')).toBe(true);
     await selectTab('Median Monthly');
     expect(arrow(rows()[0])?.classList.contains('favorable')).toBe(true);
@@ -349,26 +345,54 @@ describe('Body history goal-aware arrows', () => {
       return document.querySelector<HTMLFormElement>('.body-goal-form')!;
     }
 
-    it('saves a maintain goal that holds the chosen weight', async () => {
+    it.each(['kg', 'lb'] as const)('saves a maintenance range entered in %s', async (unit) => {
       const create = vi.spyOn(api, 'createBodyWeightGoal').mockResolvedValue(goal(84, 84));
-      await render([measurement('2026-10-02', 84), measurement('2026-10-01', 85)], []);
+      await render([measurement('2026-10-02', 84), measurement('2026-10-01', 85)], [], unit);
       const form = await openGoalForm();
       const maintain = form.querySelector<HTMLButtonElement>('[role="radio"]:nth-child(3)')!;
       await act(async () => maintain.click());
       expect(maintain.getAttribute('aria-checked')).toBe('true');
-      const [target, date] = form.querySelectorAll<HTMLInputElement>('input');
-      // Maintaining starts from the latest weight.
-      expect(target.value).toBe('84');
+      const [minimum, maximum, date] = form.querySelectorAll<HTMLInputElement>('input');
+      await act(async () => setInput(minimum, unit === 'kg' ? '82' : '180'));
+      await act(async () => setInput(maximum, unit === 'kg' ? '86' : '190'));
       await act(async () => setInput(date, '2026-12-31'));
       await act(async () => form.requestSubmit());
 
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({
-          start_weight_kg: 84,
-          target_weight_kg: 84,
+          maintenance_min_kg: expect.closeTo(unit === 'kg' ? 82 : 81.6466, 3),
+          maintenance_max_kg: expect.closeTo(unit === 'kg' ? 86 : 86.1826, 3),
           target_date: '2026-12-31',
         }),
       );
+    });
+
+    it('keeps invalid ranges open with an error, then saves a corrected range', async () => {
+      const create = vi
+        .spyOn(api, 'createBodyWeightGoal')
+        .mockResolvedValue({ ...goal(84, 84), maintenance_min_kg: 82, maintenance_max_kg: 86 });
+      await render([measurement('2026-10-02', 84)], []);
+      const form = await openGoalForm();
+      await act(async () =>
+        form.querySelector<HTMLButtonElement>('[role="radio"]:nth-child(3)')!.click(),
+      );
+      const [minimum, maximum, date] = form.querySelectorAll<HTMLInputElement>('input');
+      await act(async () => {
+        setInput(minimum, '86');
+        setInput(maximum, '82');
+        setInput(date, '2026-12-31');
+      });
+      await act(async () => form.requestSubmit());
+      expect(create).not.toHaveBeenCalled();
+      expect(form.textContent).toContain('Enter a minimum and a higher maximum');
+      await act(async () => {
+        setInput(minimum, '82');
+        setInput(maximum, '86');
+      });
+      await act(async () => form.requestSubmit());
+      expect(container.textContent).toContain('82–86 kg');
+      expect(container.textContent).toContain('In range');
+      expect(document.querySelector('.body-goal-form')).toBeNull();
     });
 
     it('asks for a target on the right side of the current weight', async () => {

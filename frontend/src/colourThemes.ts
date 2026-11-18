@@ -1,18 +1,48 @@
 const THEME_KEY = 'gym-logger-colour-theme';
 const MODE_KEY = 'gym-logger-colour-mode';
+const DARK_STYLE_KEY = 'gym-logger-dark-style';
+const GLASS_KEY = 'gym-logger-glass';
+// Retired Background choice; the reset clears any value a device still holds.
+const SUN_RAY_KEY = 'gym-logger-sun-ray';
+const LIGHT_STYLE_KEY = 'gym-logger-light-style';
+// Retired Set colours choice; the reset clears any value a device still holds.
+const SET_TINT_KEY = 'gym-logger-set-tint';
+const APPEARANCE_RESET_KEY = 'gym-logger-appearance-reset';
+/** Bump to move every device onto the default look again once, keeping its accent colour. */
+export const APPEARANCE_RESET_VERSION = '4';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
 ] as const;
 export type ColourModeId = (typeof COLOUR_MODES)[number]['id'];
+export const DARK_STYLES = [
+  { id: 'default', name: 'Default' },
+  { id: 'stained', name: 'Stained' },
+  { id: 'oled', name: 'OLED' },
+] as const;
+export type DarkStyleId = (typeof DARK_STYLES)[number]['id'];
+export const LIGHT_STYLES = [
+  { id: 'default', name: 'Default' },
+  { id: 'stained', name: 'Stained' },
+] as const;
+export type LightStyleId = (typeof LIGHT_STYLES)[number]['id'];
+/** How see-through the frosted-glass cards and tab bar are; `off` keeps them solid. */
+export const GLASS_LEVELS = [
+  { id: 'off', name: 'Off' },
+  { id: 'subtle', name: 'Subtle' },
+  { id: 'medium', name: 'Medium' },
+  { id: 'strong', name: 'Strong' },
+] as const;
+export type GlassLevelId = (typeof GLASS_LEVELS)[number]['id'];
+export const DEFAULT_GLASS_LEVEL: GlassLevelId = 'medium';
 export const COLOUR_THEMES = [
   {
     id: 'blue',
     name: 'Blue',
     detail: 'Original',
-    accent: '#3987e5',
-    hover: '#4b94ea',
-    text: '#6da7ec',
+    accent: '#2c74d0',
+    hover: '#357bd6',
+    text: '#7fb4f1',
     lightText: '#1f62b4',
   },
   {
@@ -51,6 +81,15 @@ export const COLOUR_THEMES = [
     text: '#efb06d',
     lightText: '#8a4410',
   },
+  {
+    id: 'neutral',
+    name: 'Neutral',
+    detail: 'Silver grey',
+    accent: '#5f6670',
+    hover: '#6c747e',
+    text: '#c5cbd2',
+    lightText: '#4a525b',
+  },
 ] as const;
 export type ColourThemeId = (typeof COLOUR_THEMES)[number]['id'];
 
@@ -70,11 +109,77 @@ export function applyColourTheme(id: ColourThemeId) {
   root.style.setProperty('--p-accent', theme.accent);
   root.style.setProperty('--p-accent-hover', theme.hover);
   // Light mode needs a darker accent tint so accent-coloured text stays readable on white.
+  const light = root.dataset.colourMode === 'light';
+  root.style.setProperty('--p-accent-text', light ? theme.lightText : theme.text);
+  // Dark cards are lighter than before, so the soft tint needs a little more colour to stand out.
   root.style.setProperty(
-    '--p-accent-text',
-    root.dataset.colourMode === 'light' ? theme.lightText : theme.text,
+    '--p-accent-soft',
+    `color-mix(in srgb, ${theme.accent} ${light ? 15 : 20}%, transparent)`,
   );
-  root.style.setProperty('--p-accent-soft', `color-mix(in srgb, ${theme.accent} 15%, transparent)`);
+  updateBrowserThemeColour();
+}
+
+/** Mix two #rrggbb colours, matching CSS `color-mix(in srgb, a pct%, b)`. */
+function mixHex(a: string, b: string, pct: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(channel(a, i) * (pct / 100) + channel(b, i) * (1 - pct / 100))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+/** Page colour for the phone's browser bar; kept in step with the `--p-page` token in pulse.css. */
+export function browserThemeColour(
+  mode: ColourModeId,
+  style: DarkStyleId,
+  themeId: ColourThemeId,
+  lightStyle: LightStyleId = 'default',
+): string {
+  const theme = COLOUR_THEMES.find((entry) => entry.id === themeId) ?? COLOUR_THEMES[0];
+  if (mode === 'light')
+    return lightStyle === 'stained' ? mixHex(theme.accent, '#f3f5f7', 7) : '#f3f5f7';
+  if (style === 'oled') return '#000000';
+  if (style === 'stained') return mixHex(theme.accent, '#0a0d12', 7);
+  return '#0b0d0f';
+}
+
+function updateBrowserThemeColour() {
+  const root = document.documentElement;
+  const mode: ColourModeId = root.dataset.colourMode === 'light' ? 'light' : 'dark';
+  const style = DARK_STYLES.find((entry) => entry.id === root.dataset.darkStyle)?.id ?? 'default';
+  const theme = COLOUR_THEMES.find((entry) => entry.id === root.dataset.colourTheme)?.id ?? 'blue';
+  const lightStyle =
+    LIGHT_STYLES.find((entry) => entry.id === root.dataset.lightStyle)?.id ?? 'default';
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', browserThemeColour(mode, style, theme, lightStyle));
+}
+
+export function darkStylePreference(): DarkStyleId {
+  try {
+    const saved = localStorage.getItem(DARK_STYLE_KEY);
+    return DARK_STYLES.find((style) => style.id === saved)?.id ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export function applyDarkStyle(id: DarkStyleId) {
+  document.documentElement.dataset.darkStyle = id;
+  updateBrowserThemeColour();
+}
+
+export function saveDarkStyle(id: DarkStyleId): boolean {
+  applyDarkStyle(id);
+  try {
+    localStorage.setItem(DARK_STYLE_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function saveColourTheme(id: ColourThemeId): boolean {
@@ -98,9 +203,6 @@ export function colourModePreference(): ColourModeId {
 export function applyColourMode(id: ColourModeId) {
   const root = document.documentElement;
   root.dataset.colourMode = id;
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', id === 'light' ? '#f3f5f7' : '#0b0d0f');
   const theme = root.dataset.colourTheme;
   applyColourTheme(COLOUR_THEMES.find((entry) => entry.id === theme)?.id ?? 'blue');
 }
@@ -112,5 +214,71 @@ export function saveColourMode(id: ColourModeId): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+export function glassPreference(): GlassLevelId {
+  try {
+    const saved = localStorage.getItem(GLASS_KEY);
+    return GLASS_LEVELS.find((level) => level.id === saved)?.id ?? DEFAULT_GLASS_LEVEL;
+  } catch {
+    return DEFAULT_GLASS_LEVEL;
+  }
+}
+
+export function applyGlass(id: GlassLevelId) {
+  document.documentElement.dataset.glass = id;
+}
+
+export function saveGlass(id: GlassLevelId): boolean {
+  applyGlass(id);
+  try {
+    localStorage.setItem(GLASS_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function lightStylePreference(): LightStyleId {
+  try {
+    const saved = localStorage.getItem(LIGHT_STYLE_KEY);
+    return LIGHT_STYLES.find((style) => style.id === saved)?.id ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export function applyLightStyle(id: LightStyleId) {
+  document.documentElement.dataset.lightStyle = id;
+  updateBrowserThemeColour();
+}
+
+export function saveLightStyle(id: LightStyleId): boolean {
+  applyLightStyle(id);
+  try {
+    localStorage.setItem(LIGHT_STYLE_KEY, id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Once per device, moves existing appearance choices onto the default look (Dark, Default style,
+ * Medium glass) while keeping the accent colour. Later choices are left alone.
+ */
+export function resetAppearanceOnce(): void {
+  try {
+    if (localStorage.getItem(APPEARANCE_RESET_KEY) === APPEARANCE_RESET_VERSION) return;
+    localStorage.removeItem(MODE_KEY);
+    localStorage.removeItem(DARK_STYLE_KEY);
+    localStorage.removeItem(LIGHT_STYLE_KEY);
+    localStorage.removeItem(SUN_RAY_KEY);
+    localStorage.removeItem(GLASS_KEY);
+    localStorage.removeItem(SET_TINT_KEY);
+    localStorage.setItem(APPEARANCE_RESET_KEY, APPEARANCE_RESET_VERSION);
+  } catch {
+    // Without storage every choice already falls back to the defaults.
   }
 }

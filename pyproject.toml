@@ -43,6 +43,9 @@ where = ["backend"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
+# Import `app` from this checkout, even when the virtual environment's editable install
+# points at another one (a shared environment used from several Git worktrees).
+pythonpath = ["backend"]
 addopts = "-q"
 markers = [
   "auth_flow: exercise real registration/login when creating authenticated fixture accounts",

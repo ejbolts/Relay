@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { CardioSession } from './types';
 import {
   cardioDistanceGroups,
+  cardioDistanceTabs,
   cardioTrendWeeks,
   cardioWeekTotals,
   distanceGroupFor,
   groupCardioHistory,
+  sessionElevation,
+  sessionMets,
 } from './cardioTrend';
 
 const session = (overrides: Partial<CardioSession> = {}): CardioSession => ({
@@ -39,6 +42,7 @@ describe('weekly cardio trend', () => {
           average_heart_rate_bpm: 120,
           calories_kcal: 0,
           distance_km: 2,
+          elevation_gain_m: 0,
         }),
         session({
           id: 'workout',
@@ -48,6 +52,7 @@ describe('weekly cardio trend', () => {
           source_workout_id: 'workout',
           workout_context: 'workout_plus_cardio',
           distance_km: 8,
+          elevation_gain_m: 120,
         }),
         session({ id: 'unlogged', duration_minutes: 20 }),
         session({ id: 'future', session_date: '2026-10-25', duration_minutes: 100 }),
@@ -60,7 +65,7 @@ describe('weekly cardio trend', () => {
       end: '2026-10-25',
       sessions: 3,
       time: 60,
-      metMinutes: 180,
+      elevation: 120,
       mets: 4.5,
       heartRate: 135,
       distance: 10,
@@ -77,11 +82,29 @@ describe('weekly cardio trend', () => {
       time: 0,
       distance: null,
       calories: null,
-      metMinutes: null,
+      elevation: null,
       mets: null,
       heartRate: null,
     });
     expect(weeks[8].start).toBe('2027-01-04');
+  });
+
+  it('fills blank MET and elevation with the estimates and keeps logged values', () => {
+    const logged = session({
+      average_mets: 6,
+      estimated_mets: 9,
+      elevation_gain_m: 40,
+      estimated_elevation_gain_m: 300,
+    });
+    const estimated = session({ estimated_mets: 8, estimated_elevation_gain_m: 250 });
+    expect([sessionMets(logged), sessionElevation(logged)]).toEqual([6, 40]);
+    expect([sessionMets(estimated), sessionElevation(estimated)]).toEqual([8, 250]);
+    // A response from before estimates existed has neither value.
+    expect([sessionMets(session()), sessionElevation(session())]).toEqual([null, null]);
+    expect(cardioWeekTotals([logged, estimated], '2026-10-19', '2026-10-24')).toMatchObject({
+      mets: 7,
+      elevation: 290,
+    });
   });
 
   it('rounds weighted averages to API precision before formatting heart rate', () => {
@@ -143,6 +166,29 @@ describe('weekly cardio trend', () => {
     expect(groups).toEqual([
       { key: 'foot', label: 'Walk & run', sessions: 2, distance: 8 },
       { key: 'cycle', label: 'Cycling', sessions: 1, distance: 20 },
+    ]);
+  });
+
+  it('always offers Walk & run, Cycling and Rowing tabs after logged groups', () => {
+    const tabs = cardioDistanceTabs(
+      [
+        session({ id: 'swim', activity_type: 'Swimming', distance_km: 1.5 }),
+        session({ id: 'ride', distance_km: 20 }),
+        session({ id: 'ride 2', distance_km: 12 }),
+      ],
+      '2026-10-01',
+      '2026-10-24',
+    );
+    expect(tabs.map((tab) => [tab.label, tab.sessions, tab.distance])).toEqual([
+      ['Cycling', 2, 32],
+      ['Swimming', 1, 1.5],
+      ['Walk & run', 0, 0],
+      ['Rowing', 0, 0],
+    ]);
+    expect(cardioDistanceTabs([], '2026-10-01', '2026-10-24').map((tab) => tab.key)).toEqual([
+      'foot',
+      'cycle',
+      'row',
     ]);
   });
 });

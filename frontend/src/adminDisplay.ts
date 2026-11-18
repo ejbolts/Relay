@@ -82,6 +82,7 @@ export const LIMIT_GROUPS: {
       { name: 'cardio_sessions_per_account', label: 'Cardio sessions' },
       { name: 'custom_exercises_per_account', label: 'Custom exercises' },
       { name: 'photos_per_account', label: 'Machine photos' },
+      { name: 'workout_photos_per_account', label: 'Workout photos' },
       { name: 'saves_per_minute', label: 'Changes per minute' },
     ],
   },

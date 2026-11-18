@@ -17,6 +17,8 @@ const session = (overrides: Partial<CardioSession> = {}): CardioSession => ({
   average_speed_kph: 20,
   incline_percent: null,
   average_mets: 6,
+  estimated_mets: 7.4,
+  estimated_elevation_gain_m: 150,
   intensity: null,
   zone: 'Zone 2',
   qualifies_zone2: true,
@@ -52,6 +54,8 @@ const overview: CardioOverview = {
       session_date: '2026-10-23',
       workout_context: 'workout_plus_cardio',
       source_workout_id: 'workout',
+      average_mets: null,
+      elevation_gain_m: 90,
     }),
     session({ id: 'last-week', session_date: '2026-10-17', duration_minutes: 40 }),
   ],
@@ -67,7 +71,8 @@ const overview: CardioOverview = {
     average_speed_kph: 20,
     average_incline_percent: null,
     average_mets: 6,
-    met_minutes: 540,
+    elevation_gain_m: 240,
+    elevation_sessions: 2,
     heart_rate_sessions: 3,
     distance_sessions: 3,
     speed_sessions: 3,
@@ -81,7 +86,7 @@ const overview: CardioOverview = {
     previous_average_speed_kph: null,
     previous_average_incline_percent: null,
     previous_average_mets: null,
-    previous_met_minutes: null,
+    previous_elevation_gain_m: null,
   })) as CardioOverview['energy_periods'],
 };
 
@@ -169,7 +174,11 @@ describe('cardio weekly trend screen', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ zone: null, qualifies_zone2: false }),
     );
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
+      'Workout saved',
+    );
+    expect(document.querySelector('dialog, [aria-modal="true"]')).toBeNull();
+    expect(document.querySelector('.notification-toast-action')?.textContent).toBe('Share card');
     await click(container.querySelector('[aria-label="Edit heart-rate zones and goals"]')!);
     expect(document.querySelector('dialog')!.textContent).toContain('Personal ranges (bpm)');
   });
@@ -186,20 +195,23 @@ describe('cardio weekly trend screen', () => {
       });
       const hero = () => container.querySelector('.cardio-week-value')!.textContent;
       expect(hero()).toContain('50 min');
-      await click(named('MET-min'));
-      expect(hero()).toContain('300 MET-min');
+      expect(named('MET-min')).toBeUndefined();
+      expect(container.textContent).not.toMatch(/METs|MET-min/);
+      await click(named('Elevation'));
+      // The ride's climb is estimated; the walk's 90 m was logged.
+      expect(hero()).toContain('240 m');
       const previousWeekDate = new Date('2026-10-12T12:00:00').toLocaleDateString(locale, {
         day: 'numeric',
         month: 'short',
       });
       const previousWeek = container.querySelector(
-        `[aria-label="Week of ${previousWeekDate}: 240 MET-min"]`,
+        `[aria-label="Week of ${previousWeekDate}: 150 m"]`,
       );
       expect(previousWeek).not.toBeNull();
       expect(previousWeek!.getAttribute('aria-pressed')).toBe('false');
       await click(previousWeek!);
       expect(previousWeek!.getAttribute('aria-pressed')).toBe('true');
-      expect(hero()).toContain('240 MET-min');
+      expect(hero()).toContain('150 m');
       expect(container.querySelector('.cardio-week-comparison')!.textContent).toContain(
         '1 session',
       );
@@ -220,6 +232,7 @@ describe('cardio weekly trend screen', () => {
     expect([...groups.querySelectorAll('button')].map((item) => item.textContent)).toEqual([
       'Cycling',
       'Walk & run',
+      'Rowing',
     ]);
     expect(hero()).toContain('10 km');
     expect(comparison()).toContain('1 session');
@@ -228,29 +241,66 @@ describe('cardio weekly trend screen', () => {
     expect(named('Walk & run').getAttribute('aria-pressed')).toBe('true');
     expect(hero()).toContain('10 km');
     expect(comparison()).toBe('1 session');
+    await click(named('Rowing'));
+    expect(named('Rowing').getAttribute('aria-pressed')).toBe('true');
+    expect(hero()).toContain('—');
+    expect(comparison()).toBe('0 sessions');
+    await click(named('Walk & run'));
     await click(named('Time'));
     expect(distanceTile.querySelector('dt')!.textContent).toBe('Walk & run');
   });
 
-  it('opens all stats, switches periods and explains METs in a dismissible popup', async () => {
+  it('opens all stats, switches periods and explains MET in a dismissible popup', async () => {
     await click(container.querySelector('.cardio-all-stats > summary')!);
     expect(container.querySelector('details.cardio-all-stats')!.hasAttribute('open')).toBe(true);
     await click(named('Month'));
     expect(container.querySelector('.cardio-progress-grid')!.textContent).toContain('900 kcal');
     await click(container.querySelector('[aria-label="About cardio progress"]')!);
     expect(document.querySelector('dialog')!.textContent).toContain('not measured fat loss');
+    expect(document.querySelector('dialog')!.textContent).toContain('no MET logged');
+    expect(document.body.textContent).not.toMatch(/METs|MET-min/);
     await click(document.querySelector('[aria-label="Close Cardio progress"]')!);
     expect(document.querySelector('dialog')).toBeNull();
   });
 
   it('groups filtered history by week and keeps session editing inside expandable rows', async () => {
     expect(container.querySelectorAll('.cardio-history-week')).toHaveLength(2);
-    await click(named('After workout'));
+    await click(named('With workout'));
     expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(1);
     expect(container.querySelector('.cardio-history-week h3')!.textContent).toContain('20 min');
     await click(container.querySelector('.cardio-history-row > summary')!);
+    // The walk logged its elevation; its MET was left blank, so it is estimated.
+    expect(container.querySelector('.cardio-session-performance')!.textContent).toContain(
+      '90\u00A0m elevation · ≈\u00A07.4\u00A0MET avg',
+    );
     await click(named('Edit metrics'));
     expect(document.querySelector('dialog')!.textContent).toContain('Cardio metrics');
+  });
+
+  it('separates history days while keeping sessions on the same day together', async () => {
+    vi.mocked(api.cardioOverview).mockResolvedValue({
+      ...overview,
+      sessions: [
+        session(),
+        session({ id: 'same-day', activity_type: 'Incline walking' }),
+        session({ id: 'previous-day', session_date: '2026-10-23' }),
+      ],
+    });
+    await act(async () =>
+      root.render(
+        <CardioScreen
+          dataRevision="day-dividers"
+          exercises={[]}
+          onDataChange={vi.fn()}
+          onOpenWorkout={vi.fn()}
+        />,
+      ),
+    );
+    const rows = container.querySelectorAll('.cardio-history-row');
+    expect(rows).toHaveLength(3);
+    expect(rows[0].classList.contains('cardio-history-new-day')).toBe(false);
+    expect(rows[1].classList.contains('cardio-history-new-day')).toBe(false);
+    expect(rows[2].classList.contains('cardio-history-new-day')).toBe(true);
   });
 
   it('opens the screenshot picker and previews imported values without saving', async () => {
@@ -262,6 +312,7 @@ describe('cardio weekly trend screen', () => {
       average_heart_rate_bpm: 135,
       distance_km: 15,
       average_speed_kph: 20,
+      elevation_gain_m: 180,
       fields_found: ['duration', 'calories'],
       warning: null,
     });
@@ -277,7 +328,10 @@ describe('cardio weekly trend screen', () => {
     expect(scan).toHaveBeenCalledWith(file);
     expect(field('Minutes').value).toBe('45');
     expect(field('Calories burned (kcal)').value).toBe('410');
+    expect(field('Elevation gain (m)').value).toBe('180');
+    expect(field('Average MET').placeholder).toBe('Auto');
     expect(save).not.toHaveBeenCalled();
+    expect(named('Cancel').className).toContain('pulse-button secondary');
     await click(named('Cancel'));
     expect(named('Log session')).toBeTruthy();
     await click(named('Log session'));
@@ -328,7 +382,7 @@ describe('cardio weekly trend screen', () => {
     expect(container.querySelector('.cardio-history-empty')!.textContent).toContain(
       'No cardio sessions',
     );
-    await click(named('MET-min'));
+    await click(named('Elevation'));
     expect(container.querySelector('.cardio-week-value')!.textContent).toContain('—');
     expect(container.querySelectorAll('.cardio-trend-week')).toHaveLength(8);
   });

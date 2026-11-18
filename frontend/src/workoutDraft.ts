@@ -1,6 +1,9 @@
+import { MAX_INACTIVE_WORKOUT_MS } from './activeWorkoutTimeout';
+import { isStoredSetLogged } from './workoutAutoSave';
 import { validStoredPause } from './workoutPause';
 import type {
   MachineSetting,
+  RepRange,
   TrackedWorkout,
   WorkoutCategory,
   WorkoutInput,
@@ -32,6 +35,9 @@ export interface StoredDraftMovement {
   machineSettings?: MachineSetting[];
   supersetKey: string | null;
   isComplete?: boolean;
+  swappedFrom?: string;
+  /** Target reps from the plan this exercise came from. */
+  repRange?: RepRange;
   sets: StoredDraftSet[];
 }
 
@@ -40,6 +46,8 @@ export interface ActiveWorkoutDraft {
   clientSessionId?: string;
   startedAt: number;
   resumingWorkoutId?: string;
+  /** The saved revision a resumed workout was loaded from, sent back as the save's base. */
+  resumingWorkoutRevision?: number;
   previousDurationMinutes?: number;
   updatedAt: number;
   lastActiveAt?: number;
@@ -49,6 +57,8 @@ export interface ActiveWorkoutDraft {
   pausedMs?: number;
   /** When the current pause began, or null while the live workout is running. */
   pausedAt?: number | null;
+  /** Time a manual correction added to the live clock; see workoutPause.ts. */
+  adjustedMs?: number;
   name: string;
   workoutDate: string;
   category: WorkoutCategory;
@@ -137,6 +147,7 @@ function isStoredSet(value: unknown): value is StoredDraftSet {
     isRecord(value) &&
     typeof value.key === 'string' &&
     typeof value.completed === 'boolean' &&
+    (value.machine_photo_id == null || typeof value.machine_photo_id === 'string') &&
     (value.fromPrevious === undefined || typeof value.fromPrevious === 'boolean') &&
     (value.restRevealed === undefined || typeof value.restRevealed === 'boolean') &&
     (value.restConfirmed === undefined || typeof value.restConfirmed === 'boolean') &&
@@ -168,7 +179,7 @@ function isStoredMovement(value: unknown): value is StoredDraftMovement {
   );
 }
 
-function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
+export function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
   return (
     isRecord(value) &&
     value.version === 1 &&
@@ -182,6 +193,10 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
     value.startedAt > 0 &&
     (value.resumingWorkoutId === undefined ||
       (typeof value.resumingWorkoutId === 'string' && value.resumingWorkoutId.length > 0)) &&
+    (value.resumingWorkoutRevision === undefined ||
+      (typeof value.resumingWorkoutRevision === 'number' &&
+        Number.isInteger(value.resumingWorkoutRevision) &&
+        value.resumingWorkoutRevision >= 1)) &&
     (value.previousDurationMinutes === undefined ||
       (typeof value.previousDurationMinutes === 'number' &&
         Number.isInteger(value.previousDurationMinutes) &&
@@ -200,7 +215,7 @@ function isActiveWorkoutDraft(value: unknown): value is ActiveWorkoutDraft {
         Number.isInteger(value.durationOverrideMinutes) &&
         value.durationOverrideMinutes >= 1 &&
         value.durationOverrideMinutes <= 1440)) &&
-    validStoredPause(value.pausedMs, value.pausedAt) &&
+    validStoredPause(value.pausedMs, value.pausedAt, value.adjustedMs) &&
     typeof value.updatedAt === 'number' &&
     typeof value.name === 'string' &&
     typeof value.workoutDate === 'string' &&
@@ -261,6 +276,25 @@ export function clearActiveWorkoutDraft(storage?: DraftStorage | null): void {
 
 function announceDraftChange(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACTIVE_WORKOUT_CHANGE_EVENT));
+}
+
+/**
+ * Expire abandoned workouts with nothing logged, including untouched suggested sets, without
+ * removing entered sets, notes or recovery data.
+ */
+export function isExpiredEmptyWorkoutDraft(draft: ActiveWorkoutDraft, now = Date.now()): boolean {
+  return (
+    !draft.pendingSave &&
+    !draft.resumingWorkoutId &&
+    draft.pausedAt == null &&
+    draft.notes.trim() === '' &&
+    !draft.movements.some(
+      (movement) =>
+        movement.notes.trim() !== '' ||
+        movement.sets.some((set) => Boolean(set.notes?.trim()) || isStoredSetLogged(set)),
+    ) &&
+    now >= (draft.inactiveFinishAt ?? draft.startedAt + MAX_INACTIVE_WORKOUT_MS)
+  );
 }
 
 function completedSetSignature(

@@ -31,7 +31,7 @@ from .auth import (
     clear_session_cookie,
     client_ip,
     create_user_session,
-    get_current_user,
+    get_auth_context,
     get_login_throttle,
     hash_password,
     hash_token,
@@ -47,6 +47,7 @@ from .errors import api_error
 from .models import (
     AccountBackup,
     ActiveWorkoutReminder,
+    ActiveWorkoutSync,
     AppSetting,
     BodyMeasurement,
     BodyWeightGoal,
@@ -69,6 +70,7 @@ from .models import (
     UserSession,
     UserSetting,
     WorkoutMovement,
+    WorkoutPhoto,
     WorkoutSession,
     WorkoutSet,
     WorkoutType,
@@ -83,6 +85,7 @@ from .photo_storage import (
     profile_photo_path,
     store_profile_photo,
 )
+from .profile_sex import Sex, known_sex
 from .server_settings import load_runtime_settings
 from .session_events import session_events
 from .storage import remove_session_files
@@ -93,6 +96,7 @@ from .tracker import (
 )
 from .tracker_seed import seed_sample_body_measurements, seed_sample_workouts
 from .training_metrics import rebuild_personal_records
+from .workout_photos import workout_photo_files
 from .youtube_connections import YouTubeConnectionError, decrypt_credentials, revoke_credentials
 
 DbDependency = Annotated[Session, Depends(get_db)]
@@ -160,6 +164,8 @@ class LoginRequest(BaseModel):
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     username: str | None = None
+    # Accepted once: after that only an administrator can change it.
+    sex: Sex | None = None
 
     @field_validator("username")
     @classmethod
@@ -186,6 +192,10 @@ class AuthConfigRead(BaseModel):
     invite_code_required: bool
 
 
+class FriendInviteRead(BaseModel):
+    invite_code: str | None
+
+
 class UserRead(BaseModel):
     id: str
     username: str
@@ -193,8 +203,11 @@ class UserRead(BaseModel):
     is_admin: bool
     can_upload_videos: bool
     created_at: datetime
+    # True after an admin reset: the app asks for a new password before anything else.
+    must_change_password: bool = False
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
+    sex: Sex | None = None
 
 
 def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
@@ -206,11 +219,13 @@ def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
         is_admin=user.is_admin,
         can_upload_videos=can_upload_videos(user, video_uploads),
         created_at=as_utc(user.created_at),
+        must_change_password=user.must_change_password,
         profile_photo_url=(
             f"/api/profile/photo?v={user.profile_photo_filename.removesuffix('.webp')}"
             if user.profile_photo_filename
             else None
         ),
+        sex=known_sex(user.sex),
     )
 
 
@@ -294,7 +309,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
                 MachinePhoto.user_id == user_id
             )
         )
-    ]
+    ] + workout_photo_files(db, WorkoutPhoto.user_id == user_id)
     session_ids = list(
         db.scalars(select(WorkoutSession.id).where(WorkoutSession.user_id == user_id))
     )
@@ -316,6 +331,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(WorkoutSet).where(WorkoutSet.movement_id.in_(movement_ids)),
         delete(WorkoutMovement).where(WorkoutMovement.workout_id.in_(workout_ids)),
         delete(SupersetGroup).where(SupersetGroup.workout_id.in_(workout_ids)),
+        delete(WorkoutPhoto).where(WorkoutPhoto.user_id == user_id),
         delete(TrainingWorkout).where(TrainingWorkout.user_id == user_id),
         delete(WorkoutType).where(WorkoutType.user_id == user_id),
         delete(MachinePhoto).where(MachinePhoto.user_id == user_id),
@@ -331,6 +347,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(BodyWeightGoal).where(BodyWeightGoal.user_id == user_id),
         delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id),
         delete(LiveWorkout).where(LiveWorkout.user_id == user_id),
+        delete(ActiveWorkoutSync).where(ActiveWorkoutSync.user_id == user_id),
         delete(PushSubscription).where(PushSubscription.user_id == user_id),
         delete(UserSetting).where(UserSetting.user_id == user_id),
         delete(ProfileSharing).where(ProfileSharing.user_id == user_id),
@@ -383,7 +400,9 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"], dependencies=[Depends
 profile_router = APIRouter(
     prefix="/api/profile",
     tags=["profile"],
-    dependencies=[Depends(no_store), Depends(get_current_user)],
+    # Authenticates every route; the routes that take CurrentUser also refuse an account that
+    # must choose a new password first, which the password change itself has to allow.
+    dependencies=[Depends(no_store), Depends(get_auth_context)],
 )
 
 
@@ -397,6 +416,18 @@ def auth_config(db: DbDependency, settings: AppSettings) -> AuthConfigRead:
             else browser_bootstrap_allowed(settings)
         ),
         invite_code_required=settings.registration_invite_code is not None,
+    )
+
+
+@auth_router.get("/friend-invite", response_model=FriendInviteRead)
+def friend_invite(user: CurrentUser, db: DbDependency, settings: AppSettings) -> FriendInviteRead:
+    """Let signed-in members include the registration code in their friend QR links."""
+    return FriendInviteRead(
+        invite_code=(
+            settings.registration_invite_code
+            if load_runtime_settings(db, settings).allow_registration
+            else None
+        )
     )
 
 
@@ -475,6 +506,8 @@ def login(
     if password_needs_rehash(user.password_hash):
         # Upgrade hashes made with older cost settings; committed with the new session.
         user.password_hash = hash_password(payload.password)
+    # They remembered it, so an admin no longer needs to reset it; committed with the session.
+    user.password_reset_requested_at = None
     token = create_user_session(db, user, settings, request.headers.get("user-agent"))
     set_session_cookie(response, token, settings)
     return user_to_read(db, user, settings)
@@ -513,8 +546,9 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
 
 
 @auth_router.get("/me", response_model=UserRead)
-def me(user: CurrentUser, db: DbDependency, settings: AppSettings) -> UserRead:
-    return user_to_read(db, user, settings)
+def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) -> UserRead:
+    # Uses the auth context directly so it still answers while a new password is required.
+    return user_to_read(db, context.user, settings)
 
 
 @profile_router.patch("", response_model=UserRead)
@@ -530,6 +564,12 @@ def update_profile(
         if taken is not None:
             raise api_error(409, "username_taken", "An account with that username already exists.")
         user.username = payload.username
+    if payload.sex is not None and payload.sex != user.sex:
+        if user.sex is not None:
+            raise api_error(
+                409, "sex_locked", "Your sex is already set. Ask an administrator to change it."
+            )
+        user.sex = payload.sex
     try:
         db.commit()
     except IntegrityError as error:
@@ -614,7 +654,13 @@ def change_password(
 ) -> None:
     user = context.user
     _check_current_password(user, payload.current_password, throttle)
+    if user.must_change_password and payload.new_password == payload.current_password:
+        raise api_error(
+            400, "password_unchanged", "Choose a different password from the temporary one."
+        )
     user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    user.password_reset_requested_at = None
     # A password change signs out every other device.
     db.execute(
         delete(UserSession).where(

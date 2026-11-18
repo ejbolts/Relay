@@ -34,10 +34,59 @@ export function splitStepOnDate(split: TrainingSplit, date: string): number | nu
   return elapsed < 0 || !split.steps.length ? null : elapsed % split.steps.length;
 }
 
+/** Splits follow logged workouts unless explicitly pinned to the calendar. */
+export function followsWorkouts(split: TrainingSplit): boolean {
+  return split.progression !== 'calendar';
+}
+
 export function splitPreview(split: TrainingSplit, from: string, count = 7) {
+  if (followsWorkouts(split)) return followedSplitPreview(split, from, count);
   return Array.from({ length: count }, (_, offset) => {
     const date = addDays(from, offset);
     const index = splitStepOnDate(split, date);
     return { date, typeId: index === null ? undefined : split.steps[index].workout_type_id };
   });
+}
+
+/**
+ * Days ahead of a workout-following split if each one is done as planned. A saved rest skips
+ * the first planned rest it reaches; earlier days have no plan because they follow history.
+ */
+function followedSplitPreview(split: TrainingSplit, from: string, count: number) {
+  const size = split.steps.length;
+  const first = split.next_date ?? split.start_date;
+  let index = split.next_step ?? 0;
+  let saved = split.rest_saved === true;
+  let started = false;
+  return Array.from({ length: count }, (_, offset) => {
+    const date = addDays(from, offset);
+    if (!size || date < first) return { date, typeId: undefined };
+    if (started) index = (index + 1) % size;
+    started = true;
+    if (saved && split.steps[index].workout_type_id === null) {
+      saved = false;
+      index = (index + 1) % size;
+    }
+    return { date, typeId: split.steps[index].workout_type_id };
+  });
+}
+
+/**
+ * The workout type a split puts on calendar days: the past days it marks missed, then today and
+ * the `daysAhead` after it as if each is done as planned. Rest days are left out.
+ */
+export function splitCalendarDays(
+  split: TrainingSplit | null | undefined,
+  today: string,
+  daysAhead: number,
+): Map<string, string> {
+  const days = new Map<string, string>();
+  if (!split?.enabled) return days;
+  for (const day of split.missed_days ?? []) {
+    if (day.workout_date < today) days.set(day.workout_date, day.workout_type_id);
+  }
+  for (const { date, typeId } of splitPreview(split, today, daysAhead + 1)) {
+    if (typeId) days.set(date, typeId);
+  }
+  return days;
 }

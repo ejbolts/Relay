@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from requests import RequestException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from .config import Settings
-from .models import ActiveWorkoutReminder, PushSubscription
+from .models import ActiveWorkoutReminder, ActiveWorkoutSync, PushSubscription, User
 from .push_security import MAX_PUSH_SUBSCRIPTIONS, PushSession, validate_push_endpoint
 
 if TYPE_CHECKING:
@@ -164,6 +164,7 @@ class ActiveWorkoutReminderScheduler:
                 db.commit()
 
     def deliver_due(self) -> None:
+        self.deliver_inactive()
         with self._lock, self.session_factory() as db:
             reminders = list(
                 db.scalars(
@@ -175,6 +176,12 @@ class ActiveWorkoutReminderScheduler:
                 )
             )
             for reminder in reminders:
+                shared = db.get(ActiveWorkoutSync, reminder.user_id) if reminder.user_id else None
+                if shared is not None and shared.started_at == reminder.timer_id:
+                    # Updated clients use activity across all devices instead of elapsed time.
+                    reminder.cancelled = True
+                    db.commit()
+                    continue
                 if (
                     reminder.user_id is None
                     or db.scalar(
@@ -204,8 +211,82 @@ class ActiveWorkoutReminderScheduler:
                 reminder.delivered = delivered
                 db.commit()
 
+    def deliver_inactive(self) -> None:
+        """One push per inactivity period, including when all app windows are closed."""
+        with self.session_factory() as db:
+            candidates = list(
+                db.scalars(
+                    select(ActiveWorkoutSync)
+                    .join(User)
+                    .where(
+                        ActiveWorkoutSync.last_activity_at
+                        <= datetime.now(UTC) - timedelta(minutes=45),
+                        ActiveWorkoutSync.reminder_delivered.is_(False),
+                        User.disabled_at.is_(None),
+                    )
+                )
+            )
+            for row in candidates:
+                if row.draft is None:
+                    continue
+                claimed = db.execute(
+                    update(ActiveWorkoutSync)
+                    .where(
+                        ActiveWorkoutSync.user_id == row.user_id,
+                        ActiveWorkoutSync.revision == row.revision,
+                        ActiveWorkoutSync.reminder_delivered.is_(False),
+                    )
+                    .values(reminder_delivered=True)
+                )
+                db.commit()
+                if claimed.rowcount != 1:
+                    continue
+                delivered = send_push_notification(
+                    self.session_factory,
+                    self.settings,
+                    title="Still working out?",
+                    body=(
+                        "No workout activity for 45 minutes. "
+                        "Resume your workout or finish and save it."
+                    ),
+                    user_id=row.user_id,
+                    url="/#log",
+                    tag="inactive-workout",
+                )
+                if not delivered:
+                    db.execute(
+                        update(ActiveWorkoutSync)
+                        .where(
+                            ActiveWorkoutSync.user_id == row.user_id,
+                            ActiveWorkoutSync.revision == row.revision,
+                        )
+                        .values(reminder_delivered=False)
+                    )
+                    db.commit()
+
+    def deliver_auto_saves(self) -> None:
+        """Save workouts left running past their owner's auto-save time, then tell them."""
+        # Imported here: the save path depends on the tracker, which loads after this module.
+        from .workout_auto_save import save_due_workouts
+
+        for saved in save_due_workouts(self.session_factory, self.settings):
+            send_push_notification(
+                self.session_factory,
+                self.settings,
+                title="Workout saved",
+                body=f"{saved.name} was saved automatically.",
+                user_id=saved.user_id,
+                url="/#history",
+                # Replaces the earlier "Still working out?" alert on the phone.
+                tag="inactive-workout",
+            )
+
     async def _run(self) -> None:
         while True:
+            try:
+                await asyncio.to_thread(self.deliver_auto_saves)
+            except Exception:
+                logger.exception("Could not auto-save unfinished workouts")
             try:
                 await asyncio.to_thread(self.deliver_due)
             except Exception:

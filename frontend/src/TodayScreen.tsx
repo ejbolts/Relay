@@ -1,5 +1,9 @@
+import { SexMark } from './SexMark';
+import { AppEditionBadge } from './AppEditionBadge';
+import { HomeTips } from './HomeTips';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import './liveSession.css';
 import { createPortal } from 'react-dom';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
@@ -10,13 +14,22 @@ import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
-import { homeSectionSettings, updateHomeSectionSettings, type HomeSectionId } from './homeLayout';
+import {
+  activityCardSettings,
+  homeSectionSettings,
+  updateHomeSectionSettings,
+  type HomeSectionId,
+} from './homeLayout';
 import { CardioGoalCard } from './CardioGoalCard';
+import { BodyCheckInSettingsForm } from './BodyCheckInSettings';
+import type { BodyCheckInMode } from './homeLayout';
 import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
+import { ActivityCardSettingsForm } from './ActivityCardSettings';
 import { SparkBars, Sparkline } from './PulseCharts';
 import {
   averageOf,
   daysBetween,
+  latestTopSets,
   parseLocalDate,
   recentStrengthRecords,
   shortDate,
@@ -24,11 +37,15 @@ import {
   weekStartDayFrom,
   weeklyBodyweightAverages,
   weeklyTrainingTotals,
+  upNextSetLabel,
   type SessionTemplate,
 } from './trainingSummary';
 import type {
   BodyMeasurement,
   DashboardData,
+  Exercise,
+  ExerciseLibrarySummary,
+  FriendFeedItem,
   PersonalRecord,
   TrackedWorkout,
   User,
@@ -43,19 +60,32 @@ import { ProfileButton } from './AccountHeaderActions';
 import { useUpNextSession } from './upNext';
 import {
   formatWeight,
-  formatWeightNumber,
   recordDisplayValue,
   weightFromKg,
   weightToKg,
   weightInputValue,
   weightUnitName,
 } from './weightUnits';
-import { formatElapsed, useLiveWorkoutClock } from './elapsed';
-import { useOffline } from './connectionStatus';
-import { OfflineBadge } from './OfflineBadge';
+import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
+import { TrainingBlockHome } from './TrainingBlockSummary';
+import { WEEKS_BEFORE_FIRST_BLOCK, trainedWeeks } from './trainingBlockSuggestion';
+import { blockOn } from './trainingBlocks';
+import { useTrainingBlocks } from './trainingBlocksContext';
+import {
+  BodyGoalCard,
+  CardioDistanceCard,
+  CardioDistanceSettingsForm,
+  ExerciseSpotlightCard,
+  ExerciseSpotlightSettingsForm,
+  FriendsWeekCard,
+  MuscleFreshnessCard,
+} from './HomeInsightCards';
+import { muscleFreshness } from './homeInsights';
 
 export function PageHeader({
   eyebrow,
+  eyebrowLead,
+  eyebrowAction,
   title,
   titleAction,
   actions,
@@ -64,6 +94,10 @@ export function PageHeader({
   headingLevel = 1,
 }: {
   eyebrow?: string;
+  /** Leads the eyebrow line, before the eyebrow text. */
+  eyebrowLead?: ReactNode;
+  /** Sits beside the eyebrow; the row keeps its height whether or not it renders. */
+  eyebrowAction?: ReactNode;
   title: string;
   titleAction?: ReactNode;
   actions?: ReactNode;
@@ -72,16 +106,23 @@ export function PageHeader({
   headingLevel?: 1 | 2;
 }) {
   const Heading = headingLevel === 1 ? 'h1' : 'h2';
-  const offline = useOffline();
   return (
     <header className="page-header">
       <div>
-        {eyebrow && <p className="page-eyebrow">{eyebrow}</p>}
-        {titleAction || offline ? (
+        {eyebrow &&
+          (eyebrowAction || eyebrowLead ? (
+            <div className="page-eyebrow-row">
+              {eyebrowLead}
+              <p className="page-eyebrow">{eyebrow}</p>
+              {eyebrowAction}
+            </div>
+          ) : (
+            <p className="page-eyebrow">{eyebrow}</p>
+          ))}
+        {titleAction ? (
           <div className="page-header-title-row">
             <Heading>{title}</Heading>
             {titleAction}
-            {offline && <OfflineBadge />}
           </div>
         ) : (
           <Heading>{title}</Heading>
@@ -111,12 +152,15 @@ function formatTotal(value: number | null | undefined): string {
 }
 
 const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
+  relative_strength: 'Relative strength PR',
   reps_at_weight: 'Volume PR for this weight',
   weight: 'Weight PR',
 };
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
+  /** The summary of the workout just finished, shown above the sections. */
+  finished?: ReactNode;
   data: DashboardData | null;
   muscleSets?: { weeklySets?: MuscleSetsWeek; history?: MuscleSetsWeek[] };
   workouts: TrackedWorkout[];
@@ -124,16 +168,18 @@ export interface TodayScreenProps {
   personalRecords: PersonalRecord[];
   categoryColors: WorkoutTypeColors;
   workoutStartedAt: number | null;
+  /** The running workout's name, shown where Up next sits while it is minimised. */
+  liveWorkoutName?: string | null;
+  onResumeWorkout?: () => void;
   workoutSaving?: boolean;
   todayBodyweight: number | null;
   todayBodyFat?: number | null;
-  onSaveBodyweight: (weight: number) => Promise<UndoBodyweightCheckIn>;
+  onSaveBodyweight: (weight: number, bodyFat?: number) => Promise<UndoBodyweightCheckIn>;
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
   onStartTemplate: (template: SessionTemplate) => void;
   onStartEmpty: () => void;
   onStartRecommended?: () => void;
   onEditSplit?: () => void;
-  onResumeWorkout: () => void;
   onOpenHistory: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
   onOpenProgress: (exerciseId?: string) => void;
@@ -148,7 +194,7 @@ export interface TodayScreenProps {
   profileLabel?: string;
   profilePhotoUrl?: string | null;
   /** The signed-in account for the Profile section; omitted outside the signed-in app. */
-  profile?: Pick<User, 'display_name' | 'username' | 'profile_photo_url' | 'created_at'>;
+  profile?: Pick<User, 'display_name' | 'username' | 'profile_photo_url' | 'sex' | 'created_at'>;
   /** Friend requests waiting for an answer, shown as a count on the profile button. */
   friendRequests?: number;
   notifications?: ReactNode;
@@ -156,13 +202,26 @@ export interface TodayScreenProps {
   /** Unresolved app feedback, shown to administrators beside friend requests. */
   openFeedback?: number;
   calendar?: ReactNode;
+  /** This week's days, as their own section. */
+  thisWeek?: ReactNode;
   /** The Friends card with friends' latest sessions; omitted outside the signed-in app. */
   friendsActivity?: ReactNode;
+  /** Estimated 1RM trends for Exercise spotlight; null while they load. */
+  exerciseSummaries?: ExerciseLibrarySummary[] | null;
+  exercises?: Exercise[];
+  /** Changes whenever saved data changes, so cards with their own data read it again. */
+  dataRevision?: string | null;
+  /** Whether Home is the screen on show; Friends this week reads only while it is. */
+  active?: boolean;
+  onOpenFriend?: (friend: FriendFeedItem['friend']) => void;
+  onOpenSocial?: () => void;
+  onChooseSharing?: () => void;
   today?: string;
 }
 
 export function TodayScreen({
   home,
+  finished,
   data,
   muscleSets,
   workouts,
@@ -170,6 +229,8 @@ export function TodayScreen({
   personalRecords,
   categoryColors,
   workoutStartedAt,
+  liveWorkoutName = null,
+  onResumeWorkout,
   workoutSaving = false,
   todayBodyweight,
   todayBodyFat = null,
@@ -179,7 +240,6 @@ export function TodayScreen({
   onStartEmpty,
   onStartRecommended,
   onEditSplit,
-  onResumeWorkout,
   onOpenHistory,
   onOpenWorkout,
   onOpenProgress,
@@ -196,12 +256,31 @@ export function TodayScreen({
   accountActions,
   openFeedback = 0,
   calendar,
+  thisWeek,
   friendsActivity,
+  exerciseSummaries = null,
+  exercises,
+  dataRevision = null,
+  active = true,
+  onOpenFriend,
+  onOpenSocial,
+  onChooseSharing,
   today = localDate(),
 }: TodayScreenProps) {
   const weightUnit = useWeightUnit();
-  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
+  const trainingBlocks = useTrainingBlocks();
+  const currentBlock = blockOn(trainingBlocks.config.blocks, today);
+  const blockOfferReady = useMemo(
+    () => trainedWeeks(workouts, weekStartDay) >= WEEKS_BEFORE_FIRST_BLOCK,
+    [workouts, weekStartDay],
+  );
+  const layout = home.editing ? home.draft : home.layout;
+  const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
+  const cardioWeeks = activityCardSettings(layout, 'cardio_sessions').weeks;
   const weeks = useMemo(
     () => weeklyTrainingTotals(workouts, today, weekStartDay, 12),
     [today, weekStartDay, workouts],
@@ -218,8 +297,8 @@ export function TodayScreen({
     isRestDay,
     needsSplitUpdate,
   } = useUpNextSession(data?.recommendation, workouts, today);
+  const latestSets = useMemo(() => latestTopSets(workouts, today), [workouts, today]);
   const currentWeek = weeks.at(-1);
-  const history = weeks.slice(0, -1);
   const haveWorkouts = workouts.length > 0;
   const workoutsThisWeek = haveWorkouts ? (currentWeek?.workouts ?? 0) : data?.workouts_this_week;
   // Cardio sessions are mirrored from workouts' cardio movements, so no workouts means none.
@@ -228,12 +307,20 @@ export function TodayScreen({
     : data
       ? 0
       : null;
-  const averageWorkouts = averageOf(history.map((week) => week.workouts));
-  const averageCardioSessions = averageOf(history.map((week) => week.cardioSessions));
+  const workoutHistory = weeks.slice(-workoutWeeks);
+  const cardioHistory = weeks.slice(-cardioWeeks);
+  const averageWorkouts = averageOf(workoutHistory.map((week) => week.workouts));
+  const averageCardioSessions = averageOf(cardioHistory.map((week) => week.cardioSessions));
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
   const zone2 = data?.zone2 ?? null;
   const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
   const latest = measurements[0] ?? null;
+  const checkInMode = homeSectionSettings(home.editing ? home.draft : home.layout, 'check_in').mode;
+  const priorBodyweight =
+    measurements.find((item) => item.measurement_date < today)?.weight_kg ?? null;
+  const priorBodyFat =
+    measurements.find((item) => item.measurement_date < today && item.body_fat_pct !== null)
+      ?.body_fat_pct ?? null;
   const recentWeights = measurements
     .slice(0, 30)
     .map((measurement) => measurement.weight_kg)
@@ -252,6 +339,28 @@ export function TodayScreen({
     [measurements, today, weekStartDay],
   );
   const records = recentStrengthRecords(personalRecords, 3);
+  const exerciseNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const workout of workouts)
+      for (const movement of workout.movements)
+        names.set(movement.exercise.id, movement.exercise.name);
+    for (const exercise of exercises ?? []) names.set(exercise.id, exercise.name);
+    return names;
+  }, [workouts, exercises]);
+  const spotlightOptions = useMemo(
+    () =>
+      (exerciseSummaries ?? [])
+        .filter((item) => item.latest_estimated_1rm != null && exerciseNames.has(item.exercise_id))
+        .sort((a, b) => b.session_count - a.session_count)
+        .map((item) => ({ id: item.exercise_id, name: exerciseNames.get(item.exercise_id)! })),
+    [exerciseSummaries, exerciseNames],
+  );
+  const thisWeekSets = muscleSets?.weeklySets ?? data?.weekly_sets;
+  const earlierWeekSets = muscleSets?.history ?? data?.weekly_sets_history;
+  const freshMuscles = useMemo(
+    () => muscleFreshness([thisWeekSets, ...(earlierWeekSets ?? [])], today),
+    [thisWeekSets, earlierWeekSets, today],
+  );
   const strengthRecordCount = useMemo(
     () =>
       personalRecords.filter((record) => record.value > 0 && record.record_type in RECORD_LABELS)
@@ -277,7 +386,10 @@ export function TodayScreen({
           <ProfileAvatar className="profile-avatar today-profile-avatar" user={profile} />
         )}
         <div className="today-profile-body">
-          <h2 id="today-profile-title">{profile.display_name.trim() || profile.username}</h2>
+          <h2 id="today-profile-title">
+            {profile.display_name.trim() || profile.username}
+            <SexMark sex={profile.sex} />
+          </h2>
           <p>
             @{profile.username}
             {memberSince && ` · since ${memberSince}`}
@@ -332,7 +444,7 @@ export function TodayScreen({
             </p>
             {onEditSplit && (
               <button className="text-button" type="button" onClick={onEditSplit}>
-                Edit split
+                {recommendation?.split_name ? 'Edit split' : 'Set up split'}
               </button>
             )}
           </div>
@@ -349,9 +461,11 @@ export function TodayScreen({
             ) : (
               template && (
                 <small>
-                  {recommendation?.routine_day
+                  {recommendation?.routine_day?.movements.length
                     ? 'Routine'
-                    : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
+                    : template.planned === 'type'
+                      ? 'Saved'
+                      : `Last: ${shortDate(template.sourceWorkout.workout_date)}`}
                 </small>
               )
             )}
@@ -359,20 +473,22 @@ export function TodayScreen({
           {template ? (
             <>
               <ul className="next-session-exercises">
-                {template.exercises.slice(0, 6).map(({ exercise, topSet, summary }) => (
-                  <li key={exercise.id}>
-                    <span title={exercise.name}>{exercise.name}</span>
-                    <b className="num" title={summary}>
-                      {exercise.kind !== 'cardio' && topSet
-                        ? `${formatWeightNumber(topSet.weight_kg ?? 0, weightUnit)}×${topSet.reps ?? '–'}`
-                        : summary}
-                    </b>
-                  </li>
-                ))}
+                {template.exercises.slice(0, 6).map((item) => {
+                  const label = upNextSetLabel(item, latestSets.get(item.exercise.id), weightUnit);
+                  return (
+                    <li key={item.exercise.id}>
+                      <span title={item.exercise.name}>{item.exercise.name}</span>
+                      <b className="num" title={label.title}>
+                        {label.text}
+                      </b>
+                    </li>
+                  );
+                })}
               </ul>
               {template.exercises.length > 6 && (
                 <p className="next-session-more">
-                  +{template.exercises.length - 6} more from last time
+                  +{template.exercises.length - 6} more
+                  {template.planned ? '' : ' from last time'}
                 </p>
               )}
             </>
@@ -414,28 +530,72 @@ export function TodayScreen({
                 Start workout
               </button>
             )}
-            <button
-              className="pulse-button primary next-session-empty"
-              type="button"
-              onClick={onStartEmpty}
-              aria-label="Start empty workout"
-              disabled={workoutSaving}
-            >
-              Empty
-            </button>
+            {/* On a rest day, or while the split needs updating, Start workout already starts
+                empty, so a second Empty button would do the same thing. */}
+            {(template || !(isRestDay || needsSplitUpdate)) && (
+              <button
+                className="pulse-button primary next-session-empty"
+                type="button"
+                onClick={onStartEmpty}
+                aria-label="Start empty workout"
+                disabled={workoutSaving}
+              >
+                Empty
+              </button>
+            )}
           </div>
         </section>
+      ) : onResumeWorkout ? (
+        <section
+          className="pulse-card next-session live-session"
+          aria-labelledby="live-session-title"
+        >
+          <div className="live-session-copy">
+            <p className="next-session-tag">
+              <i aria-hidden="true" />
+              In progress
+            </p>
+            <h2 id="live-session-title">{liveWorkoutName?.trim() || 'Workout'}</h2>
+          </div>
+          <button className="pulse-button primary" type="button" onClick={onResumeWorkout}>
+            <Icon name="play" filled />
+            Resume
+          </button>
+        </section>
+      ) : null,
+    // Before the first block, the card offers to start one once there are a few weeks of training
+    // to build on; people who don't want it hide it.
+    'training-block':
+      currentBlock ||
+      (!trainingBlocks.loading &&
+        !trainingBlocks.error &&
+        trainingBlocks.config.blocks.length === 0 &&
+        blockOfferReady) ? (
+        <TrainingBlockHome
+          block={currentBlock}
+          config={trainingBlocks.config}
+          today={today}
+          style={
+            homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style
+          }
+          onOpen={() => {
+            trainingBlocks.select('current');
+            onOpenProgress();
+          }}
+        />
       ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
         <strong>{workoutsThisWeek ?? '–'}</strong>
         <em>
-          {averageWorkouts === null ? 'This week' : `12-wk avg ${averageWorkouts.toFixed(1)}`}
+          {averageWorkouts === null
+            ? 'This week'
+            : `${workoutWeeks}-wk avg ${averageWorkouts.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.workouts)}
-          label="Workouts per week, last 12 weeks"
+          values={workoutHistory.map((week) => week.workouts)}
+          label={`Workouts per week, last ${workoutWeeks} weeks`}
         />
       </button>
     ),
@@ -446,11 +606,11 @@ export function TodayScreen({
         <em>
           {averageCardioSessions === null
             ? 'This week'
-            : `12-wk avg ${averageCardioSessions.toFixed(1)}`}
+            : `${cardioWeeks}-wk avg ${averageCardioSessions.toFixed(1)}`}
         </em>
         <SparkBars
-          values={weeks.map((week) => week.cardioSessions)}
-          label="Cardio sessions per week, last 12 weeks"
+          values={cardioHistory.map((week) => week.cardioSessions)}
+          label={`Cardio sessions per week, last ${cardioWeeks} weeks`}
         />
       </button>
     ),
@@ -474,6 +634,7 @@ export function TodayScreen({
         />
       </button>
     ),
+    'this-week': thisWeek ? <ThisWeekCard>{thisWeek}</ThisWeekCard> : null,
     consistency: (
       <ConsistencyCard streak={data?.current_streak ?? 0} trainingDays={trainingDays}>
         {calendar}
@@ -484,6 +645,7 @@ export function TodayScreen({
         weeklySets={muscleSets?.weeklySets ?? data?.weekly_sets}
         history={muscleSets?.history ?? data?.weekly_sets_history}
         goal={muscleSetGoal}
+        goals={muscleGoals}
         onOpenWorkout={onOpenWorkout}
       />
     ),
@@ -515,28 +677,20 @@ export function TodayScreen({
         </p>
       </button>
     ),
-    ...(Object.fromEntries(
-      (
-        [
-          ['bodyweight-check-in', 'weight'],
-          ['body-fat-check-in', 'fat'],
-          ['combined-check-in', 'combined'],
-        ] as const
-      ).map(([id, mode]) => [
-        id,
-        <DashboardQuickBodyweight
-          key={id}
-          mode={mode}
-          latestBodyweight={latest?.weight_kg ?? null}
-          todayBodyweight={todayBodyweight}
-          todayBodyFat={todayBodyFat}
-          latestBodyFat={
-            measurements.find((item) => item.body_fat_pct !== null)?.body_fat_pct ?? null
-          }
-          {...checkIns}
-        />,
-      ]),
-    ) as Record<'bodyweight-check-in' | 'body-fat-check-in' | 'combined-check-in', ReactNode>),
+    'combined-check-in': (
+      <DashboardQuickBodyweight
+        mode={checkInMode === 'combined' ? 'combined-single' : checkInMode}
+        latestBodyweight={latest?.weight_kg ?? null}
+        todayBodyweight={todayBodyweight}
+        todayBodyFat={todayBodyFat}
+        priorBodyweight={priorBodyweight}
+        priorBodyFat={priorBodyFat}
+        latestBodyFat={
+          measurements.find((item) => item.body_fat_pct !== null)?.body_fat_pct ?? null
+        }
+        {...checkIns}
+      />
+    ),
     records: (
       <section className="pulse-card" aria-labelledby="records-title">
         <header className="pulse-card-header">
@@ -556,11 +710,16 @@ export function TodayScreen({
                   <span className="record-copy">
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {RECORD_LABELS[record.record_type]}
+                      {RECORD_LABELS[record.record_type] ?? 'PR'}
                       {record.record_type === 'reps_at_weight' && record.weight_kg != null
                         ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
                         : ''}{' '}
                       · {shortDate(record.achieved_date)}
+                      {record.bodyweight_kg != null && (
+                        <span className="record-bodyweight">
+                          at {formatWeight(record.bodyweight_kg, weightUnit)} BW
+                        </span>
+                      )}
                     </small>
                   </span>
                   <strong className="num">{recordDisplayValue(record, weightUnit)}</strong>
@@ -574,6 +733,47 @@ export function TodayScreen({
       </section>
     ),
     friends: friendsActivity ?? null,
+    'body-goal': (
+      <BodyGoalCard
+        measurements={measurements}
+        today={today}
+        weightUnit={weightUnit}
+        revision={dataRevision}
+        onOpenBody={onOpenBody}
+      />
+    ),
+    'exercise-spotlight': (
+      <ExerciseSpotlightCard
+        summaries={exerciseSummaries}
+        names={exerciseNames}
+        settings={homeSectionSettings(layout, 'exercise_spotlight')}
+        weightUnit={weightUnit}
+        onOpenProgress={onOpenProgress}
+      />
+    ),
+    'muscle-freshness': <MuscleFreshnessCard muscles={freshMuscles} />,
+    'cardio-distance': (
+      <CardioDistanceCard
+        settings={homeSectionSettings(layout, 'cardio_distance')}
+        today={today}
+        weekStartDay={weekStartDay}
+        revision={dataRevision}
+        onOpenCardio={onOpenCardio}
+      />
+    ),
+    'friends-week': profile ? (
+      <FriendsWeekCard
+        active={active}
+        you={profile}
+        workouts={workouts}
+        today={today}
+        weekStartDay={weekStartDay}
+        revision={dataRevision}
+        onOpenFriend={onOpenFriend}
+        onOpenSocial={onOpenSocial}
+        onChooseSharing={onChooseSharing}
+      />
+    ) : null,
   };
 
   return (
@@ -584,6 +784,15 @@ export function TodayScreen({
           day: 'numeric',
           month: 'long',
         })}
+        eyebrowLead={<AppEditionBadge />}
+        eyebrowAction={
+          <HomeTips
+            workouts={workouts}
+            createdAt={profile?.created_at}
+            hasSplit={!!data?.recommendation?.split_name}
+            latestWeightKg={measurements[0]?.weight_kg ?? null}
+          />
+        }
         title="Home"
         onOpenSettings={onOpenSettings}
         accountActions={
@@ -643,18 +852,63 @@ export function TodayScreen({
       <p className="sr-only" role="status">
         {home.message}
       </p>
-      {workoutStartedAt !== null && (
-        <LiveWorkoutCard
-          startedAt={workoutStartedAt}
-          saving={workoutSaving}
-          onResume={onResumeWorkout}
-        />
-      )}
+      {!home.editing && finished}
       <HomeLayoutSections
         layout={home.editing ? home.draft : home.layout}
         sections={sections}
         onStartEditing={home.loaded && !home.saving ? home.edit : undefined}
         customisers={{
+          'combined-check-in': (
+            <BodyCheckInSettingsForm
+              value={homeSectionSettings(home.draft, 'check_in')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'check_in', change))
+              }
+            />
+          ),
+          workouts: (
+            <ActivityCardSettingsForm
+              values={weeks.map((week) => week.workouts)}
+              value={activityCardSettings(home.draft, 'workouts')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'workouts', change))
+              }
+            />
+          ),
+          'cardio-sessions': (
+            <ActivityCardSettingsForm
+              values={weeks.map((week) => week.cardioSessions)}
+              value={activityCardSettings(home.draft, 'cardio_sessions')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'cardio_sessions', change))
+              }
+            />
+          ),
+          'training-block': (
+            <TrainingBlockCardSettingsForm
+              value={homeSectionSettings(home.draft, 'training_block')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'training_block', change))
+              }
+            />
+          ),
+          'exercise-spotlight': (
+            <ExerciseSpotlightSettingsForm
+              options={spotlightOptions}
+              value={homeSectionSettings(home.draft, 'exercise_spotlight')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'exercise_spotlight', change))
+              }
+            />
+          ),
+          'cardio-distance': (
+            <CardioDistanceSettingsForm
+              value={homeSectionSettings(home.draft, 'cardio_distance')}
+              onChange={(change) =>
+                home.change(updateHomeSectionSettings(home.draft, 'cardio_distance', change))
+              }
+            />
+          ),
           zone2: (
             <CardioGoalCardSettingsForm
               goals={cardioGoals.map((goal) => ({ zone: goal.zone, minutes: goal.goal_minutes }))}
@@ -679,41 +933,56 @@ export function TodayScreen({
   );
 }
 
-function LiveWorkoutCard({
-  startedAt,
-  saving,
-  onResume,
+const BODYWEIGHT_UNDO_MS = 5000;
+
+function CheckInStatus({
+  prior,
+  today,
+  unit,
 }: {
-  startedAt: number;
-  saving: boolean;
-  onResume: () => void;
+  prior: number | null;
+  today: number | null;
+  unit: string;
 }) {
-  const { elapsed, paused } = useLiveWorkoutClock(startedAt);
+  const format = (value: number) => `${value.toFixed(1)}${unit === '%' ? '%' : ` ${unit}`}`;
+  const change =
+    prior === null || today === null
+      ? null
+      : Number((Number(today.toFixed(1)) - Number(prior.toFixed(1))).toFixed(1));
   return (
-    <button
-      className={`pulse-card live-workout-card${paused && !saving ? ' is-paused' : ''}`}
-      type="button"
-      onClick={onResume}
-      disabled={saving}
+    <span
+      className="quick-check-in-status"
+      role="status"
+      aria-label={[
+        ...(prior === null ? [] : [`Prior: ${format(prior)}`]),
+        today === null ? 'Not logged today' : `Saved today: ${format(today)}`,
+      ].join('; ')}
     >
-      <span className="live-workout-label">
-        <i aria-hidden="true" />
-        {saving ? 'Workout finished' : paused ? 'Workout paused' : 'Workout live'}
-      </span>
-      {!saving && (
-        <time className="live-workout-duration num" dateTime={`PT${elapsed}S`}>
-          {formatElapsed(elapsed)}
-        </time>
+      {today === null ? (
+        <span>{prior === null ? 'Not logged today' : `Last ${format(prior)}`}</span>
+      ) : (
+        <>
+          {change !== null && (
+            <span className="quick-check-in-change" aria-hidden="true">
+              {change === 0 ? (
+                '±0.0'
+              ) : (
+                <>
+                  <Icon name={change < 0 ? 'down' : 'up'} />
+                  {Math.abs(change).toFixed(1)}
+                </>
+              )}
+            </span>
+          )}
+          <span className="quick-check-in-today">
+            <Icon name="check" />
+            {format(today)}
+          </span>
+        </>
       )}
-      <span className="live-workout-resume">
-        {saving ? 'Saving in the background…' : 'Resume'}
-        {!saving && <Icon name="chevron-right" />}
-      </span>
-    </button>
+    </span>
   );
 }
-
-const BODYWEIGHT_UNDO_MS = 5000;
 
 export function DashboardQuickBodyweight({
   mode = 'combined',
@@ -721,37 +990,54 @@ export function DashboardQuickBodyweight({
   undoVersion = 0,
   undoVersionRef,
   latestBodyweight,
+  priorBodyweight = null,
+  priorBodyFat = null,
   todayBodyweight,
   latestBodyFat = null,
   todayBodyFat = null,
   onSave,
   onSaveBodyFat,
 }: {
-  mode?: 'weight' | 'fat' | 'combined';
+  mode?: BodyCheckInMode;
   busy?: boolean;
   undoVersion?: number;
   undoVersionRef?: { current: number };
   latestBodyweight: number | null;
+  priorBodyweight?: number | null;
+  priorBodyFat?: number | null;
   todayBodyweight: number | null;
   latestBodyFat?: number | null;
   todayBodyFat?: number | null;
-  onSave: (weight: number) => Promise<UndoBodyweightCheckIn>;
+  onSave: (weight: number, bodyFat?: number) => Promise<UndoBodyweightCheckIn>;
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
 }) {
   const weightUnit = useWeightUnit();
   const initialWeight = todayBodyweight ?? latestBodyweight;
   const titleId = useId();
+  const weightFormId = useId();
+  const fatFormId = useId();
   const [weight, setWeight] = useState<number | null>(initialWeight);
   const [bodyFat, setBodyFat] = useState<string>(() => String(todayBodyFat ?? latestBodyFat ?? ''));
   const [saving, setSaving] = useState(false);
   const [undo, setUndo] = useState<{
     run: UndoBodyweightCheckIn;
     attempt: number;
-    kind: 'weight' | 'fat';
+    kind: 'weight' | 'fat' | 'combined';
     version: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedWeight = weight;
+  const singleButton = mode === 'combined-single' && !!onSaveBodyFat;
+  const combined = mode === 'combined' || singleButton;
+  const headerSave = singleButton || mode !== 'combined';
+  const fatOnly = mode === 'fat' && !!onSaveBodyFat;
+  const hasToday = fatOnly
+    ? todayBodyFat !== null
+    : singleButton
+      ? todayBodyweight !== null && todayBodyFat !== null
+      : todayBodyweight !== null;
+  const saveKind = fatOnly ? 'body fat' : singleButton ? 'check-in' : 'weight';
+  const saveLabel = saving ? `Saving ${saveKind}` : `${hasToday ? 'Update' : 'Log'} ${saveKind}`;
 
   useEffect(() => {
     setBodyFat(String(todayBodyFat ?? latestBodyFat ?? ''));
@@ -779,12 +1065,24 @@ export function DashboardQuickBodyweight({
       setError(`Enter a bodyweight above 0 and up to ${formatWeight(500, weightUnit)}.`);
       return;
     }
+    const fatValue = bodyFat.trim() === '' ? NaN : Number(bodyFat);
+    if (singleButton && (!Number.isFinite(fatValue) || fatValue < 1 || fatValue > 70)) {
+      setError('Enter body fat from 1% to 70%.');
+      return;
+    }
     setSaving(true);
     setError(null);
     setUndo(null);
     try {
-      const run = await onSave(selectedWeight);
-      setUndo({ run, attempt: 0, kind: 'weight', version: undoVersionRef?.current ?? 0 });
+      const run = singleButton
+        ? await onSave(selectedWeight, fatValue)
+        : await onSave(selectedWeight);
+      setUndo({
+        run,
+        attempt: 0,
+        kind: singleButton ? 'combined' : 'weight',
+        version: undoVersionRef?.current ?? 0,
+      });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save today’s weight.');
     } finally {
@@ -853,33 +1151,60 @@ export function DashboardQuickBodyweight({
   }
 
   return (
-    <section className="pulse-card quick-bodyweight" aria-labelledby={titleId}>
+    <section
+      className={`pulse-card quick-bodyweight${headerSave ? ' is-paired' : ''}`}
+      aria-labelledby={titleId}
+    >
       <header className="pulse-card-header">
-        <h2 id={titleId}>
-          {mode === 'weight'
-            ? 'Body weight check-in'
-            : mode === 'fat'
-              ? 'Body fat check-in'
-              : 'Combined check-in'}
+        <h2 id={titleId} title="Body check-in">
+          Check-in
         </h2>
+        {headerSave && (
+          <button
+            form={fatOnly ? fatFormId : weightFormId}
+            className="pulse-button primary quick-check-in-save"
+            aria-label={saveLabel}
+            title={saveLabel}
+            aria-busy={saving}
+            type="submit"
+            disabled={saving || busy || (fatOnly && todayBodyweight === null)}
+          >
+            <Icon name="check" />
+            <span className="quick-check-in-save-label" aria-hidden="true">
+              {hasToday ? 'Update' : 'Log'}
+            </span>
+          </button>
+        )}
       </header>
+      {(mode !== 'fat' || !onSaveBodyFat) && (
+        <form
+          id={weightFormId}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        />
+      )}
+      {onSaveBodyFat && mode !== 'weight' && !singleButton && (
+        <form
+          id={fatFormId}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveFat();
+          }}
+        />
+      )}
       {(mode !== 'fat' || !onSaveBodyFat) && (
         <section className="quick-check-in-row" aria-label="Body weight check-in">
           <header className="quick-check-in-heading">
-            {mode === 'combined' && <h3>Body weight</h3>}
-            <span className={todayBodyweight === null ? '' : 'logged'} role="status">
-              {todayBodyweight === null
-                ? 'Not logged today'
-                : `Saved today · ${weightFromKg(todayBodyweight, weightUnit).toFixed(1)} ${weightUnit}`}
-            </span>
+            {(combined || headerSave) && <h3>Weight</h3>}
+            <CheckInStatus
+              prior={priorBodyweight === null ? null : weightFromKg(priorBodyweight, weightUnit)}
+              today={todayBodyweight === null ? null : weightFromKg(todayBodyweight, weightUnit)}
+              unit={weightUnit}
+            />
           </header>
-          <form
-            className="quick-bodyweight-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save();
-            }}
-          >
+          <div className={`quick-bodyweight-form${singleButton ? ' is-shared' : ''}`}>
             <button
               type="button"
               className="stepper"
@@ -892,6 +1217,7 @@ export function DashboardQuickBodyweight({
             <label>
               <span className="sr-only">Bodyweight in {weightUnitName(weightUnit)}</span>
               <WeightInput
+                form={weightFormId}
                 weightKg={weight}
                 disabled={saving || busy}
                 aria-label={`Bodyweight in ${weightUnitName(weightUnit)}`}
@@ -916,29 +1242,35 @@ export function DashboardQuickBodyweight({
             >
               +
             </button>
-            <button className="pulse-button primary" type="submit" disabled={saving || busy}>
-              {saving ? 'Saving…' : todayBodyweight === null ? 'Log' : 'Update'}
-            </button>
-          </form>
+            {!headerSave && (
+              <button
+                form={weightFormId}
+                aria-label={
+                  saving
+                    ? 'Saving weight'
+                    : todayBodyweight === null
+                      ? 'Log weight'
+                      : 'Update weight'
+                }
+                title={todayBodyweight === null ? 'Log weight' : 'Update weight'}
+                aria-busy={saving}
+                className="pulse-button primary"
+                type="submit"
+                disabled={saving || busy}
+              >
+                <Icon name="check" />
+              </button>
+            )}
+          </div>
         </section>
       )}
       {onSaveBodyFat && mode !== 'weight' && (
         <section className="quick-check-in-row body-fat-check-in" aria-label="Body fat check-in">
           <header className="quick-check-in-heading">
-            {mode === 'combined' && <h3>Body fat</h3>}
-            <span className={todayBodyFat === null ? '' : 'logged'} role="status">
-              {todayBodyFat === null
-                ? 'Not logged today'
-                : `Saved today · ${todayBodyFat.toFixed(1)}%`}
-            </span>
+            {(combined || headerSave) && <h3>Body fat</h3>}
+            <CheckInStatus prior={priorBodyFat} today={todayBodyFat} unit="%" />
           </header>
-          <form
-            className="quick-bodyweight-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveFat();
-            }}
-          >
+          <div className={`quick-bodyweight-form${singleButton ? ' is-shared' : ''}`}>
             <button
               className="stepper"
               type="button"
@@ -958,6 +1290,7 @@ export function DashboardQuickBodyweight({
                 step="0.1"
                 placeholder="—"
                 aria-label="Body fat percentage"
+                form={singleButton ? weightFormId : fatFormId}
                 disabled={saving || busy}
                 value={bodyFat}
                 style={{ '--bw-chars': `${Math.max(bodyFat.length, 1)}ch` } as CSSProperties}
@@ -977,15 +1310,27 @@ export function DashboardQuickBodyweight({
             >
               +
             </button>
-            <button
-              className="pulse-button primary"
-              type="submit"
-              disabled={saving || busy || todayBodyweight === null}
-            >
-              {saving ? 'Saving…' : todayBodyFat === null ? 'Log' : 'Update'}
-            </button>
-          </form>
-          {todayBodyweight === null && (
+            {!headerSave && (
+              <button
+                form={fatFormId}
+                aria-label={
+                  saving
+                    ? 'Saving body fat'
+                    : todayBodyFat === null
+                      ? 'Log body fat'
+                      : 'Update body fat'
+                }
+                title={todayBodyFat === null ? 'Log body fat' : 'Update body fat'}
+                aria-busy={saving}
+                className="pulse-button primary"
+                type="submit"
+                disabled={saving || busy || todayBodyweight === null}
+              >
+                <Icon name="check" />
+              </button>
+            )}
+          </div>
+          {!singleButton && todayBodyweight === null && (
             <p className="quick-check-in-hint">Log today’s body weight first.</p>
           )}
         </section>
@@ -1003,9 +1348,11 @@ export function DashboardQuickBodyweight({
             <span>
               {saving
                 ? 'Undoing check-in…'
-                : undo.kind === 'fat'
-                  ? 'Body fat saved'
-                  : 'Body weight saved'}
+                : undo.kind === 'combined'
+                  ? 'Check-in saved'
+                  : undo.kind === 'fat'
+                    ? 'Body fat saved'
+                    : 'Body weight saved'}
             </span>
             <button
               className="undo-toast-action"
@@ -1065,6 +1412,18 @@ export function TodaySkeleton() {
         ))}
       </div>
       <div className="pulse-card skeleton-card" aria-hidden="true" />
+    </section>
+  );
+}
+
+function ThisWeekCard({ children }: { children: ReactNode }) {
+  const titleId = useId();
+  return (
+    <section className="pulse-card this-week-card" aria-labelledby={titleId}>
+      <header className="pulse-card-header">
+        <h2 id={titleId}>This week</h2>
+      </header>
+      {children}
     </section>
   );
 }

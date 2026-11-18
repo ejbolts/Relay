@@ -29,16 +29,23 @@ function renderPounds(children: ReactNode) {
 describe('weight display preference across personal screens', () => {
   it('shows pound check-in controls with converted values and accessible labels', () => {
     const markup = renderPounds(
-      <DashboardQuickBodyweight latestBodyweight={84.2} todayBodyweight={84.2} onSave={vi.fn()} />,
+      <DashboardQuickBodyweight
+        latestBodyweight={84.2}
+        priorBodyweight={84}
+        todayBodyweight={84.2}
+        onSave={vi.fn()}
+      />,
     );
-    expect(markup).toContain('Saved today · 185.6 lb');
+    expect(markup).toContain('aria-label="Prior: 185.2 lb; Saved today: 185.6 lb"');
+    expect(markup).toMatch(/class="quick-check-in-change"[^>]*>.*?<\/svg>0\.4<\/span>/);
+    expect(markup).toMatch(/class="quick-check-in-today">.*?<\/svg>185\.6 lb<\/span>/);
     expect(markup).toContain('value="185.63"');
     expect(markup).toContain('Bodyweight in pounds');
     expect(markup).toContain('Increase by 0.1 lb');
     expect(markup).not.toContain('kg');
   });
 
-  it('converts Body history and median summaries while retaining the selected trend controls', () => {
+  it('converts Body check-in values to pounds', () => {
     const measurements = [84.2, 83.8].map((weight_kg, index) => ({
       id: String(index),
       measurement_date: `2026-09-0${2 - index}`,
@@ -58,9 +65,6 @@ describe('weight display preference across personal screens', () => {
       />,
     );
     expect(markup).toContain('<strong>185.63 lb</strong>');
-    expect(markup).toContain('<strong>185.2 lb</strong>');
-    expect(markup).toContain('<option value="median" selected="">Median</option>');
-    expect(markup).toContain('<option value="14d" selected="">14 days</option>');
     expect(markup).not.toContain(' kg');
     expect(measurements.map((item) => item.weight_kg)).toEqual([84.2, 83.8]);
   });

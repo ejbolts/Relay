@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from .cardio_zones import CardioGoalWeek, CardioPreferences
 from .machine_settings import MachineSetting, NumericMachineSetting
@@ -93,6 +101,8 @@ class ExerciseRead(BaseModel):
     equipment: str | None
     is_custom: bool
     is_favorite: bool
+    # Left out of exercise pickers and lists; history, records and progress are kept.
+    hidden: bool = False
     partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
     partial_set_weeks: list[ExercisePartialSetWeekRead] = []
     muscle_contributions: list[MuscleContributionRead] = []
@@ -128,6 +138,39 @@ class ExerciseFavoriteUpdate(BaseModel):
     is_favorite: bool
 
 
+class ExerciseUpdate(BaseModel):
+    """Rename or re-describe a custom exercise, or hide any exercise from lists.
+
+    Omitted fields are unchanged. Equipment and muscle credits can only change on a custom
+    exercise, for example to match another exercise before merging into it.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    hidden: bool | None = None
+    equipment: str | None = Field(default=None, max_length=100)
+    muscle_set_credits: list[MuscleSetCreditCreate] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        # A blank name is refused by the length check rather than read as "unchanged".
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("equipment", mode="before")
+    @classmethod
+    def clean_equipment(cls, value: str | None) -> str | None:
+        return value.strip() or None if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def unique_muscles(self) -> ExerciseUpdate:
+        names = [credit.muscle_name.casefold() for credit in self.muscle_set_credits or []]
+        if len(names) != len(set(names)):
+            raise ValueError("Choose each target muscle only once.")
+        return self
+
+
 class MachinePhotoCaptionUpdate(BaseModel):
     caption: str = Field(min_length=1, max_length=160)
 
@@ -154,6 +197,19 @@ class MachinePhotoRead(MachinePhotoImageRead):
     images: list[MachinePhotoImageRead] = Field(default_factory=list)
 
 
+class WorkoutPhotoRead(BaseModel):
+    """A photo of the whole workout; shared copies swap in URLs their viewer can load."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    thumbnail_url: str
+    full_url: str
+    width: int
+    height: int
+    created_at: datetime
+
+
 class MachinePhotoMerge(MachinePhotoCaptionUpdate):
     photo_ids: list[str] = Field(min_length=2, max_length=100)
     keep_photo_id: str
@@ -175,6 +231,7 @@ class MachinePhotoUsageRead(MachinePhotoRead):
 
 
 class WorkoutSetCreate(BaseModel):
+    machine_photo_id: str | None = Field(default=None, max_length=36)
     reps: int | None = Field(default=None, ge=0, le=10_000)
     weight_kg: float | None = Field(default=None, ge=0, le=10_000)
     rpe: float | None = Field(default=None, ge=1, le=10)
@@ -261,6 +318,8 @@ class WorkoutTypeUpdate(BaseModel):
 
 class TrainingWorkoutCreate(BaseModel):
     client_session_id: UUID | None = None
+    active_workout_revision: int | None = Field(default=None, ge=1)
+    active_workout_session_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     workout_date: date
     category: WorkoutCategory
@@ -270,6 +329,9 @@ class TrainingWorkoutCreate(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     movements: list[WorkoutMovementCreate] = Field(min_length=1, max_length=100)
+    # Updates only: the revision the editor loaded. A save based on an older revision is refused
+    # with 409. Older app versions omit it and still replace the workout unconditionally.
+    base_revision: int | None = Field(default=None, ge=1, le=2_147_483_647)
 
     @field_validator("name", "notes", mode="before")
     @classmethod
@@ -302,6 +364,7 @@ class TrainingWorkoutCreate(BaseModel):
 class WorkoutSetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    machine_photo_id: str | None = None
     id: str
     order_index: int
     reps: int | None
@@ -353,9 +416,11 @@ class TrainingWorkoutRead(BaseModel):
     start_time: time | None
     end_time: time | None
     is_sample: bool
+    revision: int = 1
     created_at: datetime
     updated_at: datetime
     movements: list[WorkoutMovementRead] = []
+    photos: list[WorkoutPhotoRead] = []
 
 
 class WorkoutCacheRevisionRead(BaseModel):
@@ -388,9 +453,37 @@ class ExerciseLatestSessionRead(BaseModel):
     sets: list[WorkoutSetRead]
 
 
+class BlockStatsRead(BaseModel):
+    block_id: str
+    name: str
+    start_date: date
+    deload: bool = False
+    workout_count: int
+    set_count: int
+    volume_kg: float
+    # Weight and volume PRs dated inside the block, as listed when browsing it.
+    pr_count: int
+
+
+class TrainingBlockSummaryRead(BaseModel):
+    """A block's totals next to the last regular block before it, if there is one."""
+
+    block: BlockStatsRead
+    previous: BlockStatsRead | None = None
+
+
+class BlockHistoryBaselineRead(BaseModel):
+    best_relative_strength: float | None = None
+    block_id: str
+    best_weight_kg: float | None
+    reps_by_weight: list[WeightRepsRead]
+
+
 class ExerciseHistoryBaselineRead(BaseModel):
     """An exercise's history before a date, condensed for PR checks and set suggestions."""
 
+    block_bests: list[BlockHistoryBaselineRead] = Field(default_factory=list)
+    best_relative_strength: float | None = None
     exercise_id: str
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -450,13 +543,38 @@ class RoutineSet(BaseModel):
     set_type: SetType = SetType.NORMAL
 
 
+class RepRange(BaseModel):
+    """The reps to aim for in each working set, such as 8 to 12."""
+
+    min: int = Field(ge=1, le=100)
+    max: int = Field(ge=1, le=100)
+
+    @model_validator(mode="after")
+    def ordered(self) -> RepRange:
+        if self.min > self.max:
+            raise ValueError("The lowest reps cannot be more than the highest.")
+        return self
+
+
 class RoutineMovement(BaseModel):
     exercise_id: str
     sets: list[RoutineSet] = Field(min_length=1, max_length=50)
+    # Optional target for a planned strength exercise. The logger shows it and suggests more
+    # weight once every top set reaches the highest reps.
+    rep_range: RepRange | None = None
 
 
 class RoutineMovementRead(RoutineMovement):
     exercise: ExerciseRead
+
+
+class WorkoutTypeExercises(BaseModel):
+    movements: list[RoutineMovement] = Field(default_factory=list, max_length=20)
+
+
+class WorkoutTypeExercisesRead(BaseModel):
+    workout_type_id: str
+    movements: list[RoutineMovementRead] = []
 
 
 class RoutineDay(BaseModel):
@@ -499,9 +617,13 @@ class RoutineInput(BaseModel):
         return self
 
 
+SplitProgression = Literal["calendar", "workouts"]
+
+
 class RoutineSchedule(BaseModel):
     start_date: date
     enabled: bool = True
+    progression: SplitProgression = "workouts"
 
 
 class RoutineSaveInput(RoutineInput):
@@ -515,6 +637,7 @@ class RoutineRead(RoutineInput):
 
 class RoutineActivation(BaseModel):
     start_date: date
+    progression: SplitProgression = "workouts"
 
 
 class MuscleFrequencyRead(BaseModel):
@@ -603,12 +726,22 @@ class BodyWeightGoalCreate(BaseModel):
     target_date: date
     start_weight_kg: float = Field(gt=0, le=500)
     target_weight_kg: float = Field(gt=0, le=500)
+    maintenance_min_kg: float | None = Field(default=None, gt=0, le=500)
+    maintenance_max_kg: float | None = Field(default=None, gt=0, le=500)
     active: bool = True
 
     @model_validator(mode="after")
     def dates_are_ordered(self) -> BodyWeightGoalCreate:
         if self.target_date < self.start_date:
             raise ValueError("Target date must be on or after the start date.")
+        low, high = self.maintenance_min_kg, self.maintenance_max_kg
+        if (low is None) != (high is None):
+            raise ValueError("Enter both maintenance range limits.")
+        if low is not None and high is not None:
+            if low >= high:
+                raise ValueError("Maintenance minimum must be below the maximum.")
+            # Older apps still see a maintain goal at the band's midpoint.
+            self.start_weight_kg = self.target_weight_kg = (low + high) / 2
         return self
 
 
@@ -620,6 +753,11 @@ class BodyWeightGoalRead(BodyWeightGoalCreate):
 
 
 class PersonalRecordRead(BaseModel):
+    bodyweight_kg: float | None = None
+    scope: Literal["all_time", "block"] = "all_time"
+    block_id: str | None = None
+    block_name: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -652,6 +790,7 @@ class CardioSessionFields(BaseModel):
     incline_percent: float | None = Field(default=None, ge=0, le=100)
     average_power_watts: int | None = Field(default=None, ge=1, le=3_000)
     average_mets: float | None = Field(default=None, gt=0, le=50)
+    elevation_gain_m: float | None = Field(default=None, ge=0, le=30_000)
     intensity: str | None = Field(default=None, max_length=100)
     zone: str | None = Field(default=None, max_length=30)
     qualifies_zone2: bool = False
@@ -675,6 +814,7 @@ class CardioScreenshotRead(BaseModel):
     average_heart_rate_bpm: int | None
     distance_km: float | None
     average_speed_kph: float | None
+    elevation_gain_m: float | None = None
     fields_found: list[str]
     warning: str | None
 
@@ -695,6 +835,7 @@ class CardioMetricsUpdate(BaseModel):
     incline_percent: float | None = Field(default=None, ge=0, le=100)
     average_power_watts: int | None = Field(default=None, ge=1, le=3_000)
     average_mets: float | None = Field(default=None, gt=0, le=50)
+    elevation_gain_m: float | None = Field(default=None, ge=0, le=30_000)
 
 
 class CardioEnergyPeriodRead(BaseModel):
@@ -717,13 +858,17 @@ class CardioEnergyPeriodRead(BaseModel):
     previous_average_incline_percent: float | None
     average_mets: float | None
     previous_average_mets: float | None
+    # Kept for app releases that still chart MET-minutes.
     met_minutes: float
     previous_met_minutes: float | None
+    elevation_gain_m: float
+    previous_elevation_gain_m: float | None
     heart_rate_sessions: int
     distance_sessions: int
     speed_sessions: int
     incline_sessions: int
     mets_sessions: int
+    elevation_sessions: int
 
 
 class CardioSessionRead(CardioSessionFields):
@@ -734,6 +879,9 @@ class CardioSessionRead(CardioSessionFields):
     workout_context: Literal["pure_cardio", "workout_plus_cardio"] = "pure_cardio"
     performed_after_strength: bool = False
     source_workout_name: str | None = None
+    # Calculated when the matching logged value is blank; the logged value wins.
+    estimated_mets: float | None = None
+    estimated_elevation_gain_m: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -747,6 +895,9 @@ class TrainingSplit(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     enabled: bool = True
     start_date: date
+    # "workouts" (the default) advances only as split workouts are logged; "calendar" pins
+    # each day to a date.
+    progression: SplitProgression = "workouts"
     steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
     routine_id: str | None = None
 
@@ -762,25 +913,39 @@ class TrainingSplit(BaseModel):
         return self
 
 
+class SplitMissedDay(BaseModel):
+    workout_date: date
+    workout_type_id: str
+
+
+class TrainingSplitRead(TrainingSplit):
+    # Where a workout-following split currently stands; unset for calendar splits.
+    next_step: int | None = None
+    rest_saved: bool = False
+    next_date: date | None = None
+    # Past days, within the last year, whose planned workout was not done. A workout-following
+    # split leaves out the one day off it absorbs as a rest.
+    missed_days: list[SplitMissedDay] = Field(default_factory=list)
+
+
 class TrainingPreferencesUpdate(BaseModel):
     preferred_weight_unit: Literal["kg", "lb"]
     week_start: Literal["monday", "sunday", "saturday"]
     zone2_goal_minutes: int = Field(ge=1, le=10_080)
     weekly_muscle_set_goal: int | None = Field(default=None, ge=1, le=1000)
+    # Omission preserves overrides when an older app saves its preferences; {} clears them.
+    weekly_muscle_set_goals: (
+        dict[
+            Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)],
+            Annotated[int, Field(ge=1, le=1000)],
+        ]
+        | None
+    ) = Field(default=None, max_length=200)
 
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):
     weekly_muscle_set_goal: int = 10
-
-
-class FfmiProfile(BaseModel):
-    """Body frame inputs for FFMI and natural muscular potential estimates."""
-
-    sex: Literal["male", "female"] | None = None
-    height_cm: float | None = Field(default=None, ge=100, le=250)
-    wrist_cm: float | None = Field(default=None, ge=10, le=30)
-    ankle_cm: float | None = Field(default=None, ge=12, le=40)
-    target_body_fat_pct: float = Field(default=10, ge=3, le=40)
+    weekly_muscle_set_goals: dict[str, int] = Field(default_factory=dict)
 
 
 class WorkoutTypeColors(BaseModel):
@@ -813,6 +978,14 @@ class CardioOverviewRead(BaseModel):
     energy_periods: list[CardioEnergyPeriodRead]
 
 
+class CardioWeekRead(BaseModel):
+    """One week of cardio for the weekly review: all minutes, and each goal zone's progress."""
+
+    week_start: date
+    total_minutes: int
+    goals: list[CardioGoalWeek]
+
+
 class DashboardRead(BaseModel):
     cardio_goals: list[CardioGoalWeek]
     workouts_this_week: int
@@ -828,10 +1001,14 @@ class DashboardRead(BaseModel):
     weekly_sets: WeeklySetsRead
     # The weeks before ``weekly_sets``, newest first.
     weekly_sets_history: list[WeeklySetsRead] = Field(default_factory=list)
+    # Cardio for the current week and the weeks before it, newest first.
+    cardio_weeks: list[CardioWeekRead] = Field(default_factory=list)
     muscle_volume: list[MuscleVolumeRead]
     zone2: Zone2WeekRead
     recent_workouts: list[TrainingWorkoutRead]
     history: WorkoutHistorySummaryRead | None = None
+    # The saved split and its progress, for the calendar's planned and missed days.
+    training_split: TrainingSplitRead | None = None
 
 
 class TrainingTimeRead(BaseModel):
@@ -845,6 +1022,8 @@ class TrainingTimeRead(BaseModel):
 
 
 class ProgressPoint(BaseModel):
+    relative_strength: float | None = None
+    bodyweight_kg: float | None = None
     workout_date: date
     workout_id: str
     best_weight_kg: float
@@ -881,6 +1060,9 @@ class ExerciseLibrarySummaryRead(BaseModel):
     change_kg: float | None
     change_percent: float | None
     trend: list[ExerciseTrendPointRead]
+    # True when the exercise's machine weights are normalised, so the estimates above are in the
+    # reference machine's weights. Older apps ignore it.
+    normalised: bool = False
 
 
 class CsvImportRead(BaseModel):

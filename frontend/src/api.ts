@@ -1,4 +1,6 @@
+import type { AppNotices } from './appNotices';
 import type { BodySizeLog } from './bodySizes';
+import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { NotificationReadReference } from './types';
 import type {
   SharedWorkoutFilters,
@@ -11,7 +13,6 @@ import type {
   BodyMeasurementCsvImportResult,
   BodyWeightGoal,
   BodyWeightGoalInput,
-  FfmiProfile,
   CardioOverview,
   CardioPreferences,
   CardioScreenshotScan,
@@ -19,6 +20,8 @@ import type {
   CardioSessionInput,
   CardioMetricsInput,
   Clip,
+  ArchivePreview,
+  ArchiveRestored,
   CsvImportResult,
   ImportBatch,
   ImportUndoResult,
@@ -38,7 +41,12 @@ import type {
   MachinePhotoUsage,
   MachineSetting,
   MuscleVolume,
+  MuscleSetCreditInput,
+  PasswordResetRequest,
   PersonalRecord,
+  TrainingBlockInput,
+  TrainingBlockSummary,
+  TrainingBlocks,
   ProfileUpdateInput,
   PushConfig,
   RegisterInput,
@@ -47,6 +55,7 @@ import type {
   ServerStatus,
   SharedProfile,
   SharedProfileSummary,
+  Sex,
   SuggestedProfilePage,
   SharedWorkoutPage,
   SharedCardioPage,
@@ -54,6 +63,8 @@ import type {
   FriendConnections,
   SharingNotifications,
   FriendFeed,
+  Timeline,
+  WorkoutPhoto,
   WorkoutReactionKind,
   WorkoutReactionPage,
   WorkoutReactions,
@@ -67,11 +78,14 @@ import type {
   WeightMapping,
   WorkoutSession,
   TrainingPreferences,
+  SplitProgression,
   TrainingSplit,
   Routine,
   TrainingTime,
   WorkoutTypeColors,
   WorkoutType,
+  WorkoutTypeExercises,
+  RoutineMovement,
   YouTubeConnection,
 } from './types';
 import { captureAccountCacheScope } from './accountCacheScope';
@@ -82,10 +96,22 @@ import {
   readWorkoutCache,
   writeWorkoutCache,
 } from './workoutCache';
-import { isUsingSavedData, reportSavedDataUsed, reportServerReached } from './connectionStatus';
+import {
+  isUsingSavedData,
+  reportConnectionFailure,
+  reportSavedDataUsed,
+  reportServerReached,
+} from './connectionStatus';
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
+import { beginWrite, reportClientOutdated, trackWrite } from './appUpdates';
+import {
+  CLIENT_VERSION,
+  CLIENT_VERSION_HEADER,
+  isClientOutdated,
+  withClientVersion,
+} from './clientVersion';
 import type { HomeLayout } from './homeLayout';
 import { localDate } from './utils';
 import {
@@ -108,9 +134,52 @@ export class ApiError extends Error {
   }
 }
 
+/** The server refused a workout save because the workout changed after the editor loaded it. */
+export function isWorkoutConflict(reason: unknown): reason is ApiError {
+  return reason instanceof ApiError && reason.status === 409 && reason.code === 'workout_conflict';
+}
+
 interface RequestOptions {
   /** Public auth endpoints handle their own 401s (for example a wrong password). */
   signalExpiredSession?: boolean;
+  /** Reads headers from a successful answer before its body is returned. */
+  onHeaders?: (headers: Headers) => void;
+}
+
+/** The data revision each saved workout's save reported, for refreshing straight after it. */
+const revisionsAfterSave = new WeakMap<TrackedWorkout, string>();
+
+/**
+ * The data revision the server reached when it saved this workout, or null when the server did
+ * not report one (an older server). Data read after the save is at least this new.
+ */
+export function revisionAfterSave(workout: TrackedWorkout): string | null {
+  return revisionsAfterSave.get(workout) ?? null;
+}
+
+function saveWorkoutRequest(path: string, init: RequestInit): Promise<TrackedWorkout> {
+  let revision: string | null = null;
+  const options: RequestOptions = {
+    onHeaders: (headers) => {
+      revision = headers.get('X-Workout-Revision');
+    },
+  };
+  // Keep small saves alive across page unload. The browser caps all outstanding keepalive
+  // bodies at 64 KiB; larger workouts still use the normal request and durable recovery queue.
+  const keepalive = typeof init.body === 'string' && new Blob([init.body]).size <= 64 * 1024;
+  return request<TrackedWorkout>(path, { ...init, keepalive }, options)
+    .catch((reason: unknown) => {
+      // A shared keepalive quota rejection is exposed only as a network TypeError. Fall back
+      // to a normal send without changing the payload/session ID; never retry an explicit abort.
+      if (keepalive && reason instanceof TypeError && !init.signal?.aborted)
+        return request<TrackedWorkout>(path, { ...init, keepalive: false }, options);
+      throw reason;
+    })
+    .then((workout) => {
+      if (revision && workout && typeof workout === 'object')
+        revisionsAfterSave.set(workout, revision);
+      return workout;
+    });
 }
 
 /** Proxy answers meaning the Relay server itself could not be reached. */
@@ -125,23 +194,45 @@ export function isConnectionFailure(reason: unknown): boolean {
   return reason instanceof TypeError || reason instanceof SyntaxError;
 }
 
+/** The request never got an answer: no connection or a timeout, rather than a deliberate cancel. */
+function isUnreachable(reason: unknown): boolean {
+  if (reason instanceof DOMException) return reason.name === 'TimeoutError';
+  return reason instanceof TypeError;
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
-  { signalExpiredSession = true }: RequestOptions = {},
+  { signalExpiredSession = true, onHeaders }: RequestOptions = {},
 ): Promise<T> {
   const scope = captureAccountCacheScope();
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
-  const response = await fetch(path, { ...init, credentials: 'same-origin' });
+  const sent = fetch(path, {
+    ...init,
+    headers: withClientVersion(init?.headers),
+    credentials: 'same-origin',
+  });
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  let response: Response;
+  try {
+    response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
+  } catch (reason) {
+    if (isUnreachable(reason)) reportConnectionFailure('unreachable');
+    throw reason;
+  }
+  // The proxy answered, but Relay behind it did not.
+  const serverDown = GATEWAY_FAILURES.has(response.status);
+  if (serverDown) reportConnectionFailure('down');
   checkAccount();
-  if (!GATEWAY_FAILURES.has(response.status)) reportServerReached();
+  if (!serverDown) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: { code?: string; message?: string };
     } | null;
     checkAccount();
+    if (isClientOutdated(response.status, body?.error?.code)) reportClientOutdated();
     if (
       signalExpiredSession &&
       response.status === 401 &&
@@ -157,6 +248,7 @@ async function request<T>(
   }
   const value = response.status === 204 ? (undefined as T) : ((await response.json()) as T);
   checkAccount();
+  onHeaders?.(response.headers);
   return value;
 }
 
@@ -235,11 +327,21 @@ async function requestBlob(path: string): Promise<Blob> {
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
-  const response = await fetch(path, { credentials: 'same-origin' });
+  const response = await fetch(path, {
+    headers: withClientVersion(),
+    credentials: 'same-origin',
+  });
   checkAccount();
   if (!response.ok) {
     if (response.status === 401) emitAuthExpired();
-    throw new ApiError(`Export failed (${response.status})`, 'export_failed', response.status);
+    const body = (await response.json().catch(() => null)) as {
+      error?: { code?: string; message?: string };
+    } | null;
+    throw new ApiError(
+      body?.error?.message ?? `Export failed (${response.status})`,
+      body?.error?.code ?? 'export_failed',
+      response.status,
+    );
   }
   const blob = await response.blob();
   checkAccount();
@@ -250,7 +352,11 @@ async function requestBlob(path: string): Promise<Blob> {
  * Workouts dated `since` or later, from the device cache while the server revision matches. Offline,
  * the saved snapshot answers whatever its revision, provided it reaches back that far.
  */
-async function listCachedWorkouts(since: string): Promise<TrackedWorkout[]> {
+async function listCachedWorkouts(
+  since: string,
+  /** A revision already confirmed for this read, such as the one a save just reported. */
+  knownRevision?: string,
+): Promise<TrackedWorkout[]> {
   const scope = captureAccountCacheScope();
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
@@ -258,7 +364,9 @@ async function listCachedWorkouts(since: string): Promise<TrackedWorkout[]> {
   const cached = readWorkoutCache();
   return preferServer(
     async () => {
-      const current = await request<WorkoutCacheRevision>('/api/workouts/revision');
+      const current = knownRevision
+        ? { revision: knownRevision }
+        : await request<WorkoutCacheRevision>('/api/workouts/revision');
       const reusable = cachedWorkoutsForRevision(await cached, current.revision, since);
       checkAccount();
       if (reusable) return reusable;
@@ -308,12 +416,33 @@ const bodyMeasurementTransport: BodyMeasurementTransport = {
 };
 
 export const api = {
+  activeWorkout: () =>
+    request<{ revision: number; draft: ActiveWorkoutDraft | null }>('/api/active-workout', {
+      signal: AbortSignal.timeout(10_000),
+    }),
+  syncActiveWorkout: (change: {
+    revision: number;
+    base: ActiveWorkoutDraft | null;
+    draft: ActiveWorkoutDraft | null;
+    replace?: boolean;
+    autoSave?: WorkoutInput;
+  }) =>
+    request<{ revision: number; draft: ActiveWorkoutDraft | null; conflict: boolean }>(
+      '/api/active-workout',
+      {
+        method: 'PUT',
+        signal: AbortSignal.timeout(10_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(change),
+      },
+    ),
   youtube: {
     connection: () => request<YouTubeConnection>('/api/youtube/connection'),
     connect: () => request<{ url: string }>('/api/youtube/connect', { method: 'POST' }),
     disconnect: () => request<YouTubeConnection>('/api/youtube/connection', { method: 'DELETE' }),
   },
   auth: {
+    friendInvite: () => request<{ invite_code: string | null }>('/api/auth/friend-invite'),
     config: () =>
       request<AuthConfig>('/api/auth/config', undefined, { signalExpiredSession: false }),
     me: () => request<User>('/api/auth/me', undefined, { signalExpiredSession: false }),
@@ -331,6 +460,12 @@ export const api = {
       ),
     logout: () =>
       request<void>('/api/auth/logout', { method: 'POST' }, { signalExpiredSession: false }),
+    requestPasswordReset: (username: string) =>
+      request<void>(
+        '/api/auth/password-reset-request',
+        { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ username }) },
+        { signalExpiredSession: false },
+      ),
   },
   admin: {
     feedback: () => request<AppFeedback[]>('/api/admin/feedback'),
@@ -347,6 +482,24 @@ export const api = {
         method: 'PATCH',
         headers: jsonHeaders,
         body: JSON.stringify({ disabled }),
+      }),
+    /** Changes or clears an account's sex; null lets the person choose again. */
+    setUserSex: (userId: string, sex: Sex | null) =>
+      request<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/sex`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ sex }),
+      }),
+    resetUserPassword: (userId: string) =>
+      request<{ temporary_password: string }>(
+        `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
+        { method: 'POST' },
+      ),
+    passwordResetRequests: () =>
+      request<PasswordResetRequest[]>('/api/admin/password-reset-requests'),
+    dismissPasswordResetRequest: (userId: string) =>
+      request<void>(`/api/admin/password-reset-requests/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
       }),
     settings: () => request<ServerSettings>('/api/admin/settings'),
     updateSettings: (payload: ServerSettingsUpdate) =>
@@ -425,6 +578,23 @@ export const api = {
       request<SharedCardioPage>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
       ),
+    /** Your exercises with your best and a member's, and the ones your head to heads show. */
+    lifts: (userId: string) =>
+      request<import('./types').LiftComparisons>(
+        `/api/sharing/profiles/${encodeURIComponent(userId)}/lifts`,
+      ),
+    /** Saves the exercises your head to heads show, for every member you compare with. */
+    chooseLifts: (exercise_ids: string[]) =>
+      request<{ exercise_ids: string[] }>('/api/sharing/lifts', {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ exercise_ids }),
+      }),
+    /** One of your lifts, ranked against the friends who have logged it. */
+    liftLeaderboard: (exerciseId: string) =>
+      request<{ entries: import('./types').LiftRanking[] }>(
+        `/api/sharing/lifts/${encodeURIComponent(exerciseId)}`,
+      ),
     workoutFilters: (userId: string) =>
       request<SharedWorkoutFilterOptions>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/workout-filters`,
@@ -464,6 +634,9 @@ export const api = {
         body: JSON.stringify({ items }),
       }),
     feed: (limit = 5) => request<FriendFeed>(`/api/sharing/feed?limit=${limit}`),
+    /** Social's feed: your workouts and your friends', newest first. */
+    timeline: (offset = 0, limit = 10) =>
+      request<Timeline>(`/api/sharing/timeline?offset=${offset}&limit=${limit}`),
     reactionPeople: (workoutId: string, offset = 0) =>
       request<WorkoutReactionPage>(
         `/api/sharing/workouts/${encodeURIComponent(workoutId)}/reactions?offset=${offset}`,
@@ -579,6 +752,21 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_favorite: isFavorite }),
     }),
+  updateExercise: (
+    exerciseId: string,
+    changes: {
+      name?: string;
+      hidden?: boolean;
+      /** Custom exercises only. */
+      equipment?: string | null;
+      muscle_set_credits?: MuscleSetCreditInput[];
+    },
+  ) =>
+    request<Exercise>(`/api/exercises/${exerciseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    }),
   mergeExercise: (sourceId: string, targetId: string) =>
     request<Exercise>(`/api/exercises/${sourceId}/merge`, {
       method: 'POST',
@@ -670,11 +858,22 @@ export const api = {
       `/api/dashboard?${new URLSearchParams({ on_date: localDate(), ...(calendarStart ? { calendar_start: calendarStart } : {}) })}`,
       DASHBOARD_CACHE_KEY,
     ),
-  getTrainingSplit: () => accountRead<TrainingSplit | null>('/api/training-split'),
+  getAppNotices: () => accountRead<AppNotices>('/api/app-notices'),
+  saveAppNotices: (notices: Partial<AppNotices>) =>
+    request<AppNotices>('/api/app-notices', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify(notices),
+    }),
+  getTrainingSplit: () =>
+    accountRead<TrainingSplit | null>(
+      `/api/training-split?${new URLSearchParams({ on_date: localDate() })}`,
+      'response:/api/training-split',
+    ),
   routines: {
     create: (
       routine: Omit<Routine, 'id'>,
-      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>,
+      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
     ) =>
       request<Routine>('/api/routines', {
         method: 'POST',
@@ -684,7 +883,10 @@ export const api = {
     list: () => accountRead<Routine[]>('/api/routines'),
     profile: (id: string) => request<Routine[]>(`/api/routines/profile/${encodeURIComponent(id)}`),
     fromSplit: () => request<Routine>('/api/routines/from-split', { method: 'POST' }),
-    save: (routine: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) =>
+    save: (
+      routine: Routine,
+      schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
+    ) =>
       request<Routine>(`/api/routines/${routine.id}`, {
         method: 'PUT',
         headers: jsonHeaders,
@@ -693,15 +895,18 @@ export const api = {
     remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
     copy: (owner: string, id: string) =>
       request<Routine>(`/api/routines/profile/${owner}/${id}/copy`, { method: 'POST' }),
-    use: (id: string, start_date: string) =>
-      request<TrainingSplit>(`/api/routines/${id}/use`, {
-        method: 'POST',
-        headers: jsonHeaders,
-        body: JSON.stringify({ start_date }),
-      }),
+    use: (id: string, start_date: string, progression: SplitProgression = 'workouts') =>
+      request<TrainingSplit>(
+        `/api/routines/${id}/use?${new URLSearchParams({ on_date: localDate() })}`,
+        {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({ start_date, progression }),
+        },
+      ),
   },
   saveTrainingSplit: (payload: TrainingSplit) =>
-    request<TrainingSplit>('/api/training-split', {
+    request<TrainingSplit>(`/api/training-split?${new URLSearchParams({ on_date: localDate() })}`, {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify(payload),
@@ -744,13 +949,6 @@ export const api = {
     await refreshBodyMeasurements(bodyMeasurementTransport).catch(() => undefined);
     return result;
   },
-  getFfmiProfile: () => accountRead<FfmiProfile>('/api/ffmi-profile'),
-  updateFfmiProfile: (payload: FfmiProfile) =>
-    request<FfmiProfile>('/api/ffmi-profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
   listBodyWeightGoals: () => accountRead<BodyWeightGoal[]>('/api/body-weight-goals'),
   createBodyWeightGoal: (payload: BodyWeightGoalInput) =>
     request<BodyWeightGoal>('/api/body-weight-goals', {
@@ -766,10 +964,32 @@ export const api = {
     }),
   deleteBodyWeightGoal: (id: string) =>
     request<void>(`/api/body-weight-goals/${id}`, { method: 'DELETE' }),
+  trainingBlocks: {
+    get: () => accountRead<TrainingBlocks>('/api/training-blocks'),
+    create: (payload: TrainingBlockInput) =>
+      request<TrainingBlocks>('/api/training-blocks', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    update: (id: string, payload: TrainingBlockInput) =>
+      request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
+    remove: (id: string) =>
+      request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+    summary: (id: string) =>
+      request<TrainingBlockSummary>(`/api/training-blocks/${encodeURIComponent(id)}/summary`),
+  },
   listPersonalRecords: (params?: { exerciseId?: string; workoutId?: string }) => {
     const query = new URLSearchParams();
     if (params?.exerciseId) query.set('exercise_id', params.exerciseId);
     if (params?.workoutId) query.set('workout_id', params.workoutId);
+    query.set('include_blocks', 'true');
     const path = `/api/personal-records${query.size ? `?${query}` : ''}`;
     // A just-saved workout's records only matter online; saving a copy per workout would pile up.
     return params?.workoutId
@@ -845,6 +1065,20 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
+  getWorkoutTypeExercises: () => accountRead<WorkoutTypeExercises[]>('/api/workout-type-exercises'),
+  saveWorkoutTypeExercises: (typeId: string, movements: RoutineMovement[]) =>
+    request<WorkoutTypeExercises>(`/api/workout-type-exercises/${encodeURIComponent(typeId)}`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        // Always sent, null included, so clearing a range is not read as an older app's save.
+        movements: movements.map(({ exercise_id, sets, rep_range }) => ({
+          exercise_id,
+          sets,
+          rep_range: rep_range ?? null,
+        })),
+      }),
+    }),
   deleteWorkoutType: (id: string) =>
     request<void>(`/api/workout-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   updateWorkoutTypeColors: (colors: WorkoutTypeColors) =>
@@ -852,6 +1086,16 @@ export const api = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(colors),
+    }),
+  workoutAutoSave: () =>
+    request<{ after_minutes: number | null }>('/api/workout-auto-save', {
+      signal: AbortSignal.timeout(10_000),
+    }),
+  updateWorkoutAutoSave: (afterMinutes: number | null) =>
+    request<{ after_minutes: number | null }>('/api/workout-auto-save', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ after_minutes: afterMinutes }),
     }),
   updateTrainingPreferences: (payload: TrainingPreferences) =>
     request<TrainingPreferences>('/api/training-preferences', {
@@ -861,6 +1105,8 @@ export const api = {
     }),
   exportWorkouts: (range: DateRange = {}) =>
     requestBlob(`/api/workouts/export.csv${dateRangeQuery(range)}`),
+  exportWorkout: (workoutId: string) =>
+    requestBlob(`/api/workouts/export.csv?workout_id=${encodeURIComponent(workoutId)}`),
   importWorkouts: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);
@@ -896,23 +1142,50 @@ export const api = {
   undoImportBatch: (id: string) =>
     request<ImportUndoResult>(`/api/workouts/import/batches/${id}`, { method: 'DELETE' }),
   createWorkout: (payload: WorkoutInput, signal?: AbortSignal) =>
-    request<TrackedWorkout>('/api/workouts', {
+    saveWorkoutRequest('/api/workouts', {
       signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
   updateWorkout: (id: string, payload: WorkoutInput, signal?: AbortSignal) =>
-    request<TrackedWorkout>(`/api/workouts/${id}`, {
+    saveWorkoutRequest(`/api/workouts/${id}`, {
       signal,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
   deleteWorkout: (id: string) => request<void>(`/api/workouts/${id}`, { method: 'DELETE' }),
+  uploadWorkoutPhoto: (workoutId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<WorkoutPhoto>(`/api/workouts/${encodeURIComponent(workoutId)}/photos`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+  deleteWorkoutPhoto: (photoId: string) =>
+    request<void>(`/api/workout-photos/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
   deleteSampleData: () => request<void>('/api/sample-data', { method: 'DELETE' }),
-  exerciseProgress: (id: string) => accountRead<ExerciseProgress>(`/api/progress/${id}`),
-  exerciseLibrary: () => accountRead<ExerciseLibrarySummary[]>('/api/progress'),
+  downloadAccountArchive: () => requestBlob('/api/account-archive'),
+  previewAccountArchive: (file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<ArchivePreview>('/api/account-archive/preview', { method: 'POST', body: form });
+  },
+  restoreAccountArchive: (file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<ArchiveRestored>('/api/account-archive/restore', { method: 'POST', body: form });
+  },
+  exerciseProgress: (id: string, blockId?: string) =>
+    accountRead<ExerciseProgress>(
+      `/api/progress/${id}${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,
+    ),
+  exerciseLibrary: (blockId?: string) =>
+    accountRead<ExerciseLibrarySummary[]>(
+      `/api/progress${blockId ? `?${new URLSearchParams({ block_id: blockId })}` : ''}`,
+    ),
   getWorkout: (id: string) => request<TrackedWorkout>(`/api/workouts/${id}`),
   getSession: (id: string) => request<WorkoutSession>(`/api/sessions/${id}`),
   deleteSession: (id: string) =>
@@ -952,6 +1225,8 @@ export const api = {
       form.append('file', clip.file, clip.file.name);
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/sessions/${sessionId}/clips`);
+      xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
+      xhr.onloadend = beginWrite();
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };
@@ -965,6 +1240,7 @@ export const api = {
           return;
         }
         if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE) emitAuthExpired();
+        if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
         reject(
           new ApiError(
             body?.error?.message ?? `Upload failed (${xhr.status})`,

@@ -1,30 +1,32 @@
 import { useEffect, useState } from 'react';
-import { useOffline } from './connectionStatus';
+import { useConnectionState } from './connectionStatus';
 
-/** A brief blip should not slide the whole app down and back up. */
-export const OFFLINE_NOTICE_DELAY_MS = 1500;
-/** A dismissal lasts through short reconnections, so a patchy signal does not bring it back. */
-export const OFFLINE_NOTICE_RESET_MS = 10_000;
+/** The notice says what happened once, then shrinks to an icon, so it never needs closing. */
+export const MINIMISE_AFTER_MS = 4000;
 
-type Phase = 'hidden' | 'shown' | 'dismissed';
-
-/** Whether the app-wide offline strip is showing, and a way for the person to close it. */
+/** What the app-wide connection notice shows, and whether its details are open. */
 export function useOfflineNotice() {
-  const offline = useOffline();
-  const [phase, setPhase] = useState<Phase>('hidden');
+  const connection = useConnectionState();
+  const offline = connection.phase === 'offline';
+  const [minimised, setMinimised] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const timer = offline
-      ? window.setTimeout(
-          () => setPhase((current) => (current === 'dismissed' ? current : 'shown')),
-          OFFLINE_NOTICE_DELAY_MS,
-        )
-      : window.setTimeout(() => setPhase('hidden'), OFFLINE_NOTICE_RESET_MS);
+    if (!offline) {
+      // The next outage starts with the full message and closed details.
+      setMinimised(false);
+      setOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setMinimised(true), MINIMISE_AFTER_MS);
     return () => window.clearTimeout(timer);
   }, [offline]);
 
   return {
-    visible: offline && phase === 'shown',
-    dismiss: () => setPhase('dismissed'),
+    connection,
+    visible: offline || connection.phase === 'back',
+    minimised: offline && minimised,
+    open: offline && open,
+    setOpen,
   };
 }

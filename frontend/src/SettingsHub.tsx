@@ -79,30 +79,20 @@ export function SettingsHub({
 
   return (
     <div className={`settings-hub${group ? ' has-selection' : ''}`}>
-      <header className="settings-hub-intro">
-        <div>
-          <p className="section-kicker">YOUR SETUP</p>
-          <h2>Make Relay yours.</h2>
-          <p>Set up your training, make the app yours, and stay in control of your data.</p>
-        </div>
-        {includeAccount && (
-          <button type="button" className="settings-profile-link" onClick={onOpenProfile}>
-            <Icon name="user" />
-            <span>
-              <strong>{accountName}</strong>
-              <small>Edit your profile</small>
-            </span>
-            <Icon name="chevron-right" />
-          </button>
-        )}
-      </header>
+      {includeAccount && (
+        <button type="button" className="settings-profile-link" onClick={onOpenProfile}>
+          <Icon name="user" />
+          <span>
+            <strong>{accountName}</strong>
+            <small>Edit your profile</small>
+          </span>
+          <Icon name="chevron-right" />
+        </button>
+      )}
       <SettingsSearch includeProfile={includeAccount} />
 
       <div className="settings-overview" hidden={!!group}>
-        <div className="settings-overview-heading">
-          <h3>Browse settings</h3>
-          <span>Choose a section</span>
-        </div>
+        <h3 className="settings-overview-heading">Browse settings</h3>
         <nav className="settings-category-grid" aria-label="Browse settings">
           {groups.map((entry) => (
             <button

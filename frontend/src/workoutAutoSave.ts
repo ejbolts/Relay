@@ -28,8 +28,8 @@ export function isWorkoutSetAutoSavable(kind: ExerciseKind, set: DraftSetForAuto
 
   if (kind === 'cardio') {
     return (
-      set.duration_seconds !== null ||
-      set.distance_km !== null ||
+      set.duration_seconds != null ||
+      set.distance_km != null ||
       set.calories_kcal != null ||
       set.average_heart_rate_bpm != null ||
       set.incline_percent != null ||
@@ -38,11 +38,13 @@ export function isWorkoutSetAutoSavable(kind: ExerciseKind, set: DraftSetForAuto
   }
 
   return (
-    set.reps !== null ||
-    set.weight_kg !== null ||
-    set.bodyweight_kg != null ||
-    set.percentile != null
+    set.reps != null || set.weight_kg != null || set.bodyweight_kg != null || set.percentile != null
   );
+}
+
+/** Whether a set was logged, for stored drafts whose exercise kind cannot be resolved. */
+export function isStoredSetLogged(set: DraftSetForAutoSave): boolean {
+  return isWorkoutSetAutoSavable('strength', set) || isWorkoutSetAutoSavable('cardio', set);
 }
 
 export function workoutSetForAutoSave(

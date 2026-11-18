@@ -1,6 +1,14 @@
 import type { IconName } from './Icon';
 
+// In default order. The next workout leads, so starting it needs no scrolling.
 export const HOME_SECTIONS = [
+  {
+    id: 'next-workout',
+    title: 'Next workout',
+    description: 'Your suggested session',
+    icon: 'plus',
+    size: 'full',
+  },
   {
     id: 'profile',
     title: 'Profile',
@@ -9,10 +17,10 @@ export const HOME_SECTIONS = [
     size: 'full',
   },
   {
-    id: 'next-workout',
-    title: 'Next workout',
-    description: 'Your suggested session',
-    icon: 'plus',
+    id: 'training-block',
+    title: 'Training block',
+    description: 'Current block and days left',
+    icon: 'level',
     size: 'full',
   },
   {
@@ -35,6 +43,13 @@ export const HOME_SECTIONS = [
     description: 'Weekly average and trend',
     icon: 'body',
     size: 'stat',
+  },
+  {
+    id: 'this-week',
+    title: 'This week',
+    description: 'Each day of the current week',
+    icon: 'calendar',
+    size: 'full',
   },
   {
     id: 'consistency',
@@ -66,22 +81,8 @@ export const HOME_SECTIONS = [
   },
   {
     id: 'combined-check-in',
-    title: 'Combined check-in',
-    description: 'Log body weight and body fat',
-    icon: 'body',
-    size: 'full',
-  },
-  {
-    id: 'bodyweight-check-in',
     title: 'Body weight check-in',
-    description: 'Log body weight',
-    icon: 'body',
-    size: 'full',
-  },
-  {
-    id: 'body-fat-check-in',
-    title: 'Body fat check-in',
-    description: 'Log body fat',
+    description: 'Log body weight and body fat',
     icon: 'body',
     size: 'full',
   },
@@ -99,6 +100,41 @@ export const HOME_SECTIONS = [
     icon: 'user',
     size: 'full',
   },
+  {
+    id: 'body-goal',
+    title: 'Body goal',
+    description: 'Progress to your body-weight goal',
+    icon: 'level',
+    size: 'full',
+  },
+  {
+    id: 'exercise-spotlight',
+    title: 'Exercise spotlight',
+    description: 'One lift and its estimated 1RM trend',
+    icon: 'sparkle',
+    size: 'full',
+  },
+  {
+    id: 'muscle-freshness',
+    title: 'Muscle freshness',
+    description: 'Days since each muscle was trained',
+    icon: 'pulse',
+    size: 'full',
+  },
+  {
+    id: 'cardio-distance',
+    title: 'Cardio distance',
+    description: 'Distance by activity this week or month',
+    icon: 'next',
+    size: 'full',
+  },
+  {
+    id: 'friends-week',
+    title: 'Friends this week',
+    description: 'Training days this week, you and your friends',
+    icon: 'people',
+    size: 'full',
+  },
 ] as const satisfies ReadonlyArray<{
   id: string;
   title: string;
@@ -108,6 +144,23 @@ export const HOME_SECTIONS = [
 }>;
 
 export type HomeSectionId = (typeof HOME_SECTIONS)[number]['id'];
+
+/** Opt-in sections start hidden, so a release adding one leaves everyone's Home as it was. */
+export const OPTIONAL_HOME_SECTIONS: readonly HomeSectionId[] = [
+  'body-goal',
+  'exercise-spotlight',
+  'muscle-freshness',
+  'cardio-distance',
+  'friends-week',
+];
+
+/**
+ * Saved layouts can still name sections this release no longer shows, such as the weekly review
+ * that became a popup. Older apps keep reading them, so they are ignored here rather than removed.
+ */
+export function isHomeSectionId(id: string): id is HomeSectionId {
+  return HOME_SECTIONS.some((section) => section.id === id);
+}
 export type HomeSectionWidth = 'compact' | 'full' | 'third';
 export type HomeSectionWidths = Partial<Record<HomeSectionId, HomeSectionWidth>>;
 export type CardioGoalCardStyle = 'progress' | 'ring' | 'list';
@@ -116,9 +169,35 @@ export interface CardioGoalCardSettings {
   zone: number | null;
   style: CardioGoalCardStyle;
 }
+export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
+export interface TrainingBlockCardSettings {
+  style: TrainingBlockCardStyle;
+}
+export type BodyCheckInMode = 'weight' | 'fat' | 'combined' | 'combined-single';
+export interface BodyCheckInSettings {
+  mode: BodyCheckInMode;
+}
+
+export interface ActivityCardSettings {
+  weeks: 4 | 8 | 12;
+}
+export interface ExerciseSpotlightSettings {
+  /** null follows the most-trained exercise. */
+  exercise_id: string | null;
+}
+export type CardioDistancePeriod = 'week' | 'month';
+export interface CardioDistanceSettings {
+  period: CardioDistancePeriod;
+}
 /** Display options for configurable sections, keyed by section. */
 export interface HomeSectionSettings {
+  check_in: BodyCheckInSettings;
   zone2: CardioGoalCardSettings;
+  training_block: TrainingBlockCardSettings;
+  workouts: ActivityCardSettings;
+  cardio_sessions: ActivityCardSettings;
+  exercise_spotlight: ExerciseSpotlightSettings;
+  cardio_distance: CardioDistanceSettings;
 }
 export interface HomeLayout {
   order: HomeSectionId[];
@@ -129,7 +208,13 @@ export interface HomeLayout {
 }
 
 export const DEFAULT_HOME_SECTION_SETTINGS: HomeSectionSettings = {
+  check_in: { mode: 'combined-single' },
   zone2: { zone: null, style: 'progress' },
+  training_block: { style: 'both' },
+  workouts: { weeks: 8 },
+  cardio_sessions: { weeks: 8 },
+  exercise_spotlight: { exercise_id: null },
+  cardio_distance: { period: 'month' },
 };
 
 export function homeSectionSettings<Id extends keyof HomeSectionSettings>(
@@ -137,6 +222,14 @@ export function homeSectionSettings<Id extends keyof HomeSectionSettings>(
   id: Id,
 ): HomeSectionSettings[Id] {
   return { ...DEFAULT_HOME_SECTION_SETTINGS[id], ...layout.settings?.[id] };
+}
+
+export function activityCardSettings(
+  layout: HomeLayout,
+  id: 'workouts' | 'cardio_sessions',
+): ActivityCardSettings {
+  const settings = homeSectionSettings(layout, id);
+  return { weeks: [4, 8, 12].includes(settings.weeks) ? settings.weeks : 8 };
 }
 
 export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
@@ -157,7 +250,7 @@ export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
 export function defaultHomeLayout(): HomeLayout {
   return {
     order: HOME_SECTIONS.map((section) => section.id),
-    hidden: ['bodyweight-check-in', 'body-fat-check-in'],
+    hidden: [...OPTIONAL_HOME_SECTIONS],
     widths: {},
     settings: DEFAULT_HOME_SECTION_SETTINGS,
   };

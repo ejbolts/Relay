@@ -1,0 +1,145 @@
+/* A saved workout's sets, laid out like the logging grid. Set-type and RPE colours are shared:
+   --history-set-* comes from pulse.css and --rpe-colour from workoutSetColours.css. */
+.history-set-table {
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-surface);
+}
+
+.history-set-table table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+
+.history-set-table th,
+.history-set-table td {
+  padding: 0 0.25rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.history-set-table th:first-child,
+.history-set-table td:first-child {
+  padding-left: 0.625rem;
+}
+
+.history-set-table th:last-child,
+.history-set-table td:last-child {
+  padding-right: 0.625rem;
+}
+
+.history-set-table th {
+  height: 1.5rem;
+  color: var(--p-muted);
+  font-size: 0.65625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.history-set-table td {
+  height: 2.125rem;
+  border-top: 1px solid var(--p-line);
+  color: var(--p-ink);
+  font-weight: 650;
+}
+
+/* The weight (or a cardio result) takes the spare width; the figures after it stay narrow. */
+.history-set-table .history-set-lead {
+  width: 100%;
+  padding-left: 0.375rem;
+  text-align: left;
+}
+
+.history-set-table .history-set-result {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  white-space: normal;
+}
+
+.history-set-table abbr {
+  text-decoration: none;
+}
+
+.history-set-table tr:not([data-set-type='normal']) > td {
+  background: rgb(var(--history-set-rgb) / 9%);
+}
+
+/* The legacy `.history-movement span` colour outranks a single class. */
+.history-set-table .history-set-number {
+  width: 1.375rem;
+  height: 1.375rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgb(var(--history-set-rgb) / 22%);
+  color: var(--history-set-ink);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.history-set-table .history-set-number span {
+  color: inherit;
+}
+
+/* A minimum width per figure column keeps the columns in line from one exercise to the next,
+   even when a column is empty. A spacer in the heading works where cell widths are ignored. */
+.history-set-table th.history-set-reps::after,
+.history-set-table th.history-set-rpe::after,
+.history-set-table th.history-set-ratio::after,
+.history-set-table th.history-set-record::after {
+  content: '';
+  display: block;
+  width: 1.75rem;
+}
+
+.history-set-table th.history-set-ratio::after {
+  width: 2.25rem;
+}
+
+.history-set-table td.history-set-rpe {
+  color: var(--p-muted);
+}
+
+.history-set-table td.history-set-rpe[data-rpe] {
+  color: var(--rpe-colour, var(--p-ink-2));
+  font-weight: 700;
+}
+
+.history-set-table td.history-set-ratio {
+  color: var(--p-ink-2);
+  font-size: 0.78125rem;
+  font-weight: 500;
+}
+
+.history-set-table .pr-badge {
+  margin: 0;
+  border-radius: 5px;
+  padding: 0.125rem 0.3125rem;
+  background: var(--p-gold-soft);
+  color: var(--p-gold);
+  font-size: 0.625rem;
+  font-weight: 800;
+}
+
+/* A set's machine and note sit under its row, in the same tint. */
+.history-set-table .history-set-extra > td {
+  height: auto;
+  border-top: 0;
+  padding-bottom: 0.375rem;
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+
+.history-set-table .history-set-extra span {
+  display: block;
+  margin: 0;
+  color: inherit;
+}

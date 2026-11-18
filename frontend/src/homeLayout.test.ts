@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activityCardSettings,
   defaultHomeLayout,
   HOME_SECTIONS,
   fillHomeSectionGap,
@@ -10,6 +11,7 @@ import {
   toggleHomeSectionWidth,
   homeSectionSettings,
   updateHomeSectionSettings,
+  type HomeLayout,
 } from './homeLayout';
 
 describe('Home layout edits', () => {
@@ -83,15 +85,20 @@ describe('Home layout edits', () => {
     ]);
     expect(homeSectionSpans(['zone2', 'records', 'bodyweight-trend'])).toEqual([6, 6, 6]);
   });
+  it('leads the default layout with the next workout, then the profile', () => {
+    expect(defaultHomeLayout().order.slice(0, 2)).toEqual(['next-workout', 'profile']);
+  });
   it('moves in either direction while retaining hidden sections and not mutating the saved layout', () => {
     const saved = { ...defaultHomeLayout(), hidden: ['records' as const] };
-    const reordered = moveHomeSection(saved, 'consistency', 'profile');
+    const first = HOME_SECTIONS[0].id;
+    const reordered = moveHomeSection(saved, 'consistency', first);
     expect(reordered.order[0]).toBe('consistency');
     expect(reordered.order).toHaveLength(HOME_SECTIONS.length);
     expect(new Set(reordered.order).size).toBe(HOME_SECTIONS.length);
     expect(reordered.hidden).toEqual(['records']);
-    expect(saved.order[0]).toBe('profile');
-    expect(moveHomeSection(reordered, 'consistency', 'friends').order.at(-1)).toBe('consistency');
+    expect(saved.order[0]).toBe(first);
+    const last = HOME_SECTIONS.at(-1)!.id;
+    expect(moveHomeSection(reordered, 'consistency', last).order.at(-1)).toBe('consistency');
     expect(moveHomeSection(saved, 'records', 'records')).toBe(saved);
   });
 
@@ -150,13 +157,40 @@ describe('Home layout edits', () => {
 });
 
 describe('Home section settings', () => {
+  it.each([16, 0, null, 'future'])(
+    'tolerates an unknown activity window (%j) without altering saved data',
+    (weeks) => {
+      const layout = {
+        ...defaultHomeLayout(),
+        settings: {
+          ...defaultHomeLayout().settings,
+          workouts: { weeks },
+          cardio_sessions: { weeks: 4 },
+        },
+      } as unknown as HomeLayout;
+      expect(activityCardSettings(layout, 'workouts')).toEqual({ weeks: 8 });
+      expect(activityCardSettings(layout, 'cardio_sessions')).toEqual({ weeks: 4 });
+      expect(layout.settings?.workouts.weeks).toBe(weeks);
+    },
+  );
+
   it('defaults older layouts and updates one option without losing the others', () => {
     const older = { order: defaultHomeLayout().order, hidden: [] };
     expect(homeSectionSettings(older, 'zone2')).toEqual({ zone: null, style: 'progress' });
+    expect(homeSectionSettings(older, 'workouts')).toEqual({ weeks: 8 });
+    expect(homeSectionSettings(older, 'cardio_sessions')).toEqual({ weeks: 8 });
     const ring = updateHomeSectionSettings(older, 'zone2', { style: 'ring' });
     const zone4 = updateHomeSectionSettings(ring, 'zone2', { zone: 4 });
     expect(zone4.settings?.zone2).toEqual({ zone: 4, style: 'ring' });
     expect(zone4.order).toBe(older.order);
     expect(older).not.toHaveProperty('settings');
+    const activity = updateHomeSectionSettings(
+      updateHomeSectionSettings(zone4, 'workouts', { weeks: 4 }),
+      'cardio_sessions',
+      { weeks: 12 },
+    );
+    expect(activity.settings?.workouts).toEqual({ weeks: 4 });
+    expect(activity.settings?.cardio_sessions).toEqual({ weeks: 12 });
+    expect(activity.settings?.zone2).toEqual(zone4.settings?.zone2);
   });
 });

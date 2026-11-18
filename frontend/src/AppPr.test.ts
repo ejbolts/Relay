@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDraftPrs } from './workoutPr';
+import { calculateDraftPrs, calculateScopedDraftPrs } from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
 import type { WorkoutDraftMovement } from './workoutMovements';
-import type { Exercise, TrackedWorkout, WorkoutSetInput } from './types';
+import type { Exercise, ExerciseHistoryBaseline, TrackedWorkout, WorkoutSetInput } from './types';
 
 const bench: Exercise = {
   id: 'bench',
@@ -25,6 +25,88 @@ const set = (
   reps,
   completed: true,
   ...extra,
+});
+
+describe('relative strength PRs', () => {
+  it('rewards a better ratio without requiring a heavier weight or more reps', () => {
+    expect(
+      labels(
+        [set(100, 8, { bodyweight_kg: 80 })],
+        [history([set(100, 8, { bodyweight_kg: 100 })])],
+      ),
+    ).toEqual([['Relative strength PR']]);
+    expect(
+      labels([set(90, 8, { bodyweight_kg: 72 })], [history([set(100, 8, { bodyweight_kg: 80 })])]),
+    ).toEqual([]);
+    expect(labels([set(100, 8, { bodyweight_kg: 80 })], [history([set(100, 8)])])).toEqual([]);
+  });
+
+  it('uses dated check-ins for history without snapshots and respects older baselines', () => {
+    const measurements = [
+      { measurement_date: '2026-01-01', weight_kg: 100 },
+      { measurement_date: '2026-01-15', weight_kg: 80 },
+      { measurement_date: '2026-01-20', weight_kg: 70 },
+    ].map((measurement) => ({
+      ...measurement,
+      id: measurement.measurement_date,
+      body_fat_pct: null,
+      notes: null,
+      is_sample: false,
+      created_at: '',
+    }));
+    const result = calculateDraftPrs(
+      [draft([set(100, 8)])],
+      [history([set(100, 8)])],
+      null,
+      '2026-01-15',
+      null,
+      measurements,
+    );
+    expect([...result.get('movement')!.values()]).toEqual([['Relative strength PR']]);
+    const older = new Map([
+      [
+        bench.id,
+        {
+          exercise_id: bench.id,
+          best_weight_kg: 100,
+          reps_by_weight: [{ weight_kg: 100, reps: 8 }],
+          best_relative_strength: 1.3,
+          latest: null,
+        },
+      ],
+    ]);
+    expect([
+      ...calculateDraftPrs([draft([set(100, 8)])], [], null, '2026-01-15', older, measurements)
+        .get('movement')!
+        .values(),
+    ]).toEqual([]);
+  });
+
+  it('distinguishes block records and celebrates an all-time record once', () => {
+    const blocks = [{ id: 'block', name: 'Rebuild', start_date: '2026-01-10', end_date: null }];
+    const workouts = [
+      history([set(100, 8, { bodyweight_kg: 70 })]),
+      history([set(100, 8, { bodyweight_kg: 100 })], 'recent', '2026-01-10'),
+    ];
+    const result = calculateScopedDraftPrs(
+      [draft([set(100, 8, { bodyweight_kg: 80 })])],
+      workouts,
+      null,
+      '2026-01-15',
+      null,
+      blocks,
+    );
+    expect([...result.get('movement')!.values()]).toEqual([['Block relative strength PR']]);
+    const lifetime = calculateScopedDraftPrs(
+      [draft([set(100, 8, { bodyweight_kg: 60 })])],
+      workouts,
+      null,
+      '2026-01-15',
+      null,
+      blocks,
+    );
+    expect([...lifetime.get('movement')!.values()]).toEqual([['All-time relative strength PR']]);
+  });
 });
 function draft(sets: WorkoutSetInput[], exercise = bench, key = 'movement'): WorkoutDraftMovement {
   return {
@@ -71,7 +153,7 @@ function history(
           order_index: index,
           incline_percent: null,
           speed_kph: null,
-          bodyweight_kg: null,
+          bodyweight_kg: item.bodyweight_kg ?? null,
           percentile: null,
           warmup: item.warmup ?? false,
           set_type: item.set_type ?? 'normal',
@@ -232,5 +314,48 @@ describe('exercise weight and volume PRs', () => {
     ]);
     // Loaded workouts still count alongside it.
     expect(withOlder([set(90, 12)])).toEqual([]);
+  });
+});
+
+describe('training-block PR scopes', () => {
+  const blocks = [{ id: 'block', name: 'Rebuild', start_date: '2026-01-10', end_date: null }];
+  const scoped = (
+    sets: WorkoutSetInput[],
+    workouts: TrackedWorkout[],
+    date = '2026-01-15',
+    older?: Map<string, ExerciseHistoryBaseline>,
+  ) => [
+    ...(calculateScopedDraftPrs([draft(sets)], workouts, null, date, older, blocks)
+      .get('movement')
+      ?.values() ?? []),
+  ];
+  it('keeps old all-time bests while rewarding improvements within the block', () => {
+    const recent = history([set(80, 8)], 'recent', '2026-01-10');
+    expect(scoped([set(90, 8)], [baseline, recent])).toEqual([['Block weight PR']]);
+    expect(scoped([set(105, 8)], [baseline, recent])).toEqual([['All-time weight PR']]);
+    expect(scoped([set(80, 8)], [baseline])).toEqual([]);
+  });
+  it('uses condensed block history without importing lifetime bests', () => {
+    const older = new Map<string, ExerciseHistoryBaseline>([
+      [
+        bench.id,
+        {
+          exercise_id: bench.id,
+          best_weight_kg: 120,
+          reps_by_weight: [{ weight_kg: 120, reps: 8 }],
+          latest: null,
+          block_bests: [
+            { block_id: 'block', best_weight_kg: 80, reps_by_weight: [{ weight_kg: 80, reps: 8 }] },
+          ],
+        },
+      ],
+    ]);
+    expect(scoped([set(85, 8)], [], '2026-01-15', older)).toEqual([['Block weight PR']]);
+    expect(scoped([set(80, 9)], [], '2026-01-15', older)).toEqual([
+      ['Block volume PR for this weight'],
+    ]);
+  });
+  it('uses the workout date rather than the viewed/current block', () => {
+    expect(scoped([set(105, 8)], [baseline], '2026-01-05')).toEqual([['All-time weight PR']]);
   });
 });

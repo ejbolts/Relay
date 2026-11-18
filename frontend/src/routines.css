@@ -579,6 +579,115 @@
   font-size: 12px;
   font-weight: 600;
 }
+.routine-use .routine-progression {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.routine-use .routine-progression legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.routine-use .routine-progression .segmented-control {
+  flex-direction: column;
+  margin: 0;
+}
+.routine-progression-option {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  border-radius: 10px;
+}
+.routine-progression-option.active {
+  background: var(--p-surface-3);
+}
+.routine-use .routine-progression-option button[role='radio'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  border: 0;
+  padding: 0 8px 0 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--p-muted);
+}
+.routine-use .routine-progression-option.active button[role='radio'] {
+  color: var(--p-ink);
+}
+.routine-use .routine-progression-option .routine-progression-help {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  min-height: 22px;
+  height: 22px;
+  margin-right: 10px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+/* Keep a comfortable touch target around the small visible circle. */
+.routine-use .routine-progression-help::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.routine-use .routine-progression-help {
+  position: relative;
+}
+.routine-use .routine-progression-help[aria-expanded='true'],
+.routine-use .routine-progression-help:hover {
+  border-color: var(--p-accent-text);
+  color: var(--p-accent-text);
+}
+/* Opens in place so the dialog grows to fit it rather than clipping it. */
+.routine-progression-popover {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--p-surface-3);
+  color: var(--p-ink);
+  font-size: 13px;
+}
+.routine-progression-popover p {
+  margin: 0;
+  color: var(--p-ink-2);
+}
+.routine-progression-example {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+.routine-progression-example dt {
+  color: var(--p-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.routine-progression-example dt:not(:first-child) {
+  margin-top: 4px;
+}
+.routine-progression-example dd {
+  margin: 0;
+  color: var(--p-ink-2);
+}
+.routine-progression-popover .routine-progression-flow {
+  color: var(--p-ink);
+  font-weight: 600;
+}
 .routine-editor .routine-share {
   display: flex;
   align-items: center;
@@ -932,6 +1041,39 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   min-width: 0;
   display: grid;
 }
+/* The planned rep range sits on its own line under the exercise, aligned with its name. */
+.routine-exercise-row {
+  flex-wrap: wrap;
+}
+.routine-editor .routine-exercise-row .routine-rep-range {
+  flex: 0 0 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--p-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.routine-editor .routine-exercise-card .routine-rep-range {
+  grid-column: 2 / -1;
+}
+.routine-editor .routine-exercise-row .routine-rep-range select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 5.5rem;
+  min-height: 30px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 8px;
+  padding: 2px 8px;
+  background-color: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .routine-editor .routine-exercise-name {
   min-height: 0;
   overflow: hidden;
@@ -989,4 +1131,89 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   .routine-editor .routine-day-toggle .pulse-icon {
     transition: none;
   }
+}
+/* Workout type exercises use individual neutral cards; colour stays in the type marker. */
+.routine-day-body.type-exercises-body {
+  gap: 8px;
+  padding: 0;
+  opacity: 1;
+  transform: none;
+}
+.type-exercises-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 6px;
+  color: var(--p-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.type-exercises-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.type-exercises-name i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--day-colour, var(--p-accent));
+}
+.routine-exercise-row.routine-exercise-card {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 24px auto;
+  gap: 8px;
+  padding: 13px 12px;
+  border: 1px solid var(--p-line);
+  border-radius: 13px;
+  background: var(--p-surface);
+}
+.routine-exercise-number {
+  color: var(--p-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.routine-exercise-card .routine-exercise-main {
+  position: relative;
+  gap: 3px;
+}
+.routine-exercise-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.routine-editor .routine-exercise-card .routine-exercise-name {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+.routine-exercise-card .routine-exercise-main:focus-within {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.routine-editor .routine-exercise-card .exercise-muscle-help-button {
+  width: 24px;
+  height: 32px;
+}
+.routine-exercise-card .routine-stepper {
+  border: 0;
+  border-radius: 10px;
+}
+.routine-editor .routine-exercise-card .routine-stepper button {
+  min-height: 38px;
+}
+.routine-exercise-card .routine-stepper output {
+  min-width: 24px;
+}
+.routine-editor .type-exercises-body .routine-add-exercise {
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 2px;
+  border-radius: 12px;
 }

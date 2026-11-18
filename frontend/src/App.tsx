@@ -1,6 +1,21 @@
-import { BodySizesCard } from './BodySizesCard';
+import { MachineWeightTip } from './FeatureDiscoveryTips';
+import { TipsProvider, TipsSettings, TipSlot, useTips } from './Tips';
+import { SetupGuideHost, SetupGuidesSettings } from './SetupGuide';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { useActiveWorkoutReminder } from './activeWorkoutReminder';
+import {
+  prepareWorkoutAutoSave,
+  sharedWorkoutFinishFields,
+  useActiveWorkoutSync,
+} from './activeWorkoutSync';
+import {
+  useWorkoutAutoSaveAccount,
+  useWorkoutAutoSaveMinutes,
+  workoutAutoSaveMinutes,
+} from './workoutAutoSaveChoice';
+import { WorkoutAutoSaveSetting } from './WorkoutAutoSaveSetting';
+import { ActiveWorkoutSyncDialog } from './ActiveWorkoutSyncDialog';
+import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import {
   extendInactiveWorkoutFinishAt,
   inactiveWorkoutFinishAt,
@@ -25,8 +40,9 @@ import type {
   RefObject,
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { api } from './api';
+import { api, revisionAfterSave } from './api';
 import { SetDragHandle } from './SetDragHandle';
+import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { MachineWeightsDialog } from './MachineWeightsDialog';
@@ -40,32 +56,32 @@ import {
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
+import { MuscleGoalEditor } from './MuscleGoalEditor';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
+import { entriesInMonths } from './calendarRange';
+import { splitCalendarDays } from './trainingSplit';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
+import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
 import {
   formatWeight,
   formatWeightNumber,
   recordDisplayValue,
   weightFromKg,
-  weightInputValue,
   weightUnitName,
 } from './weightUnits';
 import type { WeightUnit } from './weightUnits';
 import { PrToast, type PrToastEntry } from './PrToast';
+import { RestAlertReminder } from './RestAlertReminder';
+import { shouldShowRestAlertReminder } from './restAlertReminderState';
 import type {
   BodyMeasurement,
-  BodyWeightGoal,
-  CardioOverview,
-  CardioSession,
-  CardioSessionInput,
   DashboardData,
-  WeeklyMuscleContribution,
   Exercise,
   ExerciseCreateInput,
   ExerciseHistoryBaseline,
@@ -73,45 +89,38 @@ import type {
   MachinePhoto,
   MachinePhotoUsage,
   MachineSetting,
-  WeightMapping,
   PersonalRecord,
+  RepRange,
   SharedProfileSummary,
   TrackedSet,
   TrackedWorkout,
   TrainingPreferences,
+  TrainingSplit,
+  User,
+  WeeklyMuscleContribution,
+  WeightMapping,
   WorkoutCategory,
   WorkoutHistorySummary,
-  User,
-  WorkoutTypeColors,
-  WorkoutType,
+  WorkoutImportOptions,
   WorkoutInput,
   WorkoutRecommendation,
   WorkoutSetInput,
-  WorkoutImportOptions,
+  WorkoutType,
+  WorkoutTypeColors,
 } from './types';
-import {
-  BODY_TREND_DURATION_OPTIONS,
-  clipBodyWeightGoalPath,
-  filterMeasurementsByRange,
-  summarizeBodyWeightTrend,
-} from './bodyTrend';
+import { BODY_TREND_DURATION_OPTIONS } from './bodyTrend';
 import type { BodyTrendDuration, BodyTrendRange, BodyTrendStatistic } from './bodyTrend';
 import {
-  bodyGoalKind,
-  bodyGoalName,
-  bodyHistoryWithWeightChanges,
-  summarizeBodyHistory,
-} from './bodyMeasurementHistory';
-import type { BodyGoalKind, BodyHistoryPeriod } from './bodyMeasurementHistory';
-import { BodyHistoryGoalDivider, BodyHistoryWeightChange } from './BodyHistoryWeightChange';
-import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
-import {
-  DEFAULT_BODY_TREND_PREFERENCE,
   loadBodyTrendPreference,
   saveBodyTrendPreference,
   type BodyTrendPreference,
 } from './bodyTrendPreference';
-import { WorkoutCalendar, WorkoutCalendarLegend, type OlderHistoryProps } from './WorkoutCalendar';
+import {
+  WeekStrip,
+  WorkoutCalendar,
+  WorkoutCalendarLegend,
+  type OlderHistoryProps,
+} from './WorkoutCalendar';
 import {
   appendOlderWorkouts,
   hasOlderHistory,
@@ -124,7 +133,8 @@ import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
-import { FfmiCard } from './FfmiCard';
+import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
+import { loggedOnlyWarmups } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -137,7 +147,6 @@ import {
   type ExerciseMachineChoices,
 } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
-import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
@@ -153,11 +162,11 @@ import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { OfflineNotice } from './OfflineNotice';
-import { useOfflineNotice } from './useOfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
-import { HomeScreenGuide } from './HomeScreenGuide';
+import { HomeScreenGuide, HomeScreenShortcut } from './HomeScreenGuide';
+import { WeeklyReviewPrompt } from './WeeklyReviewPrompt';
 import { useHomeScreenGuide } from './useHomeScreenGuide';
 import { runningAsInstalledApp } from './homeScreenGuideState';
 import { AppGuide } from './AppGuide';
@@ -173,12 +182,6 @@ import { plural } from './sharedProfileDisplay';
 import { CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
 import { BackgroundActivityBar } from './BackgroundActivityBar';
-import { CardioTrendCard } from './CardioTrendCard';
-import { groupCardioHistory } from './cardioTrend';
-import { CardioMetricsEditor } from './CardioMetricsEditor';
-import { CardioZoneSettings } from './CardioZoneSettings';
-import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
-import { fatEnergyEquivalent } from './cardioEnergy';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
 import { useBackdropDismiss } from './backdropDismiss';
@@ -189,6 +192,9 @@ import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
+import { ExerciseRenameDialog } from './ExerciseRenameDialog';
+import { ExerciseSwapSheet } from './ExerciseSwapSheet';
+import { swapMovementExercise } from './exerciseSwap';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
@@ -205,6 +211,7 @@ import {
 } from './restTimerPreference';
 import { RestTimeSelect } from './RestTimeSelect';
 import { SetRestControl } from './SetRestControl';
+import { SetInsertButton, SetInsertRow } from './SetInsertButton';
 import { cancelRestTimerPushSchedule, restSecondsLeft } from './restTimer';
 import {
   disablePhonePushNotifications,
@@ -214,7 +221,6 @@ import {
   PHONE_PUSH_PREFERENCE_EVENT,
   pushNotificationsSupported,
   showRestTimerNotification,
-  showWorkoutAutoSavedNotification,
 } from './push';
 import {
   useCollapseAnimation,
@@ -237,6 +243,7 @@ import {
   setNumberLabels,
 } from './setFieldValues';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
+import { markSetAdded } from './setRowEntrance';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
   appTabFromHash,
@@ -251,14 +258,20 @@ import { AppTabBar } from './AppTabBar';
 import { PaginationControls } from './PaginationControls';
 import { useHomeLayout } from './useHomeLayout';
 import { Icon } from './Icon';
-import { TrendChart, type GoalPath, type TrendPoint } from './PulseCharts';
+import { TrendChart, type TrendPoint } from './PulseCharts';
 import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayScreen';
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
 import { DataExportDialog } from './DataExportDialog';
+import { WorkoutShareCard } from './WorkoutShareCard';
+import { WorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
+import { useWorkoutPhotos } from './workoutPhotoState';
+import { WorkoutShareMenu } from './WorkoutShareMenu';
+import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
   formatVolume,
+  groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
   recordCountsByWorkout,
@@ -274,12 +287,22 @@ import {
   workoutVolumeKg,
   type SessionTemplate,
 } from './trainingSummary';
-import { recentExerciseHistory, type ExerciseHistoryEntry } from './exerciseHistory';
+import {
+  historyOnMachine,
+  machineAliases,
+  machineSuggestionSource,
+  recentExerciseHistory,
+  withSuggestedSets,
+  type ExerciseHistoryEntry,
+} from './exerciseHistory';
+import { exerciseLastDoneDates, formatLastDone } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
+import { typeSessionTemplate } from './routines';
+import { progressionHint, progressionTarget, progressionWeightKg } from './repProgression';
 import { exerciseIconFor } from './exerciseIcons';
-import { fuzzyHighlightIndices, rankExerciseSearchMatches } from './exerciseSearch';
+import { rankExerciseSearchMatches } from './exerciseSearch';
+import { FuzzyHighlightedText } from './FuzzyHighlightedText';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
-import { ExerciseCustomFilter } from './ExerciseCustomFilter';
 import { exerciseEquipment } from './exerciseEquipment';
 import {
   formatMinutesDuration,
@@ -292,12 +315,17 @@ import {
   workoutDurationMinutes,
   workoutTimeInputValue,
 } from './utils';
+import { blockColor } from './blockColors';
 import { VideoUpload } from './VideoUpload';
 import { YouTubeConnectionPanel } from './YouTubeConnectionPanel';
 import { ProfileScreen } from './ProfileScreen';
+import { AccountArchivePanel } from './AccountArchivePanel';
 import { AccountSettings, AccountSessionSettings } from './AccountSettings';
 import { ProfileAccountId } from './ProfileAccountId';
 import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfiles';
+import { LiftLeaderboardCard } from './LiftComparison';
+import { SharedSetList } from './SharedWorkoutDetail';
+import { sharedSetCount } from './sharedProfileDisplay';
 import { FriendsActivityCard } from './FriendsActivity';
 import { SocialScreen } from './SocialScreen';
 import { SettingsHub } from './SettingsHub';
@@ -313,48 +341,124 @@ import {
 import { useOpenFeedbackCount } from './friendsActivityData';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { AdminScreen } from './AdminScreen';
+import {
+  onAdminAccountFocusRequested,
+  requestAdminAccountFocus,
+  takeAdminAccountFromUrl,
+} from './adminAccountFocus';
 import { canUploadVideos, useUserSession } from './userContext';
-import { usePendingWorkoutSave } from './usePendingWorkoutSave';
+import {
+  OUTDATED_CLIENT_MESSAGE,
+  useFinishedWorkoutQueue,
+  type SavedFromQueue,
+} from './useFinishedWorkoutQueue';
+import { finishedWorkoutKey, type FinishedWorkout } from './finishedWorkoutQueue';
+import {
+  dashboardWithPreview,
+  isPendingWorkoutId,
+  pendingWorkoutPreview,
+  previewIdFor,
+  workoutsWithPreview,
+} from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
-import { WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import { AppNoticesContext, useAppNotices, useAppNoticesContext } from './appNotices';
+import { launchPromptAllowed, type LaunchPrompt } from './launchPrompts';
+import { useWorkoutConflictPrompt, WorkoutEditDiscarded } from './useWorkoutConflictPrompt';
+import { InactiveWorkoutDialog } from './InactiveWorkoutDialog';
+import { loggerSessionKey, nextLoggerSession, type LoggerSession } from './loggerSession';
+import { RestDoneBell, WorkoutHeaderMeta, WorkoutTimerDock } from './WorkoutRestTimer';
+import { nextSetAfterRest } from './restComplete';
+import { LiveWorkoutHeader } from './LiveWorkoutHeader';
+import { LiveWorkoutSheet } from './LiveWorkoutSheet';
+import { FinishedWorkoutCard } from './FinishedWorkoutCard';
+import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
+import { onTipTarget, type TipAction } from './tipActions';
+import { TrainingBlockDialog } from './TrainingBlockDialog';
+import {
+  buildFinishSummary,
+  finishSummaryTimeLeft,
+  readFinishSummary,
+  writeFinishSummary,
+  type FinishSummary,
+} from './finishSummary';
+import type { LiveWorkoutSummary } from './liveWorkoutSummary';
+import { WorkoutTimeEditor } from './WorkoutTimeEditor';
+
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
-import { weeklySetGains } from './weeklySetsUpdate';
+import { exerciseSetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
+  clockOffsetMsAt,
   draftPause,
   pauseWorkout,
-  pausedMsAt,
   resumeWorkout,
+  withElapsedSeconds,
   type WorkoutPause,
 } from './workoutPause';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
+  isExpiredEmptyWorkoutDraft,
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
   writeActiveWorkoutDraft,
+  type ActiveWorkoutDraft,
 } from './workoutDraft';
 import {
   completeRemainingSets,
   createSuggestedWorkoutSet,
   createWorkoutSet,
+  hasRecordedPerformance,
   isCompletedWorkingSet,
   latestExerciseSets,
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
 } from './workoutSets';
-import { finalizeWorkoutIdentity, workoutNameForCategory } from './workoutCategory';
+import { restToAdd } from './workoutRestHistory';
+import {
+  finalizeWorkoutIdentity,
+  isCardioTypeWithoutCardio,
+  workoutNameForCategory,
+} from './workoutCategory';
 import {
   machineSelection,
-  replaceMovementExercise,
   restoreWorkoutDraftMovements,
   type WorkoutDraftMovement as DraftMovement,
   type WorkoutDraftSet as DraftSet,
 } from './workoutMovements';
-import { applySupersetSelection, clearSuperset } from './workoutSupersets';
-import { initialHistoryVisibleCount, upsertWorkoutByRecency } from './workoutHistory';
-import { calculateDraftPrs } from './workoutPr';
-import { completedWorkoutDurationMinutes } from './workoutResume';
+import {
+  applySupersetSelection,
+  clearSuperset,
+  keepSupersetTogether,
+  nextInSupersetRound,
+  supersetGroupName,
+  supersetRoundPending,
+} from './workoutSupersets';
+import {
+  HISTORY_WEEKS_PER_PAGE,
+  historyPageAnchor,
+  historyPageCount,
+  historyPageForDate,
+  historyPageWindow,
+  upsertWorkoutByRecency,
+  weekGroupPage,
+} from './workoutHistory';
+import { calculateScopedDraftPrs } from './workoutPr';
+import {
+  bodyweightOn,
+  bodyweightContext,
+  relativeStrength,
+  sharedBodyweight,
+} from './relativeStrength';
+import './relativeStrength.css';
+import { TrainingBlocksProvider } from './TrainingBlocksProvider';
+import { useTrainingBlocks } from './trainingBlocksContext';
+import { recordsForBlock } from './trainingBlocks';
+import {
+  cardioAdjustedEndTime,
+  completedCardioDurationSeconds,
+  completedWorkoutDurationMinutes,
+} from './workoutResume';
 import {
   isWorkoutSetAutoSavable,
   workoutSetAfterEdit,
@@ -363,13 +467,23 @@ import {
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
-import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
+import { TIME_RANGE_OPTIONS } from './dateRanges';
+import { useRangePinchZoom } from './rangePinchZoom';
 import {
   captureFriendInvite,
   clearFriendInvite,
   FRIEND_INVITE_EVENT,
   pendingFriendInvite,
 } from './friendInvite';
+import { HISTORY_PAGE_SIZE, RANGE_LABELS, numberOrNull, prettyDate } from './appShared';
+import { LoadingState } from './LoadingState';
+import { BodyCompositionScreen } from './BodyCompositionScreen';
+import { CardioScreen } from './CardioScreen';
+import { LandscapeChartFrame } from './LandscapeChartFrame';
+import { onWorkoutFocusRequested } from './workoutFocus';
+
+// Screens that live in their own files; re-exported for existing imports of './App'.
+export { BodyCompositionScreen, CardioScreen };
 
 type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
@@ -386,17 +500,15 @@ const categoryNames: Record<WorkoutCategory, string> = {
   other: 'Other',
 };
 
-const HISTORY_PAGE_SIZE = 8;
-
 /** Each exercise's history before `before`, the start of the window loaded at the time. */
 type HistoryBaselines = {
   before: string;
   byExercise: Map<string, ExerciseHistoryBaseline>;
 };
 
-const CARDIO_HISTORY_PAGE_SIZE = 5;
 const UNDO_TOAST_MS = 4000;
-const IMPORTED_BODYWEIGHT_NOTE = 'Imported from workout CSV.';
+/** How long a logger notice, such as why a set can't be deleted, stays up. */
+const LOGGER_NOTICE_MS = 5000;
 
 function emptySet(
   kind: Exercise['kind'],
@@ -443,10 +555,6 @@ function suggestedSetsFromHistory(
   }));
 }
 
-function numberOrNull(value: string): number | null {
-  return value === '' ? null : Number(value);
-}
-
 function completedSetPerformance(
   item: DraftSet,
   cardio: boolean,
@@ -477,25 +585,27 @@ function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
 }
 
-// Building a formatter is far slower than using one, and the calendar formats thousands of days.
-const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-});
-
-function prettyDate(value: string): string {
-  return prettyDateFormat.format(new Date(`${value}T12:00:00`));
+function recordTypeLabel(type: PersonalRecord['record_type']): string {
+  return (
+    {
+      weight: 'Weight PR',
+      relative_strength: 'Relative strength PR',
+      reps_at_weight: 'Volume PR for this weight',
+      estimated_1rm: 'estimated 1RM PR',
+      duration: 'duration PR',
+      distance: 'distance PR',
+    }[type] ?? 'PR'
+  );
 }
 
-function recordTypeLabel(type: PersonalRecord['record_type']): string {
-  return {
-    weight: 'Weight PR',
-    reps_at_weight: 'Volume PR for this weight',
-    estimated_1rm: 'estimated 1RM PR',
-    duration: 'duration PR',
-    distance: 'distance PR',
-  }[type];
+function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): string {
+  return [
+    `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)} · ${recordDisplayValue(record, unit)}`,
+    record.record_type === 'reps_at_weight' && record.weight_kg != null
+      ? ` @ ${formatWeight(record.weight_kg, unit)}`
+      : '',
+    record.bodyweight_kg != null ? ` · at ${formatWeight(record.bodyweight_kg, unit)} BW` : '',
+  ].join('');
 }
 
 function WorkoutCompletionToast({
@@ -539,12 +649,7 @@ function WorkoutCompletionToast({
       {records.map((record) => (
         <div key={record.id}>
           <strong>{record.exercise_name}</strong>
-          <span>
-            {recordTypeLabel(record.record_type)} · {recordDisplayValue(record, weightUnit)}
-            {record.record_type === 'reps_at_weight' && record.weight_kg != null
-              ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
-              : ''}
-          </span>
+          <span>{completionRecordDetail(record, weightUnit)}</span>
         </div>
       ))}
     </aside>,
@@ -552,15 +657,40 @@ function WorkoutCompletionToast({
   );
 }
 
+/** Set just before the reload that follows a backup restore, so it can be confirmed. */
+const BACKUP_RESTORED_KEY = 'relay-backup-restored';
+const BACKUP_RESTORED_MESSAGE = 'Backup restored.';
+
+/** Read once per page load: whether this load follows a backup restore. */
+function takeBackupRestoredFlag(): boolean {
+  try {
+    if (window.sessionStorage.getItem(BACKUP_RESTORED_KEY) !== '1') return false;
+    window.sessionStorage.removeItem(BACKUP_RESTORED_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let backupRestoredNotice = typeof window !== 'undefined' && takeBackupRestoredFlag();
+
 export function App() {
   const { user } = useUserSession();
-  const announcement = useReleaseAnnouncement(user?.id ?? null);
+  useWorkoutAutoSaveAccount(user?.id ?? null);
+  const notices = useAppNotices(user?.id ?? null);
+  const announcement = useReleaseAnnouncement(user?.id ?? null, user?.created_at ?? null, notices);
   return (
     <TrainingPreferencesProvider>
       <WorkoutTypesProvider>
-        <ReleaseAnnouncementContext.Provider value={announcement}>
-          <AppContent />
-        </ReleaseAnnouncementContext.Provider>
+        <AppNoticesContext.Provider value={notices}>
+          <ReleaseAnnouncementContext.Provider value={announcement}>
+            <TrainingBlocksProvider key={user?.id}>
+              <TipsProvider key={user?.id} account={user?.id ?? null}>
+                <AppContent />
+              </TipsProvider>
+            </TrainingBlocksProvider>
+          </ReleaseAnnouncementContext.Provider>
+        </AppNoticesContext.Provider>
       </WorkoutTypesProvider>
     </TrainingPreferencesProvider>
   );
@@ -587,6 +717,8 @@ function AppContentProviders({
 }
 
 function AppContent() {
+  const tips = useTips();
+  const { configure: configureTips } = tips;
   const [settingsJump, setSettingsJump] = useState<SettingsJump | null>(null);
   const settingsJumpSerial = useRef(0);
   const [settingsGroup, setSettingsGroup] = useState<SettingsGroupId | null>(() =>
@@ -594,9 +726,52 @@ function AppContent() {
   );
   const { user, signingIn = false } = useUserSession();
   usePresenceConnection(user?.id ?? null);
+  // The workout just finished, shown on Home until it is dismissed or the next one starts.
+  const [finishSummary, setFinishSummary] = useState<FinishSummary | null>(null);
+  // Without accounts there is one person on the device, kept under a fixed name.
+  const finishSummaryOwner = user?.id ?? 'device';
+  useEffect(() => {
+    setFinishSummary(readFinishSummary(finishSummaryOwner, Date.now()));
+  }, [finishSummaryOwner]);
+  const finishSummaryRef = useRef(finishSummary);
+  finishSummaryRef.current = finishSummary;
+  /** Records set by the workout on the card; they arrive once it has synced. */
+  const [finishRecords, setFinishRecords] = useState<PersonalRecord[]>([]);
+  function rememberFinish(summary: FinishSummary | null) {
+    setFinishSummary(summary);
+    setFinishRecords([]);
+    writeFinishSummary(finishSummaryOwner, summary);
+  }
+  // The card also goes when the app has stayed open, or been asleep, past its time.
+  useEffect(() => {
+    if (!finishSummary) return;
+    const expire = () => {
+      if (finishSummaryTimeLeft(finishSummary, Date.now()) >= 0) return;
+      setFinishSummary(null);
+      setFinishRecords([]);
+      writeFinishSummary(finishSummaryOwner, null);
+    };
+    const timer = window.setTimeout(
+      expire,
+      finishSummaryTimeLeft(finishSummary, Date.now()) + 1000,
+    );
+    // A sleeping phone does not run timers, so look again whenever the app comes back.
+    document.addEventListener('visibilitychange', expire);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', expire);
+    };
+  }, [finishSummary, finishSummaryOwner]);
+  /** The exercise whose Machine weights should open when its progress page next shows. */
+  const [machineWeightsFor, setMachineWeightsFor] = useState<string | null>(null);
+  /** Counts requests to open the weight goal form, from a tip. */
+  const [bodyGoalRequest, setBodyGoalRequest] = useState(0);
+  const [tipBlocksOpen, setTipBlocksOpen] = useState(false);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
-  const offlineNotice = useOfflineNotice();
+  const appNotices = useAppNoticesContext();
+  /** The prompt that opened by itself this visit. Others then wait for the next app open. */
+  const [launchPrompt, setLaunchPrompt] = useState<LaunchPrompt | null>(null);
   const homeScreenGuide = useHomeScreenGuide(user?.id ?? null, announcement.checked);
   const [guideWaiting, setGuideWaiting] = useState(() => user !== null && appGuideWaiting(user.id));
   const [guideRequested, setGuideRequested] = useState(false);
@@ -653,7 +828,6 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
-  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts);
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -668,9 +842,17 @@ function AppContent() {
   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
   const [completionRecords, setCompletionRecords] = useState<PersonalRecord[]>([]);
   const [restTimerEnabled, setRestTimerEnabled] = useState(restTimerPreferenceEnabled);
+  const [restAlertReminderOpen, setRestAlertReminderOpen] = useState(false);
+  const closeRestAlertReminder = useCallback(() => setRestAlertReminderOpen(false), []);
   const [showRestTimes, setShowRestTimes] = useState(restTimesPreferenceEnabled);
   // The live workout's rest end, so the tab bar can count it down away from the workout.
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  // When a finished rest is waiting for the next set, so the tab bar's bell can ring.
+  const [restDoneAt, setRestDoneAt] = useState<number | null>(null);
+  // Bumped by the ringing bell to open the workout at the next set.
+  const [restGoRequest, setRestGoRequest] = useState(0);
+  const [liveWorkoutSummary, setLiveWorkoutSummary] = useState<LiveWorkoutSummary | null>(null);
+  const [workoutResumeRequest, setWorkoutResumeRequest] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(reduceMotionPreference);
   const [navDirection, setNavDirection] = useState<'forward' | 'back'>('forward');
   const [bodyTrendPreference, setBodyTrendPreference] = useState(loadBodyTrendPreference);
@@ -729,18 +911,115 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
   const [message, setMessage] = useState<string | null>(null);
-  const notifyRestComplete = useCallback(
-    () => setMessage('Rest complete. Time for your next set.'),
-    [],
-  );
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
-  const pendingWorkout = usePendingWorkoutSave(user?.id ?? null, (saved, resumedId) =>
-    completeWorkoutSave(saved, false, resumedId),
+  const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
+    completeWorkoutSave(saved, false, resumedId, queued),
   );
-  const workoutSaving = editingWorkoutSaving || pendingWorkout.saving;
-  const workoutSaveBlocked = workoutSaving || pendingWorkout.pending !== null;
-  useActiveWorkoutReminder(workoutSaving ? null : activeWorkoutStartedAt);
+  const conflictPrompt = useWorkoutConflictPrompt();
+  const workoutSaving = editingWorkoutSaving || finishedQueue.saving;
+  // Finished workouts wait in their own queue, so only saving an edit stops a new workout.
+  const workoutSaveBlocked = editingWorkoutSaving;
+  // Finished workouts show straight away from this device's copy while they sync. One the server
+  // refused waits for review instead, so it is not presented as saved.
+  const waitingWorkouts = useMemo(
+    () =>
+      finishedQueue.items.filter(
+        (finished) => !(finishedWorkoutKey(finished) in finishedQueue.refusals),
+      ),
+    [finishedQueue.items, finishedQueue.refusals],
+  );
+  const finishedPreviews = useMemo(
+    () =>
+      waitingWorkouts.flatMap((finished) => {
+        const workout = pendingWorkoutPreview(finished.pendingSave, exercises, workoutTypes.types);
+        return workout ? [{ workout, isNew: finished.pendingSave.workoutId === null }] : [];
+      }),
+    [exercises, waitingWorkouts, workoutTypes.types],
+  );
+  const syncingWorkoutIds = useMemo(
+    () => finishedPreviews.map((preview) => preview.workout.id),
+    [finishedPreviews],
+  );
+  // A workout still syncing, or with changes waiting to sync, cannot be edited or deleted yet.
+  const queuedWorkoutIds = useMemo(
+    () =>
+      new Set(
+        finishedQueue.items.flatMap((finished) =>
+          finished.pendingSave.workoutId ? [finished.pendingSave.workoutId] : [],
+        ),
+      ),
+    [finishedQueue.items],
+  );
+  /** Reports and refuses changes to a workout whose save has not reached the server yet. */
+  const blockedWhileSyncing = (id: string) => {
+    if (!isPendingWorkoutId(id) && !queuedWorkoutIds.has(id)) return false;
+    setMessage('You can change this workout once it has synced.');
+    return true;
+  };
+  // After each save, its on-device figures stay until the refreshed dashboard replaces them.
+  const [savedPreviews, setSavedPreviews] = useState<
+    Array<{
+      finished: FinishedWorkout;
+      workout: TrackedWorkout;
+      dashboard: DashboardData | null;
+      isNew: boolean;
+    }>
+  >([]);
+  const awaitingDashboard = useMemo(
+    () => savedPreviews.filter((preview) => preview.dashboard === dashboard),
+    [dashboard, savedPreviews],
+  );
+  const shownWorkouts = useMemo(
+    () =>
+      finishedPreviews.reduce(
+        (current, preview) => workoutsWithPreview(current, preview.workout),
+        workouts,
+      ),
+    [finishedPreviews, workouts],
+  );
+  const shownDashboard = useMemo(() => {
+    if (!dashboard) return dashboard;
+    const today = localDate();
+    return [...awaitingDashboard, ...finishedPreviews].reduce(
+      (current, preview) =>
+        dashboardWithPreview(current, preview.workout, workoutTypes.types, today, preview.isNew),
+      dashboard,
+    );
+  }, [awaitingDashboard, dashboard, finishedPreviews, workoutTypes.types]);
+  const finishedMuscleSources = useMemo(
+    () => [
+      ...awaitingDashboard.map((preview) => ({ id: preview.workout.id, draft: preview.finished })),
+      ...waitingWorkouts.map((finished) => ({
+        id: previewIdFor(finished.pendingSave),
+        draft: finished,
+      })),
+    ],
+    [awaitingDashboard, waitingWorkouts],
+  );
+  const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts, finishedMuscleSources);
+  const reviewMuscleWeeks = useMemo(() => {
+    const current = muscleSets.weeklySets ?? dashboard?.weekly_sets;
+    return current
+      ? [current, ...(muscleSets.history ?? dashboard?.weekly_sets_history ?? [])]
+      : [];
+  }, [dashboard?.weekly_sets, dashboard?.weekly_sets_history, muscleSets]);
+  // Cancel this browser's legacy elapsed-time reminder; the server tracks shared activity.
+  useActiveWorkoutReminder(null);
+  const workoutSync = useActiveWorkoutSync(user?.id ?? null);
+  const [syncConflictDismissed, setSyncConflictDismissed] = useState(false);
+  useEffect(() => {
+    const remoteWorkout = () => {
+      const draft = readActiveWorkoutDraft();
+      setActiveWorkoutStartedAt(draft?.startedAt ?? null);
+      setResumingWorkoutId(draft?.resumingWorkoutId ?? null);
+    };
+    window.addEventListener(REMOTE_WORKOUT_APPLIED, remoteWorkout);
+    return () => window.removeEventListener(REMOTE_WORKOUT_APPLIED, remoteWorkout);
+  }, []);
+  useEffect(() => {
+    if (!workoutSync.conflict) setSyncConflictDismissed(false);
+  }, [workoutSync.conflict]);
   useEffect(() => {
     // A URL (including an old phone notification) is navigation, never a Start action.
     if (tab !== 'log' || editingWorkout || activeWorkoutStartedAt !== null) return;
@@ -762,6 +1041,26 @@ function AppContent() {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [activeWorkoutStartedAt]);
+  useEffect(() => {
+    if (loading || activeWorkoutStartedAt === null) return;
+    const expireEmptyDraft = () => {
+      const draft = readActiveWorkoutDraft();
+      if (draft?.startedAt !== activeWorkoutStartedAt || !isExpiredEmptyWorkoutDraft(draft)) return;
+      clearActiveWorkoutDraft();
+      setActiveWorkoutStartedAt(null);
+      setResumingWorkoutId(null);
+      setMessage('Your inactive empty workout was cleared.');
+    };
+    expireEmptyDraft();
+    const interval = window.setInterval(expireEmptyDraft, 30_000);
+    window.addEventListener('focus', expireEmptyDraft);
+    document.addEventListener('visibilitychange', expireEmptyDraft);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', expireEmptyDraft);
+      document.removeEventListener('visibilitychange', expireEmptyDraft);
+    };
+  }, [activeWorkoutStartedAt, loading]);
   useEffect(() => {
     // Accounts without upload access never reach the video screen, even from an old #videos link.
     if (tab !== 'videos' || videosAllowed) return;
@@ -800,6 +1099,14 @@ function AppContent() {
     ? (workouts.find((workout) => workout.id === resumingWorkoutId) ?? null)
     : null;
   const activeDraft = editingWorkout ? null : readActiveWorkoutDraft();
+  const liveLoggerSession = useRef<LoggerSession | null>(null);
+  if (activeWorkoutStartedAt === null) liveLoggerSession.current = null;
+  else if (!editingWorkout)
+    liveLoggerSession.current = nextLoggerSession(
+      liveLoggerSession.current,
+      String(activeWorkoutStartedAt),
+      activeDraft?.clientSessionId,
+    );
   const restoredDraftMovements = activeDraft
     ? restoreWorkoutDraftMovements(activeDraft.movements, exercises)
     : [];
@@ -837,6 +1144,18 @@ function AppContent() {
       window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
     };
   }, []);
+  // A notification opens the reacted or commented workout in Social's feed.
+  useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
+  // An admin's password reset notification opens that account in the admin console.
+  useEffect(
+    () => onAdminAccountFocusRequested(() => (isAdmin ? setTab('admin') : undefined)),
+    [isAdmin, setTab],
+  );
+  useEffect(() => {
+    // A tapped password reset phone alert opens the console at the account it is about.
+    const userId = takeAdminAccountFromUrl();
+    if (userId && isAdmin) requestAdminAccountFocus(userId);
+  }, [isAdmin]);
   useEffect(() => {
     // A friend QR code opens the inviter's profile, which sends them a friend request.
     if (!friendInvite || !user) return;
@@ -862,7 +1181,7 @@ function AppContent() {
     }
     const currentState = window.history.state;
     if (tab === 'log') {
-      if (!workoutSaving) setEditingWorkout(null);
+      if (!editingWorkoutSaving) setEditingWorkout(null);
       if (isAppHistoryState(currentState) && currentState.index > 0) {
         window.history.back();
         return;
@@ -875,6 +1194,18 @@ function AppContent() {
       return;
     }
     if (tab !== 'dashboard') setTab('dashboard', { replace: true });
+  }
+
+  function resumeLiveWorkout() {
+    setWorkoutResumeRequest((request) => request + 1);
+    setTab('log');
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '.workout-browser [data-workout-session]:not([hidden]) .workout-sheet-grab, .workout-browser [data-workout-session]:not([hidden]) .overlay-header-back',
+        )
+        ?.focus({ preventScroll: true });
+    });
   }
 
   function beginBackgroundActivity(label: string): () => void {
@@ -900,14 +1231,25 @@ function AppContent() {
   async function refreshData({
     silent = false,
     activityLabel = trainingDataActivityLabel('startup'),
-  }: { silent?: boolean; activityLabel?: string | null } = {}) {
+    knownRevision = null,
+  }: {
+    silent?: boolean;
+    activityLabel?: string | null;
+    /** A revision the server already reported, such as a save's, so the reads start at once. */
+    knownRevision?: string | null;
+  } = {}) {
     const generation = ++refreshGenerationRef.current;
     const cacheScope = captureAccountCacheScope();
     const current = () => generation === refreshGenerationRef.current && cacheScope.isCurrent();
     const refresh = async () => {
-      // Read before the data: a change during this refresh must trigger another pass. Offline,
+      // Read before the data: a change during this refresh must trigger another pass. A save's
+      // revision already precedes these reads, so they start without asking again. Offline,
       // there is no revision to confirm and saved copies answer the reads straight away.
-      const revision = isUsingSavedData() ? null : await api.workoutRevision().catch(() => null);
+      const revision = isUsingSavedData()
+        ? null
+        : knownRevision
+          ? { revision: knownRevision }
+          : await api.workoutRevision().catch(() => null);
       if (!current()) return;
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
@@ -961,7 +1303,10 @@ function AppContent() {
             }));
             throw reason;
           }),
-        api.listWorkouts(windowStart).then((nextWorkouts) => {
+        (revision && knownRevision
+          ? api.listWorkouts(windowStart, revision.revision)
+          : api.listWorkouts(windowStart)
+        ).then((nextWorkouts) => {
           if (!current()) return;
           startTransition(() =>
             setWorkouts((current) => [
@@ -988,6 +1333,7 @@ function AppContent() {
       ) {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
+        window.dispatchEvent(new Event('training-data-refreshed'));
       }
       const firstFailure = results.find(
         (result, index): result is PromiseRejectedResult =>
@@ -1080,6 +1426,16 @@ function AppContent() {
     olderError: olderHistory.error,
     onLoadOlder: onLoadOlderHistory,
   };
+
+  useEffect(() => {
+    const updated = () => {
+      void refreshData({ silent: true, activityLabel: null });
+    };
+    window.addEventListener('training-blocks-updated', updated);
+    return () => window.removeEventListener('training-blocks-updated', updated);
+    // refreshData reads the current loaded history window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function refreshAfterMutation(): Promise<void> {
     return refreshData({ silent: true, activityLabel: trainingDataActivityLabel('mutation') });
@@ -1174,7 +1530,8 @@ function AppContent() {
     const wasEditing = editingWorkout !== null;
     const resumedId = resumingWorkoutId;
     if (!wasEditing) {
-      pendingWorkout.queue(payload);
+      finishedQueue.queue(payload);
+      rememberFinish(buildFinishSummary(payload, exercises, workouts, Date.now(), resumedId));
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
       setTab('dashboard', { replace: true });
@@ -1190,12 +1547,19 @@ function AppContent() {
         wasEditing || resumedId ? 'Saving workout changes…' : 'Saving workout…',
         () =>
           editingWorkout
-            ? api.updateWorkout(editingWorkout.id, payload)
+            ? conflictPrompt.saveEdit(editingWorkout, payload)
             : resumedId
               ? api.updateWorkout(resumedId, payload)
               : api.createWorkout(payload),
       );
     } catch (error) {
+      if (error instanceof WorkoutEditDiscarded) {
+        // The other device's version was chosen: close the editor and show what is saved.
+        setEditingWorkout(null);
+        if (currentTabRef.current === 'log') setTab('history', { replace: true });
+        void refreshData({ silent: true });
+        return;
+      }
       if (currentTabRef.current === (wasEditing ? 'history' : 'dashboard'))
         setTab('log', { replace: true });
       else if (currentTabRef.current !== 'log')
@@ -1214,29 +1578,54 @@ function AppContent() {
     saved: TrackedWorkout,
     wasEditing: boolean,
     resumedId: string | null,
+    queued?: SavedFromQueue,
   ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
     if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
-    setEditingWorkout(null);
+    // A queued save may finish after the user has opened another workout for editing.
+    if (wasEditing) setEditingWorkout(null);
 
     if (!wasEditing) {
+      if (queued)
+        setSavedPreviews((current) => [
+          ...current.filter((preview) => preview.dashboard === dashboard),
+          { finished: queued.finished, workout: saved, dashboard, isNew: resumedId === null },
+        ]);
       const signature = (record: PersonalRecord) =>
-        `${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
+        `${record.scope ?? 'all_time'}:${record.block_id ?? ''}:${record.exercise_id}:${record.record_type}:${record.weight_kg ?? record.normalized_weight}:${record.record_type === 'weight' ? (record.weight_kg ?? record.value) : record.value}`;
       const existing = new Set(
         personalRecords.filter((record) => record.workout_id === resumedId).map(signature),
       );
       void api
         .listPersonalRecords({ workoutId: saved.id })
-        .then((records) =>
-          setCompletionRecords(records.filter((record) => !existing.has(signature(record)))),
-        )
+        .then((records) => {
+          const fresh = records.filter((record) => !existing.has(signature(record)));
+          if (!fresh.length) return;
+          const withFresh = (current: PersonalRecord[]) => [
+            ...current,
+            ...fresh.filter((record) => !current.some((item) => item.id === record.id)),
+          ];
+          // The workout on Home's card lists its own records there; a toast would cover it.
+          const onCard =
+            saved.client_session_id != null &&
+            saved.client_session_id === finishSummaryRef.current?.sessionId;
+          // Several workouts can sync together after a reconnection; celebrate all their records.
+          if (onCard) setFinishRecords(withFresh);
+          else setCompletionRecords(withFresh);
+        })
         .catch(() => undefined);
     }
-    void refreshData({ silent: true, activityLabel: 'Updating workout data…' });
+    // Refresh once the last waiting workout lands rather than after each one.
+    if (!queued || queued.remaining === 0)
+      void refreshData({
+        silent: true,
+        activityLabel: queued ? undefined : 'Updating workout data…',
+        knownRevision: revisionAfterSave(saved),
+      });
   }
 
   async function deleteWorkout(workout: TrackedWorkout) {
-    if (workoutSaveBlocked) return;
+    if (workoutSaveBlocked || blockedWhileSyncing(workout.id)) return;
     try {
       await withBackgroundActivity('Deleting workout…', async () => {
         await api.deleteWorkout(workout.id);
@@ -1291,6 +1680,18 @@ function AppContent() {
     );
   }
 
+  async function restoreAccountArchive(file: File) {
+    await api.restoreAccountArchive(file);
+    // A restore replaces splits, blocks, layout and preferences as well as training, so the
+    // app reloads once to read them all again, then confirms.
+    try {
+      window.sessionStorage.setItem(BACKUP_RESTORED_KEY, '1');
+    } catch {
+      // The restore succeeded either way; only the confirmation is lost.
+    }
+    window.location.reload();
+  }
+
   async function deleteSampleData() {
     try {
       await withBackgroundActivity('Removing sample workouts…', async () => {
@@ -1319,30 +1720,41 @@ function AppContent() {
     setWorkoutStartCategory(freshStart ? category : null);
     setWorkoutStartType(freshStart ? startType : null);
     const startedAt = storedDraft?.startedAt ?? Date.now();
+    if (freshStart) rememberFinish(null);
     setEditingWorkout(null);
     setResumingWorkoutId(storedDraft?.resumingWorkoutId ?? null);
     setActiveWorkoutStartedAt(startedAt);
     setWorkoutStartDate(storedDraft?.workoutDate ?? workoutDate);
     setTab('log');
     if (navigator.storage?.persist) void navigator.storage.persist().catch(() => false);
+    if (freshStart) remindAboutRestAlerts();
+  }
+
+  function remindAboutRestAlerts() {
+    void shouldShowRestAlertReminder().then((show) => {
+      if (show) setRestAlertReminderOpen(true);
+    });
   }
 
   function editWorkout(workout: TrackedWorkout) {
-    if (workoutSaveBlocked) return;
+    if (workoutSaveBlocked || blockedWhileSyncing(workout.id)) return;
     setEditingWorkout(workout);
     setWorkoutStartDate(workout.workout_date);
     setTab('log');
   }
 
   function resumeWorkout(workout: TrackedWorkout) {
-    if (workoutSaveBlocked || activeWorkoutStartedAt !== null) return;
+    if (workoutSaveBlocked || blockedWhileSyncing(workout.id) || activeWorkoutStartedAt !== null)
+      return;
     clearActiveWorkoutDraft();
+    rememberFinish(null);
     setEditingWorkout(null);
     setResumingWorkoutId(workout.id);
     setActiveWorkoutStartedAt(Date.now());
     setWorkoutStartDate(workout.workout_date);
     setTab('log');
     if (navigator.storage?.persist) void navigator.storage.persist().catch(() => false);
+    remindAboutRestAlerts();
   }
 
   async function saveMeasurement(payload: {
@@ -1426,6 +1838,42 @@ function AppContent() {
     setTab('settings');
   }
 
+  /** Opens the place a tip's button names. */
+  const openTipTargetRef = useRef<(action: TipAction) => void>(() => undefined);
+  openTipTargetRef.current = (action) => {
+    switch (action.target) {
+      case 'machine-weights': {
+        const exerciseId = action.exerciseId ?? multiMachineExerciseId(workouts);
+        if (exerciseId) setMachineWeightsFor(exerciseId);
+        openHistorySection('progress', exerciseId);
+        break;
+      }
+      case 'weight-goal':
+        setBodyGoalRequest((count) => count + 1);
+        setTab('body');
+        break;
+      case 'training-blocks':
+        setTipBlocksOpen(true);
+        break;
+      case 'home-edit':
+        setTab('dashboard');
+        home.edit();
+        break;
+      case 'profile':
+        setTab('profile');
+        break;
+      case 'split':
+        openSplitSchedule();
+        break;
+      case 'appearance':
+        setSettingsJump(null);
+        setSettingsGroup('appearance');
+        setTab('settings');
+        break;
+    }
+  };
+  useEffect(() => onTipTarget((action) => openTipTargetRef.current(action)), []);
+
   function updateReduceMotion(reduced: boolean) {
     saveReduceMotionPreference(reduced);
     applyReduceMotion(reduced);
@@ -1443,7 +1891,7 @@ function AppContent() {
       : tab === 'settings'
         ? settingsGroup
           ? { title: 'All settings', subtitle: null }
-          : { title: 'Settings', subtitle: 'Preferences • privacy • data' }
+          : { title: 'Settings', subtitle: null }
         : tab === 'videos' && videosAllowed
           ? { title: 'Videos', subtitle: 'Workout clips • uploads' }
           : tab === 'profile'
@@ -1453,8 +1901,16 @@ function AppContent() {
               : tab === 'admin' && isAdmin
                 ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
                 : null;
+  useEffect(() => {
+    // After the first load, which replaces any message with its own outcome when it finishes.
+    if (loading || !backupRestoredNotice) return;
+    backupRestoredNotice = false;
+    setMessage(BACKUP_RESTORED_MESSAGE);
+  }, [loading]);
+
   const activeMainTab = mainTabFor(tab);
-  const showTabBar = tab !== 'log' && tab !== 'split';
+  const liveSheetOpen = tab === 'log' && !editingWorkout && activeWorkoutStartedAt !== null;
+  const showTabBar = (tab !== 'log' && tab !== 'split') || liveSheetOpen;
   // The home screen guide follows the release announcement, behind the same interruptions.
   const canShowPrompts = canShowReleaseAnnouncement({
     loading,
@@ -1470,10 +1926,79 @@ function AppContent() {
     ? nextOnboardingPrompt({
         tour: guideRequested || (guideWaiting && announcement.checked),
         importStep: importStepPending,
-        release: announcement.open,
+        release: announcement.open && launchPromptAllowed(launchPrompt, 'release'),
         releaseHeld: csvGuideOpen || (releaseAfterImport && tab === 'settings'),
       })
     : null;
+  const homeGuideShown =
+    homeScreenGuide.open &&
+    (homeScreenGuide.requested || launchPromptAllowed(launchPrompt, 'home-guide')) &&
+    !guideRequested &&
+    !guideWaiting &&
+    !importStepPending &&
+    !announcement.open &&
+    canShowPrompts;
+  // The first prompt to open by itself is the only one this visit; the rest wait for the next.
+  const openedPrompt: LaunchPrompt | null =
+    prompt === 'release'
+      ? 'release'
+      : prompt
+        ? 'onboarding'
+        : homeGuideShown && !homeScreenGuide.requested
+          ? 'home-guide'
+          : null;
+  useEffect(() => {
+    if (openedPrompt) setLaunchPrompt((current) => current ?? openedPrompt);
+  }, [openedPrompt]);
+
+  useEffect(() => {
+    configureTips({
+      page: tab,
+      ready:
+        !loading &&
+        !signingIn &&
+        announcement.checked &&
+        !announcement.open &&
+        !prompt &&
+        !guideWaiting &&
+        !importStepPending &&
+        !csvGuideOpen &&
+        !releaseAfterImport &&
+        !homeScreenGuide.open &&
+        !home.editing &&
+        !message &&
+        completionRecords.length === 0 &&
+        !workoutSaveBlocked &&
+        finishedQueue.items.length === 0,
+      resting: restEndsAt !== null && restEndsAt > Date.now(),
+      workoutCount: Math.max(
+        (dashboard?.history?.total_workouts ?? workouts.length) -
+          workouts.filter((workout) => workout.is_sample).length,
+        workouts.filter((workout) => !workout.is_sample).length,
+      ),
+    });
+  }, [
+    configureTips,
+    tab,
+    loading,
+    signingIn,
+    announcement.checked,
+    announcement.open,
+    prompt,
+    guideWaiting,
+    importStepPending,
+    csvGuideOpen,
+    releaseAfterImport,
+    homeScreenGuide.open,
+    home.editing,
+    message,
+    completionRecords.length,
+    workoutSaveBlocked,
+    finishedQueue.items.length,
+    restEndsAt,
+    dashboard?.history?.total_workouts,
+    workouts,
+  ]);
 
   function openSharedProfile(
     profile: Pick<SharedProfileSummary, 'id' | 'display_name'> & { is_you?: boolean },
@@ -1519,6 +2044,12 @@ function AppContent() {
   async function openMuscleWorkout(contribution: WeeklyMuscleContribution) {
     if (contribution.workout_id === muscleSets.workoutId) {
       if (activeWorkoutStartedAt !== null) setTab('log');
+      else setMessage('This workout is waiting to sync.');
+      return;
+    }
+    if (isPendingWorkoutId(contribution.workout_id)) {
+      if (shownWorkouts.some((workout) => workout.id === contribution.workout_id))
+        openSavedWorkout(contribution.workout_id, contribution.exercise_id);
       else setMessage('This workout is waiting to sync.');
       return;
     }
@@ -1579,17 +2110,23 @@ function AppContent() {
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
-        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${appUpdates.available ? ' has-app-update' : ''}${offlineNotice.visible ? ' has-offline-notice' : ''}`}
+        className={`tracker-app${showTabBar ? ' has-tab-bar' : ''}${tab === 'log' && !editingWorkout ? ' has-compact-logger' : ''}${appUpdates.available ? ' has-app-update' : ''}`}
       >
         {appUpdates.available && (
           <AppUpdateBanner
             version={appUpdates.availableRelease?.version}
+            required={appUpdates.required}
             refreshing={appUpdates.refreshing}
             error={appUpdates.refreshError}
             onRefresh={() => void appUpdates.refresh()}
           />
         )}
-        {offlineNotice.visible && <OfflineNotice onDismiss={offlineNotice.dismiss} />}
+        <OfflineNotice
+          waiting={{
+            workouts: finishedQueue.items.length,
+            checkIns: bodyMeasurementSync.pending,
+          }}
+        />
         {prompt === 'release' && (
           <ReleaseAnnouncement
             release={announcement.release}
@@ -1627,16 +2164,45 @@ function AppContent() {
             }}
           />
         )}
-        {homeScreenGuide.open &&
-          !guideRequested &&
-          !guideWaiting &&
-          !importStepPending &&
-          !announcement.open &&
-          canShowPrompts && <HomeScreenGuide onClose={homeScreenGuide.dismiss} />}
+        {homeGuideShown && <HomeScreenGuide onClose={homeScreenGuide.dismiss} />}
+        {user && (
+          <WeeklyReviewPrompt
+            userId={user.id}
+            enabled={
+              canShowPrompts &&
+              prompt === null &&
+              !announcement.open &&
+              !homeScreenGuide.open &&
+              !guideWaiting &&
+              !importStepPending &&
+              launchPromptAllowed(launchPrompt, 'weekly-review')
+            }
+            shownElsewhere={appNotices.notices?.weekly_review_seen ?? null}
+            onShown={(weekStart) => {
+              setLaunchPrompt((current) => current ?? 'weekly-review');
+              appNotices.record({ weekly_review_seen: weekStart });
+            }}
+            dashboard={dashboard}
+            muscleWeeks={reviewMuscleWeeks}
+            workouts={workouts}
+            records={personalRecords}
+            measurements={measurements}
+            today={localDate()}
+            onOpenProgress={(exerciseId) => openHistorySection('progress', exerciseId ?? null)}
+            onOpenCardio={() => openHistorySection('cardio')}
+            onOpenBody={() => setTab('body')}
+          />
+        )}
         <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (
-          <NotificationDialog key={message} message={message} onClose={() => setMessage(null)} />
+          <NotificationDialog
+            key={message}
+            message={message}
+            onClose={() => {
+              setMessage(null);
+            }}
+          />
         )}
         {completionRecords.length > 0 && (
           <WorkoutCompletionToast
@@ -1644,6 +2210,16 @@ function AppContent() {
             onClose={() => setCompletionRecords([])}
           />
         )}
+        {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
+        {tipBlocksOpen && (
+          <TrainingBlockDialog
+            start="new"
+            onClose={() => setTipBlocksOpen(false)}
+            onNotice={setMessage}
+          />
+        )}
+        <SetupGuideHost workouts={workouts} />
+        {conflictPrompt.dialog}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -1656,29 +2232,47 @@ function AppContent() {
         )}
 
         <main
-          className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || tab === 'log' ? 'with-overlay-header' : ''}`}
+          className={`tracker-content ${tab === 'videos' ? 'video-content' : ''} ${nestedHeader || (tab === 'log' && !liveSheetOpen) ? 'with-overlay-header' : ''}`}
           data-nav-direction={navDirection}
         >
-          {pendingWorkout.pending && (
-            <PendingWorkoutSaveCard
-              completion={pendingWorkout.pending}
-              saving={pendingWorkout.saving}
-              error={pendingWorkout.error}
-              onRetry={pendingWorkout.retry}
-              onReview={
-                pendingWorkout.needsReview
-                  ? () => {
-                      const draft = pendingWorkout.review();
-                      if (!draft) return;
-                      setActiveWorkoutStartedAt(draft.startedAt);
-                      setResumingWorkoutId(draft.resumingWorkoutId ?? null);
-                      setWorkoutStartDate(draft.workoutDate);
-                      setTab('log');
-                    }
-                  : undefined
-              }
-            />
-          )}
+          {tab !== 'log' &&
+            finishedQueue.items.map((finished) => {
+              const key = finishedWorkoutKey(finished);
+              const refusal = finishedQueue.refusals[key];
+              // Routine sends and offline retries stay quiet; only actionable failures need a card.
+              if (refusal === undefined && !finishedQueue.outdated) return null;
+              return (
+                <PendingWorkoutSaveCard
+                  key={key}
+                  completion={finished.pendingSave}
+                  saving={finishedQueue.sendingKey === key}
+                  error={refusal ?? (finishedQueue.outdated ? OUTDATED_CLIENT_MESSAGE : null)}
+                  onRetry={finishedQueue.retry}
+                  onDiscard={() => {
+                    if (finishedQueue.discard(key)) setMessage('Workout discarded.');
+                  }}
+                  reviewBlocked={activeWorkoutStartedAt !== null}
+                  onKeepMine={
+                    finishedQueue.conflicts.has(key)
+                      ? () => void finishedQueue.keepMine(key)
+                      : undefined
+                  }
+                  onReview={
+                    refusal === undefined
+                      ? undefined
+                      : () => {
+                          if (activeWorkoutStartedAt !== null) return;
+                          const draft = finishedQueue.review(key);
+                          if (!draft) return;
+                          setActiveWorkoutStartedAt(draft.startedAt);
+                          setResumingWorkoutId(draft.resumingWorkoutId ?? null);
+                          setWorkoutStartDate(draft.workoutDate);
+                          setTab('log');
+                        }
+                  }
+                />
+              );
+            })}
           {bodyMeasurementSync.pending > 0 && (
             <section
               className="pulse-card pending-workout-save body-check-in-sync"
@@ -1708,20 +2302,50 @@ function AppContent() {
             tab !== 'profile' &&
             tab !== 'shared-profile' &&
             tab !== 'admin' && <TodaySkeleton />}
-          {(tab === 'dashboard' || visitedTabs.has('dashboard')) && (
-            <CachedTabPanel active={tab === 'dashboard'}>
+          {(tab === 'dashboard' || liveSheetOpen || visitedTabs.has('dashboard')) && (
+            <CachedTabPanel active={tab === 'dashboard' || liveSheetOpen} inert={liveSheetOpen}>
               {loading && dashboard === null ? (
                 <TodaySkeleton />
               ) : (
                 <TodayScreen
                   home={home}
-                  data={dashboard}
+                  finished={
+                    finishSummary && (
+                      <FinishedWorkoutCard
+                        key={finishSummary.finishedAt}
+                        summary={finishSummary}
+                        records={finishRecords.map((record) => ({
+                          id: record.id,
+                          exercise: record.exercise_name ?? 'Exercise',
+                          detail: completionRecordDetail(record, weightUnit),
+                        }))}
+                        onDismiss={() => rememberFinish(null)}
+                        onOpenWorkout={() => {
+                          const saved = finishSummary.sessionId
+                            ? workouts.find(
+                                (workout) => workout.client_session_id === finishSummary.sessionId,
+                              )
+                            : undefined;
+                          if (saved) openSavedWorkout(saved.id, null);
+                          else openHistorySection('history');
+                        }}
+                        onCompareMachines={(exerciseId) => {
+                          setMachineWeightsFor(exerciseId);
+                          openHistorySection('progress', exerciseId);
+                        }}
+                        onNotice={setMessage}
+                      />
+                    )
+                  }
+                  data={shownDashboard}
                   muscleSets={muscleSets}
-                  workouts={workouts}
+                  workouts={shownWorkouts}
                   measurements={measurements}
                   personalRecords={personalRecords}
                   categoryColors={workoutTypeColors}
                   workoutStartedAt={activeWorkoutStartedAt}
+                  liveWorkoutName={liveWorkoutSummary?.name || activeDraft?.name || null}
+                  onResumeWorkout={resumeLiveWorkout}
                   workoutSaving={workoutSaveBlocked}
                   todayBodyweight={todayMeasurement?.weight_kg ?? null}
                   todayBodyFat={todayMeasurement?.body_fat_pct ?? null}
@@ -1741,12 +2365,13 @@ function AppContent() {
                       };
                     })
                   }
-                  onSaveBodyweight={(weight) =>
+                  onSaveBodyweight={(weight, bodyFat) =>
                     withBackgroundActivity('Saving measurement…', async () => {
                       const undo = await saveBodyweightCheckIn(
                         todayMeasurement ?? null,
                         localDate(),
                         weight,
+                        bodyFat,
                       );
                       setMeasurements(await api.localBodyMeasurements());
                       return async () => {
@@ -1769,7 +2394,6 @@ function AppContent() {
                     )
                   }
                   onEditSplit={openSplitSchedule}
-                  onResumeWorkout={() => setTab('log')}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
                   onOpenProgress={(exerciseId) =>
@@ -1795,11 +2419,36 @@ function AppContent() {
                       />
                     ) : undefined
                   }
+                  exerciseSummaries={exerciseLibrary.summaries}
+                  exercises={exercises}
+                  dataRevision={dataRevision}
+                  active={tab === 'dashboard'}
+                  onOpenFriend={openSharedProfile}
+                  onOpenSocial={() => setTab('social')}
+                  onChooseSharing={openSharingSettings}
                   calendar={
                     <InteractiveWorkoutCalendar
-                      entries={dashboard?.heatmap ?? []}
-                      workouts={workouts}
+                      entries={shownDashboard?.heatmap ?? []}
+                      workouts={shownWorkouts}
                       olderHistory={olderHistoryProps}
+                      split={shownDashboard?.training_split}
+                      categoryColors={workoutTypeColors}
+                      activeWorkout={activeWorkoutStartedAt !== null}
+                      activeWorkoutDate={activeWorkoutDate}
+                      onResumeWorkout={() => setTab('log')}
+                      onEditWorkout={editWorkout}
+                      onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                      onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                    />
+                  }
+                  thisWeek={
+                    <InteractiveWorkoutCalendar
+                      entries={shownDashboard?.heatmap ?? []}
+                      weekStartDay={weekStartDayFrom(
+                        shownDashboard?.weekly_sets?.week_start ??
+                          shownDashboard?.zone2?.week_start,
+                      )}
+                      workouts={shownWorkouts}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
                       activeWorkoutDate={activeWorkoutDate}
@@ -1815,105 +2464,118 @@ function AppContent() {
           )}
           {!loading && (activeWorkoutStartedAt !== null || editingWorkout !== null) && (
             <CachedTabPanel active={tab === 'log'}>
-              {workoutCatalogueReady ? (
-                <WorkoutBrowser
-                  key={
-                    editingWorkout
-                      ? `edit-${editingWorkout.id}`
-                      : `active-${activeWorkoutStartedAt ?? workoutStartDate}`
-                  }
-                  workouts={workouts}
-                  initialWorkout={editingWorkout}
-                  resumedWorkoutId={resumingWorkoutId}
-                  hasOlder={olderHistoryAvailable}
-                >
-                  {(navigation, viewedWorkout) => (
-                    <WorkoutLogger
-                      key={viewedWorkout?.id ?? 'original'}
-                      exercises={exercises}
-                      restoredDraftMovements={restoredDraftMovements}
-                      recommendation={dashboard?.recommendation ?? null}
-                      template={workoutTemplate}
-                      startCategory={workoutStartCategory}
-                      startType={workoutStartType}
-                      initialDate={workoutStartDate}
-                      initialWorkout={viewedWorkout ?? editingWorkout}
-                      readOnly={Boolean(viewedWorkout)}
-                      navigation={navigation}
-                      resumingWorkout={viewedWorkout ? null : resumingWorkout}
-                      currentBodyweight={
-                        viewedWorkout
-                          ? savedWorkoutBodyweight(viewedWorkout)
-                          : (measurements[0]?.weight_kg ?? null)
-                      }
-                      historicalWorkouts={workouts}
-                      historyBaselines={historyBaselines}
-                      restTimerEnabled={restTimerEnabled}
-                      showRestTimes={showRestTimes}
-                      weeklySets={
-                        viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
-                      }
-                      categoryColors={workoutTypeColors}
-                      onExerciseHistory={(exerciseId) => openHistorySection('progress', exerciseId)}
-                      onExerciseFavorite={updateExerciseFavorite}
-                      onCreateExercise={createExercise}
-                      onSave={saveWorkout}
-                      onAutoSaved={() =>
-                        setMessage(
-                          'Your inactive workout passed its time limit and was auto-saved.',
-                        )
-                      }
-                      activeStartedAt={activeWorkoutStartedAt}
-                      onRestTimerChange={
-                        editingWorkout || viewedWorkout ? undefined : setRestEndsAt
-                      }
-                      onRestTimerComplete={notifyRestComplete}
-                      onClose={navigateBack}
-                      onDelete={() => {
-                        if (workoutSaveBlocked) return;
-                        if (editingWorkout) {
-                          void deleteWorkout(editingWorkout);
-                          setTab('history');
-                        } else {
-                          clearActiveWorkoutDraft();
-                          setActiveWorkoutStartedAt(null);
-                          setResumingWorkoutId(null);
-                          setTab('dashboard');
-                        }
-                        setEditingWorkout(null);
-                      }}
-                    />
-                  )}
-                </WorkoutBrowser>
-              ) : (
-                <section className="logger-screen content-page" aria-live="polite">
-                  <OverlayScreenHeader
-                    title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
-                    subtitle={
-                      activeDraft
-                        ? 'Your workout is saved on this device'
-                        : 'Load your exercise library to start'
+              <LiveWorkoutSheet
+                active={tab === 'log'}
+                enabled={!editingWorkout}
+                onMinimise={() => setTab('dashboard')}
+              >
+                {workoutCatalogueReady ? (
+                  <WorkoutBrowser
+                    key={
+                      editingWorkout
+                        ? `edit-${editingWorkout.id}`
+                        : liveLoggerSession.current
+                          ? loggerSessionKey(liveLoggerSession.current)
+                          : `active-${workoutStartDate}`
                     }
-                    onBack={navigateBack}
-                  />
-                  <p>
-                    {exerciseCatalogue.error
-                      ? 'Your exercises could not be loaded.'
-                      : 'Some exercises in your saved workout are not available yet.'}{' '}
-                    {activeDraft
-                      ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
-                      : 'Reload the exercises to start your workout.'}
-                  </p>
-                  {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                    workouts={workouts}
+                    initialWorkout={editingWorkout}
+                    resumedWorkoutId={resumingWorkoutId}
+                    hasOlder={olderHistoryAvailable}
+                    resumeRequest={editingWorkout ? undefined : workoutResumeRequest}
                   >
-                    Retry loading exercises
-                  </button>
-                </section>
-              )}
+                    {(navigation, viewedWorkout) => (
+                      <WorkoutLogger
+                        key={viewedWorkout?.id ?? 'original'}
+                        exercises={exercises}
+                        restoredDraftMovements={restoredDraftMovements}
+                        recommendation={dashboard?.recommendation ?? null}
+                        template={workoutTemplate}
+                        startCategory={workoutStartCategory}
+                        startType={workoutStartType}
+                        initialDate={workoutStartDate}
+                        initialWorkout={viewedWorkout ?? editingWorkout}
+                        readOnly={Boolean(viewedWorkout)}
+                        navigation={navigation}
+                        resumingWorkout={viewedWorkout ? null : resumingWorkout}
+                        currentBodyweight={
+                          viewedWorkout
+                            ? savedWorkoutBodyweight(viewedWorkout)
+                            : savedWorkoutBodyweight(editingWorkout ?? resumingWorkout)
+                        }
+                        measurements={measurements}
+                        historicalWorkouts={workouts}
+                        historyBaselines={historyBaselines}
+                        restTimerEnabled={restTimerEnabled}
+                        showRestTimes={showRestTimes}
+                        weeklySets={
+                          viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
+                        }
+                        categoryColors={workoutTypeColors}
+                        onExerciseHistory={(exerciseId) =>
+                          openHistorySection('progress', exerciseId)
+                        }
+                        onExerciseFavorite={updateExerciseFavorite}
+                        onCreateExercise={createExercise}
+                        onSave={saveWorkout}
+                        onShow={resumeLiveWorkout}
+                        activeStartedAt={activeWorkoutStartedAt}
+                        onRestTimerChange={
+                          editingWorkout || viewedWorkout ? undefined : setRestEndsAt
+                        }
+                        onRestDoneChange={
+                          editingWorkout || viewedWorkout ? undefined : setRestDoneAt
+                        }
+                        restGoRequest={restGoRequest}
+                        screenVisible={tab === 'log'}
+                        onLiveSummaryChange={setLiveWorkoutSummary}
+                        onClose={navigateBack}
+                        onDelete={() => {
+                          if (workoutSaveBlocked) return;
+                          if (editingWorkout) {
+                            void deleteWorkout(editingWorkout);
+                            setTab('history');
+                          } else {
+                            clearActiveWorkoutDraft();
+                            setActiveWorkoutStartedAt(null);
+                            setResumingWorkoutId(null);
+                            setTab('dashboard');
+                          }
+                          setEditingWorkout(null);
+                        }}
+                      />
+                    )}
+                  </WorkoutBrowser>
+                ) : (
+                  <section className="logger-screen content-page" aria-live="polite">
+                    <OverlayScreenHeader
+                      title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
+                      subtitle={
+                        activeDraft
+                          ? 'Your workout is saved on this device'
+                          : 'Load your exercise library to start'
+                      }
+                      onBack={navigateBack}
+                    />
+                    <p>
+                      {exerciseCatalogue.error
+                        ? 'Your exercises could not be loaded.'
+                        : 'Some exercises in your saved workout are not available yet.'}{' '}
+                      {activeDraft
+                        ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
+                        : 'Reload the exercises to start your workout.'}
+                    </p>
+                    {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                    >
+                      Retry loading exercises
+                    </button>
+                  </section>
+                )}
+              </LiveWorkoutSheet>
             </CachedTabPanel>
           )}
           {!loading && (tab === 'body' || visitedTabs.has('body')) && (
@@ -1925,6 +2587,7 @@ function AppContent() {
                 onDelete={deleteMeasurement}
                 onDataChange={refreshAfterMutation}
                 trendPreference={bodyTrendPreference}
+                goalRequest={bodyGoalRequest}
                 onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(tab === 'body')}
               />
@@ -1936,7 +2599,8 @@ function AppContent() {
                 exerciseLibrary={exerciseLibrary}
                 dataRevision={dataRevision}
                 key={`${historyOpenId ?? 'history'}-${historyExerciseId ?? 'all'}-${historyMovementId ?? 'any'}-${historyOpenCount}`}
-                workouts={workouts}
+                workouts={shownWorkouts}
+                syncingWorkoutIds={syncingWorkoutIds}
                 categoryColors={workoutTypeColors}
                 measurements={measurements}
                 exercises={exercises}
@@ -1952,15 +2616,18 @@ function AppContent() {
                 onOpenSettings={openAllSettings}
                 accountActions={accountHeaderActions(sectionFromTab !== null)}
                 onOpenExercise={(exerciseId) => openHistorySection('progress', exerciseId)}
+                onOpenMember={openSharedProfile}
                 onOpenWorkout={openSavedWorkout}
                 initialExerciseId={historyExerciseId}
+                openMachineWeights={
+                  machineWeightsFor !== null && machineWeightsFor === historyExerciseId
+                }
+                onMachineWeightsOpened={() => setMachineWeightsFor(null)}
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
-                heatmap={dashboard?.heatmap ?? []}
-                weeklySets={muscleSets.weeklySets}
-                weeklySetsHistory={muscleSets.history}
-                onOpenMuscleWorkout={openMuscleWorkout}
-                historySummary={historySummary}
+                heatmap={shownDashboard?.heatmap ?? []}
+                trainingSplit={shownDashboard?.training_split ?? null}
+                historySummary={shownDashboard?.history ?? null}
                 olderHistory={olderHistoryProps}
                 activeWorkout={activeWorkoutStartedAt !== null}
                 activeWorkoutDate={activeWorkoutDate}
@@ -1981,6 +2648,7 @@ function AppContent() {
           {!loading && (tab === 'settings' || visitedTabs.has('settings')) && (
             <CachedTabPanel active={tab === 'settings'}>
               <SettingsScreen
+                exercises={exercises}
                 active={tab === 'settings'}
                 selectedGroup={settingsGroup}
                 onSelectGroup={setSettingsGroup}
@@ -2003,6 +2671,7 @@ function AppContent() {
                 csvGuideOpen={csvGuideOpen}
                 onCsvGuideOpenChange={setCsvGuideOpen}
                 onDeleteSamples={deleteSampleData}
+                onRestoreArchive={restoreAccountArchive}
                 onDataChange={refreshAfterMutation}
                 account={user}
                 onOpenProfile={() => setTab('profile')}
@@ -2042,7 +2711,6 @@ function AppContent() {
             <CachedTabPanel active={tab === 'profile'}>
               <ProfileScreen
                 key={user.id}
-                onOpenMember={openSharedProfile}
                 onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
@@ -2063,7 +2731,6 @@ function AppContent() {
               <CachedTabPanel active={tab === 'shared-profile'}>
                 <SharedProfileScreen
                   key={`${sharedProfile.id}-${sharedProfile.opened}`}
-                  onOpenMember={openSharedProfile}
                   onOpenSplits={openSplits}
                   profileId={sharedProfile.id}
                   targetWorkout={sharedProfile.workout}
@@ -2100,29 +2767,42 @@ function AppContent() {
 
         {showTabBar && (
           <AppTabBar
+            liveSummary={liveWorkoutSummary}
+            inert={liveSheetOpen}
             homeLayout={home}
-            active={activeMainTab}
+            active={liveSheetOpen ? 'dashboard' : activeMainTab}
             workoutStartedAt={activeWorkoutStartedAt}
             restEndsAt={restEndsAt}
+            restDoneAt={restDoneAt}
             workoutSaving={workoutSaveBlocked}
             onSelect={(nextTab) => {
               if (nextTab === 'training')
                 setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
               else setTab(nextTab);
             }}
-            onStart={() => startWorkout()}
+            onStart={() => {
+              if (activeWorkoutStartedAt === null) startWorkout();
+              // The ringing bell opens the workout at the next set; the logger opens it.
+              else if (restDoneAt !== null) setRestGoRequest((request) => request + 1);
+              else resumeLiveWorkout();
+            }}
             startMenu={{
               upNextLabel:
                 upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
                   ? `${upNext.label} day`
                   : null,
-              onCardio: () =>
+              onCardio: () => {
+                const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
+                const saved = workoutTypes.savedExercises.cardio;
                 startWorkout(
                   localDate(),
                   false,
-                  sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
+                  cardio && saved?.length
+                    ? typeSessionTemplate(cardio, saved, 'Cardio workout', localDate(), weightUnit)
+                    : sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
                   'cardio',
-                ),
+                );
+              },
               onUpNext: () =>
                 startWorkout(
                   localDate(),
@@ -2135,17 +2815,27 @@ function AppContent() {
             }}
           />
         )}
+        {workoutSync.conflict && !syncConflictDismissed && (
+          <ActiveWorkoutSyncDialog
+            conflict={workoutSync.conflict}
+            exercises={exercises}
+            onResolve={workoutSync.resolve}
+            onClose={() => setSyncConflictDismissed(true)}
+          />
+        )}
+        {/* Failed syncs retry in the background; only a conflict needs the user. This floats
+            over the screen, so it never pushes the workout down. */}
+        {workoutSync.conflict && syncConflictDismissed && (
+          <button
+            type="button"
+            className="workout-sync-reopen primary-action"
+            onClick={() => setSyncConflictDismissed(false)}
+          >
+            Resolve workout sync
+          </button>
+        )}
       </div>
     </AppContentProviders>
-  );
-}
-
-function LoadingState() {
-  return (
-    <section className="loading-state">
-      <span />
-      <p>Loading your training log…</p>
-    </section>
   );
 }
 
@@ -2166,9 +2856,18 @@ function OverlayScreenHeader({
   titleActionLabel?: string;
   backLabel?: string;
 }) {
+  const tips = useTips();
   return (
     <header className="overlay-screen-header">
-      <button className="overlay-header-back" type="button" onClick={onBack} aria-label={backLabel}>
+      <button
+        className="overlay-header-back"
+        type="button"
+        onClick={() => {
+          if (runningAsInstalledApp()) tips.event('back-button', 'back', 10);
+          onBack();
+        }}
+        aria-label={backLabel}
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M14.5 5.5 8 12l6.5 6.5" />
         </svg>
@@ -2280,6 +2979,7 @@ function InteractiveWorkoutCalendar({
   entries,
   workouts,
   olderHistory,
+  split,
   categoryColors,
   activeWorkout,
   activeWorkoutDate,
@@ -2287,10 +2987,15 @@ function InteractiveWorkoutCalendar({
   onEditWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  weekStartDay,
 }: {
   entries: DashboardData['heatmap'];
+  /** Given, shows only this week's days (Home's own section) instead of the calendar. */
+  weekStartDay?: number;
   workouts: TrackedWorkout[];
   olderHistory?: OlderHistoryProps;
+  /** The saved split, whose planned and missed days get a faint outline in the calendar. */
+  split?: TrainingSplit | null;
   categoryColors: WorkoutTypeColors;
   activeWorkout: boolean;
   activeWorkoutDate: string | null;
@@ -2304,7 +3009,12 @@ function InteractiveWorkoutCalendar({
   // Every type shows by default; tapping one in the legend greys it out in the calendar.
   const { types } = useWorkoutTypes();
   const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<string>>(() => new Set());
-  const presentTypes = calendarLegendTypes(entries, types);
+  // The legend lists only the types logged in the months on screen.
+  const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
+  const presentTypes = calendarLegendTypes(entriesInMonths(entries, visibleMonths), types);
+  const today = localDate();
+  // Six weeks ahead reaches the end of the current month, the newest one the calendar shows.
+  const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
   const toggleCategory = (category: string) =>
     setHiddenCategories((current) => {
       const next = new Set(current);
@@ -2312,26 +3022,45 @@ function InteractiveWorkoutCalendar({
       return next;
     });
 
+  const openDay = (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => {
+    if (entry) setSelectedDay(entry);
+    else setPendingWorkoutDate(workoutDate);
+  };
+
   return (
     <>
-      <WorkoutCalendar
-        entries={entries}
-        olderHistory={olderHistory}
-        categoryColors={categoryColors}
-        hiddenCategories={hiddenCategories}
-        activeWorkoutDate={activeWorkoutDate}
-        onActiveWorkoutClick={onResumeWorkout}
-        onDayClick={(workoutDate, entry) => {
-          if (entry) setSelectedDay(entry);
-          else setPendingWorkoutDate(workoutDate);
-        }}
-      />
-      <WorkoutCalendarLegend
-        presentTypes={presentTypes}
-        hiddenCategories={hiddenCategories}
-        categoryColors={categoryColors}
-        onToggle={toggleCategory}
-      />
+      {weekStartDay !== undefined ? (
+        <WeekStrip
+          entries={entries}
+          categoryColors={categoryColors}
+          weekStartDay={weekStartDay}
+          activeWorkoutDate={activeWorkoutDate}
+          selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+          onActiveWorkoutClick={onResumeWorkout}
+          onDayClick={openDay}
+        />
+      ) : (
+        <>
+          <WorkoutCalendar
+            entries={entries}
+            olderHistory={olderHistory}
+            categoryColors={categoryColors}
+            hiddenCategories={hiddenCategories}
+            activeWorkoutDate={activeWorkoutDate}
+            selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+            onActiveWorkoutClick={onResumeWorkout}
+            onDayClick={openDay}
+            onVisibleMonthsChange={setVisibleMonths}
+            splitDays={splitDays}
+          />
+          <WorkoutCalendarLegend
+            presentTypes={presentTypes}
+            hiddenCategories={hiddenCategories}
+            categoryColors={categoryColors}
+            onToggle={toggleCategory}
+          />
+        </>
+      )}
       {selectedDay && (
         <CalendarDayDetail
           day={selectedDay}
@@ -2452,6 +3181,8 @@ function CalendarDayDetail({
                   <small>
                     {effectiveWorkoutType(workout, types).name} ·{' '}
                     {formatMinutesDuration(workout.duration_minutes)}
+                    {sharedBodyweight(workout.exercises) !== null &&
+                      ` · at ${formatWeight(sharedBodyweight(workout.exercises)!, weightUnit)} BW`}
                   </small>
                 </span>
                 <svg className="disclosure-chevron" viewBox="0 0 20 20" aria-hidden="true">
@@ -2463,9 +3194,12 @@ function CalendarDayDetail({
                   <span>
                     {exercise.exercise_name}
                     {exercise.bodyweight_kg !== null &&
-                      ` @ ${formatWeight(exercise.bodyweight_kg, weightUnit)}`}
+                      sharedBodyweight(workout.exercises) === null &&
+                      ` · at ${formatWeight(exercise.bodyweight_kg, weightUnit)} BW`}
                   </span>
-                  <b>{exercise.set_count} sets</b>
+                  <b>
+                    {exercise.set_count} {exercise.set_count === 1 ? 'set' : 'sets'}
+                  </b>
                 </p>
               ))}
               <button
@@ -2491,18 +3225,20 @@ function CalendarDayDetail({
   );
 }
 
-function savedWorkoutBodyweight(workout: TrackedWorkout): number | null {
+function savedWorkoutBodyweight(workout: TrackedWorkout | null): number | null {
   return (
-    workout.movements.flatMap((movement) => movement.sets).find((set) => set.bodyweight_kg !== null)
+    workout?.movements.flatMap((movement) => movement.sets).find((set) => set.bodyweight_kg != null)
       ?.bodyweight_kg ?? null
   );
 }
 
 function BrowsedWorkoutDetails({
   workout,
+  bodyweight,
   categoryColor,
 }: {
   workout: TrackedWorkout;
+  bodyweight?: number | null;
   categoryColor: string;
 }) {
   const [photo, setPhoto] = useState<MachinePhoto | null>(null);
@@ -2511,6 +3247,7 @@ function BrowsedWorkoutDetails({
     <div className="browse-history-content">
       <HistoryWorkoutCard
         detailsOnly
+        bodyweight={bodyweight}
         workout={workout}
         open
         summaryRef={null}
@@ -2542,6 +3279,7 @@ function WorkoutLogger({
   navigation,
   resumingWorkout,
   currentBodyweight,
+  measurements = [],
   historicalWorkouts,
   historyBaselines = null,
   restTimerEnabled,
@@ -2551,12 +3289,15 @@ function WorkoutLogger({
   onExerciseFavorite,
   onCreateExercise,
   onSave,
-  onAutoSaved,
+  onShow,
   activeStartedAt,
   onClose,
   onDelete,
   onRestTimerChange,
-  onRestTimerComplete,
+  onRestDoneChange,
+  restGoRequest = 0,
+  screenVisible = true,
+  onLiveSummaryChange,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
@@ -2572,6 +3313,7 @@ function WorkoutLogger({
   navigation: WorkoutNavigation;
   resumingWorkout: TrackedWorkout | null;
   currentBodyweight: number | null;
+  measurements?: BodyMeasurement[];
   /** Loaded recent workouts; `historyBaselines` condenses everything older. */
   historicalWorkouts: TrackedWorkout[];
   historyBaselines?: HistoryBaselines | null;
@@ -2583,14 +3325,22 @@ function WorkoutLogger({
   onExerciseFavorite: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   onSave: (payload: WorkoutInput) => Promise<void>;
-  onAutoSaved: () => void;
+  /** Opens the workout screen from wherever the app is. */
+  onShow: () => void;
   activeStartedAt: number | null;
   onClose: () => void;
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
-  onRestTimerComplete: () => void;
+  /** When a finished rest started waiting for the next set, or null, for the tab bar's bell. */
+  onRestDoneChange?: (endedAt: number | null) => void;
+  /** Each increase opens the workout at the set after the finished rest. */
+  restGoRequest?: number;
+  /** False while the workout is minimised behind another tab. */
+  screenVisible?: boolean;
+  onLiveSummaryChange: (summary: LiveWorkoutSummary) => void;
 }) {
+  const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
   const restoredDraft = useState(() => (initialWorkout ? null : readActiveWorkoutDraft()))[0];
   const [name, setName] = useState(
@@ -2602,6 +3352,11 @@ function WorkoutLogger({
       restoredDraft?.workoutDate ??
       resumingWorkout?.workout_date ??
       initialDate,
+  );
+  const workoutBodyweight = bodyweightOn(
+    measurements,
+    workoutDate,
+    initialWorkout ? currentBodyweight : null,
   );
   const [category, setCategory] = useState<WorkoutCategory>(
     initialWorkout?.category ??
@@ -2648,6 +3403,14 @@ function WorkoutLogger({
     setCustomTypeId(type.is_custom ? type.id : null);
     setCategory(type.is_custom ? 'other' : (type.id as WorkoutCategory));
     setWorkoutTypeExplicit(true);
+    // An empty workout takes on the exercises saved to its new type; logged work is never replaced.
+    const saved = workoutTypes.savedExercises[type.id];
+    if (!readOnly && saved?.length && movements.length === 0)
+      setMovements(
+        templateMovements(
+          typeSessionTemplate(type, saved, type.name, workoutDate, weightUnit).exercises,
+        ),
+      );
   }
   useEffect(() => {
     if (
@@ -2689,6 +3452,8 @@ function WorkoutLogger({
   );
   const [endTime, setEndTime] = useState(workoutTimeInputValue(initialWorkout?.end_time ?? null));
   const sourceWorkout = initialWorkout ?? (restoredDraft ? null : resumingWorkout);
+  const tips = useTips();
+  const recentRemoval = useRef<{ kind: 'set' | 'exercise'; key: string; at: number } | null>(null);
   const [movements, setMovements] = useState<DraftMovement[]>(() =>
     sourceWorkout
       ? sourceWorkout.movements.map((movement) => ({
@@ -2703,6 +3468,7 @@ function WorkoutLogger({
           sets: movement.sets.map((item) => ({
             key: crypto.randomUUID(),
             reps: item.reps,
+            machine_photo_id: item.machine_photo_id,
             weight_kg: item.weight_kg,
             rpe: item.rpe,
             rest_seconds: item.rest_seconds,
@@ -2727,52 +3493,99 @@ function WorkoutLogger({
         }))
       : restoredDraft
         ? restoredDraftMovements
-        : (template?.exercises ?? []).map(({ exercise, plannedSets }) => ({
-            key: crypto.randomUUID(),
-            exercise,
-            notes: '',
-            machinePhotoIds: [],
-            machinePhotosInitialized: false,
-            supersetKey: null,
-            isComplete: false,
-            sets: plannedSets
-              ? plannedSets.map((set) => ({
-                  ...createWorkoutSet(exercise.kind),
-                  ...set,
-                  key: crypto.randomUUID(),
-                  warmup: set.set_type === 'warmup',
-                  completed: false,
-                  fromPrevious: true,
-                  restRevealed: false,
-                }))
-              : suggestedSetsFromHistory(
-                  historicalWorkouts,
-                  exercise,
-                  initialDate,
-                  undefined,
-                  historyBaselines && initialDate >= historyBaselines.before
-                    ? historyBaselines.byExercise
-                    : null,
-                ),
-          })),
+        : templateMovements(template?.exercises ?? []),
   );
+  /** Draft rows for planned or last-session exercises, with sets suggested from history. */
+  function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
+    return items.map(({ exercise, plannedSets, repRange }) => {
+      // A planned range suggests its target weight for working sets the plan left blank.
+      const targetWeight =
+        repRange && plannedSets && exercise.kind !== 'cardio'
+          ? progressionWeightKg(
+              progressionTarget(
+                repRange,
+                latestExerciseSets(historicalWorkouts, exercise.id, initialDate),
+                weightUnit,
+              ),
+            )
+          : null;
+      return templateMovement(exercise, plannedSets, repRange, targetWeight);
+    });
+  }
+  function templateMovement(
+    exercise: Exercise,
+    plannedSets: SessionTemplate['exercises'][number]['plannedSets'],
+    repRange: RepRange | undefined,
+    targetWeight: number | null,
+  ): DraftMovement {
+    return {
+      key: crypto.randomUUID(),
+      exercise,
+      ...(repRange && { repRange }),
+      notes: '',
+      machinePhotoIds: [],
+      machinePhotosInitialized: false,
+      supersetKey: null,
+      isComplete: false,
+      sets: plannedSets
+        ? plannedSets.map((set) => ({
+            ...createWorkoutSet(exercise.kind),
+            ...set,
+            ...(targetWeight !== null &&
+              set.weight_kg == null &&
+              set.set_type !== 'warmup' && { weight_kg: targetWeight }),
+            key: crypto.randomUUID(),
+            warmup: set.set_type === 'warmup',
+            completed: false,
+            fromPrevious: true,
+            restRevealed: false,
+          }))
+        : suggestedSetsFromHistory(
+            historicalWorkouts,
+            exercise,
+            initialDate,
+            undefined,
+            historyBaselines && initialDate >= historyBaselines.before
+              ? historyBaselines.byExercise
+              : null,
+          ),
+    };
+  }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
-  useFlipAnimation(movementStackRef, movements.map((movement) => movement.key).join('|'));
+  const animateAddedMovements = useFlipAnimation(
+    movementStackRef,
+    movements.map((movement) => movement.key).join('|'),
+  );
   const [switchingMovementKey, setSwitchingMovementKey] = useState<string | null>(null);
+  const [swapSheetMovementKey, setSwapSheetMovementKey] = useState<string | null>(null);
+  const [swapUndo, setSwapUndo] = useState<{
+    movements: DraftMovement[];
+    exerciseName: string;
+  } | null>(null);
+  const swapSheetMovement = swapSheetMovementKey
+    ? (movements.find((movement) => movement.key === swapSheetMovementKey) ?? null)
+    : null;
   const [supersetPickerKey, setSupersetPickerKey] = useState<string | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [finishConfirmationOpen, setFinishConfirmationOpen] = useState(false);
+  const [warmupReviewOpen, setWarmupReviewOpen] = useState(false);
+  /** Why the open finish confirmation cannot save yet. */
+  const [finishBlocker, setFinishBlocker] = useState<string | null>(null);
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(initialWorkout));
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
   // Paused time is left out of the live time and the saved duration; the real start is kept.
   const [pause, setPause] = useState<WorkoutPause>(() => draftPause(restoredDraft));
   const workoutPaused = !initialWorkout && pause.pausedAt !== null;
+  const [timeEditorOpen, setTimeEditorOpen] = useState(false);
   const clientSessionId = useState(() => restoredDraft?.clientSessionId ?? crypto.randomUUID())[0];
   const draftPersistedRef = useRef(Boolean(restoredDraft));
   const isCurrentDraft = useCallback(() => {
@@ -2786,6 +3599,14 @@ function WorkoutLogger({
   const resumedWorkoutId = restoredDraft?.resumingWorkoutId ?? resumingWorkout?.id ?? null;
   const previousDurationMinutes = useState(
     () => restoredDraft?.previousDurationMinutes ?? resumingWorkout?.duration_minutes ?? 0,
+  )[0];
+  // The saved version these entries were loaded from. A save names it, so the server can refuse
+  // to replace a version another device has saved since.
+  const baseRevision = useState(
+    () =>
+      initialWorkout?.revision ??
+      restoredDraft?.resumingWorkoutRevision ??
+      resumingWorkout?.revision,
   )[0];
   const initialActivity = useState(() => {
     const lastActiveAt = Math.max(
@@ -2807,7 +3628,40 @@ function WorkoutLogger({
   const lastActiveAtRef = useRef(initialActivity.lastActiveAt);
   const inactiveFinishAtRef = useRef(initialActivity.finishAt);
   const savingRef = useRef(false);
-  const finishWorkoutRef = useRef<(automaticEndAt?: number) => Promise<void>>(async () => {});
+  const autoSaveWorkoutRef = useRef<() => WorkoutInput | null>(() => null);
+  const autoSaveMinutes = useWorkoutAutoSaveMinutes();
+  const autoSaveMinutesRef = useRef(autoSaveMinutes);
+  const preparingFinishRef = useRef(false);
+  const skipRemotePersistRef = useRef(false);
+  useEffect(() => {
+    if (initialWorkout) return;
+    const apply = (event: Event) => {
+      const draft = (event as CustomEvent<ActiveWorkoutDraft | null>).detail;
+      if (!draft || draft.clientSessionId !== clientSessionId || savingRef.current) return;
+      const restored = restoreWorkoutDraftMovements(draft.movements, exercises);
+      if (!restored) return;
+      skipRemotePersistRef.current = true;
+      lastActiveAtRef.current = draft.lastActiveAt ?? draft.startedAt;
+      inactiveFinishAtRef.current =
+        draft.inactiveFinishAt ?? inactiveWorkoutFinishAt(draft.startedAt, lastActiveAtRef.current);
+      setName(draft.name);
+      setWorkoutDate(draft.workoutDate);
+      setCategory(draft.category);
+      setCustomTypeId(draft.workoutTypeId ?? null);
+      setWorkoutTypeExplicit(draft.workoutTypeExplicit ?? false);
+      setSkipHighRepWarning(draft.skipHighRepWarning ?? false);
+      setNotes(draft.notes);
+      setDurationOverrideMinutes(draft.durationOverrideMinutes ?? null);
+      setMovements(restored);
+      setPause(draftPause(draft));
+    };
+    window.addEventListener(REMOTE_WORKOUT_APPLIED, apply);
+    return () => window.removeEventListener(REMOTE_WORKOUT_APPLIED, apply);
+  }, [clientSessionId, exercises, initialWorkout]);
+  // An inactive workout is never saved unasked: it waits for Save, Resume or Discard.
+  const [inactivePromptOpen, setInactivePromptOpen] = useState(false);
+  const hasLoggedSetRef = useRef(false);
+  const persistDraftRef = useRef<() => boolean>(() => false);
   const [elapsed, setElapsed] = useState(
     initialWorkout
       ? (initialWorkout.duration_minutes ?? 0) * 60
@@ -2817,6 +3671,12 @@ function WorkoutLogger({
   // Each new rest opens the pill; hiding it tucks the countdown into the bottom-edge notch.
   const [restTotal, setRestTotal] = useState(0);
   const [restHidden, setRestHidden] = useState(false);
+  // A finished rest becomes the "GO" pill until the next set is logged, it is used or dismissed.
+  const [restDone, setRestDone] = useState<{ endedAt: number; movementKey: string | null } | null>(
+    null,
+  );
+  // The exercise (or the first of its superset) whose logged set started the rest.
+  const restMovementKeyRef = useRef<string | null>(null);
   const restNotificationEndpointRef = useRef<string | null>(null);
   const activeRestTimerRef = useRef<{
     id: string;
@@ -2848,12 +3708,13 @@ function WorkoutLogger({
     const persistDraft = () => {
       // Read synchronously: a frozen tab can wake before its storage event is delivered.
       if (savingRef.current || !isCurrentDraft()) return false;
-      const persisted = writeActiveWorkoutDraft({
+      const draft: ActiveWorkoutDraft = {
         version: 1,
         clientSessionId,
         startedAt,
         ...(resumedWorkoutId && {
           resumingWorkoutId: resumedWorkoutId,
+          resumingWorkoutRevision: baseRevision,
           previousDurationMinutes,
         }),
         updatedAt: Date.now(),
@@ -2861,6 +3722,7 @@ function WorkoutLogger({
         inactiveFinishAt: inactiveFinishAtRef.current,
         durationOverrideMinutes,
         pausedMs: pause.pausedMs,
+        ...(pause.adjustedMs !== undefined && { adjustedMs: pause.adjustedMs }),
         pausedAt: pause.pausedAt,
         name,
         workoutDate,
@@ -2877,21 +3739,39 @@ function WorkoutLogger({
           machineSettings: movement.machineSettings,
           supersetKey: movement.supersetKey,
           isComplete: movement.isComplete,
+          ...(movement.swappedFrom && { swappedFrom: movement.swappedFrom }),
+          ...(movement.repRange && { repRange: movement.repRange }),
           sets: movement.sets,
         })),
-      });
+      };
+      prepareWorkoutAutoSave(
+        draft,
+        workoutAutoSaveMinutes() === null ? null : autoSaveWorkoutRef.current(),
+      );
+      const persisted = writeActiveWorkoutDraft(draft);
       if (persisted) draftPersistedRef.current = true;
       return persisted;
     };
-    const recordActivity = () => {
+    const recordActivity = (event: Event) => {
+      if (document.visibilityState !== 'visible' || window.location.hash !== '#log') return;
+      if (event.target instanceof Element && !event.target.closest('.logger-screen, dialog'))
+        return;
       if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();
       if (now >= inactiveFinishAtRef.current) {
-        void finishWorkoutRef.current(inactiveFinishAtRef.current);
-        return;
+        if (hasLoggedSetRef.current) {
+          setInactivePromptOpen(true);
+          return;
+        }
+        // Nothing is logged yet, so returning to the workout simply continues it.
+        inactiveFinishAtRef.current = inactiveWorkoutFinishAt(startedAt, now);
+      } else {
+        inactiveFinishAtRef.current = extendInactiveWorkoutFinishAt(
+          inactiveFinishAtRef.current,
+          now,
+        );
       }
       lastActiveAtRef.current = now;
-      inactiveFinishAtRef.current = extendInactiveWorkoutFinishAt(inactiveFinishAtRef.current, now);
       if (now - lastActivityWriteAt >= 15_000) {
         lastActivityWriteAt = now;
         persistDraft();
@@ -2902,7 +3782,9 @@ function WorkoutLogger({
         persistDraft();
       }
     };
-    persistDraft();
+    if (skipRemotePersistRef.current) skipRemotePersistRef.current = false;
+    else persistDraft();
+    persistDraftRef.current = persistDraft;
     const persistBeforeRefresh = (event: Event) => {
       if (savingRef.current || !persistDraft()) event.preventDefault();
     };
@@ -2931,6 +3813,7 @@ function WorkoutLogger({
     name,
     notes,
     previousDurationMinutes,
+    baseRevision,
     resumedWorkoutId,
     startedAt,
     workoutDate,
@@ -2976,8 +3859,10 @@ function WorkoutLogger({
       activeRestTimerRef.current = null;
       setRestHidden(false);
       onRestTimerChange?.(null);
-      if (document.visibilityState === 'visible') onRestTimerComplete();
-      else if (!active.serverScheduled) void showRestTimerNotification().catch(() => undefined);
+      // The pill also waits for a return to the app after a background alert.
+      setRestDone({ endedAt: active.endsAt, movementKey: restMovementKeyRef.current });
+      if (document.visibilityState !== 'visible' && !active.serverScheduled)
+        void showRestTimerNotification().catch(() => undefined);
     };
     const interval = window.setInterval(tick, 500);
     document.addEventListener('visibilitychange', tick);
@@ -2987,7 +3872,7 @@ function WorkoutLogger({
       document.removeEventListener('visibilitychange', tick);
       window.removeEventListener('focus', tick);
     };
-  }, [restLeft, onRestTimerChange, onRestTimerComplete]);
+  }, [restLeft, onRestTimerChange]);
 
   const [undoDeletion, setUndoDeletion] = useState<{
     kind: 'set' | 'rest';
@@ -3003,18 +3888,37 @@ function WorkoutLogger({
     return () => window.clearTimeout(timer);
   }, [undoDeletion]);
 
+  useEffect(() => {
+    if (!swapUndo) return;
+    const timer = window.setTimeout(() => setSwapUndo(null), UNDO_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [swapUndo]);
+
+  /** A brief popup explaining why an action didn't happen; each one restarts the countdown. */
+  const [loggerNotice, setLoggerNotice] = useState<{ id: number; message: string } | null>(null);
+  const showLoggerNotice = (message: string) =>
+    setLoggerNotice((current) => ({ id: (current?.id ?? 0) + 1, message }));
+
+  useEffect(() => {
+    if (!loggerNotice) return;
+    const timer = window.setTimeout(() => setLoggerNotice(null), LOGGER_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [loggerNotice]);
+
   // Older history only precedes workouts inside the window it was condensed for. An earlier
   // date (editing an older loaded workout) compares with the loaded workouts alone.
   const olderHistory =
     historyBaselines && workoutDate >= historyBaselines.before ? historyBaselines.byExercise : null;
   const prBadges = useMemo(
     () =>
-      calculateDraftPrs(
+      calculateScopedDraftPrs(
         movements,
         historicalWorkouts,
         initialWorkout?.id ?? resumedWorkoutId,
         workoutDate,
         olderHistory,
+        trainingBlocks.blocks,
+        measurements,
       ),
     [
       movements,
@@ -3023,6 +3927,8 @@ function WorkoutLogger({
       resumedWorkoutId,
       workoutDate,
       olderHistory,
+      trainingBlocks.blocks,
+      measurements,
     ],
   );
   const completedSetKeysRef = useRef(
@@ -3071,6 +3977,7 @@ function WorkoutLogger({
               labels,
               reps: item.reps!,
               weightKg: item.weight_kg!,
+              bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
             });
           }
         }
@@ -3082,7 +3989,7 @@ function WorkoutLogger({
       setPrToastId((current) => current + 1);
       setPrToastEntries(entries);
     }
-  }, [movements, prBadges]);
+  }, [movements, prBadges, measurements, workoutDate]);
   const recentExerciseIds = useMemo(() => {
     const seen = new Set<string>();
     const recent: string[] = [];
@@ -3096,8 +4003,31 @@ function WorkoutLogger({
     });
     return recent;
   }, [historicalWorkouts]);
+  const lastDoneDates = useMemo(
+    () =>
+      exerciseLastDoneDates(
+        historicalWorkouts,
+        historyBaselines?.byExercise ?? null,
+        initialWorkout?.id ?? resumedWorkoutId,
+      ),
+    [historicalWorkouts, historyBaselines, initialWorkout?.id, resumedWorkoutId],
+  );
 
-  function suggestedSetsForExercise(exercise: Exercise): DraftSet[] {
+  /** Suggestions from the chosen machine's last session, else the exercise's last session. */
+  function suggestedSetsForExercise(exercise: Exercise, machineId?: string): DraftSet[] {
+    const onMachine =
+      machineId &&
+      historyOnMachine(
+        recentExerciseHistory(
+          historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
+          exercise.id,
+          initialWorkout?.id,
+          Number.POSITIVE_INFINITY,
+        ),
+        machineId,
+        new Map(),
+      ).find((entry) => entry.sets.length)?.sets;
+    if (onMachine) return withSuggestedSets([], onMachine, exercise.kind);
     return suggestedSetsFromHistory(
       historicalWorkouts,
       exercise,
@@ -3112,20 +4042,24 @@ function WorkoutLogger({
     createSuperset = false,
     machineChoices: ExerciseMachineChoices = {},
   ) {
+    animateAddedMovements();
     setMovements((current) => {
       const merged = mergeUniqueById(
         current.map((item) => item.exercise),
         selected,
       );
-      const additions = merged.slice(current.length).map((exercise) => ({
-        key: crypto.randomUUID(),
-        exercise,
-        notes: '',
-        ...machineSelection(exercise.id, machineChoices),
-        supersetKey: null,
-        isComplete: false,
-        sets: suggestedSetsForExercise(exercise),
-      }));
+      const additions = merged.slice(current.length).map((exercise) => {
+        const machine = machineSelection(exercise.id, machineChoices);
+        return {
+          key: crypto.randomUUID(),
+          exercise,
+          notes: '',
+          ...machine,
+          supersetKey: null,
+          isComplete: false,
+          sets: suggestedSetsForExercise(exercise, machine.machinePhotoIds[0]),
+        };
+      });
       const nextMovements = [...current, ...additions];
       return createSuperset && additions.length >= 2
         ? applySupersetSelection(
@@ -3136,6 +4070,14 @@ function WorkoutLogger({
           )
         : nextMovements;
     });
+    if (
+      recentRemoval.current?.kind === 'exercise' &&
+      Date.now() - recentRemoval.current.at < 120000 &&
+      selected.length &&
+      historicalWorkouts.filter((workout) => !workout.is_sample).length >= 5
+    )
+      tips.event('replace-exercise', 'swap');
+    recentRemoval.current = null;
     setPickerOpen(false);
   }
 
@@ -3144,22 +4086,37 @@ function WorkoutLogger({
     setSwitchingMovementKey(null);
   }
 
+  /** Logged sets stay with the original exercise; planned sets move to the replacement. */
+  function swapExercise(
+    movementKey: string,
+    replacement: Exercise,
+    machineChoices: ExerciseMachineChoices = {},
+  ) {
+    const machine = machineSelection(replacement.id, machineChoices);
+    const next = swapMovementExercise(
+      movements,
+      movementKey,
+      replacement,
+      suggestedSetsForExercise(replacement, machine.machinePhotoIds[0]),
+      machine,
+    );
+    if (next === movements) return;
+    tips.learn('swap');
+    setSwapUndo({ movements, exerciseName: replacement.name });
+    setMovements(next);
+  }
+
   function switchExercise(selected: Exercise[], machineChoices: ExerciseMachineChoices = {}) {
     const replacement = selected[0];
     if (!switchingMovementKey || !replacement) return;
-    const suggestedSets = suggestedSetsForExercise(replacement);
-    setMovements((current) =>
-      replaceMovementExercise(current, switchingMovementKey, replacement).map((movement) =>
-        movement.key === switchingMovementKey
-          ? {
-              ...movement,
-              ...machineSelection(replacement.id, machineChoices),
-              sets: suggestedSets,
-            }
-          : movement,
-      ),
-    );
+    swapExercise(switchingMovementKey, replacement, machineChoices);
     closeExercisePicker();
+  }
+
+  function undoSwap() {
+    if (!swapUndo) return;
+    setMovements(swapUndo.movements);
+    setSwapUndo(null);
   }
 
   function moveMovement(index: number, direction: -1 | 1) {
@@ -3167,6 +4124,7 @@ function WorkoutLogger({
   }
 
   function moveSet(movementKey: string, fromIndex: number, toIndex: number) {
+    tips.learn('reorder');
     setMovements((current) =>
       current.map((movement) =>
         movement.key === movementKey
@@ -3178,9 +4136,10 @@ function WorkoutLogger({
 
   function deleteSet(movement: DraftMovement, index: number) {
     if (movement.sets.length === 1) {
-      setError('An exercise needs at least one set. Remove the exercise instead.');
+      showLoggerNotice('An exercise needs at least one set. Remove the exercise instead.');
       return;
     }
+    recentRemoval.current = { kind: 'set', key: movement.key, at: Date.now() };
     const deleted = movement.sets[index];
     setMovements((current) =>
       current.map((item) =>
@@ -3199,6 +4158,7 @@ function WorkoutLogger({
 
   function undoLastDeletion() {
     if (!undoDeletion) return;
+    recentRemoval.current = null;
     setMovements((current) =>
       current.map((movement) => {
         if (movement.key !== undoDeletion.movementKey) return movement;
@@ -3236,9 +4196,11 @@ function WorkoutLogger({
   }
 
   function saveSuperset(movementKey: string, partnerKeys: string[]) {
-    setMovements((items) =>
-      applySupersetSelection(items, movementKey, partnerKeys, crypto.randomUUID()),
-    );
+    setMovements((items) => {
+      const grouped = applySupersetSelection(items, movementKey, partnerKeys, crypto.randomUUID());
+      const groupKey = grouped.find((item) => item.key === movementKey)?.supersetKey;
+      return groupKey ? keepSupersetTogether(grouped, groupKey) : grouped;
+    });
     closeSupersetPicker();
   }
 
@@ -3278,6 +4240,7 @@ function WorkoutLogger({
       pendingSchedules: new Set<Promise<void>>(),
     };
     activeRestTimerRef.current = timer;
+    setRestDone(null);
     setRestLeft(seconds);
     setRestTotal(seconds);
     setRestHidden(false);
@@ -3330,6 +4293,7 @@ function WorkoutLogger({
     activeRestTimerRef.current = null;
     setRestLeft(0);
     setRestHidden(false);
+    setRestDone(null);
     onRestTimerChange?.(null);
     void dismissRestTimerNotifications().catch(() => undefined);
     if (timer) cancelRestTimerPush(timer);
@@ -3373,9 +4337,44 @@ function WorkoutLogger({
   // A closed workout leaves no rest countdown on the tab bar.
   useEffect(() => () => onRestTimerChange?.(null), [onRestTimerChange]);
 
-  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleSetGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const [weeklySetsUpdate, setWeeklySetsUpdate] = useState<WeeklySetsUpdate | null>(null);
   const weeklySetsUpdateId = useRef(0);
+  // Sets added with Add set in this session: ticking one never folds its exercise away.
+  const addedSetKeys = useRef(new Set<string>());
+
+  function completeExercise(movement: DraftMovement, isComplete: boolean) {
+    const sets = isComplete
+      ? completeRemainingSets(movement.exercise.kind, movement.sets)
+      : movement.sets;
+    if (isComplete && hasUnassignedMachineSets(movement.machinePhotoIds, sets)) {
+      setMachineAssignmentError(movement.exercise.name);
+      return;
+    }
+    const newlyCompletedWorkingSets = sets.filter(
+      (set, index) => !movement.sets[index].completed && isCompletedWorkingSet(set),
+    ).length;
+    if (newlyCompletedWorkingSets && !initialWorkout) {
+      const gains = exerciseSetGains(
+        movement.exercise,
+        weeklySets,
+        workoutDate,
+        localDate(),
+        movement.sets.filter(isCompletedWorkingSet).length,
+        newlyCompletedWorkingSets,
+      );
+      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
+    }
+    setMovements((current) =>
+      current.map((item) =>
+        item.key === movement.key
+          ? { ...item, isComplete: isComplete && sets.every((set) => set.completed), sets }
+          : item,
+      ),
+    );
+  }
 
   function updateSet(movementKey: string, setKey: string, update: Partial<DraftSet>) {
     const movement = movements.find((item) => item.key === movementKey);
@@ -3393,11 +4392,57 @@ function WorkoutLogger({
         ? restTimerSecondsAfterSetUpdate(movement.exercise.kind, currentSet, update)
         : null;
     const loggingSet = update.completed === true && currentSet?.completed === false;
+    // In a superset or tri-set, go straight to the next exercise and rest after the round.
+    const nextInRound =
+      loggingSet && movement?.supersetKey
+        ? nextInSupersetRound(
+            movements.map((item) =>
+              item.key === movementKey
+                ? {
+                    ...item,
+                    sets: item.sets.map((set) =>
+                      set.key === setKey ? { ...set, completed: true } : set,
+                    ),
+                  }
+                : item,
+            ),
+            movementKey,
+          )
+        : null;
+    if (loggingSet && !initialWorkout) tips.event('set-completed');
+    if (
+      loggingSet &&
+      !initialWorkout &&
+      movement?.exercise.kind !== 'cardio' &&
+      setKindOf({ ...currentSet, ...update }) === 'warmup'
+    )
+      tips.event('warmup-logged', 'setType');
+    if (
+      currentSet &&
+      setKindOf(currentSet) === 'warmup' &&
+      ('set_type' in update || 'warmup' in update) &&
+      setKindOf({ ...currentSet, ...update }) !== 'warmup'
+    )
+      tips.learn('setType');
+    if (loggingSet && movement?.exercise.kind === 'cardio')
+      tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
-    if (loggingSet && movement && currentSet && !initialWorkout) {
-      const gains = isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update))
-        ? weeklySetGains(movement.exercise, weeklySets, workoutDate, localDate())
-        : [];
+    // Ticking the last open set finishes the exercise: its weekly totals show once, for all of
+    // its sets, and a planned exercise folds away. A set added by hand keeps the card open.
+    const finishesExercise =
+      loggingSet &&
+      !!movement &&
+      !initialWorkout &&
+      movement.sets.every((item) => item.key === setKey || item.completed);
+    if (finishesExercise && movement && currentSet) {
+      const gains = exerciseSetGains(
+        movement.exercise,
+        weeklySets,
+        workoutDate,
+        localDate(),
+        movement.sets.filter(isCompletedWorkingSet).length,
+        isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update)) ? 1 : 0,
+      );
       if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
     } else if (update.completed === false && currentSet?.completed) {
       setWeeklySetsUpdate(null);
@@ -3415,14 +4460,23 @@ function WorkoutLogger({
             ? workoutSetAfterEdit(item, {
                 restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
                 ...update,
-                ...(update.completed === true && { restRevealed: true }),
+                ...(update.completed === true && {
+                  restRevealed: true,
+                  ...(movement.exercise.kind === 'strength' && {
+                    bodyweight_kg: item.bodyweight_kg ?? workoutBodyweight,
+                  }),
+                }),
                 ...(update.rest_seconds !== undefined && { restConfirmed: true }),
               })
             : item,
         );
         return {
           ...movement,
-          isComplete: movement.isComplete && sets.every((set) => set.completed),
+          isComplete:
+            (movement.isComplete ||
+              (finishesExercise && sets.length > 1 && !addedSetKeys.current.has(setKey))) &&
+            sets.every((set) => set.completed) &&
+            !hasUnassignedMachineSets(movement.machinePhotoIds, sets),
           sets:
             loggingSet || correctingLoggedSet
               ? suggestNextSetFromLoggedSet(
@@ -3434,28 +4488,71 @@ function WorkoutLogger({
         };
       }),
     );
-    if (restSeconds !== null) startRestTimer(restSeconds);
+    if (loggingSet) setRestDone(null);
+    if (restSeconds !== null && !nextInRound) {
+      restMovementKeyRef.current = movement?.supersetKey
+        ? (movements.find((item) => item.supersetKey === movement.supersetKey)?.key ?? movementKey)
+        : movementKey;
+      startRestTimer(restSeconds);
+    }
+    if (nextInRound && !initialWorkout) {
+      window.requestAnimationFrame(() =>
+        [...(movementStackRef.current?.querySelectorAll<HTMLElement>('[data-flip-key]') ?? [])]
+          .find((card) => card.dataset.flipKey === nextInRound.key)
+          ?.scrollIntoView?.({ block: 'nearest', behavior: motionReduced() ? 'auto' : 'smooth' }),
+      );
+    }
   }
+
+  const warmupOnlyMovements: WarmupOnlyMovement[] = movements
+    .filter((movement) => movement.exercise.kind !== 'cardio' && loggedOnlyWarmups(movement.sets))
+    .map((movement) => ({
+      key: movement.key,
+      name: movement.exercise.name,
+      iconUrl: exerciseIconFor(movement.exercise),
+      sets: movement.sets,
+    }));
+
+  const tickedSetCount = movements.reduce(
+    (total, movement) => total + movement.sets.filter((item) => item.completed).length,
+    0,
+  );
+  const untickedSetCount = movements.reduce(
+    (total, movement) => total + movement.sets.filter((item) => !item.completed).length,
+    0,
+  );
 
   function toggleSet(movement: DraftMovement, item: DraftSet) {
     updateSet(movement.key, item.key, { completed: !item.completed });
   }
 
-  function addSet(movement: DraftMovement) {
+  /** Adds a set at `position` (the end by default), copying the set above it, or set 1 at the start. */
+  function addSet(movement: DraftMovement, position?: number) {
+    if (
+      recentRemoval.current?.kind === 'set' &&
+      recentRemoval.current.key === movement.key &&
+      Date.now() - recentRemoval.current.at < 120000
+    )
+      tips.event('re-add-set', 'reorder');
+    recentRemoval.current = null;
     setMovements((current) =>
-      current.map((item) =>
-        item.key === movement.key
-          ? {
-              ...item,
-              isComplete: false,
-              sets: [...item.sets, emptySet(item.exercise.kind, item.sets.at(-1))],
-            }
-          : item,
-      ),
+      current.map((item) => {
+        if (item.key !== movement.key) return item;
+        const at = Math.min(Math.max(position ?? item.sets.length, 0), item.sets.length);
+        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1]);
+        markSetAdded(added.key);
+        addedSetKeys.current.add(added.key);
+        return {
+          ...item,
+          isComplete: false,
+          sets: [...item.sets.slice(0, at), added, ...item.sets.slice(at)],
+        };
+      }),
     );
   }
 
   function removeMovement(key: string) {
+    recentRemoval.current = { kind: 'exercise', key, at: Date.now() };
     setMovements((current) => current.filter((item) => item.key !== key));
   }
 
@@ -3464,71 +4561,171 @@ function WorkoutLogger({
     setPickerOpen(true);
   }
 
-  async function finishWorkout(automaticEndAt?: number) {
-    if (savingRef.current) return;
-    if (!initialWorkout && !isCurrentDraft()) return;
+  // An explicit type keeps its identity in the live heading and the saved workout, except
+  // Cardio on a workout with no cardio, which would file a strength session as cardio.
+  const inferTypeFromExercises =
+    !initialWorkout &&
+    !resumedWorkoutId &&
+    !customTypeId &&
+    (!workoutTypeExplicit ||
+      isCardioTypeWithoutCardio(
+        category,
+        movements.map((movement) => movement.exercise),
+      ));
+
+  /** Checks whether the workout can be saved now, without saving it. */
+  function checkFinish(inactiveEndAt?: number) {
+    const blocked = (message: string) => ({ kind: 'blocked' as const, message });
     if (workoutTypes.loading) {
-      setError('Workout types are still loading. Please try saving again in a moment.');
-      return;
+      return blocked('Workout types are still loading. Please try saving again in a moment.');
     }
     if (customTypeId && selectedType.id !== customTypeId) {
-      setError('Your workout type could not load. Reload workout types or choose another type.');
-      return;
+      return blocked(
+        'Your workout type could not load. Reload workout types or choose another type.',
+      );
     }
     if (!typeOptions.some((type) => type.id === selectedType.id)) {
-      setError('Choose an available workout type. Add or restore types in Settings if needed.');
-      return;
+      return blocked(
+        'Choose an available workout type. Add or restore types in Settings if needed.',
+      );
     }
     if (selectedType.archived && !initialWorkout && !resumedWorkoutId) {
-      setError('This workout type was removed. Choose another type before saving.');
-      return;
+      return blocked('This workout type was removed. Choose another type before saving.');
     }
-    const finishedAt = automaticEndAt ?? Date.now();
+    const finishedAt = inactiveEndAt ?? Date.now();
+    const movementsToSave = movements.map((movement) => ({
+      ...movement,
+      sets: movement.sets.map((item) => {
+        const set =
+          inactiveEndAt === undefined ? item : workoutSetForAutoSave(movement.exercise.kind, item);
+        // A live workout never records a ticked set with nothing in it (such as one ticked
+        // before this check existed); it is kept as an unticked set instead.
+        return !initialWorkout &&
+          set.completed &&
+          !hasRecordedPerformance(movement.exercise.kind, set)
+          ? { ...set, completed: false }
+          : set;
+      }),
+    }));
+    const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
+    const unassigned = movementsToSave.find((movement) =>
+      hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
+    );
+    if (unassigned) return { kind: 'machines' as const, exercise: unassigned.exercise.name };
     const durationMinutes = initialWorkout
-      ? editedDurationMinutes
+      ? Math.max(editedDurationMinutes, Math.ceil(cardioDurationSeconds / 60))
       : completedWorkoutDurationMinutes(
           previousDurationMinutes,
           startedAt,
           finishedAt,
           durationOverrideMinutes,
-          pausedMsAt(pause, finishedAt),
+          clockOffsetMsAt(pause, finishedAt),
+          cardioDurationSeconds,
         );
-    const movementsToSave =
-      automaticEndAt === undefined
-        ? movements
-        : movements.map((movement) => ({
-            ...movement,
-            sets: movement.sets.map((item) => workoutSetForAutoSave(movement.exercise.kind, item)),
-          }));
     const completed = movementsToSave
       .flatMap((movement) => movement.sets)
       .filter((item) => item.completed);
     if (!movements.length || !completed.length) {
-      setError(
+      return blocked(
         !movements.length
           ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
           : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
       );
-      return;
     }
     if (initialWorkout && Boolean(startTime) !== Boolean(endTime)) {
-      setError('Enter both a workout start time and end time, or leave both blank.');
+      return blocked('Enter both a workout start time and end time, or leave both blank.');
+    }
+    if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
+      return blocked('Clear the start and end times to save a 24-hour workout.');
+    }
+    if (durationMinutes > 1440) {
+      return blocked(
+        cardioDurationSeconds > 1440 * 60
+          ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
+          : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
+      );
+    }
+    return { kind: 'ready' as const, movementsToSave, durationMinutes, cardioDurationSeconds };
+  }
+
+  /** Opens the finish confirmation, explaining there what must change before it can save. */
+  function openFinishConfirmation() {
+    const check = checkFinish();
+    if (check.kind === 'machines') {
+      setMachineAssignmentError(check.exercise);
       return;
     }
-    if (!initialWorkout && durationOverrideMinutes === null && durationMinutes > 1440) {
-      setError(
-        'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
-      );
+    if (check.kind === 'ready' && warmupOnlyMovements.length) {
+      // The warm-up reminder doubles as the finish confirmation.
+      setWarmupReviewOpen(true);
       return;
+    }
+    setFinishBlocker(check.kind === 'blocked' ? check.message : null);
+    setFinishConfirmationOpen(true);
+  }
+
+  function confirmFinish() {
+    const check = checkFinish();
+    if (check.kind === 'blocked') {
+      setFinishBlocker(check.message);
+      return;
+    }
+    setFinishConfirmationOpen(false);
+    void finishWorkout();
+  }
+
+  /** Resolves true once the workout is handed over for saving. */
+  async function finishWorkout(inactiveEndAt?: number): Promise<boolean> {
+    if (savingRef.current || preparingFinishRef.current) return false;
+    if (!initialWorkout && !isCurrentDraft()) return false;
+    let sharedFields: Partial<WorkoutInput> = {};
+    if (!initialWorkout) {
+      preparingFinishRef.current = true;
+      try {
+        persistDraftRef.current();
+        sharedFields = await sharedWorkoutFinishFields();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not sync this workout.');
+        return false;
+      } finally {
+        preparingFinishRef.current = false;
+      }
+    }
+    const check = checkFinish(inactiveEndAt);
+    if (check.kind === 'machines') {
+      setMachineAssignmentError(check.exercise);
+      return false;
+    }
+    if (check.kind === 'blocked') {
+      setError(check.message);
+      return false;
     }
     savingRef.current = true;
     setSaving(true);
     setError(null);
+    try {
+      cancelRestTimer();
+      await onSave({ ...sharedFields, ...finishedWorkoutInput(check) });
+      return true;
+    } catch (saveError) {
+      savingRef.current = false;
+      setError(saveError instanceof Error ? saveError.message : 'Could not save the workout.');
+      setSaving(false);
+      return false;
+    }
+  }
+
+  /** The workout a ready check saves, without the shared-draft fields added when finishing. */
+  function finishedWorkoutInput({
+    movementsToSave,
+    durationMinutes,
+    cardioDurationSeconds,
+  }: Extract<ReturnType<typeof checkFinish>, { kind: 'ready' }>): WorkoutInput {
     let completedIdentity = finalizeWorkoutIdentity(
       movements.map((movement) => movement.exercise),
       category,
       name,
-      !initialWorkout && !resumedWorkoutId && !workoutTypeExplicit && !customTypeId,
+      inferTypeFromExercises,
       customTypeId ? selectedType : null,
     );
     if (
@@ -3542,69 +4739,94 @@ function WorkoutLogger({
         false,
       );
     }
-    try {
-      cancelRestTimer();
-      await onSave({
-        ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
-        name: completedIdentity.name,
-        workout_date: workoutDate,
-        category: completedIdentity.category,
-        workout_type_id: customTypeId,
-        notes: notes.trim() || null,
-        duration_minutes: durationMinutes,
-        start_time: initialWorkout && startTime && endTime ? startTime : null,
-        end_time: initialWorkout && startTime && endTime ? endTime : null,
-        movements: movementsToSave.map((movement) => ({
-          exercise_id: movement.exercise.id,
-          notes: movement.notes.trim() || null,
-          machine_photo_ids: movement.machinePhotoIds,
-          machine_settings: movement.machineSettings ?? [],
-          sets: movement.sets.map((item) => ({
-            reps: item.reps,
-            weight_kg: item.weight_kg,
-            rpe: item.rpe,
-            rest_seconds: item.rest_seconds,
-            duration_seconds: item.duration_seconds,
-            distance_km: item.distance_km,
-            calories_kcal: item.calories_kcal,
-            average_heart_rate_bpm: item.average_heart_rate_bpm,
-            incline_percent: item.incline_percent ?? null,
-            speed_kph: item.speed_kph ?? null,
-            bodyweight_kg: item.bodyweight_kg,
-            percentile: item.percentile,
-            warmup: item.warmup,
-            set_type: item.set_type,
-            failed: item.failed,
-            target_reps: item.target_reps,
-            notes: item.notes,
-            completed: item.completed,
-          })),
-          superset_key: movement.supersetKey,
+    return {
+      ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
+      ...((initialWorkout || resumedWorkoutId) &&
+        baseRevision !== undefined && { base_revision: baseRevision }),
+      name: completedIdentity.name,
+      workout_date: workoutDate,
+      category: completedIdentity.category,
+      workout_type_id: customTypeId,
+      notes: notes.trim() || null,
+      duration_minutes: durationMinutes,
+      start_time: initialWorkout && startTime && endTime ? startTime : null,
+      end_time:
+        initialWorkout && startTime && endTime
+          ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
+          : null,
+      movements: movementsToSave.map((movement) => ({
+        exercise_id: movement.exercise.id,
+        notes: movement.notes.trim() || null,
+        machine_photo_ids: movement.machinePhotoIds,
+        machine_settings: movement.machineSettings ?? [],
+        sets: movement.sets.map((item) => ({
+          reps: item.reps,
+          machine_photo_id:
+            item.machine_photo_id ??
+            (movement.machinePhotoIds.length === 1 ? movement.machinePhotoIds[0] : null),
+          weight_kg: item.weight_kg,
+          rpe: item.rpe,
+          rest_seconds: item.rest_seconds,
+          duration_seconds: item.duration_seconds,
+          distance_km: item.distance_km,
+          calories_kcal: item.calories_kcal,
+          average_heart_rate_bpm: item.average_heart_rate_bpm,
+          incline_percent: item.incline_percent ?? null,
+          speed_kph: item.speed_kph ?? null,
+          bodyweight_kg: item.bodyweight_kg,
+          percentile: item.percentile,
+          warmup: item.warmup,
+          set_type: item.set_type,
+          failed: item.failed,
+          target_reps: item.target_reps,
+          notes: item.notes,
+          completed: item.completed,
         })),
-      });
-      if (automaticEndAt !== undefined) {
-        onAutoSaved();
-        void showWorkoutAutoSavedNotification().catch(() => undefined);
-      }
-    } catch (saveError) {
-      savingRef.current = false;
-      setError(saveError instanceof Error ? saveError.message : 'Could not save the workout.');
-      setSaving(false);
-    }
+        superset_key: movement.supersetKey,
+      })),
+    };
   }
+  // What Save in the inactive-workout prompt would save, prepared with each draft revision so
+  // auto-save can save it on the server after the app is closed.
+  autoSaveWorkoutRef.current = () => {
+    if (initialWorkout) return null;
+    const check = checkFinish(inactiveFinishAtRef.current);
+    return check.kind === 'ready' ? finishedWorkoutInput(check) : null;
+  };
 
-  finishWorkoutRef.current = finishWorkout;
+  const loggedSetCount = initialWorkout
+    ? 0
+    : movements.reduce(
+        (total, movement) =>
+          total +
+          movement.sets.filter((item) => isWorkoutSetAutoSavable(movement.exercise.kind, item))
+            .length,
+        0,
+      );
+  hasLoggedSetRef.current = loggedSetCount > 0;
+
+  useEffect(() => {
+    // A changed auto-save time moves the cutoff of the workout in progress too.
+    if (autoSaveMinutesRef.current === autoSaveMinutes) return;
+    autoSaveMinutesRef.current = autoSaveMinutes;
+    if (initialWorkout) return;
+    inactiveFinishAtRef.current = inactiveWorkoutFinishAt(startedAt, lastActiveAtRef.current);
+    persistDraftRef.current();
+  }, [autoSaveMinutes, initialWorkout, startedAt]);
+
+  function continueInactiveWorkout() {
+    const now = Date.now();
+    lastActiveAtRef.current = now;
+    inactiveFinishAtRef.current = inactiveWorkoutFinishAt(startedAt, now);
+    persistDraftRef.current();
+    setInactivePromptOpen(false);
+  }
 
   useEffect(() => {
     if (initialWorkout) return;
-    const hasSavableSet = movements.some((movement) =>
-      movement.sets.some((item) => isWorkoutSetAutoSavable(movement.exercise.kind, item)),
-    );
     const checkForInactiveWorkout = () => {
-      if (!hasSavableSet || savingRef.current) return;
-      const now = Date.now();
-      if (now < inactiveFinishAtRef.current) return;
-      void finishWorkoutRef.current(inactiveFinishAtRef.current);
+      if (!hasLoggedSetRef.current || savingRef.current) return;
+      if (Date.now() >= inactiveFinishAtRef.current) setInactivePromptOpen(true);
     };
     checkForInactiveWorkout();
     const interval = window.setInterval(checkForInactiveWorkout, 30_000);
@@ -3655,12 +4877,11 @@ function WorkoutLogger({
     setNameEditorOpen(true);
   };
 
-  // Explicit choices retain their identity in both the live heading and the saved workout.
   let liveIdentity = finalizeWorkoutIdentity(
     movements.map((movement) => movement.exercise),
     category,
     name,
-    !initialWorkout && !resumedWorkoutId && !workoutTypeExplicit && !customTypeId,
+    inferTypeFromExercises,
     customTypeId ? selectedType : null,
   );
   if (
@@ -3675,13 +4896,102 @@ function WorkoutLogger({
     );
   }
 
+  const supersetLabel = (groupKey: string | null) => {
+    if (!groupKey) return null;
+    const names = movements
+      .filter((item) => item.supersetKey === groupKey)
+      .map((item) => item.exercise.name);
+    return `${supersetGroupName(names.length)} · ${names.join(' + ')}`;
+  };
+
+  useEffect(() => {
+    if (initialWorkout) return;
+    onLiveSummaryChange({
+      name: liveIdentity.name,
+      loggedSets: completedSets.length,
+      previousDurationMinutes,
+      durationOverrideMinutes,
+      paused: workoutPaused,
+    });
+  }, [
+    initialWorkout,
+    onLiveSummaryChange,
+    liveIdentity.name,
+    completedSets.length,
+    previousDurationMinutes,
+    durationOverrideMinutes,
+    workoutPaused,
+  ]);
+
+  const revealDetails = (selector: string) => {
+    setDetailsOpen(true);
+    window.requestAnimationFrame(() => {
+      const field = detailsRef.current?.querySelector<HTMLElement>(selector);
+      field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      field?.focus({ preventScroll: true });
+    });
+  };
+
   const restActive = restTimerEnabled && restLeft > 0;
   // A live rest shows the rest pill, or the bottom-edge notch while hidden.
   const showTimerDock = !initialWorkout && restActive;
-  const dockSpacing = !showTimerDock ? '' : restHidden ? 'has-rest-notch' : 'has-rest-pill';
+  const showRestDone = !initialWorkout && restTimerEnabled && !restActive && restDone !== null;
+  const dockSpacing = showRestDone
+    ? 'has-rest-notch'
+    : !showTimerDock
+      ? ''
+      : restHidden
+        ? 'has-rest-notch'
+        : 'has-rest-pill';
+  const restNextSet = restDone
+    ? nextSetAfterRest(movements, restDone.movementKey, weightUnit)
+    : null;
+
+  // The tab bar's bell rings while a finished rest waits, for as long as the workout is live.
+  const finishedRestAt = showRestDone ? restDone.endedAt : null;
+  useEffect(() => {
+    onRestDoneChange?.(finishedRestAt);
+  }, [finishedRestAt, onRestDoneChange]);
+  useEffect(() => () => onRestDoneChange?.(null), [onRestDoneChange]);
+
+  // Tapping the ringing bell on the tab bar opens the workout at the next set.
+  const handledRestGoRequest = useRef(restGoRequest);
+  useEffect(() => {
+    if (restGoRequest === handledRestGoRequest.current) return;
+    handledRestGoRequest.current = restGoRequest;
+    goToRestNextSet();
+    // Only a new request from the bell; the function changes on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restGoRequest]);
+
+  /** Opens the workout if it is minimised and brings the set after the finished rest into view. */
+  function goToRestNextSet() {
+    setRestDone(null);
+    if (!screenVisible) onShow();
+    if (!restNextSet) return;
+    const { setKey, movementKey } = restNextSet;
+    // Wait for a minimised workout to show before scrolling within it.
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        const stack = movementStackRef.current;
+        const find = (selector: string, matches: (element: HTMLElement) => boolean) =>
+          [...(stack?.querySelectorAll<HTMLElement>(selector) ?? [])].find(matches);
+        const target =
+          find('[data-set-key]', (row) => row.dataset.setKey === setKey) ??
+          find('[data-flip-key]', (card) => card.dataset.flipKey === movementKey);
+        target?.scrollIntoView?.({
+          block: 'center',
+          behavior: motionReduced() ? 'auto' : 'smooth',
+        });
+      }),
+    );
+  }
 
   return (
-    <section className={`logger-screen content-page ${dockSpacing}`} inert={saving}>
+    <section
+      className={`logger-screen content-page${!initialWorkout ? ' is-live-workout' : ''} ${dockSpacing}`}
+      inert={saving}
+    >
       {prToastEntries.length > 0 && (
         <PrToast key={`pr-toast-${prToastId}`} entries={prToastEntries} onClose={closePrToast} />
       )}
@@ -3689,52 +4999,77 @@ function WorkoutLogger({
         (motionReduced() ? null : (
           <ConfettiBurst key={prConfettiBurst} onComplete={() => setPrConfettiBurst(0)} />
         ))}
-      <OverlayScreenHeader
-        title={liveIdentity.name}
-        subtitle={
-          <WorkoutHeaderMeta
-            durationLabel={
-              initialWorkout
-                ? `${readOnly ? 'View only \u00b7 ' : ''}${formatDuration(displayedDurationSeconds)}`
-                : workoutPaused
-                  ? formatDuration(elapsed)
-                  : `Live ${formatDuration(elapsed)}`
-            }
-            paused={workoutPaused}
-            onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
-          />
-        }
-        onBack={onClose}
-        onTitleClick={readOnly ? undefined : openNameEditor}
-        titleActionLabel="Edit workout name"
-        actions={
-          readOnly ? undefined : (
-            <>
-              <button
-                ref={deleteButtonRef}
-                className="overlay-header-action delete"
-                type="button"
-                onClick={() => setDeleteConfirmationOpen(true)}
-                aria-label={resumedWorkoutId ? 'Discard resumed session' : 'Delete workout'}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
-                </svg>
-              </button>
-              <button
-                className="overlay-header-action add"
-                type="button"
-                onClick={openExercisePicker}
-                aria-label="Add exercise"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            </>
-          )
-        }
-      />
+      {!initialWorkout ? (
+        <LiveWorkoutHeader
+          name={liveIdentity.name}
+          durationLabel={
+            workoutPaused
+              ? formatDuration(displayedDurationSeconds)
+              : `Live ${formatDuration(displayedDurationSeconds)}`
+          }
+          loggedSets={completedSets.length}
+          paused={workoutPaused}
+          menuButtonRef={deleteButtonRef}
+          onMinimise={onClose}
+          onRename={openNameEditor}
+          onAdjustTime={() => setTimeEditorOpen(true)}
+          onAddNote={() => revealDetails('.workout-notes textarea')}
+          onTogglePause={toggleWorkoutPause}
+          onAddExercise={openExercisePicker}
+          onDiscard={() => setDeleteConfirmationOpen(true)}
+          discardLabel={resumedWorkoutId ? 'Discard session' : 'Discard workout'}
+          saving={saving}
+          onFinish={openFinishConfirmation}
+        />
+      ) : (
+        <OverlayScreenHeader
+          title={liveIdentity.name}
+          subtitle={
+            <WorkoutHeaderMeta
+              durationLabel={
+                initialWorkout
+                  ? `${readOnly ? 'View only \u00b7 ' : ''}${formatDuration(displayedDurationSeconds)}`
+                  : workoutPaused
+                    ? formatDuration(elapsed)
+                    : `Live ${formatDuration(elapsed)}`
+              }
+              paused={workoutPaused}
+              onTogglePause={initialWorkout || readOnly ? undefined : toggleWorkoutPause}
+            />
+          }
+          onBack={onClose}
+          onTitleClick={readOnly ? undefined : openNameEditor}
+          titleActionLabel="Edit workout name"
+          actions={
+            readOnly ? undefined : (
+              <>
+                <button
+                  ref={deleteButtonRef}
+                  className="overlay-header-action delete"
+                  type="button"
+                  onClick={() => setDeleteConfirmationOpen(true)}
+                  aria-label={resumedWorkoutId ? 'Discard resumed session' : 'Delete workout'}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
+                  </svg>
+                </button>
+                <button
+                  className="overlay-header-action add"
+                  type="button"
+                  onClick={openExercisePicker}
+                  aria-label="Add exercise"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </>
+            )
+          }
+        />
+      )}
+
       {recommendation &&
         !recommendation.is_rest_day &&
         !recommendation.needs_split_update &&
@@ -3792,181 +5127,193 @@ function WorkoutLogger({
           </section>
         )}
 
-      <section
-        className="workout-details workout-combined-summary panel"
-        aria-label="Workout summary and notes"
+      <details
+        ref={detailsRef}
+        className="workout-details-disclosure"
+        open={detailsOpen}
+        onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
       >
-        <div className="workout-summary-fields">
-          <div className="details-row">
-            <label>
-              Date
-              <input
-                type="date"
-                value={workoutDate}
-                disabled={readOnly}
-                onChange={(event) => setWorkoutDate(event.target.value)}
+        <summary>
+          Workout details <Icon name="chevron-down" />
+        </summary>
+        <section
+          className="workout-details workout-combined-summary panel"
+          aria-label="Workout summary and notes"
+        >
+          <div className="workout-summary-fields">
+            <div className="details-row">
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={workoutDate}
+                  disabled={readOnly}
+                  onChange={(event) => setWorkoutDate(event.target.value)}
+                />
+              </label>
+              <label>
+                Workout type
+                <select
+                  value={customTypeId ?? category}
+                  onChange={(event) => chooseWorkoutType(event.target.value)}
+                  disabled={readOnly || workoutTypes.loading}
+                >
+                  {!typeOptions.some((type) => type.id === (customTypeId ?? category)) && (
+                    <option value={customTypeId ?? category} disabled>
+                      Choose a workout type
+                    </option>
+                  )}
+                  {typeOptions.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                      {type.archived ? ' (removed)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {initialWorkout && !readOnly && (
+                <fieldset
+                  className={`workout-duration-editor${initialWorkout ? '' : ' live-workout-duration-editor'}`}
+                  aria-label={initialWorkout ? undefined : 'Workout duration'}
+                >
+                  {initialWorkout && <legend>Workout timing</legend>}
+                  {initialWorkout && !readOnly && (
+                    <>
+                      <label>
+                        Start time
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
+                          aria-label="Workout start time"
+                        />
+                      </label>
+                      <label>
+                        End time
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
+                          aria-label="Workout end time"
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label>
+                    Duration hours
+                    <input
+                      type="number"
+                      min="0"
+                      max="24"
+                      inputMode="numeric"
+                      disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
+                      value={initialWorkout ? editedDurationHours || '' : overrideDurationHours}
+                      placeholder="0"
+                      onChange={(event) => {
+                        if (!initialWorkout) {
+                          updateDurationOverride(
+                            event.target.value,
+                            String(overrideDurationRemainder),
+                          );
+                          return;
+                        }
+                        const hours = Number.isNaN(event.target.valueAsNumber)
+                          ? 0
+                          : event.target.valueAsNumber;
+                        setEditedDurationMinutes(
+                          Math.min(
+                            1440,
+                            Math.max(0, Math.floor(hours)) * 60 + editedDurationRemainder,
+                          ),
+                        );
+                      }}
+                      aria-label="Workout duration hours"
+                    />
+                  </label>
+                  <label>
+                    Duration minutes
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      inputMode="numeric"
+                      disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
+                      value={
+                        initialWorkout ? editedDurationRemainder || '' : overrideDurationRemainder
+                      }
+                      placeholder="0"
+                      onChange={(event) => {
+                        if (!initialWorkout) {
+                          updateDurationOverride(String(overrideDurationHours), event.target.value);
+                          return;
+                        }
+                        const minutes = Number.isNaN(event.target.valueAsNumber)
+                          ? 0
+                          : event.target.valueAsNumber;
+                        setEditedDurationMinutes(
+                          Math.min(
+                            1440,
+                            editedDurationHours * 60 +
+                              Math.min(59, Math.max(0, Math.floor(minutes))),
+                          ),
+                        );
+                      }}
+                      aria-label="Workout duration minutes"
+                    />
+                  </label>
+                  {(!initialWorkout || hasCompleteTimeRange) && (
+                    <small className="workout-timing-help">
+                      {initialWorkout
+                        ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
+                        : resumedWorkoutId
+                          ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
+                          : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
+                    </small>
+                  )}
+                </fieldset>
+              )}
+            </div>
+            <div className="workout-summary-metrics" aria-label="Workout totals">
+              <span>
+                <small>Time</small>
+                <strong>{formatDuration(displayedDurationSeconds)}</strong>
+              </span>
+              {workoutBodyweight !== null && (
+                <span>
+                  <small>BW {weightUnit}</small>
+                  <strong>{formatWeightNumber(workoutBodyweight, weightUnit)}</strong>
+                </span>
+              )}
+              <span>
+                <small>Sets</small>
+                <strong>{completedSets.length}</strong>
+              </span>
+              <span>
+                <small>Reps</small>
+                <strong>{completedReps}</strong>
+              </span>
+            </div>
+            <label className="workout-notes">
+              Workout notes
+              <textarea
+                readOnly={readOnly}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Workout notes…"
+                rows={3}
               />
             </label>
-            <label>
-              Workout type
-              <select
-                value={customTypeId ?? category}
-                onChange={(event) => chooseWorkoutType(event.target.value)}
-                disabled={readOnly || workoutTypes.loading}
-              >
-                {!typeOptions.some((type) => type.id === (customTypeId ?? category)) && (
-                  <option value={customTypeId ?? category} disabled>
-                    Choose a workout type
-                  </option>
-                )}
-                {typeOptions.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                    {type.archived ? ' (removed)' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {initialWorkout && !readOnly && (
-              <fieldset
-                className={`workout-duration-editor${initialWorkout ? '' : ' live-workout-duration-editor'}`}
-                aria-label={initialWorkout ? undefined : 'Workout duration'}
-              >
-                {initialWorkout && <legend>Workout timing</legend>}
-                {initialWorkout && !readOnly && (
-                  <>
-                    <label>
-                      Start time
-                      <input
-                        type="time"
-                        value={startTime}
-                        onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
-                        aria-label="Workout start time"
-                      />
-                    </label>
-                    <label>
-                      End time
-                      <input
-                        type="time"
-                        value={endTime}
-                        onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
-                        aria-label="Workout end time"
-                      />
-                    </label>
-                  </>
-                )}
-                <label>
-                  Duration hours
-                  <input
-                    type="number"
-                    min="0"
-                    max="24"
-                    inputMode="numeric"
-                    disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
-                    value={initialWorkout ? editedDurationHours || '' : overrideDurationHours}
-                    placeholder="0"
-                    onChange={(event) => {
-                      if (!initialWorkout) {
-                        updateDurationOverride(
-                          event.target.value,
-                          String(overrideDurationRemainder),
-                        );
-                        return;
-                      }
-                      const hours = Number.isNaN(event.target.valueAsNumber)
-                        ? 0
-                        : event.target.valueAsNumber;
-                      setEditedDurationMinutes(
-                        Math.min(
-                          1440,
-                          Math.max(0, Math.floor(hours)) * 60 + editedDurationRemainder,
-                        ),
-                      );
-                    }}
-                    aria-label="Workout duration hours"
-                  />
-                </label>
-                <label>
-                  Duration minutes
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    inputMode="numeric"
-                    disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
-                    value={
-                      initialWorkout ? editedDurationRemainder || '' : overrideDurationRemainder
-                    }
-                    placeholder="0"
-                    onChange={(event) => {
-                      if (!initialWorkout) {
-                        updateDurationOverride(String(overrideDurationHours), event.target.value);
-                        return;
-                      }
-                      const minutes = Number.isNaN(event.target.valueAsNumber)
-                        ? 0
-                        : event.target.valueAsNumber;
-                      setEditedDurationMinutes(
-                        Math.min(
-                          1440,
-                          editedDurationHours * 60 + Math.min(59, Math.max(0, Math.floor(minutes))),
-                        ),
-                      );
-                    }}
-                    aria-label="Workout duration minutes"
-                  />
-                </label>
-                {(!initialWorkout || hasCompleteTimeRange) && (
-                  <small className="workout-timing-help">
-                    {initialWorkout
-                      ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
-                      : resumedWorkoutId
-                        ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
-                        : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
-                  </small>
-                )}
-              </fieldset>
-            )}
           </div>
-          <div className="workout-summary-metrics" aria-label="Workout totals">
-            <span>
-              <small>Time</small>
-              <strong>{formatDuration(displayedDurationSeconds)}</strong>
-            </span>
-            {currentBodyweight !== null && (
-              <span>
-                <small>BW {weightUnit}</small>
-                <strong>{formatWeightNumber(currentBodyweight, weightUnit)}</strong>
-              </span>
-            )}
-            <span>
-              <small>Sets</small>
-              <strong>{completedSets.length}</strong>
-            </span>
-            <span>
-              <small>Reps</small>
-              <strong>{completedReps}</strong>
-            </span>
-          </div>
-          <label className="workout-notes">
-            Workout notes
-            <textarea
-              readOnly={readOnly}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Workout notes…"
-              rows={3}
-            />
-          </label>
-        </div>
-        <WorkoutNavigationArrows navigation={navigation} />
-      </section>
+          <WorkoutNavigationArrows navigation={navigation} />
+        </section>
+      </details>
 
       {error && <DismissibleInlineError message={error} onDismiss={() => setError(null)} />}
 
       {readOnly && initialWorkout ? (
         <BrowsedWorkoutDetails
           workout={initialWorkout}
+          bodyweight={workoutBodyweight}
           categoryColor={categoryColors[initialWorkout.category]}
         />
       ) : (
@@ -3978,46 +5325,43 @@ function WorkoutLogger({
               key={movement.key}
               movement={movement}
               showRestTimes={showRestTimes}
+              bodyweight={workoutBodyweight}
               number={movementIndex + 1}
               prBadges={prBadges.get(movement.key) ?? new Map()}
-              supersetLabel={
-                movement.supersetKey
-                  ? `Superset ${movements
-                      .filter((item) => item.supersetKey === movement.supersetKey)
-                      .map((item) => item.exercise.name)
-                      .join(' + ')}`
-                  : null
-              }
+              supersetLabel={supersetLabel(movement.supersetKey)}
+              supersetUpNext={Boolean(
+                movement.supersetKey &&
+                !initialWorkout &&
+                supersetRoundPending(movements, movement.supersetKey)[0]?.key === movement.key,
+              )}
               history={recentExerciseHistory(
                 historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
                 initialWorkout?.id ?? resumedWorkoutId ?? undefined,
-                undefined,
+                Number.POSITIVE_INFINITY,
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
-              onExerciseComplete={(isComplete) =>
-                setMovements((current) =>
-                  current.map((item) => {
-                    if (item.key !== movement.key) return item;
-                    const sets = isComplete
-                      ? completeRemainingSets(item.exercise.kind, item.sets)
-                      : item.sets;
-                    return {
-                      ...item,
-                      isComplete: isComplete && sets.every((set) => set.completed),
-                      sets,
-                    };
-                  }),
-                )
-              }
+              onExerciseComplete={(isComplete) => completeExercise(movement, isComplete)}
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
               onToggleSet={(item) => toggleSet(movement, item)}
               onAddSet={() => addSet(movement)}
-              onSwitch={() => {
-                setSwitchingMovementKey(movement.key);
-                setPickerOpen(true);
-              }}
+              onInsertSet={(position) => addSet(movement, position)}
+              onSwitch={() => setSwapSheetMovementKey(movement.key)}
+              machineTipEligible={
+                /machine|cable/i.test(movement.exercise.equipment ?? '') &&
+                historicalWorkouts.filter(
+                  (workout) =>
+                    !workout.is_sample &&
+                    workout.movements.some((item) => item.exercise.id === movement.exercise.id),
+                ).length >= 3 &&
+                !historicalWorkouts.some((workout) =>
+                  workout.movements.some(
+                    (item) =>
+                      item.exercise.id === movement.exercise.id && item.machine_photos.length > 0,
+                  ),
+                )
+              }
               onRemove={() => removeMovement(movement.key)}
               onMoveUp={() => moveMovement(movementIndex, -1)}
               onMoveDown={() => moveMovement(movementIndex, 1)}
@@ -4027,7 +5371,7 @@ function WorkoutLogger({
               onDeleteSet={(index) => deleteSet(movement, index)}
               onRemoveRestTime={(item) => removeRestTime(movement, item)}
               onSuperset={(button) => openSupersetPicker(movement.key, button)}
-              onMachinePhotos={(machinePhotoIds, machineSettings) =>
+              onMachinePhotos={(machinePhotoIds, machineSettings, chosen) =>
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key
@@ -4035,6 +5379,13 @@ function WorkoutLogger({
                           ...item,
                           machinePhotoIds,
                           machinePhotosInitialized: true,
+                          isComplete:
+                            item.isComplete &&
+                            !hasUnassignedMachineSets(
+                              machinePhotoIds,
+                              withMachinePins(item.sets, machinePhotoIds),
+                            ),
+                          sets: chosen ? withMachinePins(item.sets, machinePhotoIds) : item.sets,
                           machineSettings:
                             machineSettings ??
                             (item.machinePhotoIds.join(',') === machinePhotoIds.join(',')
@@ -4052,15 +5403,65 @@ function WorkoutLogger({
                   ),
                 )
               }
+              onSuggestedSets={(previous) =>
+                setMovements((current) =>
+                  current.map((item) =>
+                    item.key === movement.key
+                      ? {
+                          ...item,
+                          sets: withSuggestedSets(item.sets, previous, item.exercise.kind),
+                        }
+                      : item,
+                  ),
+                )
+              }
             />
           ))}
         </div>
       )}
 
-      {undoDeletion && (
+      {(undoDeletion || swapUndo || loggerNotice) && (
         // Popups that stay up while you train sit at the bottom, above the timer dock.
         <div className={`logger-bottom-toasts ${dockSpacing}`}>
-          {
+          {loggerNotice && (
+            <div
+              key={loggerNotice.id}
+              className="undo-toast logger-notice-toast"
+              role="alert"
+              style={{ '--undo-toast-duration': `${LOGGER_NOTICE_MS}ms` } as CSSProperties}
+            >
+              <span>{loggerNotice.message}</span>
+              <button
+                className="undo-toast-close"
+                type="button"
+                onClick={() => setLoggerNotice(null)}
+                aria-label="Dismiss notice"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
+          {swapUndo && (
+            <div
+              className="undo-toast"
+              role="status"
+              style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
+            >
+              <span>Swapped to {swapUndo.exerciseName}</span>
+              <button className="undo-toast-action" type="button" onClick={undoSwap}>
+                Undo
+              </button>
+              <button
+                className="undo-toast-close"
+                type="button"
+                onClick={() => setSwapUndo(null)}
+                aria-label="Dismiss swap notification"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
+          {undoDeletion && (
             <div
               className="undo-toast"
               role="status"
@@ -4079,7 +5480,7 @@ function WorkoutLogger({
                 <Icon name="close" />
               </button>
             </div>
-          }
+          )}
         </div>
       )}
       {showTimerDock && (
@@ -4096,30 +5497,60 @@ function WorkoutLogger({
           joined={Boolean(weeklySetsUpdate)}
         />
       )}
+      {/* Minimised, the tab bar's Start button rings instead. */}
+      {showRestDone && screenVisible && (
+        <RestDoneBell endedAt={restDone.endedAt} next={restNextSet} onGo={goToRestNextSet} />
+      )}
       {weeklySetsUpdate && (
         <WeeklySetsShelf
           update={weeklySetsUpdate}
           goal={muscleSetGoal}
-          placement={!showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'}
+          goals={muscleGoals}
+          placement={
+            showRestDone ? 'notch' : !showTimerDock ? 'alone' : restHidden ? 'notch' : 'pill'
+          }
           onDismiss={() => setWeeklySetsUpdate(null)}
         />
       )}
       {!readOnly && (
-        <>
+        <div className="live-workout-actions">
           <button className="add-exercise-button" type="button" onClick={openExercisePicker}>
             ＋ Add exercise
           </button>
-          <button
-            className="primary-action finish-workout-bottom"
-            disabled={saving}
-            onClick={() => {
-              if (initialWorkout) void finishWorkout();
-              else setFinishConfirmationOpen(true);
-            }}
-          >
-            {saving ? 'Saving…' : initialWorkout ? 'Save workout' : 'Finish workout'}
-          </button>
-        </>
+          {initialWorkout && (
+            <button
+              className="primary-action finish-workout-bottom"
+              disabled={saving}
+              onClick={() => void finishWorkout()}
+            >
+              {saving ? 'Saving…' : 'Save workout'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
+        <InactiveWorkoutDialog
+          name={liveIdentity.name}
+          startedAt={startedAt}
+          loggedSets={loggedSetCount}
+          resuming={Boolean(resumedWorkoutId)}
+          saving={saving}
+          onSave={() => {
+            void finishWorkout(inactiveFinishAtRef.current).then((saved) => {
+              if (saved) return;
+              // Whatever blocked the save is explained on the workout screen.
+              continueInactiveWorkout();
+              onShow();
+            });
+          }}
+          onResume={() => {
+            continueInactiveWorkout();
+            onShow();
+          }}
+          onDiscard={() => setDeleteConfirmationOpen(true)}
+          onClose={continueInactiveWorkout}
+        />
       )}
 
       {deleteConfirmationOpen && (
@@ -4137,29 +5568,107 @@ function WorkoutLogger({
         />
       )}
 
-      {finishConfirmationOpen && (
+      {machineAssignmentError && (
         <PopupDialog
-          title="Finish workout?"
-          kicker="PLEASE CONFIRM"
-          className="workout-finish-dialog"
-          onClose={() => setFinishConfirmationOpen(false)}
+          title="Assign sets to machines"
+          className="machine-assignment-dialog"
+          onClose={() => setMachineAssignmentError(null)}
         >
-          <p>This saves your workout and stops the live timer. You can resume it from History.</p>
-          <div className="popup-dialog-actions workout-finish-actions">
-            <button type="button" autoFocus onClick={() => setFinishConfirmationOpen(false)}>
-              Keep working out
-            </button>
+          <p>
+            {machineAssignmentError} has multiple machines pinned. Choose a machine beneath each
+            completed set before finishing the exercise or saving the workout, so its weights and
+            progress are recorded against the right machine.
+          </p>
+          <div className="popup-dialog-actions">
             <button
               type="button"
               className="popup-primary-action"
-              disabled={saving}
+              autoFocus
               onClick={() => {
-                setFinishConfirmationOpen(false);
-                void finishWorkout();
+                setMachineAssignmentError(null);
+                window.requestAnimationFrame(() =>
+                  document
+                    .querySelector<HTMLSelectElement>('.set-machine-select[data-unassigned="true"]')
+                    ?.focus(),
+                );
               }}
             >
-              Finish workout
+              Choose machines
             </button>
+          </div>
+        </PopupDialog>
+      )}
+
+      {warmupReviewOpen && warmupOnlyMovements.length > 0 && (
+        <WarmupOnlyFinishDialog
+          movements={warmupOnlyMovements}
+          weightUnit={weightUnit}
+          saving={saving}
+          onKeepWorkingOut={() => setWarmupReviewOpen(false)}
+          onFinishAnyway={() => {
+            setWarmupReviewOpen(false);
+            void finishWorkout();
+          }}
+        />
+      )}
+
+      {timeEditorOpen && (
+        <WorkoutTimeEditor
+          elapsedSeconds={elapsed}
+          onClose={() => setTimeEditorOpen(false)}
+          onSave={(seconds) => {
+            // A corrected clock replaces a fixed total kept from an earlier finish attempt.
+            setDurationOverrideMinutes(null);
+            setPause((current) => withElapsedSeconds(current, startedAt, seconds));
+            setTimeEditorOpen(false);
+          }}
+        />
+      )}
+      {finishConfirmationOpen && (
+        <PopupDialog
+          title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
+          kicker={finishBlocker ? 'FINISH WORKOUT' : 'PLEASE CONFIRM'}
+          className="workout-finish-dialog"
+          onClose={() => setFinishConfirmationOpen(false)}
+        >
+          {finishBlocker ? (
+            <p className="inline-error workout-finish-blocker" role="alert">
+              {finishBlocker}
+            </p>
+          ) : (
+            <>
+              {untickedSetCount > 0 && (
+                <p className="workout-finish-summary">
+                  <strong>
+                    {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked.
+                  </strong>{' '}
+                  Unticked sets won't count.
+                </p>
+              )}
+              <p>
+                This saves your workout and stops the live timer. You can resume it from History.
+              </p>
+            </>
+          )}
+          <div className="popup-dialog-actions workout-finish-actions">
+            <button
+              type="button"
+              className={finishBlocker ? 'popup-primary-action' : undefined}
+              autoFocus
+              onClick={() => setFinishConfirmationOpen(false)}
+            >
+              Keep working out
+            </button>
+            {!finishBlocker && (
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={saving}
+                onClick={confirmFinish}
+              >
+                Finish workout
+              </button>
+            )}
           </div>
         </PopupDialog>
       )}
@@ -4177,12 +5686,36 @@ function WorkoutLogger({
         />
       )}
 
+      {swapSheetMovement && (
+        <ExerciseSwapSheet
+          key={swapSheetMovement.key}
+          exercise={swapSheetMovement.exercise}
+          plannedSetCount={swapSheetMovement.sets.filter((item) => !item.completed).length}
+          loggedSetCount={swapSheetMovement.sets.filter((item) => item.completed).length}
+          exercises={exercises}
+          excludedIds={movements.map((item) => item.exercise.id)}
+          recentExerciseIds={recentExerciseIds}
+          lastDoneDates={lastDoneDates}
+          onChoose={(replacement) => {
+            setSwapSheetMovementKey(null);
+            swapExercise(swapSheetMovement.key, replacement);
+          }}
+          onBrowseAll={() => {
+            setSwapSheetMovementKey(null);
+            setSwitchingMovementKey(swapSheetMovement.key);
+            setPickerOpen(true);
+          }}
+          onClose={() => setSwapSheetMovementKey(null)}
+        />
+      )}
+
       {pickerOpen && (
         <ExercisePicker
           key={switchingMovementKey ? `switch-${switchingMovementKey}` : 'add-exercises'}
           exercises={exercises}
           excludedIds={movements.map((item) => item.exercise.id)}
           recentExerciseIds={recentExerciseIds}
+          lastDoneDates={lastDoneDates}
           onFavoriteChange={onExerciseFavorite}
           onCreateExercise={onCreateExercise}
           singleSelect={switchingMovementKey !== null}
@@ -4366,7 +5899,9 @@ function SupersetPicker({
         aria-describedby="superset-picker-description"
       >
         <header>
-          <h2 id="superset-picker-title">Add Group</h2>
+          <h2 id="superset-picker-title">
+            {movement.supersetKey ? 'Edit superset' : 'Group as superset'}
+          </h2>
           <button
             ref={closeButtonRef}
             type="button"
@@ -4376,7 +5911,9 @@ function SupersetPicker({
             ×
           </button>
         </header>
-        <p id="superset-picker-description">Alternate exercises in a superset/circuit.</p>
+        <p id="superset-picker-description">
+          Alternate {movement.exercise.name} with the exercises you choose.
+        </p>
 
         <div className="superset-options" aria-label="Exercises in this workout">
           {candidates.length === 0 ? (
@@ -4418,7 +5955,7 @@ function SupersetPicker({
         <footer>
           {movement.supersetKey && (
             <button className="remove-superset-button" type="button" onClick={onRemove}>
-              Remove group
+              Remove superset
             </button>
           )}
           <div className="superset-picker-actions">
@@ -4428,10 +5965,13 @@ function SupersetPicker({
               disabled={selectedKeys.length === 0}
               onClick={() => onSave(selectedKeys)}
             >
-              {movement.supersetKey ? 'Update Group' : 'Add Group'}
+              {movement.supersetKey ? 'Update' : 'Add'}{' '}
+              {selectedKeys.length
+                ? supersetGroupName(selectedKeys.length + 1).toLowerCase()
+                : 'superset'}
             </button>
             <button type="button" onClick={onClose}>
-              Close
+              Cancel
             </button>
           </div>
         </footer>
@@ -4474,79 +6014,57 @@ function WorkoutCloseDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const safeButtonRef = useRef<HTMLButtonElement>(null);
-  const onCancelRef = useRef(onCancel);
-  const backdropDismiss = useBackdropDismiss(onCancel);
-
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  useEffect(() => {
-    const root = document.getElementById('root');
-    const rootWasInert = root?.hasAttribute('inert') ?? false;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    root?.setAttribute('inert', '');
-    safeButtonRef.current?.focus();
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancelRef.current();
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      if (!rootWasInert) root?.removeAttribute('inert');
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
-
-  return createPortal(
-    <div className="modal-backdrop workout-close-backdrop" {...backdropDismiss}>
-      <section
-        className="workout-close-dialog panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="workout-close-title"
-        aria-describedby="workout-close-description"
-      >
-        <div className="workout-close-warning" aria-hidden="true">
-          !
-        </div>
-        <p className="section-kicker">PLEASE CONFIRM</p>
-        <h2 id="workout-close-title">
-          {editing
-            ? 'Delete this saved workout?'
-            : resuming
-              ? 'Discard this resumed session?'
-              : 'Delete this workout?'}
-        </h2>
-        <p id="workout-close-description">
-          {editing
-            ? 'This workout will be permanently removed from your history. This cannot be undone.'
-            : resuming
-              ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
-              : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
-        </p>
-        <div className="workout-close-actions">
-          <button ref={safeButtonRef} type="button" onClick={onCancel}>
-            Keep workout
-          </button>
-          <button className="discard-workout-button" type="button" onClick={onConfirm}>
-            {resuming ? 'Discard session' : 'Delete workout'}
-          </button>
-        </div>
-      </section>
-    </div>,
-    document.body,
+  return (
+    <PopupDialog
+      title={
+        editing
+          ? 'Delete this saved workout?'
+          : resuming
+            ? 'Discard this resumed session?'
+            : 'Discard this workout?'
+      }
+      kicker="PLEASE CONFIRM"
+      className="workout-finish-dialog workout-discard-dialog"
+      onClose={onCancel}
+    >
+      <p>
+        {editing
+          ? 'This workout will be permanently removed from your history. This cannot be undone.'
+          : resuming
+            ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
+            : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
+      </p>
+      <div className="popup-dialog-actions workout-finish-actions">
+        <button type="button" autoFocus onClick={onCancel}>
+          Keep workout
+        </button>
+        <button
+          type="button"
+          className="popup-primary-action discard-workout-button"
+          onClick={onConfirm}
+        >
+          {editing ? 'Delete workout' : resuming ? 'Discard session' : 'Discard workout'}
+        </button>
+      </div>
+    </PopupDialog>
   );
 }
 
-function ExerciseIcon({ exercise, number }: { exercise: Exercise; number?: number }) {
+function ExerciseIcon({
+  exercise,
+  number,
+  warning = false,
+}: {
+  exercise: Exercise;
+  number?: number;
+  /** Flags a finished exercise that only has warm-up sets. */
+  warning?: boolean;
+}) {
   return (
     <span className="exercise-icon" aria-hidden="true">
       <img src={exerciseIconFor(exercise)} alt="" />
       {number !== undefined && <b>{number}</b>}
+      {warning && <span className="exercise-icon-warning">!</span>}
     </span>
   );
 }
@@ -4555,20 +6073,25 @@ function MovementCard({
   skipHighRepWarning,
   onSkipHighRepWarning,
   movement,
+  bodyweight = null,
   showRestTimes,
   number,
-  history,
+  history: exerciseHistory,
   onExerciseHistory,
   onExerciseComplete,
   onUpdateSet,
   onToggleSet,
   onAddSet,
+  onInsertSet,
   onSwitch,
+  machineTipEligible,
   onRemove,
   onMachinePhotos,
   onMachineSettings,
+  onSuggestedSets,
   prBadges,
   supersetLabel,
+  supersetUpNext = false,
   onMoveUp,
   onMoveDown,
   canMoveUp,
@@ -4581,6 +6104,7 @@ function MovementCard({
   skipHighRepWarning: boolean;
   onSkipHighRepWarning: () => void;
   movement: DraftMovement;
+  bodyweight?: number | null;
   showRestTimes: boolean;
   number: number;
   history: ExerciseHistoryEntry[];
@@ -4589,12 +6113,19 @@ function MovementCard({
   onUpdateSet: (setKey: string, update: Partial<DraftSet>) => void;
   onToggleSet: (item: DraftSet) => void;
   onAddSet: () => void;
+  /** Adds a set before the set at this index (0 for the start of the list). */
+  onInsertSet: (position: number) => void;
   onSwitch: () => void;
+  machineTipEligible: boolean;
   onRemove: () => void;
-  onMachinePhotos: (photoIds: string[], settings?: MachineSetting[]) => void;
+  onMachinePhotos: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
   onMachineSettings: (settings: MachineSetting[]) => void;
+  /** Replace untouched suggested sets with these sets from an earlier session. */
+  onSuggestedSets: (previous: TrackedSet[]) => void;
   prBadges: Map<string, string[]>;
   supersetLabel: string | null;
+  /** The next exercise to do in its superset or tri-set round. */
+  supersetUpNext?: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
   canMoveUp: boolean;
@@ -4604,15 +6135,42 @@ function MovementCard({
   onRemoveRestTime: (item: DraftSet) => void;
   onSuperset: (button: HTMLButtonElement) => void;
 }) {
+  const tips = useTips();
+  const { learn: learnTip } = tips;
+  const hasRepRange = Boolean(movement.repRange);
+  useEffect(() => {
+    if (hasRepRange) learnTip('repRange');
+  }, [hasRepRange, learnTip]);
   const cardio = movement.exercise.kind === 'cardio';
   const treadmill =
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
+  const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
+  const loggedWarmupCount = onlyWarmupsLogged
+    ? movement.sets.filter((item) => item.completed).length
+    : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  // Free weights and bodyweight exercises show the equipment row only once it is in use.
+  const [machineRowRequested, setMachineRowRequested] = useState(false);
   const photoPanelId = useId();
   const pinnedMachinePhotoId = movement.machinePhotoIds.at(-1);
+  const [savedMachinePhotos, setSavedMachinePhotos] = useState<MachinePhoto[]>([]);
+  const [savedMachineAliases, setSavedMachineAliases] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const machineRowShown =
+    machineRowRequested ||
+    savedMachinePhotos.length > 0 ||
+    movement.machinePhotoIds.length > 0 ||
+    /machine|cable|smith/i.test(movement.exercise.equipment ?? '');
+  // With a machine pinned, its own sessions supply the last date, history and rests.
+  const history = useMemo(() => {
+    const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
+    return (onMachine.length ? onMachine : exerciseHistory).slice(0, 5);
+  }, [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases]);
   const machineSettingsUnloaded = movement.machineSettings === undefined;
   const onMachineSettingsRef = useRef(onMachineSettings);
 
@@ -4634,7 +6192,6 @@ function MovementCard({
       cancelled = true;
     };
   }, [cardio, movement.exercise.id, pinnedMachinePhotoId, machineSettingsUnloaded]);
-  const [openSetActionsKey, setOpenSetActionsKey] = useState<string | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [restEdits, setRestEdits] = useState<Readonly<Record<string, number>>>({});
   const [typeMenuSetKey, setTypeMenuSetKey] = useState<string | null>(null);
@@ -4644,6 +6201,8 @@ function MovementCard({
     item: DraftSet;
     warning: SetEntryWarning;
   } | null>(null);
+  // A set whose tick was pressed before anything was entered; cleared once it has a value.
+  const [emptySetKey, setEmptySetKey] = useState<string | null>(null);
   const barType = cardio ? null : barTypeForExercise(movement.exercise);
   const [plateSetKey, setPlateSetKey] = useState<string | null>(null);
   const plateSetIndex = movement.sets.findIndex((item) => item.key === plateSetKey);
@@ -4654,23 +6213,31 @@ function MovementCard({
   const setGridRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const setNumbers = setNumberLabels(movement.sets);
+  // The bodyweight ratio is said once per exercise, on its heaviest logged set.
+  const ratioSetKey = cardio
+    ? null
+    : (movement.sets.reduce<DraftSet | null>(
+        (best, item) =>
+          item.completed && (best === null || (item.weight_kg ?? 0) > (best.weight_kg ?? 0))
+            ? item
+            : best,
+        null,
+      )?.key ?? null);
 
   useEffect(() => {
     setExpanded(!movement.isComplete);
   }, [movement.isComplete]);
 
   useEffect(() => {
-    if (!openSetActionsKey && !typeMenuSetKey) return;
+    if (supersetUpNext) setExpanded(true);
+  }, [supersetUpNext]);
 
-    const closeMenus = () => {
-      setOpenSetActionsKey(null);
-      setTypeMenuSetKey(null);
-    };
+  useEffect(() => {
+    if (!typeMenuSetKey) return;
+
+    const closeMenus = () => setTypeMenuSetKey(null);
     const closeOutside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Element &&
-        event.target.closest('.set-actions-menu, .set-type-picker')
-      ) {
+      if (event.target instanceof Element && event.target.closest('.set-type-picker')) {
         return;
       }
       closeMenus();
@@ -4685,7 +6252,7 @@ function MovementCard({
       document.removeEventListener('pointerdown', closeOutside);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [openSetActionsKey, typeMenuSetKey]);
+  }, [typeMenuSetKey]);
 
   function closeMovementMenu() {
     if (movementMenuRef.current) movementMenuRef.current.open = false;
@@ -4769,6 +6336,12 @@ function MovementCard({
       onToggleSet(item);
       return;
     }
+    if (!hasRecordedPerformance(movement.exercise.kind, item)) {
+      // Nothing to log yet: open the set at the field it needs instead of ticking it.
+      setEmptySetKey(item.key);
+      openSet(item.key, cardio ? 'duration' : 'reps');
+      return;
+    }
 
     const otherSets = [
       ...movement.sets.slice(0, index).reverse(),
@@ -4802,7 +6375,6 @@ function MovementCard({
     dragTargetSetKeyRef.current = setKey;
     setDraggingSetKey(setKey);
     setDragTargetSetKey(setKey);
-    setOpenSetActionsKey(null);
   }
 
   function moveSetDrag(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -4887,74 +6459,13 @@ function MovementCard({
   function renderCompletedSetActions(item: DraftSet, index: number) {
     return (
       <span
-        className={`set-actions-menu completed-summary-actions ${openSetActionsKey === item.key ? 'is-open' : ''}`}
+        className="set-actions-menu completed-summary-actions"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
         }}
       >
         {renderSetDragHandle(item, index)}
-        <button
-          type="button"
-          className="completed-set-menu"
-          aria-label={`Options for set ${index + 1}`}
-          aria-expanded={openSetActionsKey === item.key}
-          onClick={() => {
-            setTypeMenuSetKey(null);
-            setOpenSetActionsKey((current) => (current === item.key ? null : item.key));
-          }}
-        >
-          ⋮
-        </button>
-        {openSetActionsKey === item.key && (
-          <span className="set-actions-menu-popover">
-            {!isSetOpen(item) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenSetActionsKey(null);
-                  openSet(item.key);
-                }}
-              >
-                <span aria-hidden="true">✎</span>
-                Edit set
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={index === 0}
-              onClick={() => {
-                onMoveSet(index, index - 1);
-                setOpenSetActionsKey(null);
-              }}
-            >
-              <span aria-hidden="true">↑</span>
-              Move earlier
-            </button>
-            <button
-              type="button"
-              disabled={index === movement.sets.length - 1}
-              onClick={() => {
-                onMoveSet(index, index + 1);
-                setOpenSetActionsKey(null);
-              }}
-            >
-              <span aria-hidden="true">↓</span>
-              Move later
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                onDeleteSet(index);
-                setOpenSetActionsKey(null);
-              }}
-            >
-              <span aria-hidden="true">■</span>
-              Delete set
-            </button>
-          </span>
-        )}
       </span>
     );
   }
@@ -4976,10 +6487,7 @@ function MovementCard({
           aria-label={`Set ${index + 1} type: ${setTypeTitle(item)}`}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          onClick={() => {
-            setOpenSetActionsKey(null);
-            setTypeMenuSetKey(menuOpen ? null : item.key);
-          }}
+          onClick={() => setTypeMenuSetKey(menuOpen ? null : item.key)}
         >
           {setNumbers[index]}
         </button>
@@ -5045,10 +6553,16 @@ function MovementCard({
                 'Edit weight',
                 'completed-set-weight',
                 <>
-                  {item.weight_kg === null ? '–' : formatWeight(item.weight_kg, weightUnit)}
+                  <span className="set-weight-value">
+                    {item.weight_kg === null ? '–' : formatWeight(item.weight_kg, weightUnit)}
+                  </span>
                   {prBadges.has(item.key) && (
                     <b className="pr-badge" title={prBadges.get(item.key)?.join(', ')}>
-                      PR
+                      {prBadges.get(item.key)?.some((label) => label.startsWith('All-time'))
+                        ? 'All-time PR'
+                        : prBadges.get(item.key)?.some((label) => label.startsWith('Block'))
+                          ? 'Block PR'
+                          : 'PR'}
                     </b>
                   )}
                 </>,
@@ -5060,6 +6574,11 @@ function MovementCard({
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
+        {item.key === ratioSetKey && (item.bodyweight_kg ?? bodyweight) != null && (
+          <small className="completed-set-bodyweight num">
+            {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
+          </small>
+        )}
         {item.notes && (
           <button
             type="button"
@@ -5076,6 +6595,12 @@ function MovementCard({
 
   function renderSetEditor(item: DraftSet, index: number) {
     const suggested = item.fromPrevious ? ', suggested value' : '';
+    const missingEntry =
+      emptySetKey === item.key && !hasRecordedPerformance(movement.exercise.kind, item);
+    const entryErrorId = `set-entry-error-${item.key}`;
+    const entryInvalid = missingEntry
+      ? { 'aria-invalid': true, 'aria-describedby': entryErrorId }
+      : {};
     return (
       <div className={`set-editor ${item.completed ? 'completed' : ''}`}>
         {renderSetTypeButton(item, index)}
@@ -5096,6 +6621,7 @@ function MovementCard({
                 })
               }
               aria-label="Duration minutes"
+              {...entryInvalid}
             />
             <input
               data-set-field="distance"
@@ -5134,6 +6660,7 @@ function MovementCard({
                 onUpdateSet(item.key, { reps: numberOrNull(event.target.value) })
               }
               aria-label={`Repetitions${suggested}`}
+              {...entryInvalid}
             />
           </>
         )}
@@ -5155,18 +6682,39 @@ function MovementCard({
         {renderRowCompleteButton(item, index)}
         {renderCompletedSetActions(item, index)}
         <div className="set-editor-extras">
-          {!cardio && (
-            <label className="set-editor-rest">
-              Rest after set
-              <RestTimeSelect
-                seconds={restEdits[item.key] ?? item.rest_seconds ?? 0}
-                label={`Rest time for set ${index + 1}`}
-                onChange={(seconds) =>
-                  setRestEdits((current) => ({ ...current, [item.key]: seconds }))
-                }
-              />
-            </label>
+          {missingEntry && (
+            <p id={entryErrorId} className="set-entry-error" role="alert">
+              {cardio
+                ? 'Enter a time, distance or another measurement to log this set.'
+                : 'Enter reps to log this set.'}
+            </p>
           )}
+          <div className="set-editor-tools">
+            {!cardio && (
+              <label className="set-editor-rest">
+                Rest after set
+                <RestTimeSelect
+                  seconds={restEdits[item.key] ?? item.rest_seconds ?? 0}
+                  label={`Rest time for set ${index + 1}`}
+                  onChange={(seconds) =>
+                    setRestEdits((current) => ({ ...current, [item.key]: seconds }))
+                  }
+                />
+              </label>
+            )}
+            <button
+              type="button"
+              className="set-editor-delete"
+              aria-label={`Delete set ${index + 1}`}
+              onClick={() => {
+                if (movement.sets.length > 1) tips.event('menu-delete', 'swipe', 3);
+                onDeleteSet(index);
+              }}
+            >
+              <Icon name="trash" />
+              Delete set
+            </button>
+          </div>
           {cardio && (
             <div className="set-editor-metrics">
               <label>
@@ -5270,23 +6818,34 @@ function MovementCard({
       className={`movement-card panel ${expanded ? '' : 'is-collapsed'} ${supersetLabel ? 'superset-card' : ''}`}
       data-flip-key={movement.key}
     >
-      {supersetLabel && <div className="superset-ribbon">{supersetLabel}</div>}
+      {supersetLabel && (
+        <div className="superset-ribbon">
+          <span>{supersetLabel}</span>
+          {supersetUpNext && <b className="superset-up-next">Up next</b>}
+        </div>
+      )}
       <header onClick={() => setExpanded((current) => !current)}>
-        <ExerciseIcon exercise={movement.exercise} number={number} />
+        <ExerciseIcon
+          exercise={movement.exercise}
+          number={number}
+          warning={onlyWarmupsLogged && movement.isComplete}
+        />
         <div>
-          <h2>
-            <button
-              type="button"
-              className="movement-history-link"
-              onClick={(event) => {
-                event.stopPropagation();
-                onExerciseHistory();
-              }}
-              aria-label={`View full history for ${movement.exercise.name}`}
-            >
-              {movement.exercise.name}
-            </button>
-          </h2>
+          <div className="movement-title-row">
+            <h2>
+              <button
+                type="button"
+                className="movement-history-link"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onExerciseHistory();
+                }}
+                aria-label={`View full history for ${movement.exercise.name}`}
+              >
+                {movement.exercise.name}
+              </button>
+            </h2>
+          </div>
           {movement.exercise.is_custom && <small className="custom-exercise-label">Custom</small>}
           <p>
             {[movement.exercise.muscle_group, movement.exercise.equipment]
@@ -5296,14 +6855,20 @@ function MovementCard({
           {!cardio && history[0] && (
             <p className="movement-last-session">Last {shortDate(history[0].workoutDate)}</p>
           )}
+          {movement.swappedFrom && (
+            <p className="movement-last-session movement-swapped-from">
+              Swapped from {movement.swappedFrom}
+            </p>
+          )}
           {!expanded && (
             <span className="movement-completed-summary">
-              {completedWorkingSetCount} completed {completedWorkingSetCount === 1 ? 'set' : 'sets'}
+              {onlyWarmupsLogged
+                ? `${loggedWarmupCount} warm-up ${loggedWarmupCount === 1 ? 'set' : 'sets'}`
+                : `${completedWorkingSetCount} completed ${completedWorkingSetCount === 1 ? 'set' : 'sets'}`}
             </span>
           )}
         </div>
         <div className="movement-header-actions" onClick={(event) => event.stopPropagation()}>
-          <ExerciseMuscleHelp exercise={movement.exercise} />
           <button
             type="button"
             className="movement-expand-toggle"
@@ -5316,26 +6881,32 @@ function MovementCard({
             </svg>
           </button>
           {barType && (
-            <button
-              type="button"
-              className="plate-calculator-button"
-              aria-label={`Plate calculator for ${movement.exercise.name}`}
-              disabled={movement.sets.length === 0}
-              onClick={() => {
-                closeMovementMenu();
-                // The next set to lift, or the last one once every set is ticked.
-                const next = movement.sets.find((item) => !item.completed) ?? movement.sets.at(-1);
-                if (next) setPlateSetKey(next.key);
-              }}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M1.5 12h2M20.5 12h2M8.5 12h7" />
-                <rect x="3.5" y="8" width="2.5" height="8" rx="1" />
-                <rect x="6" y="5" width="2.5" height="14" rx="1" />
-                <rect x="15.5" y="5" width="2.5" height="14" rx="1" />
-                <rect x="18" y="8" width="2.5" height="8" rx="1" />
-              </svg>
-            </button>
+            <TipSlot id="plates" eligible={movement.sets.some((set) => (set.weight_kg ?? 0) >= 60)}>
+              <button
+                type="button"
+                className="plate-calculator-button"
+                aria-label={`Plate calculator for ${movement.exercise.name}`}
+                disabled={movement.sets.length === 0}
+                onClick={() => {
+                  closeMovementMenu();
+                  // The next set to lift, or the last one once every set is ticked.
+                  const next =
+                    movement.sets.find((item) => !item.completed) ?? movement.sets.at(-1);
+                  if (next) {
+                    tips.learn('plates');
+                    setPlateSetKey(next.key);
+                  }
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M1.5 12h2M20.5 12h2M8.5 12h7" />
+                  <rect x="3.5" y="8" width="2.5" height="8" rx="1" />
+                  <rect x="6" y="5" width="2.5" height="14" rx="1" />
+                  <rect x="15.5" y="5" width="2.5" height="14" rx="1" />
+                  <rect x="18" y="8" width="2.5" height="8" rx="1" />
+                </svg>
+              </button>
+            </TipSlot>
           )}
           <button
             type="button"
@@ -5352,7 +6923,7 @@ function MovementCard({
               closeMovementMenu();
             }}
           >
-            ✓
+            <Icon name="check" />
           </button>
           <details className="movement-overflow" ref={movementMenuRef}>
             <summary aria-label={`Actions for ${movement.exercise.name}`}>⋮</summary>
@@ -5367,8 +6938,35 @@ function MovementCard({
                 <span aria-hidden="true">
                   <Icon name="history" />
                 </span>
-                {historyOpen ? 'Hide Recent History' : 'Recent History'}
+                {historyOpen ? 'Hide recent history' : 'Recent history'}
               </button>
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCreditsOpen(true);
+                  closeMovementMenu();
+                }}
+              >
+                <span aria-hidden="true">
+                  <Icon name="help" />
+                </span>
+                Muscle credits
+              </button>
+              {!cardio && !machineRowShown && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMachineRowRequested(true);
+                    closeMovementMenu();
+                  }}
+                >
+                  <span aria-hidden="true">
+                    <Icon name="camera" />
+                  </span>
+                  Equipment photo
+                </button>
+              )}
               <button
                 type="button"
                 className={supersetLabel ? 'active' : ''}
@@ -5381,7 +6979,7 @@ function MovementCard({
                 <span aria-hidden="true">
                   <Icon name="link" />
                 </span>
-                {supersetLabel ? 'Edit Group' : 'Group Superset'}
+                {supersetLabel ? 'Edit superset' : 'Group as superset'}
               </button>
               <button
                 type="button"
@@ -5391,7 +6989,7 @@ function MovementCard({
                 }}
               >
                 <span aria-hidden="true">⇄</span>
-                Switch Exercise
+                Swap exercise
               </button>
               <button
                 type="button"
@@ -5401,8 +6999,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">↑</span>
-                Move Earlier
+                <span aria-hidden="true">
+                  <Icon name="up" />
+                </span>
+                Move earlier
               </button>
               <button
                 type="button"
@@ -5412,8 +7012,10 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">↓</span>
-                Move Later
+                <span aria-hidden="true">
+                  <Icon name="down" />
+                </span>
+                Move later
               </button>
               <button
                 type="button"
@@ -5423,14 +7025,30 @@ function MovementCard({
                   closeMovementMenu();
                 }}
               >
-                <span aria-hidden="true">■</span>
-                Delete
+                <span aria-hidden="true">
+                  <i className="trash-can-icon" />
+                </span>
+                Remove exercise
               </button>
             </div>
           </details>
         </div>
       </header>
 
+      <ExerciseMuscleHelp
+        exercise={movement.exercise}
+        open={creditsOpen}
+        onClose={() => setCreditsOpen(false)}
+      />
+      {expanded && !cardio && movement.repRange && (
+        <p className="movement-rep-target">
+          {progressionHint(
+            movement.repRange,
+            progressionTarget(movement.repRange, history[0]?.sets ?? [], weightUnit),
+            weightUnit,
+          )}
+        </p>
+      )}
       {historyOpen && (
         <section
           className="movement-history"
@@ -5467,15 +7085,43 @@ function MovementCard({
       )}
 
       {!cardio && (
-        <MachinePhotoChooser
-          key={movement.exercise.id}
-          id={photoPanelId}
-          exercise={movement.exercise}
-          selectedIds={movement.machinePhotoIds}
-          settings={movement.machineSettings}
-          autoPinLastUsed={!movement.machinePhotosInitialized}
-          onChange={onMachinePhotos}
-        />
+        <TipSlot
+          id="machine"
+          eligible={machineTipEligible && movement.machinePhotoIds.length === 0}
+        >
+          <MachinePhotoChooser
+            key={movement.exercise.id}
+            id={photoPanelId}
+            exercise={movement.exercise}
+            selectedIds={movement.machinePhotoIds}
+            settings={movement.machineSettings}
+            autoPinLastUsed={!movement.machinePhotosInitialized}
+            hidden={!machineRowShown}
+            openRequested={machineRowRequested}
+            onChange={(photoIds, settings, chosen) => {
+              onMachinePhotos(photoIds, settings, chosen);
+              const pinned = photoIds.at(-1);
+              const canonical = (id: string | undefined) =>
+                (id && savedMachineAliases.get(id)) ?? id;
+              if (chosen && canonical(pinned) !== canonical(pinnedMachinePhotoId)) {
+                onSuggestedSets(
+                  machineSuggestionSource(exerciseHistory, pinned, savedMachineAliases),
+                );
+              }
+            }}
+            onPhotosLoaded={(photos) => {
+              setSavedMachinePhotos(photos);
+              const aliases = machineAliases(photos);
+              setSavedMachineAliases(aliases);
+              for (const set of movement.sets) {
+                const canonical = set.machine_photo_id && aliases.get(set.machine_photo_id);
+                if (canonical && canonical !== set.machine_photo_id) {
+                  onUpdateSet(set.key, { machine_photo_id: canonical });
+                }
+              }
+            }}
+          />
+        </TipSlot>
       )}
 
       <div className={`set-grid set-grid-${cardio ? 'cardio' : 'strength'}`} ref={setGridRef}>
@@ -5500,16 +7146,32 @@ function MovementCard({
             </>
           )}
         </div>
+        {movement.sets.length > 0 && <SetInsertRow beforeSet={1} onInsert={() => onInsertSet(0)} />}
         {movement.sets.map((item, index) => {
           const open = isSetOpen(item);
+          const restShown =
+            !cardio &&
+            showRestTimes &&
+            (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+            (item.rest_seconds ?? 0) > 0;
+          // Between two sets; after the last set, Add set below does the same job.
+          const insertAfter = index < movement.sets.length - 1 && (
+            <SetInsertButton beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
+          );
+          const restHistory = item.machine_photo_id
+            ? historyOnMachine(exerciseHistory, item.machine_photo_id, savedMachineAliases)
+            : history;
           return (
             <Fragment key={item.key}>
               <SwipeToDeleteSetRow
                 flipKey={item.key}
                 label={`set ${index + 1}`}
                 disabled={movement.sets.length < 2}
-                overlayOpen={openSetActionsKey === item.key || typeMenuSetKey === item.key}
-                onDelete={() => onDeleteSet(index)}
+                overlayOpen={typeMenuSetKey === item.key}
+                onDelete={() => {
+                  tips.learn('swipe');
+                  onDeleteSet(index);
+                }}
               >
                 <div
                   className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
@@ -5519,31 +7181,75 @@ function MovementCard({
                   data-expanded={open}
                 >
                   {open ? renderSetEditor(item, index) : renderSetSummary(item, index)}
+                  {movement.machinePhotoIds.length > 1 && (
+                    <label className="set-machine-assignment">
+                      <span>Machine</span>
+                      <select
+                        className="set-machine-select"
+                        aria-label={`Machine for set ${index + 1}`}
+                        data-unassigned={
+                          !movement.machinePhotoIds.includes(item.machine_photo_id ?? '')
+                        }
+                        value={
+                          movement.machinePhotoIds.includes(item.machine_photo_id ?? '')
+                            ? (item.machine_photo_id ?? '')
+                            : ''
+                        }
+                        onChange={(event) =>
+                          onUpdateSet(item.key, {
+                            machine_photo_id: event.target.value || null,
+                          })
+                        }
+                      >
+                        <option value="">Choose machine</option>
+                        {movement.machinePhotoIds.map((id, photoIndex) => (
+                          <option key={id} value={id}>
+                            {savedMachinePhotos.find((photo) => photo.id === id)?.caption ||
+                              `Machine ${photoIndex + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
               </SwipeToDeleteSetRow>
-              {!cardio &&
-                showRestTimes &&
-                (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
-                (item.rest_seconds ?? 0) > 0 && (
-                  <SwipeToDeleteSetRow
-                    flipKey={`${item.key}:rest`}
-                    label={`rest after set ${index + 1}`}
-                    onDelete={() => removeRest(item)}
-                  >
-                    <SetRestControl
-                      seconds={item.rest_seconds!}
-                      setIndex={index}
-                      sets={movement.sets}
-                      history={history}
-                      suggested={!item.completed && !item.restConfirmed}
-                      onChange={(seconds) => {
-                        clearRestEdit(item.key);
-                        if (seconds === 0) removeRest(item);
-                        else onUpdateSet(item.key, { rest_seconds: seconds });
-                      }}
-                    />
-                  </SwipeToDeleteSetRow>
-                )}
+              {restShown ? (
+                <SwipeToDeleteSetRow
+                  flipKey={`${item.key}:rest`}
+                  label={`rest after set ${index + 1}`}
+                  onDelete={() => removeRest(item)}
+                >
+                  <SetRestControl
+                    seconds={item.rest_seconds!}
+                    setIndex={index}
+                    sets={movement.sets}
+                    history={restHistory}
+                    suggested={!item.completed && !item.restConfirmed}
+                    onChange={(seconds) => {
+                      clearRestEdit(item.key);
+                      if (seconds === 0) removeRest(item);
+                      else onUpdateSet(item.key, { rest_seconds: seconds });
+                    }}
+                    leading={insertAfter}
+                  />
+                </SwipeToDeleteSetRow>
+              ) : (
+                insertAfter && (
+                  <SetInsertRow
+                    beforeSet={index + 2}
+                    onInsert={() => onInsertSet(index + 1)}
+                    onAddRest={
+                      !cardio && showRestTimes
+                        ? () =>
+                            onUpdateSet(item.key, {
+                              rest_seconds: restToAdd(movement.sets, index, restHistory),
+                              restRevealed: true,
+                            })
+                        : undefined
+                    }
+                  />
+                )
+              )}
             </Fragment>
           );
         })}
@@ -5648,36 +7354,40 @@ function SetEntryConfirmationDialog({
   );
 }
 
-function ScanningLabel() {
-  return (
-    <span className="scanning-label">
-      <span className="scanning-spinner" aria-hidden="true" />
-      Scanning
-    </span>
-  );
-}
-
 function MachinePhotoChooser({
   id,
   exercise,
   selectedIds,
   settings,
   autoPinLastUsed,
+  hidden = false,
+  openRequested = false,
   onChange,
+  onPhotosLoaded,
 }: {
   id: string;
   exercise: Exercise;
   selectedIds: string[];
   settings?: MachineSetting[];
   autoPinLastUsed: boolean;
-  onChange: (photoIds: string[], settings?: MachineSetting[]) => void;
+  /** Still loads saved machines and restores the last one used, but draws nothing. */
+  hidden?: boolean;
+  /** Asked for from the exercise menu: the panel opens once it appears. */
+  openRequested?: boolean;
+  /** `chosen` marks a pin the user picked, rather than a restored or automatic one. */
+  onChange: (photoIds: string[], settings?: MachineSetting[], chosen?: boolean) => void;
+  onPhotosLoaded?: (photos: MachinePhoto[]) => void;
 }) {
   const [selectingForMerge, setSelectingForMerge] = useState(false);
   const [photos, setPhotos] = useState<MachinePhotoUsage[]>([]);
   const [pending, setPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [caption, setCaption] = useState('');
   const [expanded, setExpanded] = useState<MachinePhoto | null>(null);
+  const tips = useTips();
   const [photoPanelOpen, setPhotoPanelOpen] = useState(false);
+  useEffect(() => {
+    if (openRequested) setPhotoPanelOpen(true);
+  }, [openRequested]);
   const [choosingReplacement, setChoosingReplacement] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -5732,6 +7442,16 @@ function MachinePhotoChooser({
     };
   }, [exercise.id]);
 
+  const onPhotosLoadedRef = useRef(onPhotosLoaded);
+
+  useEffect(() => {
+    onPhotosLoadedRef.current = onPhotosLoaded;
+  }, [onPhotosLoaded]);
+
+  useEffect(() => {
+    onPhotosLoadedRef.current?.(photos);
+  }, [photos]);
+
   useEffect(
     () => () => {
       if (pending) URL.revokeObjectURL(pending.previewUrl);
@@ -5769,6 +7489,7 @@ function MachinePhotoChooser({
       onChange(
         choosingReplacement ? [photo.id] : [...new Set([...selectedIds, photo.id])],
         machineSettings,
+        true,
       );
       setChoosingReplacement(false);
       setPending(null);
@@ -5784,7 +7505,7 @@ function MachinePhotoChooser({
     setPending(null);
     setExpanded(null);
     if (choosingReplacement) {
-      onChange([photoId]);
+      onChange([photoId], undefined, true);
       setChoosingReplacement(false);
       return;
     }
@@ -5792,6 +7513,8 @@ function MachinePhotoChooser({
       selectedIds.includes(photoId)
         ? selectedIds.filter((current) => current !== photoId)
         : [...selectedIds, photoId],
+      undefined,
+      true,
     );
   }
 
@@ -5806,7 +7529,11 @@ function MachinePhotoChooser({
   async function deletePhoto(photo: MachinePhoto) {
     await api.deleteMachinePhoto(photo.id, true);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
-    onChange(selectedIds.filter((id) => id !== photo.id));
+    onChange(
+      selectedIds.filter((id) => id !== photo.id),
+      undefined,
+      true,
+    );
     setExpanded(null);
   }
 
@@ -5820,13 +7547,24 @@ function MachinePhotoChooser({
   }
 
   const today = localDate();
-  const pinnedPhotos = photos.filter((photo) => selectedIds.includes(photo.id));
+  // Latest pin first: it supplies the suggested sets, so it sits in front of the stack.
+  const pinnedPhotos = [...selectedIds]
+    .reverse()
+    .flatMap((photoId) => photos.find((photo) => photo.id === photoId) ?? []);
   const primaryPinnedPhoto = pinnedPhotos[0] ?? null;
+  // A chosen machine is named in the row's title; the line under it says only what the name can't.
+  const photoTitle = primaryPinnedPhoto?.caption || 'Equipment photo';
   const photoSummary = primaryPinnedPhoto
-    ? `${primaryPinnedPhoto.caption}${pinnedPhotos.length > 1 ? ` +${pinnedPhotos.length - 1} more` : ''}`
+    ? pinnedPhotos.length > 1
+      ? `+${pinnedPhotos.length - 1} more`
+      : primaryPinnedPhoto.caption
+        ? ''
+        : 'Pinned'
     : photos.length > 0
       ? `${photos.length} saved · none pinned`
       : '';
+
+  if (hidden) return null;
 
   return (
     <details
@@ -5842,10 +7580,17 @@ function MachinePhotoChooser({
         className="machine-photo-summary"
         onClick={(event) => {
           event.preventDefault();
+          if (!photoPanelOpen) tips.learn('machine');
           setPhotoPanelOpen(!photoPanelOpen);
         }}
       >
-        {primaryPinnedPhoto ? (
+        {pinnedPhotos.length > 1 ? (
+          <span className="machine-photo-stack" aria-hidden="true">
+            {pinnedPhotos.slice(0, 3).map((photo) => (
+              <img key={photo.id} src={photo.thumbnail_url} alt="" loading="lazy" />
+            ))}
+          </span>
+        ) : primaryPinnedPhoto ? (
           <img src={primaryPinnedPhoto.thumbnail_url} alt="" loading="lazy" />
         ) : (
           <span className="machine-photo-placeholder" aria-hidden="true">
@@ -5853,12 +7598,12 @@ function MachinePhotoChooser({
           </span>
         )}
         <span className="machine-photo-summary-copy">
-          <strong>Equipment photo</strong>
+          <strong>{photoTitle}</strong>
           {photoSummary && <small>{photoSummary}</small>}
         </span>
-        {selectedIds.length > 0 && <b>{selectedIds.length} pinned</b>}
+        {selectedIds.length > 1 && <b>{selectedIds.length} pinned</b>}
         <span className="machine-photo-chevron" aria-hidden="true">
-          ⌄
+          <Icon name="chevron-down" />
         </span>
       </summary>
       <div className="machine-photo-content">
@@ -5868,6 +7613,7 @@ function MachinePhotoChooser({
             photos={photos}
             onCancel={() => setSelectingForMerge(false)}
             onMerged={(merged, sourceIds) => {
+              tips.learn('mergeMachines');
               const sourceSet = new Set(sourceIds);
               const nextIds = [
                 ...new Set(
@@ -5932,18 +7678,29 @@ function MachinePhotoChooser({
                 {photos.length >= 2 && (
                   <div className="machine-photo-library-actions">
                     <span>Saved · {photos.length}</span>
-                    <button
-                      type="button"
-                      disabled={uploading || !!pending}
-                      onClick={() => {
-                        setExpanded(null);
-                        setChoosingReplacement(false);
-                        setSelectingForMerge(true);
-                        setError(null);
-                      }}
+                    <TipSlot
+                      id="mergeMachines"
+                      eligible={
+                        photoPanelOpen &&
+                        !selectingForMerge &&
+                        !pending &&
+                        !uploading &&
+                        hasLikelyDuplicateMachines(photos.map((photo) => photo.caption ?? ''))
+                      }
                     >
-                      Select
-                    </button>
+                      <button
+                        type="button"
+                        disabled={uploading || !!pending}
+                        onClick={() => {
+                          setExpanded(null);
+                          setChoosingReplacement(false);
+                          setSelectingForMerge(true);
+                          setError(null);
+                        }}
+                      >
+                        Merge
+                      </button>
+                    </TipSlot>
                   </div>
                 )}
                 <div
@@ -6033,6 +7790,9 @@ function MachinePhotoChooser({
         {expanded && (
           <MachinePhotoDetail
             photo={expanded}
+            onSettingsSaved={(settings) => {
+              if (selectedIds.includes(expanded.id)) onChange(selectedIds, settings);
+            }}
             onClose={() => setExpanded(null)}
             onUpdate={updatePhoto}
             onDelete={deletePhoto}
@@ -6051,8 +7811,10 @@ function MachinePhotoDetail({
   onDelete,
   onChooseAnother,
   onShowHistory,
+  onSettingsSaved,
 }: {
   photo: MachinePhoto;
+  onSettingsSaved?: (settings: MachineSetting[]) => void;
   onClose: () => void;
   onUpdate?: (photo: MachinePhoto, caption: string) => Promise<void>;
   onDelete?: (photo: MachinePhoto) => Promise<void>;
@@ -6060,6 +7822,8 @@ function MachinePhotoDetail({
   /** Filters History to the workouts that pinned this machine. */
   onShowHistory?: () => void;
 }) {
+  const [editingSettings, setEditingSettings] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState(0);
   const [caption, setCaption] = useState(photo.caption);
   const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
@@ -6101,6 +7865,13 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
+      {settingsNotice > 0 && (
+        <NotificationDialog
+          key={`settings-${settingsNotice}`}
+          message="Machine settings saved"
+          onClose={() => setSettingsNotice(0)}
+        />
+      )}
       {saveNotice > 0 && (
         <NotificationDialog
           key={saveNotice}
@@ -6143,6 +7914,15 @@ function MachinePhotoDetail({
               Save name
             </button>
           )}
+          {onUpdate && (
+            <button
+              type="button"
+              aria-label="Edit machine settings"
+              onClick={() => setEditingSettings(true)}
+            >
+              Edit settings
+            </button>
+          )}
           {onChooseAnother && (
             <button type="button" className="photo-choose-other" onClick={onChooseAnother}>
               Switch photo
@@ -6168,6 +7948,18 @@ function MachinePhotoDetail({
               disabled={saving}
             />
           )}
+          {editingSettings && (
+            <MachineSettingsEditor
+              exerciseId={photo.exercise_id}
+              machinePhotoId={photo.id}
+              onChange={(settings) => onSettingsSaved?.(settings)}
+              onSaved={() => {
+                setEditingSettings(false);
+                setSettingsNotice((value) => value + 1);
+              }}
+              onCancel={() => setEditingSettings(false)}
+            />
+          )}
           {error && <p role="alert">{error}</p>}
         </div>
       </div>
@@ -6175,29 +7967,11 @@ function MachinePhotoDetail({
   );
 }
 
-function FuzzyHighlightedText({ value, query }: { value: string; query: string }) {
-  const highlighted = new Set(fuzzyHighlightIndices(value, query));
-  if (!highlighted.size) return value;
-
-  return (
-    <>
-      {[...value].map((character, index) =>
-        highlighted.has(index) ? (
-          <b className="exercise-search-match" key={`${character}-${index}`}>
-            {character}
-          </b>
-        ) : (
-          <Fragment key={`${character}-${index}`}>{character}</Fragment>
-        ),
-      )}
-    </>
-  );
-}
-
 export function ExercisePicker({
   exercises,
   excludedIds,
   recentExerciseIds,
+  lastDoneDates,
   onFavoriteChange,
   onCreateExercise,
   singleSelect = false,
@@ -6208,6 +7982,8 @@ export function ExercisePicker({
   exercises: Exercise[];
   excludedIds: string[];
   recentExerciseIds: string[];
+  /** Each exercise's latest workout date, shown beside its tags. */
+  lastDoneDates?: ReadonlyMap<string, string>;
   onFavoriteChange: (exerciseId: string, isFavorite: boolean) => Promise<void>;
   onCreateExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   singleSelect?: boolean;
@@ -6216,6 +7992,7 @@ export function ExercisePicker({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [today] = useState(localDate);
   const [savedMachines, setSavedMachines] = useState<ReadonlyMap<string, MachinePhotoUsage[]>>(
     () => new Map(),
   );
@@ -6224,7 +8001,6 @@ export function ExercisePicker({
   const [openMachinesId, setOpenMachinesId] = useState<string | null>(null);
   const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
   const [customOnly, setCustomOnly] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'favorites' | 'recent'>('all');
   const [equipment, setEquipment] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteSavingIds, setFavoriteSavingIds] = useState<string[]>([]);
@@ -6246,12 +8022,11 @@ export function ExercisePicker({
   const query = search.trim();
   const available = exercises.filter(
     (exercise) =>
+      !exercise.hidden &&
       !excludedIds.includes(exercise.id) &&
       (!customOnly || exercise.is_custom) &&
       (bodyPart === 'all' || exercise.category === bodyPart) &&
-      (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
-      (filter !== 'favorites' || exercise.is_favorite) &&
-      (filter !== 'recent' || recentExerciseIds.slice(0, 10).includes(exercise.id)),
+      (!equipment || exerciseEquipment(exercise.equipment) === equipment),
   );
   const recent = recentExerciseIds
     .slice(0, 10)
@@ -6264,10 +8039,6 @@ export function ExercisePicker({
       title: 'Search results',
       exercises: rankExerciseSearchMatches(available, query, recentExerciseIds),
     });
-  } else if (filter === 'favorites') {
-    sections.push({ title: 'Favorites', exercises: available.filter((item) => item.is_favorite) });
-  } else if (filter === 'recent') {
-    sections.push({ title: 'Recently used', exercises: recent });
   } else {
     const scoped = available;
     const favorites = scoped.filter((exercise) => exercise.is_favorite);
@@ -6376,6 +8147,7 @@ export function ExercisePicker({
     const chosenMachineId = selected ? (resolvedMachineChoices[exercise.id] ?? null) : null;
     const chosenMachine = machines.find((machine) => machine.id === chosenMachineId);
     const machinePanelId = `exercise-machines-${exercise.id}`;
+    const lastDone = lastDoneDates?.get(exercise.id);
     return (
       <div
         className={`exercise-option ${selected ? 'selected' : ''} ${hasMachines ? 'has-machines' : ''} ${machinesOpen ? 'machines-open' : ''}`}
@@ -6397,6 +8169,13 @@ export function ExercisePicker({
             <small className="exercise-option-tags">
               <em>{exercise.muscle_group}</em>
               {exercise.equipment && <em>{exercise.equipment}</em>}
+              {lastDone && (
+                <em className="exercise-option-last-done">
+                  <Icon name="calendar" />
+                  <span className="sr-only">Last done </span>
+                  {formatLastDone(lastDone, today)}
+                </em>
+              )}
             </small>
             {selected && hasMachines && (
               <small className="exercise-option-machine">
@@ -6451,7 +8230,7 @@ export function ExercisePicker({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
-  }, [search, filter, bodyPart, equipment, customOnly]);
+  }, [search, bodyPart, equipment, customOnly]);
 
   useEffect(() => {
     let active = true;
@@ -6565,7 +8344,7 @@ export function ExercisePicker({
         <header>
           <div className="exercise-picker-heading">
             <h2 id="exercise-picker-title">
-              {singleSelect ? 'Switch Exercise' : 'Select Exercise'}
+              {singleSelect ? 'Switch exercise' : 'Select exercise'}
             </h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
@@ -6588,7 +8367,7 @@ export function ExercisePicker({
             value={bodyPart}
             onChange={(event) => setBodyPart(event.target.value as WorkoutCategory | 'all')}
           >
-            <option value="all">Any Body Part</option>
+            <option value="all">Body part</option>
             {(
               [
                 'push',
@@ -6605,15 +8384,13 @@ export function ExercisePicker({
               </option>
             ))}
           </select>
-          <select
-            aria-label="Exercise category"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as 'all' | 'favorites' | 'recent')}
-          >
-            <option value="all">Any Category</option>
-            <option value="favorites">Favorites</option>
-            <option value="recent">Recently Used</option>
-          </select>
+          <ExerciseEquipmentFilter
+            exercises={exercises}
+            value={equipment}
+            onChange={setEquipment}
+            customOnly={customOnly}
+            onCustomOnlyChange={setCustomOnly}
+          />
           <button
             type="button"
             className="create-exercise-trigger"
@@ -6623,14 +8400,6 @@ export function ExercisePicker({
           >
             +
           </button>
-        </div>
-        <div className="exercise-picker-equipment">
-          <ExerciseCustomFilter active={customOnly} onChange={setCustomOnly} />
-          <ExerciseEquipmentFilter
-            exercises={exercises}
-            value={equipment}
-            onChange={setEquipment}
-          />
         </div>
         <div className="exercise-list" ref={listRef}>
           {sections.map(
@@ -6642,15 +8411,7 @@ export function ExercisePicker({
                 </section>
               ),
           )}
-          {!visibleExerciseCount && (
-            <p className="muted-empty">
-              {filter === 'favorites' && !query && !equipment && !customOnly && bodyPart === 'all'
-                ? 'Tap the bookmark beside an exercise to add a favorite.'
-                : filter === 'recent' && !query && !equipment && !customOnly && bodyPart === 'all'
-                  ? 'Exercises from completed workouts will appear here.'
-                  : 'No exercises match that search.'}
-            </p>
-          )}
+          {!visibleExerciseCount && <p className="muted-empty">No exercises match that search.</p>}
           {pickerError && <p className="inline-error">{pickerError}</p>}
         </div>
         <div className={`exercise-picker-actions ${singleSelect ? 'single-action' : ''}`}>
@@ -6666,7 +8427,10 @@ export function ExercisePicker({
                 )
               }
             >
-              Add super set
+              Add{' '}
+              {selectedIds.length > 2
+                ? supersetGroupName(selectedIds.length).toLowerCase()
+                : 'superset'}
             </button>
           )}
           <button
@@ -6678,7 +8442,7 @@ export function ExercisePicker({
             }
           >
             {singleSelect ? (
-              'Switch exercise'
+              'Swap exercise'
             ) : (
               <>
                 <span>Add selected exercises</span> <b>{selectedIds.length}</b>
@@ -6699,8 +8463,8 @@ export function ExercisePicker({
           onCreated={(exercise) => {
             setCreateExerciseOpen(false);
             setPickerError(null);
-            setFilter('all');
             setBodyPart('all');
+            setCustomOnly(false);
             setEquipment('');
             setSearch(exercise.name);
             setSelectedIds((current) =>
@@ -6715,155 +8479,6 @@ export function ExercisePicker({
   );
 }
 
-type LockableScreenOrientation = ScreenOrientation & {
-  lock?: (orientation: 'landscape') => Promise<void>;
-  unlock?: () => void;
-};
-
-function LandscapeChartFrame({
-  title,
-  controls,
-  children,
-}: {
-  title: string;
-  controls: ReactNode;
-  children: (expanded: boolean, close: () => void) => ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const expandedRef = useRef(false);
-  const viewerRef = useRef<HTMLDivElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-
-  const close = useCallback(() => {
-    expandedRef.current = false;
-    setExpanded(false);
-  }, []);
-
-  const focusToggle = useCallback(() => {
-    // The portal remounts the toggle; use its current node when restoring the compact view.
-    toggleRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  function unlockOrientation() {
-    try {
-      (screen.orientation as LockableScreenOrientation).unlock?.();
-    } catch {
-      // Orientation locking is optional, so the visual fallback can still close.
-    }
-  }
-
-  async function enterLandscape() {
-    // Mount the portal synchronously while the click still grants fullscreen permission.
-    expandedRef.current = true;
-    flushSync(() => setExpanded(true));
-    const viewer = viewerRef.current;
-    try {
-      if (viewer?.requestFullscreen && !document.fullscreenElement) {
-        // Fullscreen browsers override the target's transform. Rotate its child instead.
-        await viewer.requestFullscreen();
-      }
-    } catch {
-      // The fixed landscape layout below is the fallback on browsers without fullscreen support.
-    }
-    if (!expandedRef.current || viewerRef.current !== viewer) {
-      if (document.fullscreenElement === viewer) {
-        void document.exitFullscreen().catch(() => undefined);
-      }
-      return;
-    }
-    try {
-      await (screen.orientation as LockableScreenOrientation).lock?.('landscape');
-    } catch {
-      // Orientation locking is not supported on every mobile browser.
-    }
-    if (!expandedRef.current || viewerRef.current !== viewer) unlockOrientation();
-  }
-
-  useEffect(() => {
-    if (!expanded) return;
-    const viewer = viewerRef.current;
-    document.body.classList.add('chart-fullscreen-open');
-    focusToggle();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        close();
-      } else if (event.key === 'Tab' && viewer) {
-        const focusable = viewer.querySelectorAll<HTMLElement>('button, [tabindex="0"]');
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (
-          event.shiftKey &&
-          (document.activeElement === first || !viewer.contains(document.activeElement))
-        ) {
-          event.preventDefault();
-          last?.focus();
-        } else if (
-          !event.shiftKey &&
-          (document.activeElement === last || !viewer.contains(document.activeElement))
-        ) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) close();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.body.classList.remove('chart-fullscreen-open');
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      expandedRef.current = false;
-      unlockOrientation();
-      if (document.fullscreenElement === viewer) {
-        void document.exitFullscreen().catch(() => undefined);
-      }
-      focusToggle();
-    };
-  }, [expanded, close, focusToggle]);
-
-  const frame = (
-    <div className={`landscape-chart-frame ${expanded ? 'landscape-chart-expanded' : ''}`}>
-      <div className="landscape-chart-toolbar">
-        <strong className="landscape-chart-title">{title}</strong>
-        <div className="landscape-chart-options">{controls}</div>
-        <button
-          type="button"
-          ref={toggleRef}
-          className="landscape-chart-toggle"
-          aria-label={
-            expanded ? `Exit full-screen ${title}` : `View ${title} full screen in landscape`
-          }
-          onClick={() => (expanded ? close() : void enterLandscape())}
-        >
-          <span aria-hidden="true">
-            <Icon name={expanded ? 'close' : 'expand'} />
-          </span>
-          {expanded ? 'Exit' : 'Landscape'}
-        </button>
-      </div>
-      <div className="landscape-chart-content">{children(expanded, close)}</div>
-    </div>
-  );
-
-  return expanded
-    ? createPortal(
-        <div
-          ref={viewerRef}
-          className="landscape-chart-viewer"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${title} full screen`}
-        >
-          {frame}
-        </div>,
-        document.body,
-      )
-    : frame;
-}
-
 const MAPPING_NOTICE_MS = 4000;
 
 const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
@@ -6872,36 +8487,32 @@ const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: st
   { value: 'volume_kg', label: 'Volume', series: 'Session volume' },
 ];
 
-const RANGE_LABELS: Record<BodyTrendRange, string> = {
-  '1m': '1M',
-  '3m': '3M',
-  '9m': '9M',
-  '1y': '1Y',
-  all: 'All',
-};
-
 interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
   onBack: () => void;
   onMerge?: (trigger: HTMLButtonElement) => void;
+  onRename?: (trigger: HTMLButtonElement) => void;
+  onToggleHidden?: () => void;
 }
 
 export function ProgressScreen({
   exerciseLibrary,
   dataRevision = null,
   exercises,
-  measurements,
   personalRecords,
   onOpenWorkout,
   embedded = false,
   initialExerciseId = null,
+  openMachineWeights = false,
+  onMachineWeightsOpened,
   defaultExerciseId = null,
   browseFirst = false,
   onOpenSettings,
   onDetailChange,
   onCreateExercise,
   onExercisesMerged,
+  onOpenMember,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision?: string | null;
@@ -6909,8 +8520,13 @@ export function ProgressScreen({
   measurements: BodyMeasurement[];
   personalRecords: PersonalRecord[];
   onOpenWorkout: (workoutId: string, exerciseId: string) => void;
+  /** Opens a friend's profile from the exercise's friends ranking. */
+  onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   embedded?: boolean;
   initialExerciseId?: string | null;
+  /** Asked for from elsewhere: Machine weights opens once this exercise's machines have loaded. */
+  openMachineWeights?: boolean;
+  onMachineWeightsOpened?: () => void;
   defaultExerciseId?: string | null;
   browseFirst?: boolean;
   onOpenSettings?: () => void;
@@ -6918,6 +8534,8 @@ export function ProgressScreen({
   onCreateExercise?: () => void;
   onExercisesMerged?: () => Promise<void>;
 }) {
+  const { block, config: blockConfig, select: selectBlock } = useTrainingBlocks();
+  const blockId = block?.id;
   const weightUnit = useWeightUnit();
   const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
   const mergeTrigger = useRef<HTMLButtonElement | null>(null);
@@ -6959,6 +8577,12 @@ export function ProgressScreen({
     view: 'all',
   });
   const [mappingOpen, setMappingOpen] = useState(false);
+  const mappingLoaded = mapping !== null && exerciseId === initialExerciseId;
+  useEffect(() => {
+    if (!openMachineWeights || !mappingLoaded) return;
+    setMappingOpen(true);
+    onMachineWeightsOpened?.();
+  }, [openMachineWeights, mappingLoaded, onMachineWeightsOpened]);
   const [mappingNotice, setMappingNotice] = useState(0);
   const libraryRoot = useRef<HTMLDivElement>(null);
   const libraryScroll = useRef(0);
@@ -6966,6 +8590,7 @@ export function ProgressScreen({
   const rangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const selectedExercise = strengthExercises.find((exercise) => exercise.id === exerciseId) ?? null;
   const canMergeSelected = Boolean(selectedExercise?.is_custom && onExercisesMerged);
+  const canEditSelected = Boolean(selectedExercise && onExercisesMerged);
   const openSelectedMerge = useCallback(
     (trigger: HTMLButtonElement) => {
       mergeTrigger.current = trigger;
@@ -6973,6 +8598,40 @@ export function ProgressScreen({
     },
     [exerciseId],
   );
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [exerciseNotice, setExerciseNotice] = useState<{
+    text: string;
+    undo?: () => void;
+  } | null>(null);
+  useEffect(() => {
+    if (!exerciseNotice) return;
+    const timer = setTimeout(() => setExerciseNotice(null), UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [exerciseNotice]);
+  const openSelectedRename = useCallback((trigger: HTMLButtonElement) => {
+    mergeTrigger.current = trigger;
+    setRenameOpen(true);
+  }, []);
+  const setSelectedHidden = useCallback(
+    async (exercise: Exercise, hidden: boolean, undoable: boolean) => {
+      try {
+        await api.updateExercise(exercise.id, { hidden });
+        await onExercisesMerged?.();
+        setExerciseNotice({
+          text: hidden ? 'Hidden from exercise lists' : 'Shown in exercise lists',
+          undo: undoable ? () => void setSelectedHidden(exercise, !hidden, false) : undefined,
+        });
+      } catch (caught) {
+        setExerciseNotice({
+          text: caught instanceof Error ? caught.message : 'The exercise could not be changed.',
+        });
+      }
+    },
+    [onExercisesMerged],
+  );
+  const toggleSelectedHidden = useCallback(() => {
+    if (selectedExercise) void setSelectedHidden(selectedExercise, !selectedExercise.hidden, true);
+  }, [selectedExercise, setSelectedHidden]);
 
   const backToExercises = useCallback(() => {
     setFullProgress(false);
@@ -6993,6 +8652,9 @@ export function ProgressScreen({
             sessionCount: progressSessionCount,
             onBack: backToExercises,
             onMerge: canMergeSelected ? openSelectedMerge : undefined,
+            onRename:
+              canEditSelected && selectedExercise.is_custom ? openSelectedRename : undefined,
+            onToggleHidden: canEditSelected ? toggleSelectedHidden : undefined,
           }
         : null,
     );
@@ -7004,7 +8666,10 @@ export function ProgressScreen({
     progressSessionCount,
     backToExercises,
     canMergeSelected,
+    canEditSelected,
     openSelectedMerge,
+    openSelectedRename,
+    toggleSelectedHidden,
   ]);
   useEffect(() => () => onDetailChange?.(null), [onDetailChange]);
 
@@ -7013,9 +8678,10 @@ export function ProgressScreen({
     let cancelled = false;
     setVisibleSessions(browseFirst ? 5 : HISTORY_PAGE_SIZE);
     setLoading(true);
+    setProgress(null);
     setProgressError(null);
     void api
-      .exerciseProgress(exerciseId)
+      .exerciseProgress(exerciseId, blockId)
       .then((nextProgress) => {
         if (!cancelled) setProgress(nextProgress);
       })
@@ -7031,7 +8697,16 @@ export function ProgressScreen({
     return () => {
       cancelled = true;
     };
-  }, [exerciseId, progressAttempt, dataRevision, libraryMode, browseFirst]);
+  }, [
+    exerciseId,
+    progressAttempt,
+    dataRevision,
+    libraryMode,
+    browseFirst,
+    blockId,
+    block?.start_date,
+    block?.end_date,
+  ]);
 
   useEffect(() => {
     if (!exerciseId || libraryMode) return;
@@ -7066,10 +8741,18 @@ export function ProgressScreen({
     () => (progress ? progressViewPoints(progress, mapping, view) : []),
     [progress, mapping, view],
   );
+  const viewDates = useMemo(() => viewPoints.map((point) => point.workout_date), [viewPoints]);
+  const { pinchZoom, pinchStart, selectRange } = useRangePinchZoom(
+    viewDates,
+    displayRange,
+    setDisplayRange,
+  );
   const defaultView = view === 'all' && !normalised;
   const approx = normalised ? '≈ ' : '';
   const metricInfo = PROGRESS_METRICS.find((item) => item.value === metric)!;
-  const inRange = progress ? progressPointsForChart(viewPoints, metric, displayRange) : [];
+  const inRange = progress
+    ? progressPointsForChart(viewPoints, metric, displayRange, pinchStart)
+    : [];
   const weekly = !browseFirst && metric !== 'volume_kg' && displayRange !== '1m';
   const charted = weekly ? weeklyBestPoints(inRange, (point) => point[metric]) : inRange;
   const latestPoint = inRange.at(-1) ?? null;
@@ -7092,22 +8775,32 @@ export function ProgressScreen({
   const bestEstimatedOneRepMax = defaultView
     ? (progress?.personal_best_estimated_1rm ?? 0)
     : (estimatedOneRepMaxPoint?.estimated_1rm ?? 0);
-  const bodyweight = measurements[0]?.weight_kg ?? null;
+  const relativeBest = viewPoints.reduce<(typeof viewPoints)[number] | null>(
+    (best, point) =>
+      (point.relative_strength ?? 0) > (best?.relative_strength ?? 0) ? point : best,
+    null,
+  );
   const tableRecordIds = useMemo(
     () =>
       new Set(
-        personalRecords
+        recordsForBlock(personalRecords, block)
           .filter(
             (record) =>
               record.exercise_id === exerciseId &&
-              (record.record_type === 'weight' || record.record_type === 'reps_at_weight'),
+              ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
           )
           .map((record) => record.workout_id),
       ),
-    [personalRecords, exerciseId],
+    [personalRecords, exerciseId, block],
   );
   const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
   const sessionsNewestFirst = viewPoints.slice().reverse();
+  const sessionCountByYear = new Map(
+    groupByYear(sessionsNewestFirst, (point) => point.workout_date).map((group) => [
+      group.year,
+      group.items.length,
+    ]),
+  );
   const formatMetric = (value: number) =>
     metric === 'volume_kg'
       ? Math.round(value).toLocaleString('en-GB')
@@ -7120,6 +8813,13 @@ export function ProgressScreen({
     detail: `${formatWeight(point.raw_best_weight_kg, weightUnit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
   }));
 
+  const friendsRanking = (
+    <LiftLeaderboardCard
+      exerciseId={exerciseId}
+      revision={dataRevision}
+      onOpenMember={onOpenMember}
+    />
+  );
   const rangeControls = (
     <div
       ref={rangeIndicatorRef}
@@ -7135,7 +8835,7 @@ export function ProgressScreen({
           aria-selected={displayRange === option.value}
           aria-label={option.label}
           className={displayRange === option.value ? 'active' : ''}
-          onClick={() => setDisplayRange(option.value)}
+          onClick={() => selectRange(option.value)}
         >
           {RANGE_LABELS[option.value]}
         </button>
@@ -7185,6 +8885,7 @@ export function ProgressScreen({
               () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
             );
           }}
+          onChanged={() => void onExercisesMerged?.()}
           onMerged={(_sourceId, target) => {
             setMergeRequest(null);
             setMergeNotice(true);
@@ -7193,6 +8894,53 @@ export function ProgressScreen({
           }}
         />
       )}
+      {renameOpen && selectedExercise && (
+        <ExerciseRenameDialog
+          exercise={selectedExercise}
+          onClose={() => {
+            setRenameOpen(false);
+            requestAnimationFrame(
+              () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
+            );
+          }}
+          onRenamed={() => {
+            setRenameOpen(false);
+            setExerciseNotice({ text: 'Exercise renamed' });
+            void onExercisesMerged?.();
+          }}
+        />
+      )}
+      {exerciseNotice &&
+        createPortal(
+          <div
+            className="undo-toast top-toast"
+            role="status"
+            style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
+          >
+            <span>{exerciseNotice.text}</span>
+            {exerciseNotice.undo && (
+              <button
+                className="undo-toast-action"
+                type="button"
+                onClick={() => {
+                  exerciseNotice.undo?.();
+                  setExerciseNotice(null);
+                }}
+              >
+                Undo
+              </button>
+            )}
+            <button
+              type="button"
+              className="undo-toast-close"
+              aria-label="Dismiss exercise notification"
+              onClick={() => setExerciseNotice(null)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
       {mergeNotice &&
         createPortal(
           <div className="undo-toast top-toast" role="status">
@@ -7247,11 +8995,14 @@ export function ProgressScreen({
             actions={
               <>
                 {selectedExercise && <ExerciseMuscleHelp exercise={selectedExercise} />}
-                {canMergeSelected && selectedExercise && (
+                {canEditSelected && selectedExercise && (
                   <ExerciseOptionsMenu
                     key={selectedExercise.id}
                     exerciseName={selectedExercise.name}
-                    onMerge={openSelectedMerge}
+                    hidden={selectedExercise.hidden}
+                    onRename={selectedExercise.is_custom ? openSelectedRename : undefined}
+                    onMerge={canMergeSelected ? openSelectedMerge : undefined}
+                    onToggleHidden={toggleSelectedHidden}
                   />
                 )}
                 {!browseFirst && (
@@ -7343,14 +9094,20 @@ export function ProgressScreen({
                   </div>
                 )}
                 {(mapping?.machines.length ?? 0) > 1 && (
-                  <button
-                    type="button"
-                    className="progress-machine-settings"
-                    aria-label="Machine weights"
-                    onClick={() => setMappingOpen(true)}
-                  >
-                    <Icon name="settings" />
-                  </button>
+                  <MachineWeightTip mapping={mapping} onOpen={() => setMappingOpen(true)}>
+                    <button
+                      type="button"
+                      className={`progress-machine-settings${mapping?.enabled ? ' is-on' : ''}`}
+                      aria-label={
+                        mapping?.enabled
+                          ? 'Machine weights, normalised'
+                          : 'Normalise machine weights'
+                      }
+                      onClick={() => setMappingOpen(true)}
+                    >
+                      {mapping?.enabled ? 'Normalised' : 'Normalise'}
+                    </button>
+                  </MachineWeightTip>
                 )}
               </div>
             )}
@@ -7416,6 +9173,25 @@ export function ProgressScreen({
                           since {dayMonth(firstPoint.workout_date)}
                         </p>
                       )}
+                      {block && (
+                        // The chart, bests and sessions only cover this block; say so, and let
+                        // the whole history return in one tap.
+                        <button
+                          type="button"
+                          className="progress-block-scope"
+                          aria-label={`Showing the ${block.name} block only. Show all time`}
+                          onClick={() => selectBlock('all')}
+                        >
+                          <i
+                            aria-hidden="true"
+                            style={{
+                              background: blockColor(blockConfig.blocks, block, localDate()),
+                            }}
+                          />
+                          {block.name}
+                          <Icon name="close" />
+                        </button>
+                      )}
                     </div>
                     {!browseFirst && selectedExercise && (
                       <ExerciseIcon exercise={selectedExercise} />
@@ -7440,6 +9216,7 @@ export function ProgressScreen({
                         fillHeight={expanded}
                         markRecords={metric !== 'volume_kg'}
                         formatValue={formatMetric}
+                        pinchZoom={pinchZoom}
                         onSelect={
                           browseFirst
                             ? undefined
@@ -7494,17 +9271,18 @@ export function ProgressScreen({
                     <div>
                       <span>Relative strength</span>
                       <b className="num">
-                        {bodyweight && bestEstimatedOneRepMax
-                          ? `${approx}${(bestEstimatedOneRepMax / bodyweight).toFixed(2)} × BW`
+                        {relativeBest?.relative_strength != null
+                          ? `${relativeBest.relative_strength.toFixed(2)}× BW`
                           : '–'}
                       </b>
                       <small>
-                        {bodyweight
-                          ? `Best e1RM at ${formatWeight(bodyweight, weightUnit)}`
-                          : 'Log bodyweight to compare'}
+                        {relativeBest?.bodyweight_kg != null
+                          ? `at ${formatWeight(relativeBest.bodyweight_kg, weightUnit)} BW · ${shortDate(relativeBest.workout_date)}`
+                          : 'No bodyweight recorded'}
                       </small>
                     </div>
                   </section>
+                  {friendsRanking}
                   <section
                     className="pulse-card progress-sessions"
                     aria-label="Exercise session history"
@@ -7513,36 +9291,69 @@ export function ProgressScreen({
                       <h2>Sessions</h2>
                       <span>Best set · {metricInfo.label}</span>
                     </header>
-                    <ul>
-                      {sessionsNewestFirst.slice(0, visibleSessions).map((point) => (
-                        <li key={point.workout_id}>
-                          <button
-                            type="button"
-                            aria-label={`View ${progress.exercise.name} in workout from ${prettyDate(point.workout_date)}`}
-                            onClick={() =>
-                              browseFirst
-                                ? setSessionId(point.workout_id)
-                                : onOpenWorkout(point.workout_id, progress.exercise.id)
-                            }
-                          >
-                            <span className="session-date">
-                              {shortDate(point.workout_date)}
-                              {recordIds.has(point.workout_id) && <em className="pr-chip">PR</em>}
-                            </span>
-                            <span className="session-set num">
-                              {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
-                              {point.best_reps}
-                              {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
-                            </span>
-                            <b className="num">
-                              {approx}
-                              {formatMetricKg(point[metric])}
-                            </b>
-                            <Icon name="chevron-right" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    {groupByYear(
+                      sessionsNewestFirst.slice(0, visibleSessions),
+                      (point) => point.workout_date,
+                    ).map((group) => (
+                      <section
+                        key={group.year}
+                        className="session-year"
+                        aria-labelledby={`session-year-${group.year}`}
+                      >
+                        <h3 className="session-year-header">
+                          <span id={`session-year-${group.year}`} className="num">
+                            {group.year}
+                          </span>
+                          <small>
+                            {sessionCountByYear.get(group.year)}{' '}
+                            {sessionCountByYear.get(group.year) === 1 ? 'session' : 'sessions'}
+                          </small>
+                        </h3>
+                        <ul>
+                          {group.items.map((point) => (
+                            <li key={point.workout_id}>
+                              <button
+                                type="button"
+                                aria-label={`View ${progress.exercise.name} in workout from ${prettyDate(point.workout_date)}`}
+                                onClick={() =>
+                                  browseFirst
+                                    ? setSessionId(point.workout_id)
+                                    : onOpenWorkout(point.workout_id, progress.exercise.id)
+                                }
+                              >
+                                <span className="session-date">
+                                  {shortDate(point.workout_date)}
+                                  {recordIds.has(point.workout_id) && (
+                                    <em className="pr-chip">
+                                      {defaultView
+                                        ? personalRecords.some(
+                                            (record) =>
+                                              record.workout_id === point.workout_id &&
+                                              record.exercise_id === exerciseId &&
+                                              record.scope !== 'block',
+                                          )
+                                          ? 'All-time PR'
+                                          : 'Block PR'
+                                        : 'PR'}
+                                    </em>
+                                  )}
+                                </span>
+                                <span className="session-set num">
+                                  {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
+                                  {point.best_reps}
+                                  {point.best_rpe !== null && <small> @{point.best_rpe}</small>}
+                                </span>
+                                <b className="num">
+                                  {approx}
+                                  {formatMetricKg(point[metric])}
+                                </b>
+                                <Icon name="chevron-right" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
                     {visibleSessions < sessionsNewestFirst.length && (
                       <button
                         type="button"
@@ -7556,10 +9367,13 @@ export function ProgressScreen({
                 </div>
               </>
             ) : (
-              <EmptyState
-                title="No data yet"
-                body="Complete this exercise in a workout to start its progress graph."
-              />
+              <>
+                <EmptyState
+                  title="No data yet"
+                  body="Complete this exercise in a workout to start its progress graph."
+                />
+                {friendsRanking}
+              </>
             )}
           </div>
         )}
@@ -7569,6 +9383,7 @@ export function ProgressScreen({
 }
 
 function SettingsScreen({
+  exercises,
   active,
   selectedGroup,
   onSelectGroup,
@@ -7591,6 +9406,7 @@ function SettingsScreen({
   csvGuideOpen,
   onCsvGuideOpenChange,
   onDeleteSamples,
+  onRestoreArchive,
   onDataChange,
   account,
   onOpenProfile,
@@ -7602,6 +9418,7 @@ function SettingsScreen({
   onOpenHomeScreenGuide,
   onOpenAppGuide,
 }: {
+  exercises: Exercise[];
   active: boolean;
   selectedGroup: SettingsGroupId | null;
   onSelectGroup: (group: SettingsGroupId | null) => void;
@@ -7634,6 +9451,7 @@ function SettingsScreen({
   csvGuideOpen: boolean;
   onCsvGuideOpenChange: (open: boolean) => void;
   onDeleteSamples: () => Promise<void>;
+  onRestoreArchive: (file: File) => Promise<void>;
   onDataChange: () => Promise<void>;
 }) {
   useSettingsPageJump('settings', active);
@@ -7652,6 +9470,12 @@ function SettingsScreen({
   const [trainingPreferencesError, setTrainingPreferencesError] = useState<string | null>(null);
   const [savingTrainingPreferences, setSavingTrainingPreferences] = useState(false);
   const workoutTypes = useWorkoutTypes();
+
+  useEffect(() => {
+    if (!trainingPreferencesStatus) return;
+    const timer = window.setTimeout(() => setTrainingPreferencesStatus(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [trainingPreferencesStatus]);
 
   useEffect(() => {
     if (!csvGuideOpen) return;
@@ -7731,9 +9555,12 @@ function SettingsScreen({
     if (
       !Number.isInteger(trainingPreferences.weekly_muscle_set_goal) ||
       trainingPreferences.weekly_muscle_set_goal < 1 ||
-      trainingPreferences.weekly_muscle_set_goal > 1000
+      trainingPreferences.weekly_muscle_set_goal > 1000 ||
+      Object.values(trainingPreferences.weekly_muscle_set_goals ?? {}).some(
+        (goal) => !Number.isInteger(goal) || goal < 1 || goal > 1000,
+      )
     ) {
-      setTrainingPreferencesError('Enter a weekly muscle set goal between 1 and 1,000 whole sets.');
+      setTrainingPreferencesError('Enter weekly muscle set goals between 1 and 1,000 whole sets.');
       setSavingTrainingPreferences(false);
       return;
     }
@@ -7797,7 +9624,6 @@ function SettingsScreen({
                       <h2 id="training-preferences-title">Units &amp; weekly goals</h2>
                     </div>
                   </header>
-                  <p>Set your units, week start and muscle-set goal. Saved to your account.</p>
                   {trainingPreferences && (
                     <div className="training-preferences-grid">
                       <label>
@@ -7834,14 +9660,13 @@ function SettingsScreen({
                         </select>
                       </label>
                       <label>
-                        Weekly sets per muscle
+                        Default weekly sets per muscle
                         <input
                           type="number"
                           min="1"
                           max="1000"
                           step="1"
                           value={trainingPreferences.weekly_muscle_set_goal || ''}
-                          aria-describedby="muscle-set-goal-help"
                           onChange={(event) => {
                             setTrainingPreferences({
                               ...trainingPreferences,
@@ -7851,24 +9676,47 @@ function SettingsScreen({
                           }}
                         />
                       </label>
-                      <button
-                        type="button"
-                        disabled={savingTrainingPreferences}
-                        onClick={() => void saveTrainingPreferences()}
-                      >
-                        {savingTrainingPreferences ? 'Saving…' : 'Save preferences'}
-                      </button>
                     </div>
                   )}
-                  <p id="muscle-set-goal-help">
-                    Counts working sets, excluding warmups. Shown as the goal on Home’s Sets per
-                    muscle bars.
-                  </p>
-                  {trainingPreferencesStatus && (
-                    <p className="training-preference-status" role="status">
-                      {trainingPreferencesStatus}
-                    </p>
+                  {trainingPreferences && (
+                    <MuscleGoalEditor
+                      exercises={exercises}
+                      defaultGoal={trainingPreferences.weekly_muscle_set_goal}
+                      goals={trainingPreferences.weekly_muscle_set_goals}
+                      onChange={(goals) => {
+                        setTrainingPreferences({
+                          ...trainingPreferences,
+                          weekly_muscle_set_goals: goals,
+                        });
+                        setTrainingPreferencesStatus(null);
+                      }}
+                    />
                   )}
+                  {trainingPreferences && (
+                    <button
+                      type="button"
+                      className="pulse-button secondary"
+                      disabled={savingTrainingPreferences}
+                      onClick={() => void saveTrainingPreferences()}
+                    >
+                      {savingTrainingPreferences ? 'Saving…' : 'Save preferences'}
+                    </button>
+                  )}
+                  {trainingPreferencesStatus &&
+                    createPortal(
+                      <div className="undo-toast top-toast" role="status">
+                        <span>{trainingPreferencesStatus}</span>
+                        <button
+                          type="button"
+                          className="undo-toast-close"
+                          aria-label="Dismiss training preferences notification"
+                          onClick={() => setTrainingPreferencesStatus(null)}
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </div>,
+                      document.body,
+                    )}
                   {trainingPreferencesError && (
                     <p className="inline-error" role="alert">
                       {trainingPreferencesError}
@@ -7923,6 +9771,7 @@ function SettingsScreen({
                     </button>
                   </div>
                 </section>
+                {account && <WorkoutAutoSaveSetting userId={account.id} />}
                 <WorkoutTypesSettings
                   collapsible
                   types={workoutTypes.types}
@@ -8028,6 +9877,15 @@ function SettingsScreen({
             description: 'Rest alerts, workout reminders and video updates.',
             content: (
               <>
+                <section
+                  className="settings-panel panel"
+                  aria-labelledby="workout-sharing-settings-title"
+                >
+                  <header>
+                    <h2 id="workout-sharing-settings-title">Workout sharing</h2>
+                  </header>
+                  <WorkoutShareReminderSetting />
+                </section>
                 <section
                   className="settings-panel panel"
                   aria-labelledby="notification-settings-title"
@@ -8171,6 +10029,8 @@ function SettingsScreen({
                   </div>
                 </section>
 
+                {account && <AccountArchivePanel onRestore={onRestoreArchive} />}
+
                 <YouTubeConnectionPanel canConnect={canUploadVideos(account)} />
               </>
             ),
@@ -8181,6 +10041,8 @@ function SettingsScreen({
             description: 'App guides, installation, updates and feedback.',
             content: (
               <>
+                <TipsSettings />
+                <SetupGuidesSettings />
                 <section
                   className="settings-panel panel"
                   aria-labelledby="home-screen-settings-title"
@@ -8204,6 +10066,7 @@ function SettingsScreen({
                       ? 'You are already using the installed app. View the steps to set up another browser or device.'
                       : 'Open Relay full screen from an icon on your phone, like an app.'}
                   </p>
+                  <HomeScreenShortcut onUnavailable={onOpenHomeScreenGuide} />
                 </section>
                 <section
                   className="settings-panel panel"
@@ -8295,1640 +10158,11 @@ function SettingsScreen({
   );
 }
 
-export function BodyCompositionScreen({
-  dataRevision = null,
-  measurements,
-  onSave,
-  onDelete,
-  onDataChange,
-  entryRequest = 0,
-  trendPreference = DEFAULT_BODY_TREND_PREFERENCE,
-  onOpenSettings,
-  accountActions,
-}: {
-  dataRevision?: string | null;
-  measurements: BodyMeasurement[];
-  onSave: (payload: {
-    measurement_date: string;
-    weight_kg: number;
-    body_fat_pct: number | null;
-    notes: string | null;
-  }) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onDataChange: () => Promise<void>;
-  entryRequest?: number;
-  trendPreference?: BodyTrendPreference;
-  onOpenSettings?: () => void;
-  accountActions?: ReactNode;
-}) {
-  const weightUnit = useWeightUnit();
-  const [measurementDate, setMeasurementDate] = useState(localDate());
-  const [entryOpen, setEntryOpen] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(false);
-  const [weight, setWeight] = useState<number | null>(null);
-  const [bodyFat, setBodyFat] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [goals, setGoals] = useState<BodyWeightGoal[]>([]);
-  const [goalRemovalError, setGoalRemovalError] = useState<string | null>(null);
-  const [goalTarget, setGoalTarget] = useState<number | null>(null);
-  const [goalKind, setGoalKind] = useState<BodyGoalKind>('loss');
-  const [goalDate, setGoalDate] = useState('');
-  const [savingGoal, setSavingGoal] = useState(false);
-  const [editingMeasurement, setEditingMeasurement] = useState<BodyMeasurement | null>(null);
-  const [editWeight, setEditWeight] = useState<number | null>(null);
-  const [editBodyFat, setEditBodyFat] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [checkInPage, setCheckInPage] = useState(1);
-  const [historyView, setHistoryView] = useState<'daily' | BodyHistoryPeriod>('daily');
-  const historyViewIndicatorRef = useSlidingIndicator<HTMLDivElement>(historyView);
-  const [trendDuration, setTrendDuration] = useState<BodyTrendDuration>(trendPreference.duration);
-  const [trendStatistic, setTrendStatistic] = useState<BodyTrendStatistic>(
-    trendPreference.statistic,
-  );
-  const goalRemoval = useGoalRemoval<BodyWeightGoal>({
-    remove: (id) => api.deleteBodyWeightGoal(id),
-    onRemoved: () => void onDataChange(),
-    onRestore: ({ goal, index }) =>
-      setGoals((current) =>
-        current.some((item) => item.id === goal.id)
-          ? current
-          : [...current.slice(0, index), goal, ...current.slice(index)],
-      ),
-    onFailed: setGoalRemovalError,
-  });
-  const pendingGoalId = goalRemoval.pendingId;
-  const activeGoal = goals.find((goal) => goal.active) ?? null;
-  const dailyHistory = bodyHistoryWithWeightChanges(
-    measurements
-      .slice()
-      .sort((first, second) => second.measurement_date.localeCompare(first.measurement_date)),
-    goals,
-    (measurement) => measurement.measurement_date,
-  );
-  // A week or month is judged by the goal in force on its last day.
-  const historySummaries = bodyHistoryWithWeightChanges(
-    historyView === 'daily' ? [] : summarizeBodyHistory(measurements, historyView, trendStatistic),
-    goals,
-    (summary) => summary.end_date,
-  );
-  const historyCount = historyView === 'daily' ? measurements.length : historySummaries.length;
-  const checkInPageCount = Math.max(1, Math.ceil(historyCount / HISTORY_PAGE_SIZE));
-  const pagedMeasurements = dailyHistory.slice(
-    (checkInPage - 1) * HISTORY_PAGE_SIZE,
-    checkInPage * HISTORY_PAGE_SIZE,
-  );
-  const pagedSummaries = historySummaries.slice(
-    (checkInPage - 1) * HISTORY_PAGE_SIZE,
-    checkInPage * HISTORY_PAGE_SIZE,
-  );
-  const latest = measurements[0];
-  const targetWeight = goalTarget;
-  const hasValidTarget =
-    targetWeight !== null &&
-    Number.isFinite(targetWeight) &&
-    targetWeight > 0 &&
-    targetWeight <= 500;
-  const trendSummary = summarizeBodyWeightTrend(measurements, trendDuration);
-  const trendValue = trendSummary[trendStatistic];
-
-  useEffect(() => {
-    setCheckInPage((page) => Math.min(page, checkInPageCount));
-  }, [checkInPageCount]);
-
-  useEffect(() => {
-    if (entryRequest === 0) return;
-    setEntryOpen(true);
-    setGoalOpen(false);
-  }, [entryRequest]);
-
-  useEffect(() => {
-    setTrendDuration(trendPreference.duration);
-    setTrendStatistic(trendPreference.statistic);
-  }, [trendPreference]);
-  useEffect(() => {
-    let cancelled = false;
-    void api
-      .listBodyWeightGoals()
-      .then((next) => {
-        // A goal waiting out its Undo window stays hidden when the list reloads.
-        if (!cancelled) setGoals(next.filter((goal) => goal.id !== pendingGoalId()));
-      })
-      .catch((reason) => {
-        if (!cancelled)
-          setError(reason instanceof Error ? reason.message : 'Could not load body-weight goals.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dataRevision, pendingGoalId]);
-
-  /** A goal divider in body history; swipe it left to remove the goal, with Undo. */
-  function renderGoalDivider(goal: BodyWeightGoal) {
-    return (
-      <SwipeToDeleteSetRow
-        className="body-goal-swipe"
-        label={`goal: ${bodyGoalName(goal, weightUnit)}`}
-        onDelete={() => {
-          const index = goals.findIndex((item) => item.id === goal.id);
-          if (index < 0) return;
-          setGoalRemovalError(null);
-          setGoals((current) => current.filter((item) => item.id !== goal.id));
-          goalRemoval.start(goal, index);
-        }}
-      >
-        <BodyHistoryGoalDivider goal={goal} unit={weightUnit} />
-      </SwipeToDeleteSetRow>
-    );
-  }
-
-  function chooseGoalKind(kind: BodyGoalKind) {
-    setGoalKind(kind);
-    // Maintaining usually means holding today's weight, so start from it.
-    if (kind === 'maintain' && goalTarget === null && latest) setGoalTarget(latest.weight_kg);
-  }
-
-  async function saveGoal() {
-    if (!latest || !hasValidTarget || !goalDate) {
-      setError('Log a current weight, target weight, and target date first.');
-      return;
-    }
-    const direction = bodyGoalKind({
-      start_weight_kg: latest.weight_kg,
-      target_weight_kg: targetWeight!,
-    });
-    if (goalKind !== 'maintain' && direction !== goalKind) {
-      setError(
-        `For a weight-${goalKind} goal, choose a target ${goalKind === 'loss' ? 'below' : 'above'} your current ${formatWeight(latest.weight_kg, weightUnit)}.`,
-      );
-      return;
-    }
-    setSavingGoal(true);
-    setError(null);
-    try {
-      const goal = await api.createBodyWeightGoal({
-        start_date: localDate(),
-        target_date: goalDate,
-        // A maintain goal holds one weight, so its start and target are the same.
-        start_weight_kg: goalKind === 'maintain' ? targetWeight! : latest.weight_kg,
-        target_weight_kg: targetWeight!,
-        active: true,
-      });
-      setGoals((current) => [goal, ...current.map((item) => ({ ...item, active: false }))]);
-      await onDataChange();
-      setGoalTarget(null);
-      setGoalDate('');
-      setGoalOpen(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save this target.');
-    } finally {
-      setSavingGoal(false);
-    }
-  }
-
-  async function submitMeasurement() {
-    const weightValue = weight;
-    if (
-      weightValue === null ||
-      !Number.isFinite(weightValue) ||
-      weightValue <= 0 ||
-      weightValue > 500
-    ) {
-      setError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave({
-        measurement_date: measurementDate,
-        weight_kg: weightValue,
-        body_fat_pct: bodyFat ? Number(bodyFat) : null,
-        notes: notes.trim() || null,
-      });
-      setWeight(null);
-      setBodyFat('');
-      setNotes('');
-      setEntryOpen(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save this measurement.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function beginMeasurementEdit(measurement: BodyMeasurement) {
-    setEditingMeasurement(measurement);
-    setEditWeight(measurement.weight_kg);
-    setEditBodyFat(measurement.body_fat_pct === null ? '' : String(measurement.body_fat_pct));
-    setEditError(null);
-  }
-
-  async function submitMeasurementEdit() {
-    if (!editingMeasurement) return;
-    const weightValue = editWeight;
-    const bodyFatValue = editBodyFat.trim() ? Number(editBodyFat) : null;
-    if (
-      weightValue === null ||
-      !Number.isFinite(weightValue) ||
-      weightValue <= 0 ||
-      weightValue > 500
-    ) {
-      setEditError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    if (
-      bodyFatValue !== null &&
-      (!Number.isFinite(bodyFatValue) || bodyFatValue < 1 || bodyFatValue > 70)
-    ) {
-      setEditError('Enter a body-fat percentage between 1 and 70, or leave it blank.');
-      return;
-    }
-    setEditSaving(true);
-    setEditError(null);
-    try {
-      await onSave({
-        measurement_date: editingMeasurement.measurement_date,
-        weight_kg: weightValue,
-        body_fat_pct: bodyFatValue,
-        notes:
-          editingMeasurement.notes === IMPORTED_BODYWEIGHT_NOTE ? null : editingMeasurement.notes,
-      });
-      setEditingMeasurement(null);
-    } catch (saveError) {
-      setEditError(
-        saveError instanceof Error ? saveError.message : 'Could not update this check-in.',
-      );
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
-  return (
-    <section className="body-screen content-page">
-      <PageHeader
-        eyebrow={`${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${shortDate(latest.measurement_date)}` : ''}`}
-        title="Body"
-        onOpenSettings={onOpenSettings}
-        accountActions={accountActions}
-      />
-      <div className="body-reference-stats" aria-label="Bodyweight summary">
-        <div>
-          <span>Bodyweight</span>
-          <strong>{latest ? formatWeight(latest.weight_kg, weightUnit) : '–'}</strong>
-        </div>
-        <div>
-          <span>
-            {activeGoal
-              ? `${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} Goal`
-              : 'Weight Goal'}
-          </span>
-          <strong>
-            {activeGoal ? formatWeight(activeGoal.target_weight_kg, weightUnit) : '–'}
-          </strong>
-        </div>
-        <div>
-          <span>Body Fat</span>
-          <strong>
-            {latest && latest.body_fat_pct !== null ? `${latest.body_fat_pct}%` : '–'}
-          </strong>
-        </div>
-        <div className="body-trend-stat">
-          <div className="body-trend-stat-controls">
-            <label>
-              <span className="sr-only">Bodyweight trend statistic</span>
-              <select
-                aria-label="Bodyweight trend statistic"
-                value={trendStatistic}
-                onChange={(event) => setTrendStatistic(event.target.value as BodyTrendStatistic)}
-              >
-                <option value="average">Average</option>
-                <option value="median">Median</option>
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Bodyweight trend duration</span>
-              <select
-                aria-label="Bodyweight trend duration"
-                value={trendDuration}
-                onChange={(event) => setTrendDuration(event.target.value as BodyTrendDuration)}
-              >
-                {BODY_TREND_DURATION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <strong>
-            {trendValue === null
-              ? '–'
-              : `${weightFromKg(trendValue, weightUnit).toFixed(1)} ${weightUnit}`}
-          </strong>
-          <small>
-            {trendSummary.count} {trendSummary.count === 1 ? 'check-in' : 'check-ins'}
-          </small>
-        </div>
-      </div>
-
-      {measurements.length > 1 && (
-        <section className="pulse-card body-trend-panel">
-          <header className="pulse-card-header">
-            <h2>Trend</h2>
-            <span>Tap or drag the chart to read a check-in</span>
-          </header>
-          <BodyTrendChart measurements={measurements} goals={goals} />
-        </section>
-      )}
-
-      <div className="body-reference-actions">
-        <button
-          className={entryOpen ? 'active' : ''}
-          type="button"
-          onClick={() => {
-            setError(null);
-            setEntryOpen(true);
-            setGoalOpen(false);
-          }}
-        >
-          Log weigh-in
-        </button>
-        <button
-          className={goalOpen ? 'active' : ''}
-          type="button"
-          onClick={() => {
-            setError(null);
-            setGoalKind(activeGoal ? bodyGoalKind(activeGoal) : 'loss');
-            setGoalOpen(true);
-            setEntryOpen(false);
-          }}
-        >
-          {activeGoal ? 'New goal' : 'Set a goal'}
-        </button>
-      </div>
-
-      <BodySizesCard dataRevision={dataRevision} />
-      <FfmiCard measurements={measurements} dataRevision={dataRevision} />
-
-      {goalOpen && (
-        <PopupDialog
-          title="Add bodyweight goal"
-          kicker="GOAL"
-          className="body-goal-popup"
-          onClose={() => setGoalOpen(false)}
-        >
-          <form
-            className="body-goal-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveGoal();
-            }}
-          >
-            {activeGoal && latest && bodyGoalKind(activeGoal) === 'maintain' && (
-              <div className="body-goal-progress">
-                <div>
-                  <strong>{formatWeight(latest.weight_kg, weightUnit)}</strong>
-                  <span>
-                    Maintaining {formatWeight(activeGoal.target_weight_kg, weightUnit)} until{' '}
-                    {prettyDate(activeGoal.target_date)}
-                  </span>
-                </div>
-              </div>
-            )}
-            {activeGoal && latest && bodyGoalKind(activeGoal) !== 'maintain' && (
-              <div className="body-goal-progress">
-                <div>
-                  <strong>{formatWeight(latest.weight_kg, weightUnit)}</strong>
-                  <span>
-                    → {formatWeight(activeGoal.target_weight_kg, weightUnit)} by{' '}
-                    {prettyDate(activeGoal.target_date)}
-                  </span>
-                </div>
-                <div className="zone2-track">
-                  <i
-                    style={{
-                      width: `${Math.min(100, Math.max(0, (Math.abs(latest.weight_kg - activeGoal.start_weight_kg) / Math.max(Math.abs(activeGoal.target_weight_kg - activeGoal.start_weight_kg), 0.1)) * 100))}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            <div className="segmented-control body-goal-kind" role="radiogroup" aria-label="Goal">
-              {(
-                [
-                  ['loss', 'Lose'],
-                  ['gain', 'Gain'],
-                  ['maintain', 'Maintain'],
-                ] as const
-              ).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  role="radio"
-                  aria-checked={goalKind === kind}
-                  className={goalKind === kind ? 'active' : ''}
-                  onClick={() => chooseGoalKind(kind)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="goal-entry-fields">
-              <label>
-                {goalKind === 'maintain' ? 'Maintain' : 'Target'} ({weightUnit})
-                <WeightInput weightKg={goalTarget} onWeightChange={setGoalTarget} />
-              </label>
-              <label>
-                {goalKind === 'maintain' ? 'Until' : 'Target date'}
-                <input
-                  type="date"
-                  value={goalDate}
-                  onChange={(event) => setGoalDate(event.target.value)}
-                />
-              </label>
-            </div>
-            {error && <p className="inline-error">{error}</p>}
-            <footer className="popup-dialog-actions">
-              <button type="button" disabled={savingGoal} onClick={() => setGoalOpen(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={savingGoal}>
-                {savingGoal ? 'Saving…' : 'Set goal'}
-              </button>
-            </footer>
-          </form>
-        </PopupDialog>
-      )}
-
-      {entryOpen && (
-        <PopupDialog
-          title="Log measurement"
-          kicker="CHECK-IN"
-          className="body-entry-popup"
-          onClose={() => setEntryOpen(false)}
-        >
-          <form
-            className="body-entry-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitMeasurement();
-            }}
-          >
-            <div className="body-entry-fields">
-              <label>
-                Date
-                <input
-                  type="date"
-                  value={measurementDate}
-                  onChange={(event) => setMeasurementDate(event.target.value)}
-                />
-              </label>
-              <label>
-                Weight ({weightUnit})
-                <WeightInput
-                  autoFocus
-                  weightKg={weight}
-                  onWeightChange={setWeight}
-                  placeholder={weightInputValue(measurements[0]?.weight_kg ?? 88, weightUnit)}
-                />
-              </label>
-              <label>
-                Body fat %
-                <input
-                  inputMode="decimal"
-                  type="number"
-                  min="1"
-                  max="70"
-                  step="0.1"
-                  value={bodyFat}
-                  onChange={(event) => setBodyFat(event.target.value)}
-                  placeholder="Optional"
-                />
-              </label>
-            </div>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Conditions or anything worth remembering…"
-              rows={2}
-            />
-            {error && <p className="inline-error">{error}</p>}
-            <footer className="popup-dialog-actions">
-              <button type="button" disabled={saving} onClick={() => setEntryOpen(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={saving}>
-                {saving ? 'Saving…' : 'Save check-in'}
-              </button>
-            </footer>
-          </form>
-        </PopupDialog>
-      )}
-
-      <div
-        ref={historyViewIndicatorRef}
-        className="body-log-tabs slide-indicator"
-        role="tablist"
-        aria-label="Bodyweight records"
-      >
-        {(
-          [
-            ['daily', 'Daily'],
-            ['week', `${trendStatistic === 'average' ? 'Avg' : 'Median'} Week`],
-            ['month', `${trendStatistic === 'average' ? 'Avg' : 'Median'} Monthly`],
-          ] as const
-        ).map(([view, label]) => (
-          <button
-            key={view}
-            className={historyView === view ? 'active' : ''}
-            type="button"
-            role="tab"
-            aria-selected={historyView === view}
-            onClick={() => {
-              setHistoryView(view);
-              setCheckInPage(1);
-              setEditingMeasurement(null);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <section className="panel body-history-panel" role="tabpanel">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">HISTORY</p>
-            <h2>Check-ins</h2>
-          </div>
-        </div>
-        {!historyCount && <p className="body-empty">Your first check-in will appear here.</p>}
-        {historyCount > 0 && (
-          <div
-            className={`body-history-table-head${historyView === 'daily' ? '' : ' body-history-summary-grid'}`}
-            aria-hidden="true"
-          >
-            <span>
-              {historyView === 'daily' ? 'Date' : historyView === 'week' ? 'Week' : 'Month'}
-            </span>
-            <span>Bodyweight</span>
-            <span>Body Fat</span>
-            {historyView === 'daily' && <span />}
-          </div>
-        )}
-        {goalRemovalError && (
-          <p className="inline-error" role="alert">
-            {goalRemovalError}
-          </p>
-        )}
-        {historyView === 'daily' &&
-          pagedMeasurements.map((measurement) => (
-            <Fragment key={measurement.id}>
-              <article>
-                <div className="body-history-date">
-                  <strong>
-                    {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
-                      new Date(`${measurement.measurement_date}T12:00:00`),
-                    )}
-                  </strong>
-                  <small>{measurement.measurement_date.slice(0, 4)}</small>
-                </div>
-                <div className="body-history-weight">
-                  <strong>
-                    {formatWeight(measurement.weight_kg, weightUnit)}
-                    <BodyHistoryWeightChange
-                      change={measurement.weight_change}
-                      comparison="previous check-in"
-                      unit={weightUnit}
-                      decimals={2}
-                    />
-                  </strong>
-                  <small>{measurement.is_sample && 'Sample'}</small>
-                  {measurement.notes && <p>{measurement.notes}</p>}
-                </div>
-                <div className="body-history-fat">
-                  <strong>
-                    {measurement.body_fat_pct !== null ? `${measurement.body_fat_pct}%` : '–'}
-                  </strong>
-                  <small>{measurement.body_fat_pct !== null ? 'estimate' : ''}</small>
-                </div>
-                <details className="body-row-menu">
-                  <summary aria-label={`Actions for ${prettyDate(measurement.measurement_date)}`}>
-                    ⋮
-                  </summary>
-                  <div className="body-history-actions">
-                    <button type="button" onClick={() => beginMeasurementEdit(measurement)}>
-                      Edit
-                    </button>
-                    <InlineConfirmButton
-                      label="Delete"
-                      confirmLabel="Delete check-in"
-                      onConfirm={() => onDelete(measurement.id)}
-                    />
-                  </div>
-                </details>
-              </article>
-              {editingMeasurement?.id === measurement.id && (
-                <form
-                  className="body-edit-form"
-                  aria-label={`Edit check-in for ${prettyDate(editingMeasurement.measurement_date)}`}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void submitMeasurementEdit();
-                  }}
-                >
-                  <header>
-                    <div>
-                      <p className="section-kicker">EDIT CHECK-IN</p>
-                      <h2>{prettyDate(editingMeasurement.measurement_date)}</h2>
-                    </div>
-                  </header>
-                  <div className="body-edit-content">
-                    <div className="body-edit-fields">
-                      <label>
-                        Weight ({weightUnit})
-                        <WeightInput weightKg={editWeight} onWeightChange={setEditWeight} />
-                      </label>
-                      <label>
-                        Body fat %
-                        <input
-                          inputMode="decimal"
-                          type="number"
-                          min="1"
-                          max="70"
-                          step="0.1"
-                          value={editBodyFat}
-                          onChange={(event) => setEditBodyFat(event.target.value)}
-                          placeholder="Optional"
-                        />
-                      </label>
-                    </div>
-                    {editError && <p className="inline-error">{editError}</p>}
-                  </div>
-                  <div className="body-edit-actions">
-                    <button
-                      type="button"
-                      disabled={editSaving}
-                      onClick={() => setEditingMeasurement(null)}
-                    >
-                      Cancel
-                    </button>
-                    <button type="submit" disabled={editSaving}>
-                      {editSaving ? 'Saving…' : 'Save changes'}
-                    </button>
-                  </div>
-                </form>
-              )}
-              {measurement.goal_change && renderGoalDivider(measurement.goal_change)}
-            </Fragment>
-          ))}
-        {historyView !== 'daily' &&
-          pagedSummaries.map((summary) => (
-            <Fragment key={summary.start_date}>
-              <article className="body-history-summary-grid">
-                <div className="body-history-date">
-                  <strong>
-                    {historyView === 'week'
-                      ? `${new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(`${summary.start_date}T12:00:00`))} – ${new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(`${summary.end_date}T12:00:00`))}`
-                      : new Intl.DateTimeFormat(undefined, { month: 'long' }).format(
-                          new Date(`${summary.start_date}T12:00:00`),
-                        )}
-                  </strong>
-                  <small>
-                    {summary.start_date.slice(0, 4)}
-                    {summary.start_date.slice(0, 4) !== summary.end_date.slice(0, 4)
-                      ? `–${summary.end_date.slice(0, 4)}`
-                      : ''}
-                  </small>
-                </div>
-                <div className="body-history-weight">
-                  <strong>
-                    {weightFromKg(summary.weight_kg, weightUnit).toFixed(1)} {weightUnit}
-                    <BodyHistoryWeightChange
-                      change={summary.weight_change}
-                      comparison={`previous ${historyView === 'week' ? 'week' : 'month'} with check-ins`}
-                      unit={weightUnit}
-                      decimals={1}
-                      fixed
-                    />
-                  </strong>
-                  <small>
-                    {summary.count} {summary.count === 1 ? 'check-in' : 'check-ins'}
-                  </small>
-                </div>
-                <div className="body-history-fat">
-                  <strong>
-                    {summary.body_fat_pct === null ? '–' : `${summary.body_fat_pct.toFixed(1)}%`}
-                  </strong>
-                </div>
-              </article>
-              {summary.goal_change && renderGoalDivider(summary.goal_change)}
-            </Fragment>
-          ))}
-        <PaginationControls
-          currentPage={checkInPage}
-          totalPages={checkInPageCount}
-          onPageChange={setCheckInPage}
-          label={`${historyView} bodyweight history`}
-        />
-      </section>
-      {goalRemoval.pending &&
-        createPortal(
-          <div
-            key={goalRemoval.pending.goal.id}
-            className="undo-toast top-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
-          >
-            <span>Goal removed</span>
-            <button className="undo-toast-action" type="button" onClick={goalRemoval.undo}>
-              Undo
-            </button>
-            <button
-              className="undo-toast-close"
-              type="button"
-              aria-label="Dismiss goal notification"
-              onClick={goalRemoval.dismiss}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
-    </section>
-  );
-}
-
-function BodyTrendChart({
-  measurements,
-  goals,
-}: {
-  measurements: BodyMeasurement[];
-  goals: BodyWeightGoal[];
-}) {
-  const weightUnit = useWeightUnit();
-  const [displayRange, setDisplayRange] = useState<BodyTrendRange>('3m');
-  // Weight and body fat use different units, so they are separate views rather than two y-axes.
-  const [series, setSeries] = useState<'weight' | 'fat'>('weight');
-  const ordered = filterMeasurementsByRange(measurements, displayRange).slice().reverse();
-  const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
-  const selectedDateRange = dateRangeForDates(
-    measurements.map((item) => item.measurement_date),
-    displayRange,
-  );
-  const activeGoal = goals.find((goal) => goal.active) ?? null;
-  // Clip only the start: a future target date extends the chart so the goal line reaches it.
-  const clippedGoal = activeGoal
-    ? clipBodyWeightGoalPath(activeGoal, selectedDateRange.start_date)
-    : null;
-  const weekMs = 7 * 86_400_000;
-  const averagePoints = useMemo<TrendPoint[]>(
-    () =>
-      ordered.map((item) => {
-        const end = new Date(`${item.measurement_date}T12:00:00`).getTime();
-        const window = measurements.filter((candidate) => {
-          const time = new Date(`${candidate.measurement_date}T12:00:00`).getTime();
-          return time <= end && time > end - weekMs;
-        });
-        const average =
-          window.reduce((total, candidate) => total + candidate.weight_kg, 0) / window.length;
-        return {
-          date: item.measurement_date,
-          value: weightFromKg(average, weightUnit),
-          detail: `weighed ${formatWeight(item.weight_kg, weightUnit)}`,
-        };
-      }),
-    // ordered is derived from measurements and the range.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
-  );
-  const dailyPoints = useMemo<TrendPoint[]>(
-    () =>
-      ordered.map((item) => ({
-        date: item.measurement_date,
-        value: weightFromKg(item.weight_kg, weightUnit),
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
-  );
-  const fatPoints = useMemo<TrendPoint[]>(
-    () =>
-      ordered
-        .filter((item) => item.body_fat_pct !== null)
-        .map((item) => ({ date: item.measurement_date, value: item.body_fat_pct! })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [measurements, displayRange, weightUnit],
-  );
-  const goalPath = useMemo<GoalPath | null>(
-    () =>
-      clippedGoal && series === 'weight'
-        ? {
-            startDate: clippedGoal.start_date,
-            startValue: weightFromKg(clippedGoal.start_weight_kg, weightUnit),
-            endDate: clippedGoal.target_date,
-            endValue: weightFromKg(clippedGoal.target_weight_kg, weightUnit),
-            label: `Goal ${formatWeight(activeGoal!.target_weight_kg, weightUnit)}`,
-          }
-        : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      clippedGoal?.start_date,
-      clippedGoal?.target_date,
-      clippedGoal?.start_weight_kg,
-      clippedGoal?.target_weight_kg,
-      series,
-      weightUnit,
-    ],
-  );
-  const showFat = series === 'fat' && hasBodyFat;
-  const bodyRangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
-  const bodySeriesIndicatorRef = useSlidingIndicator<HTMLDivElement>(showFat);
-
-  return (
-    <div className="body-trend-chart">
-      <div className="body-trend-chart-controls">
-        <div
-          ref={bodyRangeIndicatorRef}
-          className="range-chips slide-indicator"
-          role="tablist"
-          aria-label="Body composition range"
-        >
-          {TIME_RANGE_OPTIONS.map((option) => (
-            <button
-              type="button"
-              role="tab"
-              key={option.value}
-              aria-selected={displayRange === option.value}
-              aria-label={option.label}
-              className={displayRange === option.value ? 'active' : ''}
-              onClick={() => setDisplayRange(option.value)}
-            >
-              {RANGE_LABELS[option.value]}
-            </button>
-          ))}
-        </div>
-        {hasBodyFat && (
-          <div
-            ref={bodySeriesIndicatorRef}
-            className="segmented-control compact slide-indicator"
-            role="tablist"
-            aria-label="Body measure"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showFat}
-              className={!showFat ? 'active' : ''}
-              onClick={() => setSeries('weight')}
-            >
-              Weight
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={showFat}
-              className={showFat ? 'active' : ''}
-              onClick={() => setSeries('fat')}
-            >
-              Body fat
-            </button>
-          </div>
-        )}
-      </div>
-      <LandscapeChartFrame title={showFat ? 'Body fat trend' : 'Bodyweight trend'} controls={null}>
-        {(expanded) =>
-          showFat ? (
-            <TrendChart
-              points={fatPoints}
-              label="Body fat percentage"
-              seriesLabel="Body fat"
-              unit="%"
-              height={200}
-              fillHeight={expanded}
-            />
-          ) : (
-            <TrendChart
-              points={averagePoints}
-              backgroundPoints={dailyPoints}
-              label="Bodyweight, 7-day average over daily weigh-ins"
-              seriesLabel="7-day average"
-              unit={weightUnit}
-              area={false}
-              goalPath={goalPath}
-              height={200}
-              fillHeight={expanded}
-            />
-          )
-        }
-      </LandscapeChartFrame>
-      <ul className="chart-legend" aria-label="Chart legend">
-        {showFat ? (
-          <li>
-            <i className="legend-line" aria-hidden="true" />
-            Body fat · {fatPoints.length} {fatPoints.length === 1 ? 'reading' : 'readings'}
-          </li>
-        ) : (
-          <>
-            <li>
-              <i className="legend-dot" aria-hidden="true" />
-              Daily weigh-in
-            </li>
-            <li>
-              <i className="legend-line" aria-hidden="true" />
-              7-day average
-            </li>
-            {goalPath && (
-              <li>
-                <i className="legend-goal" aria-hidden="true" />
-                Goal
-              </li>
-            )}
-          </>
-        )}
-      </ul>
-    </div>
-  );
-}
-
-export function CardioScreen({
-  dataRevision,
-  exercises,
-  onDataChange,
-  onOpenWorkout,
-}: {
-  dataRevision: string | null;
-  exercises: Exercise[];
-  onDataChange: () => Promise<void>;
-  onOpenWorkout: (workoutId: string) => void;
-}) {
-  const cardioExercises = exercises.filter((exercise) => exercise.kind === 'cardio');
-  const defaultExercise =
-    cardioExercises.find(
-      (exercise) => exercise.name.toLocaleLowerCase() === 'incline treadmill walking',
-    ) ??
-    cardioExercises[0] ??
-    null;
-  const weightUnit = useWeightUnit();
-  const empty: CardioSessionInput = {
-    session_date: localDate(),
-    exercise_id: defaultExercise?.id ?? null,
-    activity_type: defaultExercise?.name ?? '',
-    duration_minutes: 30,
-    calories_kcal: null,
-    average_heart_rate_bpm: null,
-    distance_km: null,
-    average_speed_kph: null,
-    incline_percent: null,
-    average_power_watts: null,
-    average_mets: null,
-    intensity: null,
-    zone: null,
-    qualifies_zone2: false,
-    notes: null,
-  };
-  const [overview, setOverview] = useState<CardioOverview | null>(null);
-  const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
-  const [draft, setDraft] = useState<CardioSessionInput>(empty);
-  const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [scanStatus, setScanStatus] = useState<{ message: string; warning: boolean } | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'pure_cardio' | 'workout_plus_cardio'>(
-    'all',
-  );
-  const [historyPage, setHistoryPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const cardioFormRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (!editingId) return;
-    const frame = window.requestAnimationFrame(() =>
-      cardioFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    );
-    return () => window.cancelAnimationFrame(frame);
-  }, [editingId]);
-  const load = () =>
-    api
-      .cardioOverview()
-      .then(setOverview)
-      .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : 'Could not load cardio.'),
-      );
-  useEffect(() => {
-    void load();
-    const reloadPreferences = () => void load();
-    window.addEventListener('training-preferences-updated', reloadPreferences);
-    return () => window.removeEventListener('training-preferences-updated', reloadPreferences);
-  }, [dataRevision]);
-  const filteredSessions =
-    overview?.sessions.filter(
-      (session) =>
-        historyFilter === 'all' ||
-        (session.workout_context === 'workout_plus_cardio'
-          ? 'workout_plus_cardio'
-          : 'pure_cardio') === historyFilter,
-    ) ?? [];
-  const historyPageCount = Math.max(
-    1,
-    Math.ceil(filteredSessions.length / CARDIO_HISTORY_PAGE_SIZE),
-  );
-  const currentHistoryPage = Math.min(historyPage, historyPageCount);
-  const pagedSessions = filteredSessions.slice(
-    (currentHistoryPage - 1) * CARDIO_HISTORY_PAGE_SIZE,
-    currentHistoryPage * CARDIO_HISTORY_PAGE_SIZE,
-  );
-
-  useEffect(() => {
-    setHistoryPage((page) => Math.min(page, historyPageCount));
-  }, [historyPageCount]);
-  async function importScreenshot(file: File) {
-    if (scanning) return;
-    setError(null);
-    setScanStatus(null);
-    setScanning(true);
-    try {
-      const scan = await api.scanCardioScreenshot(file);
-      const scannedExercise = scan.activity_type
-        ? cardioExercises.find(
-            (exercise) =>
-              exercise.name.toLocaleLowerCase() === scan.activity_type?.toLocaleLowerCase(),
-          )
-        : null;
-      setDraft((current) => ({
-        ...current,
-        session_date: scan.session_date ?? current.session_date,
-        exercise_id: scannedExercise?.id ?? current.exercise_id,
-        activity_type: scannedExercise?.name ?? current.activity_type,
-        duration_minutes: scan.duration_minutes ?? current.duration_minutes,
-        calories_kcal: scan.calories_kcal,
-        average_heart_rate_bpm: scan.average_heart_rate_bpm,
-        distance_km: scan.distance_km,
-        average_speed_kph: scan.average_speed_kph,
-        incline_percent: null,
-        average_power_watts: null,
-        average_mets: null,
-      }));
-      const scanned = scan.fields_found.join(', ');
-      const activityWarning =
-        scan.activity_type && !scannedExercise
-          ? ` ${scan.activity_type} is not in the activity list, so the current activity was kept.`
-          : '';
-      setScanStatus({
-        message: `Scanned ${scanned}.${activityWarning}${scan.warning ? ` ${scan.warning}` : ''} Review the fields below, then add the session.`,
-        warning: Boolean(scan.warning || activityWarning),
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not scan that screenshot.');
-    } finally {
-      setScanning(false);
-    }
-  }
-  async function save() {
-    if (saving) return;
-    setError(null);
-    try {
-      if (!editingId && !draft.exercise_id) {
-        setError('Choose a cardio exercise.');
-        return;
-      }
-      const payload = {
-        ...draft,
-        intensity: null,
-        zone: null,
-        qualifies_zone2: false,
-      };
-      setSaving(true);
-      if (editingId) await api.updateCardio(editingId, payload);
-      else await api.createCardio(payload);
-      setDraft(empty);
-      setScanStatus(null);
-      setEditingId(null);
-      setFormOpen(false);
-      await onDataChange();
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save cardio.');
-    } finally {
-      setSaving(false);
-    }
-  }
-  async function remove(id: string) {
-    try {
-      await api.deleteCardio(id);
-      await onDataChange();
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not delete cardio.');
-    }
-  }
-  if (!overview) return <LoadingState />;
-  const week = overview.current_week;
-  const today = localDate();
-  const historyGroups = groupCardioHistory(pagedSessions, weekStartDayFrom(week.week_start));
-  const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
-  return (
-    <div className="cardio-screen">
-      {zoneSettingsOpen && (
-        <CardioZoneSettings
-          preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
-          onClose={() => setZoneSettingsOpen(false)}
-          onSaved={async () => {
-            await onDataChange();
-            await load();
-          }}
-        />
-      )}
-      {error && <p className="inline-error">{error}</p>}
-      {metricSession && (
-        <CardioMetricsEditor
-          key={metricSession.id}
-          session={metricSession}
-          onClose={() => setMetricSession(null)}
-          onSave={async (metrics) => {
-            await api.updateCardioMetrics(metricSession.id, metrics);
-            await onDataChange();
-            await load();
-          }}
-        />
-      )}
-      {!formOpen && !editingId ? (
-        <div className="cardio-page-actions">
-          <button
-            type="button"
-            className="pulse-button primary"
-            onClick={() => {
-              setError(null);
-              setFormOpen(true);
-            }}
-          >
-            <Icon name="plus" />
-            Log session
-          </button>
-          <button
-            type="button"
-            className="pulse-button secondary"
-            aria-label="Import screenshot"
-            onClick={() => {
-              setError(null);
-              setFormOpen(true);
-              requestAnimationFrame(() =>
-                cardioFormRef.current
-                  ?.querySelector<HTMLInputElement>('input[type="file"]')
-                  ?.click(),
-              );
-            }}
-          >
-            <Icon name="camera" />
-            Import screenshot
-          </button>
-        </div>
-      ) : (
-        <section className="panel cardio-form" ref={cardioFormRef}>
-          <h2>{editingId ? 'Edit cardio session' : 'Log cardio session'}</h2>
-          <div className="cardio-screenshot-import">
-            <div className="cardio-screenshot-copy">
-              <strong>Import workout screenshot</strong>
-              <small>
-                OCR fills the form for review. Calories always come from Active Calories; Total
-                Calories are ignored.
-              </small>
-            </div>
-            <label className={scanning ? 'disabled' : ''}>
-              {scanning ? <ScanningLabel /> : 'Choose screenshot'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                disabled={scanning}
-                aria-label="Upload workout screenshot"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = '';
-                  if (file) void importScreenshot(file);
-                }}
-              />
-            </label>
-          </div>
-          {scanStatus && (
-            <p
-              className={`cardio-scan-status${scanStatus.warning ? ' warning' : ''}`}
-              role="status"
-            >
-              {scanStatus.message}
-            </p>
-          )}
-          <div className="cardio-fields">
-            <label>
-              Date
-              <input
-                type="date"
-                value={draft.session_date}
-                onChange={(event) => setDraft({ ...draft, session_date: event.target.value })}
-              />
-            </label>
-            <label>
-              Activity
-              <select
-                value={draft.exercise_id ?? ''}
-                disabled={cardioExercises.length === 0}
-                onChange={(event) => {
-                  const exercise = cardioExercises.find((item) => item.id === event.target.value);
-                  setDraft({
-                    ...draft,
-                    exercise_id: exercise?.id ?? null,
-                    activity_type: exercise?.name ?? '',
-                  });
-                }}
-              >
-                {cardioExercises.length === 0 && <option value="">No cardio exercises</option>}
-                {cardioExercises.map((exercise) => (
-                  <option key={exercise.id} value={exercise.id}>
-                    {exercise.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Minutes
-              <input
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={draft.duration_minutes}
-                onChange={(event) =>
-                  setDraft({ ...draft, duration_minutes: Number(event.target.value) })
-                }
-              />
-            </label>
-            <label>
-              Calories burned (kcal)
-              <input
-                type="number"
-                min="0"
-                max="100000"
-                step="1"
-                inputMode="numeric"
-                value={draft.calories_kcal ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, calories_kcal: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 350"
-              />
-            </label>
-            <label>
-              Average HR (bpm)
-              <input
-                type="number"
-                min="20"
-                max="250"
-                step="1"
-                inputMode="numeric"
-                value={draft.average_heart_rate_bpm ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_heart_rate_bpm: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 142"
-              />
-            </label>
-            <label>
-              Distance (km)
-              <input
-                type="number"
-                min="0"
-                max="10000"
-                step="0.01"
-                inputMode="decimal"
-                value={draft.distance_km ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, distance_km: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Average speed (km/h)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_speed_kph ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_speed_kph: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Incline (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.incline_percent ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, incline_percent: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            {(draft.activity_type.toLocaleLowerCase().includes('cycl') ||
-              draft.activity_type.toLocaleLowerCase().includes('bike')) && (
-              <label>
-                Average power (watts)
-                <input
-                  type="number"
-                  min="1"
-                  max="3000"
-                  step="1"
-                  inputMode="numeric"
-                  value={draft.average_power_watts ?? ''}
-                  onChange={(event) =>
-                    setDraft({ ...draft, average_power_watts: numberOrNull(event.target.value) })
-                  }
-                  placeholder="Optional"
-                />
-              </label>
-            )}
-            <label>
-              Average METs
-              <input
-                type="number"
-                min="0.1"
-                max="50"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_mets ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_mets: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 7.5"
-              />
-            </label>
-          </div>
-          <p className="cardio-calorie-hint">
-            Performance metrics are optional. For calories, prefer your watch or machine’s active
-            calorie estimate. MET-minutes are calculated as average METs × session minutes.
-          </p>
-          <textarea
-            value={draft.notes ?? ''}
-            onChange={(event) => setDraft({ ...draft, notes: event.target.value || null })}
-            placeholder="Notes"
-          />
-          <button className="primary-action" disabled={saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add cardio session'}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => {
-              setEditingId(null);
-              setFormOpen(false);
-              setDraft(empty);
-              setError(null);
-              setScanStatus(null);
-            }}
-          >
-            {editingId ? 'Cancel edit' : 'Cancel'}
-          </button>
-        </section>
-      )}
-      <CardioTrendCard overview={overview} today={today} />
-      <section className="pulse-card cardio-history">
-        <div className="cardio-history-header">
-          <h2>History</h2>
-          <div
-            className="segmented-control cardio-history-filters"
-            role="group"
-            aria-label="Filter cardio history"
-          >
-            {[
-              ['all', 'All'],
-              ['pure_cardio', 'Cardio only'],
-              ['workout_plus_cardio', 'After workout'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={historyFilter === value}
-                onClick={() => {
-                  setHistoryFilter(value as 'all' | 'pure_cardio' | 'workout_plus_cardio');
-                  setHistoryPage(1);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {filteredSessions.length === 0 && (
-          <p className="cardio-history-empty">No cardio sessions match this filter.</p>
-        )}
-        {historyGroups.map((group) => (
-          <section className="cardio-history-week" key={group.start}>
-            <h3>
-              Week of {prettyDate(group.start)}
-              <span>
-                {allHistoryGroups
-                  .find((item) => item.start === group.start)!
-                  .sessions.reduce((total, item) => total + item.duration_minutes, 0)}{' '}
-                min
-              </span>
-            </h3>
-            {group.sessions.map((session) => {
-              const workoutContext =
-                session.workout_context === 'workout_plus_cardio'
-                  ? 'workout_plus_cardio'
-                  : 'pure_cardio';
-              const workoutName = session.source_workout_name?.replace(/\s+workout$/i, '');
-              return (
-                <details className="cardio-history-row" key={session.id}>
-                  <summary>
-                    <span className="cardio-activity-icon">
-                      <Icon name="pulse" />
-                    </span>
-                    <span className="cardio-history-row-title">
-                      <strong>{session.activity_type}</strong>
-                      <small>
-                        {prettyDate(session.session_date)} ·{' '}
-                        {workoutContext === 'workout_plus_cardio'
-                          ? 'After workout'
-                          : (session.zone ?? 'Cardio only')}
-                      </small>
-                    </span>
-                    <span className="cardio-history-row-minutes">
-                      {session.duration_minutes} min
-                    </span>
-                    <Icon name="chevron-down" />
-                  </summary>
-                  <div className="cardio-history-row-content">
-                    <div className="cardio-session-title-row">
-                      {workoutContext === 'workout_plus_cardio' && (
-                        <span className="cardio-context-badge workout-plus-cardio">
-                          After workout
-                        </span>
-                      )}
-                      {session.source_workout_id ? (
-                        <button
-                          type="button"
-                          className="cardio-history-workout-link"
-                          onClick={() => onOpenWorkout(session.source_workout_id!)}
-                        >
-                          <strong>{session.activity_type}</strong>
-                        </button>
-                      ) : (
-                        <strong>{session.activity_type}</strong>
-                      )}
-                    </div>
-                    <small className="cardio-session-date">
-                      {prettyDate(session.session_date)}
-                    </small>
-                    <small className="cardio-session-summary">
-                      {session.duration_minutes} min ·{' '}
-                      {session.zone ?? session.intensity ?? 'Unspecified'}
-                      {workoutName ? ` · ${workoutName}` : ''}
-                    </small>
-                    <small className="cardio-session-energy">
-                      {session.calories_kcal == null
-                        ? 'Calories not logged'
-                        : `${session.calories_kcal.toLocaleString()} kcal · ≈ ${fatEnergyEquivalent(session.calories_kcal, weightUnit)} fat burnt`}
-                    </small>
-                    <small className="cardio-session-performance">
-                      {[
-                        session.average_heart_rate_bpm == null
-                          ? null
-                          : `${session.average_heart_rate_bpm} bpm avg`,
-                        session.distance_km == null ? null : `${session.distance_km} km`,
-                        session.average_speed_kph == null
-                          ? null
-                          : `${session.average_speed_kph} km/h avg`,
-                        session.incline_percent == null
-                          ? null
-                          : `${session.incline_percent}% incline`,
-                        session.average_power_watts == null
-                          ? null
-                          : `${session.average_power_watts} W avg`,
-                        session.average_mets == null ? null : `${session.average_mets} METs avg`,
-                        session.average_mets == null
-                          ? null
-                          : `${(session.average_mets * session.duration_minutes).toLocaleString(
-                              undefined,
-                              { maximumFractionDigits: 1 },
-                            )} MET-min`,
-                      ]
-                        .filter((value): value is string => value !== null)
-                        .join(' · ') || 'Performance metrics not logged'}
-                    </small>
-                  </div>
-                  <div className="cardio-session-actions">
-                    <button
-                      type="button"
-                      onClick={() => setMetricSession(session)}
-                      aria-label={`Edit performance metrics for ${session.activity_type} on ${session.session_date}`}
-                    >
-                      {[
-                        session.calories_kcal,
-                        session.average_heart_rate_bpm,
-                        session.distance_km,
-                        session.average_speed_kph,
-                        session.incline_percent,
-                        session.average_power_watts,
-                        session.average_mets,
-                      ].some((value) => value != null)
-                        ? 'Edit metrics'
-                        : 'Log metrics'}
-                    </button>
-                    {!session.source_workout_id && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditingId(session.id);
-                            setDraft({
-                              ...session,
-                              exercise_id:
-                                cardioExercises.find((item) => item.name === session.activity_type)
-                                  ?.id ?? null,
-                            });
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <InlineConfirmButton
-                          label="Delete"
-                          confirmLabel="Delete session"
-                          onConfirm={() => remove(session.id)}
-                        />
-                      </>
-                    )}
-                  </div>
-                </details>
-              );
-            })}
-          </section>
-        ))}
-        <PaginationControls
-          currentPage={currentHistoryPage}
-          totalPages={historyPageCount}
-          onPageChange={setHistoryPage}
-          label="cardio history"
-        />
-      </section>
-      <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">
-        <header>
-          <h2 id="cardio-goals-title">Weekly zone goals</h2>
-          <button
-            type="button"
-            className="cardio-goals-edit"
-            aria-label="Edit heart-rate zones and goals"
-            onClick={() => setZoneSettingsOpen(true)}
-          >
-            <Icon name="edit" />
-            Edit
-          </button>
-        </header>
-        <ul className="cardio-goal-list">
-          {(overview.goal_weeks ?? [{ zone: 2, ...week }]).map((goal) => {
-            const range = overview.cardio_preferences?.heart_rate_zones.find(
-              (item) => item.zone === goal.zone,
-            );
-            return (
-              <li key={goal.zone} className={goal.complete ? 'complete' : undefined}>
-                <span>
-                  <strong>Zone {goal.zone}</strong>
-                  {range && (
-                    <small>
-                      {range.min_bpm}–{range.max_bpm} bpm
-                    </small>
-                  )}
-                </span>
-                <span>
-                  <b>
-                    {goal.completed_minutes} / {goal.goal_minutes} min
-                  </b>
-                  <small>
-                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
-                  </small>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    </div>
-  );
-}
-
 function HistoryScreen({
   exerciseLibrary,
   dataRevision,
   workouts,
+  syncingWorkoutIds = [],
   categoryColors,
   measurements,
   exercises,
@@ -9942,14 +10176,15 @@ function HistoryScreen({
   section,
   onSectionChange,
   onOpenExercise,
+  onOpenMember,
   onOpenWorkout,
   initialExerciseId,
+  openMachineWeights = false,
+  onMachineWeightsOpened,
   initialMovementId,
   weekStartDay,
   heatmap,
-  weeklySets,
-  weeklySetsHistory,
-  onOpenMuscleWorkout,
+  trainingSplit,
   historySummary,
   olderHistory,
   activeWorkout,
@@ -9963,6 +10198,8 @@ function HistoryScreen({
   exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
   workouts: TrackedWorkout[];
+  /** Finished workouts still syncing, shown from this device's copy without their actions. */
+  syncingWorkoutIds?: string[];
   categoryColors: WorkoutTypeColors;
   measurements: BodyMeasurement[];
   exercises: Exercise[];
@@ -9976,14 +10213,15 @@ function HistoryScreen({
   section: HistorySection;
   onSectionChange: (section: HistorySection) => void;
   onOpenExercise: (exerciseId: string) => void;
+  onOpenMember?: (member: Pick<SharedProfileSummary, 'id' | 'display_name'>) => void;
   onOpenWorkout: (workoutId: string, exerciseId: string | null) => void;
   initialExerciseId: string | null;
+  openMachineWeights?: boolean;
+  onMachineWeightsOpened?: () => void;
   initialMovementId: string | null;
   weekStartDay: number;
   heatmap: DashboardData['heatmap'];
-  weeklySets: MuscleSetsWeek | undefined;
-  weeklySetsHistory: MuscleSetsWeek[] | undefined;
-  onOpenMuscleWorkout: (contribution: WeeklyMuscleContribution) => Promise<void>;
+  trainingSplit: TrainingSplit | null;
   historySummary: WorkoutHistorySummary | null;
   olderHistory: OlderHistoryProps;
   activeWorkout: boolean;
@@ -10002,14 +10240,9 @@ function HistoryScreen({
     setCreatedExerciseName(null);
     setCreateExerciseOpen(true);
   };
-  const muscleSetGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
   const { types } = useWorkoutTypes();
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
-  const [extraVisibleCount, setExtraVisibleCount] = useState(0);
-  const targetIndex = initialOpenId ? workouts.findIndex((item) => item.id === initialOpenId) : -1;
-  const visibleCount =
-    Math.max(initialHistoryVisibleCount(workouts, weekStartDay), targetIndex + 1) +
-    extraVisibleCount;
+  const [chosenHistoryPage, setChosenHistoryPage] = useState<number | null>(null);
   const [targetExerciseId, setTargetExerciseId] = useState<string | null>(
     initialOpenId ? initialExerciseId : null,
   );
@@ -10029,13 +10262,45 @@ function HistoryScreen({
   const openWorkoutSummaryRef = useRef<HTMLButtonElement>(null);
   const targetExerciseRef = useRef<HTMLDivElement>(null);
   const revealWorkoutRef = useRef(initialOpenId !== null);
+  const sessionListRef = useRef<HTMLDivElement>(null);
   const today = localDate();
   const machineFilterId = machineFilter?.photo.id ?? null;
   const machineWorkouts =
     machineHistory && machineHistory.photoId === machineFilterId ? machineHistory.workouts : null;
+  const { hasOlder, loadingOlder, olderError, onLoadOlder, historyStart } = olderHistory;
+  const oldestWorkoutDate = [historySummary?.first_workout_date, workouts.at(-1)?.workout_date]
+    .filter((date): date is string => Boolean(date))
+    .sort()[0];
+  const pageAnchor = historyPageAnchor(
+    today,
+    [historySummary?.last_workout_date, workouts[0]?.workout_date]
+      .filter((date): date is string => Boolean(date))
+      .sort()
+      .at(-1),
+  );
+  const historyPages = historyPageCount(oldestWorkoutDate, pageAnchor, weekStartDay);
+  // A workout opened from elsewhere starts on its page until another page is chosen.
+  const targetWorkoutDate = initialOpenId
+    ? workouts.find((item) => item.id === initialOpenId)?.workout_date
+    : undefined;
+  const historyPage = Math.min(
+    historyPages,
+    chosenHistoryPage ??
+      (targetWorkoutDate ? historyPageForDate(targetWorkoutDate, pageAnchor, weekStartDay) : 1),
+  );
+  const pageWindow = historyPageWindow(pageAnchor, weekStartDay, historyPage);
+  const pageNeedsOlder = hasOlder && pageWindow.start < historyStart;
   const weekGroups = useMemo(
-    () => groupWorkoutsByWeek(workouts.slice(0, visibleCount), weekStartDay),
-    [visibleCount, weekStartDay, workouts],
+    () =>
+      groupWorkoutsByWeek(
+        workouts.filter(
+          (workout) =>
+            workout.workout_date >= pageWindow.start &&
+            (pageWindow.end === null || workout.workout_date <= pageWindow.end),
+        ),
+        weekStartDay,
+      ),
+    [pageWindow.end, pageWindow.start, weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
   const sectionIndicatorRef = useSlidingIndicator<HTMLDivElement>(section);
@@ -10048,8 +10313,23 @@ function HistoryScreen({
     [today, workouts],
   );
   const totalWorkouts = Math.max(historySummary?.total_workouts ?? 0, workouts.length);
-  const { hasOlder, loadingOlder, olderError, onLoadOlder } = olderHistory;
-  const moreWorkouts = visibleCount < workouts.length || hasOlder;
+
+  // Jumping to an older page reads earlier months, one chunk per loaded start, until that page's
+  // weeks are loaded.
+  useEffect(() => {
+    if (section === 'history' && pageNeedsOlder && !loadingOlder && !olderError) onLoadOlder();
+  }, [historyStart, loadingOlder, olderError, onLoadOlder, pageNeedsOlder, section]);
+
+  function changeHistoryPage(page: number) {
+    setChosenHistoryPage(page);
+    setOpenId(null);
+    window.requestAnimationFrame(() =>
+      sessionListRef.current?.scrollIntoView({
+        behavior: motionReduced() ? 'instant' : 'smooth',
+        block: 'start',
+      }),
+    );
+  }
 
   // Loaded from the server, so a machine last used long ago is found even when older history is
   // not loaded here. Reloads after edits, which replace the workouts list.
@@ -10114,6 +10394,7 @@ function HistoryScreen({
       <HistoryWorkoutCard
         key={workout.id}
         workout={workout}
+        bodyweight={bodyweightOn(measurements, workout.workout_date)}
         open={openId === workout.id}
         summaryRef={openId === workout.id ? openWorkoutSummaryRef : null}
         targetExerciseId={targetExerciseId}
@@ -10131,16 +10412,19 @@ function HistoryScreen({
         onExpandPhoto={setExpandedPhoto}
         onFilterMachine={(photo, exerciseName) => filterByMachine({ photo, exerciseName })}
         machineFilterId={machineFilterId}
-        showYear={machineFilter !== null}
+        showYear={machineFilter !== null || workout.workout_date.slice(0, 4) !== today.slice(0, 4)}
         onToggle={() => {
           setTargetMovementId(null);
           setTargetExerciseId(machineFilter ? machineFilter.photo.exercise_id : null);
           setOpenId((current) => (current === workout.id ? null : workout.id));
         }}
         onOpenExercise={onOpenExercise}
-        onResume={() => onResume(workout)}
-        onEdit={() => onEdit(workout)}
-        onDelete={() => onDelete(workout)}
+        {...(!syncingWorkoutIds.includes(workout.id) && {
+          onResume: () => onResume(workout),
+          onEdit: () => onEdit(workout),
+          onDelete: () => onDelete(workout),
+          onPhotosChange: () => void onDataChange(),
+        })}
       />
     );
   }
@@ -10164,7 +10448,7 @@ function HistoryScreen({
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [section, openId, visibleCount, targetExerciseId]);
+  }, [section, openId, historyPage, targetExerciseId]);
 
   return (
     <section
@@ -10187,26 +10471,21 @@ function HistoryScreen({
           actions={
             <>
               <ExerciseMuscleHelp exercise={exerciseHeader.exercise} />
-              {exerciseHeader.onMerge && (
-                <ExerciseOptionsMenu
-                  key={exerciseHeader.exercise.id}
-                  exerciseName={exerciseHeader.exercise.name}
-                  onMerge={exerciseHeader.onMerge}
-                />
-              )}
+              <ExerciseOptionsMenu
+                key={exerciseHeader.exercise.id}
+                exerciseName={exerciseHeader.exercise.name}
+                hidden={exerciseHeader.exercise.hidden}
+                onRename={exerciseHeader.onRename}
+                onMerge={exerciseHeader.onMerge}
+                onToggleHidden={exerciseHeader.onToggleHidden}
+              />
             </>
           }
         />
       ) : (
         <>
           <PageHeader
-            eyebrow={
-              section === 'progress'
-                ? 'Exercise charts · records · sessions'
-                : section === 'cardio'
-                  ? 'Zones · energy · sessions'
-                  : `${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`
-            }
+            eyebrow={`${totalWorkouts} ${totalWorkouts === 1 ? 'workout' : 'workouts'} logged`}
             title="Training"
             onOpenSettings={onOpenSettings}
             accountActions={accountActions}
@@ -10281,7 +10560,10 @@ function HistoryScreen({
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
             onExercisesMerged={onDataChange}
+            onOpenMember={onOpenMember}
             initialExerciseId={initialExerciseId}
+            openMachineWeights={openMachineWeights}
+            onMachineWeightsOpened={onMachineWeightsOpened}
             defaultExerciseId={defaultExerciseId}
             onOpenSettings={onOpenSettings}
           />
@@ -10332,10 +10614,12 @@ function HistoryScreen({
                     <button
                       type="button"
                       className="history-machine-filter"
+                      aria-label="Filter by machine"
+                      title="Filter by machine"
+                      aria-haspopup="dialog"
                       onClick={() => setMachinePickerOpen(true)}
                     >
                       <Icon name="filter" />
-                      Filter by machine
                     </button>
                   )}
                 </header>
@@ -10343,6 +10627,7 @@ function HistoryScreen({
                   entries={heatmap}
                   workouts={workouts}
                   olderHistory={olderHistory}
+                  split={trainingSplit}
                   categoryColors={categoryColors}
                   activeWorkout={activeWorkout}
                   activeWorkoutDate={activeWorkoutDate}
@@ -10360,45 +10645,59 @@ function HistoryScreen({
                   onAction={() => onStartWorkout()}
                 />
               )}
-              {weekGroups.map((group) => {
-                const label = weekGroupLabel(group.weekStart, today, weekStartDay);
-                return (
-                  <section className="history-week" key={group.weekStart} aria-label={label}>
-                    <header className="history-week-header">
-                      <h2>{label}</h2>
-                      <span className="num">
-                        {group.workouts.length}{' '}
-                        {group.workouts.length === 1 ? 'workout' : 'workouts'} · {group.sets} sets
-                        {group.volumeKg > 0 ? ` · ${formatVolume(group.volumeKg, weightUnit)}` : ''}
-                      </span>
-                    </header>
-                    <div className="history-week-list">{group.workouts.map(renderWorkoutCard)}</div>
-                  </section>
-                );
-              })}
-              {moreWorkouts && (
-                <div className="history-show-more">
-                  <button
-                    type="button"
-                    className="show-more-button"
-                    disabled={loadingOlder}
-                    onClick={() => {
-                      if (visibleCount < workouts.length) {
-                        setExtraVisibleCount((count) => count + HISTORY_PAGE_SIZE * 2);
-                      } else onLoadOlder();
-                    }}
-                  >
-                    {loadingOlder
-                      ? 'Loading older workouts…'
-                      : olderError && visibleCount >= workouts.length
-                        ? 'Retry loading older workouts'
-                        : `Show more · ${Math.max(totalWorkouts - Math.min(visibleCount, workouts.length), 0)} older`}
-                  </button>
-                  {olderError && visibleCount >= workouts.length && (
-                    <p className="history-show-more-error" role="alert">
-                      {olderError}
-                    </p>
+              {(workouts.length > 0 || hasOlder) && (
+                <div className="history-session-pages" ref={sessionListRef}>
+                  {pageNeedsOlder ? (
+                    <div className="history-page-status" role={olderError ? 'alert' : 'status'}>
+                      {olderError ? (
+                        <>
+                          <p>{olderError}</p>
+                          <button type="button" className="show-more-button" onClick={onLoadOlder}>
+                            Retry loading older workouts
+                          </button>
+                        </>
+                      ) : (
+                        <p>Loading older workouts…</p>
+                      )}
+                    </div>
+                  ) : weekGroups.length ? (
+                    weekGroups.map((group) => {
+                      const label = weekGroupLabel(group.weekStart, today, weekStartDay);
+                      return (
+                        <section className="history-week" key={group.weekStart} aria-label={label}>
+                          <header className="history-week-header">
+                            <h2>{label}</h2>
+                            <span className="num">
+                              {group.workouts.length}{' '}
+                              {group.workouts.length === 1 ? 'workout' : 'workouts'} · {group.sets}{' '}
+                              sets
+                              {group.volumeKg > 0
+                                ? ` · ${formatVolume(group.volumeKg, weightUnit)}`
+                                : ''}
+                            </span>
+                          </header>
+                          <div className="history-week-list">
+                            {group.workouts.map(renderWorkoutCard)}
+                          </div>
+                        </section>
+                      );
+                    })
+                  ) : (
+                    <div className="history-page-status">
+                      <p>
+                        No workouts{' '}
+                        {historyPage === 1
+                          ? 'this week or last week'
+                          : `from ${dayMonth(pageWindow.start)} to ${dayMonth(pageWindow.end ?? today)} ${(pageWindow.end ?? today).slice(0, 4)}`}
+                      </p>
+                    </div>
                   )}
+                  <PaginationControls
+                    currentPage={historyPage}
+                    totalPages={historyPages}
+                    onPageChange={changeHistoryPage}
+                    label="workout history"
+                  />
                 </div>
               )}
             </>
@@ -10412,29 +10711,28 @@ function HistoryScreen({
           )}
         </CachedTabPanel>
       )}
-      {!exerciseHeader && (
-        <MuscleSetsCard
-          weeklySets={weeklySets}
-          history={weeklySetsHistory}
-          goal={muscleSetGoal}
-          onOpenWorkout={onOpenMuscleWorkout}
-        />
-      )}
     </section>
   );
 }
 
-/** Another member's shared workouts, grouped by week like History but read-only. */
+/**
+ * A profile's shared workouts, grouped by week like History but read-only, two weeks with
+ * workouts to a page. Older workouts are read as later pages need them.
+ */
 function SharedWorkoutHistory({
   workouts,
   focusWorkoutId,
   personalRecords,
   onFilterMachine,
-  renderWorkoutAction,
+  hasMore = false,
+  loadingMore = false,
+  loadMoreFailed = false,
+  onLoadMore,
   categoryColors,
   weekStartDay,
 }: SharedWorkoutListProps & { categoryColors: WorkoutTypeColors; weekStartDay: number }) {
-  const weightUnit = useWeightUnit();
+  const [chosenPage, setChosenPage] = useState<number | null>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
   const [openId, setOpenId] = useState<string | null>(focusWorkoutId ?? null);
   const summaryRef = useRef<HTMLButtonElement>(null);
   const revealed = useRef(false);
@@ -10446,6 +10744,38 @@ function SharedWorkoutHistory({
     [weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
+  // A linked workout opens on its page until another page is chosen.
+  const focusWeek = focusWorkoutId
+    ? weekGroups.findIndex((group) => group.workouts.some((item) => item.id === focusWorkoutId))
+    : -1;
+  const {
+    page,
+    start: pageStart,
+    end: pageEnd,
+    needsMore: pageNeedsMore,
+    hasNext: hasNextPage,
+    totalPages,
+  } = weekGroupPage(
+    weekGroups.length,
+    chosenPage ?? Math.max(0, Math.floor(focusWeek / HISTORY_WEEKS_PER_PAGE)),
+    hasMore,
+  );
+  const pageWeeks = weekGroups.slice(pageStart, pageEnd);
+
+  useEffect(() => {
+    if (pageNeedsMore && !loadingMore && !loadMoreFailed) onLoadMore?.();
+  }, [loadMoreFailed, loadingMore, onLoadMore, pageNeedsMore, workouts.length]);
+
+  function changePage(next: number) {
+    setChosenPage(Math.max(0, next));
+    setOpenId(null);
+    window.requestAnimationFrame(() =>
+      pagesRef.current?.scrollIntoView({
+        behavior: motionReduced() ? 'instant' : 'smooth',
+        block: 'start',
+      }),
+    );
+  }
 
   useEffect(() => {
     if (!focusWorkoutId || revealed.current || !summaryRef.current) return;
@@ -10461,46 +10791,80 @@ function SharedWorkoutHistory({
     return () => window.cancelAnimationFrame(frame);
   }, [focusWorkoutId, workouts]);
 
-  return weekGroups.map((group) => {
-    const label = weekGroupLabel(group.weekStart, today, weekStartDay);
-    return (
-      <section className="history-week" key={group.weekStart} aria-label={label}>
-        <header className="history-week-header">
-          <h2>{label}</h2>
-          <span className="num">
-            {group.workouts.length} {group.workouts.length === 1 ? 'workout' : 'workouts'} ·{' '}
-            {group.sets} sets
-            {group.volumeKg > 0 ? ` · ${formatVolume(group.volumeKg, weightUnit)}` : ''}
-          </span>
-        </header>
-        <div className="history-week-list">
-          {group.workouts.map((workout) => (
-            <HistoryWorkoutCard
-              key={workout.id}
-              workout={workout}
-              open={openId === workout.id}
-              summaryRef={workout.id === focusWorkoutId ? summaryRef : null}
-              targetExerciseId={null}
-              targetExerciseRef={targetExerciseRef}
-              categoryColor={workout.workout_type?.color ?? categoryColors[workout.category]}
-              records={recordCounts.get(workout.id) ?? 0}
-              personalRecords={personalRecords}
-              activeWorkout={false}
-              expandedPhoto={expandedPhoto}
-              onExpandPhoto={setExpandedPhoto}
-              onFilterMachine={onFilterMachine}
-              onToggle={() => setOpenId((current) => (current === workout.id ? null : workout.id))}
-              reactionAction={renderWorkoutAction?.(workout)}
-            />
-          ))}
+  return (
+    <div className="shared-workout-pages" ref={pagesRef}>
+      {pageWeeks.length === 0 && (
+        <div className="history-page-status" role="status">
+          <p>{loadMoreFailed ? 'Older workouts could not load.' : 'Loading older workouts…'}</p>
         </div>
-      </section>
-    );
-  });
+      )}
+      {pageWeeks.map((group) => {
+        const label = weekGroupLabel(group.weekStart, today, weekStartDay);
+        return (
+          <section className="history-week" key={group.weekStart} aria-label={label}>
+            <header className="history-week-header">
+              <h2>{label}</h2>
+            </header>
+            <div className="history-week-list">
+              {group.workouts.map((workout) => (
+                <HistoryWorkoutCard
+                  key={workout.id}
+                  shared
+                  workout={workout}
+                  open={openId === workout.id}
+                  summaryRef={workout.id === focusWorkoutId ? summaryRef : null}
+                  targetExerciseId={null}
+                  targetExerciseRef={targetExerciseRef}
+                  categoryColor={workout.workout_type?.color ?? categoryColors[workout.category]}
+                  records={recordCounts.get(workout.id) ?? 0}
+                  personalRecords={personalRecords}
+                  activeWorkout={false}
+                  expandedPhoto={expandedPhoto}
+                  onExpandPhoto={setExpandedPhoto}
+                  onFilterMachine={onFilterMachine}
+                  onToggle={() =>
+                    setOpenId((current) => (current === workout.id ? null : workout.id))
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      {(page > 0 || hasNextPage) && (
+        <nav className="pagination-controls shared-workout-pager" aria-label="Workout pages">
+          <button
+            type="button"
+            className="pagination-arrow"
+            disabled={page === 0}
+            onClick={() => changePage(page - 1)}
+            aria-label="Newer workouts"
+          >
+            <Icon name="chevron-left" />
+          </button>
+          <small className="pagination-status" aria-live="polite">
+            Page {page + 1}
+            {totalPages ? ` of ${totalPages}` : ''}
+          </small>
+          <button
+            type="button"
+            className="pagination-arrow"
+            disabled={!hasNextPage || pageNeedsMore}
+            onClick={() => changePage(page + 1)}
+            aria-label="Older workouts"
+          >
+            <Icon name="chevron-right" />
+          </button>
+        </nav>
+      )}
+    </div>
+  );
 }
 
 function HistoryWorkoutCard({
+  bodyweight = null,
   detailsOnly = false,
+  shared = false,
   workout,
   open,
   summaryRef,
@@ -10521,9 +10885,12 @@ function HistoryWorkoutCard({
   onResume,
   onEdit,
   onDelete,
-  reactionAction,
+  onPhotosChange,
 }: {
+  bodyweight?: number | null;
   detailsOnly?: boolean;
+  /** A profile's read-only session: totals, records and each exercise's sets laid out to read. */
+  shared?: boolean;
   workout: TrackedWorkout;
   open: boolean;
   summaryRef: RefObject<HTMLButtonElement | null> | null;
@@ -10547,26 +10914,150 @@ function HistoryWorkoutCard({
   onResume?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  reactionAction?: ReactNode;
+  /** Given for your own saved workout: its photos were added to or removed. */
+  onPhotosChange?: () => void;
 }) {
   const weightUnit = useWeightUnit();
+  const [shareOpen, setShareOpen] = useState(false);
+  const [photos, setPhotos] = useWorkoutPhotos(workout);
+  const photoSubject = shared ? workoutDisplayName(workout) : `Your ${workoutDisplayName(workout)}`;
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
   const workingSetCount = workingSets(workout).length;
-  const totalReps = completedWorkoutSets.reduce((total, item) => total + (item.reps ?? 0), 0);
   const totalVolume = workoutVolumeKg(workout);
   const totalDistance = completedWorkoutSets.reduce(
     (total, item) => total + (item.distance_km ?? 0),
     0,
   );
+  // One exercise with a bodyweight ratio or a record gives every exercise that column, so the
+  // tables of a workout line up.
+  const ratioColumn =
+    open &&
+    completedWorkoutSets.some(
+      (item) => relativeStrength(item.weight_kg, item.bodyweight_kg ?? bodyweight) !== null,
+    );
+  const recordColumn =
+    open &&
+    completedWorkoutSets.some((item) =>
+      personalRecords.some((record) => record.set_id === item.id),
+    );
   const meta = [
     showYear
       ? `${shortDate(workout.workout_date)} ${workout.workout_date.slice(0, 4)}`
       : shortDate(workout.workout_date),
     workout.duration_minutes ? formatMinutesDuration(workout.duration_minutes) : null,
-    workingSetCount ? `${workingSetCount} sets` : null,
+    workingSetCount ? `${workingSetCount} ${workingSetCount === 1 ? 'set' : 'sets'}` : null,
   ].filter(Boolean);
+  const movements = open
+    ? workout.movements.map((movement) => {
+        const targeted = targetMovementId
+          ? targetMovementId === movement.id
+          : targetExerciseId === movement.exercise.id;
+        const best = topWorkingSet(movement.sets);
+        return (
+          <div
+            ref={targeted ? targetExerciseRef : null}
+            className={`history-movement ${targeted ? 'targeted-exercise' : ''}`}
+            key={movement.id}
+            tabIndex={targeted ? -1 : undefined}
+          >
+            <div className="history-movement-header">
+              {onOpenExercise ? (
+                <button
+                  type="button"
+                  className="history-exercise-link"
+                  onClick={() => onOpenExercise(movement.exercise.id)}
+                >
+                  {movement.exercise.name}
+                  <Icon name="chevron-right" />
+                </button>
+              ) : (
+                <strong className="history-exercise-name">{movement.exercise.name}</strong>
+              )}
+              {shared ? (
+                <span className="num">{sharedSetCount(movement.sets)}</span>
+              ) : (
+                best && <span className="num">Top {setLabel(best, weightUnit)}</span>
+              )}
+            </div>
+            {movement.machine_photos.length > 0 && (
+              <>
+                <div className="history-machine-photos">
+                  {movement.machine_photos.map((photo) => (
+                    <button
+                      type="button"
+                      key={photo.id}
+                      onClick={() => onExpandPhoto(expandedPhoto?.id === photo.id ? null : photo)}
+                      aria-label={`${expandedPhoto?.id === photo.id ? 'Collapse' : 'Expand'} ${photo.caption}`}
+                      aria-expanded={expandedPhoto?.id === photo.id}
+                    >
+                      <span className="history-photo-image">
+                        <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
+                        <svg
+                          className="history-photo-expand-icon"
+                          viewBox="0 0 20 20"
+                          aria-hidden="true"
+                        >
+                          <path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4" />
+                        </svg>
+                      </span>
+                      <span className="history-photo-caption">{photo.caption}</span>
+                    </button>
+                  ))}
+                </div>
+                {expandedPhoto &&
+                  movement.machine_photos.some((photo) => photo.id === expandedPhoto.id) && (
+                    <MachinePhotoDetail
+                      photo={expandedPhoto}
+                      onClose={() => onExpandPhoto(null)}
+                      onShowHistory={
+                        onFilterMachine && expandedPhoto.id !== machineFilterId
+                          ? () => onFilterMachine(expandedPhoto, movement.exercise.name)
+                          : undefined
+                      }
+                    />
+                  )}
+              </>
+            )}
+            <MachineSettingsSummary settings={movement.machine_settings} />
+            {shared ? (
+              <SharedSetList
+                sets={movement.sets}
+                personalRecords={personalRecords}
+                machinePhotos={movement.machine_photos}
+                formatSet={(item) => setResult(item, weightUnit)}
+                describeRecord={(record) =>
+                  `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)}`
+                }
+              />
+            ) : (
+              <>
+                <HistorySetTable
+                  bodyweight={bodyweight}
+                  sets={movement.sets.filter((item) => item.completed)}
+                  personalRecords={personalRecords}
+                  machinePhotos={movement.machine_photos}
+                  ratioColumn={ratioColumn}
+                  recordColumn={recordColumn}
+                  formatSet={(item) => setResult(item, weightUnit)}
+                  recordLabel={recordTypeLabel}
+                />
+                {/* A completed set's note sits under its row in the table. */}
+                {movement.sets
+                  .filter((item) => item.notes && !item.completed)
+                  .map((item) => (
+                    <small key={item.id}>
+                      Set {item.order_index + 1}: {item.notes}
+                    </small>
+                  ))}
+              </>
+            )}
+            {movement.notes && <MovementNotes notes={movement.notes} />}
+          </div>
+        );
+      })
+    : null;
 
   return (
     <article className={`history-card ${open ? 'open' : ''}`}>
@@ -10602,127 +11093,36 @@ function HistoryWorkoutCard({
           </span>
         </button>
       )}
-      {reactionAction && <div className="history-card-social">{reactionAction}</div>}
       {open && (
-        <div className="history-detail">
-          {!detailsOnly && (
-            <div className="history-workout-stats" aria-label="Workout totals">
-              {workout.start_time && workout.end_time && (
-                <span>
-                  <small>When</small>
-                  <strong>{formatWorkoutTimeRange(workout.start_time, workout.end_time)}</strong>
-                </span>
-              )}
-              <span>
-                <small>Time</small>
-                <strong>{formatMinutesDuration(workout.duration_minutes)}</strong>
-              </span>
-              <span>
-                <small>Sets</small>
-                <strong>{completedWorkoutSets.length}</strong>
-              </span>
-              <span>
-                <small>Reps</small>
-                <strong>{totalReps || '–'}</strong>
-              </span>
-              <span>
-                <small>Volume</small>
-                <strong>{totalVolume ? formatWeight(totalVolume, weightUnit, 0) : '–'}</strong>
-              </span>
-            </div>
-          )}
-          {workout.movements.map((movement) => {
-            const targeted = targetMovementId
-              ? targetMovementId === movement.id
-              : targetExerciseId === movement.exercise.id;
-            const best = topWorkingSet(movement.sets);
-            return (
-              <div
-                ref={targeted ? targetExerciseRef : null}
-                className={`history-movement ${targeted ? 'targeted-exercise' : ''}`}
-                key={movement.id}
-                tabIndex={targeted ? -1 : undefined}
-              >
-                <div className="history-movement-header">
-                  {onOpenExercise ? (
-                    <button
-                      type="button"
-                      className="history-exercise-link"
-                      onClick={() => onOpenExercise(movement.exercise.id)}
-                    >
-                      {movement.exercise.name}
-                      <Icon name="chevron-right" />
-                    </button>
-                  ) : (
-                    <strong className="history-exercise-name">{movement.exercise.name}</strong>
-                  )}
-                  {best && <span className="num">Top {setLabel(best, weightUnit)}</span>}
-                </div>
-                {movement.machine_photos.length > 0 && (
-                  <>
-                    <div className="history-machine-photos">
-                      {movement.machine_photos.map((photo) => (
-                        <button
-                          type="button"
-                          key={photo.id}
-                          onClick={() =>
-                            onExpandPhoto(expandedPhoto?.id === photo.id ? null : photo)
-                          }
-                          aria-label={`${expandedPhoto?.id === photo.id ? 'Collapse' : 'Expand'} ${photo.caption}`}
-                          aria-expanded={expandedPhoto?.id === photo.id}
-                        >
-                          <span className="history-photo-image">
-                            <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
-                            <svg
-                              className="history-photo-expand-icon"
-                              viewBox="0 0 20 20"
-                              aria-hidden="true"
-                            >
-                              <path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4" />
-                            </svg>
-                          </span>
-                          <span className="history-photo-caption">{photo.caption}</span>
-                        </button>
-                      ))}
-                    </div>
-                    {expandedPhoto &&
-                      movement.machine_photos.some((photo) => photo.id === expandedPhoto.id) && (
-                        <MachinePhotoDetail
-                          photo={expandedPhoto}
-                          onClose={() => onExpandPhoto(null)}
-                          onShowHistory={
-                            onFilterMachine && expandedPhoto.id !== machineFilterId
-                              ? () => onFilterMachine(expandedPhoto, movement.exercise.name)
-                              : undefined
-                          }
-                        />
-                      )}
-                  </>
-                )}
-                <MachineSettingsSummary settings={movement.machine_settings} />
-                <HistorySetFlow
-                  sets={movement.sets.filter((item) => item.completed)}
-                  personalRecords={personalRecords}
-                />
-                {movement.sets
-                  .filter((item) => item.notes)
-                  .map((item) => (
-                    <small key={item.id}>
-                      Set {item.order_index + 1}: {item.notes}
-                    </small>
-                  ))}
-                {movement.notes && <MovementNotes notes={movement.notes} />}
+        <div className={`history-detail${shared ? ' shared-session' : ''}`}>
+          {onPhotosChange && !detailsOnly ? (
+            <WorkoutPhotoEditor
+              workoutId={workout.id}
+              photos={photos}
+              subject={photoSubject}
+              canAdd={false}
+              onChange={(next) => {
+                setPhotos(next);
+                onPhotosChange();
+              }}
+            />
+          ) : (
+            photos.length > 0 && (
+              <div className="history-workout-photos">
+                <WorkoutPhotos photos={photos} subject={photoSubject} layout="strip" />
               </div>
-            );
-          })}
+            )
+          )}
+          {shared ? <div className="shared-session-exercises">{movements}</div> : movements}
           {!detailsOnly && workout.notes && (
             <p className="history-workout-notes">{workout.notes}</p>
           )}
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
+              <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
               {!activeWorkout && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
-                  Resume from now
+                  Resume
                 </button>
               )}
               <button type="button" onClick={onEdit}>
@@ -10736,6 +11136,13 @@ function HistoryWorkoutCard({
               />
             </div>
           )}
+          {shareOpen && (
+            <WorkoutShareCard
+              workout={workout}
+              records={records}
+              onClose={() => setShareOpen(false)}
+            />
+          )}
         </div>
       )}
     </article>
@@ -10743,11 +11150,15 @@ function HistoryWorkoutCard({
 }
 
 function HistorySetFlow({
+  bodyweight = null,
   sets,
   personalRecords,
+  machinePhotos = [],
 }: {
+  bodyweight?: number | null;
   sets: TrackedSet[];
   personalRecords: PersonalRecord[];
+  machinePhotos?: MachinePhoto[];
 }) {
   const weightUnit = useWeightUnit();
   return (
@@ -10757,6 +11168,17 @@ function HistorySetFlow({
           <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
+            {(item.bodyweight_kg ?? bodyweight) != null && (
+              <small>
+                {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
+              </small>
+            )}
+            {machinePhotos.length > 1 && (
+              <small className="history-set-machine">
+                {machinePhotos.find((photo) => photo.id === item.machine_photo_id)?.caption ??
+                  'Machine not assigned'}
+              </small>
+            )}
             {item.rpe !== null && <small>RPE {item.rpe}</small>}
             <em>
               {item.set_type === 'warmup' || item.warmup
@@ -10768,7 +11190,22 @@ function HistorySetFlow({
                     : ''}
             </em>
             {personalRecords.some((record) => record.set_id === item.id) && (
-              <strong className="pr-badge">PR</strong>
+              <strong
+                className="pr-badge"
+                title={personalRecords
+                  .filter((record) => record.set_id === item.id)
+                  .map(
+                    (record) =>
+                      `${record.scope === 'block' ? 'Block' : 'All-time'} ${recordTypeLabel(record.record_type)}`,
+                  )
+                  .join(', ')}
+              >
+                {personalRecords.some(
+                  (record) => record.set_id === item.id && record.scope !== 'block',
+                )
+                  ? 'All-time PR'
+                  : 'Block PR'}
+              </strong>
             )}
           </div>
           {index < sets.length - 1 && (
@@ -10789,6 +11226,8 @@ function HistorySetFlow({
 }
 
 function setResult(item: TrackedSet, weightUnit: WeightUnit): string {
+  // A bodyweight set is saved at 0 kg; its reps are what matter.
+  if (item.weight_kg === 0 && item.reps !== null) return `${item.reps} reps`;
   if (item.weight_kg !== null)
     return `${formatWeight(item.weight_kg, weightUnit)} × ${item.reps ?? '–'}`;
   const cardioValues = [

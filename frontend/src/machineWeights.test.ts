@@ -196,7 +196,8 @@ describe('machine weight normalisation', () => {
       point('t2', '2027-01-20', 'techno', 104),
     ]);
     const suggestions = suggestFactors(data, 'hammer');
-    expect(suggestions.get('life')).toEqual({ factor: 1.25, sessions: 3 });
+    // The off day widens the likely range below the suggestion, not above it.
+    expect(suggestions.get('life')).toEqual({ factor: 1.25, sessions: 3, low: 1.24, high: 1.25 });
     // One comparable session is not enough.
     expect(suggestions.has('techno')).toBe(false);
     expect(suggestFactors(data, null).size).toBe(0);

@@ -28,6 +28,8 @@ BACKUP_DATABASE = "database.db"
 MANIFEST = "manifest.json"
 PHOTOS = "machine-photos"
 PROFILE_PHOTOS = "profile-photos"
+# Tables whose rows name two files each in the machine photo folder.
+PHOTO_TABLES = ("machine_photos", "workout_photos")
 LEGACY_DATABASE = "gym-video-logger.db"
 # Data folders kept from a pre-accounts backup. Server secrets, keys and logs are left out.
 LEGACY_FOLDERS = ("machine-photos", "uploads", "outputs", "normalized")
@@ -58,6 +60,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "exercise_partial_set_weeks": f"exercise_id IN ({_EXERCISES})",
     "machine_photos": _OWNED,
     "training_workouts": _OWNED,
+    "workout_photos": _OWNED,
     "workout_types": _OWNED,
     "workout_movements": f"workout_id IN ({_WORKOUTS})",
     "workout_sets": f"movement_id IN ({_MOVEMENTS})",
@@ -67,6 +70,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "cardio_sessions": _OWNED,
     "push_subscriptions": None,
     "active_workout_reminders": None,
+    "active_workout_sync": None,
     # A workout in progress is shown to friends live; it is not part of the training archive.
     "live_workouts": None,
     "user_sessions": None,
@@ -116,7 +120,7 @@ def legacy_data_owner(db: Session) -> User | None:
 def create_account_snapshot(
     db: Session, settings: Settings, user: User, label: str | None = None
 ) -> AccountBackup:
-    """Back up ``user``'s rows, machine photos and profile photo, and nobody else's."""
+    """Back up ``user``'s rows, machine, workout and profile photos, and nobody else's."""
     created_at = utc_now()
     label = clean_label(label or f"Snapshot {created_at:%Y-%m-%d %H:%M} UTC")
     backup_id = new_uuid()
@@ -268,11 +272,15 @@ def copy_account_rows(source: Path, target: Path, user_id: str) -> dict[str, int
 
 
 def copy_photos(database: Path, photos_dir: Path, target_dir: Path) -> list[str]:
-    """Copy the machine photos the backup's rows refer to; return any that were missing."""
+    """Copy the machine and workout photos the backup's rows refer to; return any missing."""
     with closing(sqlite3.connect(read_only_uri(database), uri=True)) as connection:
-        rows = connection.execute(
-            "SELECT full_filename, thumbnail_filename FROM machine_photos"
-        ).fetchall()
+        rows = [
+            row
+            for table in PHOTO_TABLES
+            for row in connection.execute(
+                f"SELECT full_filename, thumbnail_filename FROM {table}"
+            ).fetchall()
+        ]
     missing = []
     for name in sorted({name for row in rows for name in row}):
         source = photos_dir / name
@@ -312,26 +320,16 @@ def finish_backup(
     details: dict,
     fingerprint: str | None = None,
 ) -> AccountBackup:
-    files = [
-        {
-            "path": path.relative_to(staging).as_posix(),
-            "size": path.stat().st_size,
-            "sha256": sha256_of(path),
-        }
-        for path in sorted(path for path in staging.rglob("*") if path.is_file())
-    ]
-    manifest = {
-        "format": 2,
-        "id": backup_id,
-        "kind": kind.value,
-        "label": label,
-        "owner": {"id": user.id, "username": user.username},
-        "created_at": created_at.isoformat(),
-        "schema_revision": schema_revision,
-        **details,
-        "files": files,
-    }
-    (staging / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    files = write_manifest(
+        staging,
+        backup_id=backup_id,
+        kind=kind,
+        label=label,
+        user=user,
+        created_at=created_at,
+        schema_revision=schema_revision,
+        details=details,
+    )
     folder = backup_folder(settings, user.id, backup_id)
     staging.rename(folder)
     backup = AccountBackup(
@@ -353,6 +351,41 @@ def finish_backup(
         shutil.rmtree(folder, ignore_errors=True)
         raise
     return backup
+
+
+def write_manifest(
+    staging: Path,
+    *,
+    backup_id: str,
+    kind: AccountBackupKind,
+    label: str,
+    user: User,
+    created_at: datetime,
+    schema_revision: str | None,
+    details: dict,
+) -> list[dict]:
+    """Write ``manifest.json`` listing every file in ``staging``; return the file entries."""
+    files = [
+        {
+            "path": path.relative_to(staging).as_posix(),
+            "size": path.stat().st_size,
+            "sha256": sha256_of(path),
+        }
+        for path in sorted(path for path in staging.rglob("*") if path.is_file())
+    ]
+    manifest = {
+        "format": 2,
+        "id": backup_id,
+        "kind": kind.value,
+        "label": label,
+        "owner": {"id": user.id, "username": user.username},
+        "created_at": created_at.isoformat(),
+        "schema_revision": schema_revision,
+        **details,
+        "files": files,
+    }
+    (staging / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return files
 
 
 def start_staging(settings: Settings, user_id: str, backup_id: str) -> Path:

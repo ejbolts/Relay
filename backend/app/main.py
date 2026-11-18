@@ -12,10 +12,23 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from . import comments  # noqa: F401 -- registers discussion routes on sharing_router
+from . import (
+    comments,  # noqa: F401 -- registers discussion routes on sharing_router
+    lift_comparison,  # noqa: F401 -- registers lift comparison routes on sharing_router
+)
+from .account_archive import router as account_archive_router
 from .account_limits import SaveRateLimiter
 from .accounts import auth_router, profile_router
+from .active_workouts import (
+    DraftChange,
+    WorkoutAutoSave,
+    auto_save_minutes,
+    change_draft,
+    set_auto_save_minutes,
+    snapshot,
+)
 from .admin import admin_router
+from .app_notices import router as app_notices_router
 from .auth import (
     CsrfOriginMiddleware,
     CurrentUser,
@@ -23,6 +36,7 @@ from .auth import (
     get_current_user,
     require_video_access,
 )
+from .client_versions import ClientVersion, ClientVersionGateMiddleware, normalized_version
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
@@ -31,6 +45,7 @@ from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
 from .machine_settings import router as machine_settings_router
 from .models import (
+    ActiveWorkoutSync,
     Clip,
     ClipUploadStatus,
     PushSubscription,
@@ -45,6 +60,7 @@ from .notifications import (
     send_push_notification,
     vapid_public_key,
 )
+from .password_reset_requests import admin_request_router, request_router
 from .presence import presence_router
 from .processing import ProcessingValidationError, SessionProcessor, validate_batch_ready
 from .push_security import MAX_PUSH_SUBSCRIPTIONS
@@ -73,8 +89,10 @@ from .storage import (
 )
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
+from .training_blocks import router as training_blocks_router
 from .training_metrics import rebuild_personal_records
 from .weight_mapping import router as weight_mapping_router
+from .workout_type_exercises import router as workout_type_exercises_router
 from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
 from .youtube_connections import router as youtube_router
 
@@ -176,6 +194,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.login_throttle = LoginThrottle()
     app.state.save_rate_limiter = SaveRateLimiter()
     app.state.push_rate_limiter = SaveRateLimiter()
+    app.add_middleware(ClientVersionGateMiddleware)
     app.add_middleware(CsrfOriginMiddleware)
 
     @app.exception_handler(HTTPException)
@@ -209,6 +228,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # protected unless someone deliberately moves it here.
     protected = APIRouter(dependencies=[Depends(get_current_user)])
     video = APIRouter(prefix="/api/sessions", dependencies=[Depends(require_video_access)])
+
+    @protected.get("/api/active-workout")
+    def active_workout(user: CurrentUser, db: Session = Depends(get_db)) -> dict:
+        return snapshot(db.get(ActiveWorkoutSync, user.id))
+
+    @protected.put("/api/active-workout")
+    def save_active_workout(
+        payload: DraftChange,
+        user: CurrentUser,
+        db: Session = Depends(get_db),
+        client_version: ClientVersion = None,
+    ) -> dict:
+        if not app.state.save_rate_limiter.allow(f"active-workout:{user.id}", 240):
+            raise api_error(429, "draft_rate_limited", "Wait a moment before syncing again.")
+        return change_draft(db, user.id, payload, client_version=normalized_version(client_version))
+
+    @protected.get("/api/workout-auto-save", response_model=WorkoutAutoSave)
+    def workout_auto_save(user: CurrentUser, db: Session = Depends(get_db)) -> WorkoutAutoSave:
+        return WorkoutAutoSave(after_minutes=auto_save_minutes(db, user.id))
+
+    @protected.put("/api/workout-auto-save", response_model=WorkoutAutoSave)
+    def update_workout_auto_save(
+        payload: WorkoutAutoSave, user: CurrentUser, db: Session = Depends(get_db)
+    ) -> WorkoutAutoSave:
+        set_auto_save_minutes(db, user.id, payload.after_minutes)
+        db.commit()
+        return WorkoutAutoSave(after_minutes=auto_save_minutes(db, user.id))
 
     @app.get("/api/health", response_model=HealthRead)
     def health() -> HealthRead:
@@ -670,13 +716,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_router)
     app.include_router(feedback_router)
     app.include_router(admin_feedback_router)
+    app.include_router(request_router)
+    app.include_router(admin_request_router)
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)
     app.include_router(video)
     app.include_router(tracker_router)
+    app.include_router(training_blocks_router)
     app.include_router(routines_router)
+    app.include_router(account_archive_router)
+    app.include_router(workout_type_exercises_router)
     app.include_router(home_layout_router)
+    app.include_router(app_notices_router)
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)

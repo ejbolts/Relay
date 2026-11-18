@@ -2,17 +2,43 @@ import { useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
 import { ExerciseCustomFilter } from './ExerciseCustomFilter';
-import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { exerciseEquipment } from './exerciseEquipment';
 import { exerciseSearchScore } from './exerciseSearch';
+import {
+  TrainingBlockDialog,
+  TrainingBlockToast,
+  type TrainingBlockDialogStart,
+} from './TrainingBlockDialog';
+import { blockOn } from './trainingBlocks';
+import { useTrainingBlocks } from './trainingBlocksContext';
 import type { Exercise, ExerciseLibrarySummary } from './types';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { formatWeightNumber, weightFromKg } from './weightUnits';
+import { localDate } from './utils';
 import type { ExerciseLibraryState } from './useExerciseLibrary';
 
 const sorts = ['Recent first', 'A–Z', 'Most improved'] as const;
+const PAGE_SIZES = [5, 10, 20, 50];
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_KEY = 'relay-exercise-list-page-size';
+/** The page size last chosen on this device. */
+function savedPageSize(): number {
+  try {
+    const saved = Number(window.localStorage.getItem(PAGE_SIZE_KEY));
+    return PAGE_SIZES.includes(saved) ? saved : DEFAULT_PAGE_SIZE;
+  } catch {
+    return DEFAULT_PAGE_SIZE;
+  }
+}
+function savePageSize(size: number) {
+  try {
+    window.localStorage.setItem(PAGE_SIZE_KEY, String(size));
+  } catch {
+    // The choice still applies until the list is closed.
+  }
+}
 function exerciseMuscles(exercise: Exercise) {
   return (
     exercise.muscle_set_credits
@@ -66,10 +92,20 @@ export function ExerciseLibraryList({
   const [muscle, setMuscle] = useState('All');
   const [equipment, setEquipment] = useState('');
   const [customOnly, setCustomOnly] = useState(false);
+  const [hiddenOnly, setHiddenOnly] = useState(false);
   const [sort, setSort] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(savedPageSize);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [blockDialog, setBlockDialog] = useState<TrainingBlockDialogStart | null>(null);
+  const [blockNotice, setBlockNotice] = useState('');
+  const blocks = useTrainingBlocks();
+  const currentBlock = blockOn(blocks.config.blocks, localDate());
+  const blockScope = blocks.block
+    ? blocks.block.id === currentBlock?.id
+      ? 'current'
+      : blocks.block.id
+    : 'all';
   const { summaries, loading, error, retry } = library;
   const input = useRef<HTMLInputElement>(null);
   const optionsButton = useRef<HTMLButtonElement>(null);
@@ -87,9 +123,12 @@ export function ExerciseLibraryList({
       ),
     ),
   ].sort();
+  const hiddenCount = exercises.filter((exercise) => exercise.hidden).length;
+  const showHidden = hiddenOnly && hiddenCount > 0;
   const list = exercises
     .filter(
       (exercise) =>
+        Boolean(exercise.hidden) === showHidden &&
         (!customOnly || exercise.is_custom) &&
         (muscle === 'All' || exerciseMuscles(exercise).includes(muscle)) &&
         (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
@@ -141,6 +180,20 @@ export function ExerciseLibraryList({
             </button>
           )}
         </label>
+        <button
+          ref={optionsButton}
+          type="button"
+          className="exercise-list-options"
+          aria-label={
+            equipment ? 'Exercise list options, equipment filtered' : 'Exercise list options'
+          }
+          aria-haspopup="dialog"
+          aria-expanded={optionsOpen}
+          data-active={equipment ? '' : undefined}
+          onClick={() => setOptionsOpen(true)}
+        >
+          <Icon name="filter" />
+        </button>
         {onCreate && (
           <button
             type="button"
@@ -154,16 +207,6 @@ export function ExerciseLibraryList({
           </button>
         )}
       </div>
-      <div className="exercise-library-equipment">
-        <ExerciseEquipmentFilter
-          exercises={exercises}
-          value={equipment}
-          onChange={(value) => {
-            setEquipment(value);
-            setPage(1);
-          }}
-        />
-      </div>
       <div className="exercise-library-filter-row">
         <ExerciseCustomFilter
           active={customOnly}
@@ -172,6 +215,20 @@ export function ExerciseLibraryList({
             setPage(1);
           }}
         />
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="exercise-custom-filter"
+            aria-label={`Hidden exercises, ${hiddenCount}`}
+            aria-pressed={showHidden}
+            onClick={() => {
+              setHiddenOnly(!showHidden);
+              setPage(1);
+            }}
+          >
+            Hidden
+          </button>
+        )}
         <div className="exercise-muscle-filters" role="group" aria-label="Muscle group">
           {['All', ...muscles].map((name) => (
             <button
@@ -188,34 +245,6 @@ export function ExerciseLibraryList({
           ))}
         </div>
       </div>
-      <div className="exercise-list-meta">
-        <span>
-          {list.length} {list.length === 1 ? 'lift' : 'lifts'} · Est. 1RM, 8 wk
-        </span>
-        <button
-          type="button"
-          className="text-link"
-          aria-label={`Sort exercises: ${sorts[sort]}`}
-          onClick={() => {
-            setSort((value) => (value + 1) % sorts.length);
-            setPage(1);
-          }}
-        >
-          {sorts[sort]}
-          <Icon name="chevron-down" />
-        </button>
-        <button
-          ref={optionsButton}
-          type="button"
-          className="exercise-list-options"
-          aria-label="Exercise list options"
-          aria-haspopup="dialog"
-          aria-expanded={optionsOpen}
-          onClick={() => setOptionsOpen(true)}
-        >
-          <Icon name="filter" />
-        </button>
-      </div>
       {optionsOpen && (
         <PopupDialog
           title="Exercise list"
@@ -224,37 +253,117 @@ export function ExerciseLibraryList({
             requestAnimationFrame(() => optionsButton.current?.focus());
           }}
         >
+          {blocks.config.blocks.length > 0 && (
+            <label className="exercise-page-size">
+              Training block
+              <select
+                aria-label="Training block"
+                value={blockScope}
+                disabled={blocks.loading}
+                onChange={(event) => blocks.select(event.target.value)}
+              >
+                <option value="all">All time</option>
+                {[...blocks.config.blocks].reverse().map((item) => (
+                  <option key={item.id} value={item.id === currentBlock?.id ? 'current' : item.id}>
+                    {item.id === currentBlock?.id ? `${item.name} (current)` : item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="exercise-page-size">
-            Exercises per page
+            Equipment
+            <ExerciseEquipmentFilter
+              exercises={exercises}
+              value={equipment}
+              onChange={(value) => {
+                setEquipment(value);
+                setPage(1);
+              }}
+              allLabel="All equipment"
+            />
+          </label>
+          <label className="exercise-page-size">
+            Sort by
+            <select
+              aria-label="Sort exercises"
+              value={sort}
+              onChange={(event) => {
+                setSort(Number(event.target.value));
+                setPage(1);
+              }}
+            >
+              {sorts.map((name, index) => (
+                <option key={name} value={index}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="exercise-page-size">
+            Per page
             <select
               aria-label="Exercises per page"
               value={pageSize}
               onChange={(event) => {
                 setPageSize(Number(event.target.value));
+                savePageSize(Number(event.target.value));
                 setPage(1);
               }}
             >
-              {[10, 20, 50, 100].map((size) => (
+              {PAGE_SIZES.map((size) => (
                 <option key={size} value={size}>
                   {size}
                 </option>
               ))}
             </select>
           </label>
-          {onMerge && (
+          {blocks.error && (
+            <p className="exercise-list-options-error" role="alert">
+              {blocks.error}{' '}
+              <button type="button" className="text-link" onClick={blocks.retry}>
+                Retry
+              </button>
+            </p>
+          )}
+          <div className="exercise-list-options-actions">
             <button
               type="button"
               className="pulse-button secondary"
+              disabled={blocks.loading || !!blocks.error}
               onClick={() => {
                 setOptionsOpen(false);
-                onMerge();
+                setBlockDialog(blocks.config.blocks.length ? 'blocks' : 'new');
               }}
             >
-              Merge exercises
+              {blocks.config.blocks.length ? 'Training blocks' : 'Start a block'}
             </button>
-          )}
+            {onMerge && (
+              <button
+                type="button"
+                className="pulse-button secondary"
+                onClick={() => {
+                  setOptionsOpen(false);
+                  onMerge();
+                }}
+              >
+                Merge exercises
+              </button>
+            )}
+          </div>
         </PopupDialog>
       )}
+      {blockDialog && (
+        <TrainingBlockDialog
+          start={blockDialog}
+          onClose={() => {
+            setBlockDialog(null);
+            requestAnimationFrame(() => optionsButton.current?.focus());
+          }}
+          onNotice={setBlockNotice}
+        />
+      )}
+      <TrainingBlockToast notice={blockNotice} onDismiss={() => setBlockNotice('')} />
       {loading && summaries === null && (
         <p className="exercise-list-status" role="status">
           Loading trends…
@@ -316,14 +425,14 @@ export function ExerciseLibraryList({
                     .join(' · ')}
                 </small>
               </div>
-              <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
-                <b>
+                <b title={summary?.normalised ? 'In your reference machine’s weights' : undefined}>
                   {summary?.latest_estimated_1rm == null ? (
                     '—'
                   ) : (
                     <>
+                      {summary.normalised && <span aria-hidden="true">≈ </span>}
                       {formatWeightNumber(summary.latest_estimated_1rm, weightUnit, 1)}{' '}
                       <small>{weightUnit}</small>
                     </>

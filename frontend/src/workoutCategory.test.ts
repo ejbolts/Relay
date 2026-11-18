@@ -3,6 +3,7 @@ import type { WorkoutCategory } from './types';
 import {
   finalizeWorkoutIdentity,
   inferWorkoutCategory,
+  isCardioTypeWithoutCardio,
   mixedWorkoutName,
   workoutNameForCategory,
 } from './workoutCategory';
@@ -11,6 +12,19 @@ const exercises = (...categories: WorkoutCategory[]) =>
   categories.map((category) => ({ category }));
 
 describe('automatic workout category', () => {
+  it('treats Cardio as a mislabel only for a workout with exercises and no cardio', () => {
+    expect(isCardioTypeWithoutCardio('cardio', exercises('lower', 'full_body'))).toBe(true);
+    expect(isCardioTypeWithoutCardio('cardio', exercises('lower', 'cardio'))).toBe(false);
+    expect(isCardioTypeWithoutCardio('cardio', [])).toBe(false);
+    expect(isCardioTypeWithoutCardio('push', exercises('lower'))).toBe(false);
+    // The exercise kind, when known, decides over its category.
+    expect(isCardioTypeWithoutCardio('cardio', [{ category: 'other', kind: 'cardio' }])).toBe(
+      false,
+    );
+    expect(isCardioTypeWithoutCardio('cardio', [{ category: 'cardio', kind: 'strength' }])).toBe(
+      true,
+    );
+  });
   it.each(['Arms', 'Legs', 'Limbs', 'Torso'])(
     'preserves %s instead of inferring an exercise category',
     (name) => {

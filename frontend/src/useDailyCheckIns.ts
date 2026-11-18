@@ -3,7 +3,7 @@ import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 
 /** All Home check-in variants write the same daily record and share one active Undo. */
 export function useDailyCheckIns(
-  saveWeight: (weight: number) => Promise<UndoBodyweightCheckIn>,
+  saveWeight: (weight: number, bodyFat?: number) => Promise<UndoBodyweightCheckIn>,
   saveFat?: (fat: number) => Promise<UndoBodyweightCheckIn>,
 ) {
   const locked = useRef(false);
@@ -35,7 +35,8 @@ export function useDailyCheckIns(
     busy,
     undoVersion,
     undoVersionRef,
-    onSave: (weight: number) => save(() => saveWeight(weight)),
+    onSave: (weight: number, bodyFat?: number) =>
+      save(() => (bodyFat === undefined ? saveWeight(weight) : saveWeight(weight, bodyFat))),
     onSaveBodyFat: saveFat ? (fat: number) => save(() => saveFat(fat)) : undefined,
   };
 }

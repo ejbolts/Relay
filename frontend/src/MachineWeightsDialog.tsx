@@ -1,5 +1,6 @@
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from './api';
+import { GuideCoach, type CoachStep } from './GuideCoach';
 import { HelpPopup } from './HelpPopup';
 import {
   FACTOR_RANGE,
@@ -11,8 +12,10 @@ import {
   progressViewPoints,
   suggestFactors,
   withReference,
+  type FactorSuggestion,
 } from './machineWeights';
 import { PopupDialog } from './PopupDialog';
+import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 import type { ExerciseProgress, MachineWeight, WeightMapping } from './types';
 import { weightFromKg, weightInputKg, weightInputValue, type WeightUnit } from './weightUnits';
@@ -50,6 +53,17 @@ function pairForFactor(text: PairText, factor: number, base: number): PairText {
   const typed = decimalNumberOrNull(text.machine);
   const machine = typed && typed > 0 ? typed : base;
   return { machine: trimmed(machine), reference: trimmed(machine * factor) };
+}
+
+/** Where a conversion sits along the slider, from 0 at its minimum to 1 at its maximum. */
+function sliderPosition(factor: number): number {
+  return (clampFactor(factor) - FACTOR_RANGE.min) / (FACTOR_RANGE.max - FACTOR_RANGE.min);
+}
+
+/** Whether a conversion falls within the middle half of your sessions' conversions. */
+function inLikelyRange(factor: number, suggestion: FactorSuggestion): boolean {
+  const rounded = Math.round(factor * 100) / 100;
+  return rounded >= suggestion.low && rounded <= suggestion.high;
 }
 
 /** The conversion a typed pair describes, or null while either weight is missing. */
@@ -113,6 +127,8 @@ export function MachineWeightsDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const guide = useActiveGuide('normalise');
+  const [guideStep, setGuideStep] = useState(() => (mapping.enabled ? 1 : 0));
   const reference = draft.machines.find((machine) => machine.id === draft.reference_machine_id);
   const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
   const recommendedId = recommendedReferenceId(draft, recent);
@@ -221,6 +237,8 @@ export function MachineWeightsDialog({
       reference_machine_id: draft.reference_machine_id ?? recommendedId,
     };
     setDraft(next);
+    // Turning the switch on is the guide's first step; switching it off again returns there.
+    if (guide) setGuideStep((step) => (!next.enabled ? 0 : step === 0 ? 1 : step));
     if (next.enabled) {
       setTexts((current) => withSuggestions(current, next, progress, weightUnit));
     }
@@ -233,12 +251,48 @@ export function MachineWeightsDialog({
     setSaving(true);
     setSaveError(null);
     try {
-      onSaved(await api.saveWeightMapping(exerciseId, next));
+      const saved = await api.saveWeightMapping(exerciseId, next);
+      if (saved.enabled) finishGuide('normalise');
+      onSaved(saved);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Could not save machine weights.');
       setSaving(false);
     }
   }
+
+  const close = () => {
+    exitGuide('normalise');
+    onClose();
+  };
+  const spokes = live.machines.filter((machine) => machine.id !== draft.reference_machine_id);
+  const coachSteps: CoachStep[] = [
+    {
+      title: 'Switch on Normalise weights',
+      body: `Your ${exerciseName} machines weigh differently, so the same number is a different effort on each. This shows every session in one machine’s weights.`,
+      target: '.machine-weights-toggle [role="switch"]',
+      next: { disabled: !draft.enabled, onClick: () => setGuideStep(1) },
+    },
+    {
+      title: 'Check the reference machine',
+      body: 'Relay picked the machine you use most. Tap Make reference on another machine to change it.',
+      target: '.machine-weights-list li.is-reference',
+      next: { onClick: () => setGuideStep(2) },
+    },
+    {
+      title: 'Match the weights',
+      body: 'Relay suggests a match from your sessions. Change either weight, or drag the slider, until they feel the same, and watch the preview.',
+      target: '.machine-weights-list li.is-spoke',
+      next: {
+        disabled: spokes.some((machine) => !machine.machine_kg || !machine.reference_kg),
+        onClick: () => setGuideStep(3),
+      },
+    },
+    {
+      title: 'Save it',
+      body: 'Your logged sets keep the weights you entered. Only the All machines chart is converted.',
+      target: '.machine-weights-save',
+    },
+  ];
 
   return (
     <PopupDialog
@@ -250,7 +304,7 @@ export function MachineWeightsDialog({
           {saving ? 'Saving…' : 'Save'}
         </button>
       }
-      onClose={onClose}
+      onClose={close}
     >
       <form id={formId} className="machine-weights-form" onSubmit={(event) => void submit(event)}>
         <div className="notification-setting-row machine-weights-toggle">
@@ -352,60 +406,105 @@ export function MachineWeightsDialog({
                 {tree && reference && !isReference && (
                   <div className="machine-weights-pair">
                     <div className="machine-weights-equation">
-                      <label className="machine-weights-plate">
-                        <MachineThumb machine={machine} />
-                        <input
-                          inputMode="decimal"
-                          value={text.machine}
-                          aria-label={`Weight on ${machine.caption}`}
-                          aria-invalid={Boolean(errors[machine.id])}
-                          aria-describedby={errors[machine.id] ? errorId : undefined}
-                          onChange={(event) =>
-                            setMachineWeight(machine.id, text, event.target.value)
-                          }
-                        />
-                        <span>{weightUnit}</span>
-                      </label>
+                      <div className="machine-weights-side">
+                        <label className="machine-weights-plate">
+                          <MachineThumb machine={machine} />
+                          <input
+                            inputMode="decimal"
+                            value={text.machine}
+                            aria-label={`Weight on ${machine.caption}`}
+                            aria-invalid={Boolean(errors[machine.id])}
+                            aria-describedby={errors[machine.id] ? errorId : undefined}
+                            onChange={(event) =>
+                              setMachineWeight(machine.id, text, event.target.value)
+                            }
+                          />
+                          <span>{weightUnit}</span>
+                        </label>
+                        <span className="machine-weights-side-name">
+                          <small>This machine</small>
+                          <span>{machine.caption}</span>
+                        </span>
+                      </div>
                       <span className="machine-weights-equals" aria-hidden="true">
                         =
                       </span>
-                      <label className="machine-weights-plate is-reference">
-                        <MachineThumb machine={reference} />
-                        <input
-                          inputMode="decimal"
-                          value={text.reference}
-                          aria-label={`Matching weight on ${reference.caption} for ${machine.caption}`}
-                          aria-invalid={Boolean(errors[machine.id])}
-                          aria-describedby={errors[machine.id] ? errorId : undefined}
-                          onChange={(event) =>
-                            setPair(machine.id, { ...text, reference: event.target.value })
-                          }
-                        />
-                        <span>{weightUnit}</span>
-                        <span className="machine-weights-star" aria-hidden="true">
-                          ★
+                      <div className="machine-weights-side is-reference">
+                        <label className="machine-weights-plate is-reference">
+                          <MachineThumb machine={reference} />
+                          <input
+                            inputMode="decimal"
+                            value={text.reference}
+                            aria-label={`Matching weight on ${reference.caption} for ${machine.caption}`}
+                            aria-invalid={Boolean(errors[machine.id])}
+                            aria-describedby={errors[machine.id] ? errorId : undefined}
+                            onChange={(event) =>
+                              setPair(machine.id, { ...text, reference: event.target.value })
+                            }
+                          />
+                          <span>{weightUnit}</span>
+                          <span className="machine-weights-star" aria-hidden="true">
+                            ★
+                          </span>
+                        </label>
+                        <span className="machine-weights-side-name">
+                          <small>★ Reference</small>
+                          <span>{reference.caption}</span>
                         </span>
-                      </label>
+                      </div>
                     </div>
                     <div className="machine-weights-slider">
-                      <input
-                        type="range"
-                        min={FACTOR_RANGE.min}
-                        max={FACTOR_RANGE.max}
-                        step={FACTOR_RANGE.step}
-                        value={clampFactor(factor)}
-                        aria-label={`Conversion for ${machine.caption}`}
-                        aria-valuetext={`times ${factor.toFixed(2)}`}
-                        onChange={(event) =>
-                          setPair(machine.id, pairForFactor(text, Number(event.target.value), base))
-                        }
-                      />
+                      <span
+                        className="machine-weights-track"
+                        style={{ '--fill': sliderPosition(factor) } as CSSProperties}
+                      >
+                        {suggestion && (
+                          <>
+                            <span
+                              className="machine-weights-band"
+                              aria-hidden="true"
+                              style={
+                                {
+                                  '--from': sliderPosition(suggestion.low),
+                                  '--to': sliderPosition(suggestion.high),
+                                } as CSSProperties
+                              }
+                            />
+                            <span
+                              className="machine-weights-marker"
+                              aria-hidden="true"
+                              style={{ '--at': sliderPosition(suggestion.factor) } as CSSProperties}
+                            />
+                          </>
+                        )}
+                        <input
+                          type="range"
+                          min={FACTOR_RANGE.min}
+                          max={FACTOR_RANGE.max}
+                          step={FACTOR_RANGE.step}
+                          value={clampFactor(factor)}
+                          aria-label={`Conversion for ${machine.caption}`}
+                          aria-valuetext={`times ${factor.toFixed(2)}`}
+                          onChange={(event) =>
+                            setPair(
+                              machine.id,
+                              pairForFactor(text, Number(event.target.value), base),
+                            )
+                          }
+                        />
+                      </span>
                       <b className="num">×{factor.toFixed(2)}</b>
                     </div>
                     {suggestion && (
                       <p className="machine-weights-suggestion">
-                        <span>
+                        <span className="machine-weights-suggested">
+                          <span className="machine-weights-diamond" aria-hidden="true" />
                           Suggested ×{suggestion.factor.toFixed(2)} · {suggestion.sessions} sessions
+                          {inLikelyRange(factor, suggestion) ? (
+                            <em className="machine-weights-fit is-in">In range</em>
+                          ) : (
+                            <em className="machine-weights-fit">Outside range</em>
+                          )}
                         </span>
                         {Math.abs(factor - suggestion.factor) >= 0.005 && (
                           <button
@@ -438,6 +537,15 @@ export function MachineWeightsDialog({
           </p>
         )}
       </form>
+      {guide && (
+        <GuideCoach
+          step={coachSteps[guideStep]}
+          index={guideStep}
+          total={coachSteps.length}
+          onBack={guideStep > 0 ? () => setGuideStep(guideStep - 1) : undefined}
+          onExit={() => exitGuide('normalise')}
+        />
+      )}
     </PopupDialog>
   );
 }

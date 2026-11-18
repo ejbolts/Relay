@@ -7,7 +7,9 @@ Rules:
   but is PR eligible only when its configured target reps were completed.
 * Primary and secondary muscle contributions default to 1.0 and 0.5.
 * Weight PRs beat the exercise's heaviest completed working set. Volume PRs beat
-  its best reps at the same weight. First attempts establish a baseline.
+  its best reps at the same weight. Relative strength PRs beat its best lift/bodyweight
+  ratio using the set's recorded weight or the latest dated check-in. First attempts
+  establish a baseline.
 * PRs compare canonical kilograms rounded to four decimals, independently of
   display units. Estimated 1RM remains a progress metric, not a PR trigger.
 """
@@ -15,6 +17,7 @@ Rules:
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import date, timedelta
 from math import floor
 from uuid import uuid4
@@ -36,6 +39,7 @@ from .models import (
     WorkoutMovement,
     WorkoutSet,
 )
+from .relative_strength import BodyweightHistory, relative_strength
 
 KG_TO_LB = 2.2046226218
 EPLEY_FORMULA = "Epley: weight × (1 + reps ÷ 30), reps 1–30"
@@ -256,6 +260,20 @@ DEFAULT_MUSCLE_MAPPING["Dumbbell Pullover"] = (("Lats", MuscleRole.PRIMARY, 1.0)
 DEFAULT_MUSCLE_MAPPING["Cable Glute Kickback"] = (("Glutes", MuscleRole.PRIMARY, 1.0),)
 DEFAULT_MUSCLE_MAPPING["Hip Abduction Machine"] = (("Glutes", MuscleRole.PRIMARY, 1.0),)
 
+# Neck exercises credit the muscle group that produces each head movement.
+NECK_FLEXION = (("Neck flexors", MuscleRole.PRIMARY, 1.0),)
+LATERAL_NECK_FLEXION = (("Lateral neck flexors", MuscleRole.PRIMARY, 1.0),)
+NECK_EXTENSION = (("Neck extensors", MuscleRole.PRIMARY, 1.0),)
+DEFAULT_MUSCLE_MAPPING["Machine Neck Flexion"] = NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Plate Neck Flexion"] = NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Band Neck Flexion"] = NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Machine Lateral Neck Flexion"] = LATERAL_NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Plate Lateral Neck Flexion"] = LATERAL_NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Band Lateral Neck Flexion"] = LATERAL_NECK_FLEXION
+DEFAULT_MUSCLE_MAPPING["Machine Neck Extension"] = NECK_EXTENSION
+DEFAULT_MUSCLE_MAPPING["Plate Neck Extension"] = NECK_EXTENSION
+DEFAULT_MUSCLE_MAPPING["Band Neck Extension"] = NECK_EXTENSION
+
 MUSCLE_GROUP_ALIASES = {
     "Upper back": "Mid / Upper Back",
     "Upper pectorals": "Pectorals",
@@ -427,53 +445,81 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
             )
         )
     )
-    state: dict[str, dict[str, object]] = defaultdict(lambda: {"weight": -1.0, "reps": {}})
-    for workout in workouts:
-        for movement in sorted(workout.movements, key=lambda item: item.order_index):
+    bodyweights = BodyweightHistory(db, user_id)
+    for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
+        display_weight = normalized_weight(item.weight_kg, unit)
+        relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
+        ratio = relative_strength(
+            item.weight_kg, bodyweights.on(workout.workout_date, item.bodyweight_kg)
+        )
+        db.add(
+            _pr(
+                workout,
+                movement,
+                item,
+                record_type,
+                ratio
+                if relative
+                else display_weight
+                if record_type == PersonalRecordType.WEIGHT
+                else float(item.reps),
+                "× BW"
+                if relative
+                else unit
+                if record_type == PersonalRecordType.WEIGHT
+                else "reps",
+                display_weight,
+                "weight / bodyweight" if relative else None,
+            )
+        )
+    db.flush()
+
+
+def personal_record_events(
+    workouts: list[TrainingWorkout],
+    bodyweights: BodyweightHistory | None = None,
+) -> Iterator[tuple[TrainingWorkout, WorkoutMovement, WorkoutSet, PersonalRecordType]]:
+    """Chronological records, with first attempts establishing each scope's baseline."""
+    state: dict[str, dict[str, object]] = defaultdict(
+        lambda: {"weight": -1.0, "reps": {}, "relative": -1.0}
+    )
+    # SQLite returns naive UTC timestamps; newly flushed rows can still carry UTC tzinfo.
+    for workout in sorted(
+        workouts, key=lambda row: (row.workout_date, row.created_at.replace(tzinfo=None))
+    ):
+        for movement in sorted(workout.movements, key=lambda row: row.order_index):
             if movement.exercise.kind != ExerciseKind.STRENGTH:
                 continue
             current = state[movement.exercise_id]
-            for item in sorted(movement.sets, key=lambda set_item: set_item.order_index):
+            for item in sorted(movement.sets, key=lambda row: row.order_index):
                 if (
                     not is_pr_eligible(item)
                     or item.weight_kg is None
+                    or item.weight_kg < 0
                     or item.reps is None
                     or item.reps <= 0
                 ):
                     continue
                 weight = floor(item.weight_kg * 10_000 + 0.5) / 10_000
-                display_weight = normalized_weight(item.weight_kg, unit)
                 if float(current["weight"]) >= 0 and weight > float(current["weight"]):
-                    db.add(
-                        _pr(
-                            workout,
-                            movement,
-                            item,
-                            PersonalRecordType.WEIGHT,
-                            display_weight,
-                            unit,
-                            display_weight,
-                        )
-                    )
+                    yield workout, movement, item, PersonalRecordType.WEIGHT
                 current["weight"] = max(float(current["weight"]), weight)
-                if item.reps is not None:
-                    rep_bests = current["reps"]
-                    assert isinstance(rep_bests, dict)
-                    previous_reps = rep_bests.get(weight)
-                    if previous_reps is not None and item.reps > int(previous_reps):
-                        db.add(
-                            _pr(
-                                workout,
-                                movement,
-                                item,
-                                PersonalRecordType.REPS_AT_WEIGHT,
-                                float(item.reps),
-                                "reps",
-                                display_weight,
-                            )
-                        )
-                    rep_bests[weight] = max(int(previous_reps or 0), item.reps)
-    db.flush()
+                rep_bests = current["reps"]
+                assert isinstance(rep_bests, dict)
+                previous_reps = rep_bests.get(weight)
+                if previous_reps is not None and item.reps > int(previous_reps):
+                    yield workout, movement, item, PersonalRecordType.REPS_AT_WEIGHT
+                rep_bests[weight] = max(int(previous_reps or 0), item.reps)
+                bodyweight = (
+                    bodyweights.on(workout.workout_date, item.bodyweight_kg)
+                    if bodyweights
+                    else item.bodyweight_kg
+                )
+                ratio = relative_strength(item.weight_kg, bodyweight)
+                if ratio is not None:
+                    if float(current["relative"]) >= 0 and ratio > float(current["relative"]):
+                        yield workout, movement, item, PersonalRecordType.RELATIVE_STRENGTH
+                    current["relative"] = max(float(current["relative"]), ratio)
 
 
 def _pr(

@@ -66,23 +66,26 @@ async function scan() {
   }
 }
 
-it('opens a friend code scanned with the back camera, then releases the camera', async () => {
-  decodes(`https://gym.example.com/#friend=${friendId}`);
-  await scan();
+it.each(['', '&invite=sample-code'])(
+  'opens a friend code scanned with the back camera, then releases the camera (%s)',
+  async (registration) => {
+    decodes(`https://gym.example.com/#friend=${friendId}${registration}`);
+    await scan();
 
-  expect(getUserMedia).toHaveBeenCalledWith({
-    video: { facingMode: { ideal: 'environment' } },
-    audio: false,
-  });
-  expect(onScanned).toHaveBeenCalledOnce();
-  expect(onScanned).toHaveBeenCalledWith(friendId);
-  // Frames are scaled down before decoding.
-  expect(vi.mocked(jsQR).mock.calls[0].slice(1, 3)).toEqual([640, 360]);
+    expect(getUserMedia).toHaveBeenCalledWith({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    expect(onScanned).toHaveBeenCalledOnce();
+    expect(onScanned).toHaveBeenCalledWith(friendId);
+    // Frames are scaled down before decoding.
+    expect(vi.mocked(jsQR).mock.calls[0].slice(1, 3)).toEqual([640, 360]);
 
-  await act(async () => root.unmount());
-  expect(stopTrack).toHaveBeenCalled();
-  root = createRoot(host);
-});
+    await act(async () => root.unmount());
+    expect(stopTrack).toHaveBeenCalled();
+    root = createRoot(host);
+  },
+);
 
 it('keeps scanning past other codes and your own', async () => {
   decodes('WIFI:S:gym;T:WPA;P:secret;;');

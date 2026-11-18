@@ -1,10 +1,25 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import type { DashboardData, WorkoutCategory, WorkoutType, WorkoutTypeColors } from './types';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+} from 'react';
+import type { DashboardData, WorkoutType, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { calendarDayTypes } from './workoutTypes';
-import { calendarMonths, monthCountFromOldestWorkout } from './calendarRange';
+import { calendarMonths, calendarWeekdays, monthCountFromOldestWorkout } from './calendarRange';
+import { useWeekStartDay } from './trainingPreferencesContext';
 import { Icon } from './Icon';
-import { isoLocalDate as localCalendarDate } from './trainingSummary';
+import {
+  addDays,
+  isoLocalDate as localCalendarDate,
+  parseLocalDate,
+  weekStartFor,
+} from './trainingSummary';
+import { dayRing, workoutTypeColor } from './dayColors';
 const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
@@ -34,10 +49,15 @@ type WorkoutCalendarProps = {
   /** Workout types switched off in the legend; their dots and day borders are greyed out. */
   hiddenCategories?: ReadonlySet<string>;
   activeWorkoutDate?: string | null;
+  selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   olderHistory?: OlderHistoryProps;
   types?: WorkoutType[];
   readOnly?: boolean;
+  /** Called with the `YYYY-MM` months on screen whenever they change, for the legend. */
+  onVisibleMonthsChange?: (months: string[]) => void;
+  /** The workout type a split plans on a date: days ahead, and past days it was missed. */
+  splitDays?: ReadonlyMap<string, string>;
 } & (
   | {
       preview: CalendarPreview;
@@ -61,14 +81,18 @@ export function WorkoutCalendar({
   categoryColors,
   hiddenCategories,
   activeWorkoutDate = null,
+  selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
   olderHistory,
   types: suppliedTypes,
   readOnly = false,
+  onVisibleMonthsChange,
+  splitDays,
   preview,
 }: WorkoutCalendarProps) {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const weekStartDay = useWeekStartDay();
   const { types: ownTypes } = useWorkoutTypes();
   const types = suppliedTypes ?? ownTypes;
   const historyStart = olderHistory?.historyStart ?? null;
@@ -84,7 +108,7 @@ export function WorkoutCalendar({
     [entries],
   );
   const months = useMemo(() => {
-    if (previewFrom) return calendarMonths(previewFrom, 2);
+    if (previewFrom) return calendarMonths(previewFrom, 2, 0, weekStartDay);
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     // Days before the loaded window (from a dashboard cached by an earlier release) are left out,
@@ -100,14 +124,44 @@ export function WorkoutCalendar({
     ];
     const allMonthCount = monthCountFromOldestWorkout(datedEntries, today);
     const oldest = new Date(today.getFullYear(), today.getMonth() - allMonthCount + 1, 1, 12);
-    return calendarMonths(localCalendarDate(oldest), allMonthCount);
-  }, [activeWorkoutDate, entries, hasOlder, historyStart, previewFrom]);
+    return calendarMonths(localCalendarDate(oldest), allMonthCount, 0, weekStartDay);
+  }, [activeWorkoutDate, entries, hasOlder, historyStart, previewFrom, weekStartDay]);
   const todayKey = localCalendarDate(new Date());
   // Taps read the latest handlers from a ref, so the memoised grid below never calls a stale one.
-  const handlersRef = useRef({ onDayClick, onActiveWorkoutClick, olderHistory });
-  useLayoutEffect(() => {
-    handlersRef.current = { onDayClick, onActiveWorkoutClick, olderHistory };
+  const handlersRef = useRef({
+    onDayClick,
+    onActiveWorkoutClick,
+    olderHistory,
+    onVisibleMonthsChange,
   });
+  useLayoutEffect(() => {
+    handlersRef.current = { onDayClick, onActiveWorkoutClick, olderHistory, onVisibleMonthsChange };
+  });
+
+  // Months at least half on screen count as visible; mid-swipe, when none is, the one showing most.
+  const visibleMonthsRef = useRef<string | null>(null);
+  const reportVisibleMonths = useCallback(() => {
+    const calendar = calendarScrollRef.current;
+    const report = handlersRef.current.onVisibleMonthsChange;
+    if (!calendar || !report || calendar.clientWidth === 0) return;
+    const view = calendar.getBoundingClientRect();
+    const visible: string[] = [];
+    let most: { month: string; shown: number } | null = null;
+    for (const element of calendar.querySelectorAll<HTMLElement>('[data-month-start]')) {
+      const box = element.getBoundingClientRect();
+      if (box.left >= view.right) break;
+      const shown = Math.min(box.right, view.right) - Math.max(box.left, view.left);
+      if (shown <= 0) continue;
+      const month = element.dataset.monthStart!;
+      if (shown >= box.width / 2) visible.push(month);
+      if (!most || shown > most.shown) most = { month, shown };
+    }
+    if (!visible.length && most) visible.push(most.month);
+    const signature = visible.join();
+    if (signature === visibleMonthsRef.current) return;
+    visibleMonthsRef.current = signature;
+    report(visible);
+  }, []);
 
   // The month in view, so prepending older months (or showing a hidden screen again) keeps it in
   // place. `null` follows the newest month; `before` means the loading card ahead of `key`.
@@ -137,16 +191,22 @@ export function WorkoutCalendar({
     });
   }, [previewMode]);
 
-  useLayoutEffect(restoreScroll, [months, hasOlder, restoreScroll]);
+  useLayoutEffect(() => {
+    restoreScroll();
+    reportVisibleMonths();
+  }, [months, hasOlder, restoreScroll, reportVisibleMonths]);
 
   useEffect(() => {
     const calendar = calendarScrollRef.current;
     if (!calendar || typeof ResizeObserver === 'undefined') return;
     // A hidden screen has no width; once shown again, return to the month that was in view.
-    const observer = new ResizeObserver(restoreScroll);
+    const observer = new ResizeObserver(() => {
+      restoreScroll();
+      reportVisibleMonths();
+    });
     observer.observe(calendar);
     return () => observer.disconnect();
-  }, [restoreScroll]);
+  }, [restoreScroll, reportVisibleMonths]);
 
   const handleScroll = useCallback(() => {
     const calendar = calendarScrollRef.current;
@@ -165,6 +225,7 @@ export function WorkoutCalendar({
       anchorRef.current =
         closest && (previewMode || !atNewest) ? { key: closest.key, before: closest.before } : null;
     }
+    reportVisibleMonths();
     const older = handlersRef.current.olderHistory;
     if (
       older?.hasOlder &&
@@ -174,17 +235,22 @@ export function WorkoutCalendar({
     ) {
       older.onLoadOlder();
     }
-  }, [previewMode]);
+  }, [previewMode, reportVisibleMonths]);
 
   // Each tab switch re-renders the cached screens, and redrawing thousands of day cells was most
   // of that cost. The grid now only rebuilds when its data changes.
   const monthGrid = useMemo(
     () =>
       months.map((month) => (
-        <article className="calendar-month" key={month.key} data-month={month.key}>
+        <article
+          className="calendar-month"
+          key={month.key}
+          data-month={month.key}
+          data-month-start={month.first.slice(0, 7)}
+        >
           <h3>{month.title}</h3>
           <div className="calendar-weekdays" aria-hidden="true">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
+            {calendarWeekdays(weekStartDay).map((day, index) => (
               <span key={`${day}-${index}`}>{day}</span>
             ))}
           </div>
@@ -206,15 +272,37 @@ export function WorkoutCalendar({
                       const planned = previewMap.get(key);
                       const inProgress = key === activeWorkoutDate;
                       const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-                      const filteredOut =
-                        dayTypes.length > 0 &&
-                        dayTypes.every((type) => hiddenCategories?.has(type.id));
+                      // The border takes the colours of the types still switched on in the legend.
+                      const ring = dayTypes
+                        .filter((type) => !hiddenCategories?.has(type.id))
+                        .map((type) => workoutTypeColor(type, categoryColors));
+                      const filteredOut = dayTypes.length > 0 && ring.length === 0;
+                      // A day with nothing logged keeps a faint outline for the split's workout.
+                      const scheduledId =
+                        entry || inProgress || previewMode ? undefined : splitDays?.get(key);
+                      const scheduled = scheduledId
+                        ? types.find((type) => type.id === scheduledId)
+                        : undefined;
+                      const scheduledColor =
+                        scheduled && !hiddenCategories?.has(scheduled.id)
+                          ? workoutTypeColor(scheduled, categoryColors)
+                          : null;
+                      const dayRingStyle =
+                        ring.length && !inProgress ? dayRing(ring) : scheduledColor;
+                      const scheduledNote = scheduled
+                        ? `${scheduled.name} ${key < todayKey ? 'missed' : 'planned'}`
+                        : null;
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledColor ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
+                          style={
+                            dayRingStyle
+                              ? ({ '--day-ring': dayRingStyle } as CSSProperties)
+                              : undefined
+                          }
                           disabled={previewMode || (readOnly && !entry)}
                           onClick={() => {
                             const handlers = handlersRef.current;
@@ -230,7 +318,7 @@ export function WorkoutCalendar({
                                 ? `Resume workout in progress for ${prettyDate(key)}`
                                 : entry
                                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}`
+                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
                           }
                           title={
                             previewMode
@@ -238,8 +326,10 @@ export function WorkoutCalendar({
                               : inProgress
                                 ? `${prettyDate(key)}: workout in progress`
                                 : entry
-                                  ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} sets`
-                                  : prettyDate(key)
+                                  ? `${prettyDate(key)}: ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'}, ${entry.set_count} ${entry.set_count === 1 ? 'set' : 'sets'}`
+                                  : scheduledNote
+                                    ? `${prettyDate(key)}: ${scheduledNote}`
+                                    : prettyDate(key)
                           }
                         >
                           <span className="calendar-day-number">{day.getDate()}</span>
@@ -256,9 +346,7 @@ export function WorkoutCalendar({
                                   <i
                                     key={dotIndex}
                                     style={{
-                                      backgroundColor: type.is_custom
-                                        ? type.color
-                                        : categoryColors?.[type.id as WorkoutCategory],
+                                      backgroundColor: workoutTypeColor(type, categoryColors),
                                     }}
                                   />
                                 ),
@@ -277,6 +365,7 @@ export function WorkoutCalendar({
       )),
     [
       activeWorkoutDate,
+      selectedDate,
       categoryColors,
       hiddenCategories,
       map,
@@ -286,6 +375,8 @@ export function WorkoutCalendar({
       readOnly,
       previewMap,
       previewMode,
+      splitDays,
+      weekStartDay,
     ],
   );
 
@@ -321,6 +412,109 @@ export function WorkoutCalendar({
   );
 }
 
+const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/**
+ * This week's seven days as large tiles, each naming the workout types trained that day. Every
+ * tile keeps room for two names, so the weekday letters and dates line up across the row.
+ */
+export function WeekStrip({
+  entries,
+  categoryColors,
+  hiddenCategories,
+  weekStartDay,
+  activeWorkoutDate = null,
+  selectedDate = null,
+  onActiveWorkoutClick,
+  onDayClick,
+  types: suppliedTypes,
+}: {
+  entries: DashboardData['heatmap'];
+  categoryColors: WorkoutTypeColors;
+  hiddenCategories?: ReadonlySet<string>;
+  /** 0 (Sunday) to 6, matching the week the rest of Home counts. */
+  weekStartDay: number;
+  activeWorkoutDate?: string | null;
+  selectedDate?: string | null;
+  onActiveWorkoutClick?: () => void;
+  onDayClick: (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => void;
+  types?: WorkoutType[];
+}) {
+  const { types: ownTypes } = useWorkoutTypes();
+  const types = suppliedTypes ?? ownTypes;
+  const todayKey = localCalendarDate(new Date());
+  const weekStart = weekStartFor(todayKey, weekStartDay);
+  const map = useMemo(
+    () => new Map(entries.map((entry) => [entry.workout_date, entry])),
+    [entries],
+  );
+  return (
+    <div className="week-strip" role="group" aria-label="This week">
+      {Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)).map((key) => {
+        const date = parseLocalDate(key);
+        const entry = map.get(key);
+        const inProgress = key === activeWorkoutDate;
+        const dayTypes = entry ? calendarDayTypes(entry, types) : [];
+        // A type switched off in the legend keeps its name but loses its colour.
+        const colorOf = (type: WorkoutType) =>
+          hiddenCategories?.has(type.id) ? null : workoutTypeColor(type, categoryColors);
+        const ring = dayTypes.map(colorOf).filter((color) => color !== null);
+        return (
+          <button
+            type="button"
+            className={`week-strip-day ${entry ? 'trained' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
+            key={key}
+            data-date={key}
+            style={
+              ring.length && !inProgress
+                ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
+                : undefined
+            }
+            onClick={() => {
+              if (inProgress && onActiveWorkoutClick) onActiveWorkoutClick();
+              else onDayClick(key, entry);
+            }}
+            aria-current={key === todayKey ? 'date' : undefined}
+            aria-label={
+              inProgress
+                ? `Resume workout in progress for ${prettyDate(key)}`
+                : entry
+                  ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
+                  : `Create workout for ${prettyDate(key)}`
+            }
+          >
+            <span className="week-strip-weekday" aria-hidden="true">
+              {WEEKDAY_LETTERS[date.getDay()]}
+            </span>
+            <span className="week-strip-date">{date.getDate()}</span>
+            <span className="week-strip-types" aria-hidden="true">
+              {inProgress ? (
+                <i className="calendar-live-dot" />
+              ) : (
+                // Two names fit; a third or later type is counted on the second line instead.
+                dayTypes.slice(0, 2).map((type, index) => {
+                  const counted = index === 1 && dayTypes.length > 2;
+                  const color = counted ? null : colorOf(type);
+                  return (
+                    <span
+                      className={`week-strip-type${color ? '' : ' is-off'}`}
+                      key={type.id}
+                      style={color ? ({ '--type-color': color } as CSSProperties) : undefined}
+                    >
+                      {/* "Upper body" and friends lose the repeated word to fit the tile. */}
+                      {counted ? `+${dayTypes.length - 1}` : type.name.replace(/ body$/i, '')}
+                    </span>
+                  );
+                })
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function WorkoutCalendarLegend({
   presentTypes,
   hiddenCategories,
@@ -347,11 +541,7 @@ export function WorkoutCalendarLegend({
                   onClick={() => onToggle(type.id)}
                 >
                   <i
-                    style={{
-                      background: type.is_custom
-                        ? type.color
-                        : categoryColors[type.id as WorkoutCategory],
-                    }}
+                    style={{ background: workoutTypeColor(type, categoryColors) }}
                     aria-hidden="true"
                   />
                   <span className="category-legend-label">{type.name}</span>

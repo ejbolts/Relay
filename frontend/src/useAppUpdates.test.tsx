@@ -16,6 +16,7 @@ import { useAppUpdates } from './useAppUpdates';
 vi.mock('./appUpdates', () => ({
   checkForAppUpdate: vi.fn(),
   isAppUpdateAvailable: vi.fn(),
+  isAppUpdateRequired: vi.fn(() => false),
   refreshApp: vi.fn(),
   subscribeAppUpdates: vi.fn(),
 }));

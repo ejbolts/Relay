@@ -37,6 +37,23 @@ TEST_INVITE_CODE = "test-invite-code"
 os.environ["GYM_REGISTRATION_INVITE_CODE"] = TEST_INVITE_CODE
 os.environ["GYM_ALLOW_REGISTRATION"] = "true"
 
+import app  # noqa: E402
+
+# A virtual environment shared between Git worktrees can have an editable install that
+# points at another checkout. Stop before any test silently runs against that code.
+# A copy of this file run outside a checkout has no sibling `app` package to compare with.
+CHECKOUT_BACKEND = Path(__file__).resolve().parents[1]
+if (CHECKOUT_BACKEND / "app").is_dir() and Path(app.__file__).resolve().parents[1] != (
+    CHECKOUT_BACKEND
+):
+    pytest.exit(
+        f"Tests would import `app` from {Path(app.__file__).resolve().parent}, not from this "
+        f"checkout ({CHECKOUT_BACKEND / 'app'}). Run pytest from the repository root so "
+        "pyproject.toml's `pythonpath` applies, or put this checkout's backend first on "
+        "PYTHONPATH.",
+        returncode=4,
+    )
+
 from app.config import Settings, get_settings  # noqa: E402
 
 # Explicit Settings(_env_file=...) tests can still exercise dotenv parsing. Ordinary

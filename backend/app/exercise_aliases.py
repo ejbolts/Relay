@@ -43,6 +43,9 @@ EXERCISE_ALIAS_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Push-up", ("Push Up", "Push Ups", "Pushups")),
     ("EZ Bar Curl", ("EZ-Bar Curl", "EZ Bar Biceps Curl")),
     ("Face Pull", ("Cable Crossover Face Pull",)),
+    ("Plate Neck Flexion", ("Neck Curl", "Lying Neck Flexion")),
+    ("Plate Lateral Neck Flexion", ("Side Neck Curl", "Lying Lateral Neck Flexion")),
+    ("Plate Neck Extension", ("Reverse Neck Curl", "Lying Neck Extension")),
 )
 
 

@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import secrets
 import shutil
+from collections import Counter
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from . import client_versions
 from .account_limits import (
     AccountLimits,
     AccountLimitsRead,
@@ -20,7 +23,16 @@ from .account_limits import (
     save_account_limits,
 )
 from .accounts import no_store
-from .auth import AdminUser, AppSettings, as_utc, require_admin, utc_now
+from .auth import (
+    AdminUser,
+    AppSettings,
+    LoginThrottle,
+    as_utc,
+    get_login_throttle,
+    hash_password,
+    require_admin,
+    utc_now,
+)
 from .config import Settings
 from .database import get_db
 from .errors import api_error
@@ -31,10 +43,13 @@ from .models import (
     TrainingWorkout,
     User,
     UserSession,
+    WorkoutPhoto,
     WorkoutSession,
 )
+from .password_reset_requests import open_request_time
 from .photo_storage import machine_photo_paths
 from .presence import FriendPresence, admin_presence_by_member
+from .profile_sex import Sex, known_sex
 from .server_settings import (
     ALLOW_REGISTRATION_KEY,
     VIDEO_UPLOADS_KEY,
@@ -45,6 +60,18 @@ from .server_settings import (
 from .session_events import session_events
 
 DbDependency = Annotated[Session, Depends(get_db)]
+Throttle = Annotated[LoginThrottle, Depends(get_login_throttle)]
+# Machine and workout photos are stored alike and counted together.
+PHOTO_MODELS = (MachinePhoto, WorkoutPhoto)
+
+# Lowercase letters and digits without look-alikes (no i, l, o, 0 or 1), so a temporary password
+# can be read out or typed without mix-ups.
+TEMPORARY_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+TEMPORARY_PASSWORD_GROUPS = 3
+TEMPORARY_PASSWORD_GROUP_LENGTH = 5
+
+# Sign-ins unused for longer are left out of the app versions still in use.
+CLIENT_VERSION_WINDOW = timedelta(days=30)
 
 # Sessions the background processor still has to work on, in pipeline order.
 VIDEO_QUEUE_STATUSES = (
@@ -56,24 +83,44 @@ VIDEO_QUEUE_STATUSES = (
 )
 
 
+class AdminUserClientVersionRead(BaseModel):
+    version: str | None
+    devices: int
+
+
 class AdminUserRead(BaseModel):
     id: str
     username: str
     display_name: str
     is_admin: bool
     disabled_at: datetime | None
+    # An admin reset the password and the person has not chosen a new one yet.
+    must_change_password: bool
+    # The person asked for a temporary password from the sign-in screen and is still waiting.
+    password_reset_requested_at: datetime | None = None
     created_at: datetime
     last_active_at: datetime | None
     presence: FriendPresence
     signed_in_devices: int
+    client_versions: list[AdminUserClientVersionRead] = Field(default_factory=list)
     workouts: int
     photos: int
     photo_bytes: int
     video_sessions: int
+    sex: Sex | None = None
 
 
 class AdminUserUpdate(BaseModel):
     disabled: bool
+
+
+class AdminSexUpdate(BaseModel):
+    # None clears it, so the person can choose again.
+    sex: Sex | None
+
+
+class TemporaryPasswordRead(BaseModel):
+    temporary_password: str
 
 
 class ServerSettingsRead(BaseModel):
@@ -93,6 +140,14 @@ class DiskUsageRead(BaseModel):
     free_bytes: int
 
 
+class ClientVersionUsageRead(BaseModel):
+    # None: sessions that have not been used since releases started sending their version.
+    version: str | None
+    users: int
+    sessions: int
+    last_seen_at: datetime
+
+
 class ServerStatusRead(BaseModel):
     disk: DiskUsageRead
     database_bytes: int
@@ -100,6 +155,8 @@ class ServerStatusRead(BaseModel):
     photo_bytes: int
     video_file_bytes: int
     video_queue: dict[str, int]
+    client_versions: list[ClientVersionUsageRead]
+    minimum_write_version: str | None
 
 
 admin_router = APIRouter(
@@ -139,17 +196,16 @@ def _counts_by_user(db: Session, model, *conditions) -> dict[str, int]:
 
 def _photo_bytes_by_user(db: Session, settings: Settings) -> dict[str, int]:
     totals: dict[str, int] = {}
-    rows = db.execute(
-        select(MachinePhoto.user_id, MachinePhoto.full_filename, MachinePhoto.thumbnail_filename)
-    )
-    for user_id, full_filename, thumbnail_filename in rows:
-        if user_id is None:
-            continue
-        size = sum(
-            _file_size(path)
-            for path in machine_photo_paths(settings, full_filename, thumbnail_filename)
-        )
-        totals[user_id] = totals.get(user_id, 0) + size
+    for model in PHOTO_MODELS:
+        rows = db.execute(select(model.user_id, model.full_filename, model.thumbnail_filename))
+        for user_id, full_filename, thumbnail_filename in rows:
+            if user_id is None:
+                continue
+            size = sum(
+                _file_size(path)
+                for path in machine_photo_paths(settings, full_filename, thumbnail_filename)
+            )
+            totals[user_id] = totals.get(user_id, 0) + size
     return totals
 
 
@@ -158,11 +214,14 @@ def _admin_user_reads(
 ) -> list[AdminUserRead]:
     users = list(users)
     activity = admin_presence_by_member(db, users)
-    devices = _counts_by_user(db, UserSession, UserSession.expires_at > utc_now())
+    versions = _device_versions_by_user(db)
     workouts = _counts_by_user(db, TrainingWorkout)
-    photos = _counts_by_user(db, MachinePhoto)
+    photos = Counter()
+    for model in PHOTO_MODELS:
+        photos.update(_counts_by_user(db, model))
     video_sessions = _counts_by_user(db, WorkoutSession)
     photo_bytes = _photo_bytes_by_user(db, settings)
+    now = utc_now()
     return [
         AdminUserRead(
             id=user.id,
@@ -170,17 +229,80 @@ def _admin_user_reads(
             display_name=user.display_name,
             is_admin=user.is_admin,
             disabled_at=as_utc(user.disabled_at) if user.disabled_at else None,
+            must_change_password=user.must_change_password,
+            password_reset_requested_at=open_request_time(user, now),
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
             presence=activity[user.id],
-            signed_in_devices=devices.get(user.id, 0),
+            signed_in_devices=sum(item.devices for item in versions.get(user.id, [])),
+            client_versions=versions.get(user.id, []),
             workouts=workouts.get(user.id, 0),
             photos=photos.get(user.id, 0),
             photo_bytes=photo_bytes.get(user.id, 0),
             video_sessions=video_sessions.get(user.id, 0),
+            sex=known_sex(user.sex),
         )
         for user in users
     ]
+
+
+def _device_versions_by_user(db: Session) -> dict[str, list[AdminUserClientVersionRead]]:
+    """All unexpired sign-ins, matching each account's signed-in device count."""
+    rows = db.execute(
+        select(UserSession.user_id, UserSession.client_version, func.count())
+        .where(UserSession.expires_at > utc_now())
+        .group_by(UserSession.user_id, UserSession.client_version)
+    )
+    versions: dict[str, list[AdminUserClientVersionRead]] = {}
+    for user_id, version, devices in rows:
+        versions.setdefault(user_id, []).append(
+            AdminUserClientVersionRead(version=version, devices=devices)
+        )
+    for usage in versions.values():
+        usage.sort(
+            key=lambda item: client_versions.parse_version(item.version) or (-1, -1, -1),
+            reverse=True,
+        )
+    return versions
+
+
+def generate_temporary_password() -> str:
+    return "-".join(
+        "".join(
+            secrets.choice(TEMPORARY_PASSWORD_ALPHABET)
+            for _ in range(TEMPORARY_PASSWORD_GROUP_LENGTH)
+        )
+        for _ in range(TEMPORARY_PASSWORD_GROUPS)
+    )
+
+
+def _client_version_usage(db: Session) -> list[ClientVersionUsageRead]:
+    now = utc_now()
+    rows = db.execute(
+        select(
+            UserSession.client_version,
+            func.count(func.distinct(UserSession.user_id)),
+            func.count(UserSession.id),
+            func.max(UserSession.last_seen_at),
+        )
+        .where(
+            UserSession.expires_at > now,
+            UserSession.last_seen_at >= now - CLIENT_VERSION_WINDOW,
+        )
+        .group_by(UserSession.client_version)
+    ).all()
+    usage = [
+        ClientVersionUsageRead(
+            version=version, users=users, sessions=sessions, last_seen_at=as_utc(last_seen)
+        )
+        for version, users, sessions, last_seen in rows
+    ]
+    # Newest release first; sessions without a version are the oldest.
+    return sorted(
+        usage,
+        key=lambda item: client_versions.parse_version(item.version) or (-1, -1, -1),
+        reverse=True,
+    )
 
 
 def _settings_read(db: Session, settings: Settings) -> ServerSettingsRead:
@@ -229,6 +351,50 @@ def update_user(
     session_events.changed(user.id)
     db.refresh(user)
     return _admin_user_reads(db, settings, [user])[0]
+
+
+@admin_router.put("/users/{user_id}/sex", response_model=AdminUserRead)
+def set_user_sex(
+    user_id: str, payload: AdminSexUpdate, db: DbDependency, settings: AppSettings
+) -> AdminUserRead:
+    """The only way to change a sex the account has already chosen."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise api_error(404, "user_not_found", "That account was not found.")
+    user.sex = payload.sex
+    db.commit()
+    db.refresh(user)
+    return _admin_user_reads(db, settings, [user])[0]
+
+
+@admin_router.post("/users/{user_id}/reset-password", response_model=TemporaryPasswordRead)
+def reset_user_password(
+    user_id: str,
+    admin: AdminUser,
+    db: DbDependency,
+    throttle: Throttle,
+) -> TemporaryPasswordRead:
+    """Replace a forgotten password with a temporary one, shown to the admin once."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise api_error(404, "user_not_found", "That account was not found.")
+    if user.id == admin.id:
+        raise api_error(
+            409,
+            "cannot_reset_self",
+            "Change your own password from Account settings instead.",
+        )
+    temporary_password = generate_temporary_password()
+    user.password_hash = hash_password(temporary_password)
+    user.must_change_password = True
+    user.password_reset_requested_at = None
+    # Signed out everywhere, so nobody holding the old password stays in.
+    db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+    db.commit()
+    # Failed sign-ins before the reset must not lock the person out of the new password.
+    throttle.reset(f"username:{user.username}", f"user:{user.id}")
+    session_events.changed(user.id)
+    return TemporaryPasswordRead(temporary_password=temporary_password)
 
 
 @admin_router.get("/settings", response_model=ServerSettingsRead)
@@ -280,8 +446,12 @@ def server_status(db: DbDependency, settings: AppSettings) -> ServerStatusRead:
     return ServerStatusRead(
         disk=DiskUsageRead(total_bytes=disk.total, used_bytes=disk.used, free_bytes=disk.free),
         database_bytes=_file_size(settings.database_path),
-        photos=db.scalar(select(func.count(MachinePhoto.id))) or 0,
+        photos=sum(
+            db.scalar(select(func.count()).select_from(model)) or 0 for model in PHOTO_MODELS
+        ),
         photo_bytes=_tree_size([settings.machine_photos_dir]),
         video_file_bytes=video_file_bytes,
         video_queue={status.value: queued.get(status, 0) for status in VIDEO_QUEUE_STATUSES},
+        client_versions=_client_version_usage(db),
+        minimum_write_version=client_versions.MIN_WRITE_CLIENT_VERSION,
     )

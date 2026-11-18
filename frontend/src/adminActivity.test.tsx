@@ -12,6 +12,7 @@ const user: AdminUser = {
   display_name: 'Sample member',
   is_admin: false,
   disabled_at: null,
+  must_change_password: false,
   created_at: '2026-10-01T10:00:00Z',
   last_active_at: null,
   signed_in_devices: 1,

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { motionReduced } from './motion';
 
 const ACTIVE_CHILD =
@@ -52,17 +52,30 @@ export function useSlidingIndicator<T extends HTMLElement>(
 }
 
 const MOVE_EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+const ENTER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const ENTER_STAGGER_MS = 80;
+const ENTER_MAX_STAGGERED = 5;
 
 /**
  * FLIP animation for keyed lists: when `orderKey` changes (reorder, insert, delete), elements
  * marked with `data-flip-key` glide from their previous position and new ones fade in.
+ *
+ * Call the returned function from the event handler that adds items the user picked; the items
+ * the next render introduces then rise in one after another and the first is brought into view,
+ * even when the list was empty.
  */
-export function useFlipAnimation(containerRef: RefObject<HTMLElement | null>, orderKey: string) {
+export function useFlipAnimation(
+  containerRef: RefObject<HTMLElement | null>,
+  orderKey: string,
+): () => void {
   const positions = useRef(new Map<string, number>());
   const previousOrder = useRef(orderKey);
+  const entrancePending = useRef(false);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
+    const announcedEntrance = entrancePending.current;
+    entrancePending.current = false;
     if (!container) return;
     if (container.offsetWidth === 0) {
       // Hidden screens measure as zero; start fresh once visible.
@@ -78,10 +91,34 @@ export function useFlipAnimation(containerRef: RefObject<HTMLElement | null>, or
     });
 
     const orderChanged = previousOrder.current !== orderKey;
-    const measuredBefore = positions.current.size > 0;
-    if (orderChanged && measuredBefore && !motionReduced()) {
-      elements.forEach((element) => {
+    const entering =
+      orderChanged && announcedEntrance
+        ? elements.filter((element) => !positions.current.has(element.dataset.flipKey!))
+        : [];
+    const reduced = motionReduced();
+    entering[0]?.scrollIntoView?.({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+    if (!reduced) {
+      entering.forEach((element, index) => {
         if (typeof element.animate !== 'function') return;
+        element.animate(
+          [
+            { opacity: 0, transform: 'translateY(1.75rem) scale(0.96)' },
+            { opacity: 1, transform: 'none' },
+          ],
+          {
+            duration: 460,
+            delay: Math.min(index, ENTER_MAX_STAGGERED) * ENTER_STAGGER_MS,
+            easing: ENTER_EASING,
+            fill: 'backwards',
+          },
+        );
+      });
+    }
+
+    const measuredBefore = positions.current.size > 0;
+    if (orderChanged && measuredBefore && !reduced) {
+      elements.forEach((element) => {
+        if (typeof element.animate !== 'function' || entering.includes(element)) return;
         const key = element.dataset.flipKey!;
         const before = positions.current.get(key);
         if (before === undefined) {
@@ -106,6 +143,10 @@ export function useFlipAnimation(containerRef: RefObject<HTMLElement | null>, or
     positions.current = next;
     previousOrder.current = orderKey;
   });
+
+  return useCallback(() => {
+    entrancePending.current = true;
+  }, []);
 }
 
 const EXPAND_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
@@ -167,6 +208,63 @@ export function useExpandAnimation(containerRef: RefObject<HTMLElement | null>) 
       }
     });
     heights.current = next;
+  });
+}
+
+const HEIGHT_ANIMATION_ID = 'height';
+
+/**
+ * Glides an element to its new height whenever `key` changes, so a card that gains or loses rows
+ * grows or shrinks and what follows it slides instead of jumping.
+ */
+export function useHeightAnimation(ref: RefObject<HTMLElement | null>, key: string) {
+  const height = useRef<number | null>(null);
+  const previousKey = useRef(key);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const changed = previousKey.current !== key;
+    previousKey.current = key;
+    if (!element || element.offsetWidth === 0) {
+      // Hidden or unmounted elements measure as zero; start fresh once visible.
+      height.current = null;
+      return;
+    }
+    const running = element
+      .getAnimations?.()
+      .find((animation) => animation.id === HEIGHT_ANIMATION_ID);
+    if (!changed) {
+      // Mid-animation sizes are transient; keep where a running resize is heading.
+      if (!running) height.current = element.offsetHeight;
+      return;
+    }
+
+    const from = running ? element.getBoundingClientRect().height : height.current;
+    running?.cancel();
+    const to = element.offsetHeight;
+    height.current = to;
+    if (
+      from === null ||
+      Math.abs(from - to) < 1 ||
+      motionReduced() ||
+      typeof element.animate !== 'function'
+    ) {
+      return;
+    }
+
+    element.style.overflow = 'clip';
+    const resize = element.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 340,
+      easing: EXPAND_EASING,
+      id: HEIGHT_ANIMATION_ID,
+    });
+    const release = () => {
+      if (!element.getAnimations().some((animation) => animation.id === HEIGHT_ANIMATION_ID)) {
+        element.style.overflow = '';
+      }
+    };
+    resize.onfinish = release;
+    resize.oncancel = release;
   });
 }
 

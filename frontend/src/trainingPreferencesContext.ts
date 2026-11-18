@@ -11,6 +11,11 @@ export function useTrainingPreferences() {
   return useContext(TrainingPreferencesContext);
 }
 
+export function useWeekStartDay(): number {
+  const weekStart = useTrainingPreferences().preferences?.week_start;
+  return weekStart === 'sunday' ? 0 : weekStart === 'saturday' ? 6 : 1;
+}
+
 export function useWeightUnit() {
   return useTrainingPreferences().preferences?.preferred_weight_unit ?? 'kg';
 }

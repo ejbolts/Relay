@@ -10,27 +10,23 @@ import {
 } from 'react';
 import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
-import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
+import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
+import { RoutineMovementList } from './RoutineMovementList';
 import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
-import { dayCardioMinutes, daySetCredits, exerciseSetCredits, formatVolume } from './splitTargets';
+import { dayCardioMinutes, daySetCredits, exerciseMuscles, formatVolume } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
+import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
+import { formatWeight } from './weightUnits';
 import { localDate } from './utils';
+import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type { Exercise, Routine, RoutineDay, RoutineSet, TrainingSplit } from './types';
+import type { Exercise, Routine, RoutineDay, SplitProgression, TrainingSplit } from './types';
 import './routines.css';
 
-const emptySet = (): RoutineSet => ({
-  reps: null,
-  weight_kg: null,
-  duration_seconds: null,
-  distance_km: null,
-  rest_seconds: 180,
-  set_type: 'normal',
-});
 const failure = (reason: unknown) =>
   reason instanceof Error ? reason.message : 'Could not save the split. Try again.';
 const dayCount = (days: RoutineDay[]) => `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
@@ -182,6 +178,7 @@ export function RoutinePanel({
   const [deleting, setDeleting] = useState<Routine | null>(null);
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
+  const [progression, setProgression] = useState<SplitProgression>('workouts');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -190,6 +187,11 @@ export function RoutinePanel({
   const [importedId, setImportedId] = useState<string | null>(null);
   const locked = useRef(false);
   const [expandedId, setExpandedId] = useState<string | null>(initialOpenId ?? activeId ?? null);
+  const guideRunning = useActiveGuide('split');
+  // The splits guide runs on your own splits page only.
+  const guide = embedded && own ? guideRunning : null;
+  // With an active split the guide adds rep ranges to it; otherwise it builds and starts one.
+  const guideFlow: SplitGuideFlow = activeId ? 'edit' : 'new';
   const previousActive = useRef(activeId);
   const panelRef = useRef<HTMLElement>(null);
   const focusCard = useRef<string | null>(null);
@@ -437,10 +439,11 @@ export function RoutinePanel({
                           ? (trainingSplit?.start_date ?? localDate())
                           : localDate(),
                       );
+                      setProgression(trainingSplit?.progression ?? 'workouts');
                       setUsing(routine);
                     }}
                   >
-                    {routine.id === activeId ? 'Change start' : 'Use split'}
+                    {routine.id === activeId ? 'Change schedule' : 'Use split'}
                   </button>
                 </>
               ) : (
@@ -500,6 +503,13 @@ export function RoutinePanel({
             ))}
           </div>
         </section>
+      )}
+      {guide && !editing && !using && !options && !deleting && !notice && (
+        <GuideCoach
+          floating
+          {...pageGuideStep(guide, guideFlow, activeId, routines)}
+          onExit={() => exitGuide('split')}
+        />
       )}
       {options && (
         <PopupDialog
@@ -579,6 +589,7 @@ export function RoutinePanel({
           }
           busy={busy}
           error={error}
+          guide={guide ? editorGuide(guideFlow, editing) : undefined}
           onClose={() => {
             if (!busy) {
               setEditing(null);
@@ -611,6 +622,11 @@ export function RoutinePanel({
               setEditing(null);
               setExpandedId(saved.id);
               setNotice('Split saved.');
+              if (guide) {
+                // Saving the active split finishes the guide; a new one still needs starting.
+                if (saved.id === activeId || legacyEdit) finishGuide('split');
+                else updateGuide('split', { useRoutineId: saved.id });
+              }
               onChanged?.(saved.id);
             })
           }
@@ -634,11 +650,13 @@ export function RoutinePanel({
                         ...trainingSplit!,
                         start_date: startDate,
                         enabled: true,
+                        progression,
                       })
-                    : await api.routines.use(using.id, startDate);
+                    : await api.routines.use(using.id, startDate, progression);
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
+                if (guide?.useRoutineId === using.id) finishGuide('split');
               });
             }}
           >
@@ -657,6 +675,7 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
+            <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
             <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
@@ -667,6 +686,21 @@ export function RoutinePanel({
               {busy ? 'Saving…' : 'Use this split'}
             </button>
           </form>
+          {guide?.useRoutineId === using.id && (
+            <GuideCoach
+              step={{
+                title: 'Choose how it runs',
+                body: 'Follow my workouts moves on each time you train; By date keeps to set days. Then tap Use this split.',
+                target: '.routine-use .popup-primary-action',
+              }}
+              index={NEW_SPLIT_STEPS - 1}
+              total={NEW_SPLIT_STEPS}
+              onBack={() => {
+                if (!busy) setUsing(null);
+              }}
+              onExit={() => exitGuide('split')}
+            />
+          )}
         </PopupDialog>
       )}
       {deleting && (
@@ -713,6 +747,69 @@ export function RoutinePanel({
   );
 }
 
+type SplitGuideFlow = 'new' | 'edit';
+/** Template, plan days, rep range, save, then Use split and its confirmation. */
+const NEW_SPLIT_STEPS = 6;
+
+const hasExercises = (routine: Routine) =>
+  routine.days.some((day) => day.workout_type_id !== null && day.movements.length > 0);
+
+/** The editor's guide steps: planning days is skipped when an existing split already has them. */
+function editorGuide(flow: SplitGuideFlow, routine: Routine) {
+  const plan = flow === 'new' || !hasExercises(routine);
+  return {
+    flow,
+    plan,
+    offset: 1,
+    total: flow === 'new' ? NEW_SPLIT_STEPS : 1 + (plan ? 1 : 0) + 2,
+  };
+}
+type EditorGuide = ReturnType<typeof editorGuide>;
+
+/** The guide's step on the splits page itself, outside the editor. */
+function pageGuideStep(
+  guide: { useRoutineId?: string; facts: { rotation: string[] } },
+  flow: SplitGuideFlow,
+  activeId: string | null | undefined,
+  routines: Routine[] | null,
+): { step: CoachStep; index: number; total: number } {
+  if (guide.useRoutineId)
+    return {
+      step: {
+        title: 'Make it your split',
+        body: 'Tap Use split. Up next on Home then follows it, rest days included.',
+        target: `.routine-card[data-routine-id="${guide.useRoutineId}"] .routine-primary`,
+      },
+      index: NEW_SPLIT_STEPS - 2,
+      total: NEW_SPLIT_STEPS,
+    };
+  if (flow === 'edit') {
+    const active = routines?.find((routine) => routine.id === activeId);
+    return {
+      step: {
+        title: 'Open your split',
+        body: 'Rep ranges live on each planned exercise. Tap Edit split.',
+        target: `.routine-card[data-routine-id="${activeId}"] .routine-actions > button:first-child`,
+      },
+      index: 0,
+      total: active ? editorGuide('edit', active).total : 3,
+    };
+  }
+  const rotation = guide.facts.rotation;
+  return {
+    step: {
+      title: 'Start from a template',
+      body:
+        rotation.length >= 2
+          ? `Your recent workouts went ${rotation.join(', ')}. Pick the closest template, or New split to build your own.`
+          : 'Pick the template closest to how you train, or New split to build your own.',
+      target: '.split-library-templates',
+    },
+    index: 0,
+    total: NEW_SPLIT_STEPS,
+  };
+}
+
 function daySummary(day: RoutineDay) {
   if (!day.workout_type_id) return 'Rest';
   if (!day.movements.length) return 'No exercises';
@@ -739,18 +836,12 @@ function dayContribution(day: RoutineDay, selected: string | null) {
   return sets ? `+${formatVolume(sets)} ${sets === 1 ? 'set' : 'sets'}` : null;
 }
 
-function exerciseMuscles(exercise: Exercise) {
-  if (exercise.kind === 'cardio') return 'Cardio';
-  return exerciseSetCredits(exercise)
-    .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
-    .join(' · ');
-}
-
 function RoutineEditor({
   routine,
   schedule,
   busy,
   error,
+  guide,
   onSave,
   onClose,
 }: {
@@ -758,7 +849,12 @@ function RoutineEditor({
   schedule?: TrainingSplit;
   busy: boolean;
   error: string | null;
-  onSave: (value: Routine, schedule?: Pick<TrainingSplit, 'start_date' | 'enabled'>) => void;
+  /** The splits guide's steps inside the editor, while it runs. */
+  guide?: EditorGuide;
+  onSave: (
+    value: Routine,
+    schedule?: Pick<TrainingSplit, 'start_date' | 'enabled' | 'progression'>,
+  ) => void;
   onClose: () => void;
 }) {
   const formId = useId();
@@ -777,9 +873,15 @@ function RoutineEditor({
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [cardioGoal, setCardioGoal] = useState<number | null>(null);
+  const [guideStep, setGuideStep] = useState<'plan' | 'reps' | 'save'>(() =>
+    guide?.plan ? 'plan' : 'reps',
+  );
+  const guideFacts = useActiveGuide('split')?.facts;
   const alertRef = useRef<HTMLParagraphElement>(null);
   const types = useWorkoutTypes();
-  const muscleGoal = useTrainingPreferences().preferences?.weekly_muscle_set_goal ?? 10;
+  const musclePreferences = useTrainingPreferences().preferences;
+  const muscleGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
+  const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   // The library's copies reflect partial-set changes made from the credits popup.
   const libraryExercises = useContext(ExerciseCreditsContext)?.exercises;
   const latest = (exercise: Exercise) =>
@@ -829,21 +931,6 @@ function RoutineEditor({
       days: current.days.map((item, i) => (i === index ? next : item)),
     }));
   }
-  function movement(
-    dayIndex: number,
-    movementIndex: number,
-    change: (item: RoutineDay['movements'][number]) => RoutineDay['movements'][number] | null,
-  ) {
-    const item = value.days[dayIndex];
-    day(dayIndex, {
-      ...item,
-      movements: item.movements.flatMap((m, i) => {
-        if (i !== movementIndex) return [m];
-        const next = change(m);
-        return next ? [next] : [];
-      }),
-    });
-  }
   function move(index: number, direction: number) {
     setValue((current) => {
       const days = [...current.days];
@@ -890,7 +977,12 @@ function RoutineEditor({
       setValidation('Choose an active workout type for every workout day.');
       return;
     }
-    onSave(value, schedule ? { start_date: startDate, enabled } : undefined);
+    onSave(
+      value,
+      schedule
+        ? { start_date: startDate, enabled, progression: schedule.progression ?? 'workouts' }
+        : undefined,
+    );
   }
   const canSave = !busy && !addingType && !types.loading && !types.error && !loadError;
   return (
@@ -965,6 +1057,7 @@ function RoutineEditor({
           <SplitVolumeChart
             days={creditDays}
             muscleGoal={muscleGoal}
+            muscleGoals={muscleGoals}
             cardioGoal={cardioGoal}
             selected={selected}
             onSelect={setSelected}
@@ -1076,150 +1169,15 @@ function RoutineEditor({
                             <Icon name="close" />
                           </button>
                         </div>
-                        {item.movements.map((m, mi) => {
-                          const cardio = m.exercise.kind === 'cardio';
-                          const minutes = Math.round(
-                            m.sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) /
-                              60,
-                          );
-                          const atMinimum = cardio ? minutes <= 5 : m.sets.length <= 1;
-                          const name = m.exercise.name;
-                          return (
-                            <div
-                              className="routine-exercise-row"
-                              key={`${di}-${mi}-${m.exercise_id}`}
-                            >
-                              <div className="routine-exercise-main">
-                                <select
-                                  className="routine-exercise-name"
-                                  aria-label={`Day ${di + 1} exercise ${mi + 1}`}
-                                  value={m.exercise_id}
-                                  onChange={(event) => {
-                                    const exercise = exercises.find(
-                                      (e) => e.id === event.target.value,
-                                    )!;
-                                    movement(di, mi, (current) => ({
-                                      ...current,
-                                      exercise_id: exercise.id,
-                                      exercise,
-                                      sets:
-                                        exercise.kind === current.exercise.kind
-                                          ? current.sets
-                                          : [emptySet()],
-                                    }));
-                                  }}
-                                >
-                                  {[
-                                    m.exercise,
-                                    ...exercises.filter((e) => e.id !== m.exercise_id),
-                                  ].map((e) => (
-                                    <option value={e.id} key={e.id}>
-                                      {e.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <small>{exerciseMuscles(latest(m.exercise))}</small>
-                              </div>
-                              <ExerciseMuscleHelp exercise={m.exercise} />
-                              <div className="routine-stepper">
-                                <button
-                                  type="button"
-                                  aria-label={
-                                    atMinimum
-                                      ? `Remove ${name} from day ${di + 1}`
-                                      : cardio
-                                        ? `5 fewer minutes of ${name} on day ${di + 1}`
-                                        : `One fewer set of ${name} on day ${di + 1}`
-                                  }
-                                  onClick={() =>
-                                    movement(di, mi, (current) => {
-                                      if (atMinimum) return null;
-                                      if (!cardio)
-                                        return { ...current, sets: current.sets.slice(0, -1) };
-                                      return {
-                                        ...current,
-                                        // One planned duration; earlier interval sets fold into it.
-                                        sets: [
-                                          {
-                                            ...current.sets[0],
-                                            duration_seconds: (minutes - 5) * 60,
-                                          },
-                                        ],
-                                      };
-                                    })
-                                  }
-                                >
-                                  <Icon name={atMinimum ? 'close' : 'minus'} />
-                                </button>
-                                <output>{cardio ? `${minutes} min` : m.sets.length}</output>
-                                <button
-                                  type="button"
-                                  aria-label={
-                                    cardio
-                                      ? `5 more minutes of ${name} on day ${di + 1}`
-                                      : `One more set of ${name} on day ${di + 1}`
-                                  }
-                                  disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
-                                  onClick={() =>
-                                    movement(di, mi, (current) =>
-                                      cardio
-                                        ? {
-                                            ...current,
-                                            sets: [
-                                              {
-                                                ...current.sets[0],
-                                                duration_seconds: (minutes + 5) * 60,
-                                              },
-                                            ],
-                                          }
-                                        : {
-                                            ...current,
-                                            sets: [
-                                              ...current.sets,
-                                              { ...current.sets.at(-1)!, set_type: 'normal' },
-                                            ],
-                                          },
-                                    )
-                                  }
-                                >
-                                  <Icon name="plus" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {item.workout_type_id && (
-                          <select
-                            className="routine-add-exercise"
-                            aria-label={`Add exercise to day ${di + 1}`}
-                            value=""
-                            disabled={item.movements.length >= 20 || exercises.length === 0}
-                            onChange={(event) => {
-                              const exercise = exercises.find((e) => e.id === event.target.value)!;
-                              day(di, {
-                                ...item,
-                                movements: [
-                                  ...item.movements,
-                                  {
-                                    exercise_id: exercise.id,
-                                    exercise,
-                                    sets:
-                                      exercise.kind === 'cardio'
-                                        ? [{ ...emptySet(), duration_seconds: 1800 }]
-                                        : [emptySet(), emptySet(), emptySet()],
-                                  },
-                                ],
-                              });
-                            }}
-                          >
-                            <option value="">+ Exercise</option>
-                            {exercises.map((e) => (
-                              <option key={e.id} value={e.id}>
-                                {e.name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                        <RoutineMovementList
+                          movements={item.movements}
+                          exercises={exercises}
+                          target={`day ${di + 1}`}
+                          fieldLabel={(mi) => `Day ${di + 1} exercise ${mi + 1}`}
+                          latest={latest}
+                          canAdd={!!item.workout_type_id}
+                          onChange={(movements) => day(di, { ...item, movements })}
+                        />
                       </section>
                     </div>
                   </div>
@@ -1308,6 +1266,61 @@ function RoutineEditor({
           </details>
         </fieldset>
       </form>
+      {guide && (
+        <GuideCoach
+          step={editorCoachStep()}
+          index={
+            guide.offset +
+            (guideStep === 'plan'
+              ? 0
+              : guideStep === 'reps'
+                ? Number(guide.plan)
+                : Number(guide.plan) + 1)
+          }
+          total={guide.total}
+          onBack={editorBack()}
+          onExit={() => exitGuide('split')}
+        />
+      )}
     </PopupDialog>
   );
+
+  function editorBack(): (() => void) | undefined {
+    if (guideStep === 'save') return () => setGuideStep('reps');
+    if (guideStep === 'reps' && guide?.plan) return () => setGuideStep('plan');
+    return JSON.stringify(value) === JSON.stringify(routine) ? onClose : undefined;
+  }
+
+  function editorCoachStep(): CoachStep {
+    if (guideStep === 'plan')
+      return {
+        title: 'Plan your days',
+        body: 'Set each day’s workout type, add rest days, and add exercises with their sets. Starting that workout fills them in.',
+        target: '.routine-day-list',
+        next: { disabled: !hasExercises(value), onClick: () => setGuideStep('reps') },
+      };
+    if (guideStep === 'reps') {
+      const lift = guideFacts?.lift;
+      const unit = musclePreferences?.preferred_weight_unit ?? 'kg';
+      return {
+        title: 'Give an exercise a rep range',
+        body: lift
+          ? `Choose Reps on an exercise. With 8–12, stay at ${formatWeight(lift.latestTopKg, unit, 1)} on ${lift.name} until every top set reaches 12 reps, then add weight. Relay says which while you log.`
+          : 'Choose Reps on an exercise. With 8–12, stay at a weight until every top set reaches 12 reps, then add weight. Relay says which while you log.',
+        target: '.routine-day.is-open .routine-rep-range',
+        next: {
+          disabled: !value.days.some((item) => item.movements.some((m) => m.rep_range)),
+          onClick: () => setGuideStep('save'),
+        },
+      };
+    }
+    return {
+      title: 'Save your split',
+      body:
+        guide?.flow === 'new'
+          ? 'Tap Save. Then you’ll make it your active split.'
+          : 'Tap Save. Your next workout shows the target as you log.',
+      target: '.routine-editor-save',
+    };
+  }
 }

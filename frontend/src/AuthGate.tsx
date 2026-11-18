@@ -3,6 +3,7 @@ import { api } from './api';
 import { AuthBrand, AuthScreen } from './AuthScreen';
 import { subscribeAuthExpired } from './authEvents';
 import { reportSavedDataUsed } from './connectionStatus';
+import { PasswordChangeRequired } from './PasswordChangeRequired';
 import { adoptSignedInUser, resolveSession, type AuthState } from './authSession';
 import {
   browserDeps,
@@ -84,7 +85,9 @@ export function AuthGateView({
           {signedIn && (
             <UserContext.Provider value={session}>
               {/* Keyed by account so a different user always starts from fresh React state. */}
-              <Fragment key={state.user.id}>{children}</Fragment>
+              <Fragment key={state.user.id}>
+                {state.user.must_change_password ? <PasswordChangeRequired /> : children}
+              </Fragment>
             </UserContext.Provider>
           )}
           {(!signedIn || signInExiting) && (

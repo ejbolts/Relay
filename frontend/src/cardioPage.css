@@ -130,9 +130,6 @@
   color: var(--p-muted);
   font-size: 0.6875rem;
 }
-.cardio-screen .cardio-progress-grid article > .cardio-progress-comparison {
-  color: var(--p-ink-2);
-}
 .cardio-screen .cardio-history-header {
   display: block;
   margin-bottom: 0.35rem;
@@ -147,11 +144,8 @@
   margin-bottom: 0;
   background: var(--p-page);
 }
-.cardio-history-row {
+.cardio-history-row.cardio-history-new-day {
   border-top: 1px solid var(--p-line);
-}
-.cardio-history-row:first-of-type {
-  border-top: 0;
 }
 .cardio-history-row > summary {
   display: flex;

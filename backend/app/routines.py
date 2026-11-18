@@ -1,5 +1,6 @@
 """Saved routines and independent copies, scoped to the profile's existing audience."""
 
+from datetime import date
 from typing import Annotated
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import CurrentUser, get_current_user
+from .client_versions import ClientVersion, preserve_rep_ranges
 from .database import get_db
 from .exercise_merge import exercise_aliases
 from .models import Exercise, ExerciseMuscleContribution, UserSetting, WorkoutType
@@ -28,10 +30,11 @@ from .tracker_schemas import (
     RoutineSchedule,
     RoutineSet,
     TrainingSplit,
+    TrainingSplitRead,
     WorkoutTypeRead,
 )
 from .training_metrics import set_setting
-from .training_split import TRAINING_SPLIT_KEY, saved_training_split
+from .training_split import TRAINING_SPLIT_KEY, saved_training_split, split_read
 from .workout_types import MAX_CUSTOM_TYPES, workout_type_catalog
 
 PREFIX = "routine:"
@@ -123,6 +126,7 @@ def save_routine(
             routine_id=routine_id,
             start_date=schedule.start_date,
             enabled=schedule.enabled,
+            progression=schedule.progression,
             steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
         )
         set_setting(db, user_id, TRAINING_SPLIT_KEY, active.model_dump_json())
@@ -213,8 +217,16 @@ def capture_split(db: Db, user: CurrentUser):
 
 
 @router.put("/{routine_id}", response_model=RoutineRead)
-def update_routine(routine_id: str, payload: RoutineSaveInput, db: Db, user: CurrentUser):
-    routine_content(db, user.id, routine_id)
+def update_routine(
+    routine_id: str,
+    payload: RoutineSaveInput,
+    db: Db,
+    user: CurrentUser,
+    client_version: ClientVersion = None,
+):
+    stored = routine_content(db, user.id, routine_id)
+    for day, saved_day in zip(payload.days, stored.days, strict=False):
+        preserve_rep_ranges(day.movements, saved_day.movements, client_version)
     content = RoutineInput.model_validate(payload.model_dump(exclude={"schedule"}))
     return save_routine(db, user.id, content, routine_id, schedule=payload.schedule)
 
@@ -234,20 +246,27 @@ def delete_routine(routine_id: str, db: Db, user: CurrentUser):
     db.commit()
 
 
-@router.post("/{routine_id}/use", response_model=TrainingSplit)
-def use_routine(routine_id: str, payload: RoutineActivation, db: Db, user: CurrentUser):
+@router.post("/{routine_id}/use", response_model=TrainingSplitRead)
+def use_routine(
+    routine_id: str,
+    payload: RoutineActivation,
+    db: Db,
+    user: CurrentUser,
+    on_date: date | None = None,
+):
     content = routine_content(db, user.id, routine_id)
     validate_content(db, user.id, content)
     split = TrainingSplit(
         name=content.name,
         start_date=payload.start_date,
+        progression=payload.progression,
         routine_id=routine_id,
         steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
     )
     set_setting(db, user.id, TRAINING_SPLIT_KEY, split.model_dump_json())
     bump_workout_cache_revision(db, user.id)
     db.commit()
-    return split
+    return split_read(db, user.id, split, on_date or date.today())
 
 
 @router.post("/profile/{user_id}/{routine_id}/copy", response_model=RoutineRead, status_code=201)

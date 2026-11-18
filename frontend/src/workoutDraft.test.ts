@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
   clearActiveWorkoutDraft,
+  isExpiredEmptyWorkoutDraft,
   readActiveWorkoutDraft,
   savedWorkoutMatchesOldDraft,
   writeActiveWorkoutDraft,
@@ -60,6 +61,81 @@ const draft: ActiveWorkoutDraft = {
     },
   ],
 };
+
+describe('empty workout expiration', () => {
+  const finishAt = draft.startedAt + 3 * 60 * 60 * 1000;
+  const empty = { ...draft, movements: [], notes: '', inactiveFinishAt: finishAt };
+
+  it('expires an empty draft at its deadline, including after several days away', () => {
+    expect(isExpiredEmptyWorkoutDraft(empty, finishAt - 1)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(empty, finishAt)).toBe(true);
+    expect(isExpiredEmptyWorkoutDraft(empty, draft.startedAt + 72 * 60 * 60 * 1000)).toBe(true);
+  });
+
+  it('expires exercises that only hold untouched suggestions or blank sets', () => {
+    const suggestion = { ...draft.movements[0].sets[0], completed: false, fromPrevious: true };
+    const blank = { ...suggestion, reps: null, weight_kg: null, fromPrevious: false };
+    const planned = {
+      ...empty,
+      movements: [{ ...draft.movements[0], notes: ' ', sets: [suggestion, blank] }],
+    };
+    expect(isExpiredEmptyWorkoutDraft(planned, finishAt - 1)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(planned, finishAt)).toBe(true);
+    for (const logged of [
+      { ...suggestion, completed: true },
+      { ...suggestion, fromPrevious: false },
+      { ...blank, duration_seconds: 600 },
+    ]) {
+      const movements = [{ ...planned.movements[0], sets: [suggestion, logged] }];
+      expect(isExpiredEmptyWorkoutDraft({ ...planned, movements }, finishAt)).toBe(false);
+    }
+    const noted = [{ ...planned.movements[0], notes: 'Seat at 4' }];
+    expect(isExpiredEmptyWorkoutDraft({ ...planned, movements: noted }, finishAt)).toBe(false);
+    const setNoted = [
+      { ...planned.movements[0], sets: [{ ...suggestion, notes: 'Try pause reps' }] },
+    ];
+    expect(isExpiredEmptyWorkoutDraft({ ...planned, movements: setNoted }, finishAt)).toBe(false);
+  });
+
+  it('respects an extended activity deadline', () => {
+    const extended = { ...empty, inactiveFinishAt: finishAt + 10 * 60 * 1000 };
+    expect(isExpiredEmptyWorkoutDraft(extended, finishAt)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(extended, extended.inactiveFinishAt)).toBe(true);
+  });
+
+  it('expires older empty drafts without a stored deadline after three hours', () => {
+    const legacy = { ...empty, inactiveFinishAt: undefined };
+    expect(isExpiredEmptyWorkoutDraft(legacy, finishAt - 1)).toBe(false);
+    expect(isExpiredEmptyWorkoutDraft(legacy, finishAt)).toBe(true);
+  });
+
+  it.each<Partial<ActiveWorkoutDraft>>([
+    { notes: 'Keep my workout notes' },
+    { movements: draft.movements },
+    { movements: [{ ...draft.movements[0], sets: [] }] },
+    { pausedAt: draft.updatedAt },
+    { resumingWorkoutId: 'saved-workout' },
+    {
+      pendingSave: {
+        userId: 'sample-owner',
+        finishedAt: finishAt,
+        workoutId: null,
+        payload: {
+          name: draft.name,
+          workout_date: draft.workoutDate,
+          category: draft.category,
+          notes: null,
+          duration_minutes: 180,
+          start_time: null,
+          end_time: null,
+          movements: [],
+        },
+      },
+    },
+  ])('preserves entered data and recovery state: %j', (overrides) => {
+    expect(isExpiredEmptyWorkoutDraft({ ...empty, ...overrides }, finishAt)).toBe(false);
+  });
+});
 
 describe('active workout draft persistence', () => {
   it('keeps the high-rep preference with its draft and rejects malformed preferences', () => {
@@ -300,6 +376,20 @@ describe('active workout draft persistence', () => {
       previousDurationMinutes: 45,
       startedAt: draft.startedAt,
     });
+  });
+
+  it('keeps the revision a resumed workout was loaded from and rejects an invalid one', () => {
+    const storage = new MemoryStorage();
+    const resumed = { ...draft, resumingWorkoutId: 'saved-workout', previousDurationMinutes: 45 };
+    writeActiveWorkoutDraft({ ...resumed, resumingWorkoutRevision: 4 }, storage);
+    expect(readActiveWorkoutDraft(storage)?.resumingWorkoutRevision).toBe(4);
+    // Drafts written before revisions existed stay readable.
+    writeActiveWorkoutDraft(resumed, storage);
+    expect(readActiveWorkoutDraft(storage)?.resumingWorkoutRevision).toBeUndefined();
+    for (const resumingWorkoutRevision of [0, 1.5, Number.NaN]) {
+      writeActiveWorkoutDraft({ ...resumed, resumingWorkoutRevision }, storage);
+      expect(readActiveWorkoutDraft(storage)).toBeNull();
+    }
   });
 
   it('persists the inactivity deadline and rejects one before the workout began', () => {

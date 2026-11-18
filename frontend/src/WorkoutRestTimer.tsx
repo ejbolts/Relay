@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { restOvertimeLabel, type RestNextSet } from './restComplete';
 import { restTimerProgress } from './restTimer';
 import { formatSeconds } from './utils';
 
@@ -11,15 +12,29 @@ export function WorkoutHeaderMeta({
   durationLabel,
   paused = false,
   onTogglePause,
+  onEditTime,
 }: {
   durationLabel: string;
   paused?: boolean;
   onTogglePause?: () => void;
+  /** Opens the correction for a live clock that was started late or left running. */
+  onEditTime?: () => void;
 }) {
   const label = `${paused ? 'Resume' : 'Pause'} workout`;
   return (
     <span className={`workout-header-meta${paused ? ' is-paused' : ''}`}>
-      <span className="workout-header-duration">{durationLabel}</span>
+      {onEditTime ? (
+        <button
+          type="button"
+          className="workout-header-duration workout-header-time-button"
+          aria-label={`Correct workout time, ${durationLabel}`}
+          onClick={onEditTime}
+        >
+          {durationLabel}
+        </button>
+      ) : (
+        <span className="workout-header-duration">{durationLabel}</span>
+      )}
       {paused && (
         <>
           <span className="workout-header-separator" aria-hidden="true">
@@ -199,5 +214,59 @@ export function WorkoutTimerDock({
         {time}
       </strong>
     </button>
+  );
+}
+
+/** The bell icon, ringing in short bursts (still when motion is reduced). */
+export function RingingBell() {
+  return (
+    <span className="ringing-bell" aria-hidden="true">
+      <Icon name="bell" />
+    </span>
+  );
+}
+
+/** Time since the rest ended, such as "+0:12", updated every second. */
+export function RestOvertime({ endedAt, className }: { endedAt: number; className?: string }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <strong className={className}>{restOvertimeLabel(endedAt, now)}</strong>;
+}
+
+/**
+ * Shown on the workout when a rest runs out: the bottom-edge notch rings with a bell and counts the
+ * time since the rest ended. Tapping it brings the next set into view and stops the bell. While
+ * the workout is minimised, the tab bar's Start button rings instead.
+ */
+export function RestDoneBell({
+  endedAt,
+  next,
+  onGo,
+}: {
+  endedAt: number;
+  next: RestNextSet | null;
+  onGo: () => void;
+}) {
+  const setName = next?.set.toLowerCase();
+  const label = next ? `Rest complete. Go to ${next.exercise}, ${setName}` : 'Rest complete';
+  return (
+    <>
+      <span className="sr-only" role="status">
+        {next ? `Rest complete. Next: ${next.exercise}, ${setName}.` : 'Rest complete.'}
+      </span>
+      <button
+        type="button"
+        className="workout-timer-dock rest-notch rest-done-bell"
+        aria-label={label}
+        title={label}
+        onClick={onGo}
+      >
+        <RingingBell />
+        <RestOvertime endedAt={endedAt} className="rest-done-over" />
+      </button>
+    </>
   );
 }
