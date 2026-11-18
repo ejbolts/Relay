@@ -407,6 +407,7 @@ import {
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
 } from './workoutSets';
+import { restToAdd } from './workoutRestHistory';
 import {
   finalizeWorkoutIdentity,
   isCardioTypeWithoutCardio,
@@ -7126,6 +7127,9 @@ function MovementCard({
           const insertAfter = index < movement.sets.length - 1 && (
             <SetInsertButton beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
           );
+          const restHistory = item.machine_photo_id
+            ? historyOnMachine(exerciseHistory, item.machine_photo_id, savedMachineAliases)
+            : history;
           return (
             <Fragment key={item.key}>
               <SwipeToDeleteSetRow
@@ -7188,15 +7192,7 @@ function MovementCard({
                     seconds={item.rest_seconds!}
                     setIndex={index}
                     sets={movement.sets}
-                    history={
-                      item.machine_photo_id
-                        ? historyOnMachine(
-                            exerciseHistory,
-                            item.machine_photo_id,
-                            savedMachineAliases,
-                          )
-                        : history
-                    }
+                    history={restHistory}
                     suggested={!item.completed && !item.restConfirmed}
                     onChange={(seconds) => {
                       clearRestEdit(item.key);
@@ -7208,7 +7204,19 @@ function MovementCard({
                 </SwipeToDeleteSetRow>
               ) : (
                 insertAfter && (
-                  <SetInsertRow beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
+                  <SetInsertRow
+                    beforeSet={index + 2}
+                    onInsert={() => onInsertSet(index + 1)}
+                    onAddRest={
+                      !cardio && showRestTimes
+                        ? () =>
+                            onUpdateSet(item.key, {
+                              rest_seconds: restToAdd(movement.sets, index, restHistory),
+                              restRevealed: true,
+                            })
+                        : undefined
+                    }
+                  />
                 )
               )}
             </Fragment>
