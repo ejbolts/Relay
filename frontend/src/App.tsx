@@ -158,7 +158,6 @@ import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { useAppUpdates } from './useAppUpdates';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { OfflineNotice } from './OfflineNotice';
-import { useOfflineNotice } from './useOfflineNotice';
 import { AppUpdateCheck } from './AppUpdateCheck';
 import { BEFORE_APP_REFRESH_EVENT } from './appUpdates';
 import { canShowReleaseAnnouncement } from './releaseAnnouncements';
@@ -764,7 +763,6 @@ function AppContent() {
   const [tipBlocksOpen, setTipBlocksOpen] = useState(false);
   const announcement = useContext(ReleaseAnnouncementContext)!;
   const appUpdates = useAppUpdates();
-  const offlineNotice = useOfflineNotice();
   const appNotices = useAppNoticesContext();
   /** The prompt that opened by itself this visit. Others then wait for the next app open. */
   const [launchPrompt, setLaunchPrompt] = useState<LaunchPrompt | null>(null);
@@ -2103,7 +2101,12 @@ function AppContent() {
             onRefresh={() => void appUpdates.refresh()}
           />
         )}
-        {offlineNotice.visible && <OfflineNotice onDismiss={offlineNotice.dismiss} />}
+        <OfflineNotice
+          waiting={{
+            workouts: finishedQueue.items.length,
+            checkIns: bodyMeasurementSync.pending,
+          }}
+        />
         {prompt === 'release' && (
           <ReleaseAnnouncement
             release={announcement.release}

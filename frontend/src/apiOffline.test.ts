@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, revisionAfterSave, SAVED_COPY_AFTER_MS } from './api';
-import { isUsingSavedData, reportServerReached } from './connectionStatus';
+import {
+  connectionState,
+  isUsingSavedData,
+  reportServerReached,
+  resetConnectionStatus,
+} from './connectionStatus';
 import { LAST_USER_KEY } from './deviceAccount';
 import { clearOffline, replaceOfflineBackend, type OfflineBackend } from './offlineStore';
 import { readWorkoutCache, writeWorkoutCache } from './workoutCache';
@@ -104,6 +109,37 @@ describe('account reads without a connection', () => {
       fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
       expect(await api.listExercises()).toEqual([bench, squat]);
     });
+  });
+
+  it('tells the connection status about unreachable answers, but not slow ones', async () => {
+    resetConnectionStatus();
+    await saveExercisesOnline([bench]);
+    vi.useFakeTimers();
+    let answer!: (response: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const read = api.listExercises();
+    await vi.advanceTimersByTimeAsync(SAVED_COPY_AFTER_MS);
+    expect(await read).toEqual([bench]);
+    expect(connectionState().phase).toBe('online');
+    answer(json([bench]));
+    vi.useRealTimers();
+
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await api.health().catch(() => undefined);
+    expect(connectionState().phase).toBe('checking');
+
+    fetchMock.mockResolvedValueOnce(json([]));
+    await api.health();
+    expect(connectionState().phase).toBe('online');
+
+    fetchMock.mockResolvedValueOnce(json({ error: { message: 'Bad gateway' } }, 503));
+    await api.health().catch(() => undefined);
+    expect(connectionState().phase).toBe('checking');
+
+    reportServerReached();
+    fetchMock.mockRejectedValueOnce(new DOMException('Cancelled', 'AbortError'));
+    await api.health().catch(() => undefined);
+    expect(connectionState().phase).toBe('online');
   });
 
   it('skips the network wait entirely while the device reports no connection', async () => {
