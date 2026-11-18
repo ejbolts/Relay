@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { previousSetRests } from './workoutRestHistory';
-import { createWorkoutSet } from './workoutSets';
+import { previousSetRests, restToAdd } from './workoutRestHistory';
+import { createWorkoutSet, DEFAULT_REST_SECONDS } from './workoutSets';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
 
 const working = { ...createWorkoutSet('strength'), set_type: 'normal' as const, warmup: false };
@@ -54,5 +54,20 @@ describe('previous rest matching', () => {
   it('retains explicit no-rest history', () => {
     const noRest = { ...entry, sets: [{ ...entry.sets[2], rest_seconds: null }] };
     expect(previousSetRests([working], 0, [noRest])[0].seconds).toBeNull();
+  });
+});
+
+describe('rest to add between sets', () => {
+  const noRest = { ...working, rest_seconds: null };
+  it("reveals the set's own hidden rest first", () => {
+    expect(restToAdd([{ ...working, rest_seconds: 75 }, noRest], 0, [entry])).toBe(75);
+  });
+  it('uses what the same set rested last time', () => {
+    expect(restToAdd([noRest, noRest], 1, [entry])).toBe(210);
+  });
+  it('falls back to the nearest rest in the exercise, then the default', () => {
+    const sets = [{ ...noRest, rest_seconds: 45 }, noRest, { ...noRest, rest_seconds: 120 }];
+    expect(restToAdd(sets, 1, [])).toBe(45);
+    expect(restToAdd([noRest, noRest], 0, [])).toBe(DEFAULT_REST_SECONDS);
   });
 });

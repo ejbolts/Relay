@@ -1691,6 +1691,33 @@ describe('inserting sets', () => {
     expect(sets.map((set) => set.weight_kg)).toEqual([40, 40, 80]);
     expect(sets[1].key).not.toMatch(/^suggested-/);
   });
+
+  it('adds the rest after a set from the gap below it', async () => {
+    const draft = storedDraft();
+    const movement = draft.movements[0];
+    draft.movements = [movement];
+    movement.sets = [
+      { ...movement.sets[0], key: 'no-rest', completed: false, rest_seconds: null },
+      { ...movement.sets[0], key: 'next', completed: false, rest_seconds: 90 },
+    ];
+    writeActiveWorkoutDraft(draft);
+    await mount();
+
+    const addRest = insertButton('Add rest after set 1');
+    expect(addRest?.closest('.set-insert-row')).not.toBeNull();
+    // Only between sets: nothing before the first set or after the last.
+    expect(container.querySelectorAll('.movement-card .set-add-rest')).toHaveLength(1);
+    await act(async () => addRest!.click());
+
+    // The nearest rest in the exercise is used, and the gap becomes a rest divider.
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].rest_seconds).toBe(90);
+    expect(insertButton('Add rest after set 1')).toBeNull();
+    expect(
+      container.querySelector<HTMLSelectElement>('.rest-between [aria-label="Rest after set 1"]')
+        ?.value,
+    ).toBe('90');
+    expect(insertButton('Add set before set 2')?.closest('.rest-between')).not.toBeNull();
+  });
 });
 
 describe('hold to reorder workout sets', () => {

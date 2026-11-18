@@ -410,6 +410,7 @@ import {
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
 } from './workoutSets';
+import { restToAdd } from './workoutRestHistory';
 import {
   finalizeWorkoutIdentity,
   isCardioTypeWithoutCardio,
@@ -7089,6 +7090,9 @@ function MovementCard({
           const insertAfter = index < movement.sets.length - 1 && (
             <SetInsertButton beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
           );
+          const restHistory = item.machine_photo_id
+            ? historyOnMachine(exerciseHistory, item.machine_photo_id, savedMachineAliases)
+            : history;
           return (
             <Fragment key={item.key}>
               <SwipeToDeleteSetRow
@@ -7102,7 +7106,7 @@ function MovementCard({
                 }}
               >
                 <div
-                  className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
+                  className={`set-details ${item.completed ? 'completed' : ''} ${item.fromPrevious ? 'previous-set-details' : ''} ${open ? 'is-open' : ''} ${index === movement.sets.length - 1 ? 'set-rail-end' : ''} ${draggingSetKey === item.key ? 'set-dragging' : ''} ${dragTargetSetKey === item.key && draggingSetKey !== item.key ? 'set-drop-target' : ''}`}
                   data-set-key={item.key}
                   data-set-type={cardio ? 'normal' : setKindOf(item)}
                   data-expand-key={item.key}
@@ -7151,15 +7155,7 @@ function MovementCard({
                     seconds={item.rest_seconds!}
                     setIndex={index}
                     sets={movement.sets}
-                    history={
-                      item.machine_photo_id
-                        ? historyOnMachine(
-                            exerciseHistory,
-                            item.machine_photo_id,
-                            savedMachineAliases,
-                          )
-                        : history
-                    }
+                    history={restHistory}
                     suggested={!item.completed && !item.restConfirmed}
                     onChange={(seconds) => {
                       clearRestEdit(item.key);
@@ -7171,7 +7167,19 @@ function MovementCard({
                 </SwipeToDeleteSetRow>
               ) : (
                 insertAfter && (
-                  <SetInsertRow beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />
+                  <SetInsertRow
+                    beforeSet={index + 2}
+                    onInsert={() => onInsertSet(index + 1)}
+                    onAddRest={
+                      !cardio && showRestTimes
+                        ? () =>
+                            onUpdateSet(item.key, {
+                              rest_seconds: restToAdd(movement.sets, index, restHistory),
+                              restRevealed: true,
+                            })
+                        : undefined
+                    }
+                  />
                 )
               )}
             </Fragment>
