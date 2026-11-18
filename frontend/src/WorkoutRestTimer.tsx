@@ -222,7 +222,7 @@ export function WorkoutTimerDock({
 export const REST_EXTEND_SECONDS = 30;
 
 /**
- * Shown when a rest runs out: the rest pill turns into a green "GO" pill naming the next set and
+ * Shown when a rest runs out: the rest pill turns into a "GO" pill in the theme accent naming the next set and
  * counting how long ago the rest ended. Tapping it goes to that set; +30s rests a little longer.
  * It sits in the rest pill's place on the workout, or above the tab bar on other screens.
  */
