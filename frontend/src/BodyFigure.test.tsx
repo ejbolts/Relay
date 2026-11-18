@@ -122,11 +122,23 @@ describe('BodyFigure', () => {
     await act(async () => root.render(figure('male')));
     const male = host.querySelector('.body-figure-outline')!.getAttribute('d');
     expect(host.querySelector('.body-figure-hairline')).toBeNull();
+    expect(host.querySelectorAll('.body-figure-edge')).toHaveLength(1);
     await act(async () => root.render(figure('female')));
     const female = host.querySelector('.body-figure-outline')!.getAttribute('d');
     expect(host.querySelector('svg')?.getAttribute('data-figure')).toBe('female');
     expect(female).not.toBe(male);
     expect(host.querySelector('.body-figure-hairline')).not.toBeNull();
+    // The female outline has a bun joined on: each edge is masked inside the other shape.
+    const edges = [...host.querySelectorAll('.body-figure-edge')];
+    expect(edges).toHaveLength(2);
+    expect(host.querySelectorAll('.body-figure-extra')).toHaveLength(1);
+    for (const edge of edges) {
+      const id = edge.getAttribute('mask')!.slice(5, -1);
+      expect(host.querySelector(`mask[id="${id}"]`)).not.toBeNull();
+    }
+    const svg = host.querySelector('svg')!;
+    const top = Number(svg.getAttribute('viewBox')!.split(' ')[1]);
+    expect(top).toBeLessThan(-17);
   });
 });
 
@@ -189,7 +201,7 @@ describe('BodyFigure labels', () => {
         expect(column[i].top).toBeGreaterThanOrEqual(column[i - 1].top + column[i - 1].height);
       }
       // Nothing runs off the top or bottom of the picture.
-      expect(column[0].top).toBeGreaterThanOrEqual(-16);
+      expect(column[0].top).toBeGreaterThanOrEqual(-26);
       const last = column[column.length - 1];
       expect(last.top + last.height).toBeLessThanOrEqual(826);
     }

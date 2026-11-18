@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import {
   BODY_FIGURES,
   bodyFigurePath,
@@ -34,8 +34,9 @@ const CALLOUTS: readonly {
 ];
 
 const HALF_WIDTH = 350;
-const TOP = -16;
-const HEIGHT = 842;
+// Room above the head for the bun.
+const TOP = -26;
+const HEIGHT = 852;
 const LEADER_START = 214;
 /** A label's tap area: from the edge of the picture to where its leader starts. */
 const LABEL_WIDTH = HALF_WIDTH - LEADER_START + 4;
@@ -82,6 +83,10 @@ export function BodyFigure({
 }) {
   const shape = BODY_FIGURES[kind];
   const outline = useMemo(() => bodyFigurePath(shape.half), [shape]);
+  const extras = shape.extras ?? [];
+  // Mask ids are unique per drawing, since several figures can be on the page at once.
+  const maskId = `body-figure-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const frame = { x: -HALF_WIDTH, y: TOP, width: HALF_WIDTH * 2, height: HEIGHT };
   const labels = useRef(new Map<BodySizeField, SVGGElement>());
   const callouts = ([-1, 1] as const).flatMap((column) => {
     const shown = CALLOUTS.filter(
@@ -118,6 +123,33 @@ export function BodyFigure({
           />
         ))}
         <path className="body-figure-outline" d={outline} />
+        {extras.map((d) => (
+          <path key={d} className="body-figure-extra" d={d} />
+        ))}
+        {/* Extras such as a bun join the outline as one shape: each edge is hidden where it
+            runs inside the other, so only the outer edge of the join keeps its line. */}
+        {extras.length > 0 && (
+          <defs>
+            <mask id={`${maskId}-outline`} maskUnits="userSpaceOnUse" {...frame}>
+              <rect {...frame} fill="white" />
+              {extras.map((d) => (
+                <path key={d} d={d} fill="black" />
+              ))}
+            </mask>
+            <mask id={`${maskId}-extras`} maskUnits="userSpaceOnUse" {...frame}>
+              <rect {...frame} fill="white" />
+              <path d={outline} fill="black" />
+            </mask>
+          </defs>
+        )}
+        <path
+          className="body-figure-edge"
+          d={outline}
+          mask={extras.length > 0 ? `url(#${maskId}-outline)` : undefined}
+        />
+        {extras.map((d) => (
+          <path key={d} className="body-figure-edge" d={d} mask={`url(#${maskId}-extras)`} />
+        ))}
         {shape.hairline && <path className="body-figure-hairline" d={shape.hairline} />}
         {callouts.map((item) => {
           const value = values[item.field];

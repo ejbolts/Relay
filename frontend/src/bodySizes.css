@@ -64,18 +64,20 @@
   height: auto;
   font-variant-numeric: tabular-nums;
 }
-.body-figure-outline,
+.body-figure-edge,
 .body-figure-hairline {
+  fill: none;
   stroke: var(--p-muted);
   stroke-width: 1.5px;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
-.body-figure-outline {
+.body-figure-outline,
+.body-figure-extra {
   fill: var(--p-surface-2);
+  stroke: none;
 }
 .body-figure-hairline {
-  fill: none;
   stroke-linecap: round;
 }
 .body-figure-label {
