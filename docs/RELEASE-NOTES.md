@@ -14,7 +14,7 @@ _Relay was called Gym Logger before version 1.0._
 
 ![Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png)
 
-**Body measurements** — See measurements on a body outline and tap to update.
+**Body measurements** — See measurements on a body outline and tap to update. The female outline has side-swept hair and ears.
 
 ![Workout feed with five dummy workouts, exercise summaries, comment counts and reactions, without photos. Isolated sample accounts.](https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/feed.png)
 
@@ -23,6 +23,10 @@ _Relay was called Gym Logger before version 1.0._
 ![Two-finger pinch on the Body trend chart zooms from 3M to 1M and out through 3M, 9M and 1Y to All, with range chips and dates following the gesture. Isolated sample data.](https://raw.githubusercontent.com/ejbolts/Relay/8a3724e75c9b8b689904164646630dfe2927ed86/body-chart-pinch-zoom/pinch-zoom.gif)
 
 **Pinch to zoom** — Zoom Body and exercise charts with two fingers.
+
+![Female body measurements outline with side-swept hair and ears, shown with sample measurements](screenshots/releases/1.3.0-body-measurements-female.png)
+
+*The female outline with side-swept hair and ears.*
 
 - **Live workouts:** Minimise to the live Start button and continue the same session on desktop or phone.
 - **Start:** Pick any split day or repeat a past workout, and resume from Up next on Home.
