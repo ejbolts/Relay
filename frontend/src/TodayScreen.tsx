@@ -394,7 +394,7 @@ export function TodayScreen({
         )}
         <div className="today-profile-body">
           <h2 id="today-profile-title">
-            <span>{profile.display_name.trim() || profile.username}</span>
+            {profile.display_name.trim() || profile.username}
             <SexMark sex={profile.sex} />
           </h2>
           <p>

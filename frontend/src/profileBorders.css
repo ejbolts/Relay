@@ -95,16 +95,9 @@
   font-size: inherit;
 }
 
-.today-profile h2 {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.today-profile h2 > span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.today-profile h2 .sex-mark {
+  margin-left: 0.3rem;
+  vertical-align: -0.12em;
 }
 
 /* The worn border's name on a profile; on your own profile it opens the borders. */
