@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
-import { blockColor } from './blockColors';
+import { BLOCK_COLOR_CHOICES, blockColor, blockInk } from './blockColors';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import type { BlockStats, TrainingBlock, TrainingBlocks } from './types';
@@ -260,10 +260,10 @@ it('starts a named block with an optional colour', async () => {
       (item) => item.firstChild?.textContent,
     ),
   ).toContain('Custom');
-  expect(button('Automatic colour').getAttribute('aria-checked')).toBe('true');
+  expect(button('Automatic colour').getAttribute('aria-pressed')).toBe('true');
   await type(field('Block name'), 'Winter strength');
-  await click('#f0a07f');
-  expect(button('#f0a07f').getAttribute('aria-checked')).toBe('true');
+  await click('Coral');
+  expect(button('Coral').getAttribute('aria-checked')).toBe('true');
   await submit();
   expect(create).toHaveBeenCalledWith({
     name: 'Winter strength',
@@ -273,12 +273,66 @@ it('starts a named block with an optional colour', async () => {
   });
 });
 
+it('offers a wider palette with readable labels on every colour', () => {
+  const hexes = BLOCK_COLOR_CHOICES.map((choice) => choice.hex);
+  expect(hexes).toHaveLength(32);
+  expect(new Set(hexes).size).toBe(hexes.length);
+  expect(new Set(BLOCK_COLOR_CHOICES.map((choice) => choice.name)).size).toBe(hexes.length);
+  expect(hexes.every((hex) => /^#[0-9a-f]{6}$/.test(hex))).toBe(true);
+  // Earlier palette colours remain choices, so saved blocks still match a swatch.
+  for (const hex of ['#7fb0f0', '#7fd8f0', '#6fd0b8', '#9fd67a', '#f0d36a', '#d2b06f'])
+    expect(hexes).toContain(hex);
+  for (const hex of ['#f0a07f', '#f09cc4', '#b59cf0', '#9aa4ad']) expect(hexes).toContain(hex);
+  expect(blockInk('#f0d36a')).toBe('#0b0d0f');
+  expect(blockInk('#2d4f9e')).toBe('#ffffff');
+  expect(blockInk('#000000')).toBe('#ffffff');
+  expect(blockInk('var(--p-accent-text)')).toBe('#0b0d0f');
+});
+
+it('saves a custom colour from the picker or a typed hex code', async () => {
+  const create = vi.spyOn(api.trainingBlocks, 'create').mockResolvedValue(structuredClone(config));
+  await open('new');
+  await type(field('Block name'), 'Deload');
+  expect(document.querySelector('[aria-label="Hex colour"]')).toBeNull();
+  const picker = document.querySelector<HTMLInputElement>('input[aria-label="Custom colour"]')!;
+  await type(picker, '#123456');
+  const hex = document.querySelector<HTMLInputElement>('input[aria-label="Hex colour"]')!;
+  expect(hex.value).toBe('#123456');
+  expect(picker.closest('label')?.classList.contains('selected')).toBe(true);
+  expect(button('Automatic colour').getAttribute('aria-pressed')).toBe('false');
+  expect(document.querySelector('[aria-label="Colour palette"] [aria-checked="true"]')).toBeNull();
+  await type(hex, 'ABC');
+  expect(hex.getAttribute('aria-invalid')).toBe('true');
+  await type(hex, 'A1B2C3');
+  expect(hex.value).toBe('#A1B2C3');
+  expect(picker.value).toBe('#a1b2c3');
+  await submit();
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'Deload', color: '#a1b2c3' }),
+  );
+});
+
+it('shows a saved colour outside the palette as the custom choice', async () => {
+  const custom = structuredClone(config);
+  custom.blocks[2].color = '#123456';
+  vi.spyOn(api.trainingBlocks, 'get').mockResolvedValue(custom);
+  await open();
+  await click('Edit Spring strength');
+  expect(document.querySelector<HTMLInputElement>('input[aria-label="Hex colour"]')?.value).toBe(
+    '#123456',
+  );
+  expect(document.querySelector('[aria-label="Colour palette"] [aria-checked="true"]')).toBeNull();
+  await click('Coral');
+  expect(document.querySelector('[aria-label="Hex colour"]')).toBeNull();
+  expect(button('Coral').getAttribute('aria-checked')).toBe('true');
+});
+
 it('returns to the blocks from an edit or removal instead of closing', async () => {
   const update = vi.spyOn(api.trainingBlocks, 'update').mockResolvedValue(structuredClone(config));
   await open();
   await click('Edit Spring strength');
   expect(title()).toBe('Edit block');
-  expect(button('#f0a07f').getAttribute('aria-checked')).toBe('true');
+  expect(button('Coral').getAttribute('aria-checked')).toBe('true');
   await click('Close Edit block');
   expect(onClose).not.toHaveBeenCalled();
   expect(title()).toBe('Training blocks');
