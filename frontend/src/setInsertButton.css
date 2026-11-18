@@ -68,12 +68,13 @@
   transform: translateY(-50%);
 }
 
-/* Where no rest divider separates two sets (and above the first set), use a slim line. */
+/* Where no rest divider separates two sets (and above the first set), use a slim line, as tall as
+   the button's tap target so the dot clears the sets on either side. */
 .set-insert-row {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  height: 1.25rem;
+  height: 1.75rem;
   padding: 0 0.875rem 0 0.5rem;
 }
 
