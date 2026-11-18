@@ -61,12 +61,19 @@
   margin: 10px auto 0;
   font-variant-numeric: tabular-nums;
 }
-.body-figure-outline {
-  fill: var(--p-surface-2);
+.body-figure-outline,
+.body-figure-hairline {
   stroke: var(--p-muted);
   stroke-width: 1.5px;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+}
+.body-figure-outline {
+  fill: var(--p-surface-2);
+}
+.body-figure-hairline {
+  fill: none;
+  stroke-linecap: round;
 }
 .body-figure-label {
   cursor: pointer;

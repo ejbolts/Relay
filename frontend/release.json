@@ -10,6 +10,7 @@
     "**Safer edits:** Choose which version to keep when another device has changed a workout.",
     "**Unfinished workouts:** Save, resume or discard; opt into auto-save and receive idle phone reminders.",
     "**Workout controls:** Finish and add exercises from the header, correct live time and use larger iPhone touch targets.",
+    "**Rest complete:** When a rest ends, a GO pill names your next set, counts time over rest and offers +30s.",
     "**Set groups:** Log tri-sets with clearer set counts, superset borders and custom rest times.",
     "**Add sets anywhere:** Tap + above set 1 or on a rest line to add a set at the start or between sets.",
     "**Finish checks:** See ticked-set totals, catch warm-up-only exercises and get clearer save errors.",
@@ -37,7 +38,7 @@
     "**Phone alerts:** Rest alerts are on by default, with reminders to allow notifications.",
     "**Offline and updates:** Compact status and update pills, with safe refreshes around unsynced work.",
     "**Account recovery:** Admin-issued temporary passwords require a new password at sign-in.",
-    "**Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout."
+    "**Cardio:** Auto MET and elevation replace MET-minutes; linked sessions say With workout; Distance always offers Walk & run, Cycling and Rowing; Progress stats drop prior-period comparisons."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
   "image": {
@@ -55,7 +56,7 @@
     },
     {
       "title": "Body measurements",
-      "description": "See measurements on a body outline and tap to update.",
+      "description": "See measurements on a body outline and tap to update. The female outline has side-swept hair and ears.",
       "image": {
         "url": "https://raw.githubusercontent.com/ejbolts/Relay/2bf15ef73dce1fb1c2f0a7eac7ef9aea49b714ab/release-1.3-notes/body.png",
         "alt": "Body outline with labelled neck, shoulders, chest, arms, waist, hips, thighs, calves, wrist and ankle measurements. Supplied sample-data image."

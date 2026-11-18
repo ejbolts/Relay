@@ -53,10 +53,12 @@ describe('BodyFigure', () => {
     );
     await act(async () => root.render(figure('male')));
     const male = host.querySelector('.body-figure-outline')!.getAttribute('d');
+    expect(host.querySelector('.body-figure-hairline')).toBeNull();
     await act(async () => root.render(figure('female')));
     const female = host.querySelector('.body-figure-outline')!.getAttribute('d');
     expect(host.querySelector('svg')?.getAttribute('data-figure')).toBe('female');
     expect(female).not.toBe(male);
+    expect(host.querySelector('.body-figure-hairline')).not.toBeNull();
   });
 });
 

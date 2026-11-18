@@ -1249,20 +1249,21 @@ describe('rest time controls', () => {
       );
       expect(window.location.hash).toBe('#body');
       await act(async () => vi.advanceTimersByTimeAsync(30_000));
-      expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-        'Rest complete. Time for your next set.',
-      );
+      // The minimised workout's GO pill waits above the tab bar.
+      const pill = document.querySelector('.rest-complete-pill');
+      expect(pill?.classList.contains('is-above-tab-bar')).toBe(true);
+      expect(pill?.textContent).toContain('Rest complete');
       expect(systemNotification).not.toHaveBeenCalled();
       if (scheduled) expect(api.scheduleRestTimerNotification).toHaveBeenCalled();
       // Dismissal and returning focus must not announce the same timer a second time.
       await act(async () =>
-        document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
+        document.querySelector<HTMLButtonElement>('[aria-label="Dismiss rest complete"]')!.click(),
       );
       await act(async () => {
         window.dispatchEvent(new Event('focus'));
         await vi.advanceTimersByTimeAsync(1000);
       });
-      expect(document.querySelector('.app-notification-toast')).toBeNull();
+      expect(document.querySelector('.rest-complete-pill')).toBeNull();
     },
   );
 
@@ -1272,7 +1273,7 @@ describe('rest time controls', () => {
     expect(container.querySelector('[role="timer"]')).toBeNull();
     expect(container.querySelector('.workout-timer-dock')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.rest-complete-pill')).toBeNull();
   });
 
   it('logs a tri-set round before starting the rest', async () => {
@@ -1342,7 +1343,7 @@ describe('rest time controls', () => {
     expect(api.cancelRestTimerNotification).toHaveBeenCalled();
     expect(headerMeta()?.textContent).toMatch(/^Live /);
     await act(async () => vi.advanceTimersByTimeAsync(31_000));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.rest-complete-pill')).toBeNull();
   });
 
   it('pauses the live time and the rest together, keeps the rest alert waiting, then resumes both', async () => {
@@ -1360,7 +1361,7 @@ describe('rest time controls', () => {
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(headerMeta()?.textContent).toBe(frozenHeader);
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:25');
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.rest-complete-pill')).toBeNull();
     // Adjusting a paused rest changes what is left without starting it.
     await click('Add 30 seconds to the rest');
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:55');
@@ -1372,9 +1373,7 @@ describe('rest time controls', () => {
       expect.objectContaining({ delay_seconds: 55 }),
     );
     await act(async () => vi.advanceTimersByTimeAsync(55_000));
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Rest complete',
-    );
+    expect(document.querySelector('.rest-complete-pill')?.textContent).toContain('Rest complete');
     expect(systemNotification).not.toHaveBeenCalled();
   });
 
@@ -1428,8 +1427,9 @@ describe('rest time controls', () => {
       const systemNotification = await startRest(scheduled);
       vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
       await act(async () => vi.advanceTimersByTimeAsync(30_000));
-      expect(document.querySelector('.app-notification-toast')).toBeNull();
       expect(systemNotification).toHaveBeenCalledTimes(scheduled ? 0 : 1);
+      // The GO pill is waiting when the app is opened again.
+      expect(document.querySelector('.rest-complete-pill')).not.toBeNull();
     },
   );
 
@@ -1437,9 +1437,62 @@ describe('rest time controls', () => {
     await startRest();
     vi.setSystemTime(Date.now() + 31_000);
     await act(async () => window.dispatchEvent(new Event('focus')));
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Rest complete',
+    expect(document.querySelector('.rest-complete-pill')?.textContent).toContain('Rest complete');
+  });
+
+  it('turns a finished rest into a GO pill for the next set, with +30s and go to set', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const draft = storedDraft();
+    const [benchMovement] = draft.movements;
+    benchMovement.supersetKey = null;
+    benchMovement.sets = [
+      { ...benchMovement.sets[0], completed: false, rest_seconds: 30 },
+      { ...benchMovement.sets[0], key: 'set-0b', completed: false, rest_seconds: 30 },
+      { ...benchMovement.sets[0], key: 'set-0c', completed: false, rest_seconds: 30 },
+    ];
+    draft.movements = [benchMovement];
+    writeActiveWorkoutDraft(draft);
+    const scrolled: Element[] = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this);
+    };
+    await mount();
+    const pill = () => document.querySelector<HTMLElement>('.rest-complete-pill');
+    await click('Complete set 1');
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(pill()?.classList.contains('is-above-tab-bar')).toBe(false);
+    expect(pill()?.textContent).toContain('Next set ready');
+    expect(pill()?.querySelector('.rest-complete-detail')?.textContent).toBe(
+      'Bench press · Set 2 · 80 kg × 8',
     );
+    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    // It counts the time since the rest ended.
+    await act(async () => vi.advanceTimersByTimeAsync(12_000));
+    expect(pill()?.querySelector('.rest-complete-over')?.textContent).toBe('+0:12');
+    // +30s rests a little longer, then the pill returns.
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Rest 30 seconds more"]')!.click(),
+    );
+    expect(pill()).toBeNull();
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('0:30');
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(pill()).not.toBeNull();
+    // Going to the set brings it into view.
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Go to Bench press, set 2"]')!.click();
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(pill()).toBeNull();
+    expect(scrolled.some((element) => element.getAttribute('data-set-key') === 'set-0b')).toBe(
+      true,
+    );
+    // Logging the next set clears a waiting pill.
+    await click('Complete set 2');
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(pill()?.querySelector('.rest-complete-detail')?.textContent).toContain('Set 3');
+    await click('Complete set 3');
+    expect(pill()).toBeNull();
   });
 
   it("explains in a timed popup that an exercise's only set can't be deleted", async () => {

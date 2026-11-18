@@ -232,6 +232,7 @@ describe('cardio weekly trend screen', () => {
     expect([...groups.querySelectorAll('button')].map((item) => item.textContent)).toEqual([
       'Cycling',
       'Walk & run',
+      'Rowing',
     ]);
     expect(hero()).toContain('10 km');
     expect(comparison()).toContain('1 session');
@@ -240,6 +241,11 @@ describe('cardio weekly trend screen', () => {
     expect(named('Walk & run').getAttribute('aria-pressed')).toBe('true');
     expect(hero()).toContain('10 km');
     expect(comparison()).toBe('1 session');
+    await click(named('Rowing'));
+    expect(named('Rowing').getAttribute('aria-pressed')).toBe('true');
+    expect(hero()).toContain('—');
+    expect(comparison()).toBe('0 sessions');
+    await click(named('Walk & run'));
     await click(named('Time'));
     expect(distanceTile.querySelector('dt')!.textContent).toBe('Walk & run');
   });
