@@ -457,15 +457,8 @@ export function ExerciseLibraryList({
         currentPage={currentPage}
         totalPages={totalPages}
         label="exercises"
-        onPageChange={(nextPage) => {
-          setPage(nextPage);
-          listRef.current?.scrollIntoView?.({ block: 'start' });
-          requestAnimationFrame(() =>
-            listRef.current
-              ?.querySelector<HTMLButtonElement>('[data-exercise-id]')
-              ?.focus({ preventScroll: true }),
-          );
-        }}
+        onPageChange={setPage}
+        scrollTarget={listRef}
       />
     </section>
   );

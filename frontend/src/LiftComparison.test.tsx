@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { HeadToHeadCard, LiftLeaderboardCard } from './LiftComparison';
-import { pageButtons } from './pageButtons';
 import type { LiftBest, LiftComparison, LiftComparisons, LiftRanking } from './types';
 import { GOAL_UNDO_MS } from './useGoalRemoval';
 
@@ -250,7 +249,7 @@ it('lists your exercises with the member’s best beside the ones they have logg
   expect(text('.lift-picker-best', option(sheet, 'Curl'))).toEqual(['You: 40 kg']);
   expect(text('.lift-picker-best', option(sheet, 'Deadlift'))).toEqual(['Sam: S200 kg']);
   // Five lifts fit on one page, so there are no page buttons.
-  expect(sheet.querySelector('.lift-picker-pager')).toBeNull();
+  expect(sheet.querySelector('.pagination-controls')).toBeNull();
 
   await search(sheet, 'squat');
   expect(text('.lift-picker-copy strong', sheet)).toEqual(['Squat']);
@@ -379,12 +378,12 @@ it('pages through the lifts, six at a time, and back to the first page on a sear
 
   expect(text('.lift-picker-copy strong', sheet)).toHaveLength(6);
   expect(text('.lift-picker-copy strong', sheet)[0]).toBe('Lift 01');
-  const pager = sheet.querySelector('.lift-picker-pager');
+  const pager = sheet.querySelector('.pagination-controls.is-sheet-footer');
   expect(text('button', pager ?? undefined)).toEqual(['', '1', '2', '3', '']);
   expect(button(sheet, 'Page 1 of 3').getAttribute('aria-current')).toBe('page');
-  expect(button(sheet, 'Previous page').disabled).toBe(true);
+  expect(button(sheet, 'Previous lifts page').disabled).toBe(true);
 
-  await click(button(sheet, 'Next page'));
+  await click(button(sheet, 'Next lifts page'));
   expect(text('.lift-picker-copy strong', sheet)[0]).toBe('Lift 07');
   await click(option(sheet, 'Lift 10'));
   await click(button(sheet, 'Page 3 of 3'));
@@ -394,7 +393,7 @@ it('pages through the lifts, six at a time, and back to the first page on a sear
     'Lift 15',
     'Lift 16',
   ]);
-  expect(button(sheet, 'Next page').disabled).toBe(true);
+  expect(button(sheet, 'Next lifts page').disabled).toBe(true);
   expect(sheet.querySelector('.lift-picker-toolbar span')?.textContent).toBe('1 of 20 chosen');
 
   await search(sheet, 'Lift 0');
@@ -403,16 +402,6 @@ it('pages through the lifts, six at a time, and back to the first page on a sear
 
   await click(sheet.querySelector('.popup-dialog-close'));
   expect(text('.head-to-head-values > span', host)).toEqual(['Lift 10']);
-});
-
-it('offers the first, last and nearby pages when there are many', () => {
-  expect(pageButtons(0, 3)).toEqual([0, 1, 2]);
-  expect(pageButtons(3, 7)).toEqual([0, 1, 2, 3, 4, 5, 6]);
-  expect(pageButtons(0, 13)).toEqual([0, 1, 2, 3, null, 12]);
-  expect(pageButtons(2, 13)).toEqual([0, 1, 2, 3, null, 12]);
-  expect(pageButtons(6, 13)).toEqual([0, null, 5, 6, 7, null, 12]);
-  expect(pageButtons(12, 13)).toEqual([0, null, 9, 10, 11, 12]);
-  expect(pageButtons(10, 13)).toEqual([0, null, 9, 10, 11, 12]);
 });
 
 it('slides the sheet down before it closes, unless motion is reduced', async () => {

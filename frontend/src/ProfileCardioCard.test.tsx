@@ -68,25 +68,23 @@ it('shows only five newest sessions, and pages forward, back and directly to the
   expect(rows()).toHaveLength(5);
   expect(rows()[0]).toContain('Cardio 1');
   expect(rows()[4]).toContain('Cardio 5');
-  expect(host.textContent).toContain('1–5 of 27');
+  expect(host.querySelector('header')?.textContent).toContain('27 sessions');
   expect(host.textContent).toContain('Page 1 of 6');
   expect(api.sharing.cardio).not.toHaveBeenCalled();
   await click('Next cardio page');
   expect(api.sharing.cardio).toHaveBeenLastCalledWith('owner', 5, 5);
   expect(rows()[0]).toContain('Cardio 6');
   expect(rows()).toHaveLength(5);
-  await click('Choose a cardio page');
-  await click('Go to page 6');
+  await click('Page 6 of 6');
   expect(rows()).toHaveLength(2);
   expect(rows()[0]).toContain('Cardio 26');
-  expect(host.textContent).toContain('26–27 of 27');
+  expect(host.querySelector('[aria-current="page"]')?.textContent).toBe('6');
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Next cardio page"]')?.disabled).toBe(
     true,
   );
   await click('Previous cardio page');
   expect(rows()[0]).toContain('Cardio 21');
-  await click('Choose a cardio page');
-  await click('Go to page 1');
+  await click('Page 1 of 6');
   expect(rows()[0]).toContain('Cardio 1');
 });
 
@@ -113,8 +111,7 @@ it('retains the current page after a network failure and retries the failed requ
 
 it('keeps the selected page across profile refreshes and clamps it after deletions', async () => {
   await render();
-  await click('Choose a cardio page');
-  await click('Go to page 6');
+  await click('Page 6 of 6');
   await render('owner', [...sessions.slice(0, 5)], 27);
   expect(host.textContent).toContain('Page 6 of 6');
   vi.mocked(api.sharing.cardio).mockImplementation(async (_id, offset, limit = 5) => ({
@@ -138,6 +135,13 @@ it('resets for another profile and ignores stale responses from the previous pro
   await render();
   await click('Next cardio page');
   expect(host.querySelector('section')?.getAttribute('aria-busy')).toBe('true');
+  // While a page loads the pager stays enabled, so focus stays, but ignores taps.
+  expect(host.querySelector('nav')?.getAttribute('aria-busy')).toBe('true');
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Next cardio page"]')?.disabled).toBe(
+    false,
+  );
+  await click('Next cardio page');
+  expect(api.sharing.cardio).toHaveBeenCalledTimes(1);
   const other = [{ ...sessions[0], id: 'other', activity_type: 'Other account cardio' }];
   await render('other', other, 1);
   await act(async () => finish({ total: 27, sessions: sessions.slice(5, 10) }));

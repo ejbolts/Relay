@@ -6,6 +6,7 @@ import { motionReduced } from './motion';
 import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
+import { ShowMoreButton } from './ShowMoreButton';
 import type { WorkoutComment, WorkoutReactions } from './types';
 import { localDate, localDateOf } from './utils';
 
@@ -46,6 +47,7 @@ export function WorkoutComments({
   const [next, setNext] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [reply, setReply] = useState<WorkoutComment | null>(null);
@@ -334,21 +336,18 @@ export function WorkoutComments({
           ))
       )}
       {next !== null && (
-        <button
-          type="button"
-          className="text-link"
-          disabled={busy}
-          onClick={() =>
+        <ShowMoreButton
+          loading={loadingMore}
+          onClick={() => {
+            setLoadingMore(true);
             void run(async () => {
               const page = await api.sharing.comments(workoutId, next);
               setItems((current) => [...current, ...page.items]);
               setNext(page.next_offset);
               countRef.current(page.total);
-            })
-          }
-        >
-          Show more comments
-        </button>
+            }).finally(() => setLoadingMore(false));
+          }}
+        />
       )}
       {(reply || editing) && (
         <div className="comment-replying">
