@@ -334,6 +334,7 @@ import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfil
 import { LiftLeaderboardCard } from './LiftComparison';
 import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
+import { onSharedProfileRequested } from './sharedProfileRequest';
 import { FriendsActivityCard } from './FriendsActivity';
 import { SocialScreen } from './SocialScreen';
 import { SettingsHub } from './SettingsHub';
@@ -1190,6 +1191,8 @@ function AppContent() {
   }, []);
   // A notification opens the reacted or commented workout in Social's feed.
   useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
+  // A person named in a notification opens their shared profile.
+  useEffect(() => onSharedProfileRequested(openSharedProfile));
   // An admin's password reset notification opens that account in the admin console.
   useEffect(
     () => onAdminAccountFocusRequested(() => (isAdmin ? setTab('admin') : undefined)),
