@@ -344,7 +344,12 @@ function MachineWeightsEditor({
       kicker={exerciseName}
       className="machine-weights-dialog"
       headerActions={
-        <button type="submit" form={formId} className="machine-weights-save" disabled={saving}>
+        <button
+          type="submit"
+          form={formId}
+          className="overlay-header-save machine-weights-save"
+          disabled={saving}
+        >
           {saving ? 'Saving…' : 'Save'}
         </button>
       }

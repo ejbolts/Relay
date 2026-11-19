@@ -91,7 +91,7 @@ export function FriendInviteDialog({
   }
 
   return (
-    <PopupDialog title="QR code" className="friend-invite-dialog" swipeToDismiss onClose={onClose}>
+    <PopupDialog title="QR code" className="friend-invite-dialog" onClose={onClose}>
       <div
         className="segmented-control friend-invite-modes"
         role="tablist"

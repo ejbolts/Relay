@@ -559,11 +559,6 @@
 }
 
 /* Editor */
-.routine-editor-dialog {
-  width: min(540px, calc(100vw - 24px));
-  max-height: 92dvh;
-  overflow: auto;
-}
 .routine-editor fieldset {
   border: 0;
   padding: 1rem 1rem 0;
@@ -806,65 +801,6 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
-/* The editor is a full screen rather than a popup, leaving room for every day's controls. */
-dialog.popup-dialog.routine-editor-dialog.routine-editor-screen {
-  width: 100%;
-  max-width: none;
-  height: 100dvh;
-  max-height: none;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--p-page);
-  box-shadow: none;
-}
-dialog.popup-dialog.routine-editor-dialog.routine-editor-screen[open] {
-  animation: routine-screen-in 240ms var(--ease-out, ease) backwards;
-}
-dialog.popup-dialog.routine-editor-dialog.routine-editor-screen::backdrop {
-  background: var(--p-page);
-  backdrop-filter: none;
-}
-dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header {
-  justify-content: flex-start;
-  gap: 0.65rem;
-  border-bottom: 1px solid var(--p-line);
-  padding: calc(0.55rem + env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) 0.75rem
-    max(0.75rem, env(safe-area-inset-left));
-  background: color-mix(in srgb, var(--p-page) 96%, transparent);
-}
-dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
-  color: var(--p-ink);
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.routine-editor-screen > header > div {
-  flex: 1;
-  min-width: 0;
-}
-.routine-editor-screen .popup-dialog-close {
-  order: -1;
-  flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  padding: 0;
-  background: var(--p-surface);
-  color: var(--p-ink-2);
-}
-.routine-editor-screen .popup-dialog-close svg {
-  width: 1.15rem;
-  height: 1.15rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.15;
-}
 .routine-editor-screen .routine-editor {
   max-width: 600px;
   margin-inline: auto;
@@ -873,23 +809,6 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
-}
-.routine-editor-save {
-  flex: none;
-  min-height: 2.5rem;
-  border: 0;
-  border-radius: 12px;
-  padding: 0 16px;
-  background: var(--p-accent);
-  color: #fff;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.routine-editor-save:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .routine-editor .routine-name-input {
   /* Below this width the date and Active wrap under the name instead of squeezing it. */
@@ -1115,16 +1034,7 @@ dialog.popup-dialog.routine-editor-dialog.routine-editor-screen > header h2 {
   margin-top: 6px;
   padding: 6px 10px;
 }
-@keyframes routine-screen-in {
-  from {
-    opacity: 0;
-    transform: translate3d(1.5rem, 0, 0);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  dialog.popup-dialog.routine-editor-dialog.routine-editor-screen[open] {
-    animation: none;
-  }
   .routine-day,
   .routine-day-panel,
   .routine-day-body,
