@@ -87,9 +87,6 @@ const GLYPHS = {
   bench: { d: 'M2.5 7h19M5 4v6M19 4v6M7.2 5v4M16.8 5v4M6 15h12M8.5 15v5M15.5 15v5' },
   rack: { d: 'M6 3v18M18 3v18M2.5 9h19M8.5 7v4M15.5 7v4M3.5 21h5M15.5 21h5' },
   bentbar: { d: 'M2.5 9.5q9.5 5 19 0M5 6.5v8M19 6.5v8M7.3 7.5v6.5M16.7 7.5v6.5' },
-  lights: {
-    d: 'M6.5 12m-2.6 0a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0M12 12m-2.6 0a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0M17.5 12m-2.6 0a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0M5 18.5h14',
-  },
   trophy: {
     d: 'M8 4h8v5a4 4 0 0 1-8 0zM8 6H5.5a3 3 0 0 0 3 4M16 6h2.5a3 3 0 0 1-3 4M12 13.5V17M8.5 20.5h7M9.5 17h5v3.5h-5z',
   },
@@ -122,9 +119,6 @@ const GLYPHS = {
   clockface: {
     d: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5V12l3.2 2M12 4.8v1.4M12 17.8v1.4M4.8 12h1.4M17.8 12h1.4',
   },
-  scales: {
-    d: 'M12 4v16M8 20.5h8M4.5 7.5h15M6.5 7.5L3.5 14h6zM17.5 7.5L14.5 14h6zM12 4l-1.5-1M12 4l1.5-1',
-  },
   stars: {
     d: 'M12 3l1.6 3.4 3.7.5-2.7 2.6.6 3.7L12 11.4l-3.3 1.8.7-3.7-2.7-2.6 3.7-.5zM5.5 13.5l.9 1.9 2 .3-1.5 1.4.4 2.1-1.8-1-1.9 1 .4-2.1-1.5-1.4 2.1-.3zM18.5 13.5l.9 1.9 2.1.3-1.5 1.4.3 2.1-1.8-1-1.8 1 .3-2.1-1.5-1.4 2.1-.3z',
   },
@@ -132,10 +126,9 @@ const GLYPHS = {
     d: 'M8 3l4 6.2L16 3M12 21a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 12.3v5.4M10.4 13.6L12 12.3',
   },
   bolt: { d: 'M13.5 2.5L5 14h6.2l-1.2 7.5L19 10h-6.2z' },
-  globe: {
-    d: 'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM3.5 12h17M12 3.5c2.4 2.4 3.6 5.2 3.6 8.5s-1.2 6.1-3.6 8.5M12 3.5C9.6 5.9 8.4 8.7 8.4 12s1.2 6.1 3.6 8.5M5 7.5h14M5 16.5h14',
+  pullup: {
+    d: 'M2.5 4h19M8 4l2.5 6.5M16 4l-2.5 6.5M10.5 10.5h3M12 5.6a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6M12 9.2v6.3M12 15.5l-2 5M12 15.5l2 5',
   },
-  rise: { d: 'M12 19V4.5M6.5 10L12 4.5 17.5 10M3 21h18M7.5 15.5h9' },
   tree: {
     d: 'M12 2.8l5.2 6.2h-3l4.3 5.2h-3.2l4.2 5.3H4.5l4.2-5.3H5.5L9.8 9h-3zM12 19.5v2.2M12 2.8v-.1',
   },
@@ -997,7 +990,6 @@ const P = {
   crimson: palette('#3f0a0a', '#dc2626', '#fecaca', '#fca5a5', '#ef4444'),
   cobalt: palette('#0b1b4d', '#2563eb', '#dbeafe', '#93c5fd', '#3b82f6'),
   molten: palette('#0c0a09', '#57534e', '#d6d3d1', '#fb923c', '#f97316'),
-  podium: palette('#111827', '#374151', '#e5e7eb', '#fde047', '#facc15'),
   copper: palette('#3b1405', '#c2410c', '#fed7aa', '#fdba74', '#fb923c'),
   gold: palette('#422006', '#ca8a04', '#fef9c3', '#fde047', '#facc15'),
   cosmic: palette('#170b3b', '#7c3aed', '#f5f3ff', '#f0abfc', '#c084fc'),
@@ -1012,8 +1004,6 @@ const P = {
   slate: palette('#0f172a', '#334155', '#f1f5f9', '#f87171', '#94a3b8'),
   tempo: palette('#2a0f1f', '#be185d', '#fce7f3', '#fde68a', '#f472b6'),
   aeon: palette('#0b0f2a', '#1e3a8a', '#e0e7ff', '#fde047', '#93c5fd'),
-  emerald: palette('#022c22', '#059669', '#d1fae5', '#fbbf24', '#34d399'),
-  titan: palette('#0b1e2b', '#0e7490', '#cffafe', '#fbbf24', '#22d3ee'),
   void: palette('#1e0636', '#7e22ce', '#f3e8ff', '#e879f9', '#c084fc'),
   magenta: palette('#3b0764', '#c026d3', '#fae8ff', '#fde047', '#e879f9'),
   track: palette('#431407', '#ea580c', '#ffedd5', '#fef3c7', '#fb923c'),
@@ -1026,7 +1016,6 @@ const P = {
   winter: palette('#082f49', '#0284c7', '#f0f9ff', '#e0f2fe', '#7dd3fc'),
 };
 
-const BIG_THREE = ['#dc2626', '#eab308', '#2563eb'];
 const SEASONS = ['#4ade80', '#facc15', '#f97316', '#7dd3fc'];
 
 /** Baubles hung round the ring, alternating red and gold. */
@@ -1074,10 +1063,7 @@ const seasonThirds =
 const BENCH = { palette: P.crimson, glyph: 'bench', detail: plates } as const;
 const SQUAT = { palette: P.cobalt, glyph: 'rack', detail: plates } as const;
 const DEADLIFT = { palette: P.molten, glyph: 'bentbar', detail: plates } as const;
-const TOTAL = { palette: P.podium, glyph: 'lights', detail: colourArcs(BIG_THREE) } as const;
-const BENCH_BW = { palette: P.emerald, glyph: 'scales', detail: clock } as const;
-const SQUAT_BW = { palette: P.titan, glyph: 'globe', detail: rivets } as const;
-const DEADLIFT_BW = { palette: P.void, glyph: 'rise', detail: facets } as const;
+const BODYWEIGHT = { palette: P.void, glyph: 'pullup', detail: facets } as const;
 
 /*
  * Every permanent border, at the grade of its rarity. The server's catalogue is checked against
@@ -1087,22 +1073,8 @@ const SPECS: Record<string, Spec> = {
   'first-steps': { grade: 1, palette: P.sprout, glyph: 'steps' },
   'seven-straight': { grade: 1, palette: P.sky, glyph: 'seven', detail: segments(7) },
   'locked-in': { grade: 2, palette: P.violet, glyph: 'lock', detail: chain, tier: 1 },
-  'hundred-days': {
-    grade: 3,
-    palette: P.ember,
-    glyph: 'flame',
-    sides: 'flame',
-    detail: chain,
-    tier: 2,
-  },
-  unbreakable: {
-    grade: 4,
-    palette: P.ice,
-    glyph: 'infinity',
-    sides: 'crystal',
-    detail: chain,
-    tier: 3,
-  },
+  'hundred-days': { grade: 3, palette: P.ember, glyph: 'flame', tier: 2 },
+  unbreakable: { grade: 4, palette: P.ice, glyph: 'infinity', tier: 3 },
   regular: { grade: 1, palette: P.bronze, glyph: 'shield', sides: 'laurel', tier: 1 },
   centurion: { grade: 2, palette: P.legion, glyph: 'helmet', sides: 'laurel', tier: 2 },
   'iron-legion': {
@@ -1119,14 +1091,7 @@ const SPECS: Record<string, Spec> = {
   'iron-habit': { grade: 3, palette: P.iron, glyph: 'anvil', detail: rivets },
   'four-seasons': { grade: 3, palette: P.seasons, glyph: 'seasons', detail: colourArcs(SEASONS) },
   'whale-lifter': { grade: 2, palette: P.ocean, glyph: 'whale', detail: waves, tier: 1 },
-  'million-kilo': {
-    grade: 4,
-    palette: P.prism,
-    glyph: 'diamond',
-    sides: 'crystal',
-    detail: facets,
-    tier: 2,
-  },
+  'million-kilo': { grade: 4, palette: P.prism, glyph: 'diamond', tier: 2 },
   'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock, tier: 1 },
   'time-under-tension': { grade: 3, palette: P.tempo, glyph: 'stopwatch', detail: clock, tier: 2 },
   'thousand-hours': {
@@ -1152,26 +1117,11 @@ const SPECS: Record<string, Spec> = {
   'deadlift-club-3': { grade: 3, ...DEADLIFT, tier: 3, sides: 'flame' },
   'deadlift-club-4': { grade: 4, ...DEADLIFT, tier: 4, sides: 'flame' },
   'deadlift-club-5': { grade: 5, ...DEADLIFT, tier: 5, sides: 'flame' },
-  'big-three-1': { grade: 1, ...TOTAL, tier: 1 },
-  'big-three-2': { grade: 2, ...TOTAL, tier: 2 },
-  'big-three-3': { grade: 3, ...TOTAL, tier: 3 },
-  'big-three-4': { grade: 4, ...TOTAL, tier: 4 },
-  'big-three-5': { grade: 5, ...TOTAL, tier: 5 },
-  'pound-for-pound-1': { grade: 1, ...BENCH_BW, tier: 1 },
-  'pound-for-pound-2': { grade: 2, ...BENCH_BW, tier: 2 },
-  'pound-for-pound-3': { grade: 3, ...BENCH_BW, tier: 3 },
-  'pound-for-pound-4': { grade: 4, ...BENCH_BW, tier: 4 },
-  'pound-for-pound-5': { grade: 5, ...BENCH_BW, tier: 5 },
-  'atlas-1': { grade: 1, ...SQUAT_BW, tier: 1 },
-  'atlas-2': { grade: 2, ...SQUAT_BW, tier: 2 },
-  'atlas-3': { grade: 3, ...SQUAT_BW, tier: 3 },
-  'atlas-4': { grade: 4, ...SQUAT_BW, tier: 4 },
-  'atlas-5': { grade: 5, ...SQUAT_BW, tier: 5 },
-  'gravity-defier-1': { grade: 1, ...DEADLIFT_BW, tier: 1 },
-  'gravity-defier-2': { grade: 2, ...DEADLIFT_BW, tier: 2 },
-  'gravity-defier-3': { grade: 3, ...DEADLIFT_BW, tier: 3, sides: 'crystal' },
-  'gravity-defier-4': { grade: 4, ...DEADLIFT_BW, tier: 4, sides: 'crystal' },
-  'gravity-defier-5': { grade: 5, ...DEADLIFT_BW, tier: 5, sides: 'crystal' },
+  'gravity-defier-1': { grade: 1, ...BODYWEIGHT, tier: 1 },
+  'gravity-defier-2': { grade: 2, ...BODYWEIGHT, tier: 2 },
+  'gravity-defier-3': { grade: 3, ...BODYWEIGHT, tier: 3, sides: 'crystal' },
+  'gravity-defier-4': { grade: 4, ...BODYWEIGHT, tier: 4, sides: 'crystal' },
+  'gravity-defier-5': { grade: 5, ...BODYWEIGHT, tier: 5, sides: 'crystal' },
   'hat-trick': { grade: 1, palette: P.magenta, glyph: 'stars' },
   'record-breaker-1': { grade: 1, palette: P.copper, glyph: 'trophy', tier: 1 },
   'record-breaker-2': { grade: 2, palette: P.gold, glyph: 'trophy', tier: 2 },

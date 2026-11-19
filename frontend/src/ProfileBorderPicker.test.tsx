@@ -349,10 +349,8 @@ describe('limited editions', () => {
     expect(borderTimeBadge(christmas)).toBe('Soon');
   });
 
-  it('shows bodyweight ratios to two decimals', () => {
-    expect(borderProgressLabel({ current: 1.05, target: 1.25, unit: '× BW' })).toBe(
-      '1.05× / 1.25× BW',
-    );
+  it('keeps the percent sign against a share of body weight', () => {
+    expect(borderProgressLabel({ current: 20.6, target: 25, unit: '% BW' })).toBe('20.6 / 25% BW');
   });
 
   it('heads the season with its countdown and badges each coming event', async () => {

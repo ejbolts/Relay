@@ -104,15 +104,7 @@ def test_every_border_has_one_key_and_a_known_metric():
     assert len({border.key for border in BORDERS}) == len(BORDERS)
     assert all(border.metric in METRICS for border in BORDERS)
     by_sex = {border.family or border.key for border in BORDERS if isinstance(border.target, tuple)}
-    assert by_sex == {
-        "bench",
-        "squat",
-        "deadlift",
-        "big-three",
-        "bench-bw",
-        "squat-bw",
-        "deadlift-bw",
-    }
+    assert by_sex == {"bench", "squat", "deadlift", "bodyweight"}
 
 
 RARITY_ORDER = ["common", "rare", "epic", "legendary", "mythic"]
@@ -123,31 +115,24 @@ def test_each_family_climbs_in_target_and_rarity_from_tier_one():
     for border in BORDERS:
         if border.family:
             families.setdefault(border.family, []).append(border)
-    assert len(families) == 13
+    assert len(families) == 10
     for family, tiers in families.items():
         assert [border.tier for border in tiers] == list(range(1, len(tiers) + 1)), family
-        assert len({border.metric for border in tiers}) == 1, family
-        targets = [
-            border.target if isinstance(border.target, tuple) else (border.target,)
-            for border in tiers
-        ]
-        for lower, higher in zip(targets, targets[1:], strict=False):
-            assert all(a < b for a, b in zip(lower, higher, strict=True)), family
+        # One measure per family, except Gravity Defier: reps first, then weight added.
+        metrics = list(dict.fromkeys(border.metric for border in tiers))
+        assert len(metrics) == (2 if family == "bodyweight" else 1), family
+        for metric in metrics:
+            same = [border for border in tiers if border.metric == metric]
+            for lower, higher in zip(same, same[1:], strict=False):
+                for sex in ("male", "female"):
+                    assert lower.target_for(sex) < higher.target_for(sex), family
         ranks = [RARITY_ORDER.index(border.rarity) for border in tiers]
         assert ranks == sorted(ranks) and ranks[-1] > ranks[0], family
 
 
 def test_only_strength_reaches_mythic_and_effort_alone_stays_below_legendary():
     mythic = {border.family for border in BORDERS if border.rarity == "mythic"}
-    assert mythic == {
-        "bench",
-        "squat",
-        "deadlift",
-        "big-three",
-        "bench-bw",
-        "squat-bw",
-        "deadlift-bw",
-    }
+    assert mythic == {"bench", "squat", "deadlift", "bodyweight"}
     for family in mythic:
         tiers = [border for border in BORDERS if border.family == family]
         assert [border.rarity for border in tiers] == [
@@ -263,37 +248,67 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
     assert numbers["bench_kg"] == 84
     assert numbers["squat_kg"] == 140
     assert numbers["deadlift_kg"] == 180
-    assert numbers["big_three_kg"] == 404
-    # 84 kg at 80 kg body weight; the squat and deadlift use the same weigh-in.
-    assert numbers["bench_bw"] == 1.05
-    assert numbers["squat_bw"] == 1.75
-    assert numbers["deadlift_bw"] == 2.25
     # 84 x 5, 150 x 1, 140 x 1 and 180 x 2: warm-ups and failed sets add nothing.
     assert numbers["tonnes"] == (420 + 150 + 140 + 360) / 1000
 
     listed = borders(client)
     earned = {key for key, item in listed.items() if item["unlocked"]}
-    # Men: bench 40 / 60 / 100, squat 60 / 100 / 140 / 180, deadlift 100 / 140 / 180 / 220,
-    # total 200 / 300 / 380 / 454.
+    # Men: bench 40 / 60 / 100, squat 60 / 100 / 140 / 180, deadlift 100 / 140 / 180 / 220.
     assert {"bench-club-1", "bench-club-2", "squat-club-3", "deadlift-club-3"} <= earned
-    assert {"big-three-1", "big-three-2", "big-three-3"} <= earned
-    assert not earned & {"bench-club-3", "squat-club-4", "deadlift-club-4", "big-three-4"}
-    assert listed["pound-for-pound-2"]["unlocked"] and not listed["pound-for-pound-3"]["unlocked"]
-    assert listed["atlas-3"]["unlocked"] and not listed["atlas-4"]["unlocked"]
-    assert listed["gravity-defier-4"]["unlocked"] is False
-    assert listed["gravity-defier-3"]["unlocked"]
+    assert not earned & {"bench-club-3", "squat-club-4", "deadlift-club-4"}
+    # The barbell lifts say nothing about bodyweight strength.
+    assert not any(key.startswith("gravity-defier") for key in earned)
     assert listed["deadlift-club-4"]["requirement"] == "Deadlift 220 kg · 5 plates"
-    assert listed["big-three-4"]["requirement"] == (
-        "Total 454 kg across your best bench, squat and deadlift"
-    )
-    assert listed["pound-for-pound-3"]["requirement"] == "Bench press 1.25× your body weight"
-    assert listed["pound-for-pound-3"]["progress"] == {
-        "current": 1.05,
-        "target": 1.25,
-        "unit": "× BW",
-    }
     assert listed["bench-club-5"]["requirement"] == "Bench press 140 kg · 3 plates"
     assert listed["bench-club-5"]["rarity"] == "mythic"
+
+
+def test_gravity_defier_reads_pull_ups_chin_ups_and_dips(client, other_client):
+    for lifter in (client, other_client):
+        weigh_in(lifter, "2026-01-01", 80)
+        workout(lifter, "2026-01-05", "Pull-up", [{"weight_kg": 0, "reps": 7}, {"reps": 9}])
+        workout(
+            lifter,
+            "2026-01-07",
+            "Dips",
+            [
+                {"weight_kg": 30, "reps": 5, "set_type": "warmup"},
+                {"weight_kg": 16, "reps": 3},
+                {"weight_kg": 24, "reps": 0, "failed": True},
+            ],
+        )
+        workout(lifter, "2026-01-08", "Lat Pulldown", [{"weight_kg": 90, "reps": 12}])
+
+    numbers = stats(client)
+    # Nine bodyweight pull-ups; 16 kg added on dips at 80 kg is 20%. Warm-ups, failed sets and
+    # other exercises do not count.
+    assert numbers["bodyweight_reps"] == 9
+    assert numbers["bodyweight_added"] == 20
+
+    listed = borders(client)
+    first = listed["gravity-defier-1"]
+    assert first["requirement"] == "Do 1 rep in one set of pull-ups, chin-ups or dips"
+    assert first["unlocked"] and first["needs_sex"] is False
+    assert listed["gravity-defier-2"]["requirement"] == (
+        "Do 10 reps (men) or 5 reps (women) in one set of pull-ups, chin-ups or dips"
+    )
+    assert listed["gravity-defier-3"]["needs_sex"] is True
+
+    set_sex(client, "male")
+    set_sex(other_client, "female")
+    his, hers = borders(client), borders(other_client)
+    assert his["gravity-defier-2"]["progress"] == {"current": 9, "target": 10, "unit": "reps"}
+    assert his["gravity-defier-3"]["requirement"] == (
+        "Do a pull-up, chin-up or dip with 25% of your body weight added"
+    )
+    assert his["gravity-defier-3"]["progress"] == {"current": 20, "target": 25, "unit": "% BW"}
+    assert his["gravity-defier-5"]["rarity"] == "mythic"
+    # Men: 1 and 10 reps, then 25%, 50% and 75% added; women: 1 and 5 reps, then 10%, 25%, 40%.
+    earned = [
+        [lifter[f"gravity-defier-{tier}"]["unlocked"] for tier in range(1, 6)]
+        for lifter in (his, hers)
+    ]
+    assert earned == [[True, False, False, False, False], [True, True, True, False, False]]
 
 
 def test_weight_targets_are_shown_in_the_accounts_unit(client):

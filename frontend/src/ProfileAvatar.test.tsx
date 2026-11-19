@@ -113,8 +113,7 @@ describe('ProfileAvatar', () => {
           animated
         />,
       );
-    const families = ['bench-club', 'squat-club', 'deadlift-club', 'big-three'];
-    for (const family of [...families, 'pound-for-pound', 'atlas', 'gravity-defier']) {
+    for (const family of ['bench-club', 'squat-club', 'deadlift-club', 'gravity-defier']) {
       expect(draw(`${family}-5`)).toContain('profile-border-sheen is-reversed');
       expect(draw(`${family}-4`)).not.toContain('is-reversed');
     }

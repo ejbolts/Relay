@@ -73,7 +73,19 @@ class Metric:
     weight: bool = False
 
 
-RATIO = "× BW"
+PERCENT_BW = "% BW"
+
+# Pull-ups, chin-ups and dips, by canonical exercise name: Gravity Defier's bodyweight strength.
+BODYWEIGHT_MOVES = {
+    "pull-up",
+    "chin-up",
+    "dips",
+    "dip",
+    "weighted pull-up",
+    "weighted chin-up",
+    "weighted dips",
+    "weighted dip",
+}
 
 METRICS = {
     "workouts": Metric("Consistency", "Log {target} workouts", "workouts"),
@@ -92,12 +104,14 @@ METRICS = {
     "bench_kg": Metric("Strength", "Bench press {target}", weight=True),
     "squat_kg": Metric("Strength", "Squat {target}", weight=True),
     "deadlift_kg": Metric("Strength", "Deadlift {target}", weight=True),
-    "big_three_kg": Metric(
-        "Strength", "Total {target} across your best bench, squat and deadlift", weight=True
+    "bodyweight_reps": Metric(
+        "Bodyweight strength", "Do {target} in one set of pull-ups, chin-ups or dips", "reps"
     ),
-    "bench_bw": Metric("Bodyweight strength", "Bench press {target} your body weight", RATIO),
-    "squat_bw": Metric("Bodyweight strength", "Squat {target} your body weight", RATIO),
-    "deadlift_bw": Metric("Bodyweight strength", "Deadlift {target} your body weight", RATIO),
+    "bodyweight_added": Metric(
+        "Bodyweight strength",
+        "Do a pull-up, chin-up or dip with {target} of your body weight added",
+        PERCENT_BW,
+    ),
     "records_in_workout": Metric("Records", "Set {target} PRs in one workout", "PRs"),
     "records": Metric("Records", "Set {target} PRs", "PRs"),
     "cardio_month_km": Metric("Cardio", "Cover {target} km of cardio in one calendar month", "km"),
@@ -189,6 +203,16 @@ STRENGTH_RARITIES: tuple[Rarity, ...] = ("common", "rare", "epic", "legendary", 
 NUMERALS = ("I", "II", "III", "IV", "V")
 
 
+# (metric, target) for each Gravity Defier tier; (men, women) where the standard differs.
+GRAVITY_DEFIER: tuple[tuple[str, float | tuple[float, float]], ...] = (
+    ("bodyweight_reps", 1),
+    ("bodyweight_reps", (10, 5)),
+    ("bodyweight_added", (25, 10)),
+    ("bodyweight_added", (50, 25)),
+    ("bodyweight_added", (75, 40)),
+)
+
+
 def five_tiers(
     family: str, metric: str, key: str, name: str, targets: Iterable[tuple[float, float]]
 ) -> tuple[Border, ...]:
@@ -265,35 +289,21 @@ BORDERS: tuple[Border, ...] = (
         "Deadlift Club",
         ((100, 60), (140, 100), (180, 120), (220, 140), (260, 180)),
     ),
-    # The 1,000 lb total for men at tier IV.
-    *five_tiers(
-        "big-three",
-        "big_three_kg",
-        "big-three",
-        "Big Three",
-        ((200, 120), (300, 180), (380, 240), (453.6, 300), (550, 360)),
-    ),
-    # Lifts as multiples of the body weight logged nearest the set.
-    *five_tiers(
-        "bench-bw",
-        "bench_bw",
-        "pound-for-pound",
-        "Pound for Pound",
-        ((0.75, 0.5), (1, 0.65), (1.25, 0.8), (1.5, 1), (1.75, 1.2)),
-    ),
-    *five_tiers(
-        "squat-bw",
-        "squat_bw",
-        "atlas",
-        "Atlas",
-        ((1, 0.75), (1.25, 1), (1.5, 1.25), (2, 1.5), (2.5, 2)),
-    ),
-    *five_tiers(
-        "deadlift-bw",
-        "deadlift_bw",
-        "gravity-defier",
-        "Gravity Defier",
-        ((1.25, 1), (1.5, 1.25), (2, 1.5), (2.5, 2), (3, 2.5)),
+    # Bodyweight strength, on pull-ups, chin-ups and dips: reps in one set first, then weight
+    # added as a share of the body weight logged nearest the set.
+    *(
+        Border(
+            f"gravity-defier-{index}",
+            f"Gravity Defier {NUMERALS[index - 1]}",
+            rarity,
+            metric,
+            target,
+            family="bodyweight",
+            tier=index,
+        )
+        for index, (rarity, (metric, target)) in enumerate(
+            zip(STRENGTH_RARITIES, GRAVITY_DEFIER, strict=True), start=1
+        )
     ),
     Border("hat-trick", "Hat-trick", "common", "records_in_workout", 3),
     *tiers(
@@ -597,27 +607,34 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     lifted_kg = 0.0
     lifting_days: set[date] = set()
     best_lift = {lift: 0.0 for lift in LIFT_NAMES}
-    lift_sets: list[tuple[str, date, float, float | None]] = []
     lift_by_name: dict[str, str | None] = {}
+    bodyweight_by_name: dict[str, bool] = {}
+    bodyweight_reps = 0
+    added_sets: list[tuple[date, float, float | None]] = []
     for day, name, weight, reps, set_body_weight in sets:
         lifting_days.add(day)
+        if name not in bodyweight_by_name:
+            bodyweight_by_name[name] = canonical_exercise_name(name).casefold() in BODYWEIGHT_MOVES
+        if bodyweight_by_name[name]:
+            bodyweight_reps = max(bodyweight_reps, reps)
+            if weight and weight > 0:
+                added_sets.append((day, weight, set_body_weight))
         if not weight or weight <= 0:
             continue
         lifted_kg += weight * reps
         if name not in lift_by_name:
             lift_by_name[name] = lift_of(name)
         lift = lift_by_name[name]
-        if lift is None:
-            continue
-        best_lift[lift] = max(best_lift[lift], weight)
-        lift_sets.append((lift, day, weight, set_body_weight))
-    best_ratio = {lift: 0.0 for lift in LIFT_NAMES}
-    if lift_sets:
+        if lift is not None:
+            best_lift[lift] = max(best_lift[lift], weight)
+    # Weight added to a pull-up, chin-up or dip, as a percentage of the body weight on the day.
+    bodyweight_added = 0.0
+    if added_sets:
         body_weights = BodyweightHistory(db, user.id)
-        for lift, day, weight, set_body_weight in lift_sets:
+        for day, weight, set_body_weight in added_sets:
             body_weight = body_weights.on(day, set_body_weight or None)
             if body_weight:
-                best_ratio[lift] = max(best_ratio[lift], weight / body_weight)
+                bodyweight_added = max(bodyweight_added, weight / body_weight * 100)
 
     cardio = db.scalars(
         select(CardioSession)
@@ -686,10 +703,8 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
         "bench_kg": best_lift["bench"],
         "squat_kg": best_lift["squat"],
         "deadlift_kg": best_lift["deadlift"],
-        "big_three_kg": sum(best_lift.values()),
-        "bench_bw": best_ratio["bench"],
-        "squat_bw": best_ratio["squat"],
-        "deadlift_bw": best_ratio["deadlift"],
+        "bodyweight_reps": bodyweight_reps,
+        "bodyweight_added": bodyweight_added,
         "records": sum(record_counts),
         "records_in_workout": max(record_counts, default=0),
         "cardio_week_minutes": max(cardio_week_minutes.values(), default=0),
@@ -721,7 +736,7 @@ def _shown(border: Border, value: float, unit: str) -> float:
     """A stored number as the account reads it: weights in its unit, to one decimal."""
     if border.measure.weight and unit == "lb":
         value *= KG_TO_LB
-    return round(value, 2 if border.measure.unit == RATIO else 1)
+    return round(value, 1)
 
 
 def plates(target_kg: float) -> int | None:
@@ -736,8 +751,10 @@ def _target_text(border: Border, target: float, unit: str) -> str:
         text = f"{_number(round(_shown(border, target, unit)))} {unit}"
         count = plates(target) if border.metric in PLATE_LIFTS else None
         return f"{text} · {count} plate{'s' if count > 1 else ''}" if count else text
-    if border.measure.unit == RATIO:
-        return f"{_number(target, 2)}×"
+    if border.measure.unit == PERCENT_BW:
+        return f"{_number(target)}%"
+    if border.metric == "bodyweight_reps":
+        return f"{_number(target)} rep{'' if target == 1 else 's'}"
     return _number(target)
 
 

@@ -3,13 +3,10 @@ import type { ProfileBorder } from './types';
 const amount = (value: number, places = 1) =>
   value.toLocaleString('en-GB', { maximumFractionDigits: places });
 
-/** "62 / 100 workouts", a percent sign kept against its number, "1.05× / 1.25× BW" for ratios. */
+/** "62 / 100 workouts", with a percent sign kept against its number: "20 / 25% BW". */
 export function borderProgressLabel(progress: NonNullable<ProfileBorder['progress']>): string {
   const shown = Math.min(progress.current, progress.target);
-  if (progress.unit === '× BW') {
-    return `${amount(shown, 2)}× / ${amount(progress.target, 2)}× BW`;
-  }
-  const gap = progress.unit === '%' ? '' : ' ';
+  const gap = progress.unit.startsWith('%') ? '' : ' ';
   return `${amount(shown)} / ${amount(progress.target)}${gap}${progress.unit}`;
 }
 
