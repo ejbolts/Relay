@@ -47,6 +47,7 @@ import type {
   TrainingBlockInput,
   TrainingBlockSummary,
   TrainingBlocks,
+  ProfileBorders,
   ProfileUpdateInput,
   PushConfig,
   RegisterInput,
@@ -679,6 +680,14 @@ export const api = {
     return request<User>('/api/profile/photo', { method: 'PUT', body: form });
   },
   removeProfilePhoto: () => request<User>('/api/profile/photo', { method: 'DELETE' }),
+  profileBorders: () => request<ProfileBorders>('/api/profile/borders'),
+  /** Wears an earned border; null goes back to the plain photo. */
+  chooseProfileBorder: (border: string | null) =>
+    request<User>('/api/profile/border', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ border }),
+    }),
   changePassword: (payload: { current_password: string; new_password: string }) =>
     request<void>('/api/profile/password', {
       method: 'PUT',

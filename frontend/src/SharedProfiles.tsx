@@ -112,11 +112,16 @@ function longDate(value: string): string {
   });
 }
 
-function avatarUser(member: { display_name: string; profile_photo_url: string | null }) {
+function avatarUser(member: {
+  display_name: string;
+  profile_photo_url: string | null;
+  profile_border?: string | null;
+}) {
   return {
     display_name: member.display_name,
     username: '',
     profile_photo_url: member.profile_photo_url,
+    profile_border: member.profile_border,
   };
 }
 
@@ -439,7 +444,11 @@ function FriendRow({
   onOpen,
   actions,
 }: {
-  person: { display_name: string; profile_photo_url: string | null };
+  person: {
+    display_name: string;
+    profile_photo_url: string | null;
+    profile_border?: string | null;
+  };
   detail?: string;
   onOpen?: () => void;
   actions?: ReactNode;
@@ -1666,7 +1675,12 @@ export function SharedProfileScreen({
       {ownIdentity ?? (
         <section className="settings-panel panel profile-summary" aria-label="Shared profile">
           <div className="profile-summary-main">
-            <ProfileAvatar className="profile-avatar" user={avatarUser(profile)} viewable />
+            <ProfileAvatar
+              className="profile-avatar"
+              user={avatarUser(profile)}
+              viewable
+              animated
+            />
             <div className="profile-summary-copy">
               <strong>
                 <span className="profile-name">
@@ -1678,6 +1692,13 @@ export function SharedProfileScreen({
               {memberSince && (
                 <span className="shared-status-chips profile-joined">
                   <small>Joined {memberSince}</small>
+                </span>
+              )}
+              {profile.profile_border && profile.profile_border_name && (
+                <span className="profile-border-chip is-static">
+                  <Icon name="border" />
+                  <span className="sr-only">Border: </span>
+                  {profile.profile_border_name}
                 </span>
               )}
               <ProfileFriendControl

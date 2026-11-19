@@ -15,6 +15,7 @@ import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ProfileBorderPicker } from './ProfileBorderPicker';
 import { ProfilePhotoCrop } from './ProfilePhotoCrop';
 import { DEFAULT_PHOTO_CROP, type PhotoCrop } from './profilePhotoGeometry';
 import { NotificationDialog } from './NotificationDialog';
@@ -57,6 +58,8 @@ export function ProfileIdentity({
   const [sex, setSex] = useState<Sex | null>(null);
   const [confirmingSex, setConfirmingSex] = useState(false);
   const sexConfirmed = useRef(false);
+  const [bordersOpen, setBordersOpen] = useState(false);
+  const borderButton = useRef<HTMLButtonElement>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [cropSource, setCropSource] = useState<File | string | null>(null);
@@ -248,7 +251,7 @@ export function ProfileIdentity({
             <Icon name="edit" />
           </button>
         ) : (
-          <ProfileAvatar className="profile-avatar" user={user} viewable />
+          <ProfileAvatar className="profile-avatar" user={user} viewable animated />
         )}
         <div className="profile-summary-copy">
           <strong>
@@ -260,6 +263,23 @@ export function ProfileIdentity({
           </strong>
           <span>{user.username}</span>
           {joined && <small>Joined {joined}</small>}
+          {!editing && (
+            <button
+              ref={borderButton}
+              type="button"
+              className="profile-border-chip"
+              aria-haspopup="dialog"
+              aria-label={
+                user.profile_border_name
+                  ? `Borders, wearing ${user.profile_border_name}`
+                  : 'Borders'
+              }
+              onClick={() => setBordersOpen(true)}
+            >
+              <Icon name="border" />
+              {user.profile_border_name ?? 'Borders'}
+            </button>
+          )}
         </div>
         {!editing && (
           <div className="profile-identity-actions">
@@ -421,8 +441,8 @@ export function ProfileIdentity({
           onClose={() => setConfirmingSex(false)}
         >
           <p>
-            It sets your body measurement outline. After you save, only an administrator can change
-            it.
+            It sets your body measurement outline and the strength standards your borders are
+            measured against. After you save, only an administrator can change it.
           </p>
           <div className="popup-dialog-actions">
             <button type="button" onClick={() => setConfirmingSex(false)}>
@@ -441,6 +461,21 @@ export function ProfileIdentity({
             </button>
           </div>
         </PopupDialog>
+      )}
+      {bordersOpen && (
+        <ProfileBorderPicker
+          user={user}
+          onSaved={onSaved}
+          onClose={() => {
+            setBordersOpen(false);
+            requestAnimationFrame(() => borderButton.current?.focus());
+          }}
+          onSetSex={() => {
+            setBordersOpen(false);
+            requestedFocus.current = '.profile-sex-field [role="radio"]';
+            edit();
+          }}
+        />
       )}
       {cropSource && (
         <ProfilePhotoCrop

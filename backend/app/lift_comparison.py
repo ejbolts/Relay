@@ -32,6 +32,7 @@ from .models import (
     WorkoutMovement,
     WorkoutSet,
 )
+from .profile_borders import worn_border
 from .sharing import (
     Db,
     FeedFriend,
@@ -251,6 +252,7 @@ def lift_leaderboard(exercise_id: str, user: CurrentUser, db: Db) -> LiftLeaderb
                 id=member.id,
                 display_name=member.display_name,
                 profile_photo_url=photo_url(member),
+                profile_border=worn_border(member),
             ),
             is_you=member.id == user.id,
             best=bests[member.id][key],

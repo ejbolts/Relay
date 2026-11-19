@@ -227,6 +227,7 @@ def test_timeline_lists_your_and_friends_workouts_newest_first(client, other_cli
         "id": other_client.user["id"],
         "display_name": other_client.user["display_name"],
         "profile_photo_url": None,
+        "profile_border": None,
         "is_you": False,
     }
     # Only what the friend shares: their notes stay private, their photo comes with the workout.

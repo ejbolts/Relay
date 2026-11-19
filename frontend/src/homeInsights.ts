@@ -135,6 +135,7 @@ export interface WeekStanding {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  profile_border?: string | null;
   is_you: boolean;
   /** Days with a workout so far this week. */
   days: number;
@@ -167,6 +168,7 @@ export function weekStandings(
       id: friend.id,
       display_name: friend.display_name,
       profile_photo_url: friend.profile_photo_url,
+      profile_border: friend.profile_border,
       is_you: false,
       days: daysIn(friend.training_dates),
       recent: friend.recent_workout_count,
