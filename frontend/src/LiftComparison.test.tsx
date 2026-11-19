@@ -145,7 +145,7 @@ it('starts empty, with an outline of the card and the button that chooses lifts'
   const template = host.querySelector('.head-to-head-template');
   expect(template?.getAttribute('aria-hidden')).toBe('true');
   expect(template?.querySelector('.head-to-head-score')?.textContent).toBe('You?–?SamS');
-  expect(template?.querySelectorAll('.head-to-head-ghost-bar')).toHaveLength(2);
+  expect(template?.querySelectorAll('.head-to-head-ghost-bar')).toHaveLength(1);
   expect(text('button', host)).toEqual(['Choose lifts']);
 });
 

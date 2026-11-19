@@ -26,10 +26,7 @@ import './liftComparison.css';
 /** The most lifts a head to head can show. */
 const MAX_LIFTS = 20;
 /** Lifts on each page of the picker: as many as fit the sheet on a phone without scrolling. */
-const PAGE_SIZE = 6;
-/** The widths of the placeholder lift names in an empty head to head. */
-const GHOST_ROWS = [58, 42];
-/** Matches the sheet's slide-down in liftComparison.css. */
+const PAGE_SIZE = 6; /** Matches the sheet's slide-down in liftComparison.css. */
 const CLOSE_MS = 240;
 /** The gap between one new lift rising into the card and the next, as useFlipAnimation spaces them. */
 const ENTER_STAGGER_MS = 80;
@@ -150,18 +147,14 @@ export function HeadToHeadCard({
               <ProfileAvatar className="profile-avatar" user={{ ...member, username: '' }} />
             </span>
           </div>
-          <ul className="head-to-head-ghosts">
-            {GHOST_ROWS.map((width) => (
-              <li key={width}>
-                <span className="head-to-head-ghost-values">
-                  <b>?</b>
-                  <i style={{ width: `${width}%` }} />
-                  <b>?</b>
-                </span>
-                <span className="head-to-head-ghost-bar" />
-              </li>
-            ))}
-          </ul>
+          <div className="head-to-head-ghost">
+            <span className="head-to-head-ghost-values">
+              <b>?</b>
+              <i />
+              <b>?</b>
+            </span>
+            <span className="head-to-head-ghost-bar" />
+          </div>
         </div>
       )}
       {yours + theirs + level > 0 && (

@@ -160,28 +160,16 @@
   font-size: 0.75rem;
 }
 
-/* Before any lifts are chosen, a faint outline of the card: both of you, a "?" score and two
-   placeholder lifts with dashed bars. */
+/* Before any lifts are chosen, a faint outline of the card: both of you, a "?" score and a
+   placeholder lift with a dashed bar. */
 .head-to-head-template .head-to-head-score strong {
   color: var(--p-muted);
 }
 
-.head-to-head-ghosts {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.head-to-head-ghosts li {
+.head-to-head-ghost {
   display: grid;
   gap: 0.5rem;
   padding: 0.75rem 0 0;
-}
-
-.head-to-head-ghosts li + li {
-  margin-top: 0.75rem;
-  border-top: 1px solid var(--p-line);
-  opacity: 0.5;
 }
 
 .head-to-head-ghost-values {
@@ -200,6 +188,7 @@
 
 .head-to-head-ghost-values i {
   justify-self: center;
+  width: 58%;
   height: 0.625rem;
   border-radius: 999px;
   background: var(--p-surface-3);
