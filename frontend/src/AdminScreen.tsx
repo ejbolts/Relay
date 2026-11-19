@@ -19,6 +19,7 @@ import { authErrorMessage } from './authForm';
 import { SEX_LABELS } from './profileDisplay';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { motionReduced } from './motion';
+import { useSettingsPageJump } from './settingsNavigation';
 import type {
   AccountLimits,
   AppFeedback,
@@ -605,7 +606,7 @@ export function AdminScreenView({
   const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
   const openFeedback = feedback?.filter((item) => item.resolved_at === null).length ?? 0;
   return (
-    <section className="settings-screen admin-screen content-page">
+    <section className="settings-screen admin-screen content-page" data-settings-page="admin">
       <div aria-live="polite" aria-atomic="true">
         {notice && (
           <p className="notification-setting-status" role="status">
@@ -711,6 +712,7 @@ export function AdminScreenView({
 
 export function AdminScreen({ active }: { active: boolean }) {
   const { user, updateUser } = useUserSession();
+  useSettingsPageJump('admin', active);
   const { users, setUsers, loadUsers, snapshots } = useAdminUsers(
     active && Boolean(user?.is_admin),
   );

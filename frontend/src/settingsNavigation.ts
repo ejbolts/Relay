@@ -13,7 +13,7 @@ export type SettingsGroupId = keyof typeof SETTINGS_GROUP_LABELS;
 export interface SettingsDestination {
   id: string;
   title: string;
-  page: 'settings' | 'profile';
+  page: 'settings' | 'profile' | 'admin';
   group?: SettingsGroupId;
   keywords: string;
   selector: string;
@@ -297,9 +297,20 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     keywords: 'remove permanently danger',
     selector: '.danger-zone h2',
   },
+  {
+    id: 'admin',
+    title: 'Admin console',
+    page: 'admin',
+    keywords: 'administrator administration',
+    selector: '#admin-switches-title',
+  },
 ];
 
-export function searchSettings(query: string, includeProfile = true): SettingsDestination[] {
+export function searchSettings(
+  query: string,
+  includeProfile = true,
+  includeAdmin = false,
+): SettingsDestination[] {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
   const inTitle = (entry: SettingsDestination) =>
@@ -307,6 +318,7 @@ export function searchSettings(query: string, includeProfile = true): SettingsDe
   const matches = SETTINGS_DESTINATIONS.filter(
     (entry) =>
       (includeProfile || (entry.page !== 'profile' && !entry.requiresAccount)) &&
+      (includeAdmin || entry.page !== 'admin') &&
       words.every((word) => `${entry.title} ${entry.keywords}`.toLocaleLowerCase().includes(word)),
   );
   // "rest" should lead with Rest timer, not a section that only mentions rest days.
@@ -333,7 +345,7 @@ export function useSettingsReveal(title: string, reveal: () => void) {
 }
 
 /** Runs after page navigation and destination controls have been revealed. */
-export function useSettingsPageJump(page: 'settings' | 'profile', active: boolean) {
+export function useSettingsPageJump(page: SettingsDestination['page'], active: boolean) {
   const navigation = useContext(SettingsNavigationContext);
   const handled = useRef(0);
   useEffect(() => {

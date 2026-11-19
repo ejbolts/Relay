@@ -10,8 +10,10 @@ import {
   SETTINGS_DESTINATIONS,
   SettingsNavigationContext,
   useSettingsPageJump,
+  type SettingsDestination,
   type SettingsJump,
 } from './settingsNavigation';
+import { UserContext } from './userContext';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -55,7 +57,7 @@ function Harness({ identityKey = 'initial' }: { identityKey?: string }) {
   );
 }
 
-function JumpObserver({ page }: { page: 'settings' | 'profile' }) {
+function JumpObserver({ page }: { page: SettingsDestination['page'] }) {
   useSettingsPageJump('settings', page === 'settings');
   useSettingsPageJump('profile', page === 'profile');
   return null;
@@ -112,6 +114,46 @@ it('matches cross-page terms and synonyms and does not list anything for an empt
     SETTINGS_DESTINATIONS.length,
   );
 });
+
+it('opens the Admin console from a partial query only for administrators', async () => {
+  const navigate = vi.fn();
+  const renderSearch = (isAdmin: boolean) =>
+    act(async () =>
+      root.render(
+        <UserContext.Provider
+          value={{
+            user: { ...account, is_admin: isAdmin },
+            updateUser: vi.fn(),
+            signOut: vi.fn(),
+            accountDeleted: vi.fn(),
+          }}
+        >
+          <SettingsNavigationContext.Provider value={{ request: null, navigate }}>
+            <SettingsSearch includeProfile={false} />
+          </SettingsNavigationContext.Provider>
+        </UserContext.Provider>,
+      ),
+    );
+
+  await renderSearch(false);
+  const input = await type('console');
+  expect(container.textContent).toContain('No sections found');
+  await act(async () =>
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  expect(navigate).not.toHaveBeenCalled();
+
+  await renderSearch(true);
+  expect(container.querySelector('.settings-search-results button')?.textContent).toContain(
+    'Admin console',
+  );
+  await act(async () =>
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ page: 'admin' }));
+  expect(input.value).toBe('');
+});
+
 it('opens profile editing and focuses Username, then jumps back to Rest timer without changing it', async () => {
   await act(async () => root.render(<Harness />));
   await jump('username');
