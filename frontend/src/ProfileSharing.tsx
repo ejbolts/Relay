@@ -262,15 +262,18 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
               </label>
             ))}
           </fieldset>
-          <button
-            type="button"
-            className="profile-primary sharing-start"
-            disabled={saving || !visibilityPending}
-            onClick={() => void save(draft, VISIBILITY_SAVED[draft.visibility])}
-          >
-            {saving && <Spinner />}
-            <span>{VISIBILITY_CONFIRM[draft.visibility]}</span>
-          </button>
+          {/* The saved choice is shown by its radio and the badge; the button only confirms a change. */}
+          {(visibilityPending || saving) && (
+            <button
+              type="button"
+              className="profile-primary sharing-start"
+              disabled={saving}
+              onClick={() => void save(draft, VISIBILITY_SAVED[draft.visibility])}
+            >
+              {saving && <Spinner />}
+              <span>{VISIBILITY_CONFIRM[draft.visibility]}</span>
+            </button>
+          )}
           <CollapsibleSection
             className="sharing-options"
             title="What you share"

@@ -204,12 +204,12 @@ it('lists your exercises with the member’s best beside the ones they have logg
   const sheet = await openPicker();
 
   expect(sheet.querySelector('h2')?.textContent).toBe('Lifts to compare');
-  // Chosen lifts lead, then the ones Sam has logged, then the rest.
+  // Chosen lifts lead, then the ones you have both logged, then Sam's, then yours.
   expect(text('.lift-picker-copy strong', sheet)).toEqual([
     'Row',
     'Bench',
-    'Deadlift',
     'Squat',
+    'Deadlift',
     'Curl',
   ]);
   expect(
@@ -217,10 +217,13 @@ it('lists your exercises with the member’s best beside the ones they have logg
       item.getAttribute('aria-pressed'),
     ),
   ).toEqual(['true', 'false', 'false', 'false', 'false']);
-  expect(option(sheet, 'Bench').querySelector('.lift-picker-preview')?.textContent).toBe(
-    'Sam: S121 kg100 kg × 5',
-  );
-  expect(option(sheet, 'Curl').querySelector('.lift-picker-preview')).toBeNull();
+  // Each row shows both estimates, for whoever has logged the lift.
+  expect(text('.lift-picker-best', option(sheet, 'Bench'))).toEqual([
+    'You: 116.7 kg',
+    'Sam: S121 kg',
+  ]);
+  expect(text('.lift-picker-best', option(sheet, 'Curl'))).toEqual(['You: 40 kg']);
+  expect(text('.lift-picker-best', option(sheet, 'Deadlift'))).toEqual(['Sam: S200 kg']);
 
   await search(sheet, 'squat');
   expect(text('.lift-picker-copy strong', sheet)).toEqual(['Squat']);

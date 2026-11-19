@@ -8,6 +8,7 @@ import './liveSession.css';
 import { createPortal } from 'react-dom';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
+import { consistencyWeeks } from './consistencyWeeks';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
@@ -651,7 +652,11 @@ export function TodayScreen({
     ),
     'this-week': thisWeek ? <ThisWeekCard>{thisWeek}</ThisWeekCard> : null,
     consistency: (
-      <ConsistencyCard streak={data?.current_streak ?? 0} trainingDays={trainingDays}>
+      <ConsistencyCard
+        streak={data?.current_streak ?? 0}
+        trainingDays={trainingDays}
+        weeks={consistencyWeeks(data?.history?.first_workout_date, today)}
+      >
         {calendar}
       </ConsistencyCard>
     ),

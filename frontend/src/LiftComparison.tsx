@@ -243,6 +243,7 @@ export function HeadToHeadCard({
       {picking && (
         <LiftPicker
           member={member}
+          you={user}
           lifts={data.lifts}
           selected={data.selected}
           saveFailed={saveFailed}
@@ -261,9 +262,10 @@ export function HeadToHeadCard({
   );
 }
 
-/** Search your exercises and tick the ones to compare, with the member's best beside each. */
+/** Search your exercises and tick the ones to compare, with both of your bests beside each. */
 function LiftPicker({
   member,
+  you,
   lifts,
   selected,
   saveFailed,
@@ -271,6 +273,7 @@ function LiftPicker({
   onClose,
 }: {
   member: Member;
+  you: Parameters<typeof ProfileAvatar>[0]['user'] | null;
   lifts: LiftComparison[];
   selected: string[];
   saveFailed: boolean;
@@ -296,13 +299,14 @@ function LiftPicker({
     setClosing(true);
     closeTimer.current = window.setTimeout(onClose, CLOSE_MS);
   }
-  // Chosen lifts lead, then the ones the member has logged. The order is fixed while the sheet is
-  // open, so a lift stays under your finger when you tick it.
+  // Chosen lifts lead, then the ones you have both logged, then theirs, then yours, then the rest.
+  // The order is fixed while the sheet is open, so a lift stays under your finger when you tick it.
   const [ordered] = useState(() => {
     const rank = (lift: LiftComparison) => {
       const position = selected.indexOf(lift.exercise_id);
       if (position >= 0) return position;
-      return selected.length + (lift.theirs ? 0 : 1);
+      const logged = lift.yours && lift.theirs ? 0 : lift.theirs ? 1 : lift.yours ? 2 : 3;
+      return selected.length + logged;
     };
     return lifts
       .map((lift) => ({ ...lift, id: lift.exercise_id }))
@@ -384,17 +388,25 @@ function LiftPicker({
                       {lift.equipment ? ` · ${lift.equipment}` : ''}
                     </small>
                   </span>
-                  {lift.theirs && (
+                  {(lift.yours || lift.theirs) && (
                     <span className="lift-picker-preview">
-                      <span className="sr-only">{member.display_name}: </span>
-                      <ProfileAvatar
-                        className="profile-avatar"
-                        user={{ ...member, username: '' }}
-                      />
-                      <span className="num">
-                        <b>{estimate(lift.theirs, unit)}</b>
-                        <small>{bestSet(lift.theirs, unit)}</small>
-                      </span>
+                      {lift.yours && (
+                        <span className="lift-picker-best">
+                          <span className="sr-only">You: </span>
+                          {you && <ProfileAvatar className="profile-avatar" user={you} />}
+                          <b className="num">{estimate(lift.yours, unit)}</b>
+                        </span>
+                      )}
+                      {lift.theirs && (
+                        <span className="lift-picker-best">
+                          <span className="sr-only">{member.display_name}: </span>
+                          <ProfileAvatar
+                            className="profile-avatar"
+                            user={{ ...member, username: '' }}
+                          />
+                          <b className="num">{estimate(lift.theirs, unit)}</b>
+                        </span>
+                      )}
                     </span>
                   )}
                 </button>
