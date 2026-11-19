@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
 import { PaginationControls } from './PaginationControls';
@@ -44,6 +44,7 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const card = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -84,9 +85,9 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
     };
   }, [profileId, sessions, total, active, request]);
 
-  const first = (data.page - 1) * PAGE_SIZE + 1;
   return (
     <section
+      ref={card}
       className="pulse-card shared-card"
       aria-labelledby="shared-cardio-title"
       aria-busy={loading}
@@ -95,7 +96,7 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
         <h2 id="shared-cardio-title">Cardio</h2>
         {data.total > 0 && !unavailable && (
           <span className="num">
-            {first}–{first + data.sessions.length - 1} of {data.total}
+            {data.total} {data.total === 1 ? 'session' : 'sessions'}
           </span>
         )}
       </header>
@@ -138,14 +139,14 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
         </div>
       )}
       {!unavailable && (
-        <fieldset className="profile-cardio-pagination" disabled={loading}>
-          <PaginationControls
-            currentPage={data.page}
-            totalPages={Math.ceil(data.total / PAGE_SIZE)}
-            label="cardio"
-            onPageChange={(page) => setRequest((current) => ({ page, serial: current.serial + 1 }))}
-          />
-        </fieldset>
+        <PaginationControls
+          currentPage={data.page}
+          totalPages={Math.ceil(data.total / PAGE_SIZE)}
+          label="cardio"
+          busy={loading}
+          scrollTarget={card}
+          onPageChange={(page) => setRequest((current) => ({ page, serial: current.serial + 1 }))}
+        />
       )}
     </section>
   );

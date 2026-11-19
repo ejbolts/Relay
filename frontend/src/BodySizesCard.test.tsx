@@ -122,24 +122,33 @@ describe('BodySizesCard', () => {
       '35 cmFirst measurement',
     );
   });
-  it('paginates the selected part and resets pagination on switching parts, with an empty state', async () => {
+  it('pages the selected part eight at a time and goes back to page 1 on switching parts, with an empty state', async () => {
     await render(
-      Array.from({ length: 7 }, (_, index) =>
+      Array.from({ length: 10 }, (_, index) =>
         row(`2026-10-${25 - index}`, { waist_cm: 80 + index }),
       ),
     );
     await selectPart('waist_cm');
     const history = host.querySelector('.body-sizes-history')!;
-    expect(history.querySelectorAll('article')).toHaveLength(5);
+    expect(history.querySelectorAll('article')).toHaveLength(8);
     expect(history.textContent).not.toContain('First measurement');
-    await act(async () => button('Show more').click());
-    expect(history.querySelectorAll('article')).toHaveLength(7);
-    expect(history.textContent).toContain('First measurement');
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="Next measurement history page"]')!
+        .click(),
+    );
+    expect(history.querySelectorAll('article')).toHaveLength(2);
+    // The change is still measured against the previous entry on the page before.
+    expect(
+      [...history.querySelectorAll('.body-sizes-part-value span')].map((item) => item.textContent),
+    ).toEqual(['−1 cm', 'First measurement']);
     await selectPart('neck_cm');
     expect(history.querySelectorAll('article')).toHaveLength(0);
     expect(history.textContent).toContain('No neck measurements yet.');
+    expect(history.querySelector('nav')).toBeNull();
     await selectPart('all');
-    expect(history.querySelectorAll('article')).toHaveLength(5);
+    expect(history.querySelectorAll('article')).toHaveLength(8);
+    expect(history.querySelector('[aria-current="page"]')?.textContent).toBe('1');
   });
   it('reports changes using the displayed inch values', async () => {
     unit = 'lb';

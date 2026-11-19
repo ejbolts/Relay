@@ -295,7 +295,7 @@
 .training-block-actions.split button {
   flex: 1;
 }
-.training-block-dialog .training-block-actions button {
+.training-block-dialog .training-block-actions button:where(:not(.pulse-button)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;

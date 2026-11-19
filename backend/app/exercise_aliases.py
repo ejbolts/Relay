@@ -59,3 +59,13 @@ EXERCISE_NAME_ALIASES = {
 def canonical_exercise_name(name: str) -> str:
     clean = " ".join(name.split())
     return EXERCISE_NAME_ALIASES.get(clean.casefold(), clean)
+
+
+ALTERNATIVE_EXERCISE_NAMES = {
+    canonical_name.casefold(): aliases for canonical_name, aliases in EXERCISE_ALIAS_GROUPS
+}
+
+
+def alternative_exercise_names(name: str) -> list[str]:
+    """Other names people use for a standard exercise, such as Military Press for Overhead Press."""
+    return list(ALTERNATIVE_EXERCISE_NAMES.get(" ".join(name.split()).casefold(), ()))

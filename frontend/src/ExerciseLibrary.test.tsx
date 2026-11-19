@@ -433,9 +433,12 @@ it('loads the selected session sets in a sheet before opening the actual workout
   vi.spyOn(api, 'getWorkout').mockResolvedValue(workout);
   await render();
   await click(host.querySelector('[data-exercise-id="pec"]')!);
-  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(5);
-  await click(host.querySelector('.show-more-button')!);
-  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(10);
+  // Ten sessions, eight to a page.
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(8);
+  await click(host.querySelector('[aria-label="Next session page"]')!);
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(2);
+  await click(host.querySelector('[aria-label="Page 1 of 2"]')!);
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(8);
   await click(host.querySelector('.progress-sessions li button')!);
   expect(document.querySelector('dialog')?.textContent).toContain('69 kg');
   expect(onOpenWorkout).not.toHaveBeenCalled();

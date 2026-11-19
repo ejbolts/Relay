@@ -183,15 +183,9 @@
   background: var(--p-surface);
   box-shadow: 0 12px 30px rgb(16 24 32 / 16%);
 }
-:root[data-colour-mode='light'] .notification-setting-row > button,
-:root[data-colour-mode='light'] .settings-actions > button,
-:root[data-colour-mode='light'] .settings-actions .inline-confirmation > button {
+:root[data-colour-mode='light'] .notification-setting-row > button {
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
-}
-:root[data-colour-mode='light'] .settings-actions > button,
-:root[data-colour-mode='light'] .settings-actions .inline-confirmation > button {
-  color: var(--p-ink);
 }
 :root[data-colour-mode='light'] .notification-setting-row + .notification-setting-row {
   border-top-color: var(--p-line-strong);

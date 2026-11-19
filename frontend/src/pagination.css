@@ -1,0 +1,110 @@
+/* The one pager (PaginationControls): ‹ 1 … 14 … 30 ›. The arrows sit at the ends of a row at
+   most 22rem wide and the page buttons are centred between them, so nothing moves as you page.
+   Rules are scoped under .pagination-controls so list styles such as `.x button` cannot restyle
+   the buttons. */
+.pagination-controls {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 16.25rem) 2.75rem;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  margin-top: 0.75rem;
+}
+
+.pagination-controls .pagination-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pagination-controls .pagination-arrow,
+.pagination-controls .pagination-page {
+  display: grid;
+  place-items: center;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0 0.375rem;
+  background: none;
+  box-shadow: none;
+  color: var(--p-ink-2);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pagination-controls .pagination-arrow {
+  width: 2.75rem;
+  padding: 0;
+}
+
+.pagination-controls .pagination-arrow .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.pagination-controls .pagination-page[aria-current='page'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+  color: var(--p-ink);
+}
+
+.pagination-controls .pagination-arrow:disabled {
+  color: var(--p-deemph);
+  cursor: default;
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .pagination-controls .pagination-arrow:not(:disabled):hover,
+  .pagination-controls .pagination-page:not([aria-current='page']):hover {
+    background: var(--p-surface-2);
+    color: var(--p-ink);
+  }
+}
+
+.pagination-controls .pagination-arrow:focus-visible,
+.pagination-controls .pagination-page:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.pagination-controls .pagination-gap {
+  flex: 0 0 1rem;
+  width: 1rem;
+  color: var(--p-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.pagination-controls[aria-busy='true'] :is(.pagination-arrow, .pagination-page) {
+  cursor: progress;
+}
+
+/* ShowMoreButton while the next chunk loads: a spinner beside "Loading…". */
+.show-more-button[aria-busy='true'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: progress;
+}
+
+/* Pinned to the foot of a sheet or pop-up, under a divider. */
+.pagination-controls.is-sheet-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  border-top: 1px solid var(--p-line);
+  padding: 0.625rem 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+  background: var(--p-surface);
+}

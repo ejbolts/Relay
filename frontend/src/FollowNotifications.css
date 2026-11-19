@@ -130,7 +130,7 @@
 .follow-notification-reply:hover,
 .follow-notification-reply:focus-visible {
   background: var(--p-accent-soft);
-  color: var(--p-accent);
+  color: var(--p-accent-text);
 }
 .follow-notification-reply .pulse-icon {
   width: 1.125rem;
@@ -158,12 +158,6 @@
   font-size: 0.75rem;
   white-space: nowrap;
 }
-.follow-notifications > .pagination-controls {
-  margin: 0;
-  border-top: 0;
-  padding: 0.75rem 0.875rem;
-}
-
 .release-notification-icon {
   display: grid;
   place-items: center;
@@ -197,7 +191,7 @@
   font-size: 0.75rem;
   background: var(--p-accent-soft);
   border-color: var(--p-accent);
-  color: var(--p-accent);
+  color: var(--p-accent-text);
 }
 
 /* A person's photo and name open their shared profile, above a row that opens a workout. */

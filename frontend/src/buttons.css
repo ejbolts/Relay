@@ -1,0 +1,523 @@
+/*
+ * Buttons: one base, six variants, three sizes.
+ *
+ *   <button class="pulse-button primary">Save</button>
+ *   variants: primary | secondary (default) | tonal | link | danger | danger-soft
+ *   sizes:    small (36px, 44px hit area) | default (44px) | large (48px, dialog footers)
+ *   modifiers: icon-only | block
+ *
+ * Primary is the one main action on a surface (Save, Start, Resume, Log). Edit is never primary.
+ * Loaded after pulse.css. The "aliases" further down give older button classes the same looks
+ * until their markup moves to the variant classes. Each alias mirrors the selector it replaces,
+ * so it keeps that rule's specificity and wins by loading later. Delete an alias when nothing
+ * uses it any more.
+ */
+
+/* ───────── Base (secondary look, default size) ───────── */
+
+.pulse-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--p-button-h);
+  border: 1px solid var(--p-line-strong);
+  border-radius: var(--p-button-r);
+  padding: 0 1rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 160ms var(--ease-out, ease-out),
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease;
+}
+
+.pulse-button .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+/* ───────── Variants ───────── */
+
+.pulse-button.primary {
+  border-color: transparent;
+  background: var(--p-accent);
+  color: var(--p-on-accent);
+}
+
+.pulse-button.secondary {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+
+.pulse-button.tonal {
+  border-color: transparent;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.pulse-button.link {
+  min-height: 0;
+  border-color: transparent;
+  padding: 0;
+  background: transparent;
+  color: var(--p-accent-text);
+  font-weight: 600;
+}
+
+.pulse-button.danger {
+  border-color: transparent;
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
+}
+
+.pulse-button.danger-soft {
+  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
+  color: var(--p-danger);
+}
+
+/* ───────── Sizes and modifiers ───────── */
+
+.pulse-button.small {
+  min-height: var(--p-button-h-sm);
+  border-radius: var(--p-button-r-sm);
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.pulse-button.large {
+  min-height: var(--p-button-h-lg);
+  border-radius: var(--p-button-r-lg);
+  font-size: 1rem;
+}
+
+.pulse-button.link.small {
+  min-height: var(--p-button-h-sm);
+  padding: 0;
+}
+
+.pulse-button.icon-only {
+  width: var(--p-button-h-icon);
+  min-width: var(--p-button-h-icon);
+  height: var(--p-button-h-icon);
+  min-height: 0;
+  padding: 0;
+}
+
+.pulse-button.icon-only.small {
+  width: var(--p-button-h-sm);
+  min-width: var(--p-button-h-sm);
+  height: var(--p-button-h-sm);
+}
+
+.pulse-button.icon-only .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.pulse-button.block {
+  width: 100%;
+}
+
+/* Small and icon buttons look compact but keep a 44px touch target. */
+.pulse-button:is(.small, .icon-only)::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+/* ───────── States ───────── */
+
+.pulse-button:focus-visible {
+  outline: 2px solid var(--p-focus-ring);
+  outline-offset: 2px;
+}
+
+.pulse-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.pulse-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Busy buttons keep full strength: the label says "Saving…" and a spinner may sit beside it. */
+.pulse-button[aria-busy='true'] {
+  opacity: 1;
+  cursor: progress;
+}
+
+.pulse-button[aria-pressed='true'] {
+  border-color: var(--p-accent-text);
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+/* Hover only where a pointer can hover, so a tapped button does not stay lit on a phone. */
+@media (hover: hover) {
+  .pulse-button.primary:hover:not(:disabled) {
+    background: var(--p-accent-hover);
+  }
+
+  .pulse-button:not(
+      .primary,
+      .tonal,
+      .link,
+      .danger,
+      .danger-soft,
+      [aria-pressed='true']
+    ):hover:not(:disabled) {
+    background: var(--p-surface-3);
+  }
+
+  .pulse-button.tonal:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--p-accent) 28%, transparent);
+  }
+
+  .pulse-button.danger-soft:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--p-danger) 16%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-button {
+    transition: none;
+  }
+
+  .pulse-button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/*
+ * Variant buttons inside dialog footers. The shared footer rule in pulse.css paints every footer
+ * button that is not .popup-primary-action as secondary, at a higher specificity than a variant.
+ */
+:is(.popup-dialog-actions, .notification-dialog > footer) .pulse-button.primary {
+  border-color: transparent;
+  background: var(--p-accent);
+  color: var(--p-on-accent);
+}
+
+:is(.popup-dialog-actions, .notification-dialog > footer) .pulse-button.danger {
+  border-color: transparent;
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
+}
+
+:is(.popup-dialog-actions, .notification-dialog > footer) .pulse-button.danger-soft {
+  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
+  color: var(--p-danger);
+}
+
+:is(.popup-dialog-actions, .notification-dialog > footer) .pulse-button.tonal {
+  border-color: transparent;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+/*
+ * ───────── Aliases for older button classes ─────────
+ *
+ * Shape and size first, then colour. ":where(:not(.pulse-button))" keeps a container alias at
+ * the specificity of the rule it replaces while leaving buttons that already use a variant alone.
+ */
+
+/* Shape: large (dialog and sheet footers). */
+.popup-primary-action,
+.notification-ok,
+.create-exercise-cancel,
+.calendar-create-actions > button:where(:not(.pulse-button)),
+.superset-picker > footer button:where(:not(.pulse-button)),
+.workout-name-dialog form > footer button:where(:not(.pulse-button)) {
+  min-height: var(--p-button-h-lg);
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--p-button-r-lg);
+  padding: 0 1rem;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: normal;
+  text-transform: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Dialog footers: the primary and the secondary share one large shape. The legacy footer rule in
+ * styles.css outranks .popup-primary-action and would give the primary a 7px corner.
+ */
+:is(.popup-dialog-actions, .notification-dialog > footer)
+  button:where(:not(.pulse-button, .popup-tertiary-action)) {
+  min-height: var(--p-button-h-lg);
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--p-button-r-lg);
+  padding: 0 1rem;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.popup-dialog-actions button:not(.popup-primary-action),
+.notification-dialog > footer button:not(.notification-ok) {
+  font-weight: 650;
+}
+
+/* Shape: default (cards, settings, forms). */
+.profile-primary,
+.profile-secondary,
+.profile-danger,
+.auth-submit,
+.settings-actions > button:where(:not(.pulse-button)),
+.settings-actions .inline-confirmation > button:where(:not(.pulse-button)),
+.set-entry-confirmation button:where(:not(.pulse-button)),
+.body-edit-actions button:where(:not(.pulse-button)),
+.training-block-dialog .training-block-actions button:where(:not(.pulse-button)),
+.calendar-edit-workout,
+.calendar-day-workouts .calendar-edit-workout.is-secondary,
+.calendar-add-workout {
+  min-height: var(--p-button-h);
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--p-button-r);
+  padding: 0 1rem;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: normal;
+  text-transform: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Settings › Data pairs two buttons on a phone-width row; trimmed so "Download backup" fits. */
+.settings-actions > button:where(:not(.pulse-button)),
+.settings-actions .inline-confirmation > button:where(:not(.pulse-button)) {
+  padding: 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Shape: small (card rows, header saves) with a 44px hit area. */
+.history-screen
+  .workout-actions
+  button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button)),
+.history-screen .workout-actions .inline-confirmation > button:where(:not(.pulse-button)),
+.body-sizes-entry-actions button:where(:not(.pulse-button)),
+.workout-types-settings button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action)),
+.routine-editor-save,
+.machine-weights-save {
+  position: relative;
+  min-height: var(--p-button-h-sm);
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--p-button-r-sm);
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: normal;
+  text-transform: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.history-screen
+  .workout-actions
+  button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button))::before,
+.history-screen .workout-actions .inline-confirmation > button:where(:not(.pulse-button))::before,
+.body-sizes-entry-actions button:where(:not(.pulse-button))::before,
+.workout-types-settings
+  button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action))::before,
+.routine-editor-save::before,
+.machine-weights-save::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+/* Colour: secondary. Edit is always secondary ("Edit is never the blue button"). */
+.create-exercise-cancel,
+.profile-secondary,
+.settings-actions > button:where(:not(.pulse-button)),
+.settings-actions .inline-confirmation > button:where(:not(.pulse-button)),
+.calendar-create-actions > button:where(:not(.pulse-button)),
+.superset-picker > footer button:where(:not(.pulse-button)),
+.set-entry-confirmation button:where(:not(.pulse-button)),
+.workout-name-dialog form > footer button:where(:not(.pulse-button)),
+.body-edit-actions button:where(:not(.pulse-button)),
+.training-block-dialog .training-block-actions button:where(:not(.pulse-button)),
+.history-screen
+  .workout-actions
+  button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button)),
+.history-screen .workout-actions .inline-confirmation > button:where(:not(.pulse-button)),
+.history-screen .workout-actions .edit-workout-button.is-main,
+.calendar-edit-workout,
+.calendar-day-workouts .calendar-edit-workout.is-secondary,
+.body-sizes-entry-actions button:where(:not(.pulse-button)),
+.workout-types-settings button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action)) {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+
+/* Colour: primary. */
+.popup-primary-action,
+.notification-ok,
+.profile-primary,
+.auth-submit,
+.primary-action,
+.tracker-app .primary-action,
+.calendar-create-actions > .create-workout-button,
+.superset-picker > footer .save-superset-button,
+.set-entry-confirmation .confirm-unusual-set,
+.workout-name-dialog form > footer .notification-ok,
+.body-edit-actions button:last-child:where(:not(.pulse-button)),
+.training-block-dialog .training-block-actions .primary-action,
+.history-screen .workout-actions .resume-workout-button,
+.workout-types-settings .workout-types-save-color,
+.workout-types-settings .workout-types-add-button,
+.routine-editor-save,
+.machine-weights-save {
+  border-color: transparent;
+  background: var(--p-accent);
+  color: var(--p-on-accent);
+}
+
+/* Colour: tonal (add more here). Log measurements keeps its compact size in the card header. */
+.calendar-add-workout,
+.body-sizes-add {
+  border-color: transparent;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+/* Colour: danger-soft (the first Delete, Remove or Discard). */
+.profile-danger,
+.settings-actions .sample-clear,
+.superset-picker > footer .remove-superset-button,
+.history-screen .workout-actions .delete-workout,
+.body-sizes-entry-actions button.danger,
+.workout-types-settings .workout-types-remove {
+  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
+  color: var(--p-danger);
+}
+
+/* Colour: danger (the final confirm of a destructive action). */
+.sign-out-dialog > .popup-dialog-actions .popup-primary-action,
+.calendar-create-actions > .cancel-current-workout-button,
+.settings-actions .inline-confirmation > button:first-child:where(:not(.pulse-button)),
+.history-screen
+  .workout-actions
+  .inline-confirmation
+  > button:first-child:where(:not(.pulse-button)) {
+  border-color: transparent;
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
+}
+
+/* Alias states: focus ring, press, disabled and hover, as on .pulse-button. */
+:is(
+  .popup-primary-action,
+  .notification-ok,
+  .profile-primary,
+  .profile-secondary,
+  .profile-danger,
+  .auth-submit,
+  .primary-action,
+  .create-exercise-cancel,
+  .calendar-edit-workout,
+  .calendar-add-workout,
+  .body-sizes-add,
+  .routine-editor-save,
+  .machine-weights-save
+):focus-visible {
+  outline: 2px solid var(--p-focus-ring);
+  outline-offset: 2px;
+}
+
+:is(
+    .popup-primary-action,
+    .notification-ok,
+    .profile-primary,
+    .profile-secondary,
+    .profile-danger,
+    .auth-submit,
+    .primary-action,
+    .create-exercise-cancel,
+    .calendar-edit-workout,
+    .calendar-add-workout,
+    .body-sizes-add,
+    .routine-editor-save,
+    .machine-weights-save
+  ):active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+:is(
+  .popup-primary-action,
+  .notification-ok,
+  .profile-primary,
+  .profile-secondary,
+  .profile-danger,
+  .auth-submit,
+  .primary-action,
+  .routine-editor-save,
+  .machine-weights-save
+):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (hover: hover) {
+  :is(
+      .popup-primary-action,
+      .notification-ok,
+      .profile-primary,
+      .auth-submit,
+      .primary-action,
+      .routine-editor-save,
+      .machine-weights-save
+    ):hover:not(:disabled) {
+    background: var(--p-accent-hover);
+  }
+
+  :is(.profile-secondary, .create-exercise-cancel, .calendar-edit-workout):hover:not(:disabled) {
+    background: var(--p-surface-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(
+      .popup-primary-action,
+      .notification-ok,
+      .profile-primary,
+      .profile-secondary,
+      .profile-danger,
+      .auth-submit,
+      .primary-action
+    ):active:not(:disabled) {
+    transform: none;
+  }
+}

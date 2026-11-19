@@ -1,7 +1,7 @@
 import { BodyWeightTip } from './FeatureDiscoveryTips';
 import { BodyHistoryRowMenu } from './BodyHistoryRowMenu';
 import { BodySizesCard } from './BodySizesCard';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from './api';
@@ -91,6 +91,7 @@ export function BodyCompositionScreen({
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [checkInPage, setCheckInPage] = useState(1);
+  const historyPanelRef = useRef<HTMLElement>(null);
   const [historyView, setHistoryView] = useState<'daily' | BodyHistoryPeriod>('daily');
   const historyViewIndicatorRef = useSlidingIndicator<HTMLDivElement>(historyView);
   const trendStatistic = trendPreference.statistic;
@@ -122,13 +123,15 @@ export function BodyCompositionScreen({
   );
   const historyCount = historyView === 'daily' ? measurements.length : historySummaries.length;
   const checkInPageCount = Math.max(1, Math.ceil(historyCount / HISTORY_PAGE_SIZE));
+  // Clamped here as well as stored, so a shorter history never renders an empty page first.
+  const currentCheckInPage = Math.min(checkInPage, checkInPageCount);
   const pagedMeasurements = dailyHistory.slice(
-    (checkInPage - 1) * HISTORY_PAGE_SIZE,
-    checkInPage * HISTORY_PAGE_SIZE,
+    (currentCheckInPage - 1) * HISTORY_PAGE_SIZE,
+    currentCheckInPage * HISTORY_PAGE_SIZE,
   );
   const pagedSummaries = historySummaries.slice(
-    (checkInPage - 1) * HISTORY_PAGE_SIZE,
-    checkInPage * HISTORY_PAGE_SIZE,
+    (currentCheckInPage - 1) * HISTORY_PAGE_SIZE,
+    currentCheckInPage * HISTORY_PAGE_SIZE,
   );
   const latest = measurements[0];
   // The newest reading, which may come from an earlier check-in than the latest weigh-in.
@@ -600,7 +603,7 @@ export function BodyCompositionScreen({
         ))}
       </div>
 
-      <section className="panel body-history-panel" role="tabpanel">
+      <section className="panel body-history-panel" role="tabpanel" ref={historyPanelRef}>
         <div className="panel-heading">
           <div>
             <p className="section-kicker">HISTORY</p>
@@ -761,10 +764,11 @@ export function BodyCompositionScreen({
             </Fragment>
           ))}
         <PaginationControls
-          currentPage={checkInPage}
+          currentPage={currentCheckInPage}
           totalPages={checkInPageCount}
           onPageChange={setCheckInPage}
           label={`${historyView} bodyweight history`}
+          scrollTarget={historyPanelRef}
         />
       </section>
       {goalRemoval.pending &&

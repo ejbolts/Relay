@@ -64,7 +64,7 @@
   gap: 0.45rem;
 }
 
-.workout-types-settings button {
+.workout-types-settings button:where(:not(.pulse-button)) {
   min-height: 2.25rem;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -76,9 +76,9 @@
 }
 
 .workout-types-settings .workout-types-remove {
-  border-color: rgb(239 86 86 / 55%);
-  background: rgb(239 86 86 / 9%);
-  color: #fb6565;
+  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
+  color: var(--p-danger);
 }
 
 .workout-types-settings .workout-types-save-color,

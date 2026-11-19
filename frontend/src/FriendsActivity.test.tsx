@@ -133,8 +133,8 @@ it('loads three more inline, blocks duplicates, and retains expansion on refresh
   await render(vi.fn(), openFriends);
   expect(host.querySelector('h2')?.textContent).toBe('Recent Friends Activity');
   expect(feed).toHaveBeenLastCalledWith(5);
-  const more = host.querySelector<HTMLButtonElement>('.friends-activity-more')!;
-  expect(more.textContent).toBe('+4 more');
+  const more = host.querySelector<HTMLButtonElement>('.show-more-button')!;
+  expect(more.textContent).toBe('Show more');
   let finish!: (value: { items: FriendFeedItem[]; friends: number; with_sessions: number }) => void;
   feed.mockImplementationOnce(
     () =>
@@ -148,14 +148,16 @@ it('loads three more inline, blocks duplicates, and retains expansion on refresh
   });
   expect(feed).toHaveBeenCalledTimes(2);
   expect(feed).toHaveBeenLastCalledWith(8);
-  expect(more.disabled).toBe(true);
+  // Busy, not disabled, so focus stays on it; repeat taps are ignored.
+  expect(more.disabled).toBe(false);
   expect(more.getAttribute('aria-busy')).toBe('true');
+  expect(more.textContent).toBe('Loading…');
   expect(more.querySelector('.calendar-older-spinner')).not.toBeNull();
   await act(async () => window.dispatchEvent(new Event('focus')));
   expect(feed).toHaveBeenCalledTimes(2);
   await act(async () => finish({ items: entries.slice(0, 8), friends: 10, with_sessions: 9 }));
   expect(host.querySelectorAll('.friend-activity-list li')).toHaveLength(8);
-  expect(more.textContent).toBe('+1 more');
+  expect(more.textContent).toBe('Show more');
   feed.mockResolvedValue({ items: entries.slice(0, 8), friends: 10, with_sessions: 9 });
   await act(async () => window.dispatchEvent(new Event('focus')));
   expect(feed).toHaveBeenLastCalledWith(8);
@@ -163,7 +165,7 @@ it('loads three more inline, blocks duplicates, and retains expansion on refresh
   await act(async () => more.click());
   expect(feed).toHaveBeenLastCalledWith(11);
   expect(host.querySelectorAll('.friend-activity-list li')).toHaveLength(9);
-  expect(host.querySelector('.friends-activity-more')).toBeNull();
+  expect(host.querySelector('.show-more-button')).toBeNull();
   expect(openFriends).not.toHaveBeenCalled();
 });
 
@@ -173,11 +175,11 @@ it('keeps existing rows after a failed expansion and allows retry', async () => 
     .mockResolvedValue({ items: [jordan, alex], friends: 8, with_sessions: 6 });
   await render();
   feed.mockRejectedValueOnce(new Error('offline'));
-  await act(async () => host.querySelector<HTMLButtonElement>('.friends-activity-more')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('.show-more-button')!.click());
   expect(host.querySelectorAll('.friend-activity-list li')).toHaveLength(2);
   expect(host.querySelector('[role=alert]')?.textContent).toContain('Try again');
-  const more = host.querySelector<HTMLButtonElement>('.friends-activity-more')!;
-  expect(more.disabled).toBe(false);
+  const more = host.querySelector<HTMLButtonElement>('.show-more-button')!;
+  expect(more.hasAttribute('aria-busy')).toBe(false);
   await act(async () => more.click());
   expect(host.querySelector('[role=alert]')).toBeNull();
 });
