@@ -34,7 +34,7 @@ type View = 'summary' | 'next' | 'deload';
 type Plan = 'none' | '8' | '12';
 
 const PLANS: { id: Plan; label: string }[] = [
-  { id: 'none', label: 'No end' },
+  { id: 'none', label: 'No set date' },
   { id: '8', label: '8 weeks' },
   { id: '12', label: '12 weeks' },
 ];
