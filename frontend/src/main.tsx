@@ -16,6 +16,7 @@ import {
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
+  followSystemColourMode,
   glassPreference,
   resetAppearanceOnce,
   lightStylePreference,
@@ -47,6 +48,7 @@ applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
+followSystemColourMode();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
