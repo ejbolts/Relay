@@ -25,7 +25,3 @@
   flex-shrink: 0;
   accent-color: var(--accent);
 }
-
-.rest-alert-reminder-body .popup-dialog-actions {
-  margin-top: 0;
-}

@@ -162,10 +162,6 @@
   padding: 1rem;
 }
 
-.rep-range-form .popup-dialog-actions {
-  margin: 0;
-}
-
 .rep-range-options {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));

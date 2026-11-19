@@ -38,7 +38,21 @@ export function ActiveWorkoutSyncDialog({
     unit,
   );
   return (
-    <PopupDialog title="Workout sync conflict" onClose={onClose} className="workout-sync-dialog">
+    <PopupDialog
+      title="Workout sync conflict"
+      onClose={onClose}
+      className="workout-sync-dialog"
+      actions={
+        <>
+          <button type="button" onClick={() => onResolve(false)}>
+            Use other device
+          </button>
+          <button type="button" className="popup-primary-action" onClick={() => onResolve(true)}>
+            Keep this device
+          </button>
+        </>
+      }
+    >
       <p className="workout-sync-intro">
         Both devices changed <strong>{name}</strong>. Choose which version to keep.
       </p>
@@ -59,14 +73,6 @@ export function ActiveWorkoutSyncDialog({
           ))}
         </ul>
       )}
-      <div className="popup-dialog-actions workout-sync-actions">
-        <button type="button" onClick={() => onResolve(false)}>
-          Use other device
-        </button>
-        <button type="button" className="popup-primary-action" onClick={() => onResolve(true)}>
-          Keep this device
-        </button>
-      </div>
     </PopupDialog>
   );
 }

@@ -70,12 +70,29 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
         <PopupDialog
           title={selected ? 'Undo import?' : 'Import history'}
           className="import-history-dialog"
+          busy={busy}
+          onBack={selected ? () => setSelected(null) : undefined}
           onClose={() => {
-            if (!busy) {
-              setOpen(false);
-              setSelected(null);
-            }
+            setOpen(false);
+            setSelected(null);
           }}
+          actions={
+            selected && (
+              <>
+                <button type="button" autoFocus disabled={busy} onClick={() => setSelected(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="popup-primary-action is-danger import-undo-action"
+                  disabled={busy}
+                  onClick={() => void undo()}
+                >
+                  {busy ? 'Undoing…' : 'Undo import'}
+                </button>
+              </>
+            )
+          }
         >
           <div className="import-history">
             {loading ? (
@@ -94,19 +111,6 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
                     'Sessions are permanently deleted, including later edits. '}
                   {selected.body_measurements > 0 && 'Edited check-ins are kept.'}
                 </p>
-                <div className="popup-dialog-actions">
-                  <button type="button" disabled={busy} onClick={() => setSelected(null)}>
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="popup-primary-action import-undo-action"
-                    disabled={busy}
-                    onClick={() => void undo()}
-                  >
-                    {busy ? 'Undoing…' : 'Undo import'}
-                  </button>
-                </div>
               </div>
             ) : batches?.length === 0 ? (
               <p className="import-history-muted">

@@ -54,7 +54,23 @@ export function RepRangeDialog({
       title="Rep range"
       kicker={exerciseName.toUpperCase()}
       className="rep-range-dialog"
+      busy={saving}
       onClose={onClose}
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </>
+      }
     >
       <div className="rep-range-form">
         <div className="rep-range-options" role="radiogroup" aria-label="Rep range">
@@ -79,19 +95,6 @@ export function RepRangeDialog({
             {error}
           </p>
         )}
-        <div className="popup-dialog-actions">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="popup-primary-action"
-            disabled={saving}
-            onClick={() => void save()}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
       </div>
     </PopupDialog>
   );

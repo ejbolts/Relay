@@ -40,15 +40,10 @@
   height: 15px;
 }
 .routine-editor .popup-primary-action,
-.routine-use .popup-primary-action,
 .routine-panel .routine-primary {
   background: var(--p-accent);
   color: white;
   border-color: transparent;
-}
-.routine-confirm .popup-dialog-actions .routine-danger-action {
-  background: var(--p-danger-fill);
-  color: var(--p-on-danger);
 }
 .routine-panel .routine-link {
   display: inline-flex;
@@ -553,9 +548,6 @@
   color: var(--p-muted);
   font-size: 12px;
   line-height: 1.4;
-}
-.routine-use .popup-primary-action {
-  width: 100%;
 }
 
 /* Editor */

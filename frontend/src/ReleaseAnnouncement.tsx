@@ -237,6 +237,11 @@ export function ReleaseAnnouncement({
       kicker="WHAT'S NEW"
       className="release-announcement"
       onClose={onClose}
+      actions={
+        <button type="button" className="popup-primary-action" onClick={onClose}>
+          Got it
+        </button>
+      }
     >
       <div className="release-announcement-body">
         <h3>{release.title}</h3>
@@ -271,11 +276,6 @@ export function ReleaseAnnouncement({
           </section>
         )}
       </div>
-      <footer className="popup-dialog-actions">
-        <button type="button" className="popup-primary-action" onClick={onClose}>
-          Got it
-        </button>
-      </footer>
     </PopupDialog>
   );
 }

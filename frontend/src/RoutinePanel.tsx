@@ -635,11 +635,27 @@ export function RoutinePanel({
       {using && (
         <PopupDialog
           title="Use split"
-          onClose={() => {
-            if (!busy) setUsing(null);
-          }}
+          className="routine-use-dialog"
+          busy={busy}
+          onClose={() => setUsing(null)}
+          actions={
+            <>
+              <button type="button" disabled={busy} onClick={() => setUsing(null)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="routine-use-form"
+                className="popup-primary-action"
+                disabled={busy}
+              >
+                {busy ? 'Saving…' : 'Use this split'}
+              </button>
+            </>
+          }
         >
           <form
+            id="routine-use-form"
             className="routine-use"
             onSubmit={(event) => {
               event.preventDefault();
@@ -682,16 +698,13 @@ export function RoutinePanel({
                 {error}
               </p>
             )}
-            <button className="popup-primary-action" disabled={busy}>
-              {busy ? 'Saving…' : 'Use this split'}
-            </button>
           </form>
           {guide?.useRoutineId === using.id && (
             <GuideCoach
               step={{
                 title: 'Choose how it runs',
                 body: 'Follow my workouts moves on each time you train; By date keeps to set days. Then tap Use this split.',
-                target: '.routine-use .popup-primary-action',
+                target: '.routine-use-dialog .popup-primary-action',
               }}
               index={NEW_SPLIT_STEPS - 1}
               total={NEW_SPLIT_STEPS}
@@ -706,27 +719,17 @@ export function RoutinePanel({
       {deleting && (
         <PopupDialog
           title="Delete split?"
-          onClose={() => {
-            if (!busy) setDeleting(null);
-          }}
-        >
-          <div className="routine-confirm">
-            <p>
-              {deleting.name} will be removed from your library and profile. Friends keep their
-              saved copies.
-            </p>
-            {error && (
-              <p role="alert" className="inline-error">
-                {error}
-              </p>
-            )}
-            <div className="popup-dialog-actions">
-              <button type="button" disabled={busy} onClick={() => setDeleting(null)}>
+          size="compact"
+          busy={busy}
+          onClose={() => setDeleting(null)}
+          actions={
+            <>
+              <button type="button" autoFocus disabled={busy} onClick={() => setDeleting(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="popup-primary-action routine-danger-action"
+                className="popup-primary-action is-danger"
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
@@ -739,7 +742,19 @@ export function RoutinePanel({
               >
                 {busy ? 'Deleting…' : 'Delete split'}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="routine-confirm">
+            <p>
+              {deleting.name} will be removed from your library and profile. Friends keep their
+              saved copies.
+            </p>
+            {error && (
+              <p role="alert" className="inline-error">
+                {error}
+              </p>
+            )}
           </div>
         </PopupDialog>
       )}

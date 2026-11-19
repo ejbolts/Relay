@@ -39,9 +39,23 @@ export function WarmupOnlyFinishDialog({
   return (
     <PopupDialog
       title="No working sets"
-      kicker="BEFORE YOU FINISH"
       className="warmup-only-finish-dialog"
       onClose={onKeepWorkingOut}
+      actions={
+        <>
+          <button type="button" autoFocus onClick={onKeepWorkingOut}>
+            Keep working out
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={saving}
+            onClick={onFinishAnyway}
+          >
+            Finish anyway
+          </button>
+        </>
+      }
     >
       <div className="warmup-only-movements">
         {movements.map((movement) => (
@@ -65,19 +79,6 @@ export function WarmupOnlyFinishDialog({
             </ul>
           </section>
         ))}
-      </div>
-      <div className="popup-dialog-actions warmup-only-actions">
-        <button type="button" autoFocus onClick={onKeepWorkingOut}>
-          Keep working out
-        </button>
-        <button
-          type="button"
-          className="popup-primary-action"
-          disabled={saving}
-          onClick={onFinishAnyway}
-        >
-          Finish anyway
-        </button>
       </div>
     </PopupDialog>
   );
