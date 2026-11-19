@@ -6,8 +6,10 @@ export interface UserSession {
   user: User | null;
   /** Replace the stored user after a profile edit. */
   updateUser: (user: User) => void;
-  /** Ends the session, wipes this account's local data, and restarts at the sign-in screen. */
+  /** Ends this device's session, wipes this account's local data, and restarts at sign-in. */
   signOut: () => Promise<void>;
+  /** Like `signOut`, but also ends the account's sessions on every other device. */
+  signOutEverywhere?: () => Promise<void>;
   /** Called once the server has deleted the account. */
   accountDeleted: () => Promise<void>;
   /** True while the sign-in screen is still animating away above the app; prompts wait. */
@@ -20,6 +22,7 @@ export const UserContext = createContext<UserSession>({
   user: null,
   updateUser: () => undefined,
   signOut: noop,
+  signOutEverywhere: noop,
   accountDeleted: noop,
 });
 

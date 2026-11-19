@@ -458,8 +458,16 @@ export const api = {
         { method: 'POST', headers: jsonHeaders, body: JSON.stringify(payload) },
         { signalExpiredSession: false },
       ),
+    /** Ends every session the account has, on all devices. */
     logout: () =>
       request<void>('/api/auth/logout', { method: 'POST' }, { signalExpiredSession: false }),
+    /** Ends this device's session only. */
+    logoutSession: () =>
+      request<void>(
+        '/api/auth/logout-session',
+        { method: 'POST' },
+        { signalExpiredSession: false },
+      ),
     requestPasswordReset: (username: string) =>
       request<void>(
         '/api/auth/password-reset-request',

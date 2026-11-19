@@ -1,9 +1,25 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { api, ApiError } from './api';
 import { authErrorMessage, MIN_PASSWORD_LENGTH, validateNewPassword } from './authForm';
 import { CollapsibleSection } from './CollapsibleSection';
+import { Icon } from './Icon';
+import { PasswordInput } from './PasswordInput';
+import { PopupDialog } from './PopupDialog';
 import { ProfileSharingPanel } from './ProfileSharing';
+import { hasUnsyncedWorkout } from './sessionCleanup';
 import { useUserSession } from './userContext';
+import './accountSession.css';
+
+const PASSWORD_TOAST_MS = 5000;
 
 function Spinner() {
   return <span className="auth-spinner" aria-hidden="true" />;
@@ -29,14 +45,9 @@ function Field({
   );
 }
 
-function FormFeedback({ status, error }: { status: string | null; error: string | null }) {
+function FormFeedback({ error }: { error: string | null }) {
   return (
     <div aria-live="polite" aria-atomic="true">
-      {status && (
-        <p className="notification-setting-status" role="status">
-          {status}
-        </p>
-      )}
       {error && (
         <p className="inline-error" role="alert">
           {error}
@@ -46,19 +57,47 @@ function FormFeedback({ status, error }: { status: string | null; error: string 
   );
 }
 
+/** A brief confirmation at the top of the screen that clears by itself. */
+function PasswordUpdatedToast({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const timer = window.setTimeout(onClose, PASSWORD_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [onClose]);
+  return createPortal(
+    <div
+      className="undo-toast top-toast"
+      role="status"
+      aria-atomic="true"
+      style={{ '--undo-toast-duration': `${PASSWORD_TOAST_MS}ms` } as CSSProperties}
+    >
+      <span>Password updated. Other devices were signed out.</span>
+      <button
+        type="button"
+        className="undo-toast-close"
+        aria-label="Dismiss password notification"
+        onClick={onClose}
+      >
+        <Icon name="close" />
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
 function PasswordForm() {
   const id = useId();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  // Counts updates, so each one shows the confirmation afresh.
+  const [updated, setUpdated] = useState(0);
+  const closeToast = useCallback(() => setUpdated(0), []);
   const [error, setError] = useState<string | null>(null);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
-    setStatus(null);
     setError(null);
     if (!current) {
       setError('Enter your current password.');
@@ -79,7 +118,7 @@ function PasswordForm() {
       setCurrent('');
       setNext('');
       setConfirm('');
-      setStatus('Password updated.');
+      setUpdated((count) => count + 1);
     } catch (reason) {
       setError(
         reason instanceof ApiError && reason.code === 'invalid_password'
@@ -99,10 +138,11 @@ function PasswordForm() {
     >
       <form className="profile-form" noValidate onSubmit={(event) => void save(event)}>
         <Field id={`${id}-current`} label="Current password">
-          <input
+          <PasswordInput
             id={`${id}-current`}
-            type="password"
+            revealLabel="Show current password"
             autoComplete="current-password"
+            enterKeyHint="next"
             required
             value={current}
             onChange={(event) => setCurrent(event.target.value)}
@@ -113,10 +153,11 @@ function PasswordForm() {
           label="New password"
           hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
         >
-          <input
+          <PasswordInput
             id={`${id}-new`}
-            type="password"
+            revealLabel="Show new password"
             autoComplete="new-password"
+            enterKeyHint="next"
             required
             minLength={MIN_PASSWORD_LENGTH}
             value={next}
@@ -124,16 +165,17 @@ function PasswordForm() {
           />
         </Field>
         <Field id={`${id}-confirm`} label="Confirm new password">
-          <input
+          <PasswordInput
             id={`${id}-confirm`}
-            type="password"
+            revealLabel="Show confirmed password"
             autoComplete="new-password"
+            enterKeyHint="go"
             required
             value={confirm}
             onChange={(event) => setConfirm(event.target.value)}
           />
         </Field>
-        <FormFeedback status={status} error={error} />
+        <FormFeedback error={error} />
         <button
           type="submit"
           className="profile-primary"
@@ -143,46 +185,120 @@ function PasswordForm() {
           <span>{saving ? 'Updating…' : 'Update password'}</span>
         </button>
       </form>
+      {updated > 0 && <PasswordUpdatedToast key={updated} onClose={closeToast} />}
     </CollapsibleSection>
   );
 }
 
+type SignOutScope = 'device' | 'everywhere';
+
+function SignOutDialog({
+  scope,
+  unsynced,
+  onCancel,
+  onConfirm,
+}: {
+  scope: SignOutScope;
+  unsynced: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const everywhere = scope === 'everywhere';
+  return (
+    <PopupDialog
+      title={everywhere ? 'Sign out everywhere?' : 'Sign out?'}
+      kicker="PLEASE CONFIRM"
+      className="sign-out-dialog"
+      onClose={onCancel}
+    >
+      {everywhere && <p>Every device signed in to this account will need to sign in again.</p>}
+      {unsynced && (
+        <p className="sign-out-dialog-warning">
+          Sets that haven’t synced yet will be deleted from this device.
+        </p>
+      )}
+      <div className="popup-dialog-actions">
+        <button type="button" autoFocus onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="popup-primary-action" onClick={onConfirm}>
+          {everywhere ? 'Sign out everywhere' : 'Sign out'}
+        </button>
+      </div>
+    </PopupDialog>
+  );
+}
+
 function SessionPanel() {
-  const { signOut } = useUserSession();
-  const [signingOut, setSigningOut] = useState(false);
+  const { signOut, signOutEverywhere } = useUserSession();
+  const [confirming, setConfirming] = useState<{ scope: SignOutScope; unsynced: boolean } | null>(
+    null,
+  );
+  const [signingOut, setSigningOut] = useState<SignOutScope | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function run() {
+  async function run(scope: SignOutScope) {
     if (signingOut) return;
-    setSigningOut(true);
+    setConfirming(null);
+    setSigningOut(scope);
     setError(null);
     try {
-      await signOut();
+      await (scope === 'everywhere' && signOutEverywhere ? signOutEverywhere() : signOut());
     } catch (reason) {
       setError(authErrorMessage(reason));
-      setSigningOut(false);
+      setSigningOut(null);
     }
   }
 
+  function start(scope: SignOutScope) {
+    const unsynced = hasUnsyncedWorkout();
+    // Signing out of this device asks first only when it would delete unsynced sets.
+    if (scope === 'device' && !unsynced) void run(scope);
+    else setConfirming({ scope, unsynced });
+  }
+
   return (
-    <section className="settings-panel panel" aria-labelledby="profile-session-title">
+    <section
+      className="settings-panel panel account-session"
+      aria-labelledby="profile-session-title"
+    >
       <header>
         <div>
           <p className="section-kicker">SESSION</p>
-          <h2 id="profile-session-title">Sign out all devices</h2>
+          <h2 id="profile-session-title">Sign out</h2>
         </div>
       </header>
-      <p>Clears cached data and unfinished workouts on each device when it next connects.</p>
       <button
         type="button"
         className="profile-secondary"
-        disabled={signingOut}
-        onClick={() => void run()}
+        disabled={signingOut !== null}
+        onClick={() => start('device')}
       >
-        {signingOut && <Spinner />}
-        <span>{signingOut ? 'Signing out…' : 'Sign out all devices'}</span>
+        {signingOut === 'device' && <Spinner />}
+        <span>{signingOut === 'device' ? 'Signing out…' : 'Sign out'}</span>
       </button>
-      <FormFeedback status={null} error={error} />
+      {signOutEverywhere && (
+        <button
+          type="button"
+          className="text-link account-session-everywhere"
+          disabled={signingOut !== null}
+          onClick={() => start('everywhere')}
+        >
+          {signingOut === 'everywhere' && <Spinner />}
+          <span>
+            {signingOut === 'everywhere' ? 'Signing out everywhere…' : 'Sign out everywhere…'}
+          </span>
+        </button>
+      )}
+      <FormFeedback error={error} />
+      {confirming && (
+        <SignOutDialog
+          scope={confirming.scope}
+          unsynced={confirming.unsynced}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void run(confirming.scope)}
+        />
+      )}
     </section>
   );
 }
@@ -234,9 +350,8 @@ function DangerZone() {
       {open ? (
         <form className="profile-form" noValidate onSubmit={(event) => void remove(event)}>
           <Field id={`${id}-password`} label="Confirm with your password">
-            <input
+            <PasswordInput
               id={`${id}-password`}
-              type="password"
               autoComplete="current-password"
               required
               value={password}
@@ -251,7 +366,7 @@ function DangerZone() {
             />
             <span>I understand my account and all of its data will be deleted forever.</span>
           </label>
-          <FormFeedback status={null} error={error} />
+          <FormFeedback error={error} />
           <div className="profile-button-row">
             <button
               type="button"

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ACTIVE_WORKOUT_SYNC_KEY } from './activeWorkoutEvents';
 import { ApiError } from './api';
 import { resolveSession } from './authSession';
 import { LAST_USER_KEY, type CleanupStorage } from './sessionCleanup';
@@ -104,15 +105,51 @@ describe('resolveSession', () => {
   it('removes remembered account data after confirmed revocation, including at startup', async () => {
     const storage = new MemoryStorage();
     storage.setItem(LAST_USER_KEY, JSON.stringify(user));
+    const session = deps(
+      () => Promise.reject(new ApiError('Sign in', 'not_authenticated', 401)),
+      storage,
+    );
+    expect(await resolveSession(session)).toEqual({
+      status: 'signed-out',
+      notice: 'signed-out',
+      username: 'lifter',
+    });
+    expect(storage.getItem(LAST_USER_KEY)).toBeNull();
+    expect(session.clearCache).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the live workout for the same account when the session ended elsewhere', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user));
+    const live = { ...finishedOffline(), pendingSave: undefined };
+    expect(writeActiveWorkoutDraft(live, storage)).toBe(true);
+    storage.setItem(ACTIVE_WORKOUT_SYNC_KEY, JSON.stringify({ userId: user.id, base: {} }));
+    const session = deps(
+      () => Promise.reject(new ApiError('Sign in', 'not_authenticated', 401)),
+      storage,
+    );
+
+    expect(await resolveSession(session)).toEqual({
+      status: 'signed-out',
+      notice: 'signed-out-workout-saved',
+      username: 'lifter',
+    });
+    expect(readActiveWorkoutDraft(storage)?.name).toBe(live.name);
+    expect(storage.getItem(ACTIVE_WORKOUT_SYNC_KEY)).not.toBeNull();
+    // Opening the app again while still signed out still names the account.
+    expect(await resolveSession(session)).toMatchObject({ username: 'lifter' });
+    expect(readActiveWorkoutDraft(storage)?.name).toBe(live.name);
+  });
+
+  it('drops an unowned live workout when a session is confirmed revoked', async () => {
+    const storage = new MemoryStorage();
     storage.setItem(ACTIVE_WORKOUT_DRAFT_KEY, 'sample draft');
     const session = deps(
       () => Promise.reject(new ApiError('Sign in', 'not_authenticated', 401)),
       storage,
     );
     expect(await resolveSession(session)).toEqual({ status: 'signed-out' });
-    expect(storage.getItem(LAST_USER_KEY)).toBeNull();
     expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
-    expect(session.clearCache).toHaveBeenCalledOnce();
   });
 
   it('keeps a finished workout that has not synced when the session expires', async () => {
@@ -124,7 +161,10 @@ describe('resolveSession', () => {
       storage,
     );
 
-    expect(await resolveSession(session)).toEqual({ status: 'signed-out' });
+    expect(await resolveSession(session)).toMatchObject({
+      status: 'signed-out',
+      notice: 'signed-out-workout-saved',
+    });
     expect(readActiveWorkoutDraft(storage)?.pendingSave?.payload.duration_minutes).toBe(45);
     expect(storage.getItem(LAST_USER_KEY)).toBeNull();
     expect(session.clearCache).toHaveBeenCalledOnce();
