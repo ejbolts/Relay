@@ -49,6 +49,8 @@ type WorkoutCalendarProps = {
   /** Workout types switched off in the legend; their dots and day borders are greyed out. */
   hiddenCategories?: ReadonlySet<string>;
   activeWorkoutDate?: string | null;
+  /** The colour of the workout type being logged, for the live day's outline and ripple. */
+  activeWorkoutColor?: string | null;
   selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   olderHistory?: OlderHistoryProps;
@@ -81,6 +83,7 @@ export function WorkoutCalendar({
   categoryColors,
   hiddenCategories,
   activeWorkoutDate = null,
+  activeWorkoutColor = null,
   selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
@@ -299,9 +302,11 @@ export function WorkoutCalendar({
                           key={key}
                           data-date={key}
                           style={
-                            dayRingStyle
-                              ? ({ '--day-ring': dayRingStyle } as CSSProperties)
-                              : undefined
+                            inProgress && activeWorkoutColor
+                              ? ({ '--live-color': activeWorkoutColor } as CSSProperties)
+                              : dayRingStyle
+                                ? ({ '--day-ring': dayRingStyle } as CSSProperties)
+                                : undefined
                           }
                           disabled={previewMode || (readOnly && !entry)}
                           onClick={() => {
@@ -365,6 +370,7 @@ export function WorkoutCalendar({
       )),
     [
       activeWorkoutDate,
+      activeWorkoutColor,
       selectedDate,
       categoryColors,
       hiddenCategories,
@@ -424,6 +430,7 @@ export function WeekStrip({
   hiddenCategories,
   weekStartDay,
   activeWorkoutDate = null,
+  activeWorkoutColor = null,
   selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
@@ -435,6 +442,8 @@ export function WeekStrip({
   /** 0 (Sunday) to 6, matching the week the rest of Home counts. */
   weekStartDay: number;
   activeWorkoutDate?: string | null;
+  /** The colour of the workout type being logged, for the live day's tint and dot. */
+  activeWorkoutColor?: string | null;
   selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   onDayClick: (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => void;
@@ -466,9 +475,11 @@ export function WeekStrip({
             key={key}
             data-date={key}
             style={
-              ring.length && !inProgress
-                ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
-                : undefined
+              inProgress && activeWorkoutColor
+                ? ({ '--live-color': activeWorkoutColor } as CSSProperties)
+                : ring.length && !inProgress
+                  ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
+                  : undefined
             }
             onClick={() => {
               if (inProgress && onActiveWorkoutClick) onActiveWorkoutClick();

@@ -388,6 +388,37 @@ it('leaves the in-progress day to its live marker rather than a workout outline'
   expect(cell('2026-10-26').querySelector('.calendar-live-dot')).not.toBeNull();
 });
 
+it('colours the live day in the workout type being logged', async () => {
+  const live = () => cell('2026-10-26').style.getPropertyValue('--live-color');
+  await act(async () =>
+    root.render(
+      <WorkoutCalendar
+        entries={[]}
+        categoryColors={colors}
+        activeWorkoutDate="2026-10-26"
+        activeWorkoutColor="#8b5cf6"
+        onDayClick={vi.fn()}
+      />,
+    ),
+  );
+  expect(live()).toBe('#8b5cf6');
+  expect(cell('2026-10-25').style.getPropertyValue('--live-color')).toBe('');
+
+  await act(async () =>
+    root.render(
+      <WeekStrip
+        entries={[]}
+        categoryColors={colors}
+        weekStartDay={1}
+        activeWorkoutDate="2026-10-26"
+        activeWorkoutColor="#f59e0b"
+        onDayClick={vi.fn()}
+      />,
+    ),
+  );
+  expect(live()).toBe('#f59e0b');
+});
+
 it('leads Home with this week, naming each day’s workout types', async () => {
   const select = vi.fn();
   const resume = vi.fn();

@@ -122,6 +122,7 @@ import {
   WorkoutCalendarLegend,
   type OlderHistoryProps,
 } from './WorkoutCalendar';
+import { workoutTypeColor } from './dayColors';
 import {
   appendOlderWorkouts,
   hasOlderHistory,
@@ -3018,6 +3019,17 @@ function InteractiveWorkoutCalendar({
   const today = localDate();
   // Six weeks ahead reaches the end of the current month, the newest one the calendar shows.
   const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
+  // The live day takes the colour of the workout type being logged.
+  const activeDraft = activeWorkoutDate ? readActiveWorkoutDraft() : null;
+  const activeWorkoutColor = activeDraft
+    ? workoutTypeColor(
+        effectiveWorkoutType(
+          { category: activeDraft.category, workout_type_id: activeDraft.workoutTypeId },
+          types,
+        ),
+        categoryColors,
+      )
+    : null;
   const toggleCategory = (category: string) =>
     setHiddenCategories((current) => {
       const next = new Set(current);
@@ -3038,6 +3050,7 @@ function InteractiveWorkoutCalendar({
           categoryColors={categoryColors}
           weekStartDay={weekStartDay}
           activeWorkoutDate={activeWorkoutDate}
+          activeWorkoutColor={activeWorkoutColor}
           selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
           onActiveWorkoutClick={onResumeWorkout}
           onDayClick={openDay}
@@ -3050,6 +3063,7 @@ function InteractiveWorkoutCalendar({
             categoryColors={categoryColors}
             hiddenCategories={hiddenCategories}
             activeWorkoutDate={activeWorkoutDate}
+            activeWorkoutColor={activeWorkoutColor}
             selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
             onActiveWorkoutClick={onResumeWorkout}
             onDayClick={openDay}
