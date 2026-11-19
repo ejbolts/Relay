@@ -99,6 +99,7 @@ export function CardioScreen({
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const cardioFormRef = useRef<HTMLElement>(null);
+  const historyRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!editingId) return;
     const frame = window.requestAnimationFrame(() =>
@@ -545,7 +546,7 @@ export function CardioScreen({
         </section>
       )}
       <CardioTrendCard overview={overview} today={today} />
-      <section className="pulse-card cardio-history">
+      <section className="pulse-card cardio-history" ref={historyRef}>
         <div className="cardio-history-header">
           <h2>History</h2>
           <div
@@ -719,6 +720,7 @@ export function CardioScreen({
           totalPages={historyPageCount}
           onPageChange={setHistoryPage}
           label="cardio history"
+          scrollTarget={historyRef}
         />
       </section>
       <section className="pulse-card cardio-goals-summary" aria-labelledby="cardio-goals-title">

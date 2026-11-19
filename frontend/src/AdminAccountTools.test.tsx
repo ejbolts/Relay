@@ -128,7 +128,7 @@ describe('admin account search and filters', () => {
   it('confirms actions in the top toast instead of at the top of the page', async () => {
     const dismiss = vi.fn();
     await show({ notice: 'Sam is disabled and signed out.', onNoticeDismiss: dismiss });
-    const toast = document.body.querySelector('.top-toast')!;
+    const toast = document.body.querySelector('.toast')!;
     expect(toast.textContent).toContain('Sam is disabled and signed out.');
     expect(host.contains(toast)).toBe(false);
     await act(async () => toast.querySelector<HTMLButtonElement>('button')!.click());

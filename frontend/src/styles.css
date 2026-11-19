@@ -106,7 +106,7 @@ button:disabled {
   color: #0a9e87;
 }
 .text-button {
-  color: #245d86;
+  color: var(--p-accent-text);
   font-size: 0.9rem;
 }
 .danger-link {
@@ -162,12 +162,12 @@ button:disabled {
 input,
 textarea {
   width: 100%;
-  border: 1px solid #b9c9d8;
+  border: 1px solid var(--p-line-strong);
   border-radius: 9px;
-  color: #132238;
-  background: #fff;
+  color: var(--p-ink);
+  background: var(--p-surface-2);
   padding: 0.72rem;
-  outline-color: #0a9e87;
+  outline-color: var(--p-focus-ring);
 }
 textarea {
   resize: vertical;
@@ -1213,7 +1213,7 @@ button.metric-card:focus-visible {
   margin-top: 1.2rem;
 }
 
-.calendar-create-actions > button {
+.calendar-create-actions > button:where(:not(.pulse-button)) {
   min-height: 2.8rem;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1230,9 +1230,9 @@ button.metric-card:focus-visible {
 }
 
 .calendar-create-actions > .cancel-current-workout-button {
-  border-color: #e14a3b;
-  background: #e14a3b;
-  color: white;
+  border-color: transparent;
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
 }
 
 .workout-summary > div:nth-child(2) strong {
@@ -1817,7 +1817,7 @@ button.metric-card:focus-visible {
   margin-top: 1rem;
 }
 
-.body-edit-actions button {
+.body-edit-actions button:where(:not(.pulse-button)) {
   border: 1px solid var(--line);
   border-radius: 11px;
   padding: 0.8rem;
@@ -5950,13 +5950,13 @@ body,
 }
 
 .superset-picker > header > button {
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.25rem;
+  height: 2.25rem;
   flex: 0 0 auto;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: #101513;
-  color: var(--ink);
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
   font-size: 1.2rem;
 }
 
@@ -6071,7 +6071,7 @@ body,
   border-top: 1px solid var(--line);
 }
 
-.superset-picker > footer button {
+.superset-picker > footer button:where(:not(.pulse-button)) {
   min-height: 2.6rem;
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -6083,20 +6083,16 @@ body,
 }
 
 .superset-picker > footer .remove-superset-button {
-  border-color: rgb(255 99 84 / 35%);
-  color: #ff9187;
+  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
+  color: var(--p-danger);
 }
 
 .superset-picker-actions {
   display: flex;
+  align-items: center;
   gap: 0.55rem;
   margin-left: auto;
-}
-
-.superset-picker > footer .save-superset-button:disabled {
-  border-color: var(--line);
-  background: #202825;
-  color: #626e68;
 }
 
 @media (max-width: 480px) {
@@ -7226,8 +7222,8 @@ body:has(.notification-dialog[open]) {
 }
 
 .notification-dialog button:focus-visible {
-  outline: 2px solid var(--accent-dark);
-  outline-offset: 3px;
+  outline: 2px solid var(--p-focus-ring);
+  outline-offset: 2px;
 }
 
 .inline-detail > header .icon-button {
@@ -7325,7 +7321,7 @@ body:has(.notification-dialog[open]) {
   border-bottom: 1px solid var(--line);
 }
 
-.inline-confirmation > button {
+.inline-confirmation > button:where(:not(.pulse-button)) {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0.5rem 0.65rem;
@@ -7483,118 +7479,14 @@ body:has(.notification-dialog[open]) {
 }
 
 .inline-confirmation > button:first-child {
-  border-color: #713831;
-  color: #ffaaa1;
+  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
+  color: var(--p-danger);
 }
 
 .body-history-actions,
 .workout-actions,
 .data-actions {
   flex-wrap: wrap;
-}
-
-.pagination-controls {
-  position: relative;
-  display: grid;
-  grid-template-columns: 2.75rem auto 2.75rem;
-  justify-content: center;
-  gap: 0.55rem;
-  margin-top: 0.8rem;
-  border-top: 1px solid var(--line);
-  padding-top: 1rem;
-}
-
-.pagination-arrow,
-.pagination-more {
-  width: 2.75rem;
-  height: 2.75rem;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  padding: 0;
-  background: var(--card);
-  color: var(--ink);
-  font-size: 1.05rem;
-  font-weight: 900;
-}
-
-/* The page picker shows the current page, so it grows with "12 / 30". */
-.pagination-more {
-  width: auto;
-  min-width: 4.5rem;
-  padding: 0 0.85rem;
-  font-size: 0.95rem;
-  font-weight: 800;
-}
-
-/* A span, not <small>: some lists style every <small> inside them as a block. */
-.pagination-current {
-  white-space: nowrap;
-}
-
-.pagination-total {
-  color: var(--muted-ink);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.pagination-arrow:not(:disabled):hover,
-.pagination-more:hover,
-.pagination-more[aria-expanded='true'] {
-  border-color: var(--accent);
-  color: var(--accent-dark);
-}
-
-.pagination-arrow:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
-.pagination-picker {
-  position: relative;
-}
-
-.pagination-page-menu {
-  position: absolute;
-  z-index: 30;
-  bottom: calc(100% + 0.6rem);
-  left: 50%;
-  width: min(18rem, calc(100vw - 2rem));
-  max-height: 15rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.45rem, 1fr));
-  gap: 0.4rem;
-  overflow-y: auto;
-  transform: translateX(-50%);
-  border: 1px solid var(--line);
-  padding: 0.65rem;
-  background: var(--card);
-  box-shadow: 0 14px 34px rgb(20 29 25 / 18%);
-}
-
-.pagination-page-menu button {
-  min-height: 2.45rem;
-  border: 1px solid var(--line);
-  padding: 0.4rem;
-  background: var(--page);
-  color: var(--ink);
-  font-size: 0.72rem;
-  font-weight: 850;
-}
-
-.pagination-page-menu button:hover,
-.pagination-page-menu button.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--paper);
-}
-
-.pagination-status {
-  grid-column: 1 / -1;
-  color: var(--muted-ink);
-  font-size: 0.62rem;
-  font-weight: 750;
-  text-align: center;
 }
 
 .video-content .inline-confirmation {
@@ -7902,7 +7794,7 @@ body,
 
 .movement-overflow-menu .movement-menu-danger,
 .movement-overflow-menu .movement-menu-danger > span {
-  color: #ff527d;
+  color: var(--p-danger);
 }
 
 .set-grid {
@@ -8351,19 +8243,6 @@ body,
 
 .history-set-pill:has(.pr-badge) {
   background: var(--gold-row);
-}
-
-.pagination-arrow,
-.pagination-more,
-.pagination-page-menu,
-.pagination-page-menu button {
-  border-radius: 5px;
-}
-
-/* The darker fill suits dark mode only; light mode keeps the card and page surfaces set above. */
-:root:not([data-colour-mode='light'])
-  :where(.pagination-arrow, .pagination-more, .pagination-page-menu, .pagination-page-menu button) {
-  background: #191c1e;
 }
 
 @media (max-width: 620px) {
@@ -8901,7 +8780,7 @@ body,
   font-size: 0.65rem;
 }
 
-.notification-setting-row > button {
+.notification-setting-row > button:where(:not(.pulse-button)) {
   min-width: 4.25rem;
   display: inline-flex;
   align-items: center;
@@ -8924,12 +8803,12 @@ body,
 }
 
 .notification-setting-row > button.is-on {
-  border-color: rgb(57 135 229 / 65%);
-  color: var(--accent);
+  border-color: var(--p-accent-text);
+  color: var(--p-accent-text);
 }
 
 .notification-setting-row > button.is-on span {
-  background: var(--accent);
+  background: var(--p-accent-text);
 }
 
 .notification-setting-status {
@@ -9052,8 +8931,8 @@ body,
   line-height: 1.5;
 }
 
-.settings-actions > button,
-.settings-actions .inline-confirmation > button {
+.settings-actions > button:where(:not(.pulse-button)),
+.settings-actions .inline-confirmation > button:where(:not(.pulse-button)) {
   min-height: 2.6rem;
   border: 1px solid #41484b;
   border-radius: 4px;
@@ -9256,11 +9135,11 @@ body,
   width: auto;
   max-width: 100%;
   min-height: 2.35rem;
-  border: 1px solid #42494c;
+  border: 1px solid var(--p-line-strong);
   border-radius: 5px;
   padding: 0.48rem 1.75rem 0.48rem 0.58rem;
-  background: #171a1b;
-  color: #dedbd8;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
   font-size: 0.68rem;
   font-weight: 750;
 }
@@ -9986,10 +9865,10 @@ body.chart-fullscreen-open {
 .set-entry-confirmation {
   width: min(100%, 22rem);
   margin: 0;
-  border: 1px solid rgb(57 135 229 / 58%);
+  border: 1px solid var(--p-line-strong);
   border-radius: 7px;
   padding: 1rem;
-  background: #1d1f21;
+  background: var(--p-surface);
   box-shadow: 0 18px 55px rgb(0 0 0 / 60%);
 }
 
@@ -9999,13 +9878,13 @@ body.chart-fullscreen-open {
 }
 
 .set-entry-confirmation h3 {
-  color: #f1eeea;
+  color: var(--p-ink);
   font-size: 1rem;
 }
 
 .set-entry-confirmation p {
   margin-top: 0.4rem;
-  color: #aaa7a3;
+  color: var(--p-ink-2);
   font-size: 0.78rem;
   line-height: 1.45;
 }
@@ -10017,20 +9896,20 @@ body.chart-fullscreen-open {
   margin-top: 1rem;
 }
 
-.set-entry-confirmation button {
+.set-entry-confirmation button:where(:not(.pulse-button)) {
   min-height: 2.55rem;
-  border: 1px solid #485053;
+  border: 1px solid var(--p-line-strong);
   border-radius: 5px;
   padding: 0.6rem 0.85rem;
-  background: #252a2c;
-  color: #dedbd7;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
   font-weight: 750;
 }
 
 .set-entry-confirmation .confirm-unusual-set {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: white;
+  border-color: transparent;
+  background: var(--p-accent);
+  color: var(--p-on-accent);
 }
 
 #root[inert] .finish-workout-bottom,
@@ -10974,7 +10853,7 @@ html {
   gap: 0.55rem;
 }
 
-.workout-name-dialog form > footer button {
+.workout-name-dialog form > footer button:where(:not(.pulse-button)) {
   min-height: 2.75rem;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -10986,8 +10865,8 @@ html {
 
 .workout-name-dialog form > footer .notification-ok {
   border-color: transparent;
-  background: linear-gradient(145deg, #5598e7, #256abf);
-  color: white;
+  background: var(--p-accent);
+  color: var(--p-on-accent);
 }
 
 @media (max-width: 390px) {

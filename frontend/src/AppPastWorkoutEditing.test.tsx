@@ -120,7 +120,7 @@ const discardDialog = () => document.querySelector<HTMLDialogElement>('.discard-
 const editorBack = () =>
   container.querySelector<HTMLButtonElement>('.logger-screen .overlay-header-back')!;
 const notes = () => container.querySelector<HTMLTextAreaElement>('.workout-notes textarea')!;
-const toast = () => document.querySelector('.undo-toast');
+const toast = () => document.querySelector('.toast');
 
 function type(element: HTMLTextAreaElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(

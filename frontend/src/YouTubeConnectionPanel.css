@@ -102,21 +102,21 @@
 }
 
 .youtube-connection-actions .primary {
-  background: #427cff;
-  border: 1px solid #427cff;
-  color: #fff;
+  background: var(--p-accent);
+  border: 1px solid transparent;
+  color: var(--p-on-accent);
 }
 
 .youtube-connection-actions .secondary {
-  background: #202b3d;
-  border: 1px solid #36455c;
-  color: #dbe9ff;
+  background: var(--p-surface-2);
+  border: 1px solid var(--p-line-strong);
+  color: var(--p-ink);
 }
 
 .youtube-connection-actions .danger-link {
-  background: transparent;
-  border: 1px solid #54343b;
-  color: #ffabab;
+  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--p-danger) 45%, transparent);
+  color: var(--p-danger);
 }
 
 .youtube-connection button:disabled {
@@ -126,7 +126,7 @@
 
 .youtube-connection button:focus-visible,
 .youtube-channel-name:focus-visible {
-  outline: 2px solid #8db7ff;
+  outline: 2px solid var(--p-focus-ring);
   outline-offset: 3px;
 }
 

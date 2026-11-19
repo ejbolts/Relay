@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { RoutinePanel } from './RoutinePanel';
+import { TOAST_MS } from './Toast';
 import type { Exercise, Routine } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
@@ -198,23 +199,21 @@ it('shows save feedback in a dismissible popup that clears automatically after r
     await mount(true);
     await click('Edit split');
     await save();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Split saved.',
-    );
+    expect(document.querySelector('.toast')?.textContent).toContain('Split saved.');
     expect(host.textContent).not.toContain('Split saved.');
     await click('Close notification');
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
 
     await click('Edit split');
     await save();
-    await act(async () => vi.advanceTimersByTime(7000));
-    expect(document.querySelector('.app-notification-toast')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1000));
+    expect(document.querySelector('.toast')).not.toBeNull();
     await click('Edit split');
     await save();
     await act(async () => vi.advanceTimersByTime(1000));
-    expect(document.querySelector('.app-notification-toast')).not.toBeNull();
-    await act(async () => vi.advanceTimersByTime(7000));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.status));
+    expect(document.querySelector('.toast')).toBeNull();
   } finally {
     vi.useRealTimers();
   }
@@ -231,7 +230,7 @@ it('requires an explicit date confirmation before replacing the active split', a
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
   expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts');
-  expect(document.querySelector('.app-notification-toast')).toBeNull();
+  expect(document.querySelector('.toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
 });
 

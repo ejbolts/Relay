@@ -423,6 +423,19 @@ drafts; workout/cardio saves and stale routine editors also resolve those IDs. I
 keeps destinations referenced by merges. Test with `backend/tests/test_exercise_merge.py`,
 `ExerciseMergeDialog.test.tsx` and workout recovery tests.
 
+Merge suggestions (`frontend/src/exerciseMergeSuggestions.ts`) score how closely a custom
+exercise's name matches each standard exercise, from 0 to 1. Names are compared word by word
+after expanding shorthand (DB, RDL), singular forms, joined words (benchpress) and a few
+synonyms; extra words lower the score instead of ruling a match out, and a one-letter typo
+still counts. Equipment named in the custom name rules out other variants, its equipment
+setting counts as one more word, and a match that shares no muscles is marked down. A name in
+a standard exercise's `alternative_names` (the server's `EXERCISE_ALIAS_GROUPS`, such as
+Military Press for Overhead Press) is a certain match. The merge dialog lists matches of 0.6
+or more under **Suggested** until a search is typed, and a custom exercise's page shows its
+best match of 0.8 or more with a shortcut into the merge. **Not the same** hides that
+suggestion on the device (`gym-logger-dismissed-merge-suggestions`). Test with
+`exerciseMergeSuggestions.test.ts` and `ExerciseMergeNudge.test.tsx`.
+
 ## Checks
 
 While developing, run the tests for the behaviour you changed. From the repository root,

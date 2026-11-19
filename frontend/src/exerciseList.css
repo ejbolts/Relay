@@ -283,9 +283,6 @@
 .exercise-list-open:focus-visible::after {
   outline: 2px solid var(--p-accent-text);
 }
-.exercise-list-library .pagination-controls {
-  margin-top: 1rem;
-}
 .exercise-list-icon {
   display: grid;
   place-items: center;

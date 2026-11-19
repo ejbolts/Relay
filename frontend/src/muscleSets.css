@@ -175,7 +175,7 @@
   border-radius: 10px;
   padding: 0 0.5rem;
   background: transparent;
-  color: var(--p-accent);
+  color: var(--p-accent-text);
   font-size: 0.875rem;
   font-weight: 600;
   touch-action: manipulation;
