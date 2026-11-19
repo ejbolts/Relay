@@ -5,9 +5,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import metadata from '../release.json';
 import { App } from './App';
 import { api } from './api';
+import { announcedVersion } from './releaseMetadata';
 import { UserContext, type UserSession } from './userContext';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import type { DashboardData, User } from './types';
+
+// A silent patch keeps announcing the release whose notes it ships.
+const announced = announcedVersion(metadata);
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -117,7 +121,7 @@ it('opens one prompt per visit: What’s new first, the Home Screen guide on a l
   expect(whatsNew()).toBeNull();
   // Nothing follows it this visit, and the dismissal is recorded for the account.
   expect(homeGuide()).toBeNull();
-  expect(api.saveAppNotices).toHaveBeenCalledWith({ release_seen: metadata.version });
+  expect(api.saveAppNotices).toHaveBeenCalledWith({ release_seen: announced });
 
   // The next visit: What's new is done, so the guide takes its turn.
   await act(async () => root.unmount());
@@ -129,7 +133,7 @@ it('opens one prompt per visit: What’s new first, the Home Screen guide on a l
 
 it('skips What’s new when the account dismissed it on another device', async () => {
   vi.mocked(api.getAppNotices).mockResolvedValue({
-    release_seen: metadata.version,
+    release_seen: announced,
     weekly_review_seen: null,
   });
   await mount();

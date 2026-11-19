@@ -9,7 +9,7 @@ import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { rememberRelease } from './releaseAnnouncements';
 import { useReleaseAnnouncement } from './useReleaseAnnouncement';
-import { formatReleaseVersion } from './releaseMetadata';
+import { announcedVersion, formatReleaseVersion } from './releaseMetadata';
 import { FollowNotifications, NOTIFICATIONS_PER_PAGE } from './FollowNotifications';
 import {
   markNotificationSnapshotRead,
@@ -20,6 +20,9 @@ import { onWeeklyReviewRequested, publishWeeklyReviewNotice } from './weeklyRevi
 import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
 import { onAdminAccountFocusRequested } from './adminAccountFocus';
 import { UserContext, type UserSession } from './userContext';
+
+// A silent patch keeps announcing the release whose notes it ships.
+const announced = announcedVersion(metadata);
 const person = {
   id: 'sample',
   display_name: 'Sam Preview',
@@ -186,7 +189,7 @@ function ReleaseInbox({
 
 async function releaseInbox(userId: string, secondHeader = false) {
   // The automatic announcement was already dismissed; the inbox notice still awaits View.
-  rememberRelease(userId, metadata.version);
+  rememberRelease(userId, announced);
   await act(async () => root.render(<ReleaseInbox userId={userId} secondHeader={secondHeader} />));
 }
 
@@ -195,7 +198,7 @@ it('keeps the release unread on opening, opens its notes with View, closes back 
   expect(host.querySelectorAll('[aria-label="Notifications, 1 unread"]')).toHaveLength(2);
   await click('Notifications, 1 unread');
   const row = document.querySelector('.release-notification-row')!;
-  expect(row.textContent).toContain(`Relay ${metadata.version}`);
+  expect(row.textContent).toContain(`Relay ${announced}`);
   expect(row.textContent).toContain(metadata.title);
   expect(row.querySelector('time')?.dateTime).toBe(metadata.date);
   expect(row.querySelector('.release-notification-new')?.textContent).toBe('New');
@@ -205,12 +208,12 @@ it('keeps the release unread on opening, opens its notes with View, closes back 
   await click('Notifications, 1 unread');
   expect(document.querySelector('.release-notification-new')).not.toBeNull();
 
-  await click(`View Relay ${metadata.version} release notes`);
+  await click(`View Relay ${announced} release notes`);
   expect(document.querySelector('.follow-notifications')).toBeNull();
   expect(document.querySelectorAll('dialog')).toHaveLength(1);
   expect(document.querySelector('.release-announcement h3')?.textContent).toBe(metadata.title);
   expect(host.querySelectorAll('[aria-label="Notifications"]')).toHaveLength(2);
-  await click(`Close Version ${formatReleaseVersion(metadata.version)}`);
+  await click(`Close Version ${formatReleaseVersion(announced)}`);
   expect(document.querySelectorAll('dialog')).toHaveLength(0);
   expect(document.querySelector('.follow-notifications')).toBeNull();
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Notifications');
@@ -253,7 +256,7 @@ it('keeps the installed release accessible when social notifications fail', asyn
   await click('Notifications, 1 unread');
   expect(document.querySelector('[role="alert"]')).not.toBeNull();
   expect(document.querySelector('.release-notification-row')).not.toBeNull();
-  await click(`View Relay ${metadata.version} release notes`);
+  await click(`View Relay ${announced} release notes`);
   expect(document.querySelector('.release-announcement h3')?.textContent).toBe(metadata.title);
 });
 
