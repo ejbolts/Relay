@@ -545,6 +545,28 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
     clear_session_cookie(response, settings)
 
 
+@auth_router.post("/logout-session", status_code=204)
+def logout_session(
+    request: Request, response: Response, db: DbDependency, settings: AppSettings
+) -> None:
+    """Sign out this browser only; the account's other devices stay signed in.
+
+    The app removes this browser's own push subscription first, while the session is valid.
+    """
+    token = request.cookies.get(settings.session_cookie)
+    session = (
+        db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
+        if token
+        else None
+    )
+    if session is not None:
+        user_id = session.user_id
+        db.delete(session)
+        db.commit()
+        session_events.changed(user_id)
+    clear_session_cookie(response, settings)
+
+
 @auth_router.get("/me", response_model=UserRead)
 def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) -> UserRead:
     # Uses the auth context directly so it still answers while a new password is required.

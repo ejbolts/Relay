@@ -103,17 +103,18 @@ describe('profile sharing visibility', () => {
     expect(api.sharing.updateChoices).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ visibility: 'public' }),
     );
-    expect(button('Make my profile public')!.disabled).toBe(true);
+    // Once saved there is nothing to confirm, so the button goes.
+    expect(button('Make my profile public')).toBeUndefined();
   });
 
-  it('keeps one confirm button under the options and reselecting cancels the change', async () => {
+  it('shows one confirm button only while a change is waiting, and reselecting cancels it', async () => {
     await render();
-    expect(button('Make my profile friends only')!.disabled).toBe(true);
+    expect(container.querySelector('.sharing-start')).toBeNull();
     await act(async () => radio('private').click());
     expect(button('Make my profile private')!.disabled).toBe(false);
 
     await act(async () => radio('followers').click());
-    expect(button('Make my profile friends only')!.disabled).toBe(true);
+    expect(container.querySelector('.sharing-start')).toBeNull();
     expect(button('Make my profile private')).toBeUndefined();
     expect(api.sharing.updateChoices).not.toHaveBeenCalled();
   });

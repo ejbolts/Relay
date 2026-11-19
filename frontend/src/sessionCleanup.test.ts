@@ -1,14 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError } from './api';
+import { ACTIVE_WORKOUT_SYNC_KEY } from './activeWorkoutEvents';
+import { api, ApiError } from './api';
 import {
+  browserSignOutDeps,
   clearUserDeviceData,
+  hasUnsyncedWorkout,
   LAST_USER_KEY,
   readLastUser,
+  readSignedOutAccount,
   reconcileSignedInUser,
   signOutAndClear,
   type CleanupStorage,
 } from './sessionCleanup';
-import { ACTIVE_WORKOUT_DRAFT_KEY } from './workoutDraft';
+import {
+  ACTIVE_WORKOUT_DRAFT_KEY,
+  readActiveWorkoutDraft,
+  writeActiveWorkoutDraft,
+  type ActiveWorkoutDraft,
+} from './workoutDraft';
 import { FINISHED_WORKOUTS_KEY } from './finishedWorkoutQueue';
 import type { User } from './types';
 
@@ -133,6 +142,146 @@ describe('reconcileSignedInUser', () => {
     expect(clearCache).toHaveBeenCalledOnce();
     expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBe('{"draft":true}');
     expect(readLastUser(storage)?.id).toBe('a');
+  });
+});
+
+function liveWorkout(overrides: Partial<ActiveWorkoutDraft> = {}): ActiveWorkoutDraft {
+  const startedAt = Date.now() - 20 * 60_000;
+  return {
+    version: 1,
+    clientSessionId: '0d6c1f5e-3c35-4bb0-9d55-2f1c8d7a8e11',
+    startedAt,
+    updatedAt: startedAt,
+    name: 'Sample upper session',
+    workoutDate: '2026-11-19',
+    category: 'upper',
+    notes: '',
+    movements: [],
+    ...overrides,
+  };
+}
+
+describe('a live workout when the session ends on another device', () => {
+  const clearCache = () => Promise.resolve();
+
+  it('is kept with its sync record and its account for the same account to sign in again', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user('a')));
+    writeActiveWorkoutDraft(liveWorkout(), storage);
+    storage.setItem(ACTIVE_WORKOUT_SYNC_KEY, '{"userId":"a","base":{"revision":3,"draft":null}}');
+
+    await clearUserDeviceData({ storage, clearCache }, { keepUnsyncedWorkout: true });
+
+    expect(readActiveWorkoutDraft(storage)?.name).toBe('Sample upper session');
+    expect(storage.getItem(ACTIVE_WORKOUT_SYNC_KEY)).not.toBeNull();
+    expect(readLastUser(storage)).toBeNull();
+    expect(readSignedOutAccount(storage)).toEqual({ id: 'a', username: 'a' });
+
+    expect(await reconcileSignedInUser(user('a'), { storage, clearCache })).toBe(false);
+    expect(readActiveWorkoutDraft(storage)?.name).toBe('Sample upper session');
+    expect(storage.getItem(ACTIVE_WORKOUT_SYNC_KEY)).not.toBeNull();
+    expect(readSignedOutAccount(storage)).toBeNull();
+  });
+
+  it('is discarded when a different account signs in', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user('a')));
+    writeActiveWorkoutDraft(liveWorkout(), storage);
+    storage.setItem(ACTIVE_WORKOUT_SYNC_KEY, '{"userId":"a","base":{"revision":3,"draft":null}}');
+    await clearUserDeviceData({ storage, clearCache }, { keepUnsyncedWorkout: true });
+
+    expect(await reconcileSignedInUser(user('b'), { storage, clearCache })).toBe(true);
+
+    expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
+    expect(storage.getItem(ACTIVE_WORKOUT_SYNC_KEY)).toBeNull();
+    expect(readSignedOutAccount(storage)).toBeNull();
+  });
+
+  it('is dropped when no account is known to own it', async () => {
+    const storage = new MemoryStorage();
+    writeActiveWorkoutDraft(liveWorkout(), storage);
+
+    await clearUserDeviceData({ storage, clearCache }, { keepUnsyncedWorkout: true });
+
+    expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
+  });
+
+  it('is cleared, with the account, by signing out on this device', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LAST_USER_KEY, JSON.stringify(user('a')));
+    writeActiveWorkoutDraft(liveWorkout(), storage);
+    await clearUserDeviceData({ storage, clearCache }, { keepUnsyncedWorkout: true });
+
+    await clearUserDeviceData({ storage, clearCache });
+
+    expect(storage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
+    expect(readSignedOutAccount(storage)).toBeNull();
+  });
+});
+
+describe('hasUnsyncedWorkout', () => {
+  it('is false with no workout, or one the server has acknowledged', () => {
+    const storage = new MemoryStorage();
+    expect(hasUnsyncedWorkout(storage)).toBe(false);
+
+    const draft = liveWorkout();
+    writeActiveWorkoutDraft(draft, storage);
+    storage.setItem(
+      ACTIVE_WORKOUT_SYNC_KEY,
+      JSON.stringify({ userId: 'a', base: { revision: 2, draft: { ...draft, updatedAt: 1 } } }),
+    );
+    expect(hasUnsyncedWorkout(storage)).toBe(false);
+  });
+
+  it('is true for edits the server has not seen, or a finished workout waiting to save', () => {
+    const storage = new MemoryStorage();
+    writeActiveWorkoutDraft(liveWorkout({ notes: 'Logged offline' }), storage);
+    storage.setItem(
+      ACTIVE_WORKOUT_SYNC_KEY,
+      JSON.stringify({ userId: 'a', base: { revision: 2, draft: liveWorkout() } }),
+    );
+    expect(hasUnsyncedWorkout(storage)).toBe(true);
+
+    storage.removeItem(ACTIVE_WORKOUT_SYNC_KEY);
+    expect(hasUnsyncedWorkout(storage)).toBe(true);
+
+    const queued = new MemoryStorage();
+    writeActiveWorkoutDraft(
+      liveWorkout({
+        pendingSave: {
+          userId: 'a',
+          finishedAt: Date.now(),
+          workoutId: null,
+          payload: {
+            client_session_id: '0d6c1f5e-3c35-4bb0-9d55-2f1c8d7a8e11',
+            name: 'Sample upper session',
+            workout_date: '2026-11-19',
+            category: 'upper',
+            notes: null,
+            duration_minutes: 20,
+            start_time: null,
+            end_time: null,
+            movements: [
+              {
+                exercise_id: 'bench',
+                notes: null,
+                machine_photo_ids: [],
+                sets: [{ reps: 8, weight_kg: 60, completed: true } as never],
+              },
+            ],
+          },
+        },
+      }),
+      queued,
+    );
+    expect(hasUnsyncedWorkout(queued)).toBe(true);
+  });
+});
+
+describe('browserSignOutDeps', () => {
+  it('signs out this device by default, and every device when asked', () => {
+    expect(browserSignOutDeps().logout).toBe(api.auth.logoutSession);
+    expect(browserSignOutDeps({ everywhere: true }).logout).toBe(api.auth.logout);
   });
 });
 

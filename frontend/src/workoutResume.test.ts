@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canResumeWorkout,
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
@@ -67,5 +68,40 @@ describe('resuming a finished workout', () => {
   it('treats a corrected duration as the total, not another segment', () => {
     const resumedAt = Date.UTC(2026, 8, 28, 18, 0);
     expect(completedWorkoutDurationMinutes(45, resumedAt, resumedAt + 10 * 60_000, 50)).toBe(50);
+  });
+});
+
+describe('which saved workouts offer Resume', () => {
+  // Local times, so the checks hold in any time zone.
+  const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute);
+  const saved = (date: string, savedAt: Date) => ({
+    workout_date: date,
+    created_at: savedAt.toISOString(),
+    updated_at: savedAt.toISOString(),
+  });
+
+  it('offers it for any workout dated today', () => {
+    expect(canResumeWorkout(saved('2026-11-19', at(19, 7)), at(19, 21).getTime())).toBe(true);
+  });
+
+  it('keeps a late session resumable for a few hours after midnight', () => {
+    const lateSession = saved('2026-11-19', at(19, 23, 40));
+    expect(canResumeWorkout(lateSession, at(20, 1, 30).getTime())).toBe(true);
+    expect(canResumeWorkout(lateSession, at(20, 7).getTime())).toBe(false);
+  });
+
+  it('does not offer it for older workouts, even ones saved or imported just now', () => {
+    const now = at(19, 21).getTime();
+    expect(canResumeWorkout(saved('2026-11-18', at(18, 18)), now)).toBe(false);
+    expect(canResumeWorkout(saved('2026-11-09', at(19, 20, 55)), now)).toBe(false);
+  });
+
+  it('counts the latest save, so a session resumed again late stays resumable', () => {
+    const resumed = {
+      workout_date: '2026-11-19',
+      created_at: at(19, 18).toISOString(),
+      updated_at: at(19, 23, 50).toISOString(),
+    };
+    expect(canResumeWorkout(resumed, at(20, 2).getTime())).toBe(true);
   });
 });

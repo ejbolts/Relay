@@ -5,9 +5,11 @@ import {
   addDays,
   averageOf,
   cardioSessionCount,
+  isStrengthWorkout,
+  prSetCount,
   recentStrengthRecords,
+  strengthSets,
   weekStartFor,
-  workingSets,
   workoutVolumeKg,
 } from './trainingSummary';
 
@@ -63,6 +65,8 @@ export interface WeeklyReview {
   training: WeeklyTrainingTotals;
   previousTraining: WeeklyTrainingTotals;
   records: PersonalRecord[];
+  /** PRs this week, one per set. */
+  recordCount: number;
   previousRecordCount: number;
   /** Null when the dashboard has no set data for this week yet. */
   muscles: WeeklyMuscleReview | null;
@@ -92,9 +96,10 @@ const inWeek = (date: string, start: string, today: string) =>
 
 function trainingTotals(workouts: TrackedWorkout[]): WeeklyTrainingTotals {
   return {
-    workouts: workouts.length,
+    // Cardio-only sessions are counted under cardio, so Workouts and Sets cover strength work.
+    workouts: workouts.filter(isStrengthWorkout).length,
     cardioSessions: workouts.reduce((total, workout) => total + cardioSessionCount(workout), 0),
-    sets: workouts.reduce((total, workout) => total + workingSets(workout).length, 0),
+    sets: workouts.reduce((total, workout) => total + strengthSets(workout).length, 0),
     volumeKg: workouts.reduce((total, workout) => total + workoutVolumeKg(workout), 0),
   };
 }
@@ -198,8 +203,8 @@ export function weeklyReview(input: WeeklyReviewInput): WeeklyReview {
     training: trainingTotals(workoutsIn(start)),
     previousTraining: trainingTotals(workoutsIn(previousStart)),
     records: recentStrengthRecords(recordsIn(start), Number.POSITIVE_INFINITY),
-    previousRecordCount: recentStrengthRecords(recordsIn(previousStart), Number.POSITIVE_INFINITY)
-      .length,
+    recordCount: prSetCount(recordsIn(start)),
+    previousRecordCount: prSetCount(recordsIn(previousStart)),
     muscles: muscleReview(
       input.muscleWeeks,
       start,

@@ -14,6 +14,7 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { onNotificationsChanged } from './notificationEvents';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
+import { requestSharedProfile } from './sharedProfileRequest';
 import { WorkoutComments } from './WorkoutComments';
 import { formatReleaseDate, type Release } from './releaseMetadata';
 import { dayMonth } from './trainingSummary';
@@ -25,6 +26,7 @@ import {
   type WeeklyReviewNotice,
 } from './weeklyReviewNotice';
 import type {
+  NotificationReadReference,
   SharingConnection,
   SharingNotifications,
   ReactionNotice,
@@ -46,6 +48,8 @@ type NotificationRow =
 
 interface LocalNotices {
   release?: Release;
+  /** The release notice has not been opened yet. */
+  releaseUnread?: boolean;
   weeklyReview?: WeeklyReviewNotice | null;
   /** Only loaded for administrators. */
   resetRequests?: PasswordResetRequest[];
@@ -60,7 +64,7 @@ function weeklyReviewTime(notice: WeeklyReviewNotice): number {
 
 function notificationRows(
   items: SharingNotifications,
-  { release, weeklyReview, resetRequests = [] }: LocalNotices = {},
+  { release, releaseUnread = false, weeklyReview, resetRequests = [] }: LocalNotices = {},
 ): NotificationRow[] {
   const rows: NotificationRow[] = [
     ...(release ? [{ kind: 'release' as const, item: release }] : []),
@@ -82,7 +86,45 @@ function notificationRows(
     );
     return Number.isNaN(value) ? 0 : value;
   };
-  return rows.sort((a, b) => timestamp(b) - timestamp(a));
+  // The app's own unread notices stay at the top of the first page, above newer social rows.
+  const pinned = (row: NotificationRow) =>
+    (row.kind === 'release' && releaseUnread) || (row.kind === 'weekly-review' && row.item.unread);
+  return rows.sort((a, b) => Number(pinned(b)) - Number(pinned(a)) || timestamp(b) - timestamp(a));
+}
+
+/** Identifies a social notice, including when it happened, so a repeat counts as new. */
+function rowKey(reference: NotificationReadReference): string {
+  return `${reference.kind}:${reference.id}:${reference.workout_id ?? ''}:${reference.since}`;
+}
+
+interface PersonProps {
+  person: SharingConnection;
+  onOpen: (person: SharingConnection) => void;
+}
+
+/** The photo of the person a notice is about, opening their shared profile. */
+function PersonAvatar({ person, onOpen }: PersonProps) {
+  return (
+    <button
+      type="button"
+      className="follow-notification-avatar"
+      // The name beside it is the keyboard and screen reader target; this adds a tap area.
+      tabIndex={-1}
+      aria-label={`View ${person.display_name}’s profile`}
+      onClick={() => onOpen(person)}
+    >
+      <ProfileAvatar className="profile-avatar" user={{ ...person, username: '' }} />
+    </button>
+  );
+}
+
+/** The person's name, opening their shared profile. */
+function PersonName({ person, onOpen }: PersonProps) {
+  return (
+    <button type="button" className="follow-notification-person" onClick={() => onOpen(person)}>
+      {person.display_name}
+    </button>
+  );
 }
 
 function notificationPage(
@@ -149,6 +191,7 @@ function NotificationDate({ since }: { since: string }) {
 export function FollowNotifications({ active }: { active: boolean }) {
   const announcement = useContext(ReleaseAnnouncementContext);
   const release = announcement?.release;
+  const releaseUnread = announcement?.noticeUnread ?? false;
   const weeklyReview = useWeeklyReviewNotice();
   const [items, setItems] = useState<SharingNotifications | null>(null);
   const [open, setOpen] = useState(false);
@@ -158,6 +201,9 @@ export function FollowNotifications({ active }: { active: boolean }) {
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [page, setPage] = useState(1);
+  // Notices that were unread while the sheet has been open. Opening it marks them read, but
+  // they keep their dot until the sheet is opened again.
+  const [freshKeys, setFreshKeys] = useState<ReadonlySet<string>>(() => new Set());
   const list = useRef<HTMLUListElement>(null);
   const bell = useRef<HTMLButtonElement>(null);
   const restoreBellFocus = useRef(false);
@@ -197,6 +243,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
           const unread = unreadNotificationReferences(
             displayedNotifications(next, page, {
               release,
+              releaseUnread,
               weeklyReview,
               resetRequests: resetRequestsRef.current,
             }),
@@ -229,7 +276,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
       window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [active, open, attempt, page, release, weeklyReview]);
+  }, [active, open, attempt, page, release, releaseUnread, weeklyReview]);
 
   useEffect(() => {
     // Administrators also see people waiting for a temporary password, until it is handled.
@@ -258,6 +305,22 @@ export function FollowNotifications({ active }: { active: boolean }) {
     };
   }, [active, isAdmin, open]);
   const waitingResets = isAdmin ? resetRequests : [];
+
+  useEffect(() => {
+    if (!open || !items) return;
+    const unread = unreadNotificationReferences(items).map(rowKey);
+    setFreshKeys((current) =>
+      unread.every((key) => current.has(key)) ? current : new Set([...current, ...unread]),
+    );
+  }, [open, items]);
+
+  function openPerson(person: SharingConnection) {
+    setOpen(false);
+    requestSharedProfile(person);
+  }
+  function fresh(reference: NotificationReadReference): boolean {
+    return freshKeys.has(rowKey(reference));
+  }
 
   async function respond(person: SharingConnection, action: 'accept' | 'decline') {
     if (busy) return;
@@ -292,7 +355,12 @@ export function FollowNotifications({ active }: { active: boolean }) {
     // Like friend requests, these count until they have been dealt with.
     waitingResets.length;
   const currentItems = items ?? { requests: [], accepted: [] };
-  const notices = { release, weeklyReview, resetRequests: waitingResets };
+  const notices = {
+    release,
+    releaseUnread,
+    weeklyReview,
+    resetRequests: waitingResets,
+  };
   const rows = notificationRows(currentItems, notices);
   const total = rows.length;
   const pageCount = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
@@ -308,6 +376,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
         aria-haspopup="dialog"
         onClick={() => {
           setPage(1);
+          setFreshKeys(new Set());
           setOpen(true);
         }}
       >
@@ -437,11 +506,20 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </button>
                 </li>
               ) : row.kind === 'comment' ? (
-                <li key={`comment-${row.item.notice_id}`} className="is-openable">
-                  <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
+                <li
+                  key={`comment-${row.item.notice_id}`}
+                  className={`is-openable${
+                    fresh({ kind: 'comment', id: row.item.notice_id, since: row.item.since })
+                      ? ' is-new'
+                      : ''
+                  }`}
+                >
+                  <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
                     <p>
-                      <strong>{row.item.display_name}</strong>
+                      <strong>
+                        <PersonName person={row.item} onOpen={openPerson} />
+                      </strong>
                       {row.item.kind === 'comment_reaction'
                         ? ' reacted to your comment on '
                         : row.item.kind === 'reply'
@@ -491,11 +569,21 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   )}
                 </li>
               ) : row.kind === 'request' ? (
-                <li key={`request-${row.item.id}`}>
-                  <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
+                <li
+                  key={`request-${row.item.id}`}
+                  className={
+                    fresh({ kind: 'request', id: row.item.id, since: row.item.since })
+                      ? 'is-new'
+                      : undefined
+                  }
+                >
+                  <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
                     <p>
-                      <strong>{row.item.display_name}</strong> sent you a friend request
+                      <strong>
+                        <PersonName person={row.item} onOpen={openPerson} />
+                      </strong>{' '}
+                      sent you a friend request
                       <NotificationDate since={row.item.since} />
                     </p>
                     <div className="follow-notification-actions">
@@ -521,11 +609,26 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </div>
                 </li>
               ) : row.kind === 'reaction' ? (
-                <li key={`reaction-${row.item.workout_id}-${row.item.id}`} className="is-openable">
-                  <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
+                <li
+                  key={`reaction-${row.item.workout_id}-${row.item.id}`}
+                  className={`is-openable${
+                    fresh({
+                      kind: 'reaction',
+                      id: row.item.id,
+                      since: row.item.since,
+                      workout_id: row.item.workout_id,
+                    })
+                      ? ' is-new'
+                      : ''
+                  }`}
+                >
+                  <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
                     <p>
-                      <strong>{row.item.display_name}</strong> reacted to{' '}
+                      <strong>
+                        <PersonName person={row.item} onOpen={openPerson} />
+                      </strong>{' '}
+                      reacted to{' '}
                       <OpenWorkoutButton
                         name={row.item.workout_name}
                         label={`Open ${row.item.display_name}’s reaction on ${row.item.workout_name}`}
@@ -550,11 +653,21 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </span>
                 </li>
               ) : (
-                <li key={`accepted-${row.item.id}`}>
-                  <ProfileAvatar className="profile-avatar" user={{ ...row.item, username: '' }} />
+                <li
+                  key={`accepted-${row.item.id}`}
+                  className={
+                    fresh({ kind: 'accepted', id: row.item.id, since: row.item.since })
+                      ? 'is-new'
+                      : undefined
+                  }
+                >
+                  <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
                     <p>
-                      <strong>{row.item.display_name}</strong> accepted your friend request
+                      <strong>
+                        <PersonName person={row.item} onOpen={openPerson} />
+                      </strong>{' '}
+                      accepted your friend request
                       <NotificationDate since={row.item.since} />
                     </p>
                   </div>

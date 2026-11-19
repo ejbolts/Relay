@@ -192,14 +192,67 @@ it('confirms deletion and shows a failed deletion inside the dialog for retry', 
   await click('Delete');
   expect(remove).not.toHaveBeenCalled();
   const dialog = document.querySelector('dialog')!;
-  expect(dialog.textContent).toContain('and its replies');
+  // It has no replies, so none are mentioned.
+  expect(dialog.querySelector('p')?.textContent).toBe('This comment will be permanently deleted.');
+  expect(dialog.querySelector('.popup-dialog-actions')).not.toBeNull();
   const confirm = [...dialog.querySelectorAll('button')].find(
     (button) => button.textContent === 'Delete',
   )!;
+  expect(confirm.classList.contains('comment-delete-confirm')).toBe(true);
   await act(async () => confirm.click());
   expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('Offline');
   await act(async () => confirm.click());
   expect(remove).toHaveBeenCalledTimes(2);
   expect(document.querySelector('dialog')).toBeNull();
   expect(host.querySelector('.workout-comment')).toBeNull();
+});
+
+it('mentions replies only when the comment being deleted has some', async () => {
+  vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+    items: [
+      { ...rootComment, can_delete: true },
+      { ...replyComment, can_delete: true },
+    ],
+    total: 2,
+    next_offset: null,
+  });
+  await act(async () =>
+    root.render(<WorkoutComments workoutId="w1" onOpenMember={vi.fn()} onCountChange={vi.fn()} />),
+  );
+  const [rootDelete, replyDelete] = [...host.querySelectorAll('button')].filter(
+    (button) => button.textContent === 'Delete',
+  );
+  await act(async () => rootDelete.click());
+  expect(document.querySelector('dialog p')?.textContent).toBe(
+    'This comment and its replies will be permanently deleted.',
+  );
+  const cancel = [...document.querySelectorAll('dialog button')].find(
+    (button) => button.textContent === 'Cancel',
+  ) as HTMLButtonElement;
+  await act(async () => cancel.click());
+  expect(document.querySelector('dialog')).toBeNull();
+  await act(async () => replyDelete.click());
+  expect(document.querySelector('dialog p')?.textContent).toBe(
+    'This comment will be permanently deleted.',
+  );
+});
+
+it('shows the day for comments not posted today', async () => {
+  const now = new Date();
+  const earlier = new Date(now.getTime() - 3 * 86_400_000);
+  vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+    items: [
+      { ...rootComment, id: 'old', created_at: earlier.toISOString() },
+      { ...rootComment, id: 'new', created_at: now.toISOString() },
+    ],
+    total: 2,
+    next_offset: null,
+  });
+  await act(async () =>
+    root.render(<WorkoutComments workoutId="w1" onOpenMember={vi.fn()} onCountChange={vi.fn()} />),
+  );
+  const times = [...host.querySelectorAll('.comment-actions time')].map((item) => item.textContent);
+  const clock = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const day = earlier.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  expect(times).toEqual([`${day}, ${clock(earlier)}`, clock(now)]);
 });

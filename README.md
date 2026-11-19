@@ -38,6 +38,7 @@ _Home: your next workout and training dashboard. Select the screenshot to view i
 - Give a planned exercise a **rep range** (such as 8–12) in a split day or a workout type. When you start that workout, the exercise shows its target and what to do next: stay at the weight until every top set reaches the highest reps, then try the next weight up. Sets the plan left blank start with that weight suggested.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - **Start** offers three choices: the workout that is up next, cardio or an empty workout. While a workout is running, Home shows it where Up next sits, with **Resume**.
+- Tap today, or a planned day, in Home's week strip or the calendar to see that split day's exercises and start it now, so any day of your split can be trained today.
 - Tap the live time under the workout name to correct it if you started the timer late or left it running. Enter the time trained so far and the clock keeps counting from there.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
@@ -103,18 +104,19 @@ _Videos: connect your channel and upload workout clips as Unlisted videos. Selec
 
 Sign in with a username and password, personalise your name and profile photo, and keep your profile **Private** or choose **Friends only** or **Public** sharing within the app's sharing community.
 
-**Sign out all devices** in Settings ends every session for your account. Connected devices return to sign-in immediately; sleeping or offline devices check when they reconnect. Sign-out clears cached account data and unfinished workouts, and stops phone alerts. When a session simply expires, a finished workout that has not synced yet is kept and syncs after you sign back in. Temporary connection failures alone do not sign you out.
+**Sign out** in Settings signs out this device only, and asks first if it holds sets that have not synced. **Sign out everywhere** asks for confirmation, then ends every session for your account: connected devices return to sign-in immediately; sleeping or offline devices check when they reconnect. Signing out clears the device's cached account data and unfinished workouts, and stops its phone alerts. When a session ends without signing out on that device (it expired, or it was signed out from another device or by a password change), the workout on it is kept: the sign-in screen says you were signed out and starts with your username, and the workout syncs after you sign back in. A different account signing in discards it. Temporary connection failures alone do not sign you out.
 
 Shared profiles include workouts and your profile photo. You choose separately whether to share machine photos, body measurements, goals, cardio and notes. Friendships are mutual: send a friend request, and once it is accepted you both see each other's shared training. Requests always need accepting, even for public profiles. **Recent Friends Activity** on Home shows the latest workout or cardio session from each friend; tap the smiley to react with 👍, ❤️, 💪, 🔥, 👏, 🏆 or 🏃, and react to individual workouts on their shared profile too. Shared profiles show lifetime workout, cardio and combined training time. Reactions to your workouts appear in the compact notification bell; opening it marks displayed notices read automatically. Search shared accounts by display name, username or the account UUID shown on Profile. Shared profiles do not display usernames or uploaded videos.
 
 The **Social** tab has two parts. **Feed** starts with a row of your friends, those training now first, each with a dot for every day they trained in the last week, followed by the workouts you and your friends share. **Friends** holds friend requests, people search, your friends, suggestions, requests you sent and blocked members. To add someone in person, tap the QR button on your Profile or **QR code** beside people search; scanning it with a phone camera, or with **Scan** in the same sheet, sends you a friend request (with **Undo**), after signing in or creating an account if needed. Profiles offer **Add friend**, **Accept** or **Decline**, and a menu to cancel a request, remove a friend or block. Your profile-sharing choices still apply, and Home keeps a compact friends preview; **+N more** shows a spinner and adds three friends inline, keeping the expanded list during refreshes.
 
-Administrators can manage accounts, registration, video access and private app feedback from the admin console. User cards show live online status and workouts in progress, alongside last-active times.
+Administrators can manage accounts, registration, video access and private app feedback from the admin console. Accounts come first, with search and filters for reset requests, disabled accounts and temporary passwords; each account is one line showing live online status, a workout in progress or its last-active time, and opens to its details and actions. Account limits, storage and app versions are folded under **Server**.
 
 Settings opens with **Training**, **Appearance**, **Notifications**, **Account & privacy**,
 **Data & connections** and **Help & about**. Open a focused section without losing unfinished edits.
 Use **Search settings & profile** in Settings to jump to rest timers, username changes,
-sharing, data tools and other sections. **Settings > Appearance > App theme** offers five accent colours;
+sharing, data tools and other sections. **Settings > Appearance > App theme** offers **Dark**, **Light** and
+**Automatic** modes (Automatic, the default, follows the phone's light or dark setting) and six accent colours;
 the selection applies immediately and stays on that device.
 
 ## Getting started

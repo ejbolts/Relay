@@ -441,8 +441,8 @@ describe('shared tip presentation', () => {
     cutTo(80);
     await homeBulb(<HomeTips latestWeightKg={79.8} hasSplit={false} workouts={twoMachines} />);
     expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 5 new');
-    // More than three new tips are not counted out one by one.
-    expect(bulb()?.textContent).toBe('3+');
+    // The bulb shows the exact count of new tips up to nine.
+    expect(bulb()?.textContent).toBe('5');
     await act(async () => bulb()!.click());
     const titles = [popover()?.querySelector('strong')?.textContent];
     for (let step = 0; step < 4; step += 1) {

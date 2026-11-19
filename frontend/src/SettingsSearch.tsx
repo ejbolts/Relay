@@ -1,25 +1,37 @@
 import { useContext, useId, useState } from 'react';
 import { Icon } from './Icon';
+import { openTipTarget } from './tipActions';
+import { useUserSession } from './userContext';
 import {
   searchSettings,
   SETTINGS_GROUP_LABELS,
   SettingsNavigationContext,
+  useSettingsPageJump,
   type SettingsDestination,
 } from './settingsNavigation';
-import { useUserSession } from './userContext';
 import './settingsSearch.css';
 
-const PAGE_LABELS = { settings: 'Settings', profile: 'Profile', admin: 'Admin' } as const;
+const PAGE_LABELS: Record<SettingsDestination['page'], string> = {
+  settings: 'Settings',
+  profile: 'Profile',
+  cardio: 'Cardio',
+  dashboard: 'Home',
+  admin: 'Admin',
+};
 
 export function SettingsSearch({ includeProfile = true }: { includeProfile?: boolean }) {
   const navigation = useContext(SettingsNavigationContext);
-  const { user } = useUserSession();
+  const isAdmin = Boolean(useUserSession().user?.is_admin);
   const [query, setQuery] = useState('');
   const id = useId();
-  const results = searchSettings(query, includeProfile, user?.is_admin === true);
+  const results = searchSettings(query, includeProfile, isAdmin);
+  // Settings stays mounted, so it finishes jumps to results on the Cardio and Admin screens.
+  useSettingsPageJump('cardio', true);
+  useSettingsPageJump('admin', true);
   function choose(entry: SettingsDestination) {
     setQuery('');
-    navigation?.navigate(entry);
+    if (entry.action) openTipTarget(entry.action);
+    else navigation?.navigate(entry);
   }
   return (
     <section className="settings-search" aria-label="Search settings and profile">

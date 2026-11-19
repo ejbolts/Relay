@@ -8358,6 +8358,11 @@ body,
 .pagination-page-menu,
 .pagination-page-menu button {
   border-radius: 5px;
+}
+
+/* The darker fill suits dark mode only; light mode keeps the card and page surfaces set above. */
+:root:not([data-colour-mode='light'])
+  :where(.pagination-arrow, .pagination-more, .pagination-page-menu, .pagination-page-menu button) {
   background: #191c1e;
 }
 

@@ -7,6 +7,20 @@ import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import type { WorkoutComment, WorkoutReactions } from './types';
+import { localDate, localDateOf } from './utils';
+
+/** A comment's time, with its day when it was not posted today. */
+function commentTime(createdAt: string): string {
+  const posted = new Date(createdAt);
+  const time = posted.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (localDateOf(createdAt) === localDate()) return time;
+  const day = posted.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    ...(posted.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
+  });
+  return `${day}, ${time}`;
+}
 
 export function WorkoutComments({
   workoutId,
@@ -169,10 +183,7 @@ export function WorkoutComments({
           </div>
           <div className="comment-actions">
             <time dateTime={item.created_at}>
-              {new Date(item.created_at).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {commentTime(item.created_at)}
               {item.edited_at ? ' · edited' : ''}
             </time>
             <button
@@ -272,29 +283,28 @@ export function WorkoutComments({
   return (
     <section ref={section} className="workout-comments" aria-label="Workout comments">
       {deleting && (
-        <PopupDialog title="Delete comment?" onClose={() => !busy && setDeleting(null)}>
+        <PopupDialog
+          title="Delete comment?"
+          className="comment-delete-dialog"
+          onClose={() => !busy && setDeleting(null)}
+        >
           <p>
-            {deleting.parent_id
-              ? 'This comment will be permanently deleted.'
-              : 'This comment and its replies will be permanently deleted.'}
+            {items.some((item) => item.parent_id === deleting.id)
+              ? 'This comment and its replies will be permanently deleted.'
+              : 'This comment will be permanently deleted.'}
           </p>
           {error && (
             <p className="inline-error" role="alert">
               {error}
             </p>
           )}
-          <div className="profile-actions">
-            <button
-              type="button"
-              className="profile-secondary"
-              disabled={busy}
-              onClick={() => setDeleting(null)}
-            >
+          <footer className="popup-dialog-actions">
+            <button type="button" disabled={busy} onClick={() => setDeleting(null)}>
               Cancel
             </button>
             <button
               type="button"
-              className="profile-primary"
+              className="popup-primary-action comment-delete-confirm"
               disabled={busy}
               onClick={() =>
                 void run(async () => {
@@ -306,7 +316,7 @@ export function WorkoutComments({
             >
               Delete
             </button>
-          </div>
+          </footer>
         </PopupDialog>
       )}
       {loading ? (

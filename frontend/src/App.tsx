@@ -19,6 +19,7 @@ import { ActiveWorkoutSyncDialog } from './ActiveWorkoutSyncDialog';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import {
   extendInactiveWorkoutFinishAt,
+  inactiveWorkoutEndAt,
   inactiveWorkoutFinishAt,
   MAX_INACTIVE_WORKOUT_MS,
 } from './activeWorkoutTimeout';
@@ -57,7 +58,7 @@ import {
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
-import { MuscleGoalEditor } from './MuscleGoalEditor';
+import { TrainingPreferencesPanel } from './TrainingPreferencesPanel';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -66,6 +67,7 @@ import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
 import { splitCalendarDays } from './trainingSplit';
+import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
@@ -95,7 +97,6 @@ import type {
   SharedProfileSummary,
   TrackedSet,
   TrackedWorkout,
-  TrainingPreferences,
   TrainingSplit,
   User,
   WeeklyMuscleContribution,
@@ -133,6 +134,7 @@ import {
 } from './historyWindow';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
+import { StatusToast } from './StatusToast';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
@@ -184,6 +186,7 @@ import { ImportHistoryPrompt } from './ImportHistoryPrompt';
 import { plural } from './sharedProfileDisplay';
 import { CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
+import { ExerciseCreatedToast } from './ExerciseCreatedToast';
 import { BackgroundActivityBar } from './BackgroundActivityBar';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
@@ -192,6 +195,7 @@ import { CachedTabPanel } from './CachedTabPanel';
 import { optimisePhoto } from './photoOptimise';
 import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
+import { closeTopOverlay } from './overlayBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
@@ -247,15 +251,21 @@ import {
 } from './setFieldValues';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
+import { selectInputValue } from './selectInputValue';
+import { matchingLastSessionSet } from './lastSessionSet';
+import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
   appTabFromHash,
   createAppHistoryState,
   historySectionForTab,
   isAppHistoryState,
+  isMainTabScreen,
   mainTabFor,
+  tabScrollKey,
   type AppTab,
   type HistorySection,
+  type MainTab,
 } from './appNavigation';
 import { AppTabBar } from './AppTabBar';
 import { PaginationControls } from './PaginationControls';
@@ -273,7 +283,7 @@ import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
-  formatVolume,
+  formatListVolume,
   groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
@@ -281,11 +291,12 @@ import {
   setLabel,
   sessionTemplateFor,
   shortDate,
+  strengthSets,
   topWorkingSet,
   weekGroupLabel,
+  weekGroupSummary,
   weekStartDayFrom,
   weeklyBestPoints,
-  workingSets,
   workoutDisplayName,
   workoutVolumeKg,
   type SessionTemplate,
@@ -329,6 +340,7 @@ import { SharedProfileScreen, type SharedWorkoutListProps } from './SharedProfil
 import { LiftLeaderboardCard } from './LiftComparison';
 import { SharedSetList } from './SharedWorkoutDetail';
 import { sharedSetCount } from './sharedProfileDisplay';
+import { onSharedProfileRequested } from './sharedProfileRequest';
 import { FriendsActivityCard } from './FriendsActivity';
 import { SocialScreen } from './SocialScreen';
 import { SettingsHub } from './SettingsHub';
@@ -355,7 +367,12 @@ import {
   useFinishedWorkoutQueue,
   type SavedFromQueue,
 } from './useFinishedWorkoutQueue';
-import { finishedWorkoutKey, type FinishedWorkout } from './finishedWorkoutQueue';
+import {
+  finishedWorkoutKey,
+  readFinishedWorkouts,
+  type FinishedWorkout,
+} from './finishedWorkoutQueue';
+import { useDeferredDelete } from './useDeferredDelete';
 import {
   dashboardWithPreview,
   isPendingWorkoutId,
@@ -376,16 +393,21 @@ import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
 import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
 import { onTipTarget, type TipAction } from './tipActions';
+import { TimedToast } from './TimedToast';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import {
   buildFinishSummary,
+  finishSummaryIsFor,
   finishSummaryTimeLeft,
+  finishSummaryWorkoutGone,
   readFinishSummary,
   writeFinishSummary,
   type FinishSummary,
 } from './finishSummary';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
+import { useDiscardChangesGuard, type LeaveGuard } from './WorkoutEditGuard';
+import { useUnsavedWorkoutChanges } from './workoutEditChanges';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
@@ -413,6 +435,7 @@ import {
   createWorkoutSet,
   hasRecordedPerformance,
   isCompletedWorkingSet,
+  isLoggedWorkingSet,
   latestExerciseSets,
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
@@ -459,6 +482,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
 import {
+  canResumeWorkout,
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
@@ -472,6 +496,7 @@ import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { TIME_RANGE_OPTIONS } from './dateRanges';
+import { rangeOutgrowsBlock, withNormalisedRelativeStrength } from './exerciseProgressScope';
 import { useRangePinchZoom } from './rangePinchZoom';
 import {
   captureFriendInvite,
@@ -511,6 +536,8 @@ type HistoryBaselines = {
 };
 
 const UNDO_TOAST_MS = 4000;
+/** Long enough to read the toast and reach Undo before a deleted workout is removed. */
+const WORKOUT_DELETE_UNDO_MS = 6000;
 /** How long a logger notice, such as why a set can't be deleted, stays up. */
 const LOGGER_NOTICE_MS = 5000;
 
@@ -746,6 +773,16 @@ function AppContent() {
     setFinishRecords([]);
     writeFinishSummary(finishSummaryOwner, summary);
   }
+  /** Takes the card off Home once fresh history no longer has its workout: it was deleted. */
+  function forgetFinishIfGone(loaded: TrackedWorkout[], loadedFrom: string) {
+    const summary = finishSummaryRef.current;
+    const waiting = readFinishedWorkouts().map(({ pendingSave }) => ({
+      id: pendingSave.workoutId,
+      client_session_id: pendingSave.payload.client_session_id,
+    }));
+    if (summary && finishSummaryWorkoutGone(summary, loaded, waiting, loadedFrom))
+      rememberFinish(null);
+  }
   // The card also goes when the app has stayed open, or been asleep, past its time.
   useEffect(() => {
     if (!finishSummary) return;
@@ -808,6 +845,11 @@ function AppContent() {
     isAdmin,
   );
   const scrollPositionsRef = useRef(new Map<number, number>());
+  /** Each main screen's scroll, restored when the tab bar selects it again. */
+  const tabScrollRef = useRef(new Map<AppTab, number>());
+  const restoreScrollRef = useRef<number | null>(null);
+  /** Counts tab-bar taps on the current tab, which return Training to its exercise list. */
+  const [tabRootRequest, setTabRootRequest] = useState(0);
   const navigationActionRef = useRef<'push' | 'replace' | 'pop'>('replace');
   const currentTabRef = useRef(tab);
   const initialRefreshStartedRef = useRef(false);
@@ -863,12 +905,21 @@ function AppContent() {
   const workoutTypes = useWorkoutTypes();
   const weightUnit = useWeightUnit();
   const upNext = useUpNextSession(dashboard?.recommendation, workouts);
+  // On a rest day, the Start menu's Up next starts the split's next training day instead.
+  const nextTrainingDay = useUpNextSession(
+    upNext.isRestDay ? dashboard?.recommendation?.next_training_day : null,
+    workouts,
+  );
+  const startMenuUpNext = upNext.isRestDay ? nextTrainingDay : upNext;
   const workoutTypeColors = useMemo(
     () => builtinTypeColors(workoutTypes.types),
     [workoutTypes.types],
   );
   const [workoutStartDate, setWorkoutStartDate] = useState(localDate());
   const [editingWorkout, setEditingWorkout] = useState<TrackedWorkout | null>(null);
+  /** Set by the open editor: asks before Back throws away its unsaved changes. */
+  const workoutEditGuardRef = useRef<LeaveGuard | null>(null);
+  const [workoutSavedToast, setWorkoutSavedToast] = useState(0);
   const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(() => {
     const draft = readActiveWorkoutDraft();
     return draft?.pendingSave ? null : (draft?.resumingWorkoutId ?? null);
@@ -974,13 +1025,15 @@ function AppContent() {
     () => savedPreviews.filter((preview) => preview.dashboard === dashboard),
     [dashboard, savedPreviews],
   );
+  // A deleted workout disappears at once and is removed once its Undo has passed.
+  const workoutDeletion = useDeferredDelete(commitWorkoutDelete, WORKOUT_DELETE_UNDO_MS);
+  const deletingWorkoutId = workoutDeletion.pending?.id ?? null;
   const shownWorkouts = useMemo(
     () =>
-      finishedPreviews.reduce(
-        (current, preview) => workoutsWithPreview(current, preview.workout),
-        workouts,
-      ),
-    [finishedPreviews, workouts],
+      finishedPreviews
+        .reduce((current, preview) => workoutsWithPreview(current, preview.workout), workouts)
+        .filter((workout) => workout.id !== deletingWorkoutId),
+    [deletingWorkoutId, finishedPreviews, workouts],
   );
   const shownDashboard = useMemo(() => {
     if (!dashboard) return dashboard;
@@ -1129,6 +1182,8 @@ function AppContent() {
   const setTab = useCallback((nextTab: AppTab, options: { replace?: boolean } = {}) => {
     if (nextTab === currentTabRef.current) return;
     scrollPositionsRef.current.set(historyIndexRef.current, window.scrollY);
+    if (isMainTabScreen(currentTabRef.current))
+      tabScrollRef.current.set(tabScrollKey(currentTabRef.current), window.scrollY);
     navigationActionRef.current = options.replace ? 'replace' : 'push';
     setNavDirection('forward');
     setTabState(nextTab);
@@ -1150,6 +1205,8 @@ function AppContent() {
   }, []);
   // A notification opens the reacted or commented workout in Social's feed.
   useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
+  // A person named in a notification opens their shared profile.
+  useEffect(() => onSharedProfileRequested(openSharedProfile));
   // An admin's password reset notification opens that account in the admin console.
   useEffect(
     () => onAdminAccountFocusRequested(() => (isAdmin ? setTab('admin') : undefined)),
@@ -1178,6 +1235,32 @@ function AppContent() {
     setTab('shared-profile');
   }, [friendInvite, user, setTab]);
 
+  /**
+   * The tab bar. Switching between main screens replaces the history entry, so Back does not
+   * replay every tab, and each screen comes back where it was left. Tapping the current tab
+   * returns to its top, out of a member's profile or an exercise's detail first.
+   */
+  function selectMainTab(nextMain: MainTab) {
+    const current = currentTabRef.current;
+    if (mainTabFor(current) === nextMain) {
+      if (current === 'shared-profile') {
+        setTab('social', { replace: true });
+        return;
+      }
+      setTabRootRequest((request) => request + 1);
+      window.scrollTo({ top: 0, behavior: motionReduced() ? 'auto' : 'smooth' });
+      return;
+    }
+    const next =
+      nextMain === 'training'
+        ? lastHistorySection === 'history'
+          ? 'training'
+          : lastHistorySection
+        : nextMain;
+    restoreScrollRef.current = tabScrollRef.current.get(tabScrollKey(next)) ?? 0;
+    setTab(next, { replace: isMainTabScreen(current) });
+  }
+
   function navigateBack() {
     if (tab === 'settings' && settingsGroup !== null) {
       setSettingsGroup(null);
@@ -1185,6 +1268,8 @@ function AppContent() {
     }
     const currentState = window.history.state;
     if (tab === 'log') {
+      // Unsaved changes to a saved workout are only thrown away once confirmed.
+      if (editingWorkout && workoutEditGuardRef.current?.()) return;
       if (!editingWorkoutSaving) setEditingWorkout(null);
       if (isAppHistoryState(currentState) && currentState.index > 0) {
         window.history.back();
@@ -1258,6 +1343,7 @@ function AppContent() {
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
       const savedAnswersBefore = savedDataAnswerCount();
+      let loadedWorkouts: TrackedWorkout[] = [];
       const results = await Promise.allSettled([
         api.dashboard(windowStart).then((nextDashboard) => {
           if (!current()) return;
@@ -1312,6 +1398,7 @@ function AppContent() {
           : api.listWorkouts(windowStart)
         ).then((nextWorkouts) => {
           if (!current()) return;
+          loadedWorkouts = nextWorkouts;
           startTransition(() =>
             setWorkouts((current) => [
               ...nextWorkouts,
@@ -1338,6 +1425,7 @@ function AppContent() {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
         window.dispatchEvent(new Event('training-data-refreshed'));
+        forgetFinishIfGone(loadedWorkouts, windowStart);
       }
       const firstFailure = results.find(
         (result, index): result is PromiseRejectedResult =>
@@ -1488,8 +1576,11 @@ function AppContent() {
     // Runs before any screen's own animation-frame scroll (e.g. revealing an opened workout).
     window.scrollTo(
       0,
-      action === 'pop' ? (scrollPositionsRef.current.get(historyIndexRef.current) ?? 0) : 0,
+      action === 'pop'
+        ? (scrollPositionsRef.current.get(historyIndexRef.current) ?? 0)
+        : (restoreScrollRef.current ?? 0),
     );
+    restoreScrollRef.current = null;
     if (action === 'pop') {
       navigationActionRef.current = 'replace';
       return;
@@ -1512,9 +1603,26 @@ function AppContent() {
     // The app restores each screen's scroll itself; the browser's restore would fight it.
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
     const restoreNavigation = (event: PopStateEvent) => {
+      // The browser's Back closes an open sheet or dialog first and keeps the screen behind it.
+      const goingBack =
+        !isAppHistoryState(event.state) || event.state.index < historyIndexRef.current;
+      if (goingBack && closeTopOverlay()) {
+        const shown = currentTabRef.current;
+        window.history.pushState(
+          createAppHistoryState(shown, historyIndexRef.current),
+          '',
+          `#${shown}`,
+        );
+        return;
+      }
       const nextTab = isAppHistoryState(event.state)
         ? event.state.tab
         : appTabFromHash(window.location.hash);
+      // The browser's Back asks too, and stays on the editor until the changes are discarded.
+      if (currentTabRef.current === 'log' && nextTab !== 'log' && workoutEditGuardRef.current?.()) {
+        window.history.pushState(createAppHistoryState('log', historyIndexRef.current), '', '#log');
+        return;
+      }
       scrollPositionsRef.current.set(historyIndexRef.current, window.scrollY);
       if (isAppHistoryState(event.state)) historyIndexRef.current = event.state.index;
       navigationActionRef.current = 'pop';
@@ -1543,8 +1651,8 @@ function AppContent() {
     }
     setWorkoutSaving(true);
     ++refreshGenerationRef.current;
-    // Existing-workout edits stay mounted until confirmed; active completions use the durable snapshot.
-    setTab(wasEditing ? 'history' : 'dashboard', { replace: true });
+    // An edit stays open, showing Saving…, until the save is confirmed; then it returns to the
+    // screen it was opened from. A failed save leaves the changes and the error in front of you.
     let saved: TrackedWorkout;
     try {
       saved = await withBackgroundActivity(
@@ -1560,13 +1668,11 @@ function AppContent() {
       if (error instanceof WorkoutEditDiscarded) {
         // The other device's version was chosen: close the editor and show what is saved.
         setEditingWorkout(null);
-        if (currentTabRef.current === 'log') setTab('history', { replace: true });
+        leaveWorkoutEditor();
         void refreshData({ silent: true });
         return;
       }
-      if (currentTabRef.current === (wasEditing ? 'history' : 'dashboard'))
-        setTab('log', { replace: true });
-      else if (currentTabRef.current !== 'log')
+      if (currentTabRef.current !== 'log')
         setMessage(
           'Your workout could not be saved. Return to the workout to retry; your entries are still here.',
         );
@@ -1585,9 +1691,14 @@ function AppContent() {
     queued?: SavedFromQueue,
   ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
-    if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     // A queued save may finish after the user has opened another workout for editing.
-    if (wasEditing) setEditingWorkout(null);
+    if (wasEditing) {
+      leaveWorkoutEditor();
+      setEditingWorkout(null);
+      // A deletion still waiting for its Undo goes through, so the two toasts never overlap.
+      workoutDeletion.flush();
+      setWorkoutSavedToast((toast) => toast + 1);
+    }
 
     if (!wasEditing) {
       if (queued)
@@ -1628,8 +1739,20 @@ function AppContent() {
       });
   }
 
-  async function deleteWorkout(workout: TrackedWorkout) {
+  /** Returns from a saved workout's editor to the screen it was opened from, at its place. */
+  function leaveWorkoutEditor() {
+    if (currentTabRef.current !== 'log') return;
+    const state = window.history.state;
+    if (isAppHistoryState(state) && state.index > 0) window.history.back();
+    else setTab('history', { replace: true });
+  }
+
+  function deleteWorkout(workout: TrackedWorkout) {
     if (workoutSaveBlocked || blockedWhileSyncing(workout.id)) return;
+    workoutDeletion.request(workout);
+  }
+
+  async function commitWorkoutDelete(workout: TrackedWorkout) {
     try {
       await withBackgroundActivity('Deleting workout…', async () => {
         await api.deleteWorkout(workout.id);
@@ -1638,6 +1761,8 @@ function AppContent() {
           setActiveWorkoutStartedAt(null);
           setResumingWorkoutId(null);
         }
+        if (finishSummaryRef.current && finishSummaryIsFor(finishSummaryRef.current, workout))
+          rememberFinish(null);
         await refreshData({ activityLabel: null });
       });
     } catch (error) {
@@ -2197,7 +2322,11 @@ function AppContent() {
             onOpenBody={() => setTab('body')}
           />
         )}
-        <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
+        {/* An open sheet or dialog closes first; the next swipe changes screen. */}
+        <EdgeSwipeBack
+          onBack={() => closeTopOverlay() || navigateBack()}
+          enabled={canNavigateBack}
+        />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (
           <NotificationDialog
@@ -2224,6 +2353,27 @@ function AppContent() {
         )}
         <SetupGuideHost workouts={workouts} />
         {conflictPrompt.dialog}
+        {workoutDeletion.pending ? (
+          <TimedToast
+            key={workoutDeletion.pending.id}
+            message="Workout deleted"
+            durationMs={WORKOUT_DELETE_UNDO_MS}
+            action={{ label: 'Undo', run: workoutDeletion.undo }}
+            dismissLabel="Dismiss workout deleted notification"
+            onDismiss={workoutDeletion.flush}
+            onTimeout={null}
+          />
+        ) : (
+          workoutSavedToast > 0 && (
+            <TimedToast
+              key={workoutSavedToast}
+              message="Workout saved"
+              durationMs={UNDO_TOAST_MS}
+              dismissLabel="Dismiss workout saved notification"
+              onDismiss={() => setWorkoutSavedToast(0)}
+            />
+          )
+        )}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -2253,7 +2403,18 @@ function AppContent() {
                   error={refusal ?? (finishedQueue.outdated ? OUTDATED_CLIENT_MESSAGE : null)}
                   onRetry={finishedQueue.retry}
                   onDiscard={() => {
-                    if (finishedQueue.discard(key)) setMessage('Workout discarded.');
+                    if (!finishedQueue.discard(key)) return;
+                    setMessage('Workout discarded.');
+                    const { workoutId, payload } = finished.pendingSave;
+                    const summary = finishSummaryRef.current;
+                    if (
+                      summary &&
+                      finishSummaryIsFor(summary, {
+                        id: workoutId,
+                        client_session_id: payload.client_session_id,
+                      })
+                    )
+                      rememberFinish(null);
                   }}
                   reviewBlocked={activeWorkoutStartedAt !== null}
                   onKeepMine={
@@ -2314,7 +2475,11 @@ function AppContent() {
                 <TodayScreen
                   home={home}
                   finished={
-                    finishSummary && (
+                    finishSummary &&
+                    !(
+                      workoutDeletion.pending &&
+                      finishSummaryIsFor(finishSummary, workoutDeletion.pending)
+                    ) && (
                       <FinishedWorkoutCard
                         key={finishSummary.finishedAt}
                         summary={finishSummary}
@@ -2441,8 +2606,18 @@ function AppContent() {
                       activeWorkoutDate={activeWorkoutDate}
                       onResumeWorkout={() => setTab('log')}
                       onEditWorkout={editWorkout}
-                      onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                      onOpenWorkout={(workout) => openSavedWorkout(workout.id, null)}
+                      onStartWorkout={(workoutDate, start) =>
+                        startWorkout(
+                          workoutDate,
+                          false,
+                          start?.template ?? null,
+                          start?.category ?? null,
+                          start?.type ?? null,
+                        )
+                      }
                       onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                      onEditSplit={openSplitSchedule}
                     />
                   }
                   thisWeek={
@@ -2453,13 +2628,24 @@ function AppContent() {
                           shownDashboard?.zone2?.week_start,
                       )}
                       workouts={shownWorkouts}
+                      split={shownDashboard?.training_split}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
                       activeWorkoutDate={activeWorkoutDate}
                       onResumeWorkout={() => setTab('log')}
                       onEditWorkout={editWorkout}
-                      onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                      onOpenWorkout={(workout) => openSavedWorkout(workout.id, null)}
+                      onStartWorkout={(workoutDate, start) =>
+                        startWorkout(
+                          workoutDate,
+                          false,
+                          start?.template ?? null,
+                          start?.category ?? null,
+                          start?.type ?? null,
+                        )
+                      }
                       onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                      onEditSplit={openSplitSchedule}
                     />
                   }
                 />
@@ -2534,11 +2720,14 @@ function AppContent() {
                         screenVisible={tab === 'log'}
                         onLiveSummaryChange={setLiveWorkoutSummary}
                         onClose={navigateBack}
+                        workoutEditGuard={
+                          editingWorkout && !viewedWorkout ? workoutEditGuardRef : undefined
+                        }
                         onDelete={() => {
                           if (workoutSaveBlocked) return;
                           if (editingWorkout) {
-                            void deleteWorkout(editingWorkout);
-                            setTab('history');
+                            deleteWorkout(editingWorkout);
+                            leaveWorkoutEditor();
                           } else {
                             clearActiveWorkoutDraft();
                             setActiveWorkoutStartedAt(null);
@@ -2627,6 +2816,7 @@ function AppContent() {
                   machineWeightsFor !== null && machineWeightsFor === historyExerciseId
                 }
                 onMachineWeightsOpened={() => setMachineWeightsFor(null)}
+                rootRequest={tabRootRequest}
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
@@ -2636,8 +2826,17 @@ function AppContent() {
                 activeWorkout={activeWorkoutStartedAt !== null}
                 activeWorkoutDate={activeWorkoutDate}
                 onResumeWorkout={() => setTab('log')}
-                onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                onStartWorkout={(workoutDate, start) =>
+                  startWorkout(
+                    workoutDate,
+                    false,
+                    start?.template ?? null,
+                    start?.category ?? null,
+                    start?.type ?? null,
+                  )
+                }
                 onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                onEditSplit={openSplitSchedule}
               />
             </CachedTabPanel>
           )}
@@ -2779,11 +2978,7 @@ function AppContent() {
             restEndsAt={restEndsAt}
             restDoneAt={restDoneAt}
             workoutSaving={workoutSaveBlocked}
-            onSelect={(nextTab) => {
-              if (nextTab === 'training')
-                setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
-              else setTab(nextTab);
-            }}
+            onSelect={selectMainTab}
             onStart={() => {
               if (activeWorkoutStartedAt === null) startWorkout();
               // The ringing bell opens the workout at the next set; the logger opens it.
@@ -2792,8 +2987,10 @@ function AppContent() {
             }}
             startMenu={{
               upNextLabel:
-                upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
-                  ? `${upNext.label} day`
+                startMenuUpNext.label &&
+                !startMenuUpNext.isRestDay &&
+                !startMenuUpNext.needsSplitUpdate
+                  ? `${startMenuUpNext.label} day`
                   : null,
               onCardio: () => {
                 const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
@@ -2807,14 +3004,18 @@ function AppContent() {
                   'cardio',
                 );
               },
-              onUpNext: () =>
-                startWorkout(
-                  localDate(),
-                  false,
-                  upNext.template,
-                  upNext.recommendation?.category ?? null,
-                  upNext.type ?? null,
-                ),
+              // A rest day's own type is never started; without a next training day, no Up next.
+              onUpNext:
+                upNext.isRestDay && !startMenuUpNext.recommendation
+                  ? null
+                  : () =>
+                      startWorkout(
+                        localDate(),
+                        false,
+                        startMenuUpNext.template,
+                        startMenuUpNext.recommendation?.category ?? null,
+                        startMenuUpNext.type ?? null,
+                      ),
               onEmpty: () => startWorkout(),
             }}
           />
@@ -2989,8 +3190,12 @@ function InteractiveWorkoutCalendar({
   activeWorkoutDate,
   onResumeWorkout,
   onEditWorkout,
+  onOpenWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  onEditSplit,
+  hiddenCategories: shownHiddenCategories,
+  onHiddenCategoriesChange,
   weekStartDay,
 }: {
   entries: DashboardData['heatmap'];
@@ -3005,14 +3210,25 @@ function InteractiveWorkoutCalendar({
   activeWorkoutDate: string | null;
   onResumeWorkout: () => void;
   onEditWorkout: (workout: TrackedWorkout) => void;
-  onStartWorkout: (workoutDate: string) => void;
+  /** Opens a logged workout's session card; without it, a day's workout opens the editor. */
+  onOpenWorkout?: (workout: TrackedWorkout) => void;
+  /** Starts a workout on the date, pre-filled from a planned split day when given one. */
+  onStartWorkout: (workoutDate: string, start?: PlannedStart) => void;
   onReplaceActiveWorkout: (workoutDate: string) => void;
+  onEditSplit?: () => void;
+  /** The legend's switched-off types, when the screen also filters its own list by them. */
+  hiddenCategories?: ReadonlySet<string>;
+  onHiddenCategoriesChange?: (hidden: ReadonlySet<string>) => void;
 }) {
   const [selectedDay, setSelectedDay] = useState<DashboardData['heatmap'][number] | null>(null);
   const [pendingWorkoutDate, setPendingWorkoutDate] = useState<string | null>(null);
+  const [plannedDate, setPlannedDate] = useState<string | null>(null);
   // Every type shows by default; tapping one in the legend greys it out in the calendar.
   const { types } = useWorkoutTypes();
-  const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<string>>(() => new Set());
+  const [ownHiddenCategories, setOwnHiddenCategories] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const hiddenCategories = shownHiddenCategories ?? ownHiddenCategories;
   // The legend lists only the types logged in the months on screen.
   const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const presentTypes = calendarLegendTypes(entriesInMonths(entries, visibleMonths), types);
@@ -3030,15 +3246,19 @@ function InteractiveWorkoutCalendar({
         categoryColors,
       )
     : null;
-  const toggleCategory = (category: string) =>
-    setHiddenCategories((current) => {
-      const next = new Set(current);
-      if (!next.delete(category)) next.add(category);
-      return next;
-    });
+  const toggleCategory = (category: string) => {
+    const next = new Set(hiddenCategories);
+    if (!next.delete(category)) next.add(category);
+    if (onHiddenCategoriesChange) onHiddenCategoriesChange(next);
+    else setOwnHiddenCategories(next);
+  };
 
+  // Today with a split, and every later day, show the plan and start it today; a past day
+  // logs a missed session on that date.
   const openDay = (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => {
     if (entry) setSelectedDay(entry);
+    else if (workoutDate > today || (workoutDate === today && split?.enabled))
+      setPlannedDate(workoutDate);
     else setPendingWorkoutDate(workoutDate);
   };
 
@@ -3051,7 +3271,7 @@ function InteractiveWorkoutCalendar({
           weekStartDay={weekStartDay}
           activeWorkoutDate={activeWorkoutDate}
           activeWorkoutColor={activeWorkoutColor}
-          selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+          selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate ?? plannedDate}
           onActiveWorkoutClick={onResumeWorkout}
           onDayClick={openDay}
         />
@@ -3064,7 +3284,7 @@ function InteractiveWorkoutCalendar({
             hiddenCategories={hiddenCategories}
             activeWorkoutDate={activeWorkoutDate}
             activeWorkoutColor={activeWorkoutColor}
-            selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+            selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate ?? plannedDate}
             onActiveWorkoutClick={onResumeWorkout}
             onDayClick={openDay}
             onVisibleMonthsChange={setVisibleMonths}
@@ -3093,6 +3313,42 @@ function InteractiveWorkoutCalendar({
             setSelectedDay(null);
             onEditWorkout(workout);
           }}
+          onOpenWorkout={
+            onOpenWorkout &&
+            ((workoutId) => {
+              const workout = workouts.find((item) => item.id === workoutId);
+              if (!workout) return;
+              setSelectedDay(null);
+              onOpenWorkout(workout);
+            })
+          }
+        />
+      )}
+      {plannedDate && (
+        <PlannedDaySheet
+          key={plannedDate}
+          date={plannedDate}
+          today={today}
+          split={split}
+          workouts={workouts}
+          categoryColors={categoryColors}
+          activeWorkout={activeWorkout}
+          onClose={() => setPlannedDate(null)}
+          onStart={(start) => {
+            setPlannedDate(null);
+            onStartWorkout(today, start ?? undefined);
+          }}
+          onResume={() => {
+            setPlannedDate(null);
+            onResumeWorkout();
+          }}
+          onEditSplit={
+            onEditSplit &&
+            (() => {
+              setPlannedDate(null);
+              onEditSplit();
+            })
+          }
         />
       )}
       {pendingWorkoutDate && (
@@ -3118,12 +3374,15 @@ function CalendarDayDetail({
   onClose,
   onStartWorkout,
   onEditWorkout,
+  onOpenWorkout,
 }: {
   day: DashboardData['heatmap'][number];
   categoryColors: WorkoutTypeColors;
   onClose: () => void;
   onStartWorkout: (workoutDate: string) => void;
   onEditWorkout: (workoutId: string) => void;
+  /** Opens the workout's session card; the row falls back to the editor without it. */
+  onOpenWorkout?: (workoutId: string) => void;
 }) {
   const weightUnit = useWeightUnit();
   const { types } = useWorkoutTypes();
@@ -3183,8 +3442,10 @@ function CalendarDayDetail({
               <button
                 type="button"
                 className="calendar-workout-open"
-                onClick={() => onEditWorkout(workout.id)}
-                aria-label={`View and edit ${workout.name}`}
+                onClick={() => (onOpenWorkout ?? onEditWorkout)(workout.id)}
+                aria-label={
+                  onOpenWorkout ? `Open ${workout.name}` : `View and edit ${workout.name}`
+                }
               >
                 <i
                   style={{
@@ -3221,10 +3482,10 @@ function CalendarDayDetail({
               ))}
               <button
                 type="button"
-                className="calendar-edit-workout"
+                className={`calendar-edit-workout${onOpenWorkout ? ' is-secondary' : ''}`}
                 onClick={() => onEditWorkout(workout.id)}
               >
-                View &amp; edit workout
+                {onOpenWorkout ? 'Edit workout' : <>View &amp; edit workout</>}
               </button>
             </article>
           ))}
@@ -3309,6 +3570,7 @@ function WorkoutLogger({
   onShow,
   activeStartedAt,
   onClose,
+  workoutEditGuard,
   onDelete,
   onRestTimerChange,
   onRestDoneChange,
@@ -3346,6 +3608,8 @@ function WorkoutLogger({
   onShow: () => void;
   activeStartedAt: number | null;
   onClose: () => void;
+  /** Given to the editor of a saved workout, so Back can ask before discarding its changes. */
+  workoutEditGuard?: RefObject<LeaveGuard | null>;
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
@@ -3592,6 +3856,22 @@ function WorkoutLogger({
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
+  const unsavedChanges = useUnsavedWorkoutChanges(Boolean(initialWorkout) && !readOnly, {
+    name,
+    workoutDate,
+    category,
+    customTypeId,
+    notes,
+    durationMinutes: editedDurationMinutes,
+    startTime,
+    endTime,
+    movements,
+  });
+  const discardChangesDialog = useDiscardChangesGuard({
+    guard: workoutEditGuard,
+    unsaved: unsavedChanges && !saving,
+    onDiscard: onClose,
+  });
   const [error, setError] = useState<string | null>(null);
   const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
@@ -3684,16 +3964,20 @@ function WorkoutLogger({
       ? (initialWorkout.duration_minutes ?? 0) * 60
       : activeElapsedSeconds(startedAt, draftPause(restoredDraft)),
   );
-  const [restLeft, setRestLeft] = useState(0);
+  // A rest running when the app reloaded carries on from where it was.
+  const restoredRest = useState(() =>
+    restoreRestTimer(initialWorkout ? null : readStoredRestTimer(), clientSessionId),
+  )[0];
+  const [restLeft, setRestLeft] = useState(restoredRest.secondsLeft);
   // Each new rest opens the pill; hiding it tucks the countdown into the bottom-edge notch.
-  const [restTotal, setRestTotal] = useState(0);
+  const [restTotal, setRestTotal] = useState(restoredRest.totalSeconds);
   const [restHidden, setRestHidden] = useState(false);
   // A finished rest becomes the "GO" pill until the next set is logged, it is used or dismissed.
   const [restDone, setRestDone] = useState<{ endedAt: number; movementKey: string | null } | null>(
-    null,
+    restoredRest.done,
   );
   // The exercise (or the first of its superset) whose logged set started the rest.
-  const restMovementKeyRef = useRef<string | null>(null);
+  const restMovementKeyRef = useRef<string | null>(restoredRest.movementKey);
   const restNotificationEndpointRef = useRef<string | null>(null);
   const activeRestTimerRef = useRef<{
     id: string;
@@ -3702,7 +3986,13 @@ function WorkoutLogger({
     pausedLeft: number | null;
     serverScheduled: boolean;
     pendingSchedules: Set<Promise<void>>;
-  } | null>(null);
+  } | null>(
+    restoredRest.timer && {
+      ...restoredRest.timer,
+      serverScheduled: false,
+      pendingSchedules: new Set<Promise<void>>(),
+    },
+  );
 
   useEffect(() => {
     if (initialWorkout) return;
@@ -3853,7 +4143,8 @@ function WorkoutLogger({
           }
           restNotificationEndpointRef.current = subscription.endpoint;
           const timer = activeRestTimerRef.current;
-          if (timer) scheduleRestTimerPush(timer, subscription.endpoint);
+          if (timer && timer.pausedLeft === null)
+            scheduleRestTimerPush(timer, subscription.endpoint);
         })
         .catch(() => undefined);
     };
@@ -3890,6 +4181,35 @@ function WorkoutLogger({
       window.removeEventListener('focus', tick);
     };
   }, [restLeft, onRestTimerChange]);
+
+  // A restored rest shows on the tab bar too.
+  useEffect(() => {
+    const timer = activeRestTimerRef.current;
+    if (timer && timer.pausedLeft === null) onRestTimerChange?.(timer.endsAt);
+    // Only the rest restored when the workout opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the rest beside the draft, so a reload restores it; unchanged rests are not rewritten.
+  const storedRestRef = useRef('');
+  useEffect(() => {
+    if (initialWorkout) return;
+    const timer = activeRestTimerRef.current;
+    const value =
+      timer || restDone
+        ? {
+            sessionId: clientSessionId,
+            movementKey: restMovementKeyRef.current,
+            totalSeconds: restTotal,
+            timer: timer && { id: timer.id, endsAt: timer.endsAt, pausedLeft: timer.pausedLeft },
+            doneAt: timer ? null : (restDone?.endedAt ?? null),
+          }
+        : null;
+    const serialized = JSON.stringify(value);
+    if (serialized === storedRestRef.current) return;
+    storedRestRef.current = serialized;
+    writeStoredRestTimer(value);
+  }, [clientSessionId, initialWorkout, restLeft, restTotal, restDone, pause]);
 
   const [undoDeletion, setUndoDeletion] = useState<{
     kind: 'set' | 'rest';
@@ -4811,11 +5131,14 @@ function WorkoutLogger({
       })),
     };
   }
+  /** A workout left running ends at its last activity, not at the cutoff that noticed it. */
+  const inactiveEndAt = () =>
+    inactiveWorkoutEndAt(startedAt, lastActiveAtRef.current, inactiveFinishAtRef.current);
   // What Save in the inactive-workout prompt would save, prepared with each draft revision so
   // auto-save can save it on the server after the app is closed.
   autoSaveWorkoutRef.current = () => {
     if (initialWorkout) return null;
-    const check = checkFinish(inactiveFinishAtRef.current);
+    const check = checkFinish(inactiveEndAt());
     return check.kind === 'ready' ? finishedWorkoutInput(check) : null;
   };
 
@@ -5027,6 +5350,7 @@ function WorkoutLogger({
       {!initialWorkout ? (
         <LiveWorkoutHeader
           name={liveIdentity.name}
+          dateLabel={workoutDate < localDate() ? shortDate(workoutDate) : null}
           durationLabel={
             workoutPaused
               ? formatDuration(displayedDurationSeconds)
@@ -5080,14 +5404,13 @@ function WorkoutLogger({
                   </svg>
                 </button>
                 <button
-                  className="overlay-header-action add"
+                  className="overlay-header-save"
                   type="button"
-                  onClick={openExercisePicker}
-                  aria-label="Add exercise"
+                  disabled={saving}
+                  aria-busy={saving}
+                  onClick={() => void finishWorkout()}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               </>
             )
@@ -5558,11 +5881,12 @@ function WorkoutLogger({
         <InactiveWorkoutDialog
           name={liveIdentity.name}
           startedAt={startedAt}
+          endedAt={inactiveEndAt()}
           loggedSets={loggedSetCount}
           resuming={Boolean(resumedWorkoutId)}
           saving={saving}
           onSave={() => {
-            void finishWorkout(inactiveFinishAtRef.current).then((saved) => {
+            void finishWorkout(inactiveEndAt()).then((saved) => {
               if (saved) return;
               // Whatever blocked the save is explained on the workout screen.
               continueInactiveWorkout();
@@ -5577,6 +5901,8 @@ function WorkoutLogger({
           onClose={continueInactiveWorkout}
         />
       )}
+
+      {discardChangesDialog}
 
       {deleteConfirmationOpen && (
         <WorkoutCloseDialog
@@ -6054,7 +6380,7 @@ function WorkoutCloseDialog({
     >
       <p>
         {editing
-          ? 'This workout will be permanently removed from your history. This cannot be undone.'
+          ? 'This workout will be removed from your history.'
           : resuming
             ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
             : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
@@ -6196,6 +6522,11 @@ function MovementCard({
     const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
     return (onMachine.length ? onMachine : exerciseHistory).slice(0, 5);
   }, [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases]);
+  // Hints come from the last session with working sets; one cut short to warm-ups is skipped.
+  const lastSessionSets = useMemo(
+    () => history.find((entry) => entry.sets.some(isLoggedWorkingSet))?.sets ?? [],
+    [history],
+  );
   const machineSettingsUnloaded = movement.machineSettings === undefined;
   const onMachineSettingsRef = useRef(onMachineSettings);
 
@@ -6546,6 +6877,11 @@ function MovementCard({
   }
 
   function renderSetSummary(item: DraftSet, index: number) {
+    // An unticked row without an RPE shows last time's, faintly, as a guide.
+    const lastRpe =
+      item.rpe === null && !item.completed && !cardio
+        ? (matchingLastSessionSet(movement.sets, index, lastSessionSets)?.rpe ?? null)
+        : null;
     const valueButton = (field: SetField, label: string, className: string, value: ReactNode) => (
       <button
         type="button"
@@ -6597,7 +6933,12 @@ function MovementCard({
               {valueButton('reps', 'Edit repetitions', 'completed-set-reps', item.reps ?? '–')}
             </>
           )}
-          {valueButton('rpe', 'Edit RPE', 'completed-set-rpe', item.rpe ?? '–')}
+          {valueButton(
+            'rpe',
+            'Edit RPE',
+            lastRpe === null ? 'completed-set-rpe' : 'completed-set-rpe is-last-time',
+            item.rpe ?? lastRpe ?? '–',
+          )}
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
@@ -6678,10 +7019,10 @@ function MovementCard({
               type="text"
               value={item.reps ?? ''}
               onFocus={(event) => {
-                if (item.reps !== null) event.currentTarget.select();
+                if (item.reps !== null) selectInputValue(event.currentTarget);
               }}
               onClick={(event) => {
-                if (item.reps !== null) event.currentTarget.select();
+                if (item.reps !== null) selectInputValue(event.currentTarget);
               }}
               onChange={(event) =>
                 onUpdateSet(item.key, { reps: numberOrNull(event.target.value) })
@@ -7071,7 +7412,7 @@ function MovementCard({
         <p className="movement-rep-target">
           {progressionHint(
             movement.repRange,
-            progressionTarget(movement.repRange, history[0]?.sets ?? [], weightUnit),
+            progressionTarget(movement.repRange, lastSessionSets, weightUnit),
             weightUnit,
           )}
         </p>
@@ -8515,6 +8856,8 @@ const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: st
 interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
+  /** The training block the progress is scoped to, if any. */
+  blockName?: string | null;
   onBack: () => void;
   onMerge?: (trigger: HTMLButtonElement) => void;
   onRename?: (trigger: HTMLButtonElement) => void;
@@ -8537,6 +8880,7 @@ export function ProgressScreen({
   onDetailChange,
   onCreateExercise,
   onExercisesMerged,
+  onRecordsChange,
   onOpenMember,
 }: {
   exerciseLibrary: ExerciseLibraryState;
@@ -8558,6 +8902,8 @@ export function ProgressScreen({
   onDetailChange?: (header: ExerciseDetailHeader | null) => void;
   onCreateExercise?: () => void;
   onExercisesMerged?: () => Promise<void>;
+  /** Saving machine weights rebuilds personal records, so they are loaded again. */
+  onRecordsChange?: () => Promise<void>;
 }) {
   const { block, config: blockConfig, select: selectBlock } = useTrainingBlocks();
   const blockId = block?.id;
@@ -8675,6 +9021,7 @@ export function ProgressScreen({
         ? {
             exercise: selectedExercise,
             sessionCount: progressSessionCount,
+            blockName: block?.name ?? null,
             onBack: backToExercises,
             onMerge: canMergeSelected ? openSelectedMerge : undefined,
             onRename:
@@ -8689,6 +9036,7 @@ export function ProgressScreen({
     fullProgress,
     selectedExercise,
     progressSessionCount,
+    block?.name,
     backToExercises,
     canMergeSelected,
     canEditSelected,
@@ -8800,7 +9148,14 @@ export function ProgressScreen({
   const bestEstimatedOneRepMax = defaultView
     ? (progress?.personal_best_estimated_1rm ?? 0)
     : (estimatedOneRepMaxPoint?.estimated_1rm ?? 0);
-  const relativeBest = viewPoints.reduce<(typeof viewPoints)[number] | null>(
+  const relativePoints = useMemo(
+    () =>
+      progress && normalised
+        ? withNormalisedRelativeStrength(viewPoints, progress, mapping)
+        : viewPoints,
+    [progress, normalised, viewPoints, mapping],
+  );
+  const relativeBest = relativePoints.reduce<(typeof viewPoints)[number] | null>(
     (best, point) =>
       (point.relative_strength ?? 0) > (best?.relative_strength ?? 0) ? point : best,
     null,
@@ -8860,7 +9215,10 @@ export function ProgressScreen({
           aria-selected={displayRange === option.value}
           aria-label={option.label}
           className={displayRange === option.value ? 'active' : ''}
-          onClick={() => selectRange(option.value)}
+          onClick={() => {
+            if (block && rangeOutgrowsBlock(option.value, block, localDate())) selectBlock('all');
+            selectRange(option.value);
+          }}
         >
           {RANGE_LABELS[option.value]}
         </button>
@@ -9149,6 +9507,8 @@ export function ProgressScreen({
                   setMapping({ exerciseId: progress.exercise.id, mapping: next });
                   setMappingOpen(false);
                   setMappingNotice((serial) => serial + 1);
+                  // PRs are recalculated in the reference machine's weights.
+                  void onRecordsChange?.();
                 }}
               />
             )}
@@ -9298,7 +9658,7 @@ export function ProgressScreen({
                       <span>Relative strength</span>
                       <b className="num">
                         {relativeBest?.relative_strength != null
-                          ? `${relativeBest.relative_strength.toFixed(2)}× BW`
+                          ? `${approx}${relativeBest.relative_strength.toFixed(2)}× BW`
                           : '–'}
                       </b>
                       <small>
@@ -9485,22 +9845,9 @@ function SettingsScreen({
   const [notificationStatus, setNotificationStatus] = useState<RestAlertStatus>(() =>
     pushNotificationsSupported() ? 'checking' : 'unsupported',
   );
-  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [notificationError, setNotificationError] = useState<string | null>(null);
-  const sharedPreferences = useTrainingPreferences();
-  const [trainingPreferences, setTrainingPreferences] = useState<TrainingPreferences | null>(
-    sharedPreferences.preferences,
-  );
-  const [trainingPreferencesStatus, setTrainingPreferencesStatus] = useState<string | null>(null);
-  const [trainingPreferencesError, setTrainingPreferencesError] = useState<string | null>(null);
-  const [savingTrainingPreferences, setSavingTrainingPreferences] = useState(false);
+  const [exportToast, setExportToast] = useState<string | null>(null);
   const workoutTypes = useWorkoutTypes();
-
-  useEffect(() => {
-    if (!trainingPreferencesStatus) return;
-    const timer = window.setTimeout(() => setTrainingPreferencesStatus(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [trainingPreferencesStatus]);
 
   useEffect(() => {
     if (!csvGuideOpen) return;
@@ -9514,11 +9861,6 @@ function SettingsScreen({
     });
     return () => cancelAnimationFrame(frame);
   }, [csvGuideOpen]);
-
-  useEffect(() => {
-    setTrainingPreferences(sharedPreferences.preferences);
-    setTrainingPreferencesError(sharedPreferences.error);
-  }, [sharedPreferences.preferences, sharedPreferences.error]);
 
   useEffect(() => {
     if (!pushNotificationsSupported()) return;
@@ -9549,13 +9891,11 @@ function SettingsScreen({
 
   async function togglePhoneNotifications() {
     if (notificationStatus === 'checking' || notificationStatus === 'enabling') return;
-    setNotificationMessage(null);
     setNotificationError(null);
     if (notificationStatus === 'enabled') {
       setNotificationStatus('enabling');
       await disablePhonePushNotifications();
       setNotificationStatus('available');
-      setNotificationMessage('Phone notifications are off.');
       return;
     }
 
@@ -9563,45 +9903,11 @@ function SettingsScreen({
     try {
       await enablePhonePushNotifications();
       setNotificationStatus('enabled');
-      setNotificationMessage('Phone notifications are on.');
     } catch (reason) {
       setNotificationStatus(Notification.permission === 'denied' ? 'blocked' : 'available');
       setNotificationError(
         reason instanceof Error ? reason.message : 'Could not enable phone notifications.',
       );
-    }
-  }
-
-  async function saveTrainingPreferences() {
-    if (!trainingPreferences || savingTrainingPreferences) return;
-    setSavingTrainingPreferences(true);
-    setTrainingPreferencesStatus(null);
-    setTrainingPreferencesError(null);
-    if (
-      !Number.isInteger(trainingPreferences.weekly_muscle_set_goal) ||
-      trainingPreferences.weekly_muscle_set_goal < 1 ||
-      trainingPreferences.weekly_muscle_set_goal > 1000 ||
-      Object.values(trainingPreferences.weekly_muscle_set_goals ?? {}).some(
-        (goal) => !Number.isInteger(goal) || goal < 1 || goal > 1000,
-      )
-    ) {
-      setTrainingPreferencesError('Enter weekly muscle set goals between 1 and 1,000 whole sets.');
-      setSavingTrainingPreferences(false);
-      return;
-    }
-    try {
-      const saved = await api.updateTrainingPreferences(trainingPreferences);
-      setTrainingPreferences(saved);
-      sharedPreferences.applySaved(saved);
-      await onDataChange();
-      window.dispatchEvent(new Event('training-preferences-updated'));
-      setTrainingPreferencesStatus('Training preferences saved.');
-    } catch (reason) {
-      setTrainingPreferencesError(
-        reason instanceof Error ? reason.message : 'Could not save training preferences.',
-      );
-    } finally {
-      setSavingTrainingPreferences(false);
     }
   }
 
@@ -9639,115 +9945,7 @@ function SettingsScreen({
                   <span>{splitName ?? 'Automatic'}</span>
                   <Icon name="chevron-right" />
                 </button>
-                <section
-                  className="settings-panel panel"
-                  aria-labelledby="training-preferences-title"
-                >
-                  <header>
-                    <div>
-                      <p className="section-kicker">TRAINING</p>
-                      <h2 id="training-preferences-title">Units &amp; weekly goals</h2>
-                    </div>
-                  </header>
-                  {trainingPreferences && (
-                    <div className="training-preferences-grid">
-                      <label>
-                        Weight unit
-                        <select
-                          value={trainingPreferences.preferred_weight_unit}
-                          onChange={(event) => {
-                            setTrainingPreferences({
-                              ...trainingPreferences,
-                              preferred_weight_unit: event.target.value as 'kg' | 'lb',
-                            });
-                            setTrainingPreferencesStatus(null);
-                          }}
-                        >
-                          <option value="kg">Kilograms</option>
-                          <option value="lb">Pounds</option>
-                        </select>
-                      </label>
-                      <label>
-                        Week starts
-                        <select
-                          value={trainingPreferences.week_start}
-                          onChange={(event) => {
-                            setTrainingPreferences({
-                              ...trainingPreferences,
-                              week_start: event.target.value as 'monday' | 'sunday' | 'saturday',
-                            });
-                            setTrainingPreferencesStatus(null);
-                          }}
-                        >
-                          <option value="monday">Monday</option>
-                          <option value="sunday">Sunday</option>
-                          <option value="saturday">Saturday</option>
-                        </select>
-                      </label>
-                      <label>
-                        Default weekly sets per muscle
-                        <input
-                          type="number"
-                          min="1"
-                          max="1000"
-                          step="1"
-                          value={trainingPreferences.weekly_muscle_set_goal || ''}
-                          onChange={(event) => {
-                            setTrainingPreferences({
-                              ...trainingPreferences,
-                              weekly_muscle_set_goal: Number(event.target.value),
-                            });
-                            setTrainingPreferencesStatus(null);
-                          }}
-                        />
-                      </label>
-                    </div>
-                  )}
-                  {trainingPreferences && (
-                    <MuscleGoalEditor
-                      exercises={exercises}
-                      defaultGoal={trainingPreferences.weekly_muscle_set_goal}
-                      goals={trainingPreferences.weekly_muscle_set_goals}
-                      onChange={(goals) => {
-                        setTrainingPreferences({
-                          ...trainingPreferences,
-                          weekly_muscle_set_goals: goals,
-                        });
-                        setTrainingPreferencesStatus(null);
-                      }}
-                    />
-                  )}
-                  {trainingPreferences && (
-                    <button
-                      type="button"
-                      className="pulse-button secondary"
-                      disabled={savingTrainingPreferences}
-                      onClick={() => void saveTrainingPreferences()}
-                    >
-                      {savingTrainingPreferences ? 'Saving…' : 'Save preferences'}
-                    </button>
-                  )}
-                  {trainingPreferencesStatus &&
-                    createPortal(
-                      <div className="undo-toast top-toast" role="status">
-                        <span>{trainingPreferencesStatus}</span>
-                        <button
-                          type="button"
-                          className="undo-toast-close"
-                          aria-label="Dismiss training preferences notification"
-                          onClick={() => setTrainingPreferencesStatus(null)}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </div>,
-                      document.body,
-                    )}
-                  {trainingPreferencesError && (
-                    <p className="inline-error" role="alert">
-                      {trainingPreferencesError}
-                    </p>
-                  )}
-                </section>
+                <TrainingPreferencesPanel exercises={exercises} onDataChange={onDataChange} />
 
                 <section className="settings-panel panel" aria-labelledby="rest-settings-title">
                   <header>
@@ -9756,11 +9954,6 @@ function SettingsScreen({
                   <div className="notification-setting-row">
                     <div>
                       <strong>Rest timer</strong>
-                      <small>
-                        {restTimerEnabled
-                          ? 'Starts automatically after a completed set'
-                          : 'Automatic rest countdowns are disabled'}
-                      </small>
                     </div>
                     <button
                       type="button"
@@ -9777,11 +9970,6 @@ function SettingsScreen({
                   <div className="notification-setting-row">
                     <div>
                       <strong>Show rest times</strong>
-                      <small>
-                        {showRestTimes
-                          ? 'Display rest times between sets'
-                          : 'Rest times between sets are hidden'}
-                      </small>
                     </div>
                     <button
                       type="button"
@@ -9814,7 +10002,6 @@ function SettingsScreen({
                       <h2 id="bodyweight-trend-title">Bodyweight chart</h2>
                     </div>
                   </header>
-                  <p>Set the bodyweight chart shown in Body. Saved on this device.</p>
                   <div className="body-trend-default-fields">
                     <label>
                       Default statistic
@@ -9873,13 +10060,11 @@ function SettingsScreen({
                   <div className="notification-setting-row">
                     <div>
                       <strong>Reduce animations</strong>
-                      <small>
-                        {reduceMotion
-                          ? 'Screens, sheets and charts change without sliding or fading'
-                          : systemPrefersReducedMotion()
-                            ? 'Your phone already asks for reduced motion, so the app follows it'
-                            : 'Screens slide, sheets glide and charts draw in'}
-                      </small>
+                      {!reduceMotion && systemPrefersReducedMotion() && (
+                        <small>
+                          Your phone already asks for reduced motion, so the app follows it
+                        </small>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -9922,19 +10107,15 @@ function SettingsScreen({
                       <h2 id="notification-settings-title">Phone alerts</h2>
                     </div>
                   </header>
-                  <p>Manage notifications on this device.</p>
                   <div className="notification-setting-row">
                     <div>
                       <strong>Phone alerts</strong>
-                      <small>
-                        {notificationStatus === 'enabled'
-                          ? 'Rest timers, 2-hour workout reminders, and completed-video alerts are enabled'
-                          : notificationStatus === 'unsupported'
-                            ? 'Use an installed app and a supported browser to enable notifications'
-                            : notificationStatus === 'blocked'
-                              ? 'Blocked in phone settings'
-                              : 'Rest timers, 2-hour workout reminders, and completed-video alerts are disabled'}
-                      </small>
+                      {notificationStatus === 'unsupported' && (
+                        <small>
+                          Use an installed app and a supported browser to enable notifications
+                        </small>
+                      )}
+                      {notificationStatus === 'blocked' && <small>Blocked in phone settings</small>}
                     </div>
                     <button
                       type="button"
@@ -9953,11 +10134,6 @@ function SettingsScreen({
                       {notificationStatus === 'enabled' ? 'On' : 'Off'}
                     </button>
                   </div>
-                  {notificationMessage && (
-                    <p className="notification-setting-status" role="status">
-                      {notificationMessage}
-                    </p>
-                  )}
                   {notificationError && (
                     <p className="inline-error" role="alert">
                       {notificationError}
@@ -10025,7 +10201,6 @@ function SettingsScreen({
                       <h2 id="workout-data-title">Import &amp; export</h2>
                     </div>
                   </header>
-                  <p>Bring in workout history and bodyweight, or download a copy of your data.</p>
                   <button
                     type="button"
                     className="profile-secondary workout-data-guide-button"
@@ -10111,7 +10286,6 @@ function SettingsScreen({
                       Replay guide
                     </button>
                   </header>
-                  <p>Walk through the features again or find out how to contribute.</p>
                   <div className="guide-contribute">
                     <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
                       GitHub repository <Icon name="external" />
@@ -10135,7 +10309,6 @@ function SettingsScreen({
                       View changes
                     </button>
                   </header>
-                  <p>Read the latest release notes and see what's changed in Relay.</p>
                   {updateCheck}
                 </section>
                 <section className="settings-panel panel" aria-labelledby="feedback-settings-title">
@@ -10145,7 +10318,6 @@ function SettingsScreen({
                       <h2 id="feedback-settings-title">Feedback &amp; feature requests</h2>
                     </div>
                   </header>
-                  <p>Tell us what could be better, report a problem or suggest a feature.</p>
                   <FeedbackForm allowAnother />
                 </section>
                 {onOpenAdmin && (
@@ -10178,8 +10350,13 @@ function SettingsScreen({
           workoutDates={workoutDates}
           bodyweightDates={measurements.map((measurement) => measurement.measurement_date)}
           onClose={() => setExportOpen(false)}
+          onExported={(message) => {
+            setExportOpen(false);
+            setExportToast(message);
+          }}
         />
       )}
+      {exportToast && <StatusToast message={exportToast} onClose={() => setExportToast(null)} />}
     </section>
   );
 }
@@ -10218,8 +10395,10 @@ function HistoryScreen({
   onResumeWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  onEditSplit,
   onOpenSettings,
   accountActions,
+  rootRequest = 0,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
@@ -10253,17 +10432,25 @@ function HistoryScreen({
   activeWorkout: boolean;
   activeWorkoutDate: string | null;
   onResumeWorkout: () => void;
-  onStartWorkout: (workoutDate?: string) => void;
+  onStartWorkout: (workoutDate?: string, start?: PlannedStart) => void;
   onReplaceActiveWorkout: (workoutDate: string) => void;
+  onEditSplit?: () => void;
   onOpenSettings: () => void;
   accountActions?: ReactNode;
+  /** Each increase returns from an exercise's detail to the list (the tab bar's re-tap). */
+  rootRequest?: number;
 }) {
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
+  const exerciseHeaderRef = useRef(exerciseHeader);
+  exerciseHeaderRef.current = exerciseHeader;
+  useEffect(() => {
+    if (rootRequest) exerciseHeaderRef.current?.onBack();
+  }, [rootRequest]);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
-  const [createdExerciseName, setCreatedExerciseName] = useState<string | null>(null);
+  const [createdExercise, setCreatedExercise] = useState<Exercise | null>(null);
   const openExerciseCreation = () => {
-    setCreatedExerciseName(null);
+    setCreatedExercise(null);
     setCreateExerciseOpen(true);
   };
   const { types } = useWorkoutTypes();
@@ -10316,17 +10503,20 @@ function HistoryScreen({
   );
   const pageWindow = historyPageWindow(pageAnchor, weekStartDay, historyPage);
   const pageNeedsOlder = hasOlder && pageWindow.start < historyStart;
+  // Types switched off in the calendar legend leave the session list and its week totals too.
+  const [hiddenTypes, setHiddenTypes] = useState<ReadonlySet<string>>(() => new Set());
   const weekGroups = useMemo(
     () =>
       groupWorkoutsByWeek(
         workouts.filter(
           (workout) =>
             workout.workout_date >= pageWindow.start &&
-            (pageWindow.end === null || workout.workout_date <= pageWindow.end),
+            (pageWindow.end === null || workout.workout_date <= pageWindow.end) &&
+            !hiddenTypes.has(effectiveWorkoutType(workout, types).id),
         ),
         weekStartDay,
       ),
-    [pageWindow.end, pageWindow.start, weekStartDay, workouts],
+    [hiddenTypes, pageWindow.end, pageWindow.start, types, weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
   const sectionIndicatorRef = useSlidingIndicator<HTMLDivElement>(section);
@@ -10415,6 +10605,16 @@ function HistoryScreen({
     setOpenId(null);
   }
 
+  /** Opens a calendar day's workout as its session card, on its page, and scrolls to it. */
+  function revealWorkout(workout: TrackedWorkout) {
+    if (machineFilter) clearMachineFilter();
+    setChosenHistoryPage(historyPageForDate(workout.workout_date, pageAnchor, weekStartDay));
+    setTargetExerciseId(null);
+    setTargetMovementId(null);
+    setOpenId(workout.id);
+    revealWorkoutRef.current = true;
+  }
+
   function renderWorkoutCard(workout: TrackedWorkout) {
     return (
       <HistoryWorkoutCard
@@ -10485,10 +10685,11 @@ function HistoryScreen({
           title={exerciseHeader.exercise.name}
           subtitle={[
             exerciseHeader.exercise.muscle_group,
-            exerciseHeader.exercise.equipment,
+            // A block-scoped count names its block; the equipment makes room for it.
+            exerciseHeader.blockName ? null : exerciseHeader.exercise.equipment,
             exerciseHeader.sessionCount === null
               ? null
-              : `${exerciseHeader.sessionCount} ${exerciseHeader.sessionCount === 1 ? 'session' : 'sessions'}`,
+              : `${exerciseHeader.sessionCount} ${exerciseHeader.sessionCount === 1 ? 'session' : 'sessions'}${exerciseHeader.blockName ? ` in ${exerciseHeader.blockName}` : ''}`,
           ]
             .filter(Boolean)
             .join(' \u00b7 ')}
@@ -10551,11 +10752,6 @@ function HistoryScreen({
               Cardio
             </button>
           </div>
-          {section !== 'cardio' && createdExerciseName && (
-            <p className="training-exercise-notice" role="status">
-              {createdExerciseName} added to your library.
-            </p>
-          )}
         </>
       )}
       {createExerciseOpen && (
@@ -10567,9 +10763,20 @@ function HistoryScreen({
           onCreate={onCreateExercise}
           onCreated={(exercise) => {
             setCreateExerciseOpen(false);
-            setCreatedExerciseName(exercise.name);
+            setCreatedExercise(exercise);
+          }}
+          onUseExisting={(exercise) => {
+            setCreateExerciseOpen(false);
+            onOpenExercise(exercise.id);
           }}
           onClose={() => setCreateExerciseOpen(false)}
+        />
+      )}
+      {createdExercise && (
+        <ExerciseCreatedToast
+          name={createdExercise.name}
+          onOpen={() => onOpenExercise(createdExercise.id)}
+          onDismiss={() => setCreatedExercise(null)}
         />
       )}
       {visitedSections.has('progress') && (
@@ -10586,6 +10793,7 @@ function HistoryScreen({
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
             onExercisesMerged={onDataChange}
+            onRecordsChange={onDataChange}
             onOpenMember={onOpenMember}
             initialExerciseId={initialExerciseId}
             openMachineWeights={openMachineWeights}
@@ -10602,6 +10810,11 @@ function HistoryScreen({
             exercises={exercises}
             onDataChange={onDataChange}
             onOpenWorkout={(workoutId) => onOpenWorkout(workoutId, null)}
+            onEditWorkout={(workoutId) => {
+              const workout = workouts.find((item) => item.id === workoutId);
+              if (workout) onEdit(workout);
+              else onOpenWorkout(workoutId, null);
+            }}
           />
         </CachedTabPanel>
       )}
@@ -10659,8 +10872,12 @@ function HistoryScreen({
                   activeWorkoutDate={activeWorkoutDate}
                   onResumeWorkout={onResumeWorkout}
                   onEditWorkout={onEdit}
+                  onOpenWorkout={revealWorkout}
                   onStartWorkout={onStartWorkout}
                   onReplaceActiveWorkout={onReplaceActiveWorkout}
+                  onEditSplit={onEditSplit}
+                  hiddenCategories={hiddenTypes}
+                  onHiddenCategoriesChange={setHiddenTypes}
                 />
               </section>
               {!workouts.length && !hasOlder && (
@@ -10693,14 +10910,7 @@ function HistoryScreen({
                         <section className="history-week" key={group.weekStart} aria-label={label}>
                           <header className="history-week-header">
                             <h2>{label}</h2>
-                            <span className="num">
-                              {group.workouts.length}{' '}
-                              {group.workouts.length === 1 ? 'workout' : 'workouts'} · {group.sets}{' '}
-                              sets
-                              {group.volumeKg > 0
-                                ? ` · ${formatVolume(group.volumeKg, weightUnit)}`
-                                : ''}
-                            </span>
+                            <span className="num">{weekGroupSummary(group, weightUnit)}</span>
                           </header>
                           <div className="history-week-list">
                             {group.workouts.map(renderWorkoutCard)}
@@ -10946,11 +11156,14 @@ function HistoryWorkoutCard({
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
   const [photos, setPhotos] = useWorkoutPhotos(workout);
+  // Resume continues today's session; an older workout is changed with Edit.
+  const resumable = !activeWorkout && canResumeWorkout(workout);
   const photoSubject = shared ? workoutDisplayName(workout) : `Your ${workoutDisplayName(workout)}`;
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
-  const workingSetCount = workingSets(workout).length;
+  // A cardio entry is not a set: cardio-only rows show their time and distance instead.
+  const workingSetCount = strengthSets(workout).length;
   const totalVolume = workoutVolumeKg(workout);
   const totalDistance = completedWorkoutSets.reduce(
     (total, item) => total + (item.distance_km ?? 0),
@@ -11104,7 +11317,7 @@ function HistoryWorkoutCard({
           </span>
           <span className="history-card-metric num">
             {totalVolume > 0
-              ? formatVolume(totalVolume, weightUnit)
+              ? formatListVolume(totalVolume, weightUnit)
               : totalDistance > 0
                 ? `${Number(totalDistance.toFixed(1))} km`
                 : formatMinutesDuration(workout.duration_minutes)}
@@ -11146,12 +11359,16 @@ function HistoryWorkoutCard({
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
               <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
-              {!activeWorkout && (
+              {resumable && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
                   Resume
                 </button>
               )}
-              <button type="button" onClick={onEdit}>
+              <button
+                type="button"
+                className={`edit-workout-button${resumable ? '' : ' is-main'}`}
+                onClick={onEdit}
+              >
                 Edit
               </button>
               <InlineConfirmButton

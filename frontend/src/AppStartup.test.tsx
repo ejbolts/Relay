@@ -251,9 +251,10 @@ describe('App startup', () => {
   );
 
   it('shows the profile section with all-time totals and strength PRs', () => {
-    const record = (record_type: string, value: number) =>
+    const record = (record_type: string, value: number, set_id = `${record_type}-${value}`) =>
       ({
         id: `${record_type}-${value}`,
+        set_id,
         record_type,
         value,
         achieved_date: '2026-10-01',
@@ -267,7 +268,8 @@ describe('App startup', () => {
       },
       data: {
         history: {
-          total_workouts: 1260,
+          total_workouts: 1298,
+          strength_workouts: 1260,
           first_workout_date: null,
           last_workout_date: null,
           has_sample_workouts: true,
@@ -277,6 +279,8 @@ describe('App startup', () => {
       } as unknown as DashboardData,
       personalRecords: [
         record('weight', 100),
+        // The same set's relative-strength PR is the same PR.
+        record('relative_strength', 1.2, 'weight-100'),
         record('reps_at_weight', 8),
         record('estimated_1rm', 120),
         record('weight', 0),

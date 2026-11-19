@@ -3785,8 +3785,25 @@ describe('inactive workout suggestions', () => {
     expect(window.location.hash).toBe('#dashboard');
     expect(inactivePrompt()?.textContent).toContain('Unfinished workout');
     expect(inactivePrompt()?.textContent).toContain('Recovery workout');
-    expect(inactivePrompt()?.textContent).toContain('1 set logged');
+    expect(inactivePrompt()?.textContent?.replace(/\u00a0/g, ' ')).toContain('1 set logged');
     expectPreserved(draft);
+  });
+
+  it('saves a workout left running as ending at its last activity, not the cutoff', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    draft.lastActiveAt = draft.startedAt + 25 * 60_000;
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    const ended = new Date(draft.lastActiveAt).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    expect(inactivePrompt()?.textContent?.replace(/\u00a0/g, ' ')).toContain(`ended ${ended}`);
+    await chooseInactive('Save workout');
+    expect(vi.mocked(api.createWorkout).mock.lastCall![0]).toMatchObject({ duration_minutes: 25 });
   });
 
   it('prepares for auto-save exactly what Save in the prompt saves, only while it is on', async () => {
@@ -3950,10 +3967,14 @@ describe('inactive workout suggestions', () => {
 
   it('keeps saved incomplete suggestions unchecked after History resume and timeout', async () => {
     window.history.replaceState(null, '', '#history');
+    // Resume is offered for today's workouts.
+    const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 10);
     const saved: TrackedWorkout = {
       id: 'saved-workout',
       name: 'Workout with planned sets',
-      workout_date: '2026-10-13',
+      workout_date: today,
       category: 'push',
       notes: 'Workout notes survive',
       duration_minutes: 45,
@@ -4393,6 +4414,20 @@ describe('navigation while saving an old workout', () => {
     )!;
     await act(async () => edit.click());
   }
+  /** Leaves the editor with the browser's Back while its save is still on its way. */
+  async function leaveWhileSaving() {
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
+    );
+    // The edit stays open, saving, until the server confirms it.
+    expect(window.location.hash).toBe('#log');
+    expect(container.querySelector('.overlay-header-save')?.textContent).toBe('Saving…');
+    await act(async () => {
+      window.history.back();
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    await vi.waitFor(() => expect(window.location.hash).toBe('#training'));
+  }
   it('keeps later navigation when a slow edit succeeds', async () => {
     let finish!: (workout: TrackedWorkout) => void;
     vi.mocked(api.updateWorkout).mockReturnValueOnce(
@@ -4401,14 +4436,13 @@ describe('navigation while saving an old workout', () => {
       }),
     );
     await editSavedWorkout();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
-    );
+    await leaveWhileSaving();
     expect(api.updateWorkout).toHaveBeenCalledOnce();
     await navigateTo('Body');
     await act(async () => finish(remoteWorkout('Saved changes')));
     expect(window.location.hash).toBe('#body');
     expect(document.querySelector('.notification-toast-action')).toBeNull();
+    expect(document.querySelector('.undo-toast')?.textContent).toContain('Workout saved');
   });
   it('keeps the editor mounted for a failed edit while another screen stays usable', async () => {
     let fail!: (error: Error) => void;
@@ -4418,9 +4452,7 @@ describe('navigation while saving an old workout', () => {
       }),
     );
     await editSavedWorkout();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('.finish-workout-bottom')!.click(),
-    );
+    await leaveWhileSaving();
     await navigateTo('Body');
     await act(async () => fail(new Error('Save failed; retry.')));
     expect(window.location.hash).toBe('#body');

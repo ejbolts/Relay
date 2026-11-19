@@ -150,6 +150,37 @@ describe('daily bodyweight check-in', () => {
     );
     expect(saveFat).not.toHaveBeenCalled();
   });
+  it('asks for today’s weight beside body fat in Body fat only until a weight is logged', async () => {
+    const saveFat = vi.fn();
+    const both = vi.fn().mockResolvedValue(undo);
+    const view = (today: number | null) => (
+      <DashboardQuickBodyweight
+        mode="fat"
+        latestBodyweight={84.2}
+        todayBodyweight={today}
+        latestBodyFat={18}
+        onSave={both}
+        onSaveBodyFat={saveFat}
+      />
+    );
+    await act(async () => root.render(view(null)));
+    expect(container.querySelector('[aria-label="Body weight check-in"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Log today’s body weight first.');
+    const header = container.querySelector<HTMLButtonElement>('.quick-check-in-save')!;
+    expect(header.disabled).toBe(false);
+    expect(header.getAttribute('aria-label')).toBe('Log check-in');
+    await act(async () =>
+      header.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(both).toHaveBeenCalledExactlyOnceWith(84.2, 18);
+    expect(saveFat).not.toHaveBeenCalled();
+    // Once today's weight is in, the card is body fat only again.
+    await act(async () => root.render(view(84.2)));
+    expect(container.querySelector('[aria-label="Body weight check-in"]')).toBeNull();
+    expect(container.querySelector('.quick-check-in-save')!.getAttribute('aria-label')).toBe(
+      'Log body fat',
+    );
+  });
   it('keeps the saved value beside a tick while editing and shows a five-second undo popup', async () => {
     await render();
     expect(toast()).toBeNull();

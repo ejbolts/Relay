@@ -7,12 +7,14 @@ import {
   homeSectionGaps,
   homeSectionSpans,
   moveHomeSection,
+  showHomeSectionAfter,
   toggleHomeSection,
   toggleHomeSectionWidth,
   type HomeLayout,
   type HomeSectionId,
 } from './homeLayout';
 import './homeLayout.css';
+import { motionReduced } from './motion';
 import { useHomeLongPress } from './useHomeLongPress';
 
 interface HomeEditActions {
@@ -57,6 +59,8 @@ export function HomeLayoutSections({
   const [announcement, setAnnouncement] = useState('');
   const [addingTo, setAddingTo] = useState<{ after: HomeSectionId; span: number } | null>(null);
   const [customising, setCustomising] = useState<HomeSectionId | null>(null);
+  // The section just added from Add sections, brought into view and highlighted once.
+  const [added, setAdded] = useState<HomeSectionId | null>(null);
   const dragRef = useRef<CardDrag | null>(null);
   const titleFor = (id: HomeSectionId) => HOME_SECTIONS.find((section) => section.id === id)!.title;
 
@@ -119,6 +123,21 @@ export function HomeLayoutSections({
     return () => cancelAnimationFrame(frame);
   }, [dragging]);
 
+  useEffect(() => {
+    if (!added) return;
+    const frame = requestAnimationFrame(() =>
+      document.querySelector(`[data-home-section="${added}"]`)?.scrollIntoView({
+        behavior: motionReduced() ? 'instant' : 'smooth',
+        block: 'nearest',
+      }),
+    );
+    const timer = window.setTimeout(() => setAdded(null), 1600);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [added]);
+
   const onDraggingChange = edit?.onDraggingChange;
   useEffect(() => {
     onDraggingChange?.(dragging !== null);
@@ -142,7 +161,8 @@ export function HomeLayoutSections({
                 disabled={busy}
                 aria-label={`Add ${titleFor(id)}`}
                 onClick={() => {
-                  edit.onChange(toggleHomeSection(layout, id));
+                  edit.onChange(showHomeSectionAfter(layout, id, visible[0]));
+                  setAdded(id);
                   setAnnouncement(`${titleFor(id)} added.`);
                 }}
               >
@@ -160,7 +180,7 @@ export function HomeLayoutSections({
               data-home-section={id}
               data-home-span={spans[index]}
               style={{ gridColumn: `span ${spans[index]}` }}
-              className={`home-section home-section-${HOME_SECTIONS.find((section) => section.id === id)!.size}${dragging === id ? ' is-dragging' : ''}${over === id ? ' is-drop-target' : ''}`}
+              className={`home-section home-section-${HOME_SECTIONS.find((section) => section.id === id)!.size}${dragging === id ? ' is-dragging' : ''}${over === id ? ' is-drop-target' : ''}${added === id ? ' is-added' : ''}`}
             >
               <div className="home-edit-card">
                 <div className="home-section-content" inert={Boolean(edit)}>

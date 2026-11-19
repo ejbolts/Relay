@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
 import { searchWords, typoMatch } from './fuzzyText';
+import type { TipAction } from './tipActions';
 
 export const SETTINGS_GROUP_LABELS = {
   training: 'Training',
@@ -11,16 +12,22 @@ export const SETTINGS_GROUP_LABELS = {
 } as const;
 export type SettingsGroupId = keyof typeof SETTINGS_GROUP_LABELS;
 
+/** Screens a search result can open; settings found elsewhere live on Cardio, Home and Admin. */
+export type SettingsPage = 'settings' | 'profile' | 'cardio' | 'dashboard' | 'admin';
+
 export interface SettingsDestination {
   id: string;
   title: string;
-  page: 'settings' | 'profile' | 'admin';
+  page: SettingsPage;
   group?: SettingsGroupId;
   keywords: string;
   selector: string;
   reveal?: string[];
   editProfile?: boolean;
   requiresAccount?: boolean;
+  requiresAdmin?: boolean;
+  /** Opens the place another way, such as Home's edit mode, instead of jumping to `selector`. */
+  action?: TipAction;
 }
 
 export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
@@ -55,7 +62,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'Your split',
     page: 'settings',
     keywords:
-      'schedule rotation upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
+      'schedule rotation routine routines upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
     selector: '#training-split-settings',
   },
   {
@@ -97,7 +104,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     group: 'notifications',
     title: 'Phone alerts',
     page: 'settings',
-    keywords: 'notifications reminders push',
+    keywords: 'notifications reminders push rest alert alerts sound vibrate vibration',
     selector: '#notification-settings-title',
   },
   {
@@ -106,7 +113,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'App theme',
     page: 'settings',
     keywords:
-      'appearance light dark mode colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
+      'appearance light dark mode automatic system colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
     selector: '#colour-theme-title',
   },
   {
@@ -290,6 +297,38 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '#profile-session-title',
   },
   {
+    id: 'profile-sex',
+    title: 'Sex',
+    page: 'profile',
+    requiresAccount: true,
+    keywords: 'male female gender profile body figure',
+    selector: '.profile-sex-field',
+    editProfile: true,
+  },
+  {
+    id: 'cardio-zones',
+    title: 'Heart-rate zones',
+    page: 'cardio',
+    keywords: 'cardio zone zones heart rate hr bpm zone 2 weekly goal minutes',
+    selector: '[aria-label="Edit heart-rate zones and goals"]',
+  },
+  {
+    id: 'home-check-in',
+    title: 'Home check-in card',
+    page: 'dashboard',
+    keywords: 'check-in checkin weigh-in bodyweight body weight fat customise layout home card',
+    selector: '.home-section',
+    action: { target: 'home-edit' },
+  },
+  {
+    id: 'admin',
+    title: 'Admin console',
+    page: 'admin',
+    requiresAdmin: true,
+    keywords: 'administrator accounts users sign-ups registration limits server storage feedback',
+    selector: '#admin-users-title',
+  },
+  {
     id: 'delete',
     group: 'account',
     title: 'Delete account',
@@ -297,13 +336,6 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     requiresAccount: true,
     keywords: 'remove permanently danger',
     selector: '.danger-zone h2',
-  },
-  {
-    id: 'admin',
-    title: 'Admin console',
-    page: 'admin',
-    keywords: 'administrator administration',
-    selector: '#admin-switches-title',
   },
 ];
 
@@ -375,7 +407,7 @@ export function searchSettings(
   const available = SETTINGS_DESTINATIONS.filter(
     (entry) =>
       (includeProfile || (entry.page !== 'profile' && !entry.requiresAccount)) &&
-      (includeAdmin || entry.page !== 'admin'),
+      (includeAdmin || !entry.requiresAdmin),
   );
   const fields = (entry: SettingsDestination) => SEARCH_FIELDS.get(entry.id) ?? [];
   // Typing mistakes are only forgiven for a word that matches nothing as typed, so "timer"
@@ -422,7 +454,7 @@ export function useSettingsReveal(title: string, reveal: () => void) {
 }
 
 /** Runs after page navigation and destination controls have been revealed. */
-export function useSettingsPageJump(page: SettingsDestination['page'], active: boolean) {
+export function useSettingsPageJump(page: SettingsPage, active: boolean) {
   const navigation = useContext(SettingsNavigationContext);
   const handled = useRef(0);
   useEffect(() => {
@@ -446,9 +478,12 @@ export function useSettingsPageJump(page: SettingsDestination['page'], active: b
       first = requestAnimationFrame(() => {
         second = requestAnimationFrame(() => {
           queued = false;
-          const root = document.querySelector(`[data-settings-page="${page}"]`);
-          const target = root?.querySelector<HTMLElement>(destination.selector);
-          if (!target || target.closest('.is-collapsed, [hidden]')) return;
+          // Screens other than Settings and Profile are found by the control itself.
+          const root = document.querySelector(`[data-settings-page="${page}"]`) ?? document;
+          const target = Array.from(root.querySelectorAll<HTMLElement>(destination.selector)).find(
+            (element) => !element.closest('.is-collapsed, [hidden]'),
+          );
+          if (!target) return;
           handled.current = serial;
           observer.disconnect();
           clearTimeout(expiry);

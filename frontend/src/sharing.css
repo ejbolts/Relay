@@ -1517,6 +1517,22 @@
   text-align: left;
 }
 
+/* Delete comment? uses the app's dialog layout, with Delete in the danger colour. */
+.comment-delete-dialog > p {
+  margin: 0;
+  padding: 1rem;
+  line-height: 1.5;
+}
+
+.comment-delete-dialog > .popup-dialog-actions {
+  margin: 0;
+  padding: 1rem;
+}
+
+.comment-delete-dialog .popup-dialog-actions .comment-delete-confirm {
+  background: var(--p-danger);
+}
+
 /* Pair the app's height glide with a small entrance for discussion content, including
    threads reopened with a saved draft and reaction pickers inside comments. */
 :is(

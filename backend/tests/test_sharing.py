@@ -356,7 +356,8 @@ def test_people_search_matches_names_and_exact_uuid_without_wildcards(client, ot
         response = client.get("/api/sharing/profiles", params={"q": term})
         assert response.status_code == 200
         assert [item["id"] for item in response.json()] == [target_id]
-        assert "username" not in response.json()[0]
+        # A public profile's username tells same-named people apart, as in suggestions.
+        assert response.json()[0]["username"] == "tagged.user"
     for term in ("not-a-uuid", target_id[:8], "  "):
         assert client.get("/api/sharing/profiles", params={"q": term}).json() == []
     assert len(client.get("/api/sharing/profiles").json()) == 2
@@ -373,7 +374,7 @@ def test_people_search_keeps_profile_permissions(client, other_client):
     share(other_client, "followers")
     [found] = client.get("/api/sharing/profiles", params={"q": target_id}).json()
     assert found["can_view"] is False and found["workout_count"] is None
-    assert found["shares"] is None and "username" not in found
+    assert found["shares"] is None and found["username"] is None
     assert client.patch(f"/api/admin/users/{target_id}", json={"disabled": True}).is_success
     for term in terms:
         assert client.get("/api/sharing/profiles", params={"q": term}).json() == []
@@ -408,7 +409,8 @@ def test_public_profiles_are_open_but_friend_requests_still_need_accepting(clien
     assert owner["visibility"] == "public" and owner["can_view"] is True
     assert owner["workout_count"] == 1
     assert owner["friend_status"] == "none"
-    assert "username" not in owner
+    # Only a search names the account; the plain listing does not.
+    assert owner["username"] is None
 
     sent = other_client.post(f"/api/sharing/friends/{client.user['id']}")
     assert sent.json() == {"status": "outgoing"}
@@ -825,6 +827,7 @@ def test_friends_only_search_request_and_notification_accept(client, other_clien
         found = other_client.get("/api/sharing/profiles", params={"q": term}).json()
         owner = next(item for item in found if item["id"] == target)
         assert owner["can_view"] is False and owner["workout_count"] is None
+        assert owner["username"] is None
     assert other_client.post(f"/api/sharing/friends/{target}").json()["status"] == "outgoing"
     assert other_client.get(f"/api/sharing/profiles/{target}/workouts").status_code == 403
     notices = client.get("/api/sharing/notifications").json()

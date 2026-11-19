@@ -65,6 +65,7 @@ PUBLIC_ROUTES = {
     ("POST", "/api/auth/register"),
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/logout"),
+    ("POST", "/api/auth/logout-session"),
     # Asking the admins for a temporary password happens while signed out.
     ("POST", "/api/auth/password-reset-request"),
 }
@@ -294,6 +295,48 @@ def test_logout_revokes_the_server_side_session_even_if_the_cookie_is_replayed(c
     client.post("/api/auth/logout")
     replay = TestClient(client.app, cookies={SESSION_COOKIE: token})
     assert replay.get("/api/auth/me").status_code == 401
+
+
+def test_logout_session_signs_out_only_this_browser(client):
+    phone = TestClient(client.app)
+    assert login(phone, "owner").status_code == 200
+    with SessionLocal() as db:
+        db.add(
+            PushSubscription(
+                user_id=client.user["id"],
+                endpoint="https://web.push.apple.com/desktop",
+                p256dh="k",
+                auth="a",
+            )
+        )
+        db.commit()
+    token = phone.cookies.get(SESSION_COOKIE)
+
+    response = phone.post("/api/auth/logout-session")
+
+    assert response.status_code == 204
+    assert f"{SESSION_COOKIE}=" in response.headers["set-cookie"]
+    assert phone.get("/api/auth/me").status_code == 401
+    replay = TestClient(client.app, cookies={SESSION_COOKIE: token})
+    assert replay.get("/api/auth/me").status_code == 401
+    # The account's other devices, and their phone alerts, are left alone.
+    assert client.get("/api/auth/me").status_code == 200
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count(UserSession.id))) == 1
+        assert db.scalar(select(func.count(PushSubscription.id))) == 1
+
+
+def test_logout_session_while_signed_out_is_harmless(client):
+    assert TestClient(client.app).post("/api/auth/logout-session").status_code == 204
+    stale = TestClient(client.app, cookies={SESSION_COOKIE: "not-a-session"})
+    assert stale.post("/api/auth/logout-session").status_code == 204
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_logout_session_rejects_cross_origin_requests(client):
+    evil = {"Origin": "https://evil.example"}
+    assert client.post("/api/auth/logout-session", headers=evil).status_code == 403
+    assert client.get("/api/auth/me").status_code == 200
 
 
 def test_wrong_password_and_unknown_username_are_indistinguishable(anonymous_client):

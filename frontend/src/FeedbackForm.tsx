@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { api } from './api';
+import { StatusToast } from './StatusToast';
 
 export function FeedbackForm({
   optional = false,
@@ -13,6 +14,7 @@ export function FeedbackForm({
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [sentToast, setSentToast] = useState(0);
   const submissionId = useRef<string | null>(null);
   const fieldId = useId();
 
@@ -24,7 +26,15 @@ export function FeedbackForm({
     try {
       submissionId.current ??= crypto.randomUUID();
       await api.submitFeedback(message.trim(), submissionId.current);
-      setStatus('sent');
+      if (allowAnother) {
+        // Settings keeps the form open for the next message and confirms in the toast.
+        setMessage('');
+        submissionId.current = null;
+        setStatus('idle');
+        setSentToast((count) => count + 1);
+      } else {
+        setStatus('sent');
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not send feedback. Try again.');
       setStatus('idle');
@@ -46,20 +56,6 @@ export function FeedbackForm({
           <p role="status" className="feedback-form-success">
             Thanks! Your feedback has been sent.
           </p>
-          {allowAnother && (
-            <button
-              type="button"
-              className="profile-secondary"
-              onClick={() => {
-                setMessage('');
-                setError(null);
-                submissionId.current = null;
-                setStatus('idle');
-              }}
-            >
-              Send another message
-            </button>
-          )}
         </>
       ) : (
         <>
@@ -96,6 +92,13 @@ export function FeedbackForm({
         </>
       )}
       <small id={`${fieldId}-privacy`}>Please leave out passwords and sensitive information.</small>
+      {sentToast > 0 && (
+        <StatusToast
+          key={sentToast}
+          message="Thanks! Your feedback has been sent."
+          onClose={() => setSentToast(0)}
+        />
+      )}
     </form>
   );
 }

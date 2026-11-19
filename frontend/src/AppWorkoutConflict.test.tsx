@@ -264,7 +264,8 @@ describe('editing a saved workout that changed on another device', () => {
     const [first, second] = vi.mocked(api.updateWorkout).mock.calls;
     expect(second[1]).toEqual({ ...first[1], base_revision: 5 });
     expect(container.querySelector('.logger-screen')).toBeNull();
-    expect(window.location.hash).toBe('#history');
+    // Saved, the editor returns to Training, where it was opened.
+    await vi.waitFor(() => expect(window.location.hash).toBe('#training'));
   });
 
   it('asks again when the workout changes once more before the kept version lands', async () => {

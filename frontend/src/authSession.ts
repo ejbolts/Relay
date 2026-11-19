@@ -2,17 +2,51 @@ import { ApiError } from './api';
 import { isNetworkFailure } from './authForm';
 import {
   clearUserDeviceData,
+  endedSessionAccount,
+  hasLocalWorkout,
   reconcileSignedInUser,
   readLastUser,
   type CleanupDeps,
 } from './sessionCleanup';
+import type { SignInNotice } from './signInNotice';
 import type { User } from './types';
 
 export type AuthState =
   | { status: 'loading' }
-  | { status: 'signed-out' }
+  | {
+      status: 'signed-out';
+      /** Why the sign-in screen is showing, when the person did not sign out here. */
+      notice?: SignInNotice;
+      /** Starts the sign-in form, after a session ended without signing out here. */
+      username?: string;
+    }
   | { status: 'authenticated'; user: User; offline: boolean }
   | { status: 'unreachable'; message: string };
+
+/**
+ * The session ended without signing out on this device, for example after "Sign out everywhere"
+ * on another device or a password change. Drops the account's offline data but keeps its
+ * workout for when it signs in again. The storage cleanup is synchronous; `cleaned` settles
+ * once the cached snapshots are cleared too.
+ */
+export function endExpiredSession(deps: CleanupDeps): {
+  state: AuthState;
+  cleaned: Promise<void>;
+} {
+  const account = endedSessionAccount(deps.storage);
+  const workoutSaved = account !== null && hasLocalWorkout(deps.storage);
+  const cleaned = clearUserDeviceData(deps, { keepUnsyncedWorkout: true }).catch(() => undefined);
+  return {
+    state: account
+      ? {
+          status: 'signed-out',
+          notice: workoutSaved ? 'signed-out-workout-saved' : 'signed-out',
+          username: account.username,
+        }
+      : { status: 'signed-out' },
+    cleaned,
+  };
+}
 
 export interface SessionDeps extends CleanupDeps {
   me: () => Promise<User>;
@@ -60,8 +94,9 @@ export async function resolveSession(deps: SessionDeps): Promise<AuthState> {
   } catch (reason) {
     if (deps.isCurrent && !deps.isCurrent()) return { status: 'loading' };
     if (reason instanceof ApiError && reason.status === 401) {
-      await clearUserDeviceData(deps, { keepUnsyncedWorkout: true }).catch(() => undefined);
-      return { status: 'signed-out' };
+      const { state, cleaned } = endExpiredSession(deps);
+      await cleaned;
+      return state;
     }
     if (remembered) return { status: 'authenticated', user: remembered, offline: true };
     return {

@@ -338,10 +338,16 @@ describe('cardio weekly trend screen', () => {
     expect(field('Calories burned (kcal)').value).toBe('');
   });
 
-  it('keeps complete weekly totals when a group spans history pages and resets pagination on filtering', async () => {
+  it('pages history by whole weeks and resets pagination on filtering', async () => {
     vi.mocked(api.cardioOverview).mockResolvedValue({
       ...overview,
-      sessions: Array.from({ length: 7 }, (_, index) => session({ id: `ride-${index}` })),
+      sessions: [
+        // Seven sessions in one week stay on one page.
+        ...Array.from({ length: 7 }, (_, index) => session({ id: `ride-${index}` })),
+        session({ id: 'week-2', session_date: '2026-10-14' }),
+        session({ id: 'week-3', session_date: '2026-10-07' }),
+        session({ id: 'week-4', session_date: '2026-09-30' }),
+      ],
     });
     await act(async () =>
       root.render(
@@ -353,13 +359,68 @@ describe('cardio weekly trend screen', () => {
         />,
       ),
     );
-    expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(5);
+    expect(container.querySelectorAll('.cardio-history-week')).toHaveLength(3);
+    expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(9);
     expect(container.querySelector('.cardio-history-week h3')!.textContent).toContain('210 min');
     await click(container.querySelector('[aria-label="Next cardio history page"]')!);
-    expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(2);
-    expect(container.querySelector('.cardio-history-week h3')!.textContent).toContain('210 min');
+    expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(1);
+    expect(container.querySelector('.cardio-history-week h3')!.textContent).toContain('30 min');
     await click(named('Cardio only'));
-    expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(5);
+    expect(container.querySelectorAll('.cardio-history-row')).toHaveLength(9);
+  });
+
+  it('edits and deletes sessions logged with a workout from their rows, and asks for zones', async () => {
+    const onEditWorkout = vi.fn();
+    const deleteWorkout = vi.spyOn(api, 'deleteWorkout').mockResolvedValue(undefined);
+    vi.mocked(api.cardioOverview).mockResolvedValue({
+      ...overview,
+      cardio_preferences: { heart_rate_zones: [], goals: [{ zone: 2, minutes: 150 }] },
+      sessions: [
+        session({ id: 'tab', source_workout_id: 'w-tab', workout_context: 'pure_cardio' }),
+        session({
+          id: 'finisher',
+          session_date: '2026-10-23',
+          source_workout_id: 'w-legs',
+          source_workout_name: 'Lower A',
+          workout_context: 'workout_plus_cardio',
+        }),
+      ],
+    });
+    await act(async () =>
+      root.render(
+        <CardioScreen
+          dataRevision="linked"
+          exercises={[]}
+          onDataChange={vi.fn().mockResolvedValue(undefined)}
+          onOpenWorkout={vi.fn()}
+          onEditWorkout={onEditWorkout}
+        />,
+      ),
+    );
+    const [tab, finisher] = [...container.querySelectorAll('.cardio-history-row')];
+    // Each panel lists the metrics and actions, without repeating the row's title and date.
+    expect(tab.querySelector('.cardio-session-title-row')).toBeNull();
+    expect(finisher.querySelector('summary')!.textContent).toContain('With Lower A');
+    const buttons = (row: Element) =>
+      [...row.querySelectorAll('.cardio-session-actions button')].map((item) =>
+        item.textContent?.trim(),
+      );
+    expect(buttons(tab)).toEqual(['Share card', 'Edit metrics', 'Edit', 'Delete']);
+    // Removing the finisher would change the strength workout, so that happens there.
+    expect(buttons(finisher)).toEqual(['Share card', 'Edit metrics', 'Edit']);
+
+    await click(
+      [...finisher.querySelectorAll('button')].find((item) => item.textContent === 'Edit')!,
+    );
+    expect(onEditWorkout).toHaveBeenCalledWith('w-legs');
+    await click([...tab.querySelectorAll('button')].find((item) => item.textContent === 'Delete')!);
+    await click(
+      [...tab.querySelectorAll('button')].find((item) => item.textContent === 'Delete session')!,
+    );
+    expect(deleteWorkout).toHaveBeenCalledWith('w-tab');
+
+    expect(named('Set zones').getAttribute('aria-label')).toBe('Set heart-rate zones');
+    expect(container.querySelector('.cardio-goal-list')!.textContent).toContain('– / 150 min');
   });
 
   it('shows an empty chart and history without inventing unlogged metrics', async () => {

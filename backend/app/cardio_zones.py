@@ -83,19 +83,22 @@ def stored_zone(session: CardioSession) -> int | None:
 
 
 def effective_zone(session: CardioSession, preferences: CardioPreferences) -> int | None:
-    # Without personal ranges, keep each session's saved zone (new sessions default to Zone 2).
+    """A session's zone: from its heart rate within the personal ranges.
+
+    Without ranges, only a zone saved by hand on a standalone session counts. Sessions mirrored
+    from a workout (including those logged on the Cardio tab) were only ever given a default
+    Zone 2, which said nothing about the effort, so they have no zone until ranges are set.
+    """
     if not preferences.heart_rate_zones:
-        return stored_zone(session)
+        return None if session.source_workout_id else stored_zone(session)
     return session_zone(session.average_heart_rate_bpm, preferences)
 
 
-def classify_session(
-    session: CardioSession, preferences: CardioPreferences, *, new: bool = False
-) -> None:
+def classify_session(session: CardioSession, preferences: CardioPreferences) -> None:
     if not preferences.heart_rate_zones:
-        if new and stored_zone(session) is None:
-            session.zone = "Zone 2"
-        session.qualifies_zone2 = stored_zone(session) == 2
+        zone = effective_zone(session, preferences)
+        session.zone = f"Zone {zone}" if zone else None
+        session.qualifies_zone2 = zone == 2
         return
     zone = session_zone(session.average_heart_rate_bpm, preferences)
     session.zone = f"Zone {zone}" if zone else None

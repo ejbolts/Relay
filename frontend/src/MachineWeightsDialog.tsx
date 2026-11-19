@@ -15,6 +15,7 @@ import {
   type FactorSuggestion,
 } from './machineWeights';
 import { PopupDialog } from './PopupDialog';
+import { PreviewDrawer } from './PreviewDrawer';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 import type { ExerciseProgress, MachineWeight, WeightMapping } from './types';
@@ -383,7 +384,17 @@ function MachineWeightsEditor({
           </button>
         </div>
         {showPreview && reference && (
-          <section className="machine-weights-preview" aria-label="Preview">
+          <PreviewDrawer
+            label="Preview"
+            handle={
+              <span className="machine-weights-preview-key">
+                <span className="is-line" aria-hidden="true" />
+                All machines ≈
+                <span className="is-dot" aria-hidden="true" />
+                As logged
+              </span>
+            }
+          >
             <TrendChart
               points={previewPoints}
               backgroundPoints={loggedPoints}
@@ -393,13 +404,7 @@ function MachineWeightsEditor({
               area={false}
               height={130}
             />
-            <p className="machine-weights-preview-key">
-              <span className="is-line" aria-hidden="true" />
-              All machines ≈
-              <span className="is-dot" aria-hidden="true" />
-              As logged
-            </p>
-          </section>
+          </PreviewDrawer>
         )}
         <ul className={tree ? 'machine-weights-list is-tree' : 'machine-weights-list'}>
           {ordered.map((machine) => {

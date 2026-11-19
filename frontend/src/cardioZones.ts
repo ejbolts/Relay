@@ -32,3 +32,64 @@ export function trackedCardioGoals(goals: CardioGoalWeek[], settings: CardioGoal
   const chosen = goals.filter((goal) => goal.zone === settings.zone);
   return chosen.length ? chosen : goals;
 }
+
+export interface ZoneDraft {
+  zone: number;
+  min: string;
+  max: string;
+}
+
+/** Share of maximum heart rate where each of the five zones starts, then where zone 5 ends. */
+const ZONE_BANDS = [0.5, 0.6, 0.7, 0.8, 0.9, 1];
+
+/**
+ * The standard five zones (50–60, 60–70, 70–80, 80–90 and 90–100% of maximum heart rate), each
+ * starting one beat above the one before so they never overlap.
+ */
+export function zonesFromMaxHeartRate(maxBpm: number): ZoneDraft[] {
+  const zones: ZoneDraft[] = [];
+  for (let index = 0; index < 5; index += 1) {
+    const min = index ? Number(zones[index - 1].max) + 1 : Math.round(maxBpm * ZONE_BANDS[0]);
+    const max = index === 4 ? maxBpm : Math.round(maxBpm * ZONE_BANDS[index + 1]) - 1;
+    zones.push({ zone: index + 1, min: String(min), max: String(max) });
+  }
+  return zones;
+}
+
+/**
+ * A zone's "To" changed: the next zone's "From" follows one beat above, unless it was set to
+ * something else by hand.
+ */
+export function withZoneMax(zones: ZoneDraft[], index: number, value: string): ZoneDraft[] {
+  const next = zones[index + 1];
+  const previousMax = Number(zones[index].max);
+  const followsPrevious =
+    next && (next.min === '' || (zones[index].max !== '' && Number(next.min) === previousMax + 1));
+  const bpm = Number(value);
+  return zones.map((item, row) => {
+    if (row === index) return { ...item, max: value };
+    if (row === index + 1 && followsPrevious && value !== '' && Number.isInteger(bpm) && bpm > 0)
+      return { ...item, min: String(bpm + 1) };
+    return item;
+  });
+}
+
+/** Fields to mark: blanks once any range is entered, and bounds that overlap or run backwards. */
+export function invalidZoneFields(zones: ZoneDraft[]): Set<string> {
+  const invalid = new Set<string>();
+  if (!zones.some((zone) => zone.min !== '' || zone.max !== '')) return invalid;
+  zones.forEach((zone, index) => {
+    if (zone.min === '') invalid.add(`${zone.zone}:min`);
+    if (zone.max === '') invalid.add(`${zone.zone}:max`);
+    if (zone.min !== '' && zone.max !== '' && Number(zone.min) > Number(zone.max)) {
+      invalid.add(`${zone.zone}:min`);
+      invalid.add(`${zone.zone}:max`);
+    }
+    const previous = zones[index - 1];
+    if (previous?.max && zone.min !== '' && Number(previous.max) >= Number(zone.min)) {
+      invalid.add(`${previous.zone}:max`);
+      invalid.add(`${zone.zone}:min`);
+    }
+  });
+  return invalid;
+}

@@ -1,5 +1,5 @@
 import type { CardioSession, TrackedWorkout } from './types';
-import { workingSets, workoutDisplayName, workoutVolumeKg } from './trainingSummary';
+import { strengthSets, workoutDisplayName, workoutVolumeKg } from './trainingSummary';
 import { isCompletedWorkingSet } from './workoutSets';
 import { formatWeight, type WeightUnit } from './weightUnits';
 import relayLogo from '../public/relay-logo.png?inline';
@@ -102,7 +102,8 @@ export function workoutCardStats(
   unit: WeightUnit,
   records: number,
 ): CardStat[] {
-  const sets = workingSets(workout);
+  // A cardio entry is not a set, as in history and the feed.
+  const sets = strengthSets(workout);
   const completed = workout.movements.flatMap((movement) =>
     movement.sets.filter((set) => set.completed),
   );

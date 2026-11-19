@@ -71,6 +71,17 @@ async function submit() {
 }
 
 describe('PasswordChangeRequired', () => {
+  it('starts in the temporary password field, with an eye on every password', async () => {
+    await open();
+    const first = Array.from(container.querySelectorAll('label')).find(
+      (element) => element.textContent === 'Temporary password',
+    )?.control;
+    expect(document.activeElement).toBe(first);
+    expect(
+      [...container.querySelectorAll('.auth-reveal')].map((eye) => eye.getAttribute('aria-label')),
+    ).toEqual(['Show temporary password', 'Show new password', 'Show confirmed password']);
+  });
+
   it('replaces the temporary password and unlocks the app with the refreshed account', async () => {
     const change = vi.spyOn(api, 'changePassword').mockResolvedValue(undefined);
     vi.spyOn(api.auth, 'me').mockResolvedValue(cleared);

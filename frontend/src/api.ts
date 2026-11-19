@@ -458,8 +458,16 @@ export const api = {
         { method: 'POST', headers: jsonHeaders, body: JSON.stringify(payload) },
         { signalExpiredSession: false },
       ),
+    /** Ends every session the account has, on all devices. */
     logout: () =>
       request<void>('/api/auth/logout', { method: 'POST' }, { signalExpiredSession: false }),
+    /** Ends this device's session only. */
+    logoutSession: () =>
+      request<void>(
+        '/api/auth/logout-session',
+        { method: 'POST' },
+        { signalExpiredSession: false },
+      ),
     requestPasswordReset: (username: string) =>
       request<void>(
         '/api/auth/password-reset-request',
@@ -578,18 +586,11 @@ export const api = {
       request<SharedCardioPage>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
       ),
-    /** Your exercises with your best and a member's, and the ones your head to heads show. */
+    /** Your exercises with your best and a member's. */
     lifts: (userId: string) =>
       request<import('./types').LiftComparisons>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/lifts`,
       ),
-    /** Saves the exercises your head to heads show, for every member you compare with. */
-    chooseLifts: (exercise_ids: string[]) =>
-      request<{ exercise_ids: string[] }>('/api/sharing/lifts', {
-        method: 'PUT',
-        headers: jsonHeaders,
-        body: JSON.stringify({ exercise_ids }),
-      }),
     /** One of your lifts, ranked against the friends who have logged it. */
     liftLeaderboard: (exerciseId: string) =>
       request<{ entries: import('./types').LiftRanking[] }>(

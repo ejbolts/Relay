@@ -40,6 +40,7 @@ from .models import (
     WorkoutSet,
 )
 from .relative_strength import BodyweightHistory, relative_strength
+from .weight_factors import normalising_factors
 
 KG_TO_LB = 2.2046226218
 EPLEY_FORMULA = "Epley: weight × (1 + reps ÷ 30), reps 1–30"
@@ -329,6 +330,16 @@ def is_pr_eligible(item: WorkoutSet) -> bool:
     return True
 
 
+def top_set_candidates(sets: list[WorkoutSet]) -> list[WorkoutSet]:
+    """The sets a session's top set is chosen from: a missed rep does not make a set the top one.
+
+    Sets marked as attempted still count for volume, but the heaviest set comes from the
+    PR-eligible sets, unless the session has none.
+    """
+    eligible = [item for item in sets if is_pr_eligible(item)]
+    return eligible or sets
+
+
 def partial_sets_enabled_on(exercise: Exercise, on_date: date) -> bool:
     baseline = (
         exercise.partial_sets_default
@@ -446,7 +457,10 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
         )
     )
     bodyweights = BodyweightHistory(db, user_id)
-    for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
+    factors = normalising_factors(db, user_id)
+    for workout, movement, item, record_type in personal_record_events(
+        workouts, bodyweights, factors
+    ):
         display_weight = normalized_weight(item.weight_kg, unit)
         relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
         ratio = relative_strength(
@@ -475,11 +489,27 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
     db.flush()
 
 
+def machine_factor(
+    factors: dict[str, dict[str, float]] | None, exercise_id: str, item: WorkoutSet
+) -> float:
+    """Multiplier from a set's machine to its exercise's reference machine; 1 when not mapped."""
+    by_machine = (factors or {}).get(exercise_id)
+    if not by_machine or not item.machine_photo_id:
+        return 1.0
+    return by_machine.get(item.machine_photo_id, 1.0)
+
+
 def personal_record_events(
     workouts: list[TrainingWorkout],
     bodyweights: BodyweightHistory | None = None,
+    factors: dict[str, dict[str, float]] | None = None,
 ) -> Iterator[tuple[TrainingWorkout, WorkoutMovement, WorkoutSet, PersonalRecordType]]:
-    """Chronological records, with first attempts establishing each scope's baseline."""
+    """Chronological records, with first attempts establishing each scope's baseline.
+
+    For exercises with machine weights normalised (``factors``, from ``normalising_factors``),
+    weights are compared in the reference machine's weights, as the progress chart shows them,
+    so a heavier-feeling machine does not set or block a record.
+    """
     state: dict[str, dict[str, object]] = defaultdict(
         lambda: {"weight": -1.0, "reps": {}, "relative": -1.0}
     )
@@ -500,7 +530,8 @@ def personal_record_events(
                     or item.reps <= 0
                 ):
                     continue
-                weight = floor(item.weight_kg * 10_000 + 0.5) / 10_000
+                factor = machine_factor(factors, movement.exercise_id, item)
+                weight = floor(item.weight_kg * factor * 10_000 + 0.5) / 10_000
                 if float(current["weight"]) >= 0 and weight > float(current["weight"]):
                     yield workout, movement, item, PersonalRecordType.WEIGHT
                 current["weight"] = max(float(current["weight"]), weight)
@@ -515,7 +546,7 @@ def personal_record_events(
                     if bodyweights
                     else item.bodyweight_kg
                 )
-                ratio = relative_strength(item.weight_kg, bodyweight)
+                ratio = relative_strength(item.weight_kg * factor, bodyweight)
                 if ratio is not None:
                     if float(current["relative"]) >= 0 and ratio > float(current["relative"]):
                         yield workout, movement, item, PersonalRecordType.RELATIVE_STRENGTH

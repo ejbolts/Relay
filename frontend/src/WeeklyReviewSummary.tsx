@@ -110,8 +110,8 @@ export function WeeklyReviewSummary({
         <h3>
           Records
           <span className="num">
-            {review.records.length}
-            <Delta change={review.records.length - review.previousRecordCount} />
+            {review.recordCount}
+            <Delta change={review.recordCount - review.previousRecordCount} />
           </span>
         </h3>
         {review.records.length > 0 ? (
@@ -145,7 +145,7 @@ export function WeeklyReviewSummary({
         )}
         {review.records.length > 3 && (
           <button type="button" className="text-link" onClick={() => onOpenProgress()}>
-            All {review.records.length} in Progress
+            All {review.recordCount} in Progress
           </button>
         )}
       </div>

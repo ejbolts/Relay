@@ -92,6 +92,10 @@
 .body-figure-label:active .body-figure-hit {
   fill: var(--p-surface-2);
 }
+/* The label's own hit area shows focus; the app's outline would box the whole callout. */
+.body-figure-label:focus-visible {
+  outline: none;
+}
 .body-figure-label:focus-visible .body-figure-hit {
   fill: var(--p-surface-2);
   stroke: var(--p-accent);
@@ -186,6 +190,11 @@
   fill: var(--p-muted);
   font-size: 22px;
   font-weight: 400;
+}
+/* A value carried from an earlier entry than the one shown. */
+.body-figure-label.carried .body-figure-value {
+  fill: var(--p-muted);
+  font-weight: 500;
 }
 .body-sizes-card .segmented-control.body-sizes-figure-kind {
   width: fit-content;

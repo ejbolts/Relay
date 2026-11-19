@@ -241,3 +241,54 @@ def test_bodyweight_volume_and_cardio_exclusion(client):
         client, cardio["id"], [{"duration_seconds": 1200, "distance_km": 2}], "2026-01-15"
     )
     assert records(client, workout) == []
+
+
+def test_a_set_with_weight_and_relative_prs_counts_once_in_totals(client):
+    bench = exercise(client)
+    client.post("/api/body-measurements", json={"measurement_date": "2026-01-01", "weight_kg": 100})
+    log(client, bench["id"], [{"weight_kg": 100, "reps": 8}])
+    workout = log(client, bench["id"], [{"weight_kg": 110, "reps": 8}], "2026-01-08")
+    assert sorted(row["record_type"] for row in records(client, workout)) == [
+        "relative_strength",
+        "weight",
+    ]
+
+    own = client.get(f"/api/sharing/profiles/{client.user['id']}").json()
+    assert own["record_count"] == 1
+    client.put("/api/sharing", json={"visibility": "public"})
+    feed = client.get("/api/sharing/timeline").json()["items"]
+    assert [item["record_count"] for item in feed if item["workout"]["id"] == workout["id"]] == [1]
+
+
+def test_a_missed_rep_does_not_make_the_heaviest_set(client):
+    bench = exercise(client)
+    log(
+        client,
+        bench["id"],
+        [
+            {"weight_kg": 112.5, "reps": 6},
+            {"weight_kg": 122.5, "reps": 3, "failed": True, "target_reps": 4},
+        ],
+    )
+    log(
+        client,
+        bench["id"],
+        [{"weight_kg": 125, "reps": 4, "failed": True, "target_reps": 4}],
+        "2026-01-08",
+    )
+    log(
+        client,
+        bench["id"],
+        [{"weight_kg": 130, "reps": 1, "failed": True, "target_reps": 3}],
+        "2026-01-15",
+    )
+    points = client.get(f"/api/progress/{bench['id']}").json()["points"]
+    assert [(point["best_weight_kg"], point["best_reps"]) for point in points] == [
+        (112.5, 6),
+        # Reaching the target still counts, as it does for PRs.
+        (125, 4),
+        # A session of only missed sets still shows its heaviest.
+        (130, 1),
+    ]
+    # Volume keeps every set.
+    assert points[0]["volume_kg"] == 112.5 * 6 + 122.5 * 3

@@ -134,3 +134,28 @@
   display: block;
   line-height: 1.5;
 }
+
+/* Light mode: the dark privacy callout, pale link and dark buttons would hide their text on white. */
+:root[data-colour-mode='light'] .youtube-connection p.youtube-privacy-copy {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+}
+
+:root[data-colour-mode='light'] .youtube-privacy-copy strong {
+  color: var(--p-ink);
+}
+
+:root[data-colour-mode='light'] .youtube-channel-name {
+  color: var(--p-accent-text);
+}
+
+:root[data-colour-mode='light'] .youtube-connection-actions .secondary {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+
+:root[data-colour-mode='light'] .youtube-connection-actions .danger-link {
+  border-color: color-mix(in srgb, var(--p-danger) 40%, transparent);
+  color: var(--p-danger);
+}

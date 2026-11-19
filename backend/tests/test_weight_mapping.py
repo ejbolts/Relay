@@ -217,3 +217,44 @@ def test_exercise_list_summary_converts_merged_machine_sets(client):
         item for item in client.get("/api/progress").json() if item["exercise_id"] == exercise
     )
     assert summary["latest_estimated_1rm"] == round(estimated_one_rep_max(120, 5), 1)
+
+
+def test_records_compare_normalised_machines_in_reference_weights(client):
+    exercise = leg_press(client)
+    hammer = upload_machine_photo(client, exercise, "Hammer", "#e86f35")
+    cybex = upload_machine_photo(client, exercise, "Cybex", "#293d6b")
+    log(client, exercise, 3, [hammer["id"]], 110)
+    # 130 kg on the Cybex is 104 kg in Hammer weights: a PR only in logged weights.
+    cybex_day = log(client, exercise, 2, [cybex["id"]], 130)
+    # 115 kg on the Hammer beats 110 kg in Hammer weights, not the Cybex's logged 130 kg.
+    hammer_day = log(client, exercise, 1, [hammer["id"]], 115)
+    path = f"/api/exercises/{exercise}/weight-mapping"
+
+    def weight_prs() -> list[str]:
+        return [
+            row["workout_id"]
+            for row in client.get("/api/personal-records", params={"exercise_id": exercise}).json()
+            if row["record_type"] == "weight"
+        ]
+
+    assert weight_prs() == [cybex_day["id"]]
+    mapping = {
+        "enabled": True,
+        "reference_machine_id": hammer["id"],
+        "machines": [{"id": cybex["id"], "machine_kg": 150, "reference_kg": 120}],
+    }
+    before = client.get("/api/workouts/revision").json()["revision"]
+    assert client.put(path, json=mapping).status_code == 200
+    # Saving the mapping rebuilds the records and tells clients to reload them.
+    assert client.get("/api/workouts/revision").json()["revision"] != before
+    assert weight_prs() == [hammer_day["id"]]
+    record = next(
+        row
+        for row in client.get("/api/personal-records", params={"exercise_id": exercise}).json()
+        if row["record_type"] == "weight"
+    )
+    # The record still shows the weight that was logged.
+    assert record["value"] == 115
+
+    assert client.put(path, json={**mapping, "enabled": False}).status_code == 200
+    assert weight_prs() == [cybex_day["id"]]
