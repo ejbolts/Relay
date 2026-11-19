@@ -7493,110 +7493,6 @@ body:has(.notification-dialog[open]) {
   flex-wrap: wrap;
 }
 
-.pagination-controls {
-  position: relative;
-  display: grid;
-  grid-template-columns: 2.75rem auto 2.75rem;
-  justify-content: center;
-  gap: 0.55rem;
-  margin-top: 0.8rem;
-  border-top: 1px solid var(--line);
-  padding-top: 1rem;
-}
-
-.pagination-arrow,
-.pagination-more {
-  width: 2.75rem;
-  height: 2.75rem;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  padding: 0;
-  background: var(--card);
-  color: var(--ink);
-  font-size: 1.05rem;
-  font-weight: 900;
-}
-
-/* The page picker shows the current page, so it grows with "12 / 30". */
-.pagination-more {
-  width: auto;
-  min-width: 4.5rem;
-  padding: 0 0.85rem;
-  font-size: 0.95rem;
-  font-weight: 800;
-}
-
-/* A span, not <small>: some lists style every <small> inside them as a block. */
-.pagination-current {
-  white-space: nowrap;
-}
-
-.pagination-total {
-  color: var(--muted-ink);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.pagination-arrow:not(:disabled):hover,
-.pagination-more:hover,
-.pagination-more[aria-expanded='true'] {
-  border-color: var(--accent);
-  color: var(--accent-dark);
-}
-
-.pagination-arrow:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
-.pagination-picker {
-  position: relative;
-}
-
-.pagination-page-menu {
-  position: absolute;
-  z-index: 30;
-  bottom: calc(100% + 0.6rem);
-  left: 50%;
-  width: min(18rem, calc(100vw - 2rem));
-  max-height: 15rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.45rem, 1fr));
-  gap: 0.4rem;
-  overflow-y: auto;
-  transform: translateX(-50%);
-  border: 1px solid var(--line);
-  padding: 0.65rem;
-  background: var(--card);
-  box-shadow: 0 14px 34px rgb(20 29 25 / 18%);
-}
-
-.pagination-page-menu button {
-  min-height: 2.45rem;
-  border: 1px solid var(--line);
-  padding: 0.4rem;
-  background: var(--page);
-  color: var(--ink);
-  font-size: 0.72rem;
-  font-weight: 850;
-}
-
-.pagination-page-menu button:hover,
-.pagination-page-menu button.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--paper);
-}
-
-.pagination-status {
-  grid-column: 1 / -1;
-  color: var(--muted-ink);
-  font-size: 0.62rem;
-  font-weight: 750;
-  text-align: center;
-}
-
 .video-content .inline-confirmation {
   width: 100%;
 }
@@ -8351,19 +8247,6 @@ body,
 
 .history-set-pill:has(.pr-badge) {
   background: var(--gold-row);
-}
-
-.pagination-arrow,
-.pagination-more,
-.pagination-page-menu,
-.pagination-page-menu button {
-  border-radius: 5px;
-}
-
-/* The darker fill suits dark mode only; light mode keeps the card and page surfaces set above. */
-:root:not([data-colour-mode='light'])
-  :where(.pagination-arrow, .pagination-more, .pagination-page-menu, .pagination-page-menu button) {
-  background: #191c1e;
 }
 
 @media (max-width: 620px) {

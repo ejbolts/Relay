@@ -550,11 +550,6 @@ button.pulse-card:hover {
   margin-top: 0.75rem;
 }
 
-.history-session-pages > .pagination-controls {
-  border-top: 0;
-  margin-top: 0.5rem;
-}
-
 /* The leading calendar column while older months load; it keeps the month width so a fast
    scroll lands on it rather than an edge. */
 .calendar-month.calendar-month-older {
