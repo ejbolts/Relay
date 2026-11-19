@@ -11097,115 +11097,114 @@ function HistoryWorkoutCard({
     (movement) => !movement.notes && !movement.sets.some((item) => item.completed),
   );
   const movements = open
-    ? workout.movements
-        .filter((movement) => !skipped.includes(movement))
-        .map((movement) => {
-          const targeted = targetMovementId
-            ? targetMovementId === movement.id
-            : targetExerciseId === movement.exercise.id;
-          const best = topWorkingSet(movement.sets);
-          return (
-            <div
-              ref={targeted ? targetExerciseRef : null}
-              className={`history-movement ${targeted ? 'targeted-exercise' : ''}`}
-              key={movement.id}
-              tabIndex={targeted ? -1 : undefined}
-            >
-              <div className="history-movement-header">
-                {onOpenExercise ? (
-                  <button
-                    type="button"
-                    className="history-exercise-link"
-                    onClick={() => onOpenExercise(movement.exercise.id)}
-                  >
-                    {movement.exercise.name}
-                    <Icon name="chevron-right" />
-                  </button>
-                ) : (
-                  <strong className="history-exercise-name">{movement.exercise.name}</strong>
-                )}
-                {shared ? (
-                  <span className="num">{sharedSetCount(movement.sets)}</span>
-                ) : (
-                  best && <span className="num">Top {setLabel(best, weightUnit)}</span>
-                )}
-              </div>
-              {movement.machine_photos.length > 0 && (
-                <>
-                  <div className="history-machine-photos">
-                    {movement.machine_photos.map((photo) => (
-                      <button
-                        type="button"
-                        key={photo.id}
-                        onClick={() => onExpandPhoto(expandedPhoto?.id === photo.id ? null : photo)}
-                        aria-label={`${expandedPhoto?.id === photo.id ? 'Collapse' : 'Expand'} ${photo.caption}`}
-                        aria-expanded={expandedPhoto?.id === photo.id}
-                      >
-                        <span className="history-photo-image">
-                          <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
-                          <svg
-                            className="history-photo-expand-icon"
-                            viewBox="0 0 20 20"
-                            aria-hidden="true"
-                          >
-                            <path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4" />
-                          </svg>
-                        </span>
-                        <span className="history-photo-caption">{photo.caption}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {expandedPhoto &&
-                    movement.machine_photos.some((photo) => photo.id === expandedPhoto.id) && (
-                      <MachinePhotoDetail
-                        photo={expandedPhoto}
-                        onClose={() => onExpandPhoto(null)}
-                        onShowHistory={
-                          onFilterMachine && expandedPhoto.id !== machineFilterId
-                            ? () => onFilterMachine(expandedPhoto, movement.exercise.name)
-                            : undefined
-                        }
-                      />
-                    )}
-                </>
+    ? workout.movements.map((movement) => {
+        if (skipped.includes(movement)) return null;
+        const targeted = targetMovementId
+          ? targetMovementId === movement.id
+          : targetExerciseId === movement.exercise.id;
+        const best = topWorkingSet(movement.sets);
+        return (
+          <div
+            ref={targeted ? targetExerciseRef : null}
+            className={`history-movement ${targeted ? 'targeted-exercise' : ''}`}
+            key={movement.id}
+            tabIndex={targeted ? -1 : undefined}
+          >
+            <div className="history-movement-header">
+              {onOpenExercise ? (
+                <button
+                  type="button"
+                  className="history-exercise-link"
+                  onClick={() => onOpenExercise(movement.exercise.id)}
+                >
+                  {movement.exercise.name}
+                  <Icon name="chevron-right" />
+                </button>
+              ) : (
+                <strong className="history-exercise-name">{movement.exercise.name}</strong>
               )}
-              <MachineSettingsSummary settings={movement.machine_settings} />
               {shared ? (
-                <SharedSetList
-                  sets={movement.sets}
+                <span className="num">{sharedSetCount(movement.sets)}</span>
+              ) : (
+                best && <span className="num">Top {setLabel(best, weightUnit)}</span>
+              )}
+            </div>
+            {movement.machine_photos.length > 0 && (
+              <>
+                <div className="history-machine-photos">
+                  {movement.machine_photos.map((photo) => (
+                    <button
+                      type="button"
+                      key={photo.id}
+                      onClick={() => onExpandPhoto(expandedPhoto?.id === photo.id ? null : photo)}
+                      aria-label={`${expandedPhoto?.id === photo.id ? 'Collapse' : 'Expand'} ${photo.caption}`}
+                      aria-expanded={expandedPhoto?.id === photo.id}
+                    >
+                      <span className="history-photo-image">
+                        <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
+                        <svg
+                          className="history-photo-expand-icon"
+                          viewBox="0 0 20 20"
+                          aria-hidden="true"
+                        >
+                          <path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4" />
+                        </svg>
+                      </span>
+                      <span className="history-photo-caption">{photo.caption}</span>
+                    </button>
+                  ))}
+                </div>
+                {expandedPhoto &&
+                  movement.machine_photos.some((photo) => photo.id === expandedPhoto.id) && (
+                    <MachinePhotoDetail
+                      photo={expandedPhoto}
+                      onClose={() => onExpandPhoto(null)}
+                      onShowHistory={
+                        onFilterMachine && expandedPhoto.id !== machineFilterId
+                          ? () => onFilterMachine(expandedPhoto, movement.exercise.name)
+                          : undefined
+                      }
+                    />
+                  )}
+              </>
+            )}
+            <MachineSettingsSummary settings={movement.machine_settings} />
+            {shared ? (
+              <SharedSetList
+                sets={movement.sets}
+                personalRecords={personalRecords}
+                machinePhotos={movement.machine_photos}
+                formatSet={(item) => setResult(item, weightUnit)}
+                describeRecord={(record) =>
+                  `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
+                }
+              />
+            ) : (
+              <>
+                <HistorySetTable
+                  bodyweight={bodyweight}
+                  sets={movement.sets.filter((item) => item.completed)}
                   personalRecords={personalRecords}
                   machinePhotos={movement.machine_photos}
+                  ratioColumn={ratioColumn}
+                  recordColumn={recordColumn}
                   formatSet={(item) => setResult(item, weightUnit)}
-                  describeRecord={(record) =>
-                    `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
-                  }
+                  recordLabel={recordTypeLabel}
                 />
-              ) : (
-                <>
-                  <HistorySetTable
-                    bodyweight={bodyweight}
-                    sets={movement.sets.filter((item) => item.completed)}
-                    personalRecords={personalRecords}
-                    machinePhotos={movement.machine_photos}
-                    ratioColumn={ratioColumn}
-                    recordColumn={recordColumn}
-                    formatSet={(item) => setResult(item, weightUnit)}
-                    recordLabel={recordTypeLabel}
-                  />
-                  {/* A completed set's note sits under its row in the table. */}
-                  {movement.sets
-                    .filter((item) => item.notes && !item.completed)
-                    .map((item) => (
-                      <small key={item.id}>
-                        Set {item.order_index + 1}: {item.notes}
-                      </small>
-                    ))}
-                </>
-              )}
-              {movement.notes && <MovementNotes notes={movement.notes} />}
-            </div>
-          );
-        })
+                {/* A completed set's note sits under its row in the table. */}
+                {movement.sets
+                  .filter((item) => item.notes && !item.completed)
+                  .map((item) => (
+                    <small key={item.id}>
+                      Set {item.order_index + 1}: {item.notes}
+                    </small>
+                  ))}
+              </>
+            )}
+            {movement.notes && <MovementNotes notes={movement.notes} />}
+          </div>
+        );
+      })
     : null;
 
   return (
