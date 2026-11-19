@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from './api';
 import { GuideCoach, type CoachStep } from './GuideCoach';
 import { HelpPopup } from './HelpPopup';
@@ -73,7 +73,10 @@ function typedFactor(text: PairText): number | null {
   return machine && reference && machine > 0 && reference > 0 ? reference / machine : null;
 }
 
-/** Fill machines without a pair from their suggestions, starting from your latest weight. */
+/**
+ * Fill machines without a pair from their suggestions: your latest weight on the machine, and
+ * what it works out as on the reference. A pair you saved or started typing is kept.
+ */
 function withSuggestions(
   texts: PairTexts,
   mapping: WeightMapping,
@@ -85,7 +88,8 @@ function withSuggestions(
   for (const machine of mapping.machines) {
     const text = next[machine.id] ?? BLANK;
     const suggestion = suggestions.get(machine.id);
-    if (suggestion && machine.id !== mapping.reference_machine_id && !text.machine.trim()) {
+    const blank = !text.machine.trim() && !text.reference.trim();
+    if (suggestion && machine.id !== mapping.reference_machine_id && blank) {
       next[machine.id] = pairForFactor(
         text,
         suggestion.factor,
@@ -100,16 +104,14 @@ function MachineThumb({ machine }: { machine: MachineWeight }) {
   return <img className="machine-weights-thumb" src={machine.thumbnail_url} alt="" />;
 }
 
-/** Choose a reference machine and how each other machine's weights compare with it. */
-export function MachineWeightsDialog({
-  exerciseId,
-  exerciseName,
-  mapping,
-  progress,
-  weightUnit,
-  onClose,
-  onSaved,
-}: {
+/** How a suggestion is labelled: a rough one has too few sessions near the reference's. */
+function suggestionLabel(suggestion: FactorSuggestion): string {
+  return suggestion.basis === 'rough' ? 'Estimated' : 'Suggested';
+}
+
+const sessionCount = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
+
+interface MachineWeightsDialogProps {
   exerciseId: string;
   exerciseName: string;
   mapping: WeightMapping;
@@ -117,7 +119,44 @@ export function MachineWeightsDialog({
   weightUnit: WeightUnit;
   onClose: () => void;
   onSaved: (mapping: WeightMapping) => void;
-}) {
+}
+
+/**
+ * Choose a reference machine and how each other machine's weights compare with it. Suggestions
+ * need the exercise's whole history, so when `progress` covers only part of it (Progress
+ * filtered to a training block) the dialog loads the rest before it opens.
+ */
+export function MachineWeightsDialog({
+  partialHistory = false,
+  ...props
+}: MachineWeightsDialogProps & { partialHistory?: boolean }) {
+  const { exerciseId, progress } = props;
+  const [history, setHistory] = useState<ExerciseProgress | null>(null);
+  useEffect(() => {
+    if (!partialHistory) return;
+    let cancelled = false;
+    void api
+      .exerciseProgress(exerciseId)
+      .then((next) => !cancelled && setHistory(next))
+      // Offline: the filtered sessions still give suggestions.
+      .catch(() => !cancelled && setHistory(progress));
+    return () => {
+      cancelled = true;
+    };
+  }, [partialHistory, exerciseId, progress]);
+  const full = partialHistory ? (history?.exercise.id === exerciseId ? history : null) : progress;
+  return full ? <MachineWeightsEditor {...props} progress={full} /> : null;
+}
+
+function MachineWeightsEditor({
+  exerciseId,
+  exerciseName,
+  mapping,
+  progress,
+  weightUnit,
+  onClose,
+  onSaved,
+}: MachineWeightsDialogProps) {
   const formId = useId();
   const [draft, setDraft] = useState(mapping);
   const [texts, setTexts] = useState(() => {
@@ -265,6 +304,8 @@ export function MachineWeightsDialog({
     onClose();
   };
   const spokes = live.machines.filter((machine) => machine.id !== draft.reference_machine_id);
+  // Machines with no sessions yet have nothing to work a match out from.
+  const unmatched = spokes.some((machine) => !suggestions.has(machine.id));
   const coachSteps: CoachStep[] = [
     {
       title: 'Switch on Normalise weights',
@@ -274,13 +315,15 @@ export function MachineWeightsDialog({
     },
     {
       title: 'Check the reference machine',
-      body: 'Relay picked the machine you use most. Tap Make reference on another machine to change it.',
+      body: 'Relay picked the machine you use most and matched your other machines to it from your history. Tap Make reference on another machine to change it.',
       target: '.machine-weights-list li.is-reference',
       next: { onClick: () => setGuideStep(2) },
     },
     {
       title: 'Match the weights',
-      body: 'Relay suggests a match from your sessions. Change either weight, or drag the slider, until they feel the same, and watch the preview.',
+      body: unmatched
+        ? 'Relay matched the machines you’ve used from your history; enter both weights for any without sessions. Drag a slider to adjust a match and watch the preview.'
+        : 'Relay worked out each match from your history. Drag the slider to adjust it and watch your sessions line up in the preview.',
       target: '.machine-weights-list li.is-spoke',
       next: {
         disabled: spokes.some((machine) => !machine.machine_kg || !machine.reference_kg),
@@ -313,12 +356,13 @@ export function MachineWeightsDialog({
             <HelpPopup title="Normalise weights">
               <p>
                 All machines in Progress shows every session in the reference machine’s weights.
-                Each arrow shows what your weight on a machine equals on the reference. Change
-                either weight, or drag the slider, and watch the preview.
+                Each arrow shows what your weight on a machine equals on the reference. Drag the
+                slider, or change either weight, and watch the preview.
               </p>
               <p>
-                Suggestions compare the est. 1RM from each session’s weight and reps with the
-                reference machine’s trend around that date.
+                Suggested matches compare the est. 1RM from each session’s weight and reps with the
+                reference machine’s trend around that date. A machine with too few sessions near the
+                reference’s gets an estimate instead, with a wider likely range.
               </p>
               <p>
                 Sessions without a machine count as the reference. Logged sets and History keep the
@@ -499,7 +543,8 @@ export function MachineWeightsDialog({
                       <p className="machine-weights-suggestion">
                         <span className="machine-weights-suggested">
                           <span className="machine-weights-diamond" aria-hidden="true" />
-                          Suggested ×{suggestion.factor.toFixed(2)} · {suggestion.sessions} sessions
+                          {suggestionLabel(suggestion)} ×{suggestion.factor.toFixed(2)} ·{' '}
+                          {sessionCount(suggestion.sessions)}
                           {inLikelyRange(factor, suggestion) ? (
                             <em className="machine-weights-fit is-in">In range</em>
                           ) : (
@@ -510,7 +555,7 @@ export function MachineWeightsDialog({
                           <button
                             type="button"
                             className="text-link"
-                            aria-label={`Use suggested ×${suggestion.factor.toFixed(2)} for ${machine.caption}`}
+                            aria-label={`Use ${suggestionLabel(suggestion).toLowerCase()} ×${suggestion.factor.toFixed(2)} for ${machine.caption}`}
                             onClick={() =>
                               setPair(machine.id, pairForFactor(text, suggestion.factor, base))
                             }

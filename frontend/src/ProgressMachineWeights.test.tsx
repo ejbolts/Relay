@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
+import { TrainingBlocksContext } from './trainingBlocksContext';
 import { useExerciseLibrary } from './useExerciseLibrary';
-import type { Exercise, ExerciseProgress, MachineProgressPoint, WeightMapping } from './types';
+import type {
+  Exercise,
+  ExerciseProgress,
+  MachineProgressPoint,
+  TrainingBlock,
+  WeightMapping,
+} from './types';
 
 const press: Exercise = {
   id: 'press',
@@ -205,6 +212,162 @@ it('filters progress by machine and normalises All machines once mapped', async 
   expect(rows[3]).toContain('≈ 82.5');
   expect(host.querySelector('.progress-hero-caption')?.textContent).toContain(
     'Est. 1RM in Hammer weights',
+  );
+});
+
+/** A session on any date, with an est. 1RM equal to its weight. */
+function on(id: string, date: string, machine: string, weight: number) {
+  return { ...session(id, 2, machine, weight), workout_date: date };
+}
+
+// Hammer every week from August at an est. 1RM of 100; Life Fitness once in between at 80;
+// Technogym five times at 80 at an old gym, three months before the first Hammer session.
+const spread: MachineProgressPoint[] = [
+  ...['04-06', '04-13', '04-20', '04-27', '05-04'].map((day, index) =>
+    on(`t${index}`, `2026-${day}`, 'techno', 80),
+  ),
+  ...['08-03', '08-10', '08-17', '08-24', '08-31', '09-07', '09-14', '09-21', '09-28'].map(
+    (day, index) => on(`h${index}`, `2026-${day}`, 'hammer', 100),
+  ),
+  on('l0', '2026-09-12', 'life', 80),
+].sort((first, second) => first.workout_date.localeCompare(second.workout_date));
+const spreadProgress = (points: MachineProgressPoint[]): ExerciseProgress => ({
+  exercise: press,
+  points: points.map((item) => ({ ...item, machine_photo_id: undefined })),
+  machine_points: points,
+  personal_best_weight_kg: 100,
+  personal_best_estimated_1rm: 100,
+});
+const threeMachines: WeightMapping = {
+  enabled: false,
+  reference_machine_id: null,
+  machines: [
+    machine('hammer', 'Hammer', 9),
+    machine('life', 'Life Fitness', 1),
+    machine('techno', 'Technogym', 5),
+  ],
+};
+
+async function remount(element: ReactElement) {
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await act(async () => root.render(element));
+}
+const field = (label: string) =>
+  document.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!;
+const spoke = (caption: string) =>
+  [...document.querySelectorAll('.machine-weights-list > li.is-spoke')].find(
+    (item) => item.querySelector('.machine-weights-machine strong')?.textContent === caption,
+  )!;
+const previewLine = () =>
+  document.querySelector('.machine-weights-preview .pulse-chart-line')?.getAttribute('d') ?? '';
+/** The preview line's heights, one per session. */
+const lineHeights = () => [...previewLine().matchAll(/[ML][\d.]+,([\d.]+)/g)].map(([, y]) => y);
+
+async function switchOn() {
+  await click(button('Normalise'));
+  await click(document.querySelector('[role="switch"][aria-label="Normalise weights"]')!);
+}
+
+it('pre-fills a match from any history, and the slider reshapes the preview as it moves', async () => {
+  vi.mocked(api.exerciseProgress).mockResolvedValue(spreadProgress(spread));
+  vi.mocked(api.getWeightMapping).mockResolvedValue(threeMachines);
+  await remount(<Screen />);
+  await switchOn();
+
+  // One session close to Hammer's: an estimate from your latest weight on Life Fitness.
+  expect(field('Weight on Life Fitness').value).toBe('80');
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('100');
+  expect(spoke('Life Fitness').querySelector('.machine-weights-suggestion')?.textContent).toContain(
+    'Estimated ×1.25 · 1 session',
+  );
+  expect(spoke('Life Fitness').querySelector('.machine-weights-band')).toBeTruthy();
+  // Sessions only before a long gap still get an estimate, from the weeks nearest Hammer's.
+  expect(field('Weight on Technogym').value).toBe('80');
+  expect(field('Matching weight on Hammer for Technogym').value).toBe('100');
+  expect(spoke('Technogym').querySelector('.machine-weights-suggestion')?.textContent).toContain(
+    'Estimated ×1.25 · 5 sessions',
+  );
+  // Every session now sits on Hammer's flat trend.
+  expect(new Set(lineHeights()).size).toBe(1);
+
+  // Dragging lifts the Life Fitness session off the trend straight away.
+  const slider = field('Conversion for Life Fitness');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '1.5');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('120');
+  expect(spoke('Life Fitness').querySelector('.machine-weights-slider b')?.textContent).toBe(
+    '×1.50',
+  );
+  expect(new Set(lineHeights()).size).toBe(2);
+  await click(button('Use estimated ×1.25 for Life Fitness'));
+  expect(new Set(lineHeights()).size).toBe(1);
+
+  await click(button('Save'));
+  expect(api.saveWeightMapping).toHaveBeenCalledWith('press', {
+    enabled: true,
+    reference_machine_id: 'hammer',
+    machines: [
+      threeMachines.machines[0],
+      { ...threeMachines.machines[1], machine_kg: 80, reference_kg: 100 },
+      { ...threeMachines.machines[2], machine_kg: 80, reference_kg: 100 },
+    ],
+  });
+});
+
+it('keeps a saved match when Normalise is switched back on', async () => {
+  vi.mocked(api.exerciseProgress).mockResolvedValue(spreadProgress(spread));
+  vi.mocked(api.getWeightMapping).mockResolvedValue({
+    ...threeMachines,
+    reference_machine_id: 'hammer',
+    machines: [
+      threeMachines.machines[0],
+      threeMachines.machines[1],
+      { ...threeMachines.machines[2], machine_kg: 50, reference_kg: 60 },
+    ],
+  });
+  await remount(<Screen />);
+  await switchOn();
+  expect(field('Weight on Technogym').value).toBe('50');
+  expect(field('Matching weight on Hammer for Technogym').value).toBe('60');
+  expect(field('Matching weight on Hammer for Life Fitness').value).toBe('100');
+});
+
+it('works matches out from the whole history while Progress shows one training block', async () => {
+  const block: TrainingBlock = {
+    id: 'b2',
+    name: 'Block 2',
+    start_date: '2026-09-01',
+    end_date: null,
+  };
+  vi.mocked(api.exerciseProgress).mockImplementation(async (_, blockId) =>
+    spreadProgress(blockId ? spread.filter((point) => point.workout_date >= '2026-09-01') : spread),
+  );
+  vi.mocked(api.getWeightMapping).mockResolvedValue(threeMachines);
+  await remount(
+    <TrainingBlocksContext.Provider
+      value={{
+        config: { blocks: [block] },
+        block,
+        select: () => {},
+        changed: () => {},
+        loading: false,
+        error: null,
+        retry: () => {},
+      }}
+    >
+      <Screen />
+    </TrainingBlocksContext.Provider>,
+  );
+  expect(api.exerciseProgress).toHaveBeenCalledWith('press', 'b2');
+  await switchOn();
+  expect(api.exerciseProgress).toHaveBeenLastCalledWith('press');
+  // Technogym's sessions are all before the block.
+  expect(field('Matching weight on Hammer for Technogym').value).toBe('100');
+  expect(spoke('Technogym').querySelector('.machine-weights-suggestion')?.textContent).toContain(
+    'Estimated ×1.25 · 5 sessions',
   );
 });
 

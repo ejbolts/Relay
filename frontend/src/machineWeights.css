@@ -52,6 +52,12 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   background: var(--p-surface);
 }
 
+/* The line follows the slider as it moves, so it never replays the chart's draw-in. */
+.machine-weights-preview .pulse-chart-line,
+.machine-weights-preview .pulse-chart-marker {
+  animation: none;
+}
+
 .machine-weights-preview-key {
   display: flex;
   align-items: center;

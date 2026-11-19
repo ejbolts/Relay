@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FACTOR_RANGE,
+  clampFactor,
   isNormalised,
   latestWeightKg,
   machineFactor,
@@ -43,6 +45,16 @@ function point(
     best_rpe: null,
     machine_photo_id: machineId,
   };
+}
+
+/** Weekly sessions on one machine from `start`, one for each weight. */
+function weekly(machineId: string, start: string, weights: number[]): MachineProgressPoint[] {
+  return weights.map((weight, index) => {
+    const date = new Date(`${start}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + index * 7);
+    const day = date.toISOString().slice(0, 10);
+    return point(`${machineId}-${day}`, day, machineId, weight);
+  });
 }
 
 const hammerToLife: WeightMapping = {
@@ -197,11 +209,125 @@ describe('machine weight normalisation', () => {
     ]);
     const suggestions = suggestFactors(data, 'hammer');
     // The off day widens the likely range below the suggestion, not above it.
-    expect(suggestions.get('life')).toEqual({ factor: 1.25, sessions: 3, low: 1.24, high: 1.25 });
-    // One comparable session is not enough.
-    expect(suggestions.has('techno')).toBe(false);
+    expect(suggestions.get('life')).toEqual({
+      factor: 1.25,
+      sessions: 3,
+      low: 1.24,
+      high: 1.25,
+      basis: 'trend',
+    });
+    // One comparable session is only a rough suggestion, and the session months from any
+    // reference session is left out of it.
+    expect(suggestions.get('techno')).toEqual({
+      factor: 0.9,
+      sessions: 1,
+      low: 0.81,
+      high: 0.99,
+      basis: 'rough',
+    });
     expect(suggestFactors(data, null).size).toBe(0);
     expect(suggestFactors(data, 'life').get('hammer')?.sessions).toBe(2);
+  });
+
+  it('roughly suggests a machine used once, with a wider likely range', () => {
+    const data = progress([
+      ...weekly('hammer', '2026-09-01', [86, 88, 90]),
+      // Once alongside the reference.
+      point('t1', '2026-09-08', 'techno', 110),
+      // Once, five months before the reference's first session: compared with its first few.
+      point('l1', '2026-04-06', 'life', 80),
+    ]);
+    const suggestions = suggestFactors(data, 'hammer');
+    expect(suggestions.get('techno')).toEqual({
+      factor: 0.8,
+      sessions: 1,
+      low: 0.72,
+      high: 0.88,
+      basis: 'rough',
+    });
+    expect(suggestions.get('life')).toEqual({
+      factor: 1.1,
+      sessions: 1,
+      low: 0.99,
+      high: 1.21,
+      basis: 'rough',
+    });
+  });
+
+  it('roughly suggests a machine never used close to a reference session', () => {
+    const data = progress([
+      // Reference sessions twelve weeks apart, rising from 80 to 96 kg.
+      point('h1', '2026-01-05', 'hammer', 80),
+      point('h2', '2026-03-30', 'hammer', 88),
+      point('h3', '2026-06-22', 'hammer', 96),
+      // Six weeks from the nearest reference session each time; each sits on the trend at ×1.25.
+      point('l1', '2026-02-16', 'life', 67.2),
+      point('l2', '2026-05-11', 'life', 73.6),
+      // After the reference's last session, the trend is held level rather than extended.
+      point('l3', '2026-08-03', 'life', 76.8),
+    ]);
+    expect(suggestFactors(data, 'hammer').get('life')).toEqual({
+      factor: 1.25,
+      sessions: 3,
+      low: 1.19,
+      high: 1.31,
+      basis: 'rough',
+    });
+  });
+
+  it('compares the sessions either side of a gym switch', () => {
+    const data = progress([
+      // Thirteen weeks on the old gym's machine, getting stronger from 60 to 72 kg.
+      ...weekly('life', '2026-01-05', [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72]),
+      // Nine weeks off, then the new gym's machine.
+      ...weekly('hammer', '2026-06-01', [90, 92, 94, 96, 98, 100, 102, 104]),
+    ]);
+    // The old machine's last four weeks (68–72 kg) against the new one's first sessions
+    // (median 92 kg), not its weaker months before them.
+    expect(suggestFactors(data, 'hammer').get('life')).toEqual({
+      factor: 1.31,
+      sessions: 5,
+      low: 1.25,
+      high: 1.38,
+      basis: 'rough',
+    });
+    // The other way round gives about the inverse.
+    expect(suggestFactors(data, 'life').get('hammer')).toMatchObject({
+      factor: 0.76,
+      sessions: 5,
+      basis: 'rough',
+    });
+  });
+
+  it('suggests nothing without a reference session or a session to compare', () => {
+    const others = [
+      point('l1', '2026-10-01', 'life', 60),
+      // No weight, so no est. 1RM to compare.
+      point('t1', '2026-10-01', 'techno', 0),
+    ];
+    expect(suggestFactors(progress(others), 'hammer').size).toBe(0);
+    // Sessions without a machine stand in for the reference.
+    const suggestions = suggestFactors(
+      progress([...others, point('u1', '2026-10-01', null, 75)]),
+      'hammer',
+    );
+    expect([...suggestions.keys()]).toEqual(['life']);
+    expect(suggestions.get('life')?.factor).toBe(1.25);
+  });
+
+  it('keeps a suggestion beyond the slider range exact and pins the slider to its end', () => {
+    // Plates logged per side on Life Fitness: about 2.4 times the weight on Hammer.
+    const data = progress([
+      point('h1', '2026-09-01', 'hammer', 96),
+      point('l1', '2026-09-01', 'life', 40),
+      point('h2', '2026-09-08', 'hammer', 108),
+      point('l2', '2026-09-08', 'life', 45),
+    ]);
+    const suggestion = suggestFactors(data, 'hammer').get('life')!;
+    expect(suggestion).toMatchObject({ factor: 2.4, basis: 'trend' });
+    expect(clampFactor(suggestion.factor)).toBe(FACTOR_RANGE.max);
+    expect(clampFactor(0.3)).toBe(FACTOR_RANGE.min);
+    expect(clampFactor(1.234)).toBe(1.23);
   });
 
   it("starts each machine's equation from your latest weight on it", () => {
