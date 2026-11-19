@@ -114,7 +114,8 @@ Administrators can manage accounts, registration, video access and private app f
 Settings opens with **Training**, **Appearance**, **Notifications**, **Account & privacy**,
 **Data & connections** and **Help & about**. Open a focused section without losing unfinished edits.
 Use **Search settings & profile** in Settings to jump to rest timers, username changes,
-sharing, data tools and other sections. **Settings > Appearance > App theme** offers five accent colours;
+sharing, data tools and other sections. **Settings > Appearance > App theme** offers **Dark**, **Light** and
+**Automatic** modes (Automatic, the default, follows the phone's light or dark setting) and six accent colours;
 the selection applies immediately and stays on that device.
 
 ## Getting started

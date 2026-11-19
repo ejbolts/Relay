@@ -172,6 +172,13 @@
   border-color: var(--p-accent-text);
   background: var(--p-accent-soft);
 }
+/* The cardio form's screenshot button and calorie note are pale colours meant for dark cards. */
+:root[data-colour-mode='light'] .cardio-screenshot-import > label {
+  color: var(--p-accent-text);
+}
+:root[data-colour-mode='light'] .cardio-calorie-hint {
+  color: var(--p-ink-2);
+}
 :root[data-colour-mode='light'] .body-row-menu .body-history-actions {
   background: var(--p-surface);
   box-shadow: 0 12px 30px rgb(16 24 32 / 16%);
