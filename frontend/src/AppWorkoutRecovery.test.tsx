@@ -988,6 +988,59 @@ describe('saved training splits on Home', () => {
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
+  it("prefills a ranged routine day's rows with last time's reps at last time's weight", async () => {
+    const last = remoteWorkout();
+    last.movements[0].sets = [7, 6, 5].map((reps, index) => ({
+      ...last.movements[0].sets[0],
+      id: `last-set-${index}`,
+      order_index: index,
+      reps,
+      weight_kg: 100,
+    }));
+    vi.mocked(api.listWorkouts).mockResolvedValue([last]);
+    const planned = {
+      reps: 8,
+      weight_kg: null,
+      rest_seconds: 120,
+      duration_seconds: null,
+      distance_km: null,
+      set_type: 'normal',
+    };
+    vi.mocked(api.dashboard).mockResolvedValue({
+      recommendation: {
+        ...recommendation,
+        routine_day: {
+          workout_type_id: custom.id,
+          workout_type: custom,
+          movements: [
+            {
+              exercise_id: bench.id,
+              exercise: bench,
+              rep_range: { min: 6, max: 10 },
+              sets: [planned, planned, planned, { ...planned, weight_kg: 90 }],
+            },
+          ],
+        },
+      },
+    } as unknown as DashboardData);
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    // The range is the target, so untouched rows show what was lifted; a new weight keeps 8.
+    expect(readActiveWorkoutDraft()!.movements[0].sets).toMatchObject([
+      { weight_kg: 100, reps: 7, completed: false, fromPrevious: true },
+      { weight_kg: 100, reps: 6, completed: false, fromPrevious: true },
+      { weight_kg: 100, reps: 5, completed: false, fromPrevious: true },
+      { weight_kg: 90, reps: 8, completed: false, fromPrevious: true },
+    ]);
+    const rows = [...container.querySelectorAll('.completed-set-summary')].slice(0, 3);
+    expect(rows.map((row) => row.querySelector('.completed-set-reps')?.textContent)).toEqual([
+      '7',
+      '6',
+      '5',
+    ]);
+  });
+
   it('fills a workout from the exercises saved to its type when the split day has none', async () => {
     vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
       { workout_type_id: custom.id, movements: [savedMovement(row)] },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchingLastSessionSet } from './lastSessionSet';
+import { matchingLastSessionSet, withLastSessionReps } from './lastSessionSet';
 
 const warmup = { set_type: 'warmup' as const, warmup: true, failed: false };
 const working = { set_type: 'normal' as const, warmup: false, failed: false };
@@ -36,5 +36,33 @@ describe('matchingLastSessionSet', () => {
     const today = [working, working, working, working];
     expect(matchingLastSessionSet(today, 3, last)).toBeUndefined();
     expect(matchingLastSessionSet(today, 9, last)).toBeUndefined();
+  });
+});
+
+describe('withLastSessionReps', () => {
+  const at = (
+    weight_kg: number | null,
+    reps: number | null,
+    kind: typeof working | typeof warmup = working,
+  ) => ({
+    ...kind,
+    weight_kg,
+    reps,
+  });
+  const last = [at(40, 10, warmup), at(100, 7), at(100, 6), at(100, 5)];
+
+  it("gives rows at last time's weight its reps, matched by kind and position", () => {
+    const planned = [at(40, 12, warmup), at(100, 8), at(100, 8), at(100, 8)];
+    expect(withLastSessionReps(planned, last).map((row) => row.reps)).toEqual([12, 7, 6, 5]);
+  });
+
+  it("keeps the plan's reps at a new weight, beyond last time, or when last time has none", () => {
+    const planned = [at(102.5, 8), at(100, 8), at(100, 8), at(100, 8), at(100, 8)];
+    const withoutReps = [at(40, 10, warmup), at(100, 7), at(100, 6), at(100, null)];
+    expect(withLastSessionReps(planned, withoutReps).map((row) => row.reps)).toEqual([
+      8, 6, 8, 8, 8,
+    ]);
+    expect(withLastSessionReps([at(null, 12)], [at(null, 15)])[0].reps).toBe(15);
+    expect(withLastSessionReps([at(100, 8)], [])[0].reps).toBe(8);
   });
 });

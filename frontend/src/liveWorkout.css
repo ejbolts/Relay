@@ -415,21 +415,6 @@ html[data-reduce-motion] .live-workout-header {
   transition: none;
 }
 
-/* Last time's matching set under a planned row's weight, such as "last 100×7". */
-.logger-screen .completed-set-weight:has(.set-last-time) {
-  flex-wrap: wrap;
-  row-gap: 0;
-}
-
-.logger-screen .completed-set-weight .set-last-time {
-  flex-basis: 100%;
-  color: var(--p-muted);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
 /* The exercise's note, one line under its title; tapping it edits the note. */
 .logger-screen .movement-note-line {
   display: block;

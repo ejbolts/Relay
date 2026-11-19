@@ -250,11 +250,10 @@ import {
   setNumberLabels,
 } from './setFieldValues';
 import { MovementNoteDialog } from './MovementNoteDialog';
-import { SetLastTime } from './SetLastTime';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
 import { selectInputValue } from './selectInputValue';
-import { matchingLastSessionSet } from './lastSessionSet';
+import { matchingLastSessionSet, withLastSessionReps } from './lastSessionSet';
 import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
@@ -3797,18 +3796,15 @@ function WorkoutLogger({
   /** Draft rows for planned or last-session exercises, with sets suggested from history. */
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
     return items.map(({ exercise, plannedSets, repRange }) => {
+      const ranged = repRange && plannedSets && exercise.kind !== 'cardio';
+      const lastSession = ranged
+        ? latestExerciseSets(historicalWorkouts, exercise.id, initialDate)
+        : [];
       // A planned range suggests its target weight for working sets the plan left blank.
-      const targetWeight =
-        repRange && plannedSets && exercise.kind !== 'cardio'
-          ? progressionWeightKg(
-              progressionTarget(
-                repRange,
-                latestExerciseSets(historicalWorkouts, exercise.id, initialDate),
-                weightUnit,
-              ),
-            )
-          : null;
-      return templateMovement(exercise, plannedSets, repRange, targetWeight);
+      const targetWeight = ranged
+        ? progressionWeightKg(progressionTarget(repRange, lastSession, weightUnit))
+        : null;
+      return templateMovement(exercise, plannedSets, repRange, targetWeight, lastSession);
     });
   }
   function templateMovement(
@@ -3816,6 +3812,7 @@ function WorkoutLogger({
     plannedSets: SessionTemplate['exercises'][number]['plannedSets'],
     repRange: RepRange | undefined,
     targetWeight: number | null,
+    lastSession: TrackedSet[],
   ): DraftMovement {
     return {
       key: crypto.randomUUID(),
@@ -3827,18 +3824,22 @@ function WorkoutLogger({
       supersetKey: null,
       isComplete: false,
       sets: plannedSets
-        ? plannedSets.map((set) => ({
-            ...createWorkoutSet(exercise.kind),
-            ...set,
-            ...(targetWeight !== null &&
-              set.weight_kg == null &&
-              set.set_type !== 'warmup' && { weight_kg: targetWeight }),
-            key: crypto.randomUUID(),
-            warmup: set.set_type === 'warmup',
-            completed: false,
-            fromPrevious: true,
-            restRevealed: false,
-          }))
+        ? // At last time's weight, a row shows last time's reps: the range is the target.
+          withLastSessionReps(
+            plannedSets.map((set) => ({
+              ...createWorkoutSet(exercise.kind),
+              ...set,
+              ...(targetWeight !== null &&
+                set.weight_kg == null &&
+                set.set_type !== 'warmup' && { weight_kg: targetWeight }),
+              key: crypto.randomUUID(),
+              warmup: set.set_type === 'warmup',
+              completed: false,
+              fromPrevious: true,
+              restRevealed: false,
+            })),
+            lastSession,
+          )
         : suggestedSetsFromHistory(
             historicalWorkouts,
             exercise,
@@ -6972,7 +6973,6 @@ function MovementCard({
                             : 'PR'}
                     </b>
                   )}
-                  <SetLastTime rows={movement.sets} index={index} sessions={history} />
                 </>,
               )}
               {valueButton('reps', 'Edit repetitions', 'completed-set-reps', item.reps ?? '–')}
