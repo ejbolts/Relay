@@ -10810,6 +10810,11 @@ function HistoryScreen({
             exercises={exercises}
             onDataChange={onDataChange}
             onOpenWorkout={(workoutId) => onOpenWorkout(workoutId, null)}
+            onEditWorkout={(workoutId) => {
+              const workout = workouts.find((item) => item.id === workoutId);
+              if (workout) onEdit(workout);
+              else onOpenWorkout(workoutId, null);
+            }}
           />
         </CachedTabPanel>
       )}

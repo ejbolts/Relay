@@ -829,7 +829,6 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             continue
         imported_indexes.add(movement.order_index)
         session = existing.get(movement.order_index)
-        created = session is None
         if session is None:
             session = CardioSession(
                 user_id=workout.user_id,
@@ -905,7 +904,7 @@ def sync_workout_cardio_sessions(db: Session, workout: TrainingWorkout) -> None:
             )
         )
         session.intensity = "Imported from workout"
-        classify_session(session, cardio_preferences(db, workout.user_id), new=created)
+        classify_session(session, cardio_preferences(db, workout.user_id))
         session.notes = movement.notes
     for movement_index, session in existing.items():
         if movement_index not in imported_indexes:
@@ -2036,7 +2035,7 @@ def create_cardio_session(
             source_movement_index=0,
         )
         db.add(session)
-        classify_session(session, cardio_preferences(db, user.id), new=True)
+        classify_session(session, cardio_preferences(db, user.id))
         rebuild_personal_records(db, user.id)
         bump_workout_cache_revision(db, user.id)
         db.commit()
@@ -2045,7 +2044,7 @@ def create_cardio_session(
         return session
 
     session = CardioSession(user_id=user.id, **payload.model_dump(exclude={"exercise_id"}))
-    classify_session(session, cardio_preferences(db, user.id), new=True)
+    classify_session(session, cardio_preferences(db, user.id))
     db.add(session)
     bump_workout_cache_revision(db, user.id)
     db.commit()
