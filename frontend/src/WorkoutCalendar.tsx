@@ -323,7 +323,7 @@ export function WorkoutCalendar({
                                 ? `Resume workout in progress for ${prettyDate(key)}`
                                 : entry
                                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
+                                  : `${readOnly ? 'No workouts' : key > todayKey ? 'Plan' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
                           }
                           title={
                             previewMode
@@ -491,7 +491,7 @@ export function WeekStrip({
                 ? `Resume workout in progress for ${prettyDate(key)}`
                 : entry
                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                  : `Create workout for ${prettyDate(key)}`
+                  : `${key > todayKey ? 'Plan' : 'Create workout'} for ${prettyDate(key)}`
             }
           >
             <span className="week-strip-weekday" aria-hidden="true">

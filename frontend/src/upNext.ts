@@ -1,10 +1,55 @@
 import { useMemo } from 'react';
-import { CATEGORY_LABELS, sessionTemplateFor } from './trainingSummary';
+import { CATEGORY_LABELS, sessionTemplateFor, type SessionTemplate } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
-import type { TrackedWorkout, WorkoutRecommendation } from './types';
+import type {
+  RoutineDay,
+  RoutineMovement,
+  TrackedWorkout,
+  WorkoutCategory,
+  WorkoutRecommendation,
+  WorkoutType,
+} from './types';
 import { localDate } from './utils';
+import type { WeightUnit } from './weightUnits';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { routineSessionTemplate, typeSessionTemplate } from './routines';
+
+/**
+ * What a split day starts with: the day's own plan, then the exercises saved to its workout
+ * type, then the last session of that type. Up next and a planned calendar day both use it, so
+ * either starts the same workout.
+ */
+export function splitDayTemplate({
+  routineDay,
+  type,
+  category,
+  name,
+  workouts,
+  savedExercises,
+  today,
+  weightUnit,
+}: {
+  routineDay: RoutineDay | null | undefined;
+  type: WorkoutType | null | undefined;
+  category: WorkoutCategory;
+  name: string;
+  workouts: TrackedWorkout[];
+  savedExercises: Record<string, RoutineMovement[]>;
+  today: string;
+  weightUnit: WeightUnit;
+}): SessionTemplate | null {
+  if (routineDay?.movements.length)
+    return routineSessionTemplate(routineDay, name, today, weightUnit);
+  const saved = type ? savedExercises[type.id] : undefined;
+  if (type && saved?.length) return typeSessionTemplate(type, saved, name, today, weightUnit);
+  return sessionTemplateFor(
+    workouts,
+    category,
+    today,
+    weightUnit,
+    type?.is_custom ? type.id : null,
+  );
+}
 
 /**
  * The recommended next session shared by Home's Up next card and the Start menu: the
@@ -26,21 +71,16 @@ export function useUpNextSession(
     active?.needs_split_update === true || !!(active?.split_name && archived);
   const template = useMemo(() => {
     if (!active || isRestDay || needsSplitUpdate) return null;
-    // A routine day with exercises wins; an empty one falls back to the type's saved exercises,
-    // then to the last session of its type.
-    if (active.routine_day?.movements.length)
-      return routineSessionTemplate(active.routine_day, active.session_name, today, weightUnit);
-    // Next, the exercises saved to the workout type itself.
-    const saved = type ? savedExercises[type.id] : undefined;
-    if (type && saved?.length)
-      return typeSessionTemplate(type, saved, active.session_name, today, weightUnit);
-    return sessionTemplateFor(
+    return splitDayTemplate({
+      routineDay: active.routine_day,
+      type,
+      category: active.category,
+      name: active.session_name,
       workouts,
-      active.category,
+      savedExercises,
       today,
       weightUnit,
-      type?.is_custom ? type.id : null,
-    );
+    });
   }, [active, today, workouts, weightUnit, isRestDay, needsSplitUpdate, type, savedExercises]);
   const label = active
     ? isRestDay

@@ -66,6 +66,7 @@ import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
 import { splitCalendarDays } from './trainingSplit';
+import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
@@ -2441,8 +2442,18 @@ function AppContent() {
                       activeWorkoutDate={activeWorkoutDate}
                       onResumeWorkout={() => setTab('log')}
                       onEditWorkout={editWorkout}
-                      onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                      onOpenWorkout={(workout) => openSavedWorkout(workout.id, null)}
+                      onStartWorkout={(workoutDate, start) =>
+                        startWorkout(
+                          workoutDate,
+                          false,
+                          start?.template ?? null,
+                          start?.category ?? null,
+                          start?.type ?? null,
+                        )
+                      }
                       onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                      onEditSplit={openSplitSchedule}
                     />
                   }
                   thisWeek={
@@ -2453,13 +2464,24 @@ function AppContent() {
                           shownDashboard?.zone2?.week_start,
                       )}
                       workouts={shownWorkouts}
+                      split={shownDashboard?.training_split}
                       categoryColors={workoutTypeColors}
                       activeWorkout={activeWorkoutStartedAt !== null}
                       activeWorkoutDate={activeWorkoutDate}
                       onResumeWorkout={() => setTab('log')}
                       onEditWorkout={editWorkout}
-                      onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                      onOpenWorkout={(workout) => openSavedWorkout(workout.id, null)}
+                      onStartWorkout={(workoutDate, start) =>
+                        startWorkout(
+                          workoutDate,
+                          false,
+                          start?.template ?? null,
+                          start?.category ?? null,
+                          start?.type ?? null,
+                        )
+                      }
                       onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                      onEditSplit={openSplitSchedule}
                     />
                   }
                 />
@@ -2636,8 +2658,17 @@ function AppContent() {
                 activeWorkout={activeWorkoutStartedAt !== null}
                 activeWorkoutDate={activeWorkoutDate}
                 onResumeWorkout={() => setTab('log')}
-                onStartWorkout={(workoutDate) => startWorkout(workoutDate)}
+                onStartWorkout={(workoutDate, start) =>
+                  startWorkout(
+                    workoutDate,
+                    false,
+                    start?.template ?? null,
+                    start?.category ?? null,
+                    start?.type ?? null,
+                  )
+                }
                 onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
+                onEditSplit={openSplitSchedule}
               />
             </CachedTabPanel>
           )}
@@ -2989,8 +3020,12 @@ function InteractiveWorkoutCalendar({
   activeWorkoutDate,
   onResumeWorkout,
   onEditWorkout,
+  onOpenWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  onEditSplit,
+  hiddenCategories: shownHiddenCategories,
+  onHiddenCategoriesChange,
   weekStartDay,
 }: {
   entries: DashboardData['heatmap'];
@@ -3005,14 +3040,25 @@ function InteractiveWorkoutCalendar({
   activeWorkoutDate: string | null;
   onResumeWorkout: () => void;
   onEditWorkout: (workout: TrackedWorkout) => void;
-  onStartWorkout: (workoutDate: string) => void;
+  /** Opens a logged workout's session card; without it, a day's workout opens the editor. */
+  onOpenWorkout?: (workout: TrackedWorkout) => void;
+  /** Starts a workout on the date, pre-filled from a planned split day when given one. */
+  onStartWorkout: (workoutDate: string, start?: PlannedStart) => void;
   onReplaceActiveWorkout: (workoutDate: string) => void;
+  onEditSplit?: () => void;
+  /** The legend's switched-off types, when the screen also filters its own list by them. */
+  hiddenCategories?: ReadonlySet<string>;
+  onHiddenCategoriesChange?: (hidden: ReadonlySet<string>) => void;
 }) {
   const [selectedDay, setSelectedDay] = useState<DashboardData['heatmap'][number] | null>(null);
   const [pendingWorkoutDate, setPendingWorkoutDate] = useState<string | null>(null);
+  const [plannedDate, setPlannedDate] = useState<string | null>(null);
   // Every type shows by default; tapping one in the legend greys it out in the calendar.
   const { types } = useWorkoutTypes();
-  const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<string>>(() => new Set());
+  const [ownHiddenCategories, setOwnHiddenCategories] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const hiddenCategories = shownHiddenCategories ?? ownHiddenCategories;
   // The legend lists only the types logged in the months on screen.
   const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const presentTypes = calendarLegendTypes(entriesInMonths(entries, visibleMonths), types);
@@ -3030,15 +3076,19 @@ function InteractiveWorkoutCalendar({
         categoryColors,
       )
     : null;
-  const toggleCategory = (category: string) =>
-    setHiddenCategories((current) => {
-      const next = new Set(current);
-      if (!next.delete(category)) next.add(category);
-      return next;
-    });
+  const toggleCategory = (category: string) => {
+    const next = new Set(hiddenCategories);
+    if (!next.delete(category)) next.add(category);
+    if (onHiddenCategoriesChange) onHiddenCategoriesChange(next);
+    else setOwnHiddenCategories(next);
+  };
 
+  // Today with a split, and every later day, show the plan and start it today; a past day
+  // logs a missed session on that date.
   const openDay = (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => {
     if (entry) setSelectedDay(entry);
+    else if (workoutDate > today || (workoutDate === today && split?.enabled))
+      setPlannedDate(workoutDate);
     else setPendingWorkoutDate(workoutDate);
   };
 
@@ -3051,7 +3101,7 @@ function InteractiveWorkoutCalendar({
           weekStartDay={weekStartDay}
           activeWorkoutDate={activeWorkoutDate}
           activeWorkoutColor={activeWorkoutColor}
-          selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+          selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate ?? plannedDate}
           onActiveWorkoutClick={onResumeWorkout}
           onDayClick={openDay}
         />
@@ -3064,7 +3114,7 @@ function InteractiveWorkoutCalendar({
             hiddenCategories={hiddenCategories}
             activeWorkoutDate={activeWorkoutDate}
             activeWorkoutColor={activeWorkoutColor}
-            selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate}
+            selectedDate={selectedDay?.workout_date ?? pendingWorkoutDate ?? plannedDate}
             onActiveWorkoutClick={onResumeWorkout}
             onDayClick={openDay}
             onVisibleMonthsChange={setVisibleMonths}
@@ -3093,6 +3143,42 @@ function InteractiveWorkoutCalendar({
             setSelectedDay(null);
             onEditWorkout(workout);
           }}
+          onOpenWorkout={
+            onOpenWorkout &&
+            ((workoutId) => {
+              const workout = workouts.find((item) => item.id === workoutId);
+              if (!workout) return;
+              setSelectedDay(null);
+              onOpenWorkout(workout);
+            })
+          }
+        />
+      )}
+      {plannedDate && (
+        <PlannedDaySheet
+          key={plannedDate}
+          date={plannedDate}
+          today={today}
+          split={split}
+          workouts={workouts}
+          categoryColors={categoryColors}
+          activeWorkout={activeWorkout}
+          onClose={() => setPlannedDate(null)}
+          onStart={(start) => {
+            setPlannedDate(null);
+            onStartWorkout(today, start ?? undefined);
+          }}
+          onResume={() => {
+            setPlannedDate(null);
+            onResumeWorkout();
+          }}
+          onEditSplit={
+            onEditSplit &&
+            (() => {
+              setPlannedDate(null);
+              onEditSplit();
+            })
+          }
         />
       )}
       {pendingWorkoutDate && (
@@ -3118,12 +3204,15 @@ function CalendarDayDetail({
   onClose,
   onStartWorkout,
   onEditWorkout,
+  onOpenWorkout,
 }: {
   day: DashboardData['heatmap'][number];
   categoryColors: WorkoutTypeColors;
   onClose: () => void;
   onStartWorkout: (workoutDate: string) => void;
   onEditWorkout: (workoutId: string) => void;
+  /** Opens the workout's session card; the row falls back to the editor without it. */
+  onOpenWorkout?: (workoutId: string) => void;
 }) {
   const weightUnit = useWeightUnit();
   const { types } = useWorkoutTypes();
@@ -3183,8 +3272,10 @@ function CalendarDayDetail({
               <button
                 type="button"
                 className="calendar-workout-open"
-                onClick={() => onEditWorkout(workout.id)}
-                aria-label={`View and edit ${workout.name}`}
+                onClick={() => (onOpenWorkout ?? onEditWorkout)(workout.id)}
+                aria-label={
+                  onOpenWorkout ? `Open ${workout.name}` : `View and edit ${workout.name}`
+                }
               >
                 <i
                   style={{
@@ -3221,10 +3312,10 @@ function CalendarDayDetail({
               ))}
               <button
                 type="button"
-                className="calendar-edit-workout"
+                className={`calendar-edit-workout${onOpenWorkout ? ' is-secondary' : ''}`}
                 onClick={() => onEditWorkout(workout.id)}
               >
-                View &amp; edit workout
+                {onOpenWorkout ? 'Edit workout' : <>View &amp; edit workout</>}
               </button>
             </article>
           ))}
@@ -10218,6 +10309,7 @@ function HistoryScreen({
   onResumeWorkout,
   onStartWorkout,
   onReplaceActiveWorkout,
+  onEditSplit,
   onOpenSettings,
   accountActions,
 }: {
@@ -10253,8 +10345,9 @@ function HistoryScreen({
   activeWorkout: boolean;
   activeWorkoutDate: string | null;
   onResumeWorkout: () => void;
-  onStartWorkout: (workoutDate?: string) => void;
+  onStartWorkout: (workoutDate?: string, start?: PlannedStart) => void;
   onReplaceActiveWorkout: (workoutDate: string) => void;
+  onEditSplit?: () => void;
   onOpenSettings: () => void;
   accountActions?: ReactNode;
 }) {
@@ -10316,17 +10409,20 @@ function HistoryScreen({
   );
   const pageWindow = historyPageWindow(pageAnchor, weekStartDay, historyPage);
   const pageNeedsOlder = hasOlder && pageWindow.start < historyStart;
+  // Types switched off in the calendar legend leave the session list and its week totals too.
+  const [hiddenTypes, setHiddenTypes] = useState<ReadonlySet<string>>(() => new Set());
   const weekGroups = useMemo(
     () =>
       groupWorkoutsByWeek(
         workouts.filter(
           (workout) =>
             workout.workout_date >= pageWindow.start &&
-            (pageWindow.end === null || workout.workout_date <= pageWindow.end),
+            (pageWindow.end === null || workout.workout_date <= pageWindow.end) &&
+            !hiddenTypes.has(effectiveWorkoutType(workout, types).id),
         ),
         weekStartDay,
       ),
-    [pageWindow.end, pageWindow.start, weekStartDay, workouts],
+    [hiddenTypes, pageWindow.end, pageWindow.start, types, weekStartDay, workouts],
   );
   const recordCounts = useMemo(() => recordCountsByWorkout(personalRecords), [personalRecords]);
   const sectionIndicatorRef = useSlidingIndicator<HTMLDivElement>(section);
@@ -10413,6 +10509,16 @@ function HistoryScreen({
     setExpandedPhoto(null);
     setTargetExerciseId(null);
     setOpenId(null);
+  }
+
+  /** Opens a calendar day's workout as its session card, on its page, and scrolls to it. */
+  function revealWorkout(workout: TrackedWorkout) {
+    if (machineFilter) clearMachineFilter();
+    setChosenHistoryPage(historyPageForDate(workout.workout_date, pageAnchor, weekStartDay));
+    setTargetExerciseId(null);
+    setTargetMovementId(null);
+    setOpenId(workout.id);
+    revealWorkoutRef.current = true;
   }
 
   function renderWorkoutCard(workout: TrackedWorkout) {
@@ -10659,8 +10765,12 @@ function HistoryScreen({
                   activeWorkoutDate={activeWorkoutDate}
                   onResumeWorkout={onResumeWorkout}
                   onEditWorkout={onEdit}
+                  onOpenWorkout={revealWorkout}
                   onStartWorkout={onStartWorkout}
                   onReplaceActiveWorkout={onReplaceActiveWorkout}
+                  onEditSplit={onEditSplit}
+                  hiddenCategories={hiddenTypes}
+                  onHiddenCategoriesChange={setHiddenTypes}
                 />
               </section>
               {!workouts.length && !hasOlder && (
