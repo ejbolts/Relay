@@ -34,7 +34,8 @@
   padding: 0.625rem 0;
   border-bottom: 1px solid var(--p-line);
 }
-.follow-notification-list li > .profile-avatar {
+.follow-notification-list li > .profile-avatar,
+.follow-notification-avatar > .profile-avatar {
   width: 2rem;
   height: 2rem;
   font-size: 0.8125rem;
@@ -197,4 +198,53 @@
   background: var(--p-accent-soft);
   border-color: var(--p-accent);
   color: var(--p-accent);
+}
+
+/* A person's photo and name open their shared profile, above a row that opens a workout. */
+.follow-notification-avatar,
+.follow-notification-person {
+  position: relative;
+  z-index: 1;
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+}
+.follow-notification-avatar {
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+/* A 44px target around the 32px photo. */
+.follow-notification-avatar::after {
+  position: absolute;
+  inset: -0.375rem;
+  content: '';
+}
+.follow-notification-person {
+  display: inline;
+}
+.follow-notification-person:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--p-accent);
+}
+
+/* Unread when the inbox opened: an accent dot in the row's left gutter. */
+.follow-notification-list li.is-new {
+  position: relative;
+}
+.follow-notification-list li.is-new::before {
+  position: absolute;
+  top: 50%;
+  left: -0.625rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-top: -0.21875rem;
+  border-radius: 50%;
+  background: var(--p-accent);
+  content: '';
 }

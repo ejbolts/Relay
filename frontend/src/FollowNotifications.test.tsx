@@ -20,6 +20,7 @@ import { onWeeklyReviewRequested, publishWeeklyReviewNotice } from './weeklyRevi
 import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
 import { onAdminAccountFocusRequested } from './adminAccountFocus';
 import { UserContext, type UserSession } from './userContext';
+import { onSharedProfileRequested } from './sharedProfileRequest';
 
 // A silent patch keeps announcing the release whose notes it ships.
 const announced = announcedVersion(metadata);
@@ -699,4 +700,76 @@ it('never asks the admin API for members', async () => {
   await click('Notifications');
   expect(load).not.toHaveBeenCalled();
   expect(document.querySelector('.password-reset-notification-row')).toBeNull();
+});
+
+it('pins the unread release and weekly review above newer social notices', async () => {
+  snapshot = {
+    requests: [],
+    accepted: [],
+    reactions: Array.from({ length: 12 }, (_, index) => ({
+      ...reaction,
+      id: `later-${index}`,
+      since: '2099-01-01T12:00:00Z',
+    })),
+  };
+  await releaseInbox('inbox-pinned-sample');
+  await act(async () =>
+    publishWeeklyReviewNotice({ weekStart: '2026-11-09', weekEnd: '2026-11-15', unread: true }),
+  );
+  await click('Notifications, 14 unread');
+  const rows = () => [...document.querySelectorAll('.follow-notification-list > li')];
+  expect(rows()[0].classList.contains('release-notification-row')).toBe(true);
+  expect(rows()[1].classList.contains('weekly-review-notification-row')).toBe(true);
+
+  // Once read, they return to date order behind the newer notices.
+  await click(`View Relay ${announced} release notes`);
+  await click(`Close Version ${formatReleaseVersion(announced)}`);
+  await act(async () =>
+    publishWeeklyReviewNotice({ weekStart: '2026-11-09', weekEnd: '2026-11-15', unread: false }),
+  );
+  await click(document.querySelector('.follow-notification-button')!.getAttribute('aria-label')!);
+  expect(rows()[0].classList.contains('release-notification-row')).toBe(false);
+  expect(rows()[0].textContent).toContain('Alex Preview');
+});
+
+it('keeps a dot on notices that were unread when the inbox opened, until it opens again', async () => {
+  snapshot = {
+    requests: [],
+    accepted: [{ ...person, id: 'accepted', is_read: true }],
+    reactions: [reaction],
+  };
+  await render();
+  await click('Notifications, 1 unread');
+  expect(api.sharing.markNotificationsRead).toHaveBeenCalledOnce();
+  expect(unreadNotificationReferences(snapshot)).toHaveLength(0);
+  const fresh = () =>
+    [...document.querySelectorAll('.follow-notification-list > li.is-new')].map(
+      (row) => row.textContent,
+    );
+  expect(fresh()).toHaveLength(1);
+  expect(fresh()[0]).toContain('Leg day');
+
+  await click('Close Notifications');
+  await click('Notifications');
+  expect(fresh()).toEqual([]);
+});
+
+it("opens a person's shared profile from their name or photo, keeping Accept and Decline", async () => {
+  const opened = vi.fn();
+  const stop = onSharedProfileRequested(opened);
+  snapshot = { requests: [person], accepted: [], reactions: [reaction] };
+  await render();
+  await click('Notifications, 2 unread');
+  expect(document.querySelector('[aria-label="Accept Sam Preview"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Decline Sam Preview"]')).not.toBeNull();
+
+  await click('Sam Preview');
+  expect(opened).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'sample' }));
+  expect(document.querySelector('.follow-notifications')).toBeNull();
+
+  await click('Notifications, 1 unread');
+  await click('View Alex Preview’s profile');
+  expect(opened).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'alex' }));
+  expect(document.querySelector('.follow-notifications')).toBeNull();
+  stop();
 });
