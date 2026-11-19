@@ -310,9 +310,9 @@ it('shows 10 notifications per page with pagination instead of a Manage friends 
   expect(rows()).toHaveLength(10);
   expect(dialog()).toContain('Friend 19');
   expect(dialog()).not.toContain('Sam Preview');
-  await click('Choose a notifications page');
-  await click('Go to page 1');
+  await click('Page 1 of 2');
   expect(dialog()).toContain('Page 1 of 2');
+  expect(document.querySelector('.pagination-controls')?.classList).toContain('is-sheet-footer');
   await click('Next notifications page');
   await click('Close Notifications');
   await click('Notifications, 1 unread');

@@ -25,9 +25,9 @@ afterEach(async () => {
 it('clears itself after a few seconds', async () => {
   const onDismiss = vi.fn();
   await act(async () =>
-    root.render(<ExerciseCreatedToast name="Floor Press" onDismiss={onDismiss} />),
+    root.render(<ExerciseCreatedToast name="Floor Press" onOpen={vi.fn()} onDismiss={onDismiss} />),
   );
-  expect(document.querySelector('.top-toast')?.textContent).toContain('Floor Press added');
+  expect(document.querySelector('.toast')?.textContent).toContain('Floor Press added');
   await act(async () => vi.advanceTimersByTime(EXERCISE_CREATED_TOAST_MS - 1));
   expect(onDismiss).not.toHaveBeenCalled();
   await act(async () => vi.advanceTimersByTime(1));
@@ -40,7 +40,7 @@ it('opens the new exercise and closes', async () => {
   await act(async () =>
     root.render(<ExerciseCreatedToast name="Floor Press" onOpen={onOpen} onDismiss={onDismiss} />),
   );
-  await act(async () => document.querySelector<HTMLButtonElement>('.undo-toast-action')!.click());
+  await act(async () => document.querySelector<HTMLButtonElement>('.toast-action')!.click());
   expect(onOpen).toHaveBeenCalledOnce();
   expect(onDismiss).toHaveBeenCalledOnce();
 });

@@ -261,48 +261,21 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   line-height: 1.45;
 }
 
+/* Full-width account buttons. Their look (primary, secondary, danger-soft) is in buttons.css. */
 .auth-submit,
 .profile-primary,
 .profile-secondary,
 .profile-danger {
   width: 100%;
-  min-height: 2.9rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 0.65rem 1rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  touch-action: manipulation;
 }
 
-.auth-submit,
-.profile-primary {
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.auth-submit:hover:not(:disabled),
-.profile-primary:hover:not(:disabled) {
-  background: var(--p-accent-hover);
-}
-
-.profile-secondary {
-  border-color: var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
-
-.profile-danger {
-  border-color: rgb(230 103 103 / 55%);
-  background: rgb(230 103 103 / 10%);
-  color: var(--p-danger);
-}
-
-.auth-spinner {
+/* Spinner inside a primary or danger button while a network action runs. */
+.auth-spinner,
+.button-spinner {
   width: 1rem;
   height: 1rem;
   flex-shrink: 0;

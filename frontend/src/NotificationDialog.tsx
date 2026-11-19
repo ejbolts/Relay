@@ -1,50 +1,28 @@
-import { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { Toast } from './Toast';
 
+/** A notice in the shared toast; kept for existing callers until they use `Toast` directly. */
 export function NotificationDialog({
   message,
   onClose,
-  portal = true,
   action,
-  durationMs = 8000,
-  countdown = false,
 }: {
   message: string;
   onClose: () => void;
-  /** Render inside an open modal's top layer. */ portal?: boolean;
+  /** Ignored: the toast moves into an open dialog by itself. */
+  portal?: boolean;
   action?: { label: string; onClick: () => void };
+  /** Ignored: the duration follows the toast's variant. */
   durationMs?: number;
+  /** Ignored: every toast shows its countdown. */
   countdown?: boolean;
 }) {
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    const timer = window.setTimeout(() => onCloseRef.current(), durationMs);
-    return () => window.clearTimeout(timer);
-  }, [message, durationMs]);
-
-  const toast = (
-    <aside className="app-notification-toast" role="status" aria-live="polite" aria-atomic="true">
-      <p>{message}</p>
-      {action && (
-        <button type="button" className="notification-toast-action" onClick={action.onClick}>
-          {action.label}
-        </button>
-      )}
-      <button
-        type="button"
-        className="icon-button"
-        aria-label="Close notification"
-        onClick={onClose}
-      >
-        ×
-      </button>
-      {countdown && (
-        <span className="notification-toast-countdown" aria-hidden="true">
-          <span key={`${message}:${durationMs}`} style={{ animationDuration: `${durationMs}ms` }} />
-        </span>
-      )}
-    </aside>
+  return (
+    <Toast
+      id={message}
+      message={message}
+      action={action && { label: action.label, run: action.onClick }}
+      dismissLabel="Close notification"
+      onDismiss={onClose}
+    />
   );
-  return portal ? createPortal(toast, document.body) : toast;
 }

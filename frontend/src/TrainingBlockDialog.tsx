@@ -359,7 +359,7 @@ export function TrainingBlockDialog({
               <span aria-hidden="true">Ends</span>
               {(
                 [
-                  ['none', 'No end', ''],
+                  ['none', 'No set date', ''],
                   ['8', '8 weeks', blockDay(weeksEnd(start, 8), false)],
                   ['12', '12 weeks', blockDay(weeksEnd(start, 12), false)],
                   ['custom', 'Custom', plan === 'custom' ? blockDay(planEnd, false) : ''],

@@ -109,6 +109,8 @@ export interface MuscleContribution {
 
 export interface Exercise {
   merged_from_ids?: string[];
+  /** Other names for a standard exercise, such as Military Press for Overhead Press. */
+  alternative_names?: string[];
   id: string;
   name: string;
   category: WorkoutCategory;

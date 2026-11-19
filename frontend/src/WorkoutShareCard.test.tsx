@@ -377,7 +377,7 @@ it('keeps unsupported clipboard disabled and offers sharing through a non-blocki
     ),
   );
   expect(document.querySelector('dialog, [aria-modal="true"]')).toBeNull();
-  expect(document.querySelector('.app-notification-toast')?.textContent).toContain('Workout saved');
+  expect(document.querySelector('.toast')?.textContent).toContain('Workout saved');
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
   );
@@ -409,7 +409,7 @@ it('keeps Settings and the card toggle synchronized, persists disabling and pres
   await act(async () =>
     root.render(<WorkoutSharePrompt workout={workout} records={0} onClose={onClose} />),
   );
-  expect(document.querySelector('.notification-toast-action')).toBeNull();
+  expect(document.querySelector('.toast-action')).toBeNull();
   expect(onClose).toHaveBeenCalledOnce();
   await mount();
   expect(switches()[0].getAttribute('aria-checked')).toBe('false');
@@ -418,7 +418,7 @@ it('keeps Settings and the card toggle synchronized, persists disabling and pres
   await act(async () =>
     root.render(<WorkoutSharePrompt workout={workout} records={0} onClose={onClose} />),
   );
-  expect(document.querySelector('.notification-toast-action')).not.toBeNull();
+  expect(document.querySelector('.toast-action')).not.toBeNull();
 });
 
 it('keeps reminder choices isolated between signed-in accounts', async () => {
