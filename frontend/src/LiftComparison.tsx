@@ -1,27 +1,32 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { api } from './api';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
+import { pageButtons } from './pageButtons';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { useFlipAnimation, useHeightAnimation } from './motionHooks';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { useWeightUnit } from './trainingPreferencesContext';
+import { GOAL_UNDO_MS } from './useGoalRemoval';
 import { useUserSession } from './userContext';
 import { formatWeight, type WeightUnit } from './weightUnits';
-import type {
-  LiftBest,
-  LiftComparison,
-  LiftComparisons,
-  LiftRanking,
-  SharedProfileSummary,
-} from './types';
+import type { LiftBest, LiftComparison, LiftRanking, SharedProfileSummary } from './types';
 import './liftComparison.css';
 
-/** The most lifts a head to head can show, as the server allows. */
+/** The most lifts a head to head can show. */
 const MAX_LIFTS = 20;
-/** Matches the sheet's slide-down in liftComparison.css. */
+/** Lifts on each page of the picker: as many as fit the sheet on a phone without scrolling. */
+const PAGE_SIZE = 6; /** Matches the sheet's slide-down in liftComparison.css. */
 const CLOSE_MS = 240;
 /** The gap between one new lift rising into the card and the next, as useFlipAnimation spaces them. */
 const ENTER_STAGGER_MS = 80;
@@ -54,8 +59,9 @@ function count(lifts: number): string {
 }
 
 /**
- * Your best lifts against another member's, on their profile. It starts empty: you choose the
- * lifts, and the same choice then shows for every member you compare with.
+ * Your best lifts against another member's, on their profile. It starts empty each time the
+ * profile opens: the lifts you choose belong to this visit, so another member's profile, or this
+ * one opened again, starts afresh.
  */
 export function HeadToHeadCard({
   member,
@@ -72,37 +78,28 @@ export function HeadToHeadCard({
   const unit = useWeightUnit();
   const { user } = useUserSession();
   const titleId = useId();
-  const [data, setData] = useState<LiftComparisons | null>(null);
+  const [lifts, setLifts] = useState<LiftComparison[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
   // While the sheet is open the card keeps the lifts it had, then takes the new choice as the
   // sheet closes, so the lifts you added are seen arriving instead of changing behind it.
   const [held, setHeld] = useState<string[] | null>(null);
   const [fresh, setFresh] = useState<string[]>([]);
   const card = useRef<HTMLElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
-  const shownIds = held ?? data?.selected ?? [];
+  const shownIds = held ?? selected;
   const shownKey = shownIds.join('|');
   const announceAdded = useFlipAnimation(card, shownKey);
   useHeightAnimation(card, shownKey);
-  // Choices save one at a time, newest only, so quick taps cannot land out of order.
-  const saved = useRef<string[]>([]);
-  const latest = useRef(0);
-  const saving = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    const started = latest.current;
-    // The comparison is an extra: a profile that cannot answer it simply shows no card.
+    // The comparison is an extra: a profile that cannot answer it simply shows no card. The
+    // server also returns a saved choice of lifts, which is ignored: each visit starts empty.
     api.sharing.lifts(member.id).then(
       (next) => {
-        if (cancelled) return;
-        // A choice made while this was read is newer than what it holds.
-        if (started === latest.current) saved.current = next.selected;
-        setData((current) =>
-          current && started !== latest.current ? { ...next, selected: current.selected } : next,
-        );
+        if (!cancelled) setLifts(next.lifts);
       },
       () => undefined,
     );
@@ -111,24 +108,8 @@ export function HeadToHeadCard({
     };
   }, [member.id, active, revision]);
 
-  function choose(next: string[]) {
-    const serial = ++latest.current;
-    setSaveFailed(false);
-    setData((current) => current && { ...current, selected: next });
-    saving.current = saving.current.then(async () => {
-      if (serial !== latest.current) return;
-      try {
-        saved.current = (await api.sharing.chooseLifts(next)).exercise_ids;
-      } catch {
-        if (serial !== latest.current) return;
-        setData((current) => current && { ...current, selected: saved.current });
-        setSaveFailed(true);
-      }
-    });
-  }
-
-  if (!data) return null;
-  const byId = new Map(data.lifts.map((lift) => [lift.exercise_id, lift]));
+  if (!lifts) return null;
+  const byId = new Map(lifts.map((lift) => [lift.exercise_id, lift]));
   const chosen = shownIds.flatMap((id) => byId.get(id) ?? []);
   const leaders = chosen.map(leaderOf);
   const yours = leaders.filter((leader) => leader === 'you').length;
@@ -148,6 +129,34 @@ export function HeadToHeadCard({
         <h2 id={titleId}>Head to head</h2>
         {chosen.length > 0 && <span>All-time est. 1RM</span>}
       </header>
+      {chosen.length === 0 && (
+        // What the card will look like, until lifts are chosen.
+        <div className="head-to-head-template" aria-hidden="true">
+          <div className="head-to-head-score">
+            <span className="head-to-head-side">
+              {user && <ProfileAvatar className="profile-avatar" user={user} />}
+              <b>You</b>
+            </span>
+            <strong className="num">
+              <span>?</span>
+              <i>–</i>
+              <span>?</span>
+            </strong>
+            <span className="head-to-head-side them">
+              <b>{member.display_name}</b>
+              <ProfileAvatar className="profile-avatar" user={{ ...member, username: '' }} />
+            </span>
+          </div>
+          <div className="head-to-head-ghost">
+            <span className="head-to-head-ghost-values">
+              <b>?</b>
+              <i />
+              <b>?</b>
+            </span>
+            <span className="head-to-head-ghost-bar" />
+          </div>
+        </div>
+      )}
       {yours + theirs + level > 0 && (
         <p className="head-to-head-score" aria-label={score} data-flip-key="score">
           <span className={`head-to-head-side${yours > theirs ? ' ahead' : ''}`} aria-hidden="true">
@@ -234,7 +243,7 @@ export function HeadToHeadCard({
         aria-haspopup="dialog"
         data-flip-key="choose"
         onClick={() => {
-          setHeld(data.selected);
+          setHeld(selected);
           setPicking(true);
         }}
       >
@@ -244,14 +253,13 @@ export function HeadToHeadCard({
         <LiftPicker
           member={member}
           you={user}
-          lifts={data.lifts}
-          selected={data.selected}
-          saveFailed={saveFailed}
-          onChange={choose}
+          lifts={lifts}
+          selected={selected}
+          onChange={setSelected}
           onClose={() => {
             const before = held ?? [];
             announceAdded();
-            setFresh(data.selected.filter((id) => !before.includes(id)));
+            setFresh(selected.filter((id) => !before.includes(id)));
             setHeld(null);
             setPicking(false);
             requestAnimationFrame(() => opener.current?.focus());
@@ -268,7 +276,6 @@ function LiftPicker({
   you,
   lifts,
   selected,
-  saveFailed,
   onChange,
   onClose,
 }: {
@@ -276,21 +283,44 @@ function LiftPicker({
   you: Parameters<typeof ProfileAvatar>[0]['user'] | null;
   lifts: LiftComparison[];
   selected: string[];
-  saveFailed: boolean;
-  onChange: (selected: string[]) => void;
+  onChange: Dispatch<SetStateAction<string[]>>;
   onClose: () => void;
 }) {
   const unit = useWeightUnit();
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const [closing, setClosing] = useState(false);
   const closeTimer = useRef<number | null>(null);
+  // Unselect all can be undone for a few seconds, back to the lifts it cleared.
+  const [cleared, setCleared] = useState<string[] | null>(null);
+  const clearedTimer = useRef<number | null>(null);
   useEffect(
     () => () => {
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+      if (clearedTimer.current !== null) window.clearTimeout(clearedTimer.current);
     },
     [],
   );
+
+  /** Offers Undo for the lifts Unselect all cleared, or with null withdraws the offer. */
+  function offerUndo(previous: string[] | null) {
+    if (clearedTimer.current !== null) window.clearTimeout(clearedTimer.current);
+    clearedTimer.current =
+      previous === null ? null : window.setTimeout(() => setCleared(null), GOAL_UNDO_MS);
+    setCleared(previous);
+  }
+
+  function search(next: string) {
+    setQuery(next);
+    setPage(0);
+  }
+
+  function turnTo(next: number) {
+    setPage(next);
+    list.current?.scrollTo?.({ top: 0 });
+  }
 
   /** Slides the sheet back down before it unmounts. */
   function dismiss() {
@@ -314,6 +344,9 @@ function LiftPicker({
   });
   const shown = query.trim() ? rankExerciseSearchMatches(ordered, query, []) : ordered;
   const full = selected.length >= MAX_LIFTS;
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const onPage = shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   return (
     <PopupDialog
@@ -334,14 +367,14 @@ function LiftPicker({
             aria-label="Search your exercises"
             placeholder="Search exercises"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => search(event.target.value)}
           />
           {query && (
             <button
               type="button"
               aria-label="Clear search"
               onClick={() => {
-                setQuery('');
+                search('');
                 input.current?.focus();
               }}
             >
@@ -349,18 +382,23 @@ function LiftPicker({
             </button>
           )}
         </label>
-        {saveFailed && (
-          <p className="inline-error" role="alert">
-            Your lifts could not be saved. Try again.
-          </p>
-        )}
-        {full && (
-          <p className="lift-picker-limit" role="status">
-            {MAX_LIFTS} lifts is the most a head to head shows.
-          </p>
-        )}
-        <ul className="lift-picker-list" aria-label="Your exercises">
-          {shown.map((lift) => {
+        <div className="lift-picker-toolbar">
+          <span className="num">
+            <b>{selected.length}</b> of {MAX_LIFTS} chosen
+          </span>
+          <button
+            type="button"
+            disabled={!selected.length}
+            onClick={() => {
+              offerUndo(selected);
+              onChange([]);
+            }}
+          >
+            Unselect all
+          </button>
+        </div>
+        <ul ref={list} className="lift-picker-list" aria-label="Your exercises">
+          {onPage.map((lift) => {
             const chosen = selected.includes(lift.exercise_id);
             return (
               <li key={lift.exercise_id}>
@@ -368,13 +406,17 @@ function LiftPicker({
                   type="button"
                   aria-pressed={chosen}
                   disabled={full && !chosen}
-                  onClick={() =>
-                    onChange(
-                      chosen
-                        ? selected.filter((id) => id !== lift.exercise_id)
-                        : [...selected, lift.exercise_id],
-                    )
-                  }
+                  onClick={() => {
+                    offerUndo(null);
+                    // From the latest choice, so quick taps in a row all count.
+                    onChange((current) =>
+                      current.includes(lift.exercise_id)
+                        ? current.filter((id) => id !== lift.exercise_id)
+                        : current.length >= MAX_LIFTS
+                          ? current
+                          : [...current, lift.exercise_id],
+                    );
+                  }}
                 >
                   <span className="lift-picker-check" aria-hidden="true">
                     <Icon name="check" />
@@ -419,7 +461,73 @@ function LiftPicker({
             No exercises match “{query.trim()}”.
           </p>
         )}
+        {pages > 1 && (
+          <nav className="lift-picker-pager" aria-label="Pages">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={current === 0}
+              onClick={() => turnTo(current - 1)}
+            >
+              <Icon name="chevron-left" />
+            </button>
+            {pageButtons(current, pages).map((item, index) =>
+              item === null ? (
+                <span key={`gap-${index}`} aria-hidden="true">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={item}
+                  type="button"
+                  className="num"
+                  aria-label={`Page ${item + 1} of ${pages}`}
+                  aria-current={item === current ? 'page' : undefined}
+                  onClick={() => turnTo(item)}
+                >
+                  {item + 1}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={current === pages - 1}
+              onClick={() => turnTo(current + 1)}
+            >
+              <Icon name="chevron-right" />
+            </button>
+          </nav>
+        )}
       </div>
+      {cleared && (
+        <div
+          className="undo-toast lift-picker-toast"
+          role="status"
+          aria-atomic="true"
+          style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
+        >
+          <span>Lifts cleared</span>
+          <button
+            className="undo-toast-action"
+            type="button"
+            onClick={() => {
+              onChange(cleared);
+              offerUndo(null);
+            }}
+          >
+            Undo
+          </button>
+          <button
+            className="undo-toast-close"
+            type="button"
+            aria-label="Dismiss lifts cleared notification"
+            onClick={() => offerUndo(null)}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+      )}
     </PopupDialog>
   );
 }
