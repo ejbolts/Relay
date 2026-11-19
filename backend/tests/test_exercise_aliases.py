@@ -1,4 +1,4 @@
-from app.exercise_aliases import canonical_exercise_name
+from app.exercise_aliases import alternative_exercise_names, canonical_exercise_name
 
 
 def test_known_aliases_use_standardized_exercise_names():
@@ -19,3 +19,9 @@ def test_curl_aliases_preserve_equipment_variants():
     assert canonical_exercise_name("Cable Curl") == "Cable Biceps Curl"
     assert canonical_exercise_name("Barbell Biceps Curl") == "Barbell Curl"
     assert canonical_exercise_name("EZ-Bar Curl") == "EZ Bar Curl"
+
+
+def test_alternative_names_list_known_names_for_a_standard_exercise():
+    assert alternative_exercise_names("Overhead Press") == ["Military Press"]
+    assert alternative_exercise_names(" barbell  row ") == ["Bent Over Row"]
+    assert alternative_exercise_names("My custom movement") == []
