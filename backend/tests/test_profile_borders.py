@@ -5,13 +5,15 @@ import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, text, update
+from sqlalchemy import create_engine, inspect, select, text, update
 from test_auth import named
 from test_sharing import befriend, profile, share
 
+from app import profile_borders
 from app.database import SessionLocal
 from app.models import CardioSession, TrainingWorkout, User
 from app.profile_borders import (
@@ -33,6 +35,13 @@ from app.profile_borders import (
 )
 
 BENCH, SQUAT, DEADLIFT = "Barbell Bench Press", "Back Squat", "Deadlift"
+
+
+@pytest.fixture(autouse=True)
+def backdates_allowed(monkeypatch):
+    """Most tests log months of history at once; the backdate allowance has its own test."""
+    monkeypatch.setattr(profile_borders, "BACKDATES_PER_WEEK", 10_000)
+    return monkeypatch
 
 
 def workout(
@@ -668,3 +677,38 @@ def test_csv_imports_earn_no_borders(client):
     listed = borders(client)
     assert listed["first-steps"]["progress"] == {"current": 1, "target": 5, "unit": "workouts"}
     assert listed["bench-club-2"]["unlocked"] and not listed["bench-club-3"]["unlocked"]
+
+
+def test_only_two_backdated_entries_a_week_count(client, backdates_allowed):
+    backdates_allowed.setattr(profile_borders, "BACKDATES_PER_WEEK", 2)
+    today = date.today()
+    # Saved today: yesterday and two days ago are on time; anything older is backdated.
+    for days_ago in (1, 2, 10, 11, 12, 13):
+        workout(client, today - timedelta(days=days_ago), BENCH, [{"weight_kg": 50, "reps": 5}])
+    weigh_in(client, today - timedelta(days=20))
+    numbers = stats(client)
+    # Two on time plus the first two backdated workouts; the rest, and the weigh-in, wait.
+    assert numbers["workouts"] == 4
+    assert numbers["log_streak"] == 2
+
+    # The allowance is per week the entries were saved in: a week later, two more count.
+    with SessionLocal() as db:
+        late = db.scalars(
+            select(TrainingWorkout)
+            .where(TrainingWorkout.workout_date < today - timedelta(days=11))
+            .order_by(TrainingWorkout.workout_date)
+        ).all()
+        for item in late:
+            item.created_at = datetime.combine(today, datetime.min.time()) + timedelta(days=7)
+        db.commit()
+    assert stats(client, today + timedelta(days=8))["workouts"] == 6
+
+    # Editing an on-time workout to an old date makes it backdated too.
+    with SessionLocal() as db:
+        recent = db.scalar(
+            select(TrainingWorkout).where(TrainingWorkout.workout_date == today - timedelta(days=1))
+        )
+        recent.workout_date = today - timedelta(days=40)
+        db.commit()
+    # It now takes one of this week's two places, so one fewer workout counts.
+    assert stats(client)["workouts"] == 5
