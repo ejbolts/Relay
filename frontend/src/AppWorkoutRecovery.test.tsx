@@ -353,10 +353,11 @@ async function confirmFinish() {
     (button) => button.textContent === 'Finish workout',
   )!;
   await act(async () => finish.click());
+  // With every entered set ticked, Finish saves straight away without asking.
   const confirm = document.querySelector<HTMLButtonElement>(
     '.workout-finish-dialog .popup-primary-action',
-  )!;
-  await act(async () => confirm.click());
+  );
+  if (confirm) await act(async () => confirm.click());
 }
 
 /** Taps Finish workout on a workout that cannot save, checking the popup explains why. */
@@ -660,6 +661,7 @@ describe('mixed-session timelines', () => {
       ),
     ).toEqual([
       'Recent history',
+      'Edit note',
       'Muscle credits',
       'Group as superset',
       'Swap exercise',
@@ -2197,21 +2199,31 @@ describe('finishing workouts in the background', () => {
     await act(async () => finish.click());
     expect(
       document.querySelector('.workout-finish-dialog .workout-finish-summary')?.textContent,
-    ).toBe("2 of 3 sets ticked. Unticked sets won't count.");
+    ).toBe('2 of 3 sets ticked');
     await closeFinishConfirmation();
     expect(api.createWorkout).not.toHaveBeenCalled();
   });
 
-  it('keeps the finish confirmation short when every set is ticked', async () => {
-    writeActiveWorkoutDraft(storedDraft());
+  it('finishes without asking when every entered set is ticked, offering Undo on Home', async () => {
+    const draft = storedDraft();
+    // An empty row left unticked is not a set and needs no decision.
+    draft.movements[0].sets.push({
+      ...draft.movements[0].sets[0],
+      key: 'set-empty',
+      reps: null,
+      weight_kg: null,
+      completed: false,
+    });
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
     await mount();
     const finish = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Finish workout',
     )!;
     await act(async () => finish.click());
-    expect(document.querySelector('.workout-finish-dialog')).not.toBeNull();
-    expect(document.querySelector('.workout-finish-summary')).toBeNull();
-    await closeFinishConfirmation();
+    expect(document.querySelector('.workout-finish-dialog')).toBeNull();
+    expect(api.createWorkout).toHaveBeenCalledOnce();
+    expect(document.querySelector('.workout-saved-toast')?.textContent).toContain('Workout saved');
   });
 
   it('explains how to finish an empty workout without discarding it', async () => {
@@ -3288,7 +3300,9 @@ describe('cardio set editing defaults', () => {
     await mount();
     await confirmFinish();
     expect(document.querySelector('.app-notification-toast')).toBeNull();
-    expect(document.body.textContent).not.toContain('Workout saved');
+    // Only Home's brief "Workout saved" toast; no cardio share or zone popup.
+    expect(document.body.textContent?.split('Workout saved')).toHaveLength(2);
+    expect(document.querySelector('.workout-saved-toast')).not.toBeNull();
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     expect(api.cardioOverview).not.toHaveBeenCalled();
   });

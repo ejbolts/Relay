@@ -684,8 +684,8 @@ describe('saving and pinning a machine photo while logging', () => {
       homeGym.id,
       travelGym.id,
     ]);
+    // Every set is ticked, so Finish saves without asking.
     await click(button('Finish workout'));
-    await click(button('Finish workout', document.querySelector('dialog[open]')!));
     expect(save).toHaveBeenCalled();
     expect(save.mock.calls[0][0].movements[0].sets.map((set) => set.machine_photo_id)).toEqual([
       homeGym.id,

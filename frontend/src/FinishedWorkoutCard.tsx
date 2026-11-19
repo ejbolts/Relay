@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from './api';
 import { Icon, type IconName } from './Icon';
 import { RepRangeDialog } from './RepRangeDialog';
@@ -6,6 +7,7 @@ import { activeRoutineWithout } from './routineRepRange';
 import { formatVolume } from './trainingSummary';
 import { formatWeight } from './weightUnits';
 import { useWeightUnit } from './trainingPreferencesContext';
+import { useWorkoutShareReminder } from './useWorkoutShareReminder';
 import type { FinishSummary } from './finishSummary';
 import type { Routine } from './types';
 import './weeklyReview.css';
@@ -16,6 +18,9 @@ function minutesLabel(minutes: number): string {
   const rest = minutes % 60;
   return `${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ''}`;
 }
+
+/** How long "Workout saved" stays up after finishing, with its Undo and Share. */
+export const WORKOUT_SAVED_TOAST_MS = 6000;
 
 function Delta({ value, label }: { value: number; label: string }) {
   if (!value) return null;
@@ -38,6 +43,8 @@ export function FinishedWorkoutCard({
   onOpenWorkout,
   onCompareMachines,
   onNotice,
+  onShare,
+  onUndo,
 }: {
   summary: FinishSummary;
   /** Records this workout set, known once it has synced. */
@@ -46,8 +53,23 @@ export function FinishedWorkoutCard({
   onOpenWorkout: () => void;
   onCompareMachines: (exerciseId: string) => void;
   onNotice: (message: string) => void;
+  /** Opens the share card; available once the workout has saved. */
+  onShare?: () => void;
+  /** Resumes the workout just finished; available once it has saved. */
+  onUndo?: () => void;
 }) {
   const unit = useWeightUnit();
+  const [shareReminder] = useWorkoutShareReminder();
+  // A workout finished moments ago gets a brief "Workout saved" with Undo (and Share, when the
+  // sharing reminder is on); returning to Home later shows the card alone.
+  const [savedToast, setSavedToast] = useState(
+    () => Date.now() - summary.finishedAt < WORKOUT_SAVED_TOAST_MS,
+  );
+  useEffect(() => {
+    if (!savedToast) return;
+    const timer = window.setTimeout(() => setSavedToast(false), WORKOUT_SAVED_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [savedToast]);
   const [machineExerciseId, setMachineExerciseId] = useState<string | null>(null);
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [rangeFor, setRangeFor] = useState<FinishSummary['plateaus'][number] | null>(null);
@@ -128,14 +150,25 @@ export function FinishedWorkoutCard({
           <p className="section-kicker">WORKOUT FINISHED</p>
           <h2 id="finished-workout-title">{summary.name}</h2>
         </div>
-        <button
-          type="button"
-          className="icon-button-pulse finished-workout-close"
-          aria-label="Dismiss workout summary"
-          onClick={onDismiss}
-        >
-          <Icon name="close" />
-        </button>
+        <div className="finished-workout-header-actions">
+          <button
+            type="button"
+            className="icon-button-pulse finished-workout-share"
+            aria-label="Share workout"
+            disabled={!onShare}
+            onClick={onShare}
+          >
+            <Icon name="share" />
+          </button>
+          <button
+            type="button"
+            className="icon-button-pulse finished-workout-close"
+            aria-label="Dismiss workout summary"
+            onClick={onDismiss}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
       </header>
       <dl className="weekly-review-stats">
         <div>
@@ -192,6 +225,49 @@ export function FinishedWorkoutCard({
       <button type="button" className="text-button finished-workout-open" onClick={onOpenWorkout}>
         View workout
       </button>
+      {savedToast &&
+        createPortal(
+          <div
+            className="undo-toast top-toast workout-saved-toast"
+            role="status"
+            style={{ '--undo-toast-duration': `${WORKOUT_SAVED_TOAST_MS}ms` } as CSSProperties}
+          >
+            <span>Workout saved</span>
+            {shareReminder && onShare && (
+              <button
+                className="undo-toast-action"
+                type="button"
+                onClick={() => {
+                  setSavedToast(false);
+                  onShare();
+                }}
+              >
+                Share
+              </button>
+            )}
+            {onUndo && (
+              <button
+                className="undo-toast-action"
+                type="button"
+                onClick={() => {
+                  setSavedToast(false);
+                  onUndo();
+                }}
+              >
+                Undo
+              </button>
+            )}
+            <button
+              type="button"
+              className="undo-toast-close"
+              aria-label="Dismiss workout saved notification"
+              onClick={() => setSavedToast(false)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
       {rangeFor && routine && (
         <RepRangeDialog
           exerciseId={rangeFor.exerciseId}

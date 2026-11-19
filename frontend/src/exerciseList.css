@@ -480,3 +480,21 @@
     column-gap: 0.45rem;
   }
 }
+
+/* A search with no match offers to create it, named after the search. */
+.exercise-picker-empty {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+}
+
+.exercise-picker-create {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}

@@ -245,6 +245,8 @@ import {
   setKindUpdate,
   setNumberLabels,
 } from './setFieldValues';
+import { MovementNoteDialog } from './MovementNoteDialog';
+import { SetLastTime } from './SetLastTime';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
@@ -462,6 +464,7 @@ import {
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
+  liveWorkoutTimes,
 } from './workoutResume';
 import {
   isWorkoutSetAutoSavable,
@@ -741,6 +744,7 @@ function AppContent() {
   finishSummaryRef.current = finishSummary;
   /** Records set by the workout on the card; they arrive once it has synced. */
   const [finishRecords, setFinishRecords] = useState<PersonalRecord[]>([]);
+  const [finishShareOpen, setFinishShareOpen] = useState(false);
   function rememberFinish(summary: FinishSummary | null) {
     setFinishSummary(summary);
     setFinishRecords([]);
@@ -832,6 +836,10 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
+  // The workout on Home's finished card once it has saved, for View workout, Share and Undo.
+  const finishedSaved = finishSummary?.sessionId
+    ? workouts.find((workout) => workout.client_session_id === finishSummary.sessionId)
+    : undefined;
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -2315,30 +2323,40 @@ function AppContent() {
                   home={home}
                   finished={
                     finishSummary && (
-                      <FinishedWorkoutCard
-                        key={finishSummary.finishedAt}
-                        summary={finishSummary}
-                        records={finishRecords.map((record) => ({
-                          id: record.id,
-                          exercise: record.exercise_name ?? 'Exercise',
-                          detail: completionRecordDetail(record, weightUnit),
-                        }))}
-                        onDismiss={() => rememberFinish(null)}
-                        onOpenWorkout={() => {
-                          const saved = finishSummary.sessionId
-                            ? workouts.find(
-                                (workout) => workout.client_session_id === finishSummary.sessionId,
-                              )
-                            : undefined;
-                          if (saved) openSavedWorkout(saved.id, null);
-                          else openHistorySection('history');
-                        }}
-                        onCompareMachines={(exerciseId) => {
-                          setMachineWeightsFor(exerciseId);
-                          openHistorySection('progress', exerciseId);
-                        }}
-                        onNotice={setMessage}
-                      />
+                      <>
+                        <FinishedWorkoutCard
+                          key={finishSummary.finishedAt}
+                          summary={finishSummary}
+                          records={finishRecords.map((record) => ({
+                            id: record.id,
+                            exercise: record.exercise_name ?? 'Exercise',
+                            detail: completionRecordDetail(record, weightUnit),
+                          }))}
+                          onDismiss={() => rememberFinish(null)}
+                          onOpenWorkout={() => {
+                            if (finishedSaved) openSavedWorkout(finishedSaved.id, null);
+                            else openHistorySection('history');
+                          }}
+                          onShare={finishedSaved ? () => setFinishShareOpen(true) : undefined}
+                          onUndo={
+                            finishedSaved && !workoutSaveBlocked && activeWorkoutStartedAt === null
+                              ? () => resumeWorkout(finishedSaved)
+                              : undefined
+                          }
+                          onCompareMachines={(exerciseId) => {
+                            setMachineWeightsFor(exerciseId);
+                            openHistorySection('progress', exerciseId);
+                          }}
+                          onNotice={setMessage}
+                        />
+                        {finishShareOpen && finishedSaved && (
+                          <WorkoutShareCard
+                            workout={finishedSaved}
+                            records={finishRecords.length}
+                            onClose={() => setFinishShareOpen(false)}
+                          />
+                        )}
+                      </>
                     )
                   }
                   data={shownDashboard}
@@ -4542,8 +4560,13 @@ function WorkoutLogger({
     (total, movement) => total + movement.sets.filter((item) => item.completed).length,
     0,
   );
+  // Rows left empty are not sets; only entered ones left unticked need a decision at Finish.
   const untickedSetCount = movements.reduce(
-    (total, movement) => total + movement.sets.filter((item) => !item.completed).length,
+    (total, movement) =>
+      total +
+      movement.sets.filter(
+        (item) => !item.completed && hasRecordedPerformance(movement.exercise.kind, item),
+      ).length,
     0,
   );
 
@@ -4685,6 +4708,11 @@ function WorkoutLogger({
       setWarmupReviewOpen(true);
       return;
     }
+    // With every entered set ticked there is nothing to decide: finish, with Undo on Home.
+    if (check.kind === 'ready' && untickedSetCount === 0) {
+      void finishWorkout();
+      return;
+    }
     setFinishBlocker(check.kind === 'blocked' ? check.message : null);
     setFinishConfirmationOpen(true);
   }
@@ -4764,6 +4792,8 @@ function WorkoutLogger({
         false,
       );
     }
+    const liveTimes =
+      !initialWorkout && !resumedWorkoutId ? liveWorkoutTimes(startedAt, durationMinutes) : null;
     return {
       ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
       ...((initialWorkout || resumedWorkoutId) &&
@@ -4774,11 +4804,12 @@ function WorkoutLogger({
       workout_type_id: customTypeId,
       notes: notes.trim() || null,
       duration_minutes: durationMinutes,
-      start_time: initialWorkout && startTime && endTime ? startTime : null,
+      // A new live workout records when it started and ended; edits keep their own times.
+      start_time: initialWorkout && startTime && endTime ? startTime : (liveTimes?.start ?? null),
       end_time:
         initialWorkout && startTime && endTime
           ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
-          : null,
+          : (liveTimes?.end ?? null),
       movements: movementsToSave.map((movement) => ({
         exercise_id: movement.exercise.id,
         notes: movement.notes.trim() || null,
@@ -5017,9 +5048,6 @@ function WorkoutLogger({
       className={`logger-screen content-page${!initialWorkout ? ' is-live-workout' : ''} ${dockSpacing}`}
       inert={saving}
     >
-      {prToastEntries.length > 0 && (
-        <PrToast key={`pr-toast-${prToastId}`} entries={prToastEntries} onClose={closePrToast} />
-      )}
       {prConfettiBurst > 0 &&
         (motionReduced() ? null : (
           <ConfettiBurst key={prConfettiBurst} onComplete={() => setPrConfettiBurst(0)} />
@@ -5367,6 +5395,16 @@ function WorkoutLogger({
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
+              onNotesChange={
+                readOnly
+                  ? undefined
+                  : (notes) =>
+                      setMovements((items) =>
+                        items.map((item) =>
+                          item.key === movement.key ? { ...item, notes } : item,
+                        ),
+                      )
+              }
               onExerciseComplete={(isComplete) => completeExercise(movement, isComplete)}
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
               onToggleSet={(item) => toggleSet(movement, item)}
@@ -5445,9 +5483,18 @@ function WorkoutLogger({
         </div>
       )}
 
-      {(undoDeletion || swapUndo || loggerNotice) && (
+      {(undoDeletion || swapUndo || loggerNotice || prToastEntries.length > 0) && (
         // Popups that stay up while you train sit at the bottom, above the timer dock.
-        <div className={`logger-bottom-toasts ${dockSpacing}`}>
+        <div
+          className={`logger-bottom-toasts ${dockSpacing}${weeklySetsUpdate ? ' has-weekly-shelf' : ''}`}
+        >
+          {prToastEntries.length > 0 && (
+            <PrToast
+              key={`pr-toast-${prToastId}`}
+              entries={prToastEntries}
+              onClose={closePrToast}
+            />
+          )}
           {loggerNotice && (
             <div
               key={loggerNotice.id}
@@ -5661,19 +5708,11 @@ function WorkoutLogger({
               {finishBlocker}
             </p>
           ) : (
-            <>
-              {untickedSetCount > 0 && (
-                <p className="workout-finish-summary">
-                  <strong>
-                    {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked.
-                  </strong>{' '}
-                  Unticked sets won't count.
-                </p>
-              )}
-              <p>
-                This saves your workout and stops the live timer. You can resume it from History.
-              </p>
-            </>
+            <p className="workout-finish-summary">
+              <strong>
+                {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked
+              </strong>
+            </p>
           )}
           <div className="popup-dialog-actions workout-finish-actions">
             <button
@@ -5744,6 +5783,7 @@ function WorkoutLogger({
           onFavoriteChange={onExerciseFavorite}
           onCreateExercise={onCreateExercise}
           singleSelect={switchingMovementKey !== null}
+          workoutCategory={liveIdentity.category}
           onChoose={(selected, machineChoices) =>
             switchingMovementKey
               ? switchExercise(selected, machineChoices)
@@ -6103,6 +6143,7 @@ function MovementCard({
   number,
   history: exerciseHistory,
   onExerciseHistory,
+  onNotesChange,
   onExerciseComplete,
   onUpdateSet,
   onToggleSet,
@@ -6134,6 +6175,8 @@ function MovementCard({
   number: number;
   history: ExerciseHistoryEntry[];
   onExerciseHistory: () => void;
+  /** Saves the exercise's note for this workout; absent while read-only. */
+  onNotesChange?: (notes: string) => void;
   onExerciseComplete: (isComplete: boolean) => void;
   onUpdateSet: (setKey: string, update: Partial<DraftSet>) => void;
   onToggleSet: (item: DraftSet) => void;
@@ -6177,6 +6220,7 @@ function MovementCard({
     : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   // Free weights and bodyweight exercises show the equipment row only once it is in use.
   const [machineRowRequested, setMachineRowRequested] = useState(false);
@@ -6592,6 +6636,7 @@ function MovementCard({
                             : 'PR'}
                     </b>
                   )}
+                  <SetLastTime rows={movement.sets} index={index} sessions={history} />
                 </>,
               )}
               {valueButton('reps', 'Edit repetitions', 'completed-set-reps', item.reps ?? '–')}
@@ -6967,6 +7012,21 @@ function MovementCard({
                 </span>
                 {historyOpen ? 'Hide recent history' : 'Recent history'}
               </button>
+              {onNotesChange && (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setNoteOpen(true);
+                    closeMovementMenu();
+                  }}
+                >
+                  <span aria-hidden="true">
+                    <Icon name="edit" />
+                  </span>
+                  {movement.notes.trim() ? 'Edit note' : 'Add note'}
+                </button>
+              )}
               <button
                 type="button"
                 aria-haspopup="dialog"
@@ -7061,12 +7121,34 @@ function MovementCard({
           </details>
         </div>
       </header>
+      {onNotesChange && (movement.notes.trim() || history[0]?.movementNotes) && (
+        // This workout's note, or last time's (faint) until one is written.
+        <button
+          type="button"
+          className={`movement-note-line${movement.notes.trim() ? '' : ' is-last-time'}`}
+          aria-label={`${movement.notes.trim() ? 'Edit' : 'Add'} note for ${movement.exercise.name}`}
+          onClick={() => setNoteOpen(true)}
+        >
+          {movement.notes.trim() || `Last time: ${history[0]?.movementNotes}`}
+        </button>
+      )}
 
       <ExerciseMuscleHelp
         exercise={movement.exercise}
         open={creditsOpen}
         onClose={() => setCreditsOpen(false)}
       />
+      {noteOpen && onNotesChange && (
+        <MovementNoteDialog
+          exerciseName={movement.exercise.name}
+          value={movement.notes}
+          onSave={(notes) => {
+            onNotesChange(notes);
+            setNoteOpen(false);
+          }}
+          onClose={() => setNoteOpen(false)}
+        />
+      )}
       {expanded && !cardio && movement.repRange && (
         <p className="movement-rep-target">
           {progressionHint(
@@ -7992,6 +8074,14 @@ function MachinePhotoDetail({
   );
 }
 
+/** "zercher squat" as "Zercher Squat", for an exercise named from a search. */
+function titleCase(text: string): string {
+  return text.replace(
+    /(^|\s)(\p{L})/gu,
+    (_, space: string, letter: string) => `${space}${letter.toUpperCase()}`,
+  );
+}
+
 export function ExercisePicker({
   exercises,
   excludedIds,
@@ -8000,12 +8090,15 @@ export function ExercisePicker({
   onFavoriteChange,
   onCreateExercise,
   singleSelect = false,
+  workoutCategory,
   onChoose,
   onCreateSuperset,
   onClose,
 }: {
   exercises: Exercise[];
   excludedIds: string[];
+  /** The workout's type, which an exercise created from a search starts in. */
+  workoutCategory?: WorkoutCategory;
   recentExerciseIds: string[];
   /** Each exercise's latest workout date, shown beside its tags. */
   lastDoneDates?: ReadonlyMap<string, string>;
@@ -8030,6 +8123,8 @@ export function ExercisePicker({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteSavingIds, setFavoriteSavingIds] = useState<string[]>([]);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
+  // Created from a search with no match: named after it, in the workout's type.
+  const [createFromSearch, setCreateFromSearch] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [viewport, setViewport] = useState(() => {
     const visualViewport = window.visualViewport;
@@ -8421,7 +8516,10 @@ export function ExercisePicker({
             className="create-exercise-trigger"
             aria-label="Create new exercise"
             aria-haspopup="dialog"
-            onClick={() => setCreateExerciseOpen(true)}
+            onClick={() => {
+              setCreateFromSearch(false);
+              setCreateExerciseOpen(true);
+            }}
           >
             +
           </button>
@@ -8436,7 +8534,24 @@ export function ExercisePicker({
                 </section>
               ),
           )}
-          {!visibleExerciseCount && <p className="muted-empty">No exercises match that search.</p>}
+          {!visibleExerciseCount && (
+            <div className="exercise-picker-empty">
+              <p className="muted-empty">No exercises match that search.</p>
+              {query && (
+                <button
+                  type="button"
+                  className="exercise-picker-create"
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setCreateFromSearch(true);
+                    setCreateExerciseOpen(true);
+                  }}
+                >
+                  Create “{titleCase(query)}”
+                </button>
+              )}
+            </div>
+          )}
           {pickerError && <p className="inline-error">{pickerError}</p>}
         </div>
         <div className={`exercise-picker-actions ${singleSelect ? 'single-action' : ''}`}>
@@ -8480,8 +8595,10 @@ export function ExercisePicker({
         <CreateExerciseDialog
           exercises={exercises}
           categoryLabels={categoryNames}
-          initialName={query}
-          initialCategory={bodyPart === 'all' ? '' : bodyPart}
+          initialName={createFromSearch ? titleCase(query) : query}
+          initialCategory={
+            bodyPart !== 'all' ? bodyPart : createFromSearch ? (workoutCategory ?? '') : ''
+          }
           viewportHeight={viewport.height}
           viewportTop={viewport.top}
           onCreate={onCreateExercise}
@@ -10975,114 +11092,120 @@ function HistoryWorkoutCard({
     workout.duration_minutes ? formatMinutesDuration(workout.duration_minutes) : null,
     workingSetCount ? `${workingSetCount} ${workingSetCount === 1 ? 'set' : 'sets'}` : null,
   ].filter(Boolean);
+  // Exercises planned but never done are listed by name only, not as empty tables.
+  const skipped = workout.movements.filter(
+    (movement) => !movement.notes && !movement.sets.some((item) => item.completed),
+  );
   const movements = open
-    ? workout.movements.map((movement) => {
-        const targeted = targetMovementId
-          ? targetMovementId === movement.id
-          : targetExerciseId === movement.exercise.id;
-        const best = topWorkingSet(movement.sets);
-        return (
-          <div
-            ref={targeted ? targetExerciseRef : null}
-            className={`history-movement ${targeted ? 'targeted-exercise' : ''}`}
-            key={movement.id}
-            tabIndex={targeted ? -1 : undefined}
-          >
-            <div className="history-movement-header">
-              {onOpenExercise ? (
-                <button
-                  type="button"
-                  className="history-exercise-link"
-                  onClick={() => onOpenExercise(movement.exercise.id)}
-                >
-                  {movement.exercise.name}
-                  <Icon name="chevron-right" />
-                </button>
-              ) : (
-                <strong className="history-exercise-name">{movement.exercise.name}</strong>
+    ? workout.movements
+        .filter((movement) => !skipped.includes(movement))
+        .map((movement) => {
+          const targeted = targetMovementId
+            ? targetMovementId === movement.id
+            : targetExerciseId === movement.exercise.id;
+          const best = topWorkingSet(movement.sets);
+          return (
+            <div
+              ref={targeted ? targetExerciseRef : null}
+              className={`history-movement ${targeted ? 'targeted-exercise' : ''}`}
+              key={movement.id}
+              tabIndex={targeted ? -1 : undefined}
+            >
+              <div className="history-movement-header">
+                {onOpenExercise ? (
+                  <button
+                    type="button"
+                    className="history-exercise-link"
+                    onClick={() => onOpenExercise(movement.exercise.id)}
+                  >
+                    {movement.exercise.name}
+                    <Icon name="chevron-right" />
+                  </button>
+                ) : (
+                  <strong className="history-exercise-name">{movement.exercise.name}</strong>
+                )}
+                {shared ? (
+                  <span className="num">{sharedSetCount(movement.sets)}</span>
+                ) : (
+                  best && <span className="num">Top {setLabel(best, weightUnit)}</span>
+                )}
+              </div>
+              {movement.machine_photos.length > 0 && (
+                <>
+                  <div className="history-machine-photos">
+                    {movement.machine_photos.map((photo) => (
+                      <button
+                        type="button"
+                        key={photo.id}
+                        onClick={() => onExpandPhoto(expandedPhoto?.id === photo.id ? null : photo)}
+                        aria-label={`${expandedPhoto?.id === photo.id ? 'Collapse' : 'Expand'} ${photo.caption}`}
+                        aria-expanded={expandedPhoto?.id === photo.id}
+                      >
+                        <span className="history-photo-image">
+                          <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
+                          <svg
+                            className="history-photo-expand-icon"
+                            viewBox="0 0 20 20"
+                            aria-hidden="true"
+                          >
+                            <path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4" />
+                          </svg>
+                        </span>
+                        <span className="history-photo-caption">{photo.caption}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {expandedPhoto &&
+                    movement.machine_photos.some((photo) => photo.id === expandedPhoto.id) && (
+                      <MachinePhotoDetail
+                        photo={expandedPhoto}
+                        onClose={() => onExpandPhoto(null)}
+                        onShowHistory={
+                          onFilterMachine && expandedPhoto.id !== machineFilterId
+                            ? () => onFilterMachine(expandedPhoto, movement.exercise.name)
+                            : undefined
+                        }
+                      />
+                    )}
+                </>
               )}
+              <MachineSettingsSummary settings={movement.machine_settings} />
               {shared ? (
-                <span className="num">{sharedSetCount(movement.sets)}</span>
-              ) : (
-                best && <span className="num">Top {setLabel(best, weightUnit)}</span>
-              )}
-            </div>
-            {movement.machine_photos.length > 0 && (
-              <>
-                <div className="history-machine-photos">
-                  {movement.machine_photos.map((photo) => (
-                    <button
-                      type="button"
-                      key={photo.id}
-                      onClick={() => onExpandPhoto(expandedPhoto?.id === photo.id ? null : photo)}
-                      aria-label={`${expandedPhoto?.id === photo.id ? 'Collapse' : 'Expand'} ${photo.caption}`}
-                      aria-expanded={expandedPhoto?.id === photo.id}
-                    >
-                      <span className="history-photo-image">
-                        <img src={photo.thumbnail_url} alt={photo.caption} loading="lazy" />
-                        <svg
-                          className="history-photo-expand-icon"
-                          viewBox="0 0 20 20"
-                          aria-hidden="true"
-                        >
-                          <path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4" />
-                        </svg>
-                      </span>
-                      <span className="history-photo-caption">{photo.caption}</span>
-                    </button>
-                  ))}
-                </div>
-                {expandedPhoto &&
-                  movement.machine_photos.some((photo) => photo.id === expandedPhoto.id) && (
-                    <MachinePhotoDetail
-                      photo={expandedPhoto}
-                      onClose={() => onExpandPhoto(null)}
-                      onShowHistory={
-                        onFilterMachine && expandedPhoto.id !== machineFilterId
-                          ? () => onFilterMachine(expandedPhoto, movement.exercise.name)
-                          : undefined
-                      }
-                    />
-                  )}
-              </>
-            )}
-            <MachineSettingsSummary settings={movement.machine_settings} />
-            {shared ? (
-              <SharedSetList
-                sets={movement.sets}
-                personalRecords={personalRecords}
-                machinePhotos={movement.machine_photos}
-                formatSet={(item) => setResult(item, weightUnit)}
-                describeRecord={(record) =>
-                  `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
-                }
-              />
-            ) : (
-              <>
-                <HistorySetTable
-                  bodyweight={bodyweight}
-                  sets={movement.sets.filter((item) => item.completed)}
+                <SharedSetList
+                  sets={movement.sets}
                   personalRecords={personalRecords}
                   machinePhotos={movement.machine_photos}
-                  ratioColumn={ratioColumn}
-                  recordColumn={recordColumn}
                   formatSet={(item) => setResult(item, weightUnit)}
-                  recordLabel={recordTypeLabel}
+                  describeRecord={(record) =>
+                    `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
+                  }
                 />
-                {/* A completed set's note sits under its row in the table. */}
-                {movement.sets
-                  .filter((item) => item.notes && !item.completed)
-                  .map((item) => (
-                    <small key={item.id}>
-                      Set {item.order_index + 1}: {item.notes}
-                    </small>
-                  ))}
-              </>
-            )}
-            {movement.notes && <MovementNotes notes={movement.notes} />}
-          </div>
-        );
-      })
+              ) : (
+                <>
+                  <HistorySetTable
+                    bodyweight={bodyweight}
+                    sets={movement.sets.filter((item) => item.completed)}
+                    personalRecords={personalRecords}
+                    machinePhotos={movement.machine_photos}
+                    ratioColumn={ratioColumn}
+                    recordColumn={recordColumn}
+                    formatSet={(item) => setResult(item, weightUnit)}
+                    recordLabel={recordTypeLabel}
+                  />
+                  {/* A completed set's note sits under its row in the table. */}
+                  {movement.sets
+                    .filter((item) => item.notes && !item.completed)
+                    .map((item) => (
+                      <small key={item.id}>
+                        Set {item.order_index + 1}: {item.notes}
+                      </small>
+                    ))}
+                </>
+              )}
+              {movement.notes && <MovementNotes notes={movement.notes} />}
+            </div>
+          );
+        })
     : null;
 
   return (
@@ -11140,6 +11263,11 @@ function HistoryWorkoutCard({
             )
           )}
           {shared ? <div className="shared-session-exercises">{movements}</div> : movements}
+          {skipped.length > 0 && (
+            <p className="history-skipped">
+              Skipped: {skipped.map((movement) => movement.exercise.name).join(', ')}
+            </p>
+          )}
           {!detailsOnly && workout.notes && (
             <p className="history-workout-notes">{workout.notes}</p>
           )}
