@@ -14,12 +14,19 @@
   padding: 0.875rem 1rem 0;
 }
 
-/* The grabber spans the card on the edge facing the middle of the screen. */
+/*
+ * The grabber spans the card on the edge facing the middle of the screen. Its full set of
+ * properties is here so a page's own button rules cannot give it a border, fill or padding.
+ */
 .guide-card button.guide-card-handle {
   width: auto;
   min-height: 1.5rem;
   margin: 0 -1rem;
-  padding-top: 0.125rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0.125rem 0 0;
+  background: none;
+  font-size: inherit;
 }
 
 .guide-card.is-top button.guide-card-handle {
@@ -99,25 +106,21 @@
   margin-top: 0.75rem;
 }
 
-.guide-card button.guide-card-back,
-.guide-card button.guide-card-next {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/*
+ * Back and Next are the standard secondary and primary buttons (buttons.css). This keeps their
+ * standard size where a page's own button rules (such as the splits page's) would shrink them.
+ */
+.guide-card button.pulse-button {
+  min-height: var(--p-button-h);
+  border-radius: var(--p-button-r);
   gap: 0.25rem;
-  width: auto;
-  min-height: 2.75rem;
-  border-radius: 12px;
   font-size: 0.9375rem;
   font-weight: 650;
 }
 
 .guide-card button.guide-card-back {
   margin-right: auto;
-  border: 1px solid var(--p-line-strong);
   padding: 0 0.95rem 0 0.65rem;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
   opacity: var(--open, 1);
   transition: opacity 240ms ease;
 }
@@ -132,25 +135,16 @@
 }
 
 .guide-card button.guide-card-next {
-  border: 0;
   padding: 0 0.75rem 0 1.05rem;
-  background: var(--p-accent);
-  color: #fff;
 }
 
-.guide-card button.guide-card-next:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.guide-card-back .pulse-icon,
-.guide-card-next .pulse-icon {
+.guide-card .pulse-button .pulse-icon {
   width: 1.05rem;
   height: 1.05rem;
 }
 
 .guide-card button:focus-visible {
-  outline: 2px solid var(--p-accent-text);
+  outline: 2px solid var(--p-focus-ring, var(--p-accent-text));
   outline-offset: 2px;
 }
 

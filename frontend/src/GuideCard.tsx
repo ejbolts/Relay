@@ -82,7 +82,11 @@ export function GuideCard({
       {(onBack || next) && (
         <div className="guide-card-actions">
           {onBack && (
-            <button type="button" className="guide-card-back" onClick={onBack}>
+            <button
+              type="button"
+              className="pulse-button secondary guide-card-back"
+              onClick={onBack}
+            >
               <Icon name="chevron-left" />
               Back
             </button>
@@ -90,7 +94,7 @@ export function GuideCard({
           {next && (
             <button
               type="button"
-              className="popup-primary-action guide-card-next"
+              className="pulse-button primary guide-card-next"
               disabled={next.disabled}
               onClick={next.onClick}
             >
