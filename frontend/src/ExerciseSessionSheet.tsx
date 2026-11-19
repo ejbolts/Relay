@@ -52,10 +52,17 @@ export function ExerciseSessionSheet({
   let workingSetNumber = 0;
   return (
     <PopupDialog
+      variant="sheet"
       title={exercise.name}
       className="exercise-session-sheet"
       onClose={onClose}
-      swipeToDismiss
+      actions={
+        workout && (
+          <button type="button" className="popup-primary-action" onClick={onOpenWorkout}>
+            Open workout
+          </button>
+        )
+      }
     >
       {!workout && !error && <p role="status">Loading session…</p>}
       {error && (
@@ -122,9 +129,6 @@ export function ExerciseSessionSheet({
             </tbody>
           </table>
           {!movements.length && <p>This exercise is no longer in the workout.</p>}
-          <button type="button" className="pulse-button primary" onClick={onOpenWorkout}>
-            Open workout
-          </button>
         </>
       )}
     </PopupDialog>

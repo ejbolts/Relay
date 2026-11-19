@@ -23,6 +23,7 @@ import {
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
+import './popupDialog.css';
 import './lightMode.css';
 import './workoutSetColours.css';
 import './auth.css';

@@ -209,7 +209,18 @@ function SignOutDialog({
       title={everywhere ? 'Sign out everywhere?' : 'Sign out?'}
       kicker="PLEASE CONFIRM"
       className="sign-out-dialog"
+      size="compact"
       onClose={onCancel}
+      actions={
+        <>
+          <button type="button" autoFocus onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="popup-primary-action is-danger" onClick={onConfirm}>
+            {everywhere ? 'Sign out everywhere' : 'Sign out'}
+          </button>
+        </>
+      }
     >
       {everywhere && <p>Every device signed in to this account will need to sign in again.</p>}
       {unsynced && (
@@ -217,14 +228,6 @@ function SignOutDialog({
           Sets that haven’t synced yet will be deleted from this device.
         </p>
       )}
-      <div className="popup-dialog-actions">
-        <button type="button" autoFocus onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="button" className="popup-primary-action" onClick={onConfirm}>
-          {everywhere ? 'Sign out everywhere' : 'Sign out'}
-        </button>
-      </div>
     </PopupDialog>
   );
 }

@@ -439,7 +439,7 @@ it('loads the selected session sets in a sheet before opening the actual workout
   await click(host.querySelector('.progress-sessions li button')!);
   expect(document.querySelector('dialog')?.textContent).toContain('69 kg');
   expect(onOpenWorkout).not.toHaveBeenCalled();
-  await click(document.querySelector('dialog .primary')!);
+  await click(document.querySelector('dialog .popup-primary-action')!);
   expect(onOpenWorkout).toHaveBeenCalledWith('session-9', 'pec');
   expect(document.querySelector('dialog')).toBeNull();
 });
@@ -569,9 +569,9 @@ it('retries a failed session read and keeps the workout action unavailable until
   expect(document.querySelector('dialog [role="alert"]')?.textContent).toContain(
     'Could not load this session',
   );
-  expect(document.querySelector('dialog .primary')).toBeNull();
+  expect(document.querySelector('dialog .popup-primary-action')).toBeNull();
   await click(document.querySelector('dialog .text-link')!);
-  expect(document.querySelector('dialog .primary')).not.toBeNull();
+  expect(document.querySelector('dialog .popup-primary-action')).not.toBeNull();
   vi.mocked(api.getWorkout).mockResolvedValue({ ...workout, name: 'Updated upper body' });
   await render('remote-sheet-change');
   expect(document.querySelector('dialog')?.textContent).toContain('Updated upper body');
