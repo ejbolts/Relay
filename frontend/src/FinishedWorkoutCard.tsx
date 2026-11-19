@@ -1,9 +1,9 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import { api } from './api';
 import { Icon, type IconName } from './Icon';
 import { RepRangeDialog } from './RepRangeDialog';
 import { activeRoutineWithout } from './routineRepRange';
+import { Toast, TOAST_MS, type ToastAction } from './Toast';
 import { formatVolume } from './trainingSummary';
 import { formatWeight } from './weightUnits';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -18,9 +18,6 @@ function minutesLabel(minutes: number): string {
   const rest = minutes % 60;
   return `${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ''}`;
 }
-
-/** How long "Workout saved" stays up after finishing, with its Undo and Share. */
-export const WORKOUT_SAVED_TOAST_MS = 6000;
 
 function Delta({ value, label }: { value: number; label: string }) {
   if (!value) return null;
@@ -63,13 +60,25 @@ export function FinishedWorkoutCard({
   // A workout finished moments ago gets a brief "Workout saved" with Undo (and Share, when the
   // sharing reminder is on); returning to Home later shows the card alone.
   const [savedToast, setSavedToast] = useState(
-    () => Date.now() - summary.finishedAt < WORKOUT_SAVED_TOAST_MS,
+    () => Date.now() - summary.finishedAt < TOAST_MS.action,
   );
-  useEffect(() => {
-    if (!savedToast) return;
-    const timer = window.setTimeout(() => setSavedToast(false), WORKOUT_SAVED_TOAST_MS);
-    return () => window.clearTimeout(timer);
-  }, [savedToast]);
+  const share: ToastAction | undefined =
+    shareReminder && onShare
+      ? {
+          label: 'Share',
+          run: () => {
+            setSavedToast(false);
+            onShare();
+          },
+        }
+      : undefined;
+  const undo: ToastAction | undefined = onUndo && {
+    label: 'Undo',
+    run: () => {
+      setSavedToast(false);
+      onUndo();
+    },
+  };
   const [machineExerciseId, setMachineExerciseId] = useState<string | null>(null);
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [rangeFor, setRangeFor] = useState<FinishSummary['plateaus'][number] | null>(null);
@@ -225,49 +234,15 @@ export function FinishedWorkoutCard({
       <button type="button" className="text-button finished-workout-open" onClick={onOpenWorkout}>
         View workout
       </button>
-      {savedToast &&
-        createPortal(
-          <div
-            className="undo-toast top-toast workout-saved-toast"
-            role="status"
-            style={{ '--undo-toast-duration': `${WORKOUT_SAVED_TOAST_MS}ms` } as CSSProperties}
-          >
-            <span>Workout saved</span>
-            {shareReminder && onShare && (
-              <button
-                className="undo-toast-action"
-                type="button"
-                onClick={() => {
-                  setSavedToast(false);
-                  onShare();
-                }}
-              >
-                Share
-              </button>
-            )}
-            {onUndo && (
-              <button
-                className="undo-toast-action"
-                type="button"
-                onClick={() => {
-                  setSavedToast(false);
-                  onUndo();
-                }}
-              >
-                Undo
-              </button>
-            )}
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss workout saved notification"
-              onClick={() => setSavedToast(false)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {savedToast && (
+        <Toast
+          message="Workout saved"
+          secondaryAction={undo && share}
+          action={undo ?? share}
+          dismissLabel="Dismiss workout saved notification"
+          onDismiss={() => setSavedToast(false)}
+        />
+      )}
       {rangeFor && routine && (
         <RepRangeDialog
           exerciseId={rangeFor.exerciseId}

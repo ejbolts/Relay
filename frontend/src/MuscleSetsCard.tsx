@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useId, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { PopupDialog } from './PopupDialog';
+import { useToast } from './Toast';
 import { shortDate } from './trainingSummary';
 import type { WeeklyMuscleContribution } from './types';
 import type { MuscleSetsWeek } from './liveMuscleSets';
@@ -270,16 +271,7 @@ function MuscleContributionSheet({
   const [draft, setDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [goalError, setGoalError] = useState<string | null>(null);
-  const [notice, setNotice] = useState('');
-  const toastRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!notice) return;
-    // The sheet's transform would pin a fixed toast to the sheet; the top layer frees it.
-    const toast = toastRef.current;
-    if (toast?.showPopover && !toast.matches(':popover-open')) toast.showPopover();
-    const timer = setTimeout(() => setNotice(''), 4000);
-    return () => clearTimeout(timer);
-  }, [notice]);
+  const toast = useToast();
   const contributions = muscle.contributions ?? [];
   const percentage = Math.round((muscle.raw_sets / goal) * 100);
 
@@ -323,7 +315,7 @@ function MuscleContributionSheet({
     try {
       await onChangeGoal(value);
       setEditing(false);
-      setNotice(
+      toast.show(
         value === null
           ? `${muscle.muscle_group} uses the default goal`
           : `${muscle.muscle_group} goal set to ${value} sets`,
@@ -508,25 +500,6 @@ function MuscleContributionSheet({
           </p>
         )}
       </div>
-      {notice && (
-        // Inside the dialog, so the modal sheet does not make it inert.
-        <div
-          ref={toastRef}
-          className="undo-toast top-toast muscle-goal-toast"
-          role="status"
-          popover="manual"
-        >
-          <span>{notice}</span>
-          <button
-            type="button"
-            className="undo-toast-close"
-            aria-label="Dismiss goal notification"
-            onClick={() => setNotice('')}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      )}
     </PopupDialog>
   );
 }

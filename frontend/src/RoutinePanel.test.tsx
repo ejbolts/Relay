@@ -192,7 +192,7 @@ it('shows save feedback in a dismissible popup that clears automatically after r
     await save();
     expect(document.querySelector('.toast')?.textContent).toContain('Split saved.');
     expect(host.textContent).not.toContain('Split saved.');
-    await click('Close notification');
+    await click('Dismiss notification');
     expect(document.querySelector('.toast')).toBeNull();
 
     await click('Edit split');
@@ -242,14 +242,14 @@ it('creates private splits without a publishing switch and shares from split opt
     }),
   );
   expect(host.querySelectorAll('.routine-card')).toHaveLength(2);
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Options for My split');
   await click('Show on my profile');
   expect(api.routines.save).toHaveBeenLastCalledWith(
     expect.objectContaining({ id: 'new', shared: true }),
   );
   expect(host.querySelector('.routine-card-meta')?.textContent).toContain('On profile');
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Options for My split');
   await click('Hide from my profile');
   expect(api.routines.save).toHaveBeenLastCalledWith(
@@ -291,7 +291,7 @@ it('explains how to complete an empty workout day before sharing and allows retr
   await openDay(2);
   await addExercise(2, 'row', 'Cable row');
   await save();
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Options for Upper / Rest');
   await click('Show on my profile');
   expect(api.routines.save).toHaveBeenLastCalledWith(

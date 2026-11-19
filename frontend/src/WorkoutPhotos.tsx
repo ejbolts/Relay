@@ -1,17 +1,16 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { useRef, useState, type CSSProperties } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { Icon } from './Icon';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { optimisePhoto } from './photoOptimise';
 import { PopupDialog } from './PopupDialog';
+import { useToast } from './Toast';
 import type { WorkoutPhoto } from './types';
 import { MAX_WORKOUT_PHOTOS } from './workoutPhotoState';
 import './profilePhotoViewer.css';
 import './workoutPhotos.css';
 
-const NOTICE_MS = 4000;
 /** The longest side of the small copy the server keeps beside the full photo. */
 const THUMBNAIL_SIDE = 360;
 
@@ -188,19 +187,9 @@ export function WorkoutPhotoEditor({
   const input = useRef<HTMLInputElement>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ message: string; serial: number } | null>(null);
+  const toast = useToast();
   const latest = useRef(photos);
   latest.current = photos;
-
-  useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [notice]);
-
-  function confirm(message: string) {
-    setNotice((current) => ({ message, serial: (current?.serial ?? 0) + 1 }));
-  }
 
   async function add(file: File) {
     setAdding(true);
@@ -208,7 +197,7 @@ export function WorkoutPhotoEditor({
     try {
       const saved = await api.uploadWorkoutPhoto(workoutId, await optimisePhoto(file));
       onChange([...latest.current, saved]);
-      confirm('Photo added');
+      toast.show('Photo added');
     } catch (reason) {
       setError(authErrorMessage(reason));
     } finally {
@@ -217,30 +206,7 @@ export function WorkoutPhotoEditor({
   }
 
   const full = !canAdd || photos.length >= MAX_WORKOUT_PHOTOS;
-  const toast =
-    notice &&
-    createPortal(
-      <div
-        key={notice.serial}
-        className="undo-toast top-toast"
-        role="status"
-        aria-atomic="true"
-        style={{ '--undo-toast-duration': `${NOTICE_MS}ms` } as CSSProperties}
-      >
-        <span>{notice.message}</span>
-        <button
-          type="button"
-          className="undo-toast-close"
-          aria-label="Dismiss photo notification"
-          onClick={() => setNotice(null)}
-        >
-          <Icon name="close" />
-        </button>
-      </div>,
-      document.body,
-    );
-  // With nothing to show or add, only the "Photo removed" confirmation is left to render.
-  if (!canAdd && !photos.length) return toast;
+  if (!canAdd && !photos.length) return null;
   return (
     <div className={`workout-photo-editor workout-photo-editor-${layout}`}>
       <WorkoutPhotos
@@ -250,7 +216,7 @@ export function WorkoutPhotoEditor({
         onRemove={async (photo) => {
           await api.deleteWorkoutPhoto(photo.id);
           onChange(latest.current.filter((item) => item.id !== photo.id));
-          confirm('Photo removed');
+          toast.show('Photo removed');
         }}
       />
       {!full && (
@@ -286,7 +252,6 @@ export function WorkoutPhotoEditor({
           {error}
         </p>
       )}
-      {toast}
     </div>
   );
 }

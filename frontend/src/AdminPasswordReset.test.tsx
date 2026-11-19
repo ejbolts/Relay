@@ -3,6 +3,7 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminScreenView, type TemporaryPasswordReveal } from './AdminScreen';
+import { toastText, withToasts } from './toastTestUtils';
 import type { AdminUser } from './types';
 
 const tester: AdminUser = {
@@ -71,7 +72,7 @@ beforeEach(async () => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(<Harness />));
+  await act(async () => root.render(withToasts(<Harness />)));
 });
 
 afterEach(async () => {
@@ -107,7 +108,7 @@ describe('resetting a password from the admin screen', () => {
     expect(button('Reset password')).toBeDefined();
   });
 
-  it('copies the temporary password and confirms on the button', async () => {
+  it('copies the temporary password and confirms in a toast', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
     await act(async () => button('Reset password')!.click());
@@ -116,6 +117,7 @@ describe('resetting a password from the admin screen', () => {
     await act(async () => button('Copy')!.click());
 
     expect(writeText).toHaveBeenCalledWith('abcde-fghjk-mnpqr');
-    expect(button('Copied')).toBeDefined();
+    expect(toastText()).toBe('Password copied');
+    expect(button('Copy')).toBeDefined();
   });
 });

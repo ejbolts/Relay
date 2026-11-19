@@ -239,7 +239,7 @@ describe('Editing the body-weight goal', () => {
     const remove = button('Remove goal', dialog());
     await act(async () => remove.click());
     expect(document.querySelector('dialog[open]')).toBeNull();
-    expect(document.querySelector('.undo-toast')?.textContent).toContain('Goal removed');
+    expect(document.querySelector('.toast')?.textContent).toContain('Goal removed');
     expect(host.querySelector('.body-goal-tile')).toBeNull();
   });
 });

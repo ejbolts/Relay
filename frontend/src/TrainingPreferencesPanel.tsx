@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { MuscleGoalEditor } from './MuscleGoalEditor';
-import { StatusToast } from './StatusToast';
+import { useToast } from './Toast';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import type { Exercise, TrainingPreferences } from './types';
 
@@ -28,8 +28,7 @@ export function TrainingPreferencesPanel({
   const shared = useTrainingPreferences();
   const [draft, setDraft] = useState<TrainingPreferences | null>(shared.preferences);
   const [error, setError] = useState<string | null>(shared.error);
-  // Counts saves, so each one restarts the toast's timer.
-  const [savedToast, setSavedToast] = useState(0);
+  const toast = useToast();
   // The newest edit that has not reached the server yet.
   const unsaved = useRef<TrainingPreferences | null>(null);
   const saving = useRef(false);
@@ -60,7 +59,7 @@ export function TrainingPreferencesPanel({
       if (!unsaved.current) setDraft(saved);
       await onDataChange();
       window.dispatchEvent(new Event('training-preferences-updated'));
-      setSavedToast((count) => count + 1);
+      toast.show('Training preferences saved.');
     } catch (reason) {
       failed = true;
       // Keep the edit, so the next change or leaving the field tries again.
@@ -189,13 +188,6 @@ export function TrainingPreferencesPanel({
           goals={draft.weekly_muscle_set_goals}
           onChange={(goals) => change({ ...draft, weekly_muscle_set_goals: goals }, 'after-typing')}
           onCommit={saveTypedGoals}
-        />
-      )}
-      {savedToast > 0 && (
-        <StatusToast
-          key={savedToast}
-          message="Training preferences saved."
-          onClose={() => setSavedToast(0)}
         />
       )}
     </section>

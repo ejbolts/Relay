@@ -17,7 +17,7 @@ import { useFlipAnimation, useHeightAnimation } from './motionHooks';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { useWeightUnit } from './trainingPreferencesContext';
-import { GOAL_UNDO_MS } from './useGoalRemoval';
+import { Toast } from './Toast';
 import { useUserSession } from './userContext';
 import { formatWeight, type WeightUnit } from './weightUnits';
 import type { LiftBest, LiftComparison, LiftRanking, SharedProfileSummary } from './types';
@@ -293,23 +293,20 @@ function LiftPicker({
   const list = useRef<HTMLUListElement>(null);
   const [closing, setClosing] = useState(false);
   const closeTimer = useRef<number | null>(null);
-  // Unselect all can be undone for a few seconds, back to the lifts it cleared.
-  const [cleared, setCleared] = useState<string[] | null>(null);
-  const clearedTimer = useRef<number | null>(null);
+  // Unselect all can be undone while its toast is up, back to the lifts it cleared.
+  const [cleared, setCleared] = useState<{ lifts: string[]; serial: number } | null>(null);
   useEffect(
     () => () => {
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-      if (clearedTimer.current !== null) window.clearTimeout(clearedTimer.current);
     },
     [],
   );
 
   /** Offers Undo for the lifts Unselect all cleared, or with null withdraws the offer. */
   function offerUndo(previous: string[] | null) {
-    if (clearedTimer.current !== null) window.clearTimeout(clearedTimer.current);
-    clearedTimer.current =
-      previous === null ? null : window.setTimeout(() => setCleared(null), GOAL_UNDO_MS);
-    setCleared(previous);
+    setCleared((current) =>
+      previous === null ? null : { lifts: previous, serial: (current?.serial ?? 0) + 1 },
+    );
   }
 
   function search(next: string) {
@@ -501,32 +498,19 @@ function LiftPicker({
         )}
       </div>
       {cleared && (
-        <div
-          className="undo-toast lift-picker-toast"
-          role="status"
-          aria-atomic="true"
-          style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
-        >
-          <span>Lifts cleared</span>
-          <button
-            className="undo-toast-action"
-            type="button"
-            onClick={() => {
-              onChange(cleared);
+        <Toast
+          id={cleared.serial}
+          message="Lifts cleared"
+          action={{
+            label: 'Undo',
+            run: () => {
+              onChange(cleared.lifts);
               offerUndo(null);
-            }}
-          >
-            Undo
-          </button>
-          <button
-            className="undo-toast-close"
-            type="button"
-            aria-label="Dismiss lifts cleared notification"
-            onClick={() => offerUndo(null)}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
+            },
+          }}
+          dismissLabel="Dismiss lifts cleared notification"
+          onDismiss={() => offerUndo(null)}
+        />
       )}
     </PopupDialog>
   );

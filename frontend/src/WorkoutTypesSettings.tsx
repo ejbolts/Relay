@@ -1,8 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useId, useRef, useState } from 'react';
 import { api } from './api';
 import { CollapsibleSection } from './CollapsibleSection';
-import { Icon } from './Icon';
+import { useToast } from './Toast';
 import type { WorkoutType } from './types';
 import { WorkoutTypeExercisesEditor } from './WorkoutTypeExercisesEditor';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -31,17 +30,11 @@ export function WorkoutTypesSettings({
   const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const toast = useToast();
   const { savedExercises, applySavedExercises } = useWorkoutTypes();
   const editing = types.find((type) => type.id === editingId) ?? null;
   const busy = useRef(false);
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
   const latestTypes = useRef(types);
   latestTypes.current = types;
   const disabled = loading || !!error || pending !== null;
@@ -53,7 +46,6 @@ export function WorkoutTypesSettings({
     busy.current = true;
     setPending(action);
     setSaveError(null);
-    setNotice(null);
     try {
       await task();
     } catch (reason) {
@@ -84,7 +76,7 @@ export function WorkoutTypesSettings({
       const created = await api.createWorkoutType({ name: trimmed, color });
       onTypesChange([...latestTypes.current, created]);
       setName('');
-      setNotice(`${created.name} added.`);
+      toast.show(`${created.name} added`);
     });
   }
 
@@ -103,7 +95,7 @@ export function WorkoutTypesSettings({
         delete next[type.id];
         return next;
       });
-      setNotice(`${updated.name} colour saved.`);
+      toast.show(`${updated.name} colour saved`);
     });
   }
 
@@ -111,7 +103,10 @@ export function WorkoutTypesSettings({
     void save(`remove:${type.id}`, async () => {
       await api.deleteWorkoutType(type.id);
       replaceType({ ...type, archived: true });
-      setNotice(`${type.name} removed. Saved workouts are unchanged.`);
+      toast.show({
+        message: `${type.name} removed`,
+        action: { label: 'Undo', run: () => restoreType(type) },
+      });
     });
   }
 
@@ -119,7 +114,7 @@ export function WorkoutTypesSettings({
     void save(`restore:${type.id}`, async () => {
       const updated = await api.updateWorkoutType(type.id, { archived: false });
       replaceType(updated);
-      setNotice(`${updated.name} restored.`);
+      toast.show(`${updated.name} restored`);
     });
   }
 
@@ -137,7 +132,12 @@ export function WorkoutTypesSettings({
             {error}
           </p>
           {onRetry && (
-            <button type="button" onClick={onRetry} disabled={loading}>
+            <button
+              type="button"
+              className="pulse-button secondary small"
+              onClick={onRetry}
+              disabled={loading}
+            >
               Try again
             </button>
           )}
@@ -163,7 +163,6 @@ export function WorkoutTypesSettings({
                   onChange={(event) => {
                     setColorDrafts((current) => ({ ...current, [type.id]: event.target.value }));
                     setSaveError(null);
-                    setNotice(null);
                   }}
                 />
                 <span>
@@ -174,7 +173,7 @@ export function WorkoutTypesSettings({
               <div className="workout-types-row-actions">
                 <button
                   type="button"
-                  className="workout-types-exercises"
+                  className="pulse-button secondary small workout-types-exercises"
                   aria-label={`${type.name} exercises`}
                   disabled={disabled}
                   onClick={() => setEditingId(type.id)}
@@ -187,7 +186,7 @@ export function WorkoutTypesSettings({
                 {changed && (
                   <button
                     type="button"
-                    className="workout-types-save-color"
+                    className="pulse-button primary small workout-types-save-color"
                     aria-label={`Save ${type.name} colour`}
                     disabled={disabled}
                     onClick={() => saveColor(type)}
@@ -197,7 +196,7 @@ export function WorkoutTypesSettings({
                 )}
                 <button
                   type="button"
-                  className="workout-types-remove"
+                  className="pulse-button danger-soft small workout-types-remove"
                   aria-label={`Remove ${type.name} workout type`}
                   disabled={disabled}
                   onClick={() => removeType(type)}
@@ -228,7 +227,6 @@ export function WorkoutTypesSettings({
             onChange={(event) => {
               setName(event.target.value);
               setSaveError(null);
-              setNotice(null);
             }}
           />
         </label>
@@ -244,7 +242,7 @@ export function WorkoutTypesSettings({
         </label>
         <button
           type="submit"
-          className="workout-types-add-button"
+          className="pulse-button primary workout-types-add-button"
           disabled={disabled || !name.trim()}
         >
           {pending === 'add' ? 'Adding…' : 'Add type'}
@@ -253,11 +251,6 @@ export function WorkoutTypesSettings({
       {saveError && (
         <p className="inline-error" role="alert">
           {saveError}
-        </p>
-      )}
-      {notice && (
-        <p className="training-preference-status" role="status">
-          {notice}
         </p>
       )}
       {removedTypes.length > 0 && (
@@ -274,6 +267,7 @@ export function WorkoutTypesSettings({
                 </span>
                 <button
                   type="button"
+                  className="pulse-button secondary small"
                   aria-label={`Restore ${type.name} workout type`}
                   disabled={disabled}
                   onClick={() => restoreType(type)}
@@ -287,36 +281,17 @@ export function WorkoutTypesSettings({
       )}
     </>
   );
-  const overlays = (
-    <>
-      {editing && (
-        <WorkoutTypeExercisesEditor
-          type={editing}
-          movements={savedExercises[editing.id] ?? []}
-          onClose={() => setEditingId(null)}
-          onSaved={(movements) => {
-            applySavedExercises(editing.id, movements);
-            setEditingId(null);
-            setToast(`${editing.name} exercises saved`);
-          }}
-        />
-      )}
-      {toast &&
-        createPortal(
-          <div className="undo-toast top-toast" role="status" aria-atomic="true">
-            <span>{toast}</span>
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss workout type notification"
-              onClick={() => setToast(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
-    </>
+  const overlays = editing && (
+    <WorkoutTypeExercisesEditor
+      type={editing}
+      movements={savedExercises[editing.id] ?? []}
+      onClose={() => setEditingId(null)}
+      onSaved={(movements) => {
+        applySavedExercises(editing.id, movements);
+        setEditingId(null);
+        toast.show(`${editing.name} exercises saved`);
+      }}
+    />
   );
   if (collapsible) {
     return (

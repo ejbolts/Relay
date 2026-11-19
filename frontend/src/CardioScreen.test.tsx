@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CardioScreen } from './App';
 import { api } from './api';
+import { createToastRoot, toastButton, toastElement, toastText } from './toastTestUtils';
 import type { CardioOverview, CardioSession, Exercise } from './types';
 
 const session = (overrides: Partial<CardioSession> = {}): CardioSession => ({
@@ -113,7 +114,7 @@ beforeEach(async () => {
   };
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
   await act(async () =>
     root.render(
       <CardioScreen
@@ -174,11 +175,35 @@ describe('cardio weekly trend screen', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ zone: null, qualifies_zone2: false }),
     );
-    expect(document.querySelector('.toast')?.textContent).toContain('Workout saved');
+    expect(toastText()).toBe('Workout saved');
     expect(document.querySelector('dialog, [aria-modal="true"]')).toBeNull();
-    expect(document.querySelector('.toast-action')?.textContent).toBe('Share card');
+    expect(toastButton('Share card')).toBeDefined();
     await click(container.querySelector('[aria-label="Edit heart-rate zones and goals"]')!);
     expect(document.querySelector('dialog')!.textContent).toContain('Personal ranges (bpm)');
+  });
+  it('offers the share card from the saved toast, or just confirms when the reminder is off', async () => {
+    vi.spyOn(api, 'createCardio').mockResolvedValue(session({ id: 'new-ride' }));
+    await click(named('Log session'));
+    await click(named('Add cardio session'));
+    await click(toastButton('Share card')!);
+    expect(toastElement()).toBeNull();
+    expect(document.querySelector('dialog h2')?.textContent).toBe('Share workout');
+    await click(document.querySelector('dialog [aria-label^="Close"]')!);
+
+    window.localStorage.setItem('relay-workout-share-reminder:device', 'off');
+    window.dispatchEvent(new StorageEvent('storage'));
+    await click(named('Log session'));
+    await click(named('Add cardio session'));
+    expect(toastText()).toBe('Cardio saved');
+    expect(toastElement()!.querySelector('.toast-action')).toBeNull();
+    window.localStorage.removeItem('relay-workout-share-reminder:device');
+  });
+  it('confirms an edited session in a toast', async () => {
+    const update = vi.spyOn(api, 'updateCardio').mockResolvedValue(session());
+    await click(named('Edit'));
+    await click(named('Save changes'));
+    expect(update).toHaveBeenCalledOnce();
+    expect(toastText()).toBe('Cardio saved');
   });
   it.each(['en-AU', 'en-US'])(
     'switches metrics and selected weeks together, with the current week as the default (%s)',

@@ -2,8 +2,7 @@ import { BodyWeightTip } from './FeatureDiscoveryTips';
 import { BodyHistoryRowMenu } from './BodyHistoryRowMenu';
 import { BodySizesCard } from './BodySizesCard';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import type { ReactNode } from 'react';
 import { api } from './api';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
@@ -24,7 +23,8 @@ import {
 } from './bodyMeasurementHistory';
 import type { BodyGoalKind, BodyHistoryPeriod } from './bodyMeasurementHistory';
 import { BodyHistoryGoalDivider, BodyHistoryWeightChange } from './BodyHistoryWeightChange';
-import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
+import { useGoalRemoval } from './useGoalRemoval';
+import { Toast } from './Toast';
 import { DEFAULT_BODY_TREND_PREFERENCE, type BodyTrendPreference } from './bodyTrendPreference';
 import { PopupDialog } from './PopupDialog';
 import { useSlidingIndicator } from './motionHooks';
@@ -767,30 +767,15 @@ export function BodyCompositionScreen({
           label={`${historyView} bodyweight history`}
         />
       </section>
-      {goalRemoval.pending &&
-        createPortal(
-          <div
-            key={goalRemoval.pending.goal.id}
-            className="undo-toast top-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
-          >
-            <span>Goal removed</span>
-            <button className="undo-toast-action" type="button" onClick={goalRemoval.undo}>
-              Undo
-            </button>
-            <button
-              className="undo-toast-close"
-              type="button"
-              aria-label="Dismiss goal notification"
-              onClick={goalRemoval.dismiss}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {goalRemoval.pending && (
+        <Toast
+          id={goalRemoval.pending.goal.id}
+          message="Goal removed"
+          action={{ label: 'Undo', run: goalRemoval.undo }}
+          dismissLabel="Dismiss goal notification"
+          onDismiss={goalRemoval.dismiss}
+        />
+      )}
     </section>
   );
 }

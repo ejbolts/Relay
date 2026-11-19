@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import type { WeeklyMuscleContribution, WeeklySets } from './types';
@@ -57,7 +58,7 @@ beforeEach(() => {
   };
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -391,9 +392,8 @@ it('edits a muscle goal from its sheet, updates the progress and confirms in a t
   expect(dialog.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe(
     '6 of 12 sets',
   );
-  expect(dialog.querySelector('.undo-toast[role="status"]')?.textContent).toContain(
-    'Biceps goal set to 12 sets',
-  );
+  expect(toastText()).toBe('Biceps goal set to 12 sets');
+  expect(dialog.contains(toastElement())).toBe(true);
   expect(host.querySelector('.muscle-set-count')?.textContent).toBe('6 / 12');
 });
 
@@ -434,7 +434,7 @@ it('hides goal editing when saving is unavailable and cancels without saving', a
   await render();
   expect(document.querySelector('.muscle-goal-edit-button')).toBeNull();
   await act(async () => root.unmount());
-  root = createRoot(host);
+  root = createToastRoot(host);
   const save = vi.fn<(muscle: string, goal: number | null) => Promise<void>>(async () => {});
   const input = await openGoalEditor(<GoalHarness save={save} />);
   await act(async () => type(input, '20'));

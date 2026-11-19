@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountSessionSettings, AccountSettings } from './AccountSettings';
 import { api } from './api';
+import { toastText, withToasts } from './toastTestUtils';
 import type { User } from './types';
 import { UserContext, type UserSession } from './userContext';
 import { writeActiveWorkoutDraft } from './workoutDraft';
@@ -47,7 +48,9 @@ afterEach(async () => {
 
 async function show(children = <AccountSessionSettings />) {
   await act(async () => {
-    root.render(<UserContext.Provider value={session}>{children}</UserContext.Provider>);
+    root.render(
+      withToasts(<UserContext.Provider value={session}>{children}</UserContext.Provider>),
+    );
   });
 }
 
@@ -148,9 +151,7 @@ describe('changing the password', () => {
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
 
-    expect(document.querySelector('.top-toast')?.textContent).toContain(
-      'Password updated. Other devices were signed out.',
-    );
+    expect(toastText()).toBe('Password updated. Other devices were signed out.');
     expect(section.textContent).not.toContain('Password updated');
   });
 });

@@ -1,13 +1,11 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useId, useRef, useState } from 'react';
 import { api } from './api';
 import { downloadFile, workoutExportFileName } from './downloadFile';
 import { Icon } from './Icon';
+import { useToast } from './Toast';
 import type { TrackedWorkout } from './types';
 import './workoutShareMenu.css';
 import { leavesMenu } from './menuDismiss';
-
-const NOTICE_MS = 4000;
 
 /** One Export button for a saved workout: its share card, or its sets as a CSV file. */
 export function WorkoutShareMenu({
@@ -20,7 +18,7 @@ export function WorkoutShareMenu({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState(false);
+  const toast = useToast();
   const root = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLSpanElement>(null);
@@ -41,12 +39,6 @@ export function WorkoutShareMenu({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(false), NOTICE_MS);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
   function close() {
     setOpen(false);
     trigger.current?.focus();
@@ -57,10 +49,9 @@ export function WorkoutShareMenu({
     if (busy) return;
     setBusy(true);
     setError(null);
-    setNotice(false);
     try {
       downloadFile(await api.exportWorkout(workout.id), workoutExportFileName(workout));
-      setNotice(true);
+      toast.show('Workout exported');
     } catch (caught) {
       setError(
         caught instanceof Error && caught.message
@@ -146,25 +137,6 @@ export function WorkoutShareMenu({
           {error}
         </p>
       )}
-      {notice &&
-        createPortal(
-          <div
-            className="undo-toast top-toast"
-            role="status"
-            style={{ '--undo-toast-duration': `${NOTICE_MS}ms` } as CSSProperties}
-          >
-            <span>Workout exported</span>
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss export notification"
-              onClick={() => setNotice(false)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
     </>
   );
 }

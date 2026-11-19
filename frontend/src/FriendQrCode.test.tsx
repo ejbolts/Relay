@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import jsQR from 'jsqr';
@@ -38,7 +39,7 @@ beforeEach(() => {
   };
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 
 afterEach(async () => {
@@ -77,7 +78,10 @@ it('shows a scannable invite and copies its link', async () => {
   const copy = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Copy link')!;
   await act(async () => copy.click());
   expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/#friend=${user.id}`);
-  expect(copy.textContent).toBe('Link copied');
+  expect(toastText()).toBe('Link copied');
+  // Shown inside the open dialog, so the modal does not make it inert.
+  expect(dialog.contains(toastElement())).toBe(true);
+  expect(copy.textContent).toBe('Copy link');
 });
 
 it('opens from the labelled shortcut beside people search', async () => {

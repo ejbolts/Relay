@@ -350,20 +350,20 @@ it('unselects every lift at once, with Undo for a few seconds', async () => {
   expect(unselect.disabled).toBe(true);
 
   // Undo puts back the lifts it cleared, in their order.
-  const toast = sheet.querySelector('.lift-picker-toast');
-  expect(toast?.querySelector('span')?.textContent).toBe('Lifts cleared');
+  // The toast shows inside the open sheet, so the modal does not make it inert.
+  expect(sheet.querySelector('.toast .toast-text')?.textContent).toBe('Lifts cleared');
   await click(button(sheet, 'Undo'));
-  expect(sheet.querySelector('.lift-picker-toast')).toBeNull();
+  expect(sheet.querySelector('.toast')).toBeNull();
   expect(sheet.querySelector('.lift-picker-toolbar span')?.textContent).toBe('2 of 20 chosen');
 
   // The offer goes after a few seconds, or as soon as you tick another lift.
   await click(unselect);
   await act(async () => vi.advanceTimersByTime(GOAL_UNDO_MS));
-  expect(sheet.querySelector('.lift-picker-toast')).toBeNull();
+  expect(sheet.querySelector('.toast')).toBeNull();
   await click(option(sheet, 'Row'));
   await click(unselect);
   await click(option(sheet, 'Curl'));
-  expect(sheet.querySelector('.lift-picker-toast')).toBeNull();
+  expect(sheet.querySelector('.toast')).toBeNull();
 
   await click(sheet.querySelector('.popup-dialog-close'));
   expect(text('.head-to-head-values > span', host)).toEqual(['Curl']);

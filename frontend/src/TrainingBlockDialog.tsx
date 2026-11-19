@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
@@ -30,40 +29,6 @@ function presetFor(start: string): StartPreset {
   const today = localDate();
   if (start === today) return 'today';
   return start === `${today.slice(0, 4)}-01-01` ? 'january' : 'custom';
-}
-
-/** Brief confirmation after a block starts; clears itself after a few seconds. */
-export function TrainingBlockToast({
-  notice,
-  onDismiss,
-}: {
-  notice: string;
-  onDismiss: () => void;
-}) {
-  const dismiss = useRef(onDismiss);
-  useEffect(() => {
-    dismiss.current = onDismiss;
-  });
-  useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => dismiss.current(), 4000);
-    return () => clearTimeout(timer);
-  }, [notice]);
-  if (!notice) return null;
-  return createPortal(
-    <div className="undo-toast top-toast" role="status">
-      <span>{notice}</span>
-      <button
-        type="button"
-        className="undo-toast-close"
-        aria-label="Dismiss training block notification"
-        onClick={onDismiss}
-      >
-        <Icon name="close" />
-      </button>
-    </div>,
-    document.body,
-  );
 }
 
 /** Lists, creates, edits and removes training blocks. */

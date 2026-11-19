@@ -1,25 +1,16 @@
-import { useEffect, useId, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
-import { Icon } from './Icon';
+import { useId, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
 import { enablePhonePushNotifications } from './push';
 import { dismissRestAlertReminder } from './restAlertReminderState';
+import { useToast } from './Toast';
 import './restAlertReminder.css';
-
-const CONFIRMATION_MS = 3000;
 
 export function RestAlertReminder({ onClose }: { onClose: () => void }) {
   const checkboxId = useId();
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [enabled, setEnabled] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const timer = window.setTimeout(onClose, CONFIRMATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [enabled, onClose]);
+  const toast = useToast();
 
   function close() {
     if (enabling) return;
@@ -35,34 +26,13 @@ export function RestAlertReminder({ onClose }: { onClose: () => void }) {
       // Called straight from the tap, which browsers require before asking for permission.
       await enablePhonePushNotifications();
       if (dontShowAgain) dismissRestAlertReminder();
-      setEnabled(true);
+      toast.show('Rest alerts on');
+      onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not turn on rest alerts.');
     } finally {
       setEnabling(false);
     }
-  }
-
-  if (enabled) {
-    return createPortal(
-      <div
-        className="undo-toast top-toast"
-        role="status"
-        aria-atomic="true"
-        style={{ '--undo-toast-duration': `${CONFIRMATION_MS}ms` } as CSSProperties}
-      >
-        <span>Rest alerts on</span>
-        <button
-          className="undo-toast-close"
-          type="button"
-          aria-label="Dismiss rest alerts notification"
-          onClick={onClose}
-        >
-          <Icon name="close" />
-        </button>
-      </div>,
-      document.body,
-    );
   }
 
   return (

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { SocialFeed } from './SocialFeed';
@@ -107,7 +108,7 @@ beforeEach(() => {
   for (const mock of [openProfile, openOwnProfile, openFind, chooseSharing]) mock.mockClear();
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 
 afterEach(async () => {
@@ -288,7 +289,7 @@ it('adds a photo to your own workout and confirms it in a popup', async () => {
   const collage = host.querySelector<HTMLElement>('.workout-photos-feed')!;
   expect(collage.getAttribute('data-count')).toBe('1');
   expect(collage.style.getPropertyValue('--photo-ratio')).toBe('900 / 1200');
-  expect(document.body.querySelector('.undo-toast')?.textContent).toContain('Photo added');
+  expect(toastText()).toBe('Photo added');
 });
 
 it('opens a photo full screen, steps between photos and removes your own', async () => {
@@ -324,7 +325,7 @@ it('opens a photo full screen, steps between photos and removes your own', async
   expect(remove).toHaveBeenCalledWith('p2');
   expect(viewer()).toBeNull();
   expect(host.querySelector('.workout-photos-feed')?.getAttribute('data-count')).toBe('1');
-  expect(document.body.querySelector('.undo-toast')?.textContent).toContain('Photo removed');
+  expect(toastText()).toBe('Photo removed');
 });
 
 it('stops offering Add photo once your workout has three photos', async () => {
@@ -441,7 +442,7 @@ it('asks a private account to share first, and offers a retry when loading fails
   expect(chooseSharing).toHaveBeenCalledOnce();
 
   await act(async () => root.unmount());
-  root = createRoot(host);
+  root = createToastRoot(host);
   const timeline = vi
     .spyOn(api.sharing, 'timeline')
     .mockRejectedValueOnce(new ApiError('Server error', 'server_error', 500))

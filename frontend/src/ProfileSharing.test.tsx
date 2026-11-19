@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
+import { TOAST_MS } from './Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileSharingPanel } from './ProfileSharing';
@@ -38,7 +40,7 @@ beforeEach(() => {
   }));
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -119,15 +121,14 @@ describe('profile sharing visibility', () => {
     expect(api.sharing.updateChoices).not.toHaveBeenCalled();
   });
 
-  it('shows the saved message as a five-second popup', async () => {
+  it('shows the saved message in a toast that clears itself', async () => {
     await render();
     await act(async () => radio('public').click());
     await act(async () => button('Make my profile public')!.click());
 
-    const toast = document.querySelector('.top-toast');
-    expect(toast?.textContent).toContain('Your profile is public to every member who shares.');
-    await act(async () => vi.advanceTimersByTime(5000));
-    expect(document.querySelector('.top-toast')).toBeNull();
+    expect(toastText()).toContain('Your profile is public to every member who shares.');
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.status));
+    expect(toastElement()).toBeNull();
   });
 });
 
