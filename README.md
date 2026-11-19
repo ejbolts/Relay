@@ -38,6 +38,7 @@ _Home: your next workout and training dashboard. Select the screenshot to view i
 - Give a planned exercise a **rep range** (such as 8–12) in a split day or a workout type. When you start that workout, the exercise shows its target and what to do next: stay at the weight until every top set reaches the highest reps, then try the next weight up. Sets the plan left blank start with that weight suggested.
 - Follow a live rest timer, with optional phone alerts and a reminder if a workout is left running.
 - **Start** offers three choices: the workout that is up next, cardio or an empty workout. While a workout is running, Home shows it where Up next sits, with **Resume**.
+- Tap today, or a planned day, in Home's week strip or the calendar to see that split day's exercises and start it now, so any day of your split can be trained today.
 - Tap the live time under the workout name to correct it if you started the timer late or left it running. Enter the time trained so far and the clock keeps counting from there.
 - Attach reusable machine photos and add custom numeric settings while naming a machine. **Save and pin** saves them together; choosing a saved machine loads its own settings.
 - Use **Equipment photo > Select** to merge duplicate machines. Keep every photo and workout link together, and choose the cover, name and future settings to keep.
