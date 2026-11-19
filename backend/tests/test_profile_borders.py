@@ -123,7 +123,7 @@ def test_each_family_climbs_in_target_and_rarity_from_tier_one():
     for border in BORDERS:
         if border.family:
             families.setdefault(border.family, []).append(border)
-    assert len(families) == 12
+    assert len(families) == 13
     for family, tiers in families.items():
         assert [border.tier for border in tiers] == list(range(1, len(tiers) + 1)), family
         assert len({border.metric for border in tiers}) == 1, family
@@ -346,6 +346,13 @@ def test_schedule_borders_count_mondays_weeks_months_and_start_times(client):
     assert numbers["months_trained"] == 3
     assert numbers["workouts"] == 13
     assert numbers["training_hours"] == (50 + 45 + 40 + 60) / 60
+    hours = [find_border(key) for key in ("hundred-hours", "time-under-tension", "thousand-hours")]
+    assert [(border.family, border.tier, border.target) for border in hours] == [
+        ("hours", 1, 100),
+        ("hours", 2, 500),
+        ("hours", 3, 1000),
+    ]
+    assert borders(client)["thousand-hours"]["requirement"] == "Train for 1,000 hours in total"
 
 
 def test_cardio_borders_take_the_best_week_and_month(client):

@@ -116,6 +116,12 @@ const GLYPHS = {
   hourglass: {
     d: 'M6 3h12M6 21h12M7.5 3c0 5.2 9 6 9 9s-9 3.8-9 9M16.5 3c0 5.2-9 6-9 9s9 3.8 9 9M9.5 18.5h5',
   },
+  stopwatch: {
+    d: 'M12 20.5a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM12 10v3.5l2.4 1.6M10 3h4M12 3v3.5M17.6 6.6l1.4-1.4',
+  },
+  clockface: {
+    d: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5V12l3.2 2M12 4.8v1.4M12 17.8v1.4M4.8 12h1.4M17.8 12h1.4',
+  },
   scales: {
     d: 'M12 4v16M8 20.5h8M4.5 7.5h15M6.5 7.5L3.5 14h6zM17.5 7.5L14.5 14h6zM12 4l-1.5-1M12 4l1.5-1',
   },
@@ -1004,6 +1010,8 @@ const P = {
   iron: palette('#111827', '#4b5563', '#e5e7eb', '#cbd5e1', '#94a3b8'),
   seasons: palette('#14532d', '#0f766e', '#ecfeff', '#fde047', '#5eead4'),
   slate: palette('#0f172a', '#334155', '#f1f5f9', '#f87171', '#94a3b8'),
+  tempo: palette('#2a0f1f', '#be185d', '#fce7f3', '#fde68a', '#f472b6'),
+  aeon: palette('#0b0f2a', '#1e3a8a', '#e0e7ff', '#fde047', '#93c5fd'),
   emerald: palette('#022c22', '#059669', '#d1fae5', '#fbbf24', '#34d399'),
   titan: palette('#0b1e2b', '#0e7490', '#cffafe', '#fbbf24', '#22d3ee'),
   void: palette('#1e0636', '#7e22ce', '#f3e8ff', '#e879f9', '#c084fc'),
@@ -1119,7 +1127,16 @@ const SPECS: Record<string, Spec> = {
     detail: facets,
     tier: 2,
   },
-  'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock },
+  'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock, tier: 1 },
+  'time-under-tension': { grade: 3, palette: P.tempo, glyph: 'stopwatch', detail: clock, tier: 2 },
+  'thousand-hours': {
+    grade: 4,
+    palette: P.aeon,
+    glyph: 'clockface',
+    sides: 'crystal',
+    detail: clock,
+    tier: 3,
+  },
   'bench-club-1': { grade: 1, ...BENCH, tier: 1 },
   'bench-club-2': { grade: 2, ...BENCH, tier: 2 },
   'bench-club-3': { grade: 3, ...BENCH, tier: 3 },
