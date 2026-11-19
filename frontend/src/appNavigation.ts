@@ -67,3 +67,15 @@ export function mainTabFor(tab: AppTab): MainTab | null {
   if (historySectionForTab(tab) !== null) return 'training';
   return null;
 }
+
+/** Screens the tab bar switches between, Training's sections included. */
+export function isMainTabScreen(tab: AppTab): boolean {
+  return (
+    tab === 'dashboard' || tab === 'social' || tab === 'body' || historySectionForTab(tab) !== null
+  );
+}
+
+/** Where a screen's scroll is remembered: Training and its Sessions section are one screen. */
+export function tabScrollKey(tab: AppTab): AppTab {
+  return historySectionForTab(tab) ?? tab;
+}
