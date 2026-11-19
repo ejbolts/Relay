@@ -810,38 +810,9 @@ export function TodayScreen({
           />
         }
         title="Home"
-        onOpenSettings={onOpenSettings}
         accountActions={
-          accountActions ?? (
-            <div className="account-header-actions">
-              {notifications}
-              {onOpenProfile && (
-                <ProfileButton
-                  onClick={onOpenProfile}
-                  name={profileLabel}
-                  photoUrl={profilePhotoUrl}
-                  friendRequests={friendRequests}
-                  openFeedback={openFeedback}
-                />
-              )}
-            </div>
-          )
-        }
-        actions={
-          <>
-            <button
-              ref={home.editButton}
-              className="icon-button-pulse"
-              type="button"
-              aria-label={home.editing ? 'Save Home layout' : 'Edit Home layout'}
-              title={home.editing ? 'Save Home layout' : 'Edit Home layout'}
-              aria-busy={home.saving}
-              aria-pressed={home.editing}
-              disabled={!home.loaded || (home.editing && (home.saving || home.dragging))}
-              onClick={home.toggleEditing}
-            >
-              <Icon name="edit" />
-            </button>
+          // Only the pencil works while the layout is being edited, so nothing leaves Home mid-edit.
+          <span className="home-header-locks" inert={home.editing}>
             {onOpenVideos && (
               <button
                 className="icon-button-pulse"
@@ -853,7 +824,37 @@ export function TodayScreen({
                 <Icon name="video" />
               </button>
             )}
-          </>
+            {accountActions ?? (
+              <div className="account-header-actions">
+                {notifications}
+                {onOpenProfile && (
+                  <ProfileButton
+                    onClick={onOpenProfile}
+                    name={profileLabel}
+                    photoUrl={profilePhotoUrl}
+                    friendRequests={friendRequests}
+                    openFeedback={openFeedback}
+                  />
+                )}
+              </div>
+            )}
+            {onOpenSettings && <SettingsButton onClick={onOpenSettings} />}
+          </span>
+        }
+        actions={
+          <button
+            ref={home.editButton}
+            className="icon-button-pulse"
+            type="button"
+            aria-label={home.editing ? 'Save Home layout' : 'Edit Home layout'}
+            title={home.editing ? 'Save Home layout' : 'Edit Home layout'}
+            aria-busy={home.saving}
+            aria-pressed={home.editing}
+            disabled={!home.loaded || (home.editing && (home.saving || home.dragging))}
+            onClick={home.toggleEditing}
+          >
+            <Icon name="edit" />
+          </button>
         }
       />
 

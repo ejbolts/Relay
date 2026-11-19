@@ -194,6 +194,47 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
     .map((match) => match.exercise);
 }
 
+/** How many existing exercises a new name suggests using instead. */
+const SIMILAR_EXERCISE_LIMIT = 3;
+
+/**
+ * Library exercises whose names resemble a name being added, closest first, so a near-duplicate
+ * such as "DB Bench" for "Dumbbell Bench Press" can be picked instead. Every word of the name
+ * must appear in the exercise's name, abbreviations included; at most one word may only match
+ * loosely, letter by letter.
+ */
+export function similarExercises<T extends Pick<SearchableExercise, 'name'>>(
+  exercises: T[],
+  name: string,
+  limit = SIMILAR_EXERCISE_LIMIT,
+): T[] {
+  const query = name.trim();
+  const words = searchTokens(query);
+  if (query.length < 3 || !words.length) return [];
+  const exact = query.toLocaleLowerCase();
+  return exercises
+    .map((exercise, index) => {
+      const same = exercise.name.trim().toLocaleLowerCase() === exact;
+      const score = same
+        ? 0
+        : fuzzyScoreFields([exercise.name, searchTokens(exercise.name).join(' ')], query);
+      return { exercise, index, same, score };
+    })
+    .filter(
+      (match): match is typeof match & { score: number } =>
+        match.score !== null && match.score / words.length < 100,
+    )
+    .sort(
+      (first, second) =>
+        Number(second.same) - Number(first.same) ||
+        first.score - second.score ||
+        first.exercise.name.length - second.exercise.name.length ||
+        first.index - second.index,
+    )
+    .slice(0, limit)
+    .map((match) => match.exercise);
+}
+
 export function progressExerciseMatches<T extends SearchableExercise>(
   exercises: T[],
   query: string,
