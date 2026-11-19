@@ -18,7 +18,7 @@ other shared-profile responses omit them. Videos and sample data are never share
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple, get_args
 from uuid import UUID
@@ -38,6 +38,7 @@ from .body_sizes import BodySizeLog
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
+from .imported_entries import imported_workout_ids
 from .models import (
     BodyMeasurement,
     BodyWeightGoal,
@@ -149,6 +150,9 @@ class SharedProfileSummary(BaseModel):
     # Shared cardio sessions and weight and volume PRs, as counted on the member's Today.
     cardio_count: int | None = None
     record_count: int | None = None
+    # How many of ``workout_count`` and ``recent_workout_count`` came from a CSV import.
+    imported_workout_count: int | None = None
+    imported_recent_workout_count: int | None = None
     shares: SharedContent | None = None
 
 
@@ -499,11 +503,14 @@ class ActivityStats(NamedTuple):
     last_workout_date: date | None = None
     cardio_sessions: int = 0
     records: int = 0
+    imported_workouts: int = 0
+    imported_recent_workouts: int = 0
 
 
 def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
     """Per account: shared workouts, those in the last 30 days, the latest workout date, and
-    totals of shared cardio sessions and weight and volume PRs, as counted on Today."""
+    totals of shared cardio sessions and weight and volume PRs, as counted on Today, and how
+    many of the workouts came from a CSV import."""
     if not user_ids:
         return {}
     cutoff = date.today() - timedelta(days=RECENT_DAYS)
@@ -545,11 +552,24 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             .group_by(PersonalRecord.user_id)
         ).all()
     )
+    imported_ids = imported_workout_ids(db, user_ids)
+    imported: defaultdict[str, list[date]] = defaultdict(list)
+    if imported_ids:
+        for user_id, workout_id, day in db.execute(
+            select(TrainingWorkout.user_id, TrainingWorkout.id, TrainingWorkout.workout_date).where(
+                TrainingWorkout.user_id.in_(list(imported_ids)),
+                TrainingWorkout.is_sample.is_(False),
+            )
+        ):
+            if workout_id in imported_ids[user_id]:
+                imported[user_id].append(day)
     return {
         user_id: ActivityStats(
             *workouts.get(user_id, (0, 0, None)),
             cardio_sessions=cardio.get(user_id, 0),
             records=records.get(user_id, 0),
+            imported_workouts=len(imported[user_id]),
+            imported_recent_workouts=sum(day >= cutoff for day in imported[user_id]),
         )
         for user_id in user_ids
     }
@@ -587,6 +607,8 @@ def profile_summary(
         last_workout_date=stats.last_workout_date if viewable else None,
         cardio_count=stats.cardio_sessions if viewable else None,
         record_count=stats.records if viewable else None,
+        imported_workout_count=stats.imported_workouts if viewable else None,
+        imported_recent_workout_count=stats.imported_recent_workouts if viewable else None,
         shares=(
             SharedContent(
                 notes=sharing.share_notes,

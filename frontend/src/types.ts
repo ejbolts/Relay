@@ -463,6 +463,12 @@ export interface TrainingTime {
   cardio_minutes: number;
   cardio_count: number;
   total_minutes: number;
+  /** The share of each total brought in by CSV import; missing from older servers. */
+  imported_workout_minutes?: number;
+  imported_workout_count?: number;
+  imported_cardio_minutes?: number;
+  imported_cardio_count?: number;
+  imported_total_minutes?: number;
 }
 
 /** Cardio for one week: all minutes, and each goal zone's progress. */
@@ -1104,6 +1110,9 @@ export interface SharedProfileSummary {
   /** Shared cardio sessions and weight and volume PRs, as counted on the member's Today. */
   cardio_count?: number | null;
   record_count?: number | null;
+  /** How many of the workouts, and of those in the last 30 days, came from a CSV import. */
+  imported_workout_count?: number | null;
+  imported_recent_workout_count?: number | null;
   shares: {
     notes: boolean;
     body_weight: boolean;
