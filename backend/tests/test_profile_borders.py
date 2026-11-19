@@ -633,3 +633,38 @@ def test_training_logged_after_a_season_closes_does_not_count(client):
     with SessionLocal() as db:
         user = db.get(User, client.user["id"])
         assert not can_wear(db, user, "season-1-1", date(2027, 1, 10))
+
+
+def test_csv_imports_earn_no_borders(client):
+    set_sex(client, "male")
+    header = "Date Lifted,Exercise,Weight (kg),Weight (lb),Reps,Bodyweight (kg),"
+    header += "Bodyweight (lb),Percentile (%),Warmup\n"
+    start = date.today() - timedelta(days=12)
+    rows = "".join(
+        f"{(start + timedelta(days=day)).isoformat()},{lift},{150 + day},,5,80,,,FALSE\n"
+        for day in range(10)
+        for lift in (BENCH, "Pull-up")
+    )
+    imported = client.post(
+        "/api/workouts/import",
+        files={"file": ("strong.csv", (header + rows).encode(), "text/csv")},
+    )
+    assert imported.status_code == 201, imported.text
+    assert len(client.get("/api/workouts").json()) == 10
+
+    with SessionLocal() as db:
+        imported_stats = border_stats(db, db.get(User, client.user["id"]))
+    # Ten imported days of heavy benching, weighted pull-ups and weigh-ins: none of it counts.
+    assert imported_stats.activity == []
+    numbers = imported_stats.values
+    for metric in ("workouts", "log_streak", "bench_kg", "bodyweight_reps", "records", "tonnes"):
+        assert numbers[metric] == 0, metric
+    assert not any(item["unlocked"] for item in borders(client).values())
+
+    # A workout logged in Relay counts as usual.
+    workout(client, date.today(), BENCH, [{"weight_kg": 60, "reps": 5}])
+    numbers = stats(client)
+    assert numbers["workouts"] == 1 and numbers["bench_kg"] == 60
+    listed = borders(client)
+    assert listed["first-steps"]["progress"] == {"current": 1, "target": 5, "unit": "workouts"}
+    assert listed["bench-club-2"]["unlocked"] and not listed["bench-club-3"]["unlocked"]
