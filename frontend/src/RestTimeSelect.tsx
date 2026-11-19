@@ -9,13 +9,22 @@ const MAX_REST_SECONDS = 7200;
 export function RestTimeSelect({
   seconds,
   label,
+  placeholder,
+  customStart = 0,
   onChange,
 }: {
-  seconds: number;
+  /** The current rest, or null when none is set yet and the select shows `placeholder`. */
+  seconds: number | null;
   label: string;
+  placeholder?: string;
+  /** Where Custom starts when no rest is set. */
+  customStart?: number;
   onChange: (seconds: number) => void;
 }) {
-  const custom = !REST_OPTIONS.includes(seconds);
+  const empty = seconds === null;
+  const custom = !empty && !REST_OPTIONS.includes(seconds);
+  // Adding a rest offers only real rest times; "no rest" is the state it starts from.
+  const options = empty ? REST_OPTIONS.filter((value) => value > 0) : REST_OPTIONS;
   const select = useRef<HTMLSelectElement>(null);
   const [editing, setEditing] = useState(false);
   const [minutes, setMinutes] = useState('');
@@ -29,20 +38,27 @@ export function RestTimeSelect({
     <>
       <select
         ref={select}
-        value={custom ? 'current-custom' : seconds}
+        value={empty ? '' : custom ? 'current-custom' : seconds}
         onChange={(event) => {
+          if (event.target.value === '') return;
           if (event.target.value !== 'custom') {
             onChange(Number(event.target.value));
             return;
           }
-          setMinutes(String(Math.floor(seconds / 60)));
-          setRemainder(String(seconds % 60));
+          const start = seconds ?? customStart;
+          setMinutes(String(Math.floor(start / 60)));
+          setRemainder(String(start % 60));
           setError(null);
           setEditing(true);
         }}
         aria-label={label}
       >
-        {REST_OPTIONS.map((value) => (
+        {empty && (
+          <option value="" disabled hidden>
+            {placeholder}
+          </option>
+        )}
+        {options.map((value) => (
           <option key={value} value={value}>
             {formatSeconds(value)}
             {value === 0 ? ' (no rest)' : ''}

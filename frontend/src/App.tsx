@@ -7247,13 +7247,11 @@ function MovementCard({
                     onInsert={() => onInsertSet(index + 1)}
                     onAddRest={
                       !cardio && showRestTimes
-                        ? () =>
-                            onUpdateSet(item.key, {
-                              rest_seconds: restToAdd(movement.sets, index, restHistory),
-                              restRevealed: true,
-                            })
+                        ? (seconds) =>
+                            onUpdateSet(item.key, { rest_seconds: seconds, restRevealed: true })
                         : undefined
                     }
+                    suggestedRest={restToAdd(movement.sets, index, restHistory)}
                   />
                 )
               )}
