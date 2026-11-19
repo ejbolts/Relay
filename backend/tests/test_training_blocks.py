@@ -330,3 +330,124 @@ def test_block_colour_is_optional_validated_and_kept_by_older_apps(client):
             json={"name": "Peak", "start_date": "2026-07-01", "color": bad},
         )
         assert response.status_code == 422, bad
+
+
+def fresh_records(client, workout):
+    return client.get(
+        "/api/personal-records",
+        params={"include_blocks": True, "include_fresh_start": True, "workout_id": workout["id"]},
+    ).json()
+
+
+def add_fresh_start(client, day):
+    return client.post("/api/training-blocks/fresh-starts", json={"start_date": day})
+
+
+def scopes(client, workout):
+    return [
+        (r["scope"], r["record_type"], r["fresh_start_date"])
+        for r in fresh_records(client, workout)
+    ]
+
+
+def test_fresh_start_sets_a_new_baseline_without_blocks(client):
+    log(client, 120, "2026-01-01")
+    assert client.get("/api/training-blocks").json()["fresh_starts"] == []
+    saved = add_fresh_start(client, "2026-06-01")
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["fresh_starts"] == ["2026-06-01"]
+    assert saved.json()["blocks"] == []
+
+    first, exercise = log(client, 90, "2026-06-01")
+    # The first lift since the fresh start is the baseline.
+    assert fresh_records(client, first) == []
+    improved, _ = log(client, 95, "2026-06-02")
+    assert scopes(client, improved) == [("fresh_start", "weight", "2026-06-01")]
+    # Older apps do not ask for fresh-start records, so they never read them as all-time.
+    assert records(client, improved) == []
+    all_time, _ = log(client, 125, "2026-06-03")
+    assert scopes(client, all_time) == [("all_time", "weight", None)]
+
+    baseline = next(
+        b
+        for b in client.get("/api/exercise-history-baselines?before=2026-06-03").json()
+        if b["exercise_id"] == exercise
+    )
+    assert baseline["best_weight_kg"] == 120
+    assert [(b["start_date"], b["best_weight_kg"]) for b in baseline["fresh_start_bests"]] == [
+        ("2026-06-01", 95)
+    ]
+    assert baseline["block_bests"] == []
+
+    # Removing it returns to all-time comparisons only; the workouts are untouched.
+    removed = client.delete("/api/training-blocks/fresh-starts/2026-06-01")
+    assert removed.json()["fresh_starts"] == []
+    assert fresh_records(client, improved) == []
+    assert len(client.get("/api/workouts").json()) == 4
+
+
+def test_each_fresh_start_has_its_own_baseline_until_the_next(client):
+    log(client, 120, "2026-01-01")
+    add_fresh_start(client, "2026-06-01")
+    log(client, 90, "2026-06-01")
+    first_period, exercise = log(client, 100, "2026-06-02")
+    # Added out of order; the list is kept oldest first.
+    assert add_fresh_start(client, "2026-03-01").json()["fresh_starts"] == [
+        "2026-03-01",
+        "2026-06-01",
+    ]
+    assert add_fresh_start(client, "2026-08-01").status_code == 201
+    log(client, 70, "2026-08-01")
+    second_period, _ = log(client, 80, "2026-08-02")
+    # 80 kg beats only the newest fresh start's 70 kg, not June's 100 kg.
+    assert scopes(client, second_period) == [("fresh_start", "weight", "2026-08-01")]
+    assert scopes(client, first_period) == [("fresh_start", "weight", "2026-06-01")]
+
+    baseline = next(
+        b
+        for b in client.get("/api/exercise-history-baselines?before=2026-09-01").json()
+        if b["exercise_id"] == exercise
+    )
+    assert sorted(
+        (b["start_date"], b["best_weight_kg"]) for b in baseline["fresh_start_bests"]
+    ) == [
+        ("2026-06-01", 100),
+        ("2026-08-01", 80),
+    ]
+
+    # Removing the newest merges its lifts back into June's baseline.
+    client.delete("/api/training-blocks/fresh-starts/2026-08-01")
+    assert fresh_records(client, second_period) == []
+
+
+def test_fresh_starts_work_alongside_blocks_and_take_precedence_over_them(client):
+    log(client, 120, "2026-01-01")
+    current = block(client, "Rebuild", "2026-02-01")
+    log(client, 110, "2026-02-01")
+    assert add_fresh_start(client, "2026-03-01").status_code == 201
+    log(client, 90, "2026-03-01")
+    improved, _ = log(client, 100, "2026-03-02")
+    # A fresh-start record only; the block's earlier 110 kg still stands.
+    assert scopes(client, improved) == [("fresh_start", "weight", "2026-03-01")]
+    both, _ = log(client, 115, "2026-03-03")
+    # Beating both baselines lists the broader fresh start once.
+    assert scopes(client, both) == [("fresh_start", "weight", "2026-03-01")]
+    assert [(r["scope"], r["block_id"]) for r in records(client, both)] == [
+        ("block", current["id"])
+    ]
+    # Blocks keep the fresh starts, and the block summary still counts block records only.
+    assert block(client, "Peak", "2026-04-01")
+    assert client.get("/api/training-blocks").json()["fresh_starts"] == ["2026-03-01"]
+    summary = client.get(f"/api/training-blocks/{current['id']}/summary").json()
+    assert summary["block"]["pr_count"] == 1  # 115 kg beat the block's 110 kg.
+
+
+def test_fresh_starts_are_validated_and_private(client, other_client):
+    assert add_fresh_start(client, "2999-01-01").status_code == 422
+    assert add_fresh_start(client, "not a date").status_code == 422
+    assert add_fresh_start(client, None).status_code == 422
+    assert add_fresh_start(client, "2026-06-01").status_code == 201
+    assert add_fresh_start(client, "2026-06-01").status_code == 422
+    assert client.delete("/api/training-blocks/fresh-starts/2026-05-01").status_code == 404
+    assert other_client.get("/api/training-blocks").json()["fresh_starts"] == []
+    assert other_client.delete("/api/training-blocks/fresh-starts/2026-06-01").status_code == 404

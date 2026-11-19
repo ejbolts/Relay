@@ -30,6 +30,13 @@ export interface Release {
   video?: ReleaseVideo;
   /** Ordered feature previews, shown before the change list. Image is the older-client fallback. */
   highlights?: ReleaseHighlight[];
+  /**
+   * Set on a silent patch: the earlier release of the same minor whose notes this file still
+   * carries. The app keeps announcing that release, so the patch shows no new notes.
+   */
+  notesVersion?: string;
+  /** A silent patch's changes, held back for the next minor or major release's notes. */
+  silentChanges?: string[];
 }
 
 function text(value: unknown): value is string {
@@ -101,6 +108,7 @@ export function parseRelease(value: unknown): Release | null {
     return null;
   }
   if (release.date !== undefined && !validDate(release.date)) return null;
+  if (!validSilentPatch(release)) return null;
   if (release.image !== undefined && !validImage(release.image)) return null;
   if (release.video !== undefined && !validVideo(release.video)) return null;
   if (
@@ -119,6 +127,45 @@ export function parseRelease(value: unknown): Release | null {
   return release as Release;
 }
 
+/**
+ * A silent patch names the announced release it follows, an earlier patch of the same minor, and
+ * lists what it changed so the next minor or major release can announce it. Both or neither.
+ */
+function validSilentPatch(release: Partial<Release>): boolean {
+  const { notesVersion, silentChanges } = release;
+  if (notesVersion === undefined && silentChanges === undefined) return true;
+  if (
+    !text(notesVersion) ||
+    !/^\d+\.\d+\.\d+$/.test(notesVersion) ||
+    !Array.isArray(silentChanges) ||
+    !silentChanges.length ||
+    !silentChanges.every(text)
+  ) {
+    return false;
+  }
+  const [major, minor] = release.version!.split('.');
+  const [notesMajor, notesMinor] = notesVersion.split('.');
+  return (
+    major === notesMajor &&
+    minor === notesMinor &&
+    compareVersions(notesVersion, release.version!) < 0
+  );
+}
+
+/** The version whose notes are shown and announced: the running one, unless it is a silent patch. */
+export function announcedVersion(release: Release): string {
+  return release.notesVersion ?? release.version;
+}
+
+/** The notes to show for a release, under the version they announce. */
+export function announcedRelease(release: Release): Release {
+  if (release.notesVersion === undefined) return release;
+  const notes: Release = { ...release, version: release.notesVersion };
+  delete notes.notesVersion;
+  delete notes.silentChanges;
+  return notes;
+}
+
 /** Compare the numeric `major.minor.patch` parts of two release versions. */
 export function compareVersions(left: string, right: string): number {
   const parts = (version: string) => version.split('-')[0].split('.').map(Number);
@@ -135,7 +182,10 @@ export function parseReleaseHistory(value: unknown, currentVersion: string): Rel
   const releases = value.map(parseRelease);
   let newer = currentVersion;
   for (const release of releases) {
-    if (!release || compareVersions(release.version, newer) >= 0) return null;
+    // Earlier versions lists announced releases only; a silent patch's changes join the next one.
+    if (!release || release.notesVersion || compareVersions(release.version, newer) >= 0) {
+      return null;
+    }
     newer = release.version;
   }
   return releases as Release[];

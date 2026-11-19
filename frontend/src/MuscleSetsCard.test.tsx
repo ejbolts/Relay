@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MuscleSetsCard } from './MuscleSetsCard';
@@ -327,4 +327,121 @@ it('positions each target independently on the volume scale and uses it in the c
   const progress = document.querySelector('dialog [role="progressbar"]')!;
   expect(progress.getAttribute('aria-valuemax')).toBe('18');
   expect(progress.getAttribute('aria-valuetext')).toBe('6 of 18 sets');
+});
+
+function GoalHarness({
+  save,
+  initial = {},
+}: {
+  save: (muscle: string, goal: number | null) => Promise<void>;
+  initial?: Record<string, number>;
+}) {
+  const [goals, setGoals] = useState(initial);
+  return (
+    <MuscleSetsCard
+      weeklySets={weeklySets}
+      goal={10}
+      goals={goals}
+      onChangeGoal={async (muscle, goal) => {
+        await save(muscle, goal);
+        setGoals((current) => {
+          const next = { ...current };
+          if (goal === null) delete next[muscle];
+          else next[muscle] = goal;
+          return next;
+        });
+      }}
+    />
+  );
+}
+
+const sheetButton = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('dialog button')].find(
+    (button) => button.textContent === label || button.getAttribute('aria-label') === label,
+  )!;
+
+async function openGoalEditor(element: React.ReactElement) {
+  await act(async () => root.render(element));
+  await act(async () =>
+    host
+      .querySelector<HTMLButtonElement>('[aria-label="Exercises contributing to Biceps"]')!
+      .click(),
+  );
+  await act(async () => sheetButton('Edit goal for Biceps').click());
+  return document.querySelector<HTMLInputElement>('[aria-label="Biceps weekly set goal"]')!;
+}
+
+function type(input: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+it('edits a muscle goal from its sheet, updates the progress and confirms in a toast', async () => {
+  const save = vi.fn<(muscle: string, goal: number | null) => Promise<void>>(async () => {});
+  const input = await openGoalEditor(<GoalHarness save={save} />);
+  expect(input.value).toBe('10');
+  expect(sheetButton('Use default (10)')).toBeUndefined();
+  await act(async () => sheetButton('One set more').click());
+  await act(async () => sheetButton('One set more').click());
+  expect(input.value).toBe('12');
+  await act(async () => sheetButton('Save').click());
+  expect(save).toHaveBeenCalledExactlyOnceWith('Biceps', 12);
+  const dialog = document.querySelector('dialog')!;
+  expect(dialog.querySelector('form')).toBeNull();
+  expect(dialog.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe(
+    '6 of 12 sets',
+  );
+  expect(dialog.querySelector('.undo-toast[role="status"]')?.textContent).toContain(
+    'Biceps goal set to 12 sets',
+  );
+  expect(host.querySelector('.muscle-set-count')?.textContent).toBe('6 / 12');
+});
+
+it('returns a custom goal to the default', async () => {
+  const save = vi.fn<(muscle: string, goal: number | null) => Promise<void>>(async () => {});
+  const input = await openGoalEditor(<GoalHarness save={save} initial={{ Biceps: 16 }} />);
+  expect(input.value).toBe('16');
+  await act(async () => sheetButton('Use default (10)').click());
+  expect(save).toHaveBeenCalledExactlyOnceWith('Biceps', null);
+  expect(
+    document.querySelector('dialog [role="progressbar"]')?.getAttribute('aria-valuetext'),
+  ).toBe('6 of 10 sets');
+});
+
+it('rejects an invalid goal beside the field and keeps the editor open after a failed save', async () => {
+  const save = vi
+    .fn<(muscle: string, goal: number | null) => Promise<void>>()
+    .mockRejectedValueOnce(new Error('Server unavailable'))
+    .mockResolvedValueOnce(undefined);
+  const input = await openGoalEditor(<GoalHarness save={save} />);
+  await act(async () => type(input, '0'));
+  await act(async () => sheetButton('Save').click());
+  expect(save).not.toHaveBeenCalled();
+  expect(document.querySelector('dialog [role="alert"]')?.textContent).toContain('1 to 1,000');
+  await act(async () => type(input, '14'));
+  expect(document.querySelector('dialog [role="alert"]')).toBeNull();
+  await act(async () => sheetButton('Save').click());
+  expect(document.querySelector('dialog [role="alert"]')?.textContent).toContain(
+    'Server unavailable',
+  );
+  expect(document.querySelector('dialog form')).not.toBeNull();
+  await act(async () => sheetButton('Save').click());
+  expect(save).toHaveBeenLastCalledWith('Biceps', 14);
+  expect(document.querySelector('dialog form')).toBeNull();
+});
+
+it('hides goal editing when saving is unavailable and cancels without saving', async () => {
+  await render();
+  expect(document.querySelector('.muscle-goal-edit-button')).toBeNull();
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  const save = vi.fn<(muscle: string, goal: number | null) => Promise<void>>(async () => {});
+  const input = await openGoalEditor(<GoalHarness save={save} />);
+  await act(async () => type(input, '20'));
+  await act(async () => sheetButton('Cancel').click());
+  expect(save).not.toHaveBeenCalled();
+  expect(document.querySelector('dialog form')).toBeNull();
+  expect(
+    document.querySelector('dialog [role="progressbar"]')?.getAttribute('aria-valuetext'),
+  ).toBe('6 of 10 sets');
 });

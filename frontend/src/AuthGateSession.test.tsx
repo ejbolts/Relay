@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { emitAuthExpired } from './authEvents';
 import { AuthGate } from './AuthGate';
 import { LAST_USER_KEY } from './sessionCleanup';
@@ -18,9 +18,20 @@ vi.mock('./workoutCache', async (original) => ({
   ...(await original<typeof import('./workoutCache')>()),
   clearWorkoutCache: clearCache,
 }));
+const { applyUpdateOnSignIn, signIn } = vi.hoisted(() => ({
+  applyUpdateOnSignIn: vi.fn<() => Promise<boolean>>(),
+  signIn: { current: null as ((user: User) => Promise<void>) | null },
+}));
+vi.mock('./appUpdates', async (original) => ({
+  ...(await original<typeof import('./appUpdates')>()),
+  applyUpdateOnSignIn,
+}));
 vi.mock('./AuthScreen', () => ({
   AuthBrand: () => null,
-  AuthScreen: () => <p>Sign in</p>,
+  AuthScreen: ({ onAuthenticated }: { onAuthenticated: (user: User) => Promise<void> }) => {
+    signIn.current = onAuthenticated;
+    return <p>Sign in</p>;
+  },
 }));
 
 const user = { id: 'sample', username: 'sample', display_name: 'Sample Lifter' } as User;
@@ -37,6 +48,8 @@ beforeEach(() => {
   });
   localStorage.clear();
   clearCache.mockClear();
+  applyUpdateOnSignIn.mockReset().mockResolvedValue(false);
+  signIn.current = null;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -144,4 +157,44 @@ it('ignores a startup response that arrives after the session ended', async () =
   expect(container.textContent).toContain('Sign in');
   expect(container.textContent).not.toContain('Account workout');
   expect(localStorage.getItem(LAST_USER_KEY)).toBeNull();
+});
+
+async function showSignIn() {
+  vi.mocked(api.auth.me).mockRejectedValue(new ApiError('Not signed in', 'not_authenticated', 401));
+  await act(async () =>
+    root.render(
+      <AuthGate>
+        <p>Account workout</p>
+      </AuthGate>,
+    ),
+  );
+  expect(container.textContent).toContain('Sign in');
+  expect(signIn.current).not.toBeNull();
+}
+
+it('reloads into a ready update when signing in instead of opening this release', async () => {
+  await showSignIn();
+  applyUpdateOnSignIn.mockResolvedValue(true);
+
+  let settled = false;
+  await act(async () => {
+    void signIn.current!(user).then(() => {
+      settled = true;
+    });
+  });
+
+  expect(applyUpdateOnSignIn).toHaveBeenCalledOnce();
+  expect(container.textContent).not.toContain('Account workout');
+  // The sign-in button keeps its busy state until the page reloads.
+  expect(settled).toBe(false);
+  expect(localStorage.getItem(LAST_USER_KEY)).toContain('sample');
+});
+
+it('opens the app as usual after signing in when no update is ready', async () => {
+  await showSignIn();
+
+  await act(async () => signIn.current!(user));
+
+  expect(applyUpdateOnSignIn).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain('Account workout');
 });

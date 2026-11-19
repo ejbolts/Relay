@@ -9,6 +9,8 @@ import {
   watchReleases,
 } from './releaseAnnouncements';
 import {
+  announcedRelease,
+  announcedVersion,
   compareVersions,
   formatReleaseDate,
   parseRelease,
@@ -132,11 +134,49 @@ describe('release announcements', () => {
       expect(parseRelease({ ...metadata, video: invalid })).toBeNull();
   });
 
-  it('ships earlier releases newest first, all older than the current version', () => {
-    expect(parseReleaseHistory(history, metadata.version)).toEqual(history);
-    expect(history.map((release) => release.version)).not.toContain(metadata.version);
+  it('ships earlier releases newest first, all older than the announced version', () => {
+    const announced = announcedVersion(parseRelease(metadata)!);
+    expect(parseReleaseHistory(history, announced)).toEqual(history);
+    expect(history.map((release) => release.version)).not.toContain(announced);
     expect(compareVersions('0.10.0', '0.9.9')).toBeGreaterThan(0);
     expect(compareVersions('1.2.3', '1.2.3')).toBe(0);
+  });
+
+  it('accepts a silent patch only with held-back changes and announced notes from its own minor', () => {
+    // The shipped release.json may itself be a silent patch; start from its notes alone.
+    const announced = { ...metadata, notesVersion: undefined, silentChanges: undefined };
+    const silent = {
+      ...announced,
+      version: '2.4.3',
+      notesVersion: '2.4.1',
+      silentChanges: ['**Exercises:** The help button is back.'],
+    };
+    expect(parseRelease(silent)).toEqual(silent);
+    expect(announcedVersion(parseRelease(silent)!)).toBe('2.4.1');
+    expect(announcedVersion(parseRelease({ ...announced, version: '2.4.1' })!)).toBe('2.4.1');
+    const notes = announcedRelease(parseRelease(silent)!);
+    expect(notes.version).toBe('2.4.1');
+    expect(notes).not.toHaveProperty('notesVersion');
+    expect(notes).not.toHaveProperty('silentChanges');
+    expect(notes.changes).toEqual(metadata.changes);
+
+    for (const invalid of [
+      { ...silent, notesVersion: undefined },
+      { ...silent, silentChanges: undefined },
+      { ...silent, silentChanges: [] },
+      { ...silent, silentChanges: ['  '] },
+      { ...silent, notesVersion: '2.4.3' },
+      { ...silent, notesVersion: '2.4.4' },
+      // A minor or major release is always announced.
+      { ...silent, notesVersion: '2.3.9' },
+      { ...silent, version: '2.5.0' },
+      { ...silent, version: '3.0.0', notesVersion: '2.4.1' },
+      { ...silent, notesVersion: '2.4.1-beta' },
+    ]) {
+      expect(parseRelease(invalid)).toBeNull();
+    }
+    // Earlier versions only lists announced releases.
+    expect(parseReleaseHistory([silent], '2.5.0')).toBeNull();
   });
 
   it('shortens only .0 patch releases in headings', () => {

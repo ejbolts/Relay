@@ -982,6 +982,17 @@ export const api = {
       request<TrainingBlocks>(`/api/training-blocks/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       }),
+    addFreshStart: (startDate: string) =>
+      request<TrainingBlocks>('/api/training-blocks/fresh-starts', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ start_date: startDate }),
+      }),
+    removeFreshStart: (startDate: string) =>
+      request<TrainingBlocks>(
+        `/api/training-blocks/fresh-starts/${encodeURIComponent(startDate)}`,
+        { method: 'DELETE' },
+      ),
     summary: (id: string) =>
       request<TrainingBlockSummary>(`/api/training-blocks/${encodeURIComponent(id)}/summary`),
   },
@@ -990,6 +1001,7 @@ export const api = {
     if (params?.exerciseId) query.set('exercise_id', params.exerciseId);
     if (params?.workoutId) query.set('workout_id', params.workoutId);
     query.set('include_blocks', 'true');
+    query.set('include_fresh_start', 'true');
     const path = `/api/personal-records${query.size ? `?${query}` : ''}`;
     // A just-saved workout's records only matter online; saving a copy per workout would pile up.
     return params?.workoutId
