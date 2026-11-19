@@ -1,5 +1,4 @@
-/* Only a title and its two choices: no empty body between them. */
-.discard-changes-dialog .popup-dialog-actions {
-  margin-top: 0;
+/* Only a title and its two choices: one divider between them. */
+.discard-changes-dialog > .popup-dialog-footer {
   border-top: 0;
 }

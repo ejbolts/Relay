@@ -12,7 +12,7 @@
 .warmup-only-movements {
   display: grid;
   gap: 1rem;
-  padding: 1rem 1rem 0;
+  padding: 1rem;
 }
 
 .warmup-only-movements section + section {
@@ -73,10 +73,6 @@
   color: var(--warmup-ink);
   font-size: 0.75rem;
   font-weight: 700;
-}
-
-.warmup-only-finish-dialog > .warmup-only-actions {
-  padding: 0.875rem 1rem 1rem;
 }
 
 .logger-screen .exercise-icon-warning {

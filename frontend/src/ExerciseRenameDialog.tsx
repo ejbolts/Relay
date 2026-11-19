@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import type { Exercise } from './types';
@@ -17,6 +17,7 @@ export function ExerciseRenameDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const trimmed = name.trim();
+  const formId = useId();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -39,11 +40,25 @@ export function ExerciseRenameDialog({
     <PopupDialog
       title="Rename exercise"
       className="exercise-rename-dialog"
-      onClose={() => {
-        if (!saving) onClose();
-      }}
+      busy={saving}
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form={formId}
+            className="popup-primary-action"
+            disabled={saving || !trimmed}
+          >
+            {saving ? 'Saving…' : 'Save name'}
+          </button>
+        </>
+      }
     >
-      <form onSubmit={submit}>
+      <form id={formId} onSubmit={submit}>
         <label>
           Name
           <input
@@ -63,14 +78,6 @@ export function ExerciseRenameDialog({
             {error}
           </p>
         )}
-        <footer className="popup-dialog-actions">
-          <button type="button" disabled={saving} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="popup-primary-action" disabled={saving || !trimmed}>
-            {saving ? 'Saving…' : 'Save name'}
-          </button>
-        </footer>
       </form>
     </PopupDialog>
   );

@@ -59,8 +59,3 @@
   color: var(--p-ink-2);
   line-height: 1.5;
 }
-
-.profile-sex-confirm > .popup-dialog-actions {
-  margin: 0;
-  padding: 1rem;
-}

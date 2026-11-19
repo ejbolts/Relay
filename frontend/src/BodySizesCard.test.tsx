@@ -185,6 +185,9 @@ describe('BodySizesCard', () => {
     );
     await act(async () => button('Delete').click());
     expect(api.deleteBodySizes).not.toHaveBeenCalled();
+    // A red confirm named with the verb, with focus on the safe choice.
+    expect(button('Delete measurements').className).toBe('popup-primary-action is-danger');
+    expect(document.activeElement?.textContent).toBe('Cancel');
     await act(async () => button('Cancel').click());
     await act(async () => button('Delete').click());
     await act(async () => button('Delete measurements').click());

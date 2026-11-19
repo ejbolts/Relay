@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
 
 /** Writes the note kept with an exercise in this workout, which History shows with it. */
@@ -14,14 +14,26 @@ export function MovementNoteDialog({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const formId = useId();
   return (
     <PopupDialog
       title={exerciseName}
       kicker="EXERCISE NOTE"
       className="movement-note-dialog"
       onClose={onClose}
+      actions={
+        <>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action">
+            Save note
+          </button>
+        </>
+      }
     >
       <form
+        id={formId}
         onSubmit={(event) => {
           event.preventDefault();
           onSave(draft.trim());
@@ -35,14 +47,6 @@ export function MovementNoteDialog({
           autoFocus
           onChange={(event) => setDraft(event.target.value)}
         />
-        <div className="popup-dialog-actions">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="popup-primary-action">
-            Save note
-          </button>
-        </div>
       </form>
     </PopupDialog>
   );

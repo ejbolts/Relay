@@ -15,37 +15,33 @@ export function WorkoutConflictDialog({
   return (
     <PopupDialog
       title="Changed on another device"
-      kicker="NOT SAVED YET"
       className="workout-conflict-dialog workout-finish-dialog"
+      size="compact"
       onClose={() => onChoose('cancel')}
-    >
-      {confirmingDiscard ? (
-        <>
-          <p>Discard the changes you made here and load the latest “{name}”?</p>
-          <div className="popup-dialog-actions workout-finish-actions">
-            <button type="button" autoFocus onClick={() => setConfirmingDiscard(false)}>
+      onBack={confirmingDiscard ? () => setConfirmingDiscard(false) : undefined}
+      actionsClassName="workout-finish-actions"
+      actions={
+        confirmingDiscard ? (
+          <>
+            {/* Keyed, so each step's safe choice mounts fresh and takes focus. */}
+            <button key="back" type="button" autoFocus onClick={() => setConfirmingDiscard(false)}>
               Back
             </button>
             <button
               type="button"
-              className="popup-primary-action"
+              className="popup-primary-action is-danger"
               onClick={() => onChoose('load-latest')}
             >
               Discard my changes
             </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p>
-            “{name}” was saved on another device after you opened it here. Keeping your version
-            replaces those changes.
-          </p>
-          <div className="popup-dialog-actions workout-finish-actions">
+          </>
+        ) : (
+          <>
             <button type="button" onClick={() => setConfirmingDiscard(true)}>
               Load latest
             </button>
             <button
+              key="keep-mine"
               type="button"
               className="popup-primary-action"
               autoFocus
@@ -53,8 +49,17 @@ export function WorkoutConflictDialog({
             >
               Keep my version
             </button>
-          </div>
-        </>
+          </>
+        )
+      }
+    >
+      {confirmingDiscard ? (
+        <p>Discard the changes you made here and load the latest “{name}”?</p>
+      ) : (
+        <p>
+          “{name}” was saved on another device after you opened it here. Keeping your version
+          replaces those changes.
+        </p>
       )}
     </PopupDialog>
   );

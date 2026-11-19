@@ -289,13 +289,13 @@ export function HomeScreenGuide({ onClose }: { onClose: () => void }) {
       kicker="SET UP YOUR PHONE"
       className="home-guide"
       onClose={onClose}
-    >
-      <HomeScreenGuideContent />
-      <footer className="popup-dialog-actions">
+      actions={
         <button type="button" className="popup-primary-action" onClick={onClose}>
           Got it
         </button>
-      </footer>
+      }
+    >
+      <HomeScreenGuideContent />
     </PopupDialog>
   );
 }

@@ -193,11 +193,6 @@
   font-size: 13px;
   color: var(--p-muted);
 }
-.exercise-merge-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
 
 /* The rename dialog opened from the same exercise options menu. */
 .exercise-rename-dialog > form {

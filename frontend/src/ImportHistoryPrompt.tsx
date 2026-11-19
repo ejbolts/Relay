@@ -19,9 +19,19 @@ export function ImportHistoryPrompt({
   return (
     <PopupDialog
       title="Your workout history"
-      kicker="NEXT STEP"
       className="app-guide import-history-prompt"
+      dismissOnBackdrop={false}
       onClose={onSkip}
+      actions={
+        <>
+          <button type="button" className="popup-tertiary-action guide-skip" onClick={onSkip}>
+            Skip for now
+          </button>
+          <button type="button" className="popup-primary-action" onClick={onContinue}>
+            Import or export <span aria-hidden="true">→</span>
+          </button>
+        </>
+      }
     >
       <div className="app-guide-body">
         <div className="app-guide-step">
@@ -41,14 +51,6 @@ export function ImportHistoryPrompt({
           </p>
         </div>
       </div>
-      <footer className="popup-dialog-actions">
-        <button type="button" className="guide-skip" onClick={onSkip}>
-          Skip for now
-        </button>
-        <button type="button" className="popup-primary-action" onClick={onContinue}>
-          Import or export <span aria-hidden="true">→</span>
-        </button>
-      </footer>
     </PopupDialog>
   );
 }

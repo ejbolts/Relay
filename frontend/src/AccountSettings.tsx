@@ -207,7 +207,6 @@ function SignOutDialog({
   return (
     <PopupDialog
       title={everywhere ? 'Sign out everywhere?' : 'Sign out?'}
-      kicker="PLEASE CONFIRM"
       className="sign-out-dialog"
       size="compact"
       onClose={onCancel}

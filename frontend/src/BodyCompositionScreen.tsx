@@ -445,11 +445,41 @@ export function BodyCompositionScreen({
       {goalOpen && (
         <PopupDialog
           title={editingGoal ? 'Edit goal' : 'Add bodyweight goal'}
-          kicker="GOAL"
           className="body-goal-popup"
+          busy={savingGoal}
           onClose={closeGoal}
+          actions={
+            <>
+              {editingGoal && (
+                <button
+                  type="button"
+                  className="popup-tertiary-action is-danger body-goal-remove"
+                  disabled={savingGoal}
+                  onClick={() => {
+                    const goal = editingGoal;
+                    closeGoal();
+                    removeGoal(goal);
+                  }}
+                >
+                  Remove goal
+                </button>
+              )}
+              <button type="button" disabled={savingGoal} onClick={closeGoal}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="body-goal-form"
+                className="popup-primary-action"
+                disabled={savingGoal}
+              >
+                {savingGoal ? 'Saving…' : editingGoal ? 'Save goal' : 'Set goal'}
+              </button>
+            </>
+          }
         >
           <form
+            id="body-goal-form"
             className="body-goal-form"
             onSubmit={(event) => {
               event.preventDefault();
@@ -536,28 +566,6 @@ export function BodyCompositionScreen({
               </label>
             </div>
             {error && <p className="inline-error">{error}</p>}
-            <footer className="popup-dialog-actions">
-              {editingGoal && (
-                <button
-                  type="button"
-                  className="body-goal-remove"
-                  disabled={savingGoal}
-                  onClick={() => {
-                    const goal = editingGoal;
-                    closeGoal();
-                    removeGoal(goal);
-                  }}
-                >
-                  Remove goal
-                </button>
-              )}
-              <button type="button" disabled={savingGoal} onClick={closeGoal}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={savingGoal}>
-                {savingGoal ? 'Saving…' : editingGoal ? 'Save goal' : 'Set goal'}
-              </button>
-            </footer>
           </form>
         </PopupDialog>
       )}

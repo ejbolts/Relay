@@ -66,11 +66,6 @@ html[data-reduce-motion] .profile-crop-context {
   }
 }
 
-.profile-crop-dialog > .popup-dialog-actions {
-  margin: 0;
-  padding: 0 1.25rem 1.25rem;
-}
-
 .profile-photo-actions {
   display: flex;
   gap: 1rem;

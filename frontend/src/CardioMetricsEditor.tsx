@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { CardioMetricsInput, CardioSession } from './types';
 import { PopupDialog } from './PopupDialog';
 import { prettyDate } from './appShared';
@@ -31,10 +31,26 @@ export function CardioMetricsEditor({
   const [elevation, setElevation] = useState(session.elevation_gain_m?.toString() ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formId = useId();
 
   return (
-    <PopupDialog title="Cardio metrics" kicker="PERFORMANCE" onClose={onClose}>
+    <PopupDialog
+      title="Cardio metrics"
+      busy={saving}
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action" disabled={saving}>
+            {saving ? 'Saving…' : 'Save metrics'}
+          </button>
+        </>
+      }
+    >
       <form
+        id={formId}
         className="cardio-metrics-dialog"
         onSubmit={async (event) => {
           event.preventDefault();
@@ -168,14 +184,6 @@ export function CardioMetricsEditor({
         </div>
         <p className="cardio-metric-hint">All performance fields are optional.</p>
         {error && <p className="inline-error">{error}</p>}
-        <footer className="popup-dialog-actions">
-          <button type="button" disabled={saving} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="popup-primary-action" disabled={saving}>
-            {saving ? 'Saving…' : 'Save metrics'}
-          </button>
-        </footer>
       </form>
     </PopupDialog>
   );

@@ -286,7 +286,30 @@ export function WorkoutComments({
         <PopupDialog
           title="Delete comment?"
           className="comment-delete-dialog"
-          onClose={() => !busy && setDeleting(null)}
+          size="compact"
+          busy={busy}
+          onClose={() => setDeleting(null)}
+          actions={
+            <>
+              <button type="button" autoFocus disabled={busy} onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action is-danger comment-delete-confirm"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await api.sharing.deleteComment(deleting.id);
+                    setDeleting(null);
+                    await refresh();
+                  })
+                }
+              >
+                Delete
+              </button>
+            </>
+          }
         >
           <p>
             {items.some((item) => item.parent_id === deleting.id)
@@ -298,25 +321,6 @@ export function WorkoutComments({
               {error}
             </p>
           )}
-          <footer className="popup-dialog-actions">
-            <button type="button" disabled={busy} onClick={() => setDeleting(null)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="popup-primary-action comment-delete-confirm"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await api.sharing.deleteComment(deleting.id);
-                  setDeleting(null);
-                  await refresh();
-                })
-              }
-            >
-              Delete
-            </button>
-          </footer>
         </PopupDialog>
       )}
       {loading ? (

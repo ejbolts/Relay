@@ -308,10 +308,6 @@
   background: var(--p-surface-2);
   color: var(--p-ink);
 }
-:root[data-colour-mode='light'] .workout-csv-guide .workout-csv-guide-actions {
-  border-top-color: var(--p-line-strong);
-  background: var(--p-surface);
-}
 
 /* Add to Home Screen guide: show the light iOS share sheet. */
 :root[data-colour-mode='light'] .home-guide {

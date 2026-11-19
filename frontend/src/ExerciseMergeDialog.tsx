@@ -96,11 +96,28 @@ export function ExerciseMergeDialog({
     <PopupDialog
       title="Merge exercises"
       className="exercise-merge-dialog"
+      busy={saving}
       onClose={() => {
         if (!busy.current) onClose();
       }}
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="exercise-merge-form"
+            className="popup-primary-action is-danger"
+            disabled={saving || !source || !target}
+          >
+            {saving && target ? 'Merging…' : 'Merge exercises'}
+          </button>
+        </>
+      }
     >
       <form
+        id="exercise-merge-form"
         onSubmit={(event) => {
           event.preventDefault();
           merge();
@@ -230,14 +247,6 @@ export function ExerciseMergeDialog({
               {error}
             </p>
           )}
-          <div className="exercise-merge-actions">
-            <button type="button" className="pulse-button secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="pulse-button primary" disabled={!source || !target}>
-              {saving && target ? 'Merging…' : 'Merge exercises'}
-            </button>
-          </div>
         </fieldset>
       </form>
     </PopupDialog>

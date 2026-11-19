@@ -363,17 +363,6 @@
   font-size: 0.875rem;
 }
 
-/* Keep the way out in reach while scrolling through the steps. */
-.home-guide .popup-dialog-actions {
-  position: sticky;
-  z-index: 2;
-  bottom: 0;
-  display: flex;
-  margin: 0;
-  padding: 1rem 1.25rem;
-  background: var(--p-surface);
-}
-
 .home-guide .popup-primary-action {
   width: 100%;
 }

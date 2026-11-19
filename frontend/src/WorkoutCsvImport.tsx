@@ -37,7 +37,31 @@ export function WorkoutImportReview({
 }) {
   const exercises = preview.available_exercises ?? [];
   return (
-    <PopupDialog title="Review import" kicker="CSV IMPORT" onClose={onCancel}>
+    <PopupDialog
+      title="Review import"
+      busy={saving}
+      onClose={onCancel}
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={
+              saving ||
+              reviewing ||
+              reviewStale ||
+              (preview.workouts_to_create === 0 && !preview.body_measurements_to_create)
+            }
+            onClick={onSave}
+          >
+            {saving ? 'Saving…' : 'Save import'}
+          </button>
+        </>
+      }
+    >
       <div className="workout-import-review">
         <p className="workout-import-filename">{fileName}</p>
         {options && (
@@ -191,24 +215,6 @@ export function WorkoutImportReview({
             {error}
           </p>
         )}
-        <div className="popup-dialog-actions">
-          <button type="button" disabled={saving} onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="popup-primary-action"
-            disabled={
-              saving ||
-              reviewing ||
-              reviewStale ||
-              (preview.workouts_to_create === 0 && !preview.body_measurements_to_create)
-            }
-            onClick={onSave}
-          >
-            {saving ? 'Saving…' : 'Save import'}
-          </button>
-        </div>
       </div>
     </PopupDialog>
   );

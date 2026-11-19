@@ -512,15 +512,41 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         <PopupDialog
           title="Log body measurements"
           className="body-sizes-popup"
+          busy={saving}
           onClose={() => {
-            if (!saving) {
-              setEditing(false);
-              setError(null);
-            }
+            setEditing(false);
+            setError(null);
           }}
+          actions={
+            <>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setEditing(false);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="body-sizes-form"
+                className="popup-primary-action"
+                disabled={saving}
+              >
+                {saving
+                  ? 'Saving…'
+                  : logs?.some((row) => row.measurement_date === date)
+                    ? 'Update measurements'
+                    : 'Save measurements'}
+              </button>
+            </>
+          }
         >
           <form
             ref={form}
+            id="body-sizes-form"
             className="body-entry-form"
             onSubmit={(event) => {
               event.preventDefault();
@@ -561,25 +587,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                 {error}
               </p>
             )}
-            <footer className="popup-dialog-actions">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => {
-                  setEditing(false);
-                  setError(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={saving}>
-                {saving
-                  ? 'Saving…'
-                  : logs?.some((row) => row.measurement_date === date)
-                    ? 'Update measurements'
-                    : 'Save measurements'}
-              </button>
-            </footer>
           </form>
         </PopupDialog>
       )}
@@ -587,9 +594,24 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         <PopupDialog
           title={`Save your sex as ${SEX_LABELS[offeredSex]}?`}
           className="profile-sex-confirm"
-          onClose={() => {
-            if (!savingSex) setOfferedSex(null);
-          }}
+          size="compact"
+          busy={savingSex}
+          onClose={() => setOfferedSex(null)}
+          actions={
+            <>
+              <button type="button" disabled={savingSex} onClick={() => setOfferedSex(null)}>
+                Not now
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={savingSex}
+                onClick={() => void saveSex()}
+              >
+                {savingSex ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          }
         >
           <p>
             It sets your body measurement outline. After you save, only an administrator can change
@@ -600,31 +622,41 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               {sexError}
             </p>
           )}
-          <div className="popup-dialog-actions">
-            <button type="button" disabled={savingSex} onClick={() => setOfferedSex(null)}>
-              Not now
-            </button>
-            <button
-              type="button"
-              className="popup-primary-action"
-              disabled={savingSex}
-              onClick={() => void saveSex()}
-            >
-              {savingSex ? 'Saving…' : 'Save'}
-            </button>
-          </div>
         </PopupDialog>
       )}
       {deleting && (
         <PopupDialog
           title="Delete body measurements?"
           className="body-sizes-delete"
+          size="compact"
+          busy={saving}
           onClose={() => {
-            if (!saving) {
-              setDeleting(null);
-              setError(null);
-            }
+            setDeleting(null);
+            setError(null);
           }}
+          actions={
+            <>
+              <button
+                type="button"
+                autoFocus
+                disabled={saving}
+                onClick={() => {
+                  setDeleting(null);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action is-danger"
+                disabled={saving}
+                onClick={() => void remove()}
+              >
+                {saving ? 'Deleting…' : 'Delete measurements'}
+              </button>
+            </>
+          }
         >
           <p>Delete the measurements for {shortDate(deleting)}?</p>
           {error && (
@@ -632,26 +664,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               {error}
             </p>
           )}
-          <footer className="popup-dialog-actions">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                setDeleting(null);
-                setError(null);
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              disabled={saving}
-              onClick={() => void remove()}
-            >
-              {saving ? 'Deleting…' : 'Delete measurements'}
-            </button>
-          </footer>
         </PopupDialog>
       )}
     </section>

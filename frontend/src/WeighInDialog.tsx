@@ -85,7 +85,6 @@ export function WeighInDialog({
   return (
     <PopupDialog
       title="Log weigh-in"
-      kicker="CHECK-IN"
       className="body-entry-popup"
       onClose={onClose}
       busy={saving}
