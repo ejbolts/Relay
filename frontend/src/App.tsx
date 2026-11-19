@@ -57,7 +57,7 @@ import {
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
-import { MuscleGoalEditor } from './MuscleGoalEditor';
+import { TrainingPreferencesPanel } from './TrainingPreferencesPanel';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -95,7 +95,6 @@ import type {
   SharedProfileSummary,
   TrackedSet,
   TrackedWorkout,
-  TrainingPreferences,
   TrainingSplit,
   User,
   WeeklyMuscleContribution,
@@ -133,6 +132,7 @@ import {
 } from './historyWindow';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { NotificationDialog } from './NotificationDialog';
+import { StatusToast } from './StatusToast';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
@@ -9485,22 +9485,9 @@ function SettingsScreen({
   const [notificationStatus, setNotificationStatus] = useState<RestAlertStatus>(() =>
     pushNotificationsSupported() ? 'checking' : 'unsupported',
   );
-  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [notificationError, setNotificationError] = useState<string | null>(null);
-  const sharedPreferences = useTrainingPreferences();
-  const [trainingPreferences, setTrainingPreferences] = useState<TrainingPreferences | null>(
-    sharedPreferences.preferences,
-  );
-  const [trainingPreferencesStatus, setTrainingPreferencesStatus] = useState<string | null>(null);
-  const [trainingPreferencesError, setTrainingPreferencesError] = useState<string | null>(null);
-  const [savingTrainingPreferences, setSavingTrainingPreferences] = useState(false);
+  const [exportToast, setExportToast] = useState<string | null>(null);
   const workoutTypes = useWorkoutTypes();
-
-  useEffect(() => {
-    if (!trainingPreferencesStatus) return;
-    const timer = window.setTimeout(() => setTrainingPreferencesStatus(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [trainingPreferencesStatus]);
 
   useEffect(() => {
     if (!csvGuideOpen) return;
@@ -9514,11 +9501,6 @@ function SettingsScreen({
     });
     return () => cancelAnimationFrame(frame);
   }, [csvGuideOpen]);
-
-  useEffect(() => {
-    setTrainingPreferences(sharedPreferences.preferences);
-    setTrainingPreferencesError(sharedPreferences.error);
-  }, [sharedPreferences.preferences, sharedPreferences.error]);
 
   useEffect(() => {
     if (!pushNotificationsSupported()) return;
@@ -9549,13 +9531,11 @@ function SettingsScreen({
 
   async function togglePhoneNotifications() {
     if (notificationStatus === 'checking' || notificationStatus === 'enabling') return;
-    setNotificationMessage(null);
     setNotificationError(null);
     if (notificationStatus === 'enabled') {
       setNotificationStatus('enabling');
       await disablePhonePushNotifications();
       setNotificationStatus('available');
-      setNotificationMessage('Phone notifications are off.');
       return;
     }
 
@@ -9563,45 +9543,11 @@ function SettingsScreen({
     try {
       await enablePhonePushNotifications();
       setNotificationStatus('enabled');
-      setNotificationMessage('Phone notifications are on.');
     } catch (reason) {
       setNotificationStatus(Notification.permission === 'denied' ? 'blocked' : 'available');
       setNotificationError(
         reason instanceof Error ? reason.message : 'Could not enable phone notifications.',
       );
-    }
-  }
-
-  async function saveTrainingPreferences() {
-    if (!trainingPreferences || savingTrainingPreferences) return;
-    setSavingTrainingPreferences(true);
-    setTrainingPreferencesStatus(null);
-    setTrainingPreferencesError(null);
-    if (
-      !Number.isInteger(trainingPreferences.weekly_muscle_set_goal) ||
-      trainingPreferences.weekly_muscle_set_goal < 1 ||
-      trainingPreferences.weekly_muscle_set_goal > 1000 ||
-      Object.values(trainingPreferences.weekly_muscle_set_goals ?? {}).some(
-        (goal) => !Number.isInteger(goal) || goal < 1 || goal > 1000,
-      )
-    ) {
-      setTrainingPreferencesError('Enter weekly muscle set goals between 1 and 1,000 whole sets.');
-      setSavingTrainingPreferences(false);
-      return;
-    }
-    try {
-      const saved = await api.updateTrainingPreferences(trainingPreferences);
-      setTrainingPreferences(saved);
-      sharedPreferences.applySaved(saved);
-      await onDataChange();
-      window.dispatchEvent(new Event('training-preferences-updated'));
-      setTrainingPreferencesStatus('Training preferences saved.');
-    } catch (reason) {
-      setTrainingPreferencesError(
-        reason instanceof Error ? reason.message : 'Could not save training preferences.',
-      );
-    } finally {
-      setSavingTrainingPreferences(false);
     }
   }
 
@@ -9639,115 +9585,7 @@ function SettingsScreen({
                   <span>{splitName ?? 'Automatic'}</span>
                   <Icon name="chevron-right" />
                 </button>
-                <section
-                  className="settings-panel panel"
-                  aria-labelledby="training-preferences-title"
-                >
-                  <header>
-                    <div>
-                      <p className="section-kicker">TRAINING</p>
-                      <h2 id="training-preferences-title">Units &amp; weekly goals</h2>
-                    </div>
-                  </header>
-                  {trainingPreferences && (
-                    <div className="training-preferences-grid">
-                      <label>
-                        Weight unit
-                        <select
-                          value={trainingPreferences.preferred_weight_unit}
-                          onChange={(event) => {
-                            setTrainingPreferences({
-                              ...trainingPreferences,
-                              preferred_weight_unit: event.target.value as 'kg' | 'lb',
-                            });
-                            setTrainingPreferencesStatus(null);
-                          }}
-                        >
-                          <option value="kg">Kilograms</option>
-                          <option value="lb">Pounds</option>
-                        </select>
-                      </label>
-                      <label>
-                        Week starts
-                        <select
-                          value={trainingPreferences.week_start}
-                          onChange={(event) => {
-                            setTrainingPreferences({
-                              ...trainingPreferences,
-                              week_start: event.target.value as 'monday' | 'sunday' | 'saturday',
-                            });
-                            setTrainingPreferencesStatus(null);
-                          }}
-                        >
-                          <option value="monday">Monday</option>
-                          <option value="sunday">Sunday</option>
-                          <option value="saturday">Saturday</option>
-                        </select>
-                      </label>
-                      <label>
-                        Default weekly sets per muscle
-                        <input
-                          type="number"
-                          min="1"
-                          max="1000"
-                          step="1"
-                          value={trainingPreferences.weekly_muscle_set_goal || ''}
-                          onChange={(event) => {
-                            setTrainingPreferences({
-                              ...trainingPreferences,
-                              weekly_muscle_set_goal: Number(event.target.value),
-                            });
-                            setTrainingPreferencesStatus(null);
-                          }}
-                        />
-                      </label>
-                    </div>
-                  )}
-                  {trainingPreferences && (
-                    <MuscleGoalEditor
-                      exercises={exercises}
-                      defaultGoal={trainingPreferences.weekly_muscle_set_goal}
-                      goals={trainingPreferences.weekly_muscle_set_goals}
-                      onChange={(goals) => {
-                        setTrainingPreferences({
-                          ...trainingPreferences,
-                          weekly_muscle_set_goals: goals,
-                        });
-                        setTrainingPreferencesStatus(null);
-                      }}
-                    />
-                  )}
-                  {trainingPreferences && (
-                    <button
-                      type="button"
-                      className="pulse-button secondary"
-                      disabled={savingTrainingPreferences}
-                      onClick={() => void saveTrainingPreferences()}
-                    >
-                      {savingTrainingPreferences ? 'Saving…' : 'Save preferences'}
-                    </button>
-                  )}
-                  {trainingPreferencesStatus &&
-                    createPortal(
-                      <div className="undo-toast top-toast" role="status">
-                        <span>{trainingPreferencesStatus}</span>
-                        <button
-                          type="button"
-                          className="undo-toast-close"
-                          aria-label="Dismiss training preferences notification"
-                          onClick={() => setTrainingPreferencesStatus(null)}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </div>,
-                      document.body,
-                    )}
-                  {trainingPreferencesError && (
-                    <p className="inline-error" role="alert">
-                      {trainingPreferencesError}
-                    </p>
-                  )}
-                </section>
+                <TrainingPreferencesPanel exercises={exercises} onDataChange={onDataChange} />
 
                 <section className="settings-panel panel" aria-labelledby="rest-settings-title">
                   <header>
@@ -9756,11 +9594,6 @@ function SettingsScreen({
                   <div className="notification-setting-row">
                     <div>
                       <strong>Rest timer</strong>
-                      <small>
-                        {restTimerEnabled
-                          ? 'Starts automatically after a completed set'
-                          : 'Automatic rest countdowns are disabled'}
-                      </small>
                     </div>
                     <button
                       type="button"
@@ -9777,11 +9610,6 @@ function SettingsScreen({
                   <div className="notification-setting-row">
                     <div>
                       <strong>Show rest times</strong>
-                      <small>
-                        {showRestTimes
-                          ? 'Display rest times between sets'
-                          : 'Rest times between sets are hidden'}
-                      </small>
                     </div>
                     <button
                       type="button"
@@ -9814,7 +9642,6 @@ function SettingsScreen({
                       <h2 id="bodyweight-trend-title">Bodyweight chart</h2>
                     </div>
                   </header>
-                  <p>Set the bodyweight chart shown in Body. Saved on this device.</p>
                   <div className="body-trend-default-fields">
                     <label>
                       Default statistic
@@ -9873,13 +9700,11 @@ function SettingsScreen({
                   <div className="notification-setting-row">
                     <div>
                       <strong>Reduce animations</strong>
-                      <small>
-                        {reduceMotion
-                          ? 'Screens, sheets and charts change without sliding or fading'
-                          : systemPrefersReducedMotion()
-                            ? 'Your phone already asks for reduced motion, so the app follows it'
-                            : 'Screens slide, sheets glide and charts draw in'}
-                      </small>
+                      {!reduceMotion && systemPrefersReducedMotion() && (
+                        <small>
+                          Your phone already asks for reduced motion, so the app follows it
+                        </small>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -9922,19 +9747,15 @@ function SettingsScreen({
                       <h2 id="notification-settings-title">Phone alerts</h2>
                     </div>
                   </header>
-                  <p>Manage notifications on this device.</p>
                   <div className="notification-setting-row">
                     <div>
                       <strong>Phone alerts</strong>
-                      <small>
-                        {notificationStatus === 'enabled'
-                          ? 'Rest timers, 2-hour workout reminders, and completed-video alerts are enabled'
-                          : notificationStatus === 'unsupported'
-                            ? 'Use an installed app and a supported browser to enable notifications'
-                            : notificationStatus === 'blocked'
-                              ? 'Blocked in phone settings'
-                              : 'Rest timers, 2-hour workout reminders, and completed-video alerts are disabled'}
-                      </small>
+                      {notificationStatus === 'unsupported' && (
+                        <small>
+                          Use an installed app and a supported browser to enable notifications
+                        </small>
+                      )}
+                      {notificationStatus === 'blocked' && <small>Blocked in phone settings</small>}
                     </div>
                     <button
                       type="button"
@@ -9953,11 +9774,6 @@ function SettingsScreen({
                       {notificationStatus === 'enabled' ? 'On' : 'Off'}
                     </button>
                   </div>
-                  {notificationMessage && (
-                    <p className="notification-setting-status" role="status">
-                      {notificationMessage}
-                    </p>
-                  )}
                   {notificationError && (
                     <p className="inline-error" role="alert">
                       {notificationError}
@@ -10025,7 +9841,6 @@ function SettingsScreen({
                       <h2 id="workout-data-title">Import &amp; export</h2>
                     </div>
                   </header>
-                  <p>Bring in workout history and bodyweight, or download a copy of your data.</p>
                   <button
                     type="button"
                     className="profile-secondary workout-data-guide-button"
@@ -10111,7 +9926,6 @@ function SettingsScreen({
                       Replay guide
                     </button>
                   </header>
-                  <p>Walk through the features again or find out how to contribute.</p>
                   <div className="guide-contribute">
                     <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
                       GitHub repository <Icon name="external" />
@@ -10135,7 +9949,6 @@ function SettingsScreen({
                       View changes
                     </button>
                   </header>
-                  <p>Read the latest release notes and see what's changed in Relay.</p>
                   {updateCheck}
                 </section>
                 <section className="settings-panel panel" aria-labelledby="feedback-settings-title">
@@ -10145,7 +9958,6 @@ function SettingsScreen({
                       <h2 id="feedback-settings-title">Feedback &amp; feature requests</h2>
                     </div>
                   </header>
-                  <p>Tell us what could be better, report a problem or suggest a feature.</p>
                   <FeedbackForm allowAnother />
                 </section>
                 {onOpenAdmin && (
@@ -10178,8 +9990,13 @@ function SettingsScreen({
           workoutDates={workoutDates}
           bodyweightDates={measurements.map((measurement) => measurement.measurement_date)}
           onClose={() => setExportOpen(false)}
+          onExported={(message) => {
+            setExportOpen(false);
+            setExportToast(message);
+          }}
         />
       )}
+      {exportToast && <StatusToast message={exportToast} onClose={() => setExportToast(null)} />}
     </section>
   );
 }

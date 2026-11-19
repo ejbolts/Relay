@@ -1,0 +1,190 @@
+/* Admin console: accounts first, as compact rows that open to their details and actions. */
+
+.admin-accounts > header {
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.admin-accounts > header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-refresh .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.admin-account-tools {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+
+.admin-account-search {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 14px;
+  background: var(--p-surface);
+}
+
+.admin-account-search:focus-within {
+  border-color: var(--p-accent);
+}
+
+.admin-account-search > .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--p-muted);
+}
+
+.admin-screen .admin-account-search input[type='search'] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0.75rem 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--p-ink);
+  font-size: 1rem;
+}
+
+.admin-screen .admin-account-search input[type='search']:focus {
+  outline: none;
+}
+
+.admin-account-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.admin-account-filters button {
+  min-height: 2.25rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.admin-account-filters button[aria-pressed='true'] {
+  border-color: var(--p-accent-text);
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.admin-accounts .admin-user {
+  gap: 0;
+  padding: 0;
+}
+
+.admin-user-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3.25rem;
+  border: 0;
+  border-radius: inherit;
+  padding: 0.7rem 0.85rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.admin-user-summary > .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--p-muted);
+  transition: transform 160ms ease;
+}
+
+.admin-user-summary[aria-expanded='true'] > .pulse-icon {
+  transform: rotate(180deg);
+}
+
+.admin-user-activity {
+  max-width: 9rem;
+  overflow: hidden;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-activity.admin-user-online {
+  color: var(--p-good);
+}
+
+.admin-user-details:not([hidden]) {
+  display: grid;
+  gap: 0.75rem;
+  border-top: 1px solid var(--p-line);
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+
+.admin-accounts-empty {
+  margin: 0.85rem 0 0;
+  color: var(--p-muted);
+}
+
+/* Limits, storage and versions fold into one Server section. */
+.admin-server {
+  border: 1px solid var(--p-card-border, var(--p-line));
+  border-radius: var(--p-radius);
+  background: var(--p-surface);
+}
+
+.admin-server > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.5rem;
+  padding: 0.9rem 1.1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.admin-server > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-server > summary > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-server > summary small {
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}
+
+.admin-server > summary > .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--p-muted);
+  transition: transform 160ms ease;
+}
+
+.admin-server[open] > summary > .pulse-icon {
+  transform: rotate(180deg);
+}
+
+.admin-server > .settings-panel {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--p-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}

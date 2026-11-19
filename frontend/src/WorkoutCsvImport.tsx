@@ -4,6 +4,7 @@ import { PopupDialog } from './PopupDialog';
 import { WorkoutCsvGuide } from './WorkoutCsvGuide';
 import { WorkoutImportSource } from './WorkoutImportSource';
 import { ImportBatchHistory } from './ImportBatchHistory';
+import { bestExerciseMatches } from './importExerciseMatches';
 import './importReview.css';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { CsvImportPreview, WorkoutImportOptions } from './types';
@@ -31,8 +32,10 @@ export function WorkoutImportReview({
   reviewing?: boolean;
   reviewStale?: boolean;
   onMappingChange?: (name: string, id: string) => void;
+  /** Tries the review again after a mapping's update failed. */
   onUpdateReview?: () => void;
 }) {
+  const exercises = preview.available_exercises ?? [];
   return (
     <PopupDialog title="Review import" kicker="CSV IMPORT" onClose={onCancel}>
       <div className="workout-import-review">
@@ -54,72 +57,94 @@ export function WorkoutImportReview({
         {!!preview.exercise_matches?.length && onMappingChange && (
           <details className="import-mapping" open>
             <summary>Exercise mapping ({preview.exercise_matches.length})</summary>
-            {preview.exercise_matches.map((match) => (
-              <label key={match.incoming_name}>
-                <span>{match.incoming_name}</span>
-                <select
-                  aria-label={`Map ${match.incoming_name}`}
-                  disabled={saving || reviewing}
-                  value={
-                    options?.exercise_mappings?.[match.incoming_name] ?? match.exercise_id ?? ''
-                  }
-                  onChange={(event) => onMappingChange(match.incoming_name, event.target.value)}
-                >
-                  <option value="">Automatic match / new exercise</option>
-                  {preview.available_exercises?.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
-            {reviewStale && (
-              <button type="button" disabled={reviewing} onClick={onUpdateReview}>
-                {reviewing ? 'Updating…' : 'Update review'}
+            {preview.exercise_matches.map((match) => {
+              const best = bestExerciseMatches(match.incoming_name, exercises);
+              const rest = exercises.filter((exercise) => !best.includes(exercise));
+              return (
+                <label key={match.incoming_name}>
+                  <span>{match.incoming_name}</span>
+                  <select
+                    aria-label={`Map ${match.incoming_name}`}
+                    disabled={saving || reviewing}
+                    value={
+                      options?.exercise_mappings?.[match.incoming_name] ?? match.exercise_id ?? ''
+                    }
+                    onChange={(event) => onMappingChange(match.incoming_name, event.target.value)}
+                  >
+                    <option value="">Automatic match / new exercise</option>
+                    {best.length > 0 && (
+                      <optgroup label="Best matches">
+                        {best.map((exercise) => (
+                          <option key={exercise.id} value={exercise.id}>
+                            {exercise.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="All exercises">
+                      {rest.map((exercise) => (
+                        <option key={exercise.id} value={exercise.id}>
+                          {exercise.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+              );
+            })}
+            {reviewStale && !reviewing && onUpdateReview && (
+              <button type="button" className="profile-secondary" onClick={onUpdateReview}>
+                Try again
               </button>
             )}
           </details>
         )}
-        {(preview.sessions.length > 0 ||
-          !(
-            (preview.body_measurements_to_create ?? 0) + (preview.body_measurements_to_skip ?? 0)
-          )) && (
-          <p>
-            <span className="workout-import-totals">
-              <strong>
-                {preview.workouts_to_create}{' '}
-                {preview.workouts_to_create === 1 ? 'session' : 'sessions'}
-              </strong>{' '}
-              and{' '}
-              <strong>
-                {preview.sets_to_import} {preview.sets_to_import === 1 ? 'set' : 'sets'}
-              </strong>{' '}
-              will be added.
-            </span>
-            {preview.workouts_to_skip > 0 && (
-              <>
-                {' '}
-                {preview.workouts_to_skip} identical existing{' '}
-                {preview.workouts_to_skip === 1 ? 'session' : 'sessions'} will be skipped.
-              </>
-            )}
+        {reviewing && (
+          <p className="workout-import-totals" role="status">
+            Updating…
           </p>
         )}
-        {(preview.body_measurements_to_create ?? 0) + (preview.body_measurements_to_skip ?? 0) >
-          0 && (
-          <p>
-            <span className="workout-import-totals">
-              <strong>
-                {preview.body_measurements_to_create ?? 0} body-weight{' '}
-                {preview.body_measurements_to_create === 1 ? 'check-in' : 'check-ins'}
-              </strong>{' '}
-              will be added.
-            </span>{' '}
-            {preview.body_measurements_to_skip ?? 0} existing{' '}
-            {preview.body_measurements_to_skip === 1 ? 'date' : 'dates'} will be kept.
-          </p>
-        )}
+        {!reviewing &&
+          (preview.sessions.length > 0 ||
+            !(
+              (preview.body_measurements_to_create ?? 0) + (preview.body_measurements_to_skip ?? 0)
+            )) && (
+            <p>
+              <span className="workout-import-totals">
+                <strong>
+                  {preview.workouts_to_create}{' '}
+                  {preview.workouts_to_create === 1 ? 'session' : 'sessions'}
+                </strong>{' '}
+                and{' '}
+                <strong>
+                  {preview.sets_to_import} {preview.sets_to_import === 1 ? 'set' : 'sets'}
+                </strong>{' '}
+                will be added.
+              </span>
+              {preview.workouts_to_skip > 0 && (
+                <>
+                  {' '}
+                  {preview.workouts_to_skip} identical existing{' '}
+                  {preview.workouts_to_skip === 1 ? 'session' : 'sessions'} will be skipped.
+                </>
+              )}
+            </p>
+          )}
+        {!reviewing &&
+          (preview.body_measurements_to_create ?? 0) + (preview.body_measurements_to_skip ?? 0) >
+            0 && (
+            <p>
+              <span className="workout-import-totals">
+                <strong>
+                  {preview.body_measurements_to_create ?? 0} body-weight{' '}
+                  {preview.body_measurements_to_create === 1 ? 'check-in' : 'check-ins'}
+                </strong>{' '}
+                will be added.
+              </span>{' '}
+              {preview.body_measurements_to_skip ?? 0} existing{' '}
+              {preview.body_measurements_to_skip === 1 ? 'date' : 'dates'} will be kept.
+            </p>
+          )}
         {preview.sessions.length > 0 && (
           <p>
             {preview.new_exercises.length
@@ -312,15 +337,15 @@ export function WorkoutCsvImport({
           reviewing={previewing}
           reviewStale={reviewStale}
           onMappingChange={(name, id) => {
-            setReview({
-              ...review,
-              options: {
-                ...review.options,
-                exercise_mappings: { ...review.options.exercise_mappings, [name]: id },
-              },
-            });
+            const mapped = {
+              ...review.options,
+              exercise_mappings: { ...review.options.exercise_mappings, [name]: id },
+            };
+            setReview({ ...review, options: mapped });
+            // Save stays off until the refreshed review arrives; a failure keeps it off.
             setReviewStale(true);
             setError(null);
+            void selectFile(review.file, mapped);
           }}
           onUpdateReview={() => void selectFile(review.file, review.options)}
           options={review.options}
