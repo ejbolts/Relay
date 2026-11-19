@@ -355,7 +355,12 @@ import {
   useFinishedWorkoutQueue,
   type SavedFromQueue,
 } from './useFinishedWorkoutQueue';
-import { finishedWorkoutKey, type FinishedWorkout } from './finishedWorkoutQueue';
+import {
+  finishedWorkoutKey,
+  readFinishedWorkouts,
+  type FinishedWorkout,
+} from './finishedWorkoutQueue';
+import { useDeferredDelete } from './useDeferredDelete';
 import {
   dashboardWithPreview,
   isPendingWorkoutId,
@@ -376,16 +381,21 @@ import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
 import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
 import { onTipTarget, type TipAction } from './tipActions';
+import { TimedToast } from './TimedToast';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import {
   buildFinishSummary,
+  finishSummaryIsFor,
   finishSummaryTimeLeft,
+  finishSummaryWorkoutGone,
   readFinishSummary,
   writeFinishSummary,
   type FinishSummary,
 } from './finishSummary';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
+import { useDiscardChangesGuard, type LeaveGuard } from './WorkoutEditGuard';
+import { useUnsavedWorkoutChanges } from './workoutEditChanges';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
@@ -459,6 +469,7 @@ import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
 import {
+  canResumeWorkout,
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
@@ -511,6 +522,8 @@ type HistoryBaselines = {
 };
 
 const UNDO_TOAST_MS = 4000;
+/** Long enough to read the toast and reach Undo before a deleted workout is removed. */
+const WORKOUT_DELETE_UNDO_MS = 6000;
 /** How long a logger notice, such as why a set can't be deleted, stays up. */
 const LOGGER_NOTICE_MS = 5000;
 
@@ -746,6 +759,16 @@ function AppContent() {
     setFinishRecords([]);
     writeFinishSummary(finishSummaryOwner, summary);
   }
+  /** Takes the card off Home once fresh history no longer has its workout: it was deleted. */
+  function forgetFinishIfGone(loaded: TrackedWorkout[], loadedFrom: string) {
+    const summary = finishSummaryRef.current;
+    const waiting = readFinishedWorkouts().map(({ pendingSave }) => ({
+      id: pendingSave.workoutId,
+      client_session_id: pendingSave.payload.client_session_id,
+    }));
+    if (summary && finishSummaryWorkoutGone(summary, loaded, waiting, loadedFrom))
+      rememberFinish(null);
+  }
   // The card also goes when the app has stayed open, or been asleep, past its time.
   useEffect(() => {
     if (!finishSummary) return;
@@ -869,6 +892,9 @@ function AppContent() {
   );
   const [workoutStartDate, setWorkoutStartDate] = useState(localDate());
   const [editingWorkout, setEditingWorkout] = useState<TrackedWorkout | null>(null);
+  /** Set by the open editor: asks before Back throws away its unsaved changes. */
+  const workoutEditGuardRef = useRef<LeaveGuard | null>(null);
+  const [workoutSavedToast, setWorkoutSavedToast] = useState(0);
   const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(() => {
     const draft = readActiveWorkoutDraft();
     return draft?.pendingSave ? null : (draft?.resumingWorkoutId ?? null);
@@ -974,13 +1000,15 @@ function AppContent() {
     () => savedPreviews.filter((preview) => preview.dashboard === dashboard),
     [dashboard, savedPreviews],
   );
+  // A deleted workout disappears at once and is removed once its Undo has passed.
+  const workoutDeletion = useDeferredDelete(commitWorkoutDelete, WORKOUT_DELETE_UNDO_MS);
+  const deletingWorkoutId = workoutDeletion.pending?.id ?? null;
   const shownWorkouts = useMemo(
     () =>
-      finishedPreviews.reduce(
-        (current, preview) => workoutsWithPreview(current, preview.workout),
-        workouts,
-      ),
-    [finishedPreviews, workouts],
+      finishedPreviews
+        .reduce((current, preview) => workoutsWithPreview(current, preview.workout), workouts)
+        .filter((workout) => workout.id !== deletingWorkoutId),
+    [deletingWorkoutId, finishedPreviews, workouts],
   );
   const shownDashboard = useMemo(() => {
     if (!dashboard) return dashboard;
@@ -1185,6 +1213,8 @@ function AppContent() {
     }
     const currentState = window.history.state;
     if (tab === 'log') {
+      // Unsaved changes to a saved workout are only thrown away once confirmed.
+      if (editingWorkout && workoutEditGuardRef.current?.()) return;
       if (!editingWorkoutSaving) setEditingWorkout(null);
       if (isAppHistoryState(currentState) && currentState.index > 0) {
         window.history.back();
@@ -1258,6 +1288,7 @@ function AppContent() {
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
       const savedAnswersBefore = savedDataAnswerCount();
+      let loadedWorkouts: TrackedWorkout[] = [];
       const results = await Promise.allSettled([
         api.dashboard(windowStart).then((nextDashboard) => {
           if (!current()) return;
@@ -1312,6 +1343,7 @@ function AppContent() {
           : api.listWorkouts(windowStart)
         ).then((nextWorkouts) => {
           if (!current()) return;
+          loadedWorkouts = nextWorkouts;
           startTransition(() =>
             setWorkouts((current) => [
               ...nextWorkouts,
@@ -1338,6 +1370,7 @@ function AppContent() {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
         window.dispatchEvent(new Event('training-data-refreshed'));
+        forgetFinishIfGone(loadedWorkouts, windowStart);
       }
       const firstFailure = results.find(
         (result, index): result is PromiseRejectedResult =>
@@ -1515,6 +1548,11 @@ function AppContent() {
       const nextTab = isAppHistoryState(event.state)
         ? event.state.tab
         : appTabFromHash(window.location.hash);
+      // The browser's Back asks too, and stays on the editor until the changes are discarded.
+      if (currentTabRef.current === 'log' && nextTab !== 'log' && workoutEditGuardRef.current?.()) {
+        window.history.pushState(createAppHistoryState('log', historyIndexRef.current), '', '#log');
+        return;
+      }
       scrollPositionsRef.current.set(historyIndexRef.current, window.scrollY);
       if (isAppHistoryState(event.state)) historyIndexRef.current = event.state.index;
       navigationActionRef.current = 'pop';
@@ -1543,8 +1581,8 @@ function AppContent() {
     }
     setWorkoutSaving(true);
     ++refreshGenerationRef.current;
-    // Existing-workout edits stay mounted until confirmed; active completions use the durable snapshot.
-    setTab(wasEditing ? 'history' : 'dashboard', { replace: true });
+    // An edit stays open, showing Saving…, until the save is confirmed; then it returns to the
+    // screen it was opened from. A failed save leaves the changes and the error in front of you.
     let saved: TrackedWorkout;
     try {
       saved = await withBackgroundActivity(
@@ -1560,13 +1598,11 @@ function AppContent() {
       if (error instanceof WorkoutEditDiscarded) {
         // The other device's version was chosen: close the editor and show what is saved.
         setEditingWorkout(null);
-        if (currentTabRef.current === 'log') setTab('history', { replace: true });
+        leaveWorkoutEditor();
         void refreshData({ silent: true });
         return;
       }
-      if (currentTabRef.current === (wasEditing ? 'history' : 'dashboard'))
-        setTab('log', { replace: true });
-      else if (currentTabRef.current !== 'log')
+      if (currentTabRef.current !== 'log')
         setMessage(
           'Your workout could not be saved. Return to the workout to retry; your entries are still here.',
         );
@@ -1585,9 +1621,14 @@ function AppContent() {
     queued?: SavedFromQueue,
   ) {
     setWorkouts((current) => upsertWorkoutByRecency(current, saved));
-    if (wasEditing && currentTabRef.current === 'log') setTab('history', { replace: true });
     // A queued save may finish after the user has opened another workout for editing.
-    if (wasEditing) setEditingWorkout(null);
+    if (wasEditing) {
+      leaveWorkoutEditor();
+      setEditingWorkout(null);
+      // A deletion still waiting for its Undo goes through, so the two toasts never overlap.
+      workoutDeletion.flush();
+      setWorkoutSavedToast((toast) => toast + 1);
+    }
 
     if (!wasEditing) {
       if (queued)
@@ -1628,8 +1669,20 @@ function AppContent() {
       });
   }
 
-  async function deleteWorkout(workout: TrackedWorkout) {
+  /** Returns from a saved workout's editor to the screen it was opened from, at its place. */
+  function leaveWorkoutEditor() {
+    if (currentTabRef.current !== 'log') return;
+    const state = window.history.state;
+    if (isAppHistoryState(state) && state.index > 0) window.history.back();
+    else setTab('history', { replace: true });
+  }
+
+  function deleteWorkout(workout: TrackedWorkout) {
     if (workoutSaveBlocked || blockedWhileSyncing(workout.id)) return;
+    workoutDeletion.request(workout);
+  }
+
+  async function commitWorkoutDelete(workout: TrackedWorkout) {
     try {
       await withBackgroundActivity('Deleting workout…', async () => {
         await api.deleteWorkout(workout.id);
@@ -1638,6 +1691,8 @@ function AppContent() {
           setActiveWorkoutStartedAt(null);
           setResumingWorkoutId(null);
         }
+        if (finishSummaryRef.current && finishSummaryIsFor(finishSummaryRef.current, workout))
+          rememberFinish(null);
         await refreshData({ activityLabel: null });
       });
     } catch (error) {
@@ -2224,6 +2279,27 @@ function AppContent() {
         )}
         <SetupGuideHost workouts={workouts} />
         {conflictPrompt.dialog}
+        {workoutDeletion.pending ? (
+          <TimedToast
+            key={workoutDeletion.pending.id}
+            message="Workout deleted"
+            durationMs={WORKOUT_DELETE_UNDO_MS}
+            action={{ label: 'Undo', run: workoutDeletion.undo }}
+            dismissLabel="Dismiss workout deleted notification"
+            onDismiss={workoutDeletion.flush}
+            onTimeout={null}
+          />
+        ) : (
+          workoutSavedToast > 0 && (
+            <TimedToast
+              key={workoutSavedToast}
+              message="Workout saved"
+              durationMs={UNDO_TOAST_MS}
+              dismissLabel="Dismiss workout saved notification"
+              onDismiss={() => setWorkoutSavedToast(0)}
+            />
+          )
+        )}
 
         {nestedHeader && (
           <OverlayScreenHeader
@@ -2253,7 +2329,18 @@ function AppContent() {
                   error={refusal ?? (finishedQueue.outdated ? OUTDATED_CLIENT_MESSAGE : null)}
                   onRetry={finishedQueue.retry}
                   onDiscard={() => {
-                    if (finishedQueue.discard(key)) setMessage('Workout discarded.');
+                    if (!finishedQueue.discard(key)) return;
+                    setMessage('Workout discarded.');
+                    const { workoutId, payload } = finished.pendingSave;
+                    const summary = finishSummaryRef.current;
+                    if (
+                      summary &&
+                      finishSummaryIsFor(summary, {
+                        id: workoutId,
+                        client_session_id: payload.client_session_id,
+                      })
+                    )
+                      rememberFinish(null);
                   }}
                   reviewBlocked={activeWorkoutStartedAt !== null}
                   onKeepMine={
@@ -2314,7 +2401,11 @@ function AppContent() {
                 <TodayScreen
                   home={home}
                   finished={
-                    finishSummary && (
+                    finishSummary &&
+                    !(
+                      workoutDeletion.pending &&
+                      finishSummaryIsFor(finishSummary, workoutDeletion.pending)
+                    ) && (
                       <FinishedWorkoutCard
                         key={finishSummary.finishedAt}
                         summary={finishSummary}
@@ -2534,11 +2625,14 @@ function AppContent() {
                         screenVisible={tab === 'log'}
                         onLiveSummaryChange={setLiveWorkoutSummary}
                         onClose={navigateBack}
+                        workoutEditGuard={
+                          editingWorkout && !viewedWorkout ? workoutEditGuardRef : undefined
+                        }
                         onDelete={() => {
                           if (workoutSaveBlocked) return;
                           if (editingWorkout) {
-                            void deleteWorkout(editingWorkout);
-                            setTab('history');
+                            deleteWorkout(editingWorkout);
+                            leaveWorkoutEditor();
                           } else {
                             clearActiveWorkoutDraft();
                             setActiveWorkoutStartedAt(null);
@@ -3309,6 +3403,7 @@ function WorkoutLogger({
   onShow,
   activeStartedAt,
   onClose,
+  workoutEditGuard,
   onDelete,
   onRestTimerChange,
   onRestDoneChange,
@@ -3346,6 +3441,8 @@ function WorkoutLogger({
   onShow: () => void;
   activeStartedAt: number | null;
   onClose: () => void;
+  /** Given to the editor of a saved workout, so Back can ask before discarding its changes. */
+  workoutEditGuard?: RefObject<LeaveGuard | null>;
   onDelete: () => void;
   /** When the rest ends, or null without one, for the countdown on the tab bar. */
   onRestTimerChange?: (endsAt: number | null) => void;
@@ -3592,6 +3689,22 @@ function WorkoutLogger({
   const [nameEditorOpen, setNameEditorOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
   const [saving, setSaving] = useState(false);
+  const unsavedChanges = useUnsavedWorkoutChanges(Boolean(initialWorkout) && !readOnly, {
+    name,
+    workoutDate,
+    category,
+    customTypeId,
+    notes,
+    durationMinutes: editedDurationMinutes,
+    startTime,
+    endTime,
+    movements,
+  });
+  const discardChangesDialog = useDiscardChangesGuard({
+    guard: workoutEditGuard,
+    unsaved: unsavedChanges && !saving,
+    onDiscard: onClose,
+  });
   const [error, setError] = useState<string | null>(null);
   const [machineAssignmentError, setMachineAssignmentError] = useState<string | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
@@ -5027,6 +5140,7 @@ function WorkoutLogger({
       {!initialWorkout ? (
         <LiveWorkoutHeader
           name={liveIdentity.name}
+          dateLabel={workoutDate < localDate() ? shortDate(workoutDate) : null}
           durationLabel={
             workoutPaused
               ? formatDuration(displayedDurationSeconds)
@@ -5080,14 +5194,13 @@ function WorkoutLogger({
                   </svg>
                 </button>
                 <button
-                  className="overlay-header-action add"
+                  className="overlay-header-save"
                   type="button"
-                  onClick={openExercisePicker}
-                  aria-label="Add exercise"
+                  disabled={saving}
+                  aria-busy={saving}
+                  onClick={() => void finishWorkout()}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               </>
             )
@@ -5578,6 +5691,8 @@ function WorkoutLogger({
         />
       )}
 
+      {discardChangesDialog}
+
       {deleteConfirmationOpen && (
         <WorkoutCloseDialog
           editing={Boolean(initialWorkout)}
@@ -6054,7 +6169,7 @@ function WorkoutCloseDialog({
     >
       <p>
         {editing
-          ? 'This workout will be permanently removed from your history. This cannot be undone.'
+          ? 'This workout will be removed from your history.'
           : resuming
             ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
             : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
@@ -10946,6 +11061,8 @@ function HistoryWorkoutCard({
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
   const [photos, setPhotos] = useWorkoutPhotos(workout);
+  // Resume continues today's session; an older workout is changed with Edit.
+  const resumable = !activeWorkout && canResumeWorkout(workout);
   const photoSubject = shared ? workoutDisplayName(workout) : `Your ${workoutDisplayName(workout)}`;
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
@@ -11146,12 +11263,16 @@ function HistoryWorkoutCard({
           {onResume && onEdit && onDelete && (
             <div className="workout-actions">
               <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
-              {!activeWorkout && (
+              {resumable && (
                 <button className="resume-workout-button" type="button" onClick={onResume}>
                   Resume
                 </button>
               )}
-              <button type="button" onClick={onEdit}>
+              <button
+                type="button"
+                className={`edit-workout-button${resumable ? '' : ' is-main'}`}
+                onClick={onEdit}
+              >
                 Edit
               </button>
               <InlineConfirmButton
