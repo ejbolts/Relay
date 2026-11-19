@@ -276,17 +276,27 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   gap: 0.4rem;
 }
 
+/*
+ * The machines scroll in their own edge-to-edge pane below a divider, so cards pass under it the
+ * way they pass under the dialog's header, rather than being cut off against the pinned chart.
+ * Above the setup guide, they fade out instead of stopping at a hard edge.
+ */
 .machine-weights-list {
+  --edge: 0.75rem;
   display: grid;
   flex: 1;
   align-content: start;
   gap: 0.5rem;
   min-height: 0;
-  margin: 0;
+  margin: 0 -1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0;
+  border-top: 1px solid var(--p-line-strong);
+  padding: var(--edge) 1rem;
+  scroll-padding-block: var(--edge);
   list-style: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--edge)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--edge)), transparent);
 }
 
 .machine-weights-list > li {
@@ -300,7 +310,7 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
 
 /* The reference leads the tree, with a gold arrow to each machine measured against it. */
 .machine-weights-list.is-tree {
-  padding-left: 1.9rem;
+  padding-left: calc(1rem + 1.9rem);
 }
 
 .machine-weights-list > li.is-reference {
