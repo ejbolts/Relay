@@ -226,11 +226,11 @@
   margin: 0;
 }
 
+/* The tag always sits on its own line under the name, so switching tiers never moves it. */
 .border-preview-name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
   font-size: 1.05rem;
 }
 
