@@ -363,6 +363,8 @@ export interface WorkoutRecommendation {
   scheduled_date?: string | null;
   split_name?: string | null;
   routine_day?: RoutineDay | null;
+  /** On a split's rest day: the next training day, which starting a workout then trains. */
+  next_training_day?: WorkoutRecommendation | null;
 }
 
 export type SplitProgression = 'calendar' | 'workouts';

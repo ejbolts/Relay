@@ -19,6 +19,7 @@ import { ActiveWorkoutSyncDialog } from './ActiveWorkoutSyncDialog';
 import { REMOTE_WORKOUT_APPLIED } from './activeWorkoutEvents';
 import {
   extendInactiveWorkoutFinishAt,
+  inactiveWorkoutEndAt,
   inactiveWorkoutFinishAt,
   MAX_INACTIVE_WORKOUT_MS,
 } from './activeWorkoutTimeout';
@@ -248,6 +249,9 @@ import {
 } from './setFieldValues';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
+import { selectInputValue } from './selectInputValue';
+import { matchingLastSessionSet } from './lastSessionSet';
+import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
   appTabFromHash,
@@ -414,6 +418,7 @@ import {
   createWorkoutSet,
   hasRecordedPerformance,
   isCompletedWorkingSet,
+  isLoggedWorkingSet,
   latestExerciseSets,
   restTimerSecondsAfterSetUpdate,
   suggestNextSetFromLoggedSet,
@@ -864,6 +869,12 @@ function AppContent() {
   const workoutTypes = useWorkoutTypes();
   const weightUnit = useWeightUnit();
   const upNext = useUpNextSession(dashboard?.recommendation, workouts);
+  // On a rest day, the Start menu's Up next starts the split's next training day instead.
+  const nextTrainingDay = useUpNextSession(
+    upNext.isRestDay ? dashboard?.recommendation?.next_training_day : null,
+    workouts,
+  );
+  const startMenuUpNext = upNext.isRestDay ? nextTrainingDay : upNext;
   const workoutTypeColors = useMemo(
     () => builtinTypeColors(workoutTypes.types),
     [workoutTypes.types],
@@ -2823,8 +2834,10 @@ function AppContent() {
             }}
             startMenu={{
               upNextLabel:
-                upNext.label && !upNext.isRestDay && !upNext.needsSplitUpdate
-                  ? `${upNext.label} day`
+                startMenuUpNext.label &&
+                !startMenuUpNext.isRestDay &&
+                !startMenuUpNext.needsSplitUpdate
+                  ? `${startMenuUpNext.label} day`
                   : null,
               onCardio: () => {
                 const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
@@ -2838,14 +2851,18 @@ function AppContent() {
                   'cardio',
                 );
               },
-              onUpNext: () =>
-                startWorkout(
-                  localDate(),
-                  false,
-                  upNext.template,
-                  upNext.recommendation?.category ?? null,
-                  upNext.type ?? null,
-                ),
+              // A rest day's own type is never started; without a next training day, no Up next.
+              onUpNext:
+                upNext.isRestDay && !startMenuUpNext.recommendation
+                  ? null
+                  : () =>
+                      startWorkout(
+                        localDate(),
+                        false,
+                        startMenuUpNext.template,
+                        startMenuUpNext.recommendation?.category ?? null,
+                        startMenuUpNext.type ?? null,
+                      ),
               onEmpty: () => startWorkout(),
             }}
           />
@@ -3775,16 +3792,20 @@ function WorkoutLogger({
       ? (initialWorkout.duration_minutes ?? 0) * 60
       : activeElapsedSeconds(startedAt, draftPause(restoredDraft)),
   );
-  const [restLeft, setRestLeft] = useState(0);
+  // A rest running when the app reloaded carries on from where it was.
+  const restoredRest = useState(() =>
+    restoreRestTimer(initialWorkout ? null : readStoredRestTimer(), clientSessionId),
+  )[0];
+  const [restLeft, setRestLeft] = useState(restoredRest.secondsLeft);
   // Each new rest opens the pill; hiding it tucks the countdown into the bottom-edge notch.
-  const [restTotal, setRestTotal] = useState(0);
+  const [restTotal, setRestTotal] = useState(restoredRest.totalSeconds);
   const [restHidden, setRestHidden] = useState(false);
   // A finished rest becomes the "GO" pill until the next set is logged, it is used or dismissed.
   const [restDone, setRestDone] = useState<{ endedAt: number; movementKey: string | null } | null>(
-    null,
+    restoredRest.done,
   );
   // The exercise (or the first of its superset) whose logged set started the rest.
-  const restMovementKeyRef = useRef<string | null>(null);
+  const restMovementKeyRef = useRef<string | null>(restoredRest.movementKey);
   const restNotificationEndpointRef = useRef<string | null>(null);
   const activeRestTimerRef = useRef<{
     id: string;
@@ -3793,7 +3814,13 @@ function WorkoutLogger({
     pausedLeft: number | null;
     serverScheduled: boolean;
     pendingSchedules: Set<Promise<void>>;
-  } | null>(null);
+  } | null>(
+    restoredRest.timer && {
+      ...restoredRest.timer,
+      serverScheduled: false,
+      pendingSchedules: new Set<Promise<void>>(),
+    },
+  );
 
   useEffect(() => {
     if (initialWorkout) return;
@@ -3944,7 +3971,8 @@ function WorkoutLogger({
           }
           restNotificationEndpointRef.current = subscription.endpoint;
           const timer = activeRestTimerRef.current;
-          if (timer) scheduleRestTimerPush(timer, subscription.endpoint);
+          if (timer && timer.pausedLeft === null)
+            scheduleRestTimerPush(timer, subscription.endpoint);
         })
         .catch(() => undefined);
     };
@@ -3981,6 +4009,35 @@ function WorkoutLogger({
       window.removeEventListener('focus', tick);
     };
   }, [restLeft, onRestTimerChange]);
+
+  // A restored rest shows on the tab bar too.
+  useEffect(() => {
+    const timer = activeRestTimerRef.current;
+    if (timer && timer.pausedLeft === null) onRestTimerChange?.(timer.endsAt);
+    // Only the rest restored when the workout opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the rest beside the draft, so a reload restores it; unchanged rests are not rewritten.
+  const storedRestRef = useRef('');
+  useEffect(() => {
+    if (initialWorkout) return;
+    const timer = activeRestTimerRef.current;
+    const value =
+      timer || restDone
+        ? {
+            sessionId: clientSessionId,
+            movementKey: restMovementKeyRef.current,
+            totalSeconds: restTotal,
+            timer: timer && { id: timer.id, endsAt: timer.endsAt, pausedLeft: timer.pausedLeft },
+            doneAt: timer ? null : (restDone?.endedAt ?? null),
+          }
+        : null;
+    const serialized = JSON.stringify(value);
+    if (serialized === storedRestRef.current) return;
+    storedRestRef.current = serialized;
+    writeStoredRestTimer(value);
+  }, [clientSessionId, initialWorkout, restLeft, restTotal, restDone, pause]);
 
   const [undoDeletion, setUndoDeletion] = useState<{
     kind: 'set' | 'rest';
@@ -4902,11 +4959,14 @@ function WorkoutLogger({
       })),
     };
   }
+  /** A workout left running ends at its last activity, not at the cutoff that noticed it. */
+  const inactiveEndAt = () =>
+    inactiveWorkoutEndAt(startedAt, lastActiveAtRef.current, inactiveFinishAtRef.current);
   // What Save in the inactive-workout prompt would save, prepared with each draft revision so
   // auto-save can save it on the server after the app is closed.
   autoSaveWorkoutRef.current = () => {
     if (initialWorkout) return null;
-    const check = checkFinish(inactiveFinishAtRef.current);
+    const check = checkFinish(inactiveEndAt());
     return check.kind === 'ready' ? finishedWorkoutInput(check) : null;
   };
 
@@ -5649,11 +5709,12 @@ function WorkoutLogger({
         <InactiveWorkoutDialog
           name={liveIdentity.name}
           startedAt={startedAt}
+          endedAt={inactiveEndAt()}
           loggedSets={loggedSetCount}
           resuming={Boolean(resumedWorkoutId)}
           saving={saving}
           onSave={() => {
-            void finishWorkout(inactiveFinishAtRef.current).then((saved) => {
+            void finishWorkout(inactiveEndAt()).then((saved) => {
               if (saved) return;
               // Whatever blocked the save is explained on the workout screen.
               continueInactiveWorkout();
@@ -6287,6 +6348,11 @@ function MovementCard({
     const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
     return (onMachine.length ? onMachine : exerciseHistory).slice(0, 5);
   }, [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases]);
+  // Hints come from the last session with working sets; one cut short to warm-ups is skipped.
+  const lastSessionSets = useMemo(
+    () => history.find((entry) => entry.sets.some(isLoggedWorkingSet))?.sets ?? [],
+    [history],
+  );
   const machineSettingsUnloaded = movement.machineSettings === undefined;
   const onMachineSettingsRef = useRef(onMachineSettings);
 
@@ -6637,6 +6703,11 @@ function MovementCard({
   }
 
   function renderSetSummary(item: DraftSet, index: number) {
+    // An unticked row without an RPE shows last time's, faintly, as a guide.
+    const lastRpe =
+      item.rpe === null && !item.completed && !cardio
+        ? (matchingLastSessionSet(movement.sets, index, lastSessionSets)?.rpe ?? null)
+        : null;
     const valueButton = (field: SetField, label: string, className: string, value: ReactNode) => (
       <button
         type="button"
@@ -6688,7 +6759,12 @@ function MovementCard({
               {valueButton('reps', 'Edit repetitions', 'completed-set-reps', item.reps ?? '–')}
             </>
           )}
-          {valueButton('rpe', 'Edit RPE', 'completed-set-rpe', item.rpe ?? '–')}
+          {valueButton(
+            'rpe',
+            'Edit RPE',
+            lastRpe === null ? 'completed-set-rpe' : 'completed-set-rpe is-last-time',
+            item.rpe ?? lastRpe ?? '–',
+          )}
           {renderRowCompleteButton(item, index)}
           {renderCompletedSetActions(item, index)}
         </div>
@@ -6769,10 +6845,10 @@ function MovementCard({
               type="text"
               value={item.reps ?? ''}
               onFocus={(event) => {
-                if (item.reps !== null) event.currentTarget.select();
+                if (item.reps !== null) selectInputValue(event.currentTarget);
               }}
               onClick={(event) => {
-                if (item.reps !== null) event.currentTarget.select();
+                if (item.reps !== null) selectInputValue(event.currentTarget);
               }}
               onChange={(event) =>
                 onUpdateSet(item.key, { reps: numberOrNull(event.target.value) })
@@ -7162,7 +7238,7 @@ function MovementCard({
         <p className="movement-rep-target">
           {progressionHint(
             movement.repRange,
-            progressionTarget(movement.repRange, history[0]?.sets ?? [], weightUnit),
+            progressionTarget(movement.repRange, lastSessionSets, weightUnit),
             weightUnit,
           )}
         </p>

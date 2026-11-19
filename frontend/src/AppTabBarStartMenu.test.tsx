@@ -105,6 +105,18 @@ describe('Start menu', () => {
     expect(container.querySelector('.start-menu-detail')).toBeNull();
   });
 
+  it('hides Up next when there is no training day to start, such as on a rest day', async () => {
+    startMenu = { ...startMenu, upNextLabel: null, onUpNext: null };
+    await act(async () => render());
+    await act(async () => start().click());
+
+    expect(
+      [...container.querySelectorAll('.start-menu-option')].map(
+        (item) => item.getAttribute('aria-label') ?? item.textContent,
+      ),
+    ).toEqual(['Cardio', 'Empty workout']);
+  });
+
   it('offers exactly three choices: Cardio, Up next and Empty', async () => {
     await act(async () => start().click());
     expect(

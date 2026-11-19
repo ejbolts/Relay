@@ -3785,8 +3785,25 @@ describe('inactive workout suggestions', () => {
     expect(window.location.hash).toBe('#dashboard');
     expect(inactivePrompt()?.textContent).toContain('Unfinished workout');
     expect(inactivePrompt()?.textContent).toContain('Recovery workout');
-    expect(inactivePrompt()?.textContent).toContain('1 set logged');
+    expect(inactivePrompt()?.textContent?.replace(/\u00a0/g, ' ')).toContain('1 set logged');
     expectPreserved(draft);
+  });
+
+  it('saves a workout left running as ending at its last activity, not the cutoff', async () => {
+    window.history.replaceState(null, '', '#dashboard');
+    const draft = expiredSuggestions(true);
+    draft.lastActiveAt = draft.startedAt + 25 * 60_000;
+    writeActiveWorkoutDraft(draft);
+    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    await mount();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    const ended = new Date(draft.lastActiveAt).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    expect(inactivePrompt()?.textContent?.replace(/\u00a0/g, ' ')).toContain(`ended ${ended}`);
+    await chooseInactive('Save workout');
+    expect(vi.mocked(api.createWorkout).mock.lastCall![0]).toMatchObject({ duration_minutes: 25 });
   });
 
   it('prepares for auto-save exactly what Save in the prompt saves, only while it is on', async () => {

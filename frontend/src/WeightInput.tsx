@@ -1,4 +1,5 @@
 import { useState, type InputHTMLAttributes } from 'react';
+import { selectInputValue } from './selectInputValue';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { weightInputKg, weightInputValue, type WeightUnit } from './weightUnits';
 
@@ -28,11 +29,11 @@ export function WeightInput({
       value={currentDraft ? currentDraft.value : weightInputValue(weightKg, unit)}
       onFocus={(event) => {
         setDraft({ value: event.currentTarget.value, unit, kg: weightKg });
-        if (selectOnFocus && weightKg !== null) event.currentTarget.select();
+        if (selectOnFocus && weightKg !== null) selectInputValue(event.currentTarget);
         props.onFocus?.(event);
       }}
       onClick={(event) => {
-        if (selectOnFocus && weightKg !== null) event.currentTarget.select();
+        if (selectOnFocus && weightKg !== null) selectInputValue(event.currentTarget);
         props.onClick?.(event);
       }}
       onChange={(event) => {
