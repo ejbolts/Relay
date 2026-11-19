@@ -2,7 +2,10 @@
 
 Each border is one challenge with a single number to reach. The numbers come from the account's
 whole history (its best streak, its heaviest lift, its biggest cardio week), so a border stays
-earned for as long as the training behind it is logged. Sample workouts never count.
+earned for as long as the training behind it is logged. Sample workouts never count, and
+neither does anything brought in by a CSV import: borders are earned by logging in Relay. Late
+logging is fine, but only two backdated entries a week (saved more than two days after their
+date) count towards borders.
 
 Strength borders have a standard for each sex. That is why an account's sex is fixed once it is
 chosen: it decides which standard the account is measured against. Strength is also where the
@@ -20,7 +23,7 @@ from __future__ import annotations
 import calendar
 import re
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
@@ -35,6 +38,7 @@ from .models import (
     CardioSession,
     Exercise,
     ExerciseKind,
+    ImportBatch,
     PersonalRecord,
     PersonalRecordType,
     SetType,
@@ -557,32 +561,145 @@ def window_days(activity: list[tuple[date, datetime]], window: Window) -> int:
     )
 
 
+def imported_ids(db: Session, user_id: str) -> tuple[set[str], set[str]]:
+    """The workouts and weigh-ins the account brought in by CSV import, which earn no borders."""
+    workouts: set[str] = set()
+    measurements: set[str] = set()
+    for workout_ids, items in db.execute(
+        select(ImportBatch.workout_ids, ImportBatch.measurements).where(
+            ImportBatch.user_id == user_id
+        )
+    ):
+        workouts.update(workout_ids or ())
+        measurements.update(
+            item["id"] for item in items or () if isinstance(item, dict) and item.get("id")
+        )
+    return workouts, measurements
+
+
+# An entry saved more than this many days after its date is backdated.
+BACKDATE_GRACE_DAYS = 2
+# Backdated entries that still count towards borders, per week they were saved in.
+BACKDATES_PER_WEEK = 2
+
+
+def counted_entries(
+    entries: Iterable[tuple[str, date, datetime | None]], week_of: Callable[[date], date]
+) -> set[str]:
+    """The (key, day, saved) entries that count: saved on time, or within the weekly allowance.
+
+    Logging late is allowed, but only a few backdated entries a week earn border progress, in
+    the order they were saved. The rest stay in the account and count for nothing here.
+    """
+    counted: set[str] = set()
+    used: dict[date, int] = defaultdict(int)
+    dated: list[tuple[str, date, datetime]] = []
+    for key, day, saved in entries:
+        if saved is None:
+            counted.add(key)
+        else:
+            dated.append((key, day, _naive_utc(saved)))
+    for key, day, saved in sorted(dated, key=lambda entry: entry[2]):
+        if (saved.date() - day).days <= BACKDATE_GRACE_DAYS:
+            counted.add(key)
+            continue
+        week = week_of(saved.date())
+        if used[week] < BACKDATES_PER_WEEK:
+            used[week] += 1
+            counted.add(key)
+    return counted
+
+
 def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
-    """The account's number for every border metric, from its whole logged history."""
+    """The account's number for every border metric, from the history it logged in Relay."""
     today = today or date.today()
+    imported_workouts, imported_measurements = imported_ids(db, user.id)
     week_start = get_setting(db, user.id, "week_start", "monday")
 
     def week_of(day: date) -> date:
         return start_of_week(day, week_start)
 
-    workouts = db.execute(
-        select(
-            TrainingWorkout.workout_date,
-            TrainingWorkout.start_time,
-            TrainingWorkout.duration_minutes,
-            TrainingWorkout.created_at,
-        ).where(
-            TrainingWorkout.user_id == user.id,
-            TrainingWorkout.is_sample.is_(False),
-            TrainingWorkout.workout_date <= today,
+    workout_rows = [
+        row
+        for row in db.execute(
+            select(
+                TrainingWorkout.id,
+                TrainingWorkout.workout_date,
+                TrainingWorkout.start_time,
+                TrainingWorkout.duration_minutes,
+                TrainingWorkout.created_at,
+            ).where(
+                TrainingWorkout.user_id == user.id,
+                TrainingWorkout.is_sample.is_(False),
+                TrainingWorkout.workout_date <= today,
+            )
+        )
+        if row.id not in imported_workouts
+    ]
+    all_cardio = db.scalars(
+        select(CardioSession)
+        .outerjoin(TrainingWorkout, TrainingWorkout.id == CardioSession.source_workout_id)
+        .where(
+            CardioSession.user_id == user.id,
+            CardioSession.session_date <= today,
+            or_(
+                CardioSession.source_workout_id.is_(None),
+                TrainingWorkout.is_sample.is_(False),
+            ),
         )
     ).all()
+    weigh_in_rows = [
+        row
+        for row in db.execute(
+            select(
+                BodyMeasurement.id, BodyMeasurement.measurement_date, BodyMeasurement.created_at
+            ).where(
+                BodyMeasurement.user_id == user.id,
+                BodyMeasurement.is_sample.is_(False),
+                BodyMeasurement.measurement_date <= today,
+            )
+        )
+        if row.id not in imported_measurements
+    ]
+    # Workouts, cardio of its own and weigh-ins share the weekly allowance for backdated entries.
+    counted = counted_entries(
+        [
+            *((f"w{row.id}", row.workout_date, row.created_at) for row in workout_rows),
+            *(
+                (f"c{session.id}", session.session_date, session.created_at)
+                for session in all_cardio
+                if session.source_workout_id is None
+            ),
+            *((f"m{row.id}", row.measurement_date, row.created_at) for row in weigh_in_rows),
+        ],
+        week_of,
+    )
+    skipped_workouts = imported_workouts | {
+        row.id for row in workout_rows if f"w{row.id}" not in counted
+    }
+    workouts = [
+        (row.workout_date, row.start_time, row.duration_minutes, row.created_at)
+        for row in workout_rows
+        if row.id not in skipped_workouts
+    ]
+    # Cardio a skipped workout created earns nothing; cardio of its own needs its own place.
+    cardio = [
+        session
+        for session in all_cardio
+        if (
+            session.source_workout_id not in skipped_workouts
+            if session.source_workout_id
+            else f"c{session.id}" in counted
+        )
+    ]
+    weigh_in_days = [row.measurement_date for row in weigh_in_rows if f"m{row.id}" in counted]
     training_days = {day for day, _, _, _ in workouts}
     starts = [start for _, start, _, _ in workouts if start is not None]
 
     # Completed working sets of strength exercises: what counts as lifting.
     sets = db.execute(
         select(
+            TrainingWorkout.id,
             TrainingWorkout.workout_date,
             Exercise.name,
             WorkoutSet.weight_kg,
@@ -611,7 +728,9 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     bodyweight_by_name: dict[str, bool] = {}
     bodyweight_reps = 0
     added_sets: list[tuple[date, float, float | None]] = []
-    for day, name, weight, reps, set_body_weight in sets:
+    for workout_id, day, name, weight, reps, set_body_weight in sets:
+        if workout_id in skipped_workouts:
+            continue
         lifting_days.add(day)
         if name not in bodyweight_by_name:
             bodyweight_by_name[name] = canonical_exercise_name(name).casefold() in BODYWEIGHT_MOVES
@@ -636,18 +755,6 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
             if body_weight:
                 bodyweight_added = max(bodyweight_added, weight / body_weight * 100)
 
-    cardio = db.scalars(
-        select(CardioSession)
-        .outerjoin(TrainingWorkout, TrainingWorkout.id == CardioSession.source_workout_id)
-        .where(
-            CardioSession.user_id == user.id,
-            CardioSession.session_date <= today,
-            or_(
-                CardioSession.source_workout_id.is_(None),
-                TrainingWorkout.is_sample.is_(False),
-            ),
-        )
-    ).all()
     cardio_week_minutes: dict[date, int] = defaultdict(int)
     cardio_month_km: dict[tuple[int, int], float] = defaultdict(float)
     climbed_m = 0.0
@@ -657,16 +764,8 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
         cardio_month_km[(day.year, day.month)] += session.distance_km or 0
         climbed_m += session.effective_elevation_gain_m or 0
 
-    weigh_in_days = db.scalars(
-        select(BodyMeasurement.measurement_date).where(
-            BodyMeasurement.user_id == user.id,
-            BodyMeasurement.is_sample.is_(False),
-            BodyMeasurement.measurement_date <= today,
-        )
-    ).all()
-
     records = db.execute(
-        select(func.count(PersonalRecord.id))
+        select(PersonalRecord.workout_id, func.count(PersonalRecord.id))
         .join(TrainingWorkout, TrainingWorkout.id == PersonalRecord.workout_id)
         .where(
             PersonalRecord.user_id == user.id,
@@ -679,7 +778,7 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
         )
         .group_by(PersonalRecord.workout_id)
     ).all()
-    record_counts = [count for (count,) in records]
+    record_counts = [count for workout_id, count in records if workout_id not in skipped_workouts]
 
     days_per_week: dict[date, int] = defaultdict(int)
     for day in training_days:
