@@ -1581,7 +1581,7 @@ describe('rest time controls', () => {
     expect(bell()?.getAttribute('aria-label')).toBe('Rest complete. Go to Bench press, set 2');
     expect(bell()?.querySelector('.ringing-bell')).not.toBeNull();
     expect(document.querySelector('.rest-complete-pill')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expect(container.querySelector('.logger-screen')?.classList.contains('has-rest-notch')).toBe(
       true,
     );
@@ -2385,7 +2385,7 @@ describe('finishing workouts in the background', () => {
     expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expectPreserved(draft);
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
       true,
@@ -2509,7 +2509,7 @@ describe('finishing workouts in the background', () => {
     );
     await mount();
     await confirmFinish();
-    const toast = () => document.querySelector('.app-notification-toast');
+    const toast = () => document.querySelector('.toast');
     expect(toast()).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
 
@@ -2880,9 +2880,7 @@ describe('durable workout completion', () => {
     expect(vi.mocked(api.createWorkout).mock.calls[1][0]).toEqual(first);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(container.querySelector('.logger-screen')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')?.textContent).not.toContain(
-      'Workout saved',
-    );
+    expect(document.querySelector('.toast')?.textContent).not.toContain('Workout saved');
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
   });
@@ -2910,7 +2908,7 @@ describe('durable workout completion', () => {
     expect(container.querySelector('.logger-screen')).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expect(finishedSave()?.payload.duration_minutes).toBe(45);
     expect(readActiveWorkoutDraft()).toBeNull();
 
@@ -2938,7 +2936,7 @@ describe('durable workout completion', () => {
       'Second workout',
     ]);
     expect(container.querySelector('.pending-workout-save')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
 
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
     vi.mocked(api.createWorkout).mockImplementation(async (payload) => ({
@@ -3370,7 +3368,7 @@ describe('cardio set editing defaults', () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     await confirmFinish();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     // Only Home's brief "Workout saved" toast; no cardio share or zone popup.
     expect(document.body.textContent?.split('Workout saved')).toHaveLength(2);
     expect(document.querySelector('.workout-saved-toast')).not.toBeNull();
@@ -4321,7 +4319,7 @@ describe('live muscle totals while logging', () => {
     );
     await confirmFinish();
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     let refresh!: (data: DashboardData) => void;
     vi.mocked(api.dashboard).mockReturnValueOnce(
@@ -4337,7 +4335,7 @@ describe('live muscle totals while logging', () => {
     expect(readFinishedWorkouts()).toEqual([]);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     await act(async () =>
       refresh({
@@ -4350,7 +4348,7 @@ describe('live muscle totals while logging', () => {
       } as unknown as DashboardData),
     );
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.notification-toast-action')).toBeNull();
+    expect(document.querySelector('.toast-action')).toBeNull();
   });
 
   it('updates Home immediately, opens the live source, and reverses unticking', async () => {
@@ -4526,8 +4524,8 @@ describe('navigation while saving an old workout', () => {
     await navigateTo('Body');
     await act(async () => finish(remoteWorkout('Saved changes')));
     expect(window.location.hash).toBe('#body');
-    expect(document.querySelector('.notification-toast-action')).toBeNull();
-    expect(document.querySelector('.undo-toast')?.textContent).toContain('Workout saved');
+    expect(document.querySelector('.toast-action')).toBeNull();
+    expect(document.querySelector('.toast')?.textContent).toContain('Workout saved');
   });
   it('keeps the editor mounted for a failed edit while another screen stays usable', async () => {
     let fail!: (error: Error) => void;
@@ -4542,9 +4540,7 @@ describe('navigation while saving an old workout', () => {
     await act(async () => fail(new Error('Save failed; retry.')));
     expect(window.location.hash).toBe('#body');
     expect(container.querySelector('.logger-screen')?.textContent).toContain('Save failed; retry.');
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'could not be saved',
-    );
+    expect(document.querySelector('.toast')?.textContent).toContain('could not be saved');
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     await navigateTo('Training');
     expect(window.location.hash).toBe('#training');

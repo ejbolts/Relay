@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { App } from './App';
 import { api } from './api';
 import { optimisePhoto } from './photoOptimise';
+import { TOAST_MS } from './Toast';
 import { localDate } from './utils';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { readActiveWorkoutDraft, writeActiveWorkoutDraft } from './workoutDraft';
@@ -392,9 +393,7 @@ describe('saving and pinning a machine photo while logging', () => {
       homeGym.id,
     );
     expect(container.querySelector('.machine-settings')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Machine settings saved',
-    );
+    expect(document.querySelector('.toast')?.textContent).toContain('Machine settings saved');
   });
   it('shows when each saved machine was last used', async () => {
     await act(async () => root.render(<App />));
@@ -421,7 +420,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await act(async () => root.render(<App />));
     await click(button(`Expand ${homeGym.caption}`));
     const input = container.querySelector<HTMLInputElement>('.photo-detail-caption input')!;
-    const notice = () => document.querySelector('.app-notification-toast');
+    const notice = () => document.querySelector('.toast');
 
     await type(input, '  Hammer leg press  ');
     input.focus();
@@ -433,10 +432,10 @@ describe('saving and pinning a machine photo while logging', () => {
     );
     expect(document.activeElement).toBe(input);
 
-    await act(async () => vi.advanceTimersByTime(4000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1000));
     await type(input, 'Hammer leg press 2');
     await click(button('Save name'));
-    await act(async () => vi.advanceTimersByTime(7999));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1));
     expect(notice()).not.toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
     expect(notice()).toBeNull();
@@ -461,10 +460,10 @@ describe('saving and pinning a machine photo while logging', () => {
     await type(input, 'Hammer leg press');
     await click(button('Save name'));
     expect(button('Save name').disabled).toBe(true);
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
 
     await act(async () => rejectSave(new Error('Could not save machine name.')));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expect(container.querySelector('.photo-detail [role="alert"]')?.textContent).toContain(
       'Could not save machine name.',
     );
@@ -479,7 +478,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await type(container.querySelector<HTMLInputElement>('.photo-detail-caption input')!, '   ');
     await click(button('Save name'));
     expect(api.updateMachinePhoto).not.toHaveBeenCalled();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
   });
 
   it('explains deletion from saved workouts and lets the user cancel', async () => {

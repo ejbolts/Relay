@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { HeadToHeadCard, LiftLeaderboardCard } from './LiftComparison';
 import type { LiftBest, LiftComparison, LiftComparisons, LiftRanking } from './types';
+import { GOAL_UNDO_MS } from './useGoalRemoval';
 
 const sam = { id: 'sam', display_name: 'Sam', profile_photo_url: null };
 const alex = { id: 'alex', display_name: 'Alex', profile_photo_url: null };
@@ -356,7 +357,7 @@ it('unselects every lift at once, with Undo for a few seconds', async () => {
 
   // The offer goes after a few seconds, or as soon as you tick another lift.
   await click(unselect);
-  await act(async () => vi.advanceTimersByTime(4000));
+  await act(async () => vi.advanceTimersByTime(GOAL_UNDO_MS));
   expect(sheet.querySelector('.lift-picker-toast')).toBeNull();
   await click(option(sheet, 'Row'));
   await click(unselect);
