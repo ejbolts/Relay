@@ -335,6 +335,52 @@ it('keeps a saved match when Normalise is switched back on', async () => {
   expect(field('Matching weight on Hammer for Life Fitness').value).toBe('100');
 });
 
+it('slides the preview down, and a swipe or tap on its handle minimises and restores it', async () => {
+  // jsdom lays nothing out, so give the chart a height to drag against.
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(160);
+  vi.mocked(api.exerciseProgress).mockResolvedValue(spreadProgress(spread));
+  vi.mocked(api.getWeightMapping).mockResolvedValue(threeMachines);
+  await remount(<Screen />);
+  await switchOn();
+  const preview = () => document.querySelector<HTMLElement>('.machine-weights-preview')!;
+  const body = () => preview().querySelector('.machine-weights-preview-body')!;
+  const openness = () => preview().style.getPropertyValue('--open');
+  // It starts shut and slides open on the next frames.
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+  expect(openness()).toBe('1');
+  expect(preview().style.getPropertyValue('--full')).toBe('160px');
+
+  const handle = button('Minimise preview');
+  expect(handle.getAttribute('aria-expanded')).toBe('true');
+  await click(handle);
+  expect(handle.getAttribute('aria-expanded')).toBe('false');
+  expect(handle.getAttribute('aria-label')).toBe('Show preview');
+  expect(body().getAttribute('aria-hidden')).toBe('true');
+  expect(openness()).toBe('0');
+  await click(handle);
+  expect(handle.getAttribute('aria-expanded')).toBe('true');
+
+  const pointer = (type: string, clientY: number) =>
+    act(async () => {
+      handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY }));
+    });
+  // Swiping up follows the finger, then settles shut; the click after the drag is not a tap.
+  await pointer('pointerdown', 300);
+  await pointer('pointermove', 200);
+  expect(preview().classList.contains('is-dragging')).toBe(true);
+  expect(openness()).toBe('0.375');
+  await pointer('pointerup', 200);
+  await click(handle);
+  expect(preview().classList.contains('is-dragging')).toBe(false);
+  expect(handle.getAttribute('aria-expanded')).toBe('false');
+  // Swiping down brings it back.
+  await pointer('pointerdown', 200);
+  await pointer('pointermove', 330);
+  await pointer('pointerup', 330);
+  expect(handle.getAttribute('aria-expanded')).toBe('true');
+  expect(openness()).toBe('1');
+});
+
 it('works matches out from the whole history while Progress shows one training block', async () => {
   const block: TrainingBlock = {
     id: 'b2',
