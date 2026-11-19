@@ -143,15 +143,17 @@ describe('release announcements', () => {
   });
 
   it('accepts a silent patch only with held-back changes and announced notes from its own minor', () => {
+    // The shipped release.json may itself be a silent patch; start from its notes alone.
+    const announced = { ...metadata, notesVersion: undefined, silentChanges: undefined };
     const silent = {
-      ...metadata,
+      ...announced,
       version: '2.4.3',
       notesVersion: '2.4.1',
       silentChanges: ['**Exercises:** The help button is back.'],
     };
     expect(parseRelease(silent)).toEqual(silent);
     expect(announcedVersion(parseRelease(silent)!)).toBe('2.4.1');
-    expect(announcedVersion(parseRelease({ ...metadata, version: '2.4.1' })!)).toBe('2.4.1');
+    expect(announcedVersion(parseRelease({ ...announced, version: '2.4.1' })!)).toBe('2.4.1');
     const notes = announcedRelease(parseRelease(silent)!);
     expect(notes.version).toBe('2.4.1');
     expect(notes).not.toHaveProperty('notesVersion');

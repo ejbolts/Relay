@@ -1,5 +1,6 @@
 {
-  "version": "1.3.0",
+  "version": "1.3.1",
+  "notesVersion": "1.3.0",
   "date": "2026-11-19",
   "title": "See how you measure up",
   "summary": "Compare lifts with friends, track your body and plan your training in blocks.",
@@ -43,6 +44,13 @@
     "**Offline and updates:** A small offline pill appears only after a lasting outage; updates refresh safely around unsynced work.",
     "**Account recovery:** Tap Forgot password? to get a temporary password from your admin; an eye icon shows or hides your password.",
     "**Cardio:** Auto MET and elevation replace MET-minutes, Distance adds Rowing and linked sessions say With workout."
+  ],
+  "silentChanges": [
+    "**Fresh starts:** Add a fresh start in Settings > Training to earn PRs again after a break or injury; all-time records stay.",
+    "**Muscle goals:** Tap a muscle in Sets per muscle on Home, then Edit goal to change its weekly target.",
+    "**Calendar:** Today's outline pulses gently so it's easier to find.",
+    "**Exercises:** The ? muscle set credits button is back on each exercise.",
+    "**Updates:** Signing in applies a waiting app update straight away."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
   "video": {

@@ -334,6 +334,85 @@ export async function refreshApp(): Promise<void> {
   }
 }
 
+/** How long signing in waits for an update to download and start before opening this release. */
+export const SIGN_IN_UPDATE_TIMEOUT_MS = 8000;
+/** How long signing in waits for a notification permission prompt before giving up on updating. */
+export const SIGN_IN_PROMPT_TIMEOUT_MS = 60_000;
+
+function withinDeadline<T>(task: Promise<T>, milliseconds: number): Promise<T> {
+  // A late failure after the deadline must not surface as an unhandled rejection.
+  task.catch(() => undefined);
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('Timed out')), milliseconds);
+    task.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (reason: unknown) => {
+        window.clearTimeout(timer);
+        reject(reason);
+      },
+    );
+  });
+}
+
+/**
+ * Signing in opens nothing yet, so it is a safe moment to move to the newest release. When an
+ * update is ready, or finishes downloading within a few seconds, it activates and the page
+ * reloads straight into the new version, already signed in. Otherwise the current release opens
+ * as usual and the refresh arrow stays available. Resolves true when the page is reloading.
+ *
+ * `promptSettled` is a notification permission prompt opened by the same tap; the page never
+ * reloads while it is still waiting for an answer.
+ */
+export async function applyUpdateOnSignIn({
+  promptSettled = Promise.resolve(),
+  timeoutMs = SIGN_IN_UPDATE_TIMEOUT_MS,
+  promptTimeoutMs = SIGN_IN_PROMPT_TIMEOUT_MS,
+}: {
+  promptSettled?: Promise<unknown>;
+  timeoutMs?: number;
+  promptTimeoutMs?: number;
+} = {}): Promise<boolean> {
+  if (!supportsWorkers() || refreshing || applyingAutomatically) return false;
+  let reloading = false;
+  const attempt = (async () => {
+    const deadline = Date.now() + timeoutMs;
+    const remaining = () => Math.max(0, deadline - Date.now());
+    const current = await withinDeadline(ensureRegistration(), remaining());
+    if (!current) return;
+    if (!updateReady()) {
+      if (!navigator.onLine) return;
+      await withinDeadline(checkForAppUpdate(), remaining());
+      const installing = current.installing;
+      if (!current.waiting && installing) {
+        await withinDeadline(waitForInstallation(installing), remaining());
+      }
+    }
+    if (!updateReady()) return;
+    await withinDeadline(promptSettled, promptTimeoutMs);
+    if (pendingWrites > 0 || !refreshAllowed(true)) return;
+    const waiting = current.waiting;
+    // A downloaded worker activates in moments; allow that even after a long check or prompt.
+    if (waiting) {
+      await withinDeadline(activateWaitingWorker(waiting), Math.max(remaining(), 3000));
+    }
+    reloading = true;
+    window.location.reload();
+  })();
+  // Holding the refresh slot keeps the automatic and manual paths from reloading at the same time.
+  refreshing = attempt;
+  try {
+    await attempt;
+  } catch {
+    // A slow or failed update never stands in the way of signing in.
+  } finally {
+    if (refreshing === attempt) refreshing = undefined;
+  }
+  return reloading;
+}
+
 export function registerAppUpdates() {
   if (!supportsWorkers() || started) return;
   started = true;
