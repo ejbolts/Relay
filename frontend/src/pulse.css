@@ -45,6 +45,19 @@
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
   --p-danger: #e66767;
+  /* Filled buttons: text on the accent or danger fill, and a red that keeps white text readable. */
+  --p-on-accent: #fff;
+  --p-danger-fill: #c53b3b;
+  --p-on-danger: #fff;
+  --p-focus-ring: var(--p-accent-text);
+  /* Button sizes (buttons.css): small 36px with a 44px hit area, default 44px, large 48px. */
+  --p-button-h-sm: 2.25rem;
+  --p-button-h: 2.75rem;
+  --p-button-h-lg: 3rem;
+  --p-button-h-icon: 2.5rem;
+  --p-button-r-sm: 10px;
+  --p-button-r: 12px;
+  --p-button-r-lg: 14px;
   --p-grid: #22272b;
   --p-axis: #3a4046;
   --p-deemph: #353b41;
@@ -370,8 +383,9 @@ body {
   stroke-width: 2.4;
 }
 
-:where(.tracker-app) :focus-visible {
-  outline: 2px solid var(--p-accent-text);
+/* Dialogs are portalled to <body>, outside .tracker-app, so they are listed too. */
+:where(.tracker-app, .popup-dialog, .notification-dialog) :focus-visible {
+  outline: 2px solid var(--p-focus-ring);
   outline-offset: 2px;
 }
 
@@ -435,39 +449,7 @@ button.pulse-card:hover {
   font-weight: 600;
 }
 
-.pulse-button {
-  min-height: 2.875rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: 0;
-  border-radius: 14px;
-  padding: 0 1rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pulse-button .pulse-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.pulse-button.primary {
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.pulse-button.primary:hover {
-  background: var(--p-accent-hover);
-}
-
-.pulse-button.secondary {
-  background: var(--p-surface-3);
-  color: var(--p-ink);
-}
+/* .pulse-button and its variants live in buttons.css. */
 
 .segmented-control {
   display: flex;
@@ -1629,8 +1611,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .overlay-header-action.delete {
-  border-color: rgb(230 103 103 / 25%);
-  background: rgb(230 103 103 / 12%);
+  border-color: color-mix(in srgb, var(--p-danger) 25%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 12%, transparent);
   color: var(--p-danger);
 }
 
@@ -2284,7 +2266,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   margin-top: 0.875rem;
 }
 
-.history-screen .workout-actions button {
+.history-screen .workout-actions button:where(:not(.pulse-button)) {
   min-height: 2.5rem;
   flex: 1;
   border: 1px solid var(--p-line-strong);
@@ -5298,7 +5280,8 @@ small.custom-exercise-label,
 }
 
 .workout-discard-dialog .popup-dialog-actions .discard-workout-button {
-  background: var(--p-danger);
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
 }
 
 .inactive-workout-dialog > p {

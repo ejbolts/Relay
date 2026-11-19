@@ -47,7 +47,8 @@
   border-color: transparent;
 }
 .routine-confirm .popup-dialog-actions .routine-danger-action {
-  background: var(--p-danger);
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
 }
 .routine-panel .routine-link {
   display: inline-flex;
