@@ -424,6 +424,7 @@
 }
 
 /* Colour: danger (the final confirm of a destructive action). */
+.sign-out-dialog > .popup-dialog-actions .popup-primary-action,
 .calendar-create-actions > .cancel-current-workout-button,
 .settings-actions .inline-confirmation > button:first-child:where(:not(.pulse-button)),
 .history-screen

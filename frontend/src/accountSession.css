@@ -39,6 +39,5 @@
 }
 
 .sign-out-dialog > .popup-dialog-actions .popup-primary-action {
-  background: var(--p-danger-fill);
-  color: var(--p-on-danger);
+  background: var(--p-danger);
 }
