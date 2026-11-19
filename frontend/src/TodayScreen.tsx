@@ -1001,7 +1001,7 @@ function CheckInStatus({
 }
 
 export function DashboardQuickBodyweight({
-  mode = 'combined',
+  mode: configuredMode = 'combined',
   busy = false,
   undoVersion = 0,
   undoVersionRef,
@@ -1028,6 +1028,11 @@ export function DashboardQuickBodyweight({
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
 }) {
   const weightUnit = useWeightUnit();
+  // Body fat is stored on a weigh-in, so until today's weight is in, Body fat only asks for both.
+  const mode: BodyCheckInMode =
+    configuredMode === 'fat' && onSaveBodyFat && todayBodyweight === null
+      ? 'combined-single'
+      : configuredMode;
   const initialWeight = todayBodyweight ?? latestBodyweight;
   const titleId = useId();
   const weightFormId = useId();

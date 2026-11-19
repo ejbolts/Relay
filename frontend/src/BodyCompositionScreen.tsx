@@ -1,4 +1,5 @@
 import { BodyWeightTip } from './FeatureDiscoveryTips';
+import { BodyHistoryRowMenu } from './BodyHistoryRowMenu';
 import { BodySizesCard } from './BodySizesCard';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -6,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
-import { formatWeight, weightFromKg, weightInputValue } from './weightUnits';
+import { formatWeight, weightFromKg } from './weightUnits';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
 import { clipBodyWeightGoalPath, filterMeasurementsByRange } from './bodyTrend';
 import { useRangePinchZoom } from './rangePinchZoom';
@@ -25,7 +26,6 @@ import type { BodyGoalKind, BodyHistoryPeriod } from './bodyMeasurementHistory';
 import { BodyHistoryGoalDivider, BodyHistoryWeightChange } from './BodyHistoryWeightChange';
 import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
 import { DEFAULT_BODY_TREND_PREFERENCE, type BodyTrendPreference } from './bodyTrendPreference';
-import { InlineConfirmButton } from './InlineConfirmButton';
 import { PopupDialog } from './PopupDialog';
 import { useSlidingIndicator } from './motionHooks';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
@@ -38,8 +38,8 @@ import { localDate } from './utils';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import { HISTORY_PAGE_SIZE, RANGE_LABELS, prettyDate } from './appShared';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
-
-const IMPORTED_BODYWEIGHT_NOTE = 'Imported from workout CSV.';
+import { IMPORTED_BODYWEIGHT_NOTE, WeighInDialog } from './WeighInDialog';
+import './bodyScreen.css';
 
 export function BodyCompositionScreen({
   dataRevision = null,
@@ -72,13 +72,10 @@ export function BodyCompositionScreen({
 }) {
   const weightUnit = useWeightUnit();
   const [goalsReady, setGoalsReady] = useState(false);
-  const [measurementDate, setMeasurementDate] = useState(localDate());
   const [entryOpen, setEntryOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
-  const [weight, setWeight] = useState<number | null>(null);
-  const [bodyFat, setBodyFat] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
+  // The goal the dialog edits; null while it adds a new goal.
+  const [editingGoal, setEditingGoal] = useState<BodyWeightGoal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [goals, setGoals] = useState<BodyWeightGoal[]>([]);
   const [goalRemovalError, setGoalRemovalError] = useState<string | null>(null);
@@ -134,6 +131,8 @@ export function BodyCompositionScreen({
     checkInPage * HISTORY_PAGE_SIZE,
   );
   const latest = measurements[0];
+  // The newest reading, which may come from an earlier check-in than the latest weigh-in.
+  const latestBodyFat = measurements.find((item) => item.body_fat_pct !== null);
   const targetWeight = goalTarget;
   const hasValidTarget =
     targetWeight !== null &&
@@ -149,6 +148,7 @@ export function BodyCompositionScreen({
   const goalReached = weightGoalReached(activeGoal, latest?.weight_kg);
   const openMaintenanceGoal = useCallback(() => {
     setError(null);
+    setEditingGoal(null);
     setGoalKind('maintain');
     setGoalMinimum(null);
     setGoalMaximum(null);
@@ -192,21 +192,62 @@ export function BodyCompositionScreen({
       <SwipeToDeleteSetRow
         className="body-goal-swipe"
         label={`goal: ${bodyGoalName(goal, weightUnit)}`}
-        onDelete={() => {
-          const index = goals.findIndex((item) => item.id === goal.id);
-          if (index < 0) return;
-          setGoalRemovalError(null);
-          setGoals((current) => current.filter((item) => item.id !== goal.id));
-          goalRemoval.start(goal, index);
-        }}
+        onDelete={() => removeGoal(goal)}
       >
         <BodyHistoryGoalDivider goal={goal} unit={weightUnit} />
       </SwipeToDeleteSetRow>
     );
   }
 
+  /** Removes a goal at once, with Undo in a popup until the delete is sent. */
+  function removeGoal(goal: BodyWeightGoal) {
+    const index = goals.findIndex((item) => item.id === goal.id);
+    if (index < 0) return;
+    setGoalRemovalError(null);
+    setGoals((current) => current.filter((item) => item.id !== goal.id));
+    goalRemoval.start(goal, index);
+  }
+
   function chooseGoalKind(kind: BodyGoalKind) {
     setGoalKind(kind);
+  }
+
+  /** Opens the goal dialog empty, to add a goal that replaces the active one. */
+  function openNewGoal() {
+    setError(null);
+    if (editingGoal) {
+      setEditingGoal(null);
+      setGoalTarget(null);
+      setGoalDate('');
+    }
+    setGoalKind(activeGoal ? bodyGoalKind(activeGoal) : 'loss');
+    setGoalMinimum(activeGoal?.maintenance_min_kg ?? null);
+    setGoalMaximum(activeGoal?.maintenance_max_kg ?? null);
+    setGoalOpen(true);
+    setEntryOpen(false);
+  }
+
+  /** Opens the goal dialog filled in with a goal, to change its target or date. */
+  function openGoalEdit(goal: BodyWeightGoal) {
+    setError(null);
+    setEditingGoal(goal);
+    setGoalKind(bodyGoalKind(goal));
+    setGoalTarget(goal.target_weight_kg);
+    setGoalMinimum(goal.maintenance_min_kg ?? null);
+    setGoalMaximum(goal.maintenance_max_kg ?? null);
+    setGoalDate(goal.target_date);
+    setGoalOpen(true);
+    setEntryOpen(false);
+  }
+
+  function closeGoal() {
+    setGoalOpen(false);
+    if (editingGoal) {
+      // The next new goal starts empty, not with the edited goal's values.
+      setEditingGoal(null);
+      setGoalTarget(null);
+      setGoalDate('');
+    }
   }
 
   async function saveGoal() {
@@ -220,37 +261,46 @@ export function BodyCompositionScreen({
       );
       return;
     }
-    if (!latest || (goalKind !== 'maintain' && !hasValidTarget) || !goalDate) {
+    if ((!latest && !editingGoal) || (goalKind !== 'maintain' && !hasValidTarget) || !goalDate) {
       setError('Log a current weight, target weight, and target date first.');
       return;
     }
     const savedTarget =
       range && goalKind === 'maintain' ? (range[0] + range[1]) / 2 : targetWeight!;
+    // An edited goal keeps where it started; a new one starts from the latest weigh-in.
+    const startWeight = editingGoal ? editingGoal.start_weight_kg : latest!.weight_kg;
     const direction = bodyGoalKind({
-      start_weight_kg: latest.weight_kg,
+      start_weight_kg: startWeight,
       target_weight_kg: targetWeight!,
     });
     if (goalKind !== 'maintain' && direction !== goalKind) {
       setError(
-        `For a weight-${goalKind} goal, choose a target ${goalKind === 'loss' ? 'below' : 'above'} your current ${formatWeight(latest.weight_kg, weightUnit)}.`,
+        `For a weight-${goalKind} goal, choose a target ${goalKind === 'loss' ? 'below' : 'above'} ${editingGoal ? 'its starting' : 'your current'} ${formatWeight(startWeight, weightUnit)}.`,
       );
       return;
     }
     setSavingGoal(true);
     setError(null);
     try {
-      const goal = await api.createBodyWeightGoal({
-        start_date: localDate(),
+      const payload = {
+        start_date: editingGoal ? editingGoal.start_date : localDate(),
         target_date: goalDate,
-        start_weight_kg: goalKind === 'maintain' ? savedTarget : latest.weight_kg,
+        start_weight_kg: goalKind === 'maintain' ? savedTarget : startWeight,
         target_weight_kg: savedTarget,
         ...(goalKind === 'maintain' && range
           ? { maintenance_min_kg: range[0], maintenance_max_kg: range[1] }
           : {}),
         active: true,
-      });
-      setGoals((current) => [goal, ...current.map((item) => ({ ...item, active: false }))]);
+      };
+      if (editingGoal) {
+        const goal = await api.updateBodyWeightGoal(editingGoal.id, payload);
+        setGoals((current) => current.map((item) => (item.id === goal.id ? goal : item)));
+      } else {
+        const goal = await api.createBodyWeightGoal(payload);
+        setGoals((current) => [goal, ...current.map((item) => ({ ...item, active: false }))]);
+      }
       await onDataChange();
+      setEditingGoal(null);
       setGoalTarget(null);
       setGoalMinimum(null);
       setGoalMaximum(null);
@@ -260,37 +310,6 @@ export function BodyCompositionScreen({
       setError(saveError instanceof Error ? saveError.message : 'Could not save this target.');
     } finally {
       setSavingGoal(false);
-    }
-  }
-
-  async function submitMeasurement() {
-    const weightValue = weight;
-    if (
-      weightValue === null ||
-      !Number.isFinite(weightValue) ||
-      weightValue <= 0 ||
-      weightValue > 500
-    ) {
-      setError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave({
-        measurement_date: measurementDate,
-        weight_kg: weightValue,
-        body_fat_pct: bodyFat ? Number(bodyFat) : null,
-        notes: notes.trim() || null,
-      });
-      setWeight(null);
-      setBodyFat('');
-      setNotes('');
-      setEntryOpen(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save this measurement.');
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -360,22 +379,35 @@ export function BodyCompositionScreen({
           <span>Bodyweight</span>
           <strong>{latest ? formatWeight(latest.weight_kg, weightUnit) : '–'}</strong>
         </div>
-        <div>
-          <span>
-            {activeGoal
-              ? `${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} goal`
-              : 'Weight goal'}
-          </span>
-          <strong>{activeGoal ? bodyGoalTarget(activeGoal, weightUnit) : '–'}</strong>
-          {activeGoal && latest && maintenanceRange(activeGoal) && (
-            <small>{maintenanceStatus(activeGoal, latest.weight_kg)}</small>
-          )}
-        </div>
+        {activeGoal ? (
+          <div className="body-goal-tile">
+            <button type="button" onClick={() => openGoalEdit(activeGoal)}>
+              <span>
+                {`${new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(`${activeGoal.target_date}T12:00:00`))} goal`}
+                <Icon name="chevron-right" />
+              </span>
+              <strong>{bodyGoalTarget(activeGoal, weightUnit)}</strong>
+            </button>
+            {latest && maintenanceRange(activeGoal) && (
+              <small>{maintenanceStatus(activeGoal, latest.weight_kg)}</small>
+            )}
+          </div>
+        ) : (
+          <div>
+            <span>Weight goal</span>
+            <strong>–</strong>
+          </div>
+        )}
         <div>
           <span>Body fat</span>
-          <strong>
-            {latest && latest.body_fat_pct !== null ? `${latest.body_fat_pct}%` : '–'}
-          </strong>
+          <strong>{latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}</strong>
+          {latestBodyFat && latestBodyFat !== latest && (
+            <small>
+              <time dateTime={latestBodyFat.measurement_date}>
+                {dayMonth(latestBodyFat.measurement_date)}
+              </time>
+            </small>
+          )}
         </div>
       </div>
 
@@ -384,7 +416,6 @@ export function BodyCompositionScreen({
           className={entryOpen ? 'active' : ''}
           type="button"
           onClick={() => {
-            setError(null);
             setEntryOpen(true);
             setGoalOpen(false);
           }}
@@ -392,16 +423,9 @@ export function BodyCompositionScreen({
           Log weigh-in
         </button>
         <button
-          className={goalOpen ? 'active' : ''}
+          className={goalOpen && !editingGoal ? 'active' : ''}
           type="button"
-          onClick={() => {
-            setError(null);
-            setGoalKind(activeGoal ? bodyGoalKind(activeGoal) : 'loss');
-            setGoalMinimum(activeGoal?.maintenance_min_kg ?? null);
-            setGoalMaximum(activeGoal?.maintenance_max_kg ?? null);
-            setGoalOpen(true);
-            setEntryOpen(false);
-          }}
+          onClick={openNewGoal}
         >
           {activeGoal ? 'New goal' : 'Set a goal'}
         </button>
@@ -420,10 +444,10 @@ export function BodyCompositionScreen({
 
       {goalOpen && (
         <PopupDialog
-          title="Add bodyweight goal"
+          title={editingGoal ? 'Edit goal' : 'Add bodyweight goal'}
           kicker="GOAL"
           className="body-goal-popup"
-          onClose={() => setGoalOpen(false)}
+          onClose={closeGoal}
         >
           <form
             className="body-goal-form"
@@ -461,26 +485,29 @@ export function BodyCompositionScreen({
                 </div>
               </div>
             )}
-            <div className="segmented-control body-goal-kind" role="radiogroup" aria-label="Goal">
-              {(
-                [
-                  ['loss', 'Lose'],
-                  ['gain', 'Gain'],
-                  ['maintain', 'Maintain'],
-                ] as const
-              ).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  role="radio"
-                  aria-checked={goalKind === kind}
-                  className={goalKind === kind ? 'active' : ''}
-                  onClick={() => chooseGoalKind(kind)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* An edit changes the target and date; a new direction is a new goal. */}
+            {!editingGoal && (
+              <div className="segmented-control body-goal-kind" role="radiogroup" aria-label="Goal">
+                {(
+                  [
+                    ['loss', 'Lose'],
+                    ['gain', 'Gain'],
+                    ['maintain', 'Maintain'],
+                  ] as const
+                ).map(([kind, label]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    role="radio"
+                    aria-checked={goalKind === kind}
+                    className={goalKind === kind ? 'active' : ''}
+                    onClick={() => chooseGoalKind(kind)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="goal-entry-fields">
               {goalKind === 'maintain' ? (
                 <>
@@ -510,11 +537,25 @@ export function BodyCompositionScreen({
             </div>
             {error && <p className="inline-error">{error}</p>}
             <footer className="popup-dialog-actions">
-              <button type="button" disabled={savingGoal} onClick={() => setGoalOpen(false)}>
+              {editingGoal && (
+                <button
+                  type="button"
+                  className="body-goal-remove"
+                  disabled={savingGoal}
+                  onClick={() => {
+                    const goal = editingGoal;
+                    closeGoal();
+                    removeGoal(goal);
+                  }}
+                >
+                  Remove goal
+                </button>
+              )}
+              <button type="button" disabled={savingGoal} onClick={closeGoal}>
                 Cancel
               </button>
               <button type="submit" className="popup-primary-action" disabled={savingGoal}>
-                {savingGoal ? 'Saving…' : 'Set goal'}
+                {savingGoal ? 'Saving…' : editingGoal ? 'Save goal' : 'Set goal'}
               </button>
             </footer>
           </form>
@@ -522,68 +563,11 @@ export function BodyCompositionScreen({
       )}
 
       {entryOpen && (
-        <PopupDialog
-          title="Log weigh-in"
-          kicker="CHECK-IN"
-          className="body-entry-popup"
+        <WeighInDialog
+          measurements={measurements}
+          onSave={onSave}
           onClose={() => setEntryOpen(false)}
-        >
-          <form
-            className="body-entry-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitMeasurement();
-            }}
-          >
-            <div className="body-entry-fields">
-              <label>
-                Date
-                <input
-                  type="date"
-                  value={measurementDate}
-                  onChange={(event) => setMeasurementDate(event.target.value)}
-                />
-              </label>
-              <label>
-                Weight ({weightUnit})
-                <WeightInput
-                  autoFocus
-                  weightKg={weight}
-                  onWeightChange={setWeight}
-                  placeholder={weightInputValue(measurements[0]?.weight_kg ?? 88, weightUnit)}
-                />
-              </label>
-              <label>
-                Body fat %
-                <input
-                  inputMode="decimal"
-                  type="number"
-                  min="1"
-                  max="70"
-                  step="0.1"
-                  value={bodyFat}
-                  onChange={(event) => setBodyFat(event.target.value)}
-                  placeholder="Optional"
-                />
-              </label>
-            </div>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Conditions or anything worth remembering…"
-              rows={2}
-            />
-            {error && <p className="inline-error">{error}</p>}
-            <footer className="popup-dialog-actions">
-              <button type="button" disabled={saving} onClick={() => setEntryOpen(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={saving}>
-                {saving ? 'Saving…' : 'Save check-in'}
-              </button>
-            </footer>
-          </form>
-        </PopupDialog>
+        />
       )}
 
       <div
@@ -673,21 +657,11 @@ export function BodyCompositionScreen({
                   </strong>
                   <small>{measurement.body_fat_pct !== null ? 'estimate' : ''}</small>
                 </div>
-                <details className="body-row-menu">
-                  <summary aria-label={`Actions for ${prettyDate(measurement.measurement_date)}`}>
-                    ⋮
-                  </summary>
-                  <div className="body-history-actions">
-                    <button type="button" onClick={() => beginMeasurementEdit(measurement)}>
-                      Edit
-                    </button>
-                    <InlineConfirmButton
-                      label="Delete"
-                      confirmLabel="Delete check-in"
-                      onConfirm={() => onDelete(measurement.id)}
-                    />
-                  </div>
-                </details>
+                <BodyHistoryRowMenu
+                  label={`Actions for ${prettyDate(measurement.measurement_date)}`}
+                  onEdit={() => beginMeasurementEdit(measurement)}
+                  onDelete={() => onDelete(measurement.id)}
+                />
               </article>
               {editingMeasurement?.id === measurement.id && (
                 <form
