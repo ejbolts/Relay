@@ -10236,7 +10236,8 @@ body.chart-fullscreen-open {
   background: transparent;
   color: #8c9692;
   cursor: grab;
-  touch-action: auto;
+  /* Like the rest of the row: vertical scrolling stays native, a sideways swipe deletes. */
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;

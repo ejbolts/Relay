@@ -14,6 +14,8 @@ interface ActivePointer {
   startX: number;
   startY: number;
   horizontal: boolean;
+  /** The reorder handle the touch started on, if any. */
+  handle: HTMLElement | null;
 }
 
 export function SwipeToDeleteSetRow({
@@ -85,23 +87,17 @@ export function SwipeToDeleteSetRow({
     setOffsetX(0);
   }
 
+  // Runs in the capture phase, so a touch that starts on the reorder handle (which stops the
+  // event from bubbling) can still swipe: the handle needs a hold before it drags.
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    const target = event.target as HTMLElement;
-    if (
-      disabled ||
-      deleting ||
-      !event.isPrimary ||
-      event.pointerType === 'mouse' ||
-      target.closest('.set-drag-handle')
-    ) {
-      return;
-    }
+    if (disabled || deleting || !event.isPrimary || event.pointerType === 'mouse') return;
 
     pointerRef.current = {
       id: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       horizontal: false,
+      handle: (event.target as HTMLElement).closest<HTMLElement>('.set-drag-handle'),
     };
   }
 
@@ -112,6 +108,12 @@ export function SwipeToDeleteSetRow({
     const deltaY = event.clientY - pointer.startY;
 
     if (!pointer.horizontal) {
+      // Held long enough to start reordering: the handle owns this touch now. (Pointer capture
+      // can't tell, as a touch is implicitly captured by the element it starts on.)
+      if (pointer.handle?.dataset.armed) {
+        resetSwipe();
+        return;
+      }
       if (Math.abs(deltaY) > SWIPE_AXIS_LOCK_PX && Math.abs(deltaY) > Math.abs(deltaX)) {
         resetSwipe();
         return;
@@ -178,7 +180,7 @@ export function SwipeToDeleteSetRow({
         event.preventDefault();
         event.stopPropagation();
       }}
-      onPointerDown={onPointerDown}
+      onPointerDownCapture={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}

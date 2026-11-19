@@ -1811,7 +1811,7 @@ describe('inserting sets', () => {
     expect(sets[1].key).not.toMatch(/^suggested-/);
   });
 
-  it('adds the rest after a set from the gap below it', async () => {
+  it('adds the rest chosen from the menu in the gap below a set', async () => {
     const draft = storedDraft();
     const movement = draft.movements[0];
     draft.movements = [movement];
@@ -1822,19 +1822,27 @@ describe('inserting sets', () => {
     writeActiveWorkoutDraft(draft);
     await mount();
 
-    const addRest = insertButton('Add rest after set 1');
+    const addRest = container.querySelector<HTMLSelectElement>(
+      '.movement-card select[aria-label="Add rest after set 1"]',
+    );
     expect(addRest?.closest('.set-insert-row')).not.toBeNull();
     // Only between sets: nothing before the first set or after the last.
     expect(container.querySelectorAll('.movement-card .set-add-rest')).toHaveLength(1);
+    // Opening the menu adds nothing until a time is picked.
     await act(async () => addRest!.click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].rest_seconds).toBeNull();
+    await act(async () => {
+      addRest!.value = '150';
+      addRest!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
 
-    // The nearest rest in the exercise is used, and the gap becomes a rest divider.
-    expect(readActiveWorkoutDraft()!.movements[0].sets[0].rest_seconds).toBe(90);
+    // The chosen rest is stored, and the gap becomes a rest divider.
+    expect(readActiveWorkoutDraft()!.movements[0].sets[0].rest_seconds).toBe(150);
     expect(insertButton('Add rest after set 1')).toBeNull();
     expect(
       container.querySelector<HTMLSelectElement>('.rest-between [aria-label="Rest after set 1"]')
         ?.value,
-    ).toBe('90');
+    ).toBe('150');
     expect(insertButton('Add set before set 2')?.closest('.rest-between')).not.toBeNull();
   });
 });

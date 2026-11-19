@@ -387,7 +387,7 @@ import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
-import { exerciseSetGains } from './weeklySetsUpdate';
+import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
   clockOffsetMsAt,
@@ -4432,13 +4432,15 @@ function WorkoutLogger({
     if (loggingSet && movement?.exercise.kind === 'cardio')
       tips.event('manual-cardio', 'cardio', 2);
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
-    // Ticking the last open set finishes the exercise: its weekly totals show once, for all of
-    // its sets, and a planned exercise folds away. A set added by hand keeps the card open.
+    // Ticking the last open set finishes the exercise: a planned exercise folds away and its
+    // weekly totals show for all of its sets. A set added by hand keeps the card open.
     const finishesExercise =
       loggingSet &&
       !!movement &&
       !initialWorkout &&
       movement.sets.every((item) => item.key === setKey || item.completed);
+    const logsWorkingSet =
+      !!currentSet && isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update));
     if (finishesExercise && movement && currentSet) {
       const gains = exerciseSetGains(
         movement.exercise,
@@ -4446,8 +4448,12 @@ function WorkoutLogger({
         workoutDate,
         localDate(),
         movement.sets.filter(isCompletedWorkingSet).length,
-        isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update)) ? 1 : 0,
+        logsWorkingSet ? 1 : 0,
       );
+      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
+    } else if (loggingSet && logsWorkingSet && movement && !initialWorkout) {
+      // Each working set before then moves its muscles' weekly totals as it is logged.
+      const gains = weeklySetGains(movement.exercise, weeklySets, workoutDate, localDate());
       if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
     } else if (update.completed === false && currentSet?.completed) {
       setWeeklySetsUpdate(null);
@@ -7247,13 +7253,11 @@ function MovementCard({
                     onInsert={() => onInsertSet(index + 1)}
                     onAddRest={
                       !cardio && showRestTimes
-                        ? () =>
-                            onUpdateSet(item.key, {
-                              rest_seconds: restToAdd(movement.sets, index, restHistory),
-                              restRevealed: true,
-                            })
+                        ? (seconds) =>
+                            onUpdateSet(item.key, { rest_seconds: seconds, restRevealed: true })
                         : undefined
                     }
+                    suggestedRest={restToAdd(movement.sets, index, restHistory)}
                   />
                 )
               )}

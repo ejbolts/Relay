@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RestTimeSelect } from './RestTimeSelect';
 
 let root: Root;
@@ -156,4 +156,44 @@ it.each([
   await submit();
   expect(changed).not.toHaveBeenCalled();
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('0:00 to 120:00');
+});
+
+describe('without a rest yet', () => {
+  async function renderEmpty() {
+    await act(async () =>
+      root.render(
+        <RestTimeSelect
+          seconds={null}
+          label="Add rest after set 1"
+          placeholder="Rest"
+          customStart={135}
+          onChange={changed}
+        />,
+      ),
+    );
+  }
+
+  it('shows the placeholder and offers rest times without "no rest"', async () => {
+    await renderEmpty();
+    expect(select().value).toBe('');
+    expect(select().selectedOptions[0].textContent).toBe('Rest');
+    expect(
+      [...select().options].filter((option) => !option.hidden).map((option) => option.value),
+    ).toEqual(['30', '60', '90', '120', '150', '180', '210', '240', 'custom']);
+    await choose('90');
+    expect(changed).toHaveBeenCalledWith(90);
+    // Nothing is set until the parent stores the choice.
+    expect(select().value).toBe('');
+  });
+
+  it('starts a custom time from the suggested rest', async () => {
+    await renderEmpty();
+    await choose('custom');
+    const fields = document.querySelectorAll('input');
+    expect([fields[0].value, fields[1].value]).toEqual(['2', '15']);
+    expect(changed).not.toHaveBeenCalled();
+    await input('Seconds', '45');
+    await submit();
+    expect(changed).toHaveBeenCalledWith(165);
+  });
 });
