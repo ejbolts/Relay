@@ -9142,6 +9142,7 @@ export function ProgressScreen({
                 exerciseName={progress.exercise.name}
                 mapping={mapping}
                 progress={progress}
+                partialHistory={Boolean(blockId)}
                 weightUnit={weightUnit}
                 onClose={() => setMappingOpen(false)}
                 onSaved={(next) => {
