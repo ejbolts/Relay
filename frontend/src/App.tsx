@@ -198,6 +198,7 @@ import { EdgeSwipeBack } from './EdgeSwipeBack';
 import { closeTopOverlay } from './overlayBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
+import { ExerciseMergeNudge } from './ExerciseMergeNudge';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
 import { ExerciseRenameDialog } from './ExerciseRenameDialog';
 import { ExerciseSwapSheet } from './ExerciseSwapSheet';
@@ -9025,7 +9026,9 @@ export function ProgressScreen({
   const { block, config: blockConfig, select: selectBlock } = useTrainingBlocks();
   const blockId = block?.id;
   const weightUnit = useWeightUnit();
-  const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string } | null>(null);
+  const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string; targetId?: string } | null>(
+    null,
+  );
   const mergeTrigger = useRef<HTMLButtonElement | null>(null);
   const [mergeNotice, setMergeNotice] = useState(false);
   useEffect(() => {
@@ -9083,6 +9086,13 @@ export function ProgressScreen({
     (trigger: HTMLButtonElement) => {
       mergeTrigger.current = trigger;
       setMergeRequest({ sourceId: exerciseId });
+    },
+    [exerciseId],
+  );
+  const openSuggestedMerge = useCallback(
+    (targetId: string, trigger: HTMLButtonElement) => {
+      mergeTrigger.current = trigger;
+      setMergeRequest({ sourceId: exerciseId, targetId });
     },
     [exerciseId],
   );
@@ -9379,6 +9389,7 @@ export function ProgressScreen({
         <ExerciseMergeDialog
           exercises={exercises}
           initialSourceId={mergeRequest.sourceId}
+          initialTargetId={mergeRequest.targetId}
           onClose={() => {
             setMergeRequest(null);
             requestAnimationFrame(
@@ -9517,6 +9528,14 @@ export function ProgressScreen({
                 )}
               </>
             }
+          />
+        )}
+        {canMergeSelected && selectedExercise && (
+          <ExerciseMergeNudge
+            key={selectedExercise.id}
+            exercise={selectedExercise}
+            exercises={exercises}
+            onMerge={openSuggestedMerge}
           />
         )}
         {!browseFirst && (

@@ -27,7 +27,8 @@ function credits(exercise: Exercise): { muscle_name: string; sets: number }[] {
 
 const muscleKey = (name: string) => aliases[clean(name)] ?? clean(name);
 
-function muscles(exercise: Exercise): string[] {
+/** The exercise's muscles, named consistently, for comparing two exercises. */
+export function muscles(exercise: Exercise): string[] {
   return [...new Set(credits(exercise).map((item) => muscleKey(item.muscle_name)))].sort();
 }
 

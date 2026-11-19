@@ -3,25 +3,29 @@ import { api } from './api';
 import { PopupDialog } from './PopupDialog';
 import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
 import { canMergeExercises, mergeChanges, mergeDistance } from './exerciseMergeCompatibility';
+import { isMatchedWord, mergeSuggestions } from './exerciseMergeSuggestions';
 import type { Exercise } from './types';
 import './exerciseMerge.css';
 
 export function ExerciseMergeDialog({
   exercises,
   initialSourceId = '',
+  initialTargetId = '',
   onMerged,
   onChanged,
   onClose,
 }: {
   exercises: Exercise[];
   initialSourceId?: string;
+  /** A destination to start with, such as the suggestion the merge was opened from. */
+  initialTargetId?: string;
   onMerged: (sourceId: string, target: Exercise) => void;
   /** A custom exercise was changed to match its destination, before any merge. */
   onChanged?: (exercise: Exercise) => void;
   onClose: () => void;
 }) {
   const [sourceId, setSourceId] = useState(initialSourceId);
-  const [targetId, setTargetId] = useState('');
+  const [targetId, setTargetId] = useState(initialTargetId);
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -55,6 +59,10 @@ export function ExerciseMergeDialog({
             a.item.name.localeCompare(b.item.name),
         )
     : [];
+  // Before a search, the likeliest standard exercises are listed first under their own heading.
+  const suggested = source && !query.trim() ? mergeSuggestions(source, all) : [];
+  const suggestedIds = new Set(suggested.map((entry) => entry.exercise.id));
+  const listed = candidates.filter((entry) => !suggestedIds.has(entry.item.id));
   const chosen = candidates.find((entry) => entry.item.id === targetId);
   const target = chosen?.ready ? chosen.item : undefined;
   const needed = chosen && !chosen.ready ? chosen.changes : null;
@@ -143,27 +151,36 @@ export function ExerciseMergeDialog({
                 />
               </label>
               <div className="exercise-merge-targets" role="group" aria-label="Merge destination">
-                {candidates.map(({ item, ready }) => (
-                  <label key={item.id} className={targetId === item.id ? 'selected' : ''}>
-                    <input
-                      type="radio"
-                      name="merge-target"
-                      checked={targetId === item.id}
-                      onChange={() => {
-                        setTargetId(item.id);
-                        setError('');
-                      }}
-                    />
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>
-                        {[item.is_custom ? 'Custom' : 'Official', item.muscle_group, item.equipment]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </small>
-                      {!ready && <em className="exercise-merge-tag">Needs changes</em>}
-                    </span>
-                  </label>
+                {suggested.length > 0 && (
+                  <>
+                    <h3 className="exercise-merge-group">Suggested</h3>
+                    {suggested.map(({ exercise, ready, matchedWords }) => (
+                      <MergeTarget
+                        key={exercise.id}
+                        exercise={exercise}
+                        ready={ready}
+                        matchedWords={matchedWords}
+                        selected={targetId === exercise.id}
+                        onSelect={() => {
+                          setTargetId(exercise.id);
+                          setError('');
+                        }}
+                      />
+                    ))}
+                    {listed.length > 0 && <h3 className="exercise-merge-group">All exercises</h3>}
+                  </>
+                )}
+                {listed.map(({ item, ready }) => (
+                  <MergeTarget
+                    key={item.id}
+                    exercise={item}
+                    ready={ready}
+                    selected={targetId === item.id}
+                    onSelect={() => {
+                      setTargetId(item.id);
+                      setError('');
+                    }}
+                  />
                 ))}
                 {!candidates.length && (
                   <p role="status">
@@ -241,5 +258,47 @@ export function ExerciseMergeDialog({
         </fieldset>
       </form>
     </PopupDialog>
+  );
+}
+
+function MergeTarget({
+  exercise,
+  ready,
+  matchedWords,
+  selected,
+  onSelect,
+}: {
+  exercise: Exercise;
+  ready: boolean;
+  /** Words of the name to highlight, for a suggested exercise. */
+  matchedWords?: string[];
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <label className={selected ? 'selected' : ''}>
+      <input type="radio" name="merge-target" checked={selected} onChange={onSelect} />
+      <span>
+        <strong>
+          {matchedWords?.length
+            ? exercise.name.split(/([^\p{L}\p{N}]+)/u).map((part, index) =>
+                isMatchedWord(part, matchedWords) ? (
+                  <b className="exercise-search-match" key={index}>
+                    {part}
+                  </b>
+                ) : (
+                  part
+                ),
+              )
+            : exercise.name}
+        </strong>
+        <small>
+          {[exercise.is_custom ? 'Custom' : 'Official', exercise.muscle_group, exercise.equipment]
+            .filter(Boolean)
+            .join(' · ')}
+        </small>
+        {!ready && <em className="exercise-merge-tag">Needs changes</em>}
+      </span>
+    </label>
   );
 }
