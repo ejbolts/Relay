@@ -7,6 +7,9 @@ import type { WeeklySets } from './types';
 
 let root: Root;
 let host: HTMLDivElement;
+// Each touch event is this many milliseconds after the last: quick by default, so a pull is a flick.
+let step = 16;
+let clock = 0;
 const data: WeeklySets = {
   week_start: '2026-10-19',
   week_end: '2026-10-25',
@@ -39,6 +42,8 @@ const data: WeeklySets = {
 };
 beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  step = 16;
+  vi.spyOn(performance, 'now').mockImplementation(() => clock);
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
@@ -56,12 +61,14 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 function sheet() {
   return document.querySelector<HTMLDialogElement>('dialog')!;
 }
 async function touch(target: Element, type: string, x: number, y: number, count = 1) {
+  clock += step;
   const point = { identifier: 1, clientX: x, clientY: y };
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.assign(event, {
@@ -86,7 +93,8 @@ it('tracks a downward touch from the handle and dismisses on release', async () 
   expect(end.defaultPrevented).toBe(true);
   expect(sheet()).toBeNull();
 });
-it('snaps back a short pull and suppresses its click on an exercise', async () => {
+it('snaps back a short slow pull and suppresses its click on an exercise', async () => {
+  step = 200;
   const dialog = sheet();
   const exercise = dialog.querySelector('.muscle-contribution-list button')!;
   await touch(exercise, 'touchstart', 180, 300);
@@ -136,7 +144,8 @@ it.each(['touchcancel', 'second-touch'])('resets an interrupted drag (%s)', asyn
   expect(sheet().style.getPropertyValue('--sheet-offset')).toBe('');
 });
 
-it('keeps keyboard dismissal available after a short touch pull', async () => {
+it('keeps keyboard dismissal available after a short slow touch pull', async () => {
+  step = 200;
   const header = sheet().querySelector('header')!;
   await touch(header, 'touchstart', 180, 300);
   await touch(header, 'touchmove', 180, 330);

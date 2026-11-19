@@ -17,10 +17,6 @@
   opacity: 0.6;
 }
 
-.popup-dialog.sign-out-dialog {
-  width: min(24rem, calc(100vw - 2rem));
-}
-
 .sign-out-dialog > p {
   margin: 0;
   padding: 1rem 1rem 0;
@@ -33,11 +29,6 @@
   color: var(--p-danger);
 }
 
-.sign-out-dialog > .popup-dialog-actions {
-  margin: 0;
-  padding: 1rem;
-}
-
-.sign-out-dialog > .popup-dialog-actions .popup-primary-action {
-  background: var(--p-danger);
+.sign-out-dialog > p:last-of-type {
+  padding-bottom: 1rem;
 }

@@ -1,6 +1,20 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import {
+  commitsDrag,
+  DRAG_START_PX,
+  dragVelocity,
+  trackDragSample,
+  type DragSample,
+} from './drawerGesture';
 
-/** Claim downward drags before mobile browsers turn them into overscroll. */
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+/**
+ * Swipe down to dismiss a sheet. The dialog follows the finger through `--sheet-offset` while
+ * `.sheet-dragging` is set, and a far enough drag or a flick (`commitsDrag`) closes it. On a close
+ * the offset stays in place, so the sheet can slide away from where the finger left it.
+ * Claims downward drags before mobile browsers turn them into overscroll.
+ */
 export function useSheetDismiss(
   ref: RefObject<HTMLDialogElement | null>,
   enabled: boolean,
@@ -12,7 +26,13 @@ export function useSheetDismiss(
   useEffect(() => {
     const dialog = ref.current;
     if (!enabled || !dialog) return;
-    let gesture: { id: number; x: number; y: number; dragging: boolean } | null = null;
+    let gesture: {
+      id: number;
+      x: number;
+      y: number;
+      dragging: boolean;
+      samples: DragSample[];
+    } | null = null;
     let suppressClick = false;
 
     const reset = () => {
@@ -31,14 +51,14 @@ export function useSheetDismiss(
           if (node === dialog) break;
         }
       }
-      gesture = { id, x, y, dragging: false };
+      gesture = { id, x, y, dragging: false, samples: [{ y, t: now() }] };
     };
     const move = (x: number, y: number) => {
       if (!gesture) return false;
       const dx = x - gesture.x;
       const dy = y - gesture.y;
       if (!gesture.dragging) {
-        if (Math.hypot(dx, dy) < 8) return false;
+        if (Math.hypot(dx, dy) < DRAG_START_PX) return false;
         if (dy <= 0 || dy < Math.abs(dx) * 1.2) {
           reset();
           return false;
@@ -47,16 +67,29 @@ export function useSheetDismiss(
         suppressClick = true;
         dialog.classList.add('sheet-dragging');
       }
+      trackDragSample(gesture.samples, y, now());
       dialog.style.setProperty('--sheet-offset', `${Math.max(0, dy)}px`);
       return true;
     };
     const finish = (x: number, y: number) => {
       if (!gesture) return false;
-      const dragged = gesture.dragging;
-      const dismiss = dragged && y - gesture.y >= 72 && y - gesture.y > Math.abs(x - gesture.x);
-      reset();
-      if (dismiss) close.current();
-      return dragged;
+      const { dragging, samples } = gesture;
+      const dy = y - gesture.y;
+      const dx = x - gesture.x;
+      const dismiss =
+        dragging &&
+        commitsDrag(dy, dx, dragVelocity(trackDragSample(samples, y, now())), window.innerHeight);
+      if (!dismiss) {
+        reset();
+        return dragging;
+      }
+      gesture = null;
+      dialog.classList.remove('sheet-dragging');
+      dialog.style.setProperty('--sheet-offset', `${Math.max(0, dy)}px`);
+      close.current();
+      // Only a sheet that is sliding away keeps its place; any other springs back.
+      if (!dialog.classList.contains('is-closing')) dialog.style.removeProperty('--sheet-offset');
+      return true;
     };
     const touchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) return reset();
@@ -108,7 +141,13 @@ export function useSheetDismiss(
     dialog.addEventListener('click', click, true);
     window.addEventListener('blur', reset);
     return () => {
-      reset();
+      // A sheet sliding away after a swipe keeps its place until it has gone.
+      if (dialog.classList.contains('is-closing')) {
+        gesture = null;
+        dialog.classList.remove('sheet-dragging');
+      } else {
+        reset();
+      }
       dialog.removeEventListener('touchstart', touchStart);
       dialog.removeEventListener('touchmove', touchMove);
       dialog.removeEventListener('touchend', touchEnd);
