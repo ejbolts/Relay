@@ -33,12 +33,12 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .exercise_aliases import canonical_exercise_name
+from .imported_entries import imported_ids
 from .models import (
     BodyMeasurement,
     CardioSession,
     Exercise,
     ExerciseKind,
-    ImportBatch,
     PersonalRecord,
     PersonalRecordType,
     SetType,
@@ -559,22 +559,6 @@ def window_days(activity: list[tuple[date, datetime]], window: Window) -> int:
             if window.starts <= day <= window.ends and _naive_utc(logged) < deadline
         }
     )
-
-
-def imported_ids(db: Session, user_id: str) -> tuple[set[str], set[str]]:
-    """The workouts and weigh-ins the account brought in by CSV import, which earn no borders."""
-    workouts: set[str] = set()
-    measurements: set[str] = set()
-    for workout_ids, items in db.execute(
-        select(ImportBatch.workout_ids, ImportBatch.measurements).where(
-            ImportBatch.user_id == user_id
-        )
-    ):
-        workouts.update(workout_ids or ())
-        measurements.update(
-            item["id"] for item in items or () if isinstance(item, dict) and item.get("id")
-        )
-    return workouts, measurements
 
 
 # An entry saved more than this many days after its date is backdated.

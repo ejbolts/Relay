@@ -35,7 +35,7 @@ import { ConsistencyCard } from './ConsistencyCard';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
-import { TrainingTimeCard } from './TrainingTimeStats';
+import { ImportedShare, TrainingTimeCard } from './TrainingTimeStats';
 import { PopupDialog } from './PopupDialog';
 import { RoutinePanel } from './RoutinePanel';
 import { HeadToHeadCard } from './LiftComparison';
@@ -1225,10 +1225,16 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
       <div>
         <dt>Workouts</dt>
         <dd className="num">{(profile.workout_count ?? 0).toLocaleString('en-GB')}</dd>
+        {!!profile.imported_workout_count && (
+          <ImportedShare value={profile.imported_workout_count.toLocaleString('en-GB')} />
+        )}
       </div>
       <div>
         <dt>Last 30 days</dt>
         <dd className="num">{profile.recent_workout_count ?? 0}</dd>
+        {!!profile.imported_recent_workout_count && (
+          <ImportedShare value={profile.imported_recent_workout_count.toLocaleString('en-GB')} />
+        )}
       </div>
       <div>
         <dt>Last workout</dt>

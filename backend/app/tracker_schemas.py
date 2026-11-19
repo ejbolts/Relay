@@ -1029,6 +1029,12 @@ class TrainingTimeRead(BaseModel):
     cardio_minutes: int
     cardio_count: int
     total_minutes: int
+    # The share of each total brought in by CSV import; cardio follows its imported workout.
+    imported_workout_minutes: int = 0
+    imported_workout_count: int = 0
+    imported_cardio_minutes: int = 0
+    imported_cardio_count: int = 0
+    imported_total_minutes: int = 0
 
 
 class ProgressPoint(BaseModel):

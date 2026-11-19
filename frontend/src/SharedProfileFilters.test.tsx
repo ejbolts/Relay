@@ -6,6 +6,7 @@ import { api } from './api';
 import { SharedProfileScreen } from './SharedProfiles';
 import { clearSharedProfileCache, prefetchSharedProfile } from './sharedProfileCache';
 import type { SharedProfile, SharedWorkoutPage, TrackedWorkout, User } from './types';
+import { importedTime } from './utils';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
 const profile: SharedProfile = {
@@ -253,6 +254,51 @@ describe('shared profile friend control', () => {
     await act(async () => button('Accept').click());
     expect(accept).toHaveBeenCalledWith('asker');
     expect(button('Friends')).toBeTruthy();
+  });
+});
+
+describe('imported totals', () => {
+  const imported = (root: ParentNode) =>
+    [...root.querySelectorAll('.stat-imported')].map((item) => item.textContent);
+
+  it('shows how much of each total came from an import, and nothing without one', async () => {
+    expect(imported(container)).toEqual([]);
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      id: 'importer',
+      workout_count: 1_240,
+      recent_workout_count: 9,
+      imported_workout_count: 1_200,
+      imported_recent_workout_count: 0,
+      training_time: {
+        ...profile.training_time!,
+        imported_workout_minutes: 150,
+        imported_workout_count: 3,
+        imported_cardio_minutes: 0,
+        imported_cardio_count: 0,
+        imported_total_minutes: 150,
+      },
+    });
+    await renderProfile('importer');
+    expect(imported(container.querySelector('.profile-summary')!)).toEqual(['Imported 1,200']);
+    expect(imported(container.querySelector('.profile-training-time')!)).toEqual([
+      'Imported 2.5h',
+      'Imported 2.5h',
+    ]);
+    // The past year had no imports, so its totals carry no imported line.
+    await act(async () => button('Past year').click());
+    expect(imported(container.querySelector('.profile-training-time')!)).toEqual([]);
+  });
+
+  it('keeps imported time to one short line', () => {
+    expect([45, 60, 150, 599, 2_000, 75_000].map(importedTime)).toEqual([
+      '45min',
+      '1h',
+      '2.5h',
+      '10h',
+      '33h',
+      '1,250h',
+    ]);
   });
 });
 
