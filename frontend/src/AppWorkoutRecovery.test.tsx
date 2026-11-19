@@ -2215,7 +2215,16 @@ describe('finishing workouts in the background', () => {
       completed: false,
     });
     writeActiveWorkoutDraft(draft);
-    vi.mocked(api.createWorkout).mockResolvedValue(remoteWorkout());
+    vi.mocked(api.createWorkout).mockImplementation(async (payload) => {
+      const saved = {
+        ...remoteWorkout(),
+        client_session_id: payload.client_session_id,
+        workout_date: payload.workout_date,
+      };
+      // The refresh after saving lists it, as the server would, so Home keeps its card.
+      vi.mocked(api.listWorkouts).mockResolvedValue([saved]);
+      return saved;
+    });
     await mount();
     const finish = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Finish workout',
@@ -3295,7 +3304,16 @@ describe('cardio set editing defaults', () => {
         },
       ],
     } as import('./types').CardioOverview);
-    vi.mocked(api.createWorkout).mockResolvedValue(saved);
+    vi.mocked(api.createWorkout).mockImplementation(async (payload) => {
+      const listed = {
+        ...saved,
+        client_session_id: payload.client_session_id,
+        workout_date: payload.workout_date,
+      };
+      // The refresh after saving lists it, as the server would, so Home keeps its card.
+      vi.mocked(api.listWorkouts).mockResolvedValue([listed]);
+      return listed;
+    });
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     await confirmFinish();
