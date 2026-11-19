@@ -987,15 +987,16 @@ function RoutineEditor({
   const canSave = !busy && !addingType && !types.loading && !types.error && !loadError;
   return (
     <PopupDialog
+      variant="screen"
       title={routine.id ? 'Edit split' : 'New split'}
       className="routine-editor-dialog routine-editor-screen"
-      closeLabel={
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M14.5 5.5 8 12l6.5 6.5" />
-        </svg>
-      }
       headerActions={
-        <button type="submit" form={formId} className="routine-editor-save" disabled={!canSave}>
+        <button
+          type="submit"
+          form={formId}
+          className="overlay-header-save routine-editor-save"
+          disabled={!canSave}
+        >
           {busy ? 'Saving…' : 'Save'}
         </button>
       }

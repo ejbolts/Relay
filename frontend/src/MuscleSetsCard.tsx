@@ -270,6 +270,7 @@ function MuscleContributionSheet({
   const [draft, setDraft] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [goalError, setGoalError] = useState<string | null>(null);
+  const goalFormId = useId();
   const [notice, setNotice] = useState('');
   const toastRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -344,12 +345,45 @@ function MuscleContributionSheet({
 
   return (
     <PopupDialog
+      variant="sheet"
       title={muscle.muscle_group}
       kicker={weekLabel.toUpperCase()}
       className="muscle-contribution-sheet"
-      closeLabel="Done"
-      swipeToDismiss
       onClose={onClose}
+      actions={
+        editing && (
+          <>
+            {customGoal && (
+              <button
+                type="button"
+                className="popup-tertiary-action"
+                disabled={savingGoal}
+                onClick={() => void saveGoal(null)}
+              >
+                Use default ({defaultGoal})
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={savingGoal}
+              onClick={() => {
+                setEditing(false);
+                setGoalError(null);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form={goalFormId}
+              className="popup-primary-action"
+              disabled={savingGoal}
+            >
+              {savingGoal ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        )
+      }
     >
       <div className="muscle-sheet-body">
         <div className="muscle-sheet-total">
@@ -379,7 +413,7 @@ function MuscleContributionSheet({
           <span style={{ width: `${Math.min(percentage, 100)}%` }} />
         </div>
         {editing ? (
-          <form className="muscle-goal-form" noValidate onSubmit={submitGoal}>
+          <form id={goalFormId} className="muscle-goal-form" noValidate onSubmit={submitGoal}>
             <div className="muscle-goal-field">
               <span>Weekly goal</span>
               <span className="muscle-goal-stepper">
@@ -422,32 +456,6 @@ function MuscleContributionSheet({
                 {goalError}
               </p>
             )}
-            <div className="muscle-goal-actions">
-              {customGoal && (
-                <button
-                  type="button"
-                  className="muscle-goal-default"
-                  disabled={savingGoal}
-                  onClick={() => void saveGoal(null)}
-                >
-                  Use default ({defaultGoal})
-                </button>
-              )}
-              <button
-                type="button"
-                className="pulse-button secondary"
-                disabled={savingGoal}
-                onClick={() => {
-                  setEditing(false);
-                  setGoalError(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="pulse-button primary" disabled={savingGoal}>
-                {savingGoal ? 'Saving…' : 'Save'}
-              </button>
-            </div>
           </form>
         ) : (
           <p className="muscle-sheet-goal-label">

@@ -420,9 +420,16 @@ it('slides the sheet down before it closes, unless motion is reduced', async () 
   vi.spyOn(api.sharing, 'lifts').mockResolvedValue(comparisons());
   await render(<HeadToHeadCard member={sam} active />);
   const sheet = await openPicker();
+  expect(sheet.classList).toContain('popup-dialog--sheet');
+  expect(sheet.classList).toContain('popup-dialog--tall');
+  expect(sheet.querySelector('header > .sheet-grabber')).not.toBeNull();
+  // The standard × closes it; there is no "Done" text.
+  const close = sheet.querySelector('.popup-dialog-close')!;
+  expect(close.textContent).toBe('');
+  expect(close.querySelector('.pulse-icon')).not.toBeNull();
   await click(option(sheet, 'Bench'));
 
-  await click(sheet.querySelector('.popup-dialog-close'));
+  await click(close);
   expect(sheet.classList.contains('is-closing')).toBe(true);
   expect(document.querySelector('dialog.lift-picker')).not.toBeNull();
   expect(host.querySelector('.head-to-head-lifts')).toBeNull();

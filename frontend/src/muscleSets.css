@@ -154,84 +154,8 @@
   z-index: 2;
   cursor: pointer;
 }
-.popup-dialog.muscle-contribution-sheet[open] {
-  width: min(30rem, calc(100% - 1.5rem));
-  max-height: calc(100dvh - 2rem);
-  margin: auto auto max(0.75rem, env(safe-area-inset-bottom));
-  border-radius: 24px;
-  transform: translateY(var(--sheet-offset, 0px));
-  transition: transform 180ms ease-out;
-}
-.popup-dialog.muscle-contribution-sheet.sheet-dragging {
-  transition: none;
-  user-select: none;
-}
-.muscle-contribution-sheet > header::before {
-  content: '';
-  position: absolute;
-  top: 0.625rem;
-  left: calc(50% - 1.125rem);
-  display: block;
-  width: 2.25rem;
-  height: 0.25rem;
-  border-radius: 8px;
-  background: var(--p-muted);
-}
-.muscle-contribution-sheet > header {
-  padding: 1.75rem 1.25rem 0.875rem;
-  border-bottom: 0;
-  background: var(--p-surface);
-  touch-action: none;
-}
-/* Slides up from the bottom when it opens. It animates the separate translate property, so a
-   drag snapping back (which moves transform) never restarts it. */
-.popup-dialog.muscle-contribution-sheet[open] {
-  animation: muscle-sheet-in 420ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
-}
-
-@keyframes muscle-sheet-in {
-  from {
-    translate: 0 calc(100% + 1.5rem);
-  }
-  to {
-    translate: 0 0;
-  }
-}
-
-/* A light dim and blur, like the Start menu, so Home stays visible behind the sheet. */
-.popup-dialog.muscle-contribution-sheet::backdrop {
-  background: rgb(5 6 8 / 50%);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
-}
-
-:root[data-colour-mode='light'] .popup-dialog.muscle-contribution-sheet::backdrop {
-  background: rgb(243 245 247 / 55%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .popup-dialog.muscle-contribution-sheet {
-    transition: none;
-  }
-  .popup-dialog.muscle-contribution-sheet[open] {
-    animation: none;
-  }
-}
-
-html[data-reduce-motion] .popup-dialog.muscle-contribution-sheet[open] {
-  animation: none;
-}
-.muscle-contribution-sheet .popup-dialog-close {
-  width: auto;
-  min-height: 2.75rem;
-  border: 0;
-  padding: 0 0 0 0.75rem;
-  background: transparent;
-  color: var(--p-accent);
-  font-size: 0.875rem;
-}
 .muscle-sheet-body {
-  padding: 0 1.25rem 1.25rem;
+  padding: 0 var(--popup-pad) 1.25rem;
 }
 .muscle-sheet-total {
   display: flex;
@@ -325,25 +249,6 @@ html[data-reduce-motion] .popup-dialog.muscle-contribution-sheet[open] {
 .muscle-goal-stepper input::-webkit-outer-spin-button {
   margin: 0;
   -webkit-appearance: none;
-}
-.muscle-goal-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-.muscle-goal-actions .pulse-button {
-  min-height: 2.75rem;
-}
-.muscle-goal-default {
-  min-height: 2.75rem;
-  margin-right: auto;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--p-accent);
-  font-size: 0.875rem;
-  font-weight: 600;
 }
 /* Undo the popover defaults so it sits where every other top toast does. */
 .muscle-goal-toast[popover] {
