@@ -67,7 +67,7 @@ export function FreshStartSetting() {
                 {index === 0 && <span className="fresh-start-current">Current</span>}
                 <button
                   type="button"
-                  className="fresh-start-remove"
+                  className="pulse-button link small icon-only fresh-start-remove"
                   aria-label={`Remove fresh start on ${label}`}
                   disabled={saving}
                   onClick={() =>
@@ -97,7 +97,7 @@ export function FreshStartSetting() {
             setError(null);
           }}
         />
-        <button type="submit" disabled={saving}>
+        <button type="submit" className="pulse-button secondary small" disabled={saving}>
           Start fresh
         </button>
       </form>

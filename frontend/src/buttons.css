@@ -107,7 +107,7 @@
 }
 
 .pulse-button.link.small {
-  min-height: var(--p-button-h-sm);
+  min-height: 0;
   padding: 0;
 }
 
@@ -134,11 +134,31 @@
   width: 100%;
 }
 
+/*
+ * The legacy .primary and .secondary rule in styles.css also gives full width and a top margin.
+ * Buttons with a size or block modifier size themselves; this stays at that rule's specificity
+ * so context rules still win. Plain primary and secondary buttons keep the old layout until the
+ * legacy rule is deleted.
+ */
+.pulse-button:where(.primary, .secondary):where(.small, .large, .block, .icon-only) {
+  width: auto;
+  margin-top: 0;
+}
+
 /* Small and icon buttons look compact but keep a 44px touch target. */
 .pulse-button:is(.small, .icon-only)::before {
   content: '';
   position: absolute;
   inset: -4px;
+}
+
+/* Links stay the height of their text, so card headers keep their size; the touch target grows. */
+.pulse-button.link::before {
+  content: '';
+  position: absolute;
+  inset: 50% -4px auto;
+  height: max(100%, 44px);
+  transform: translateY(-50%);
 }
 
 /* ───────── States ───────── */
@@ -289,7 +309,6 @@
 .profile-danger,
 .auth-submit,
 .settings-actions > button:where(:not(.pulse-button)),
-.settings-actions .inline-confirmation > button:where(:not(.pulse-button)),
 .set-entry-confirmation button:where(:not(.pulse-button)),
 .body-edit-actions button:where(:not(.pulse-button)),
 .training-block-dialog .training-block-actions button:where(:not(.pulse-button)),
@@ -311,8 +330,7 @@
 }
 
 /* Settings › Data pairs two buttons on a phone-width row; trimmed so "Download backup" fits. */
-.settings-actions > button:where(:not(.pulse-button)),
-.settings-actions .inline-confirmation > button:where(:not(.pulse-button)) {
+.settings-actions > button:where(:not(.pulse-button)) {
   padding: 0 0.5rem;
   font-size: 0.875rem;
 }
@@ -321,7 +339,6 @@
 .history-screen
   .workout-actions
   button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button)),
-.history-screen .workout-actions .inline-confirmation > button:where(:not(.pulse-button)),
 .body-sizes-entry-actions button:where(:not(.pulse-button)),
 .workout-types-settings button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action)),
 .routine-editor-save,
@@ -344,7 +361,6 @@
 .history-screen
   .workout-actions
   button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button))::before,
-.history-screen .workout-actions .inline-confirmation > button:where(:not(.pulse-button))::before,
 .body-sizes-entry-actions button:where(:not(.pulse-button))::before,
 .workout-types-settings
   button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action))::before,
@@ -359,7 +375,6 @@
 .create-exercise-cancel,
 .profile-secondary,
 .settings-actions > button:where(:not(.pulse-button)),
-.settings-actions .inline-confirmation > button:where(:not(.pulse-button)),
 .calendar-create-actions > button:where(:not(.pulse-button)),
 .superset-picker > footer button:where(:not(.pulse-button)),
 .set-entry-confirmation button:where(:not(.pulse-button)),
@@ -369,7 +384,6 @@
 .history-screen
   .workout-actions
   button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button)),
-.history-screen .workout-actions .inline-confirmation > button:where(:not(.pulse-button)),
 .history-screen .workout-actions .edit-workout-button.is-main,
 .calendar-edit-workout,
 .calendar-day-workouts .calendar-edit-workout.is-secondary,
@@ -425,12 +439,7 @@
 
 /* Colour: danger (the final confirm of a destructive action). */
 .sign-out-dialog > .popup-dialog-actions .popup-primary-action,
-.calendar-create-actions > .cancel-current-workout-button,
-.settings-actions .inline-confirmation > button:first-child:where(:not(.pulse-button)),
-.history-screen
-  .workout-actions
-  .inline-confirmation
-  > button:first-child:where(:not(.pulse-button)) {
+.calendar-create-actions > .cancel-current-workout-button {
   border-color: transparent;
   background: var(--p-danger-fill);
   color: var(--p-on-danger);

@@ -303,7 +303,7 @@ export function CreateExerciseDialog({
                 </div>
               ))}
               <button
-                className="create-exercise-add-muscle"
+                className="pulse-button tonal small create-exercise-add-muscle"
                 type="button"
                 disabled={draft.muscle_set_credits.length >= muscleGroups.length}
                 onClick={() =>

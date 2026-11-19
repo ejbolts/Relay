@@ -25,10 +25,8 @@
 }
 
 .notification-setting-row > button.fresh-start-remove {
-  width: 2.75rem;
-  min-width: 2.75rem;
   margin-left: auto;
-  padding: 0;
+  color: var(--p-muted);
 }
 
 .fresh-start-remove svg {

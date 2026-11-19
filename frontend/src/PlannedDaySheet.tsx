@@ -277,7 +277,7 @@ export function PlannedDaySheet({
         {onEditSplit && (
           <button
             type="button"
-            className="text-button planned-day-edit-split"
+            className="pulse-button link small planned-day-edit-split"
             onClick={onEditSplit}
           >
             {split?.enabled ? 'Edit split' : 'Set up split'}

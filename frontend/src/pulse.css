@@ -943,11 +943,8 @@ button.pulse-card:hover {
   color: var(--p-muted);
   font-size: 0.75rem;
 }
-.consistency-header-actions .text-link {
-  display: inline-flex;
-  align-items: center;
+.consistency-header-actions .pulse-button.link {
   gap: 3px;
-  min-height: 32px;
   white-space: nowrap;
 }
 .consistency-header-actions .pulse-icon {

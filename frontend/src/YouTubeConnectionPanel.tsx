@@ -171,7 +171,8 @@ export function YouTubeConnectionPanel({
       <div className="youtube-connection-actions">
         {available && canConnect && (
           <button
-            className={connected ? 'secondary' : 'primary'}
+            type="button"
+            className={`pulse-button ${connected ? 'secondary' : 'primary'} block`}
             disabled={disabled || working}
             onClick={() => void connect()}
           >
@@ -187,13 +188,18 @@ export function YouTubeConnectionPanel({
             label="Disconnect"
             confirmLabel="Disconnect YouTube"
             workingLabel="Disconnecting…"
-            className="danger-link"
+            className="pulse-button danger-soft"
+            size="default"
             disabled={disabled || working || !connection.can_disconnect}
             onConfirm={disconnect}
           />
         )}
         {!connection && (
-          <button className="secondary" onClick={() => void refresh()}>
+          <button
+            type="button"
+            className="pulse-button secondary block"
+            onClick={() => void refresh()}
+          >
             Try again
           </button>
         )}

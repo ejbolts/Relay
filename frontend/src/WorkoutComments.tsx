@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS, reactionEmoji } from './friendFeedData';
+import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -188,6 +189,7 @@ export function WorkoutComments({
             </time>
             <button
               type="button"
+              className="pulse-button link small"
               aria-expanded={picker === item.id}
               onClick={() => setPicker(picker === item.id ? null : item.id)}
             >
@@ -195,6 +197,7 @@ export function WorkoutComments({
             </button>
             <button
               type="button"
+              className="pulse-button link small"
               onClick={() => {
                 setReply(item);
                 setEditing(null);
@@ -206,6 +209,7 @@ export function WorkoutComments({
             {item.can_edit && (
               <button
                 type="button"
+                className="pulse-button link small"
                 onClick={() => {
                   setEditing(item);
                   setBody(item.body);
@@ -217,7 +221,12 @@ export function WorkoutComments({
               </button>
             )}
             {item.can_delete && (
-              <button type="button" disabled={busy} onClick={() => setDeleting(item)}>
+              <button
+                type="button"
+                className="pulse-button link small comment-delete"
+                disabled={busy}
+                onClick={() => setDeleting(item)}
+              >
                 Delete
               </button>
             )}
@@ -355,6 +364,7 @@ export function WorkoutComments({
           {editing ? 'Editing comment' : <>Replying to {member(reply!.author, true)}</>}
           <button
             type="button"
+            className="pulse-button secondary small icon-only"
             aria-label="Cancel comment reply or edit"
             onClick={() => {
               setReply(null);
@@ -362,7 +372,7 @@ export function WorkoutComments({
               setBody('');
             }}
           >
-            ×
+            <Icon name="close" />
           </button>
         </div>
       )}
@@ -406,7 +416,7 @@ export function WorkoutComments({
           {error}
           <button
             type="button"
-            className="text-link"
+            className="pulse-button link small"
             disabled={busy}
             onClick={() =>
               void run(async () => {

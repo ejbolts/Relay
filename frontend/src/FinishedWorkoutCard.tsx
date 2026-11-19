@@ -222,7 +222,11 @@ export function FinishedWorkoutCard({
           ))}
         </ul>
       )}
-      <button type="button" className="text-button finished-workout-open" onClick={onOpenWorkout}>
+      <button
+        type="button"
+        className="pulse-button link small finished-workout-open"
+        onClick={onOpenWorkout}
+      >
         View workout
       </button>
       {savedToast &&

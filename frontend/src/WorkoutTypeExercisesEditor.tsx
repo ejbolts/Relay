@@ -103,7 +103,11 @@ export function WorkoutTypeExercisesEditor({
           {loadError && (
             <p role="alert" className="inline-error">
               {loadError}{' '}
-              <button type="button" onClick={() => setAttempt((x) => x + 1)}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => setAttempt((x) => x + 1)}
+              >
                 Try again
               </button>
             </p>

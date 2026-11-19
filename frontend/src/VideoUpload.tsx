@@ -415,7 +415,8 @@ export function VideoUpload() {
                     </label>
                     <div className="clip-actions">
                       <button
-                        className="small-button"
+                        type="button"
+                        className="pulse-button secondary small icon-only"
                         onClick={() => moveClip(index, index - 1)}
                         disabled={index === 0}
                         aria-label={`Move set ${index + 1} up`}
@@ -423,14 +424,19 @@ export function VideoUpload() {
                         ↑
                       </button>
                       <button
-                        className="small-button"
+                        type="button"
+                        className="pulse-button secondary small icon-only"
                         onClick={() => moveClip(index, index + 1)}
                         disabled={index === clips.length - 1}
                         aria-label={`Move set ${index + 1} down`}
                       >
                         ↓
                       </button>
-                      <button className="danger-link" onClick={() => removeClip(clip.clientId)}>
+                      <button
+                        type="button"
+                        className="pulse-button danger-soft small"
+                        onClick={() => removeClip(clip.clientId)}
+                      >
                         Remove
                       </button>
                     </div>
@@ -439,7 +445,12 @@ export function VideoUpload() {
               ))}
             </section>
           )}
-          <button className="primary" disabled={uploadDisabled} onClick={() => void startUpload()}>
+          <button
+            type="button"
+            className="pulse-button primary large block"
+            disabled={uploadDisabled}
+            onClick={() => void startUpload()}
+          >
             Upload session
           </button>
         </section>
@@ -462,11 +473,21 @@ export function VideoUpload() {
           </p>
           <UploadRows clips={clips} />
           {failedClips.length > 0 && (
-            <button className="primary" disabled={busy} onClick={() => void retryFailedUploads()}>
+            <button
+              type="button"
+              className="pulse-button secondary large block"
+              disabled={busy}
+              onClick={() => void retryFailedUploads()}
+            >
               Retry failed uploads
             </button>
           )}
-          <button className="secondary" disabled={busy} onClick={() => void cancelSession()}>
+          <button
+            type="button"
+            className="pulse-button secondary large block"
+            disabled={busy}
+            onClick={() => void cancelSession()}
+          >
             Cancel session
           </button>
         </section>
@@ -507,18 +528,23 @@ export function VideoUpload() {
             <p className="error-box">{serverSession.processing_error}</p>
           )}
           {serverSession.status === 'failed' && (
-            <button className="primary" onClick={retryFailedSession}>
+            <button
+              type="button"
+              className="pulse-button secondary large block"
+              onClick={retryFailedSession}
+            >
               {serverSession.youtube_video_id ? 'Check YouTube again' : 'Retry processing'}
             </button>
           )}
           {serverSession.status === 'cancelled' && (
-            <button className="primary" onClick={resetUpload}>
+            <button type="button" className="pulse-button primary large block" onClick={resetUpload}>
               Start a new upload
             </button>
           )}
           {canDeleteCurrentSession && (
             <InlineConfirmButton
-              className="danger-button"
+              className="pulse-button danger-soft large block"
+              size="default"
               disabled={busy}
               label="Delete this session"
               confirmLabel="Confirm deletion"
@@ -546,7 +572,7 @@ export function VideoUpload() {
             />
           )}
           <a
-            className="primary link-button"
+            className="pulse-button primary large block"
             href={serverSession.youtube_url ?? '#'}
             target="_blank"
             rel="noreferrer"
@@ -568,11 +594,12 @@ export function VideoUpload() {
               </a>
             ))}
           </section>
-          <button className="secondary" onClick={resetUpload}>
+          <button type="button" className="pulse-button secondary large block" onClick={resetUpload}>
             Upload another session
           </button>
           <InlineConfirmButton
-            className="danger-button"
+            className="pulse-button danger-soft large block"
+            size="default"
             disabled={busy}
             label="Delete this session"
             confirmLabel="Confirm deletion"

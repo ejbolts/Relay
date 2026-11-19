@@ -398,7 +398,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               {error}{' '}
               <button
                 type="button"
-                className="text-link"
+                className="pulse-button link small"
                 onClick={() => setAttempt((value) => value + 1)}
               >
                 Try again

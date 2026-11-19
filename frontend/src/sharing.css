@@ -676,7 +676,6 @@
 }
 .profile-account-id-row button {
   flex-shrink: 0;
-  font-size: 0.75rem;
 }
 .people-search-form {
   display: flex;
@@ -1618,6 +1617,9 @@
   font: inherit;
   cursor: pointer;
 }
+.comment-actions .comment-delete {
+  color: var(--p-danger);
+}
 .comment-actions .comment-reaction {
   border: 1px solid var(--p-line-strong);
   border-radius: 20px;
@@ -1662,12 +1664,6 @@
 }
 .comment-replying > button:last-child {
   margin-left: auto;
-  border: 0;
-  background: none;
-  color: var(--p-ink);
-  min-width: 32px;
-  min-height: 32px;
-  font-size: 1.2rem;
 }
 .comment-composer {
   display: flex;

@@ -654,6 +654,7 @@ export function TrainingBlockYearView({
             </div>
             <button
               type="button"
+              className="pulse-button secondary small"
               aria-label={`Edit ${item.name}`}
               disabled={busy}
               onClick={() => onEdit(item)}

@@ -205,7 +205,7 @@ export function TrainingBlockSummaryDialog({
           {loadFailed && (
             <p role="alert" className="error-message">
               Could not load the summary.{' '}
-              <button type="button" onClick={load}>
+              <button type="button" className="pulse-button link small" onClick={load}>
                 Retry
               </button>
             </p>

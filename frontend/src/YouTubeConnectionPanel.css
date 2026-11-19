@@ -93,38 +93,6 @@
   margin: 16px 0 12px;
 }
 
-.youtube-connection-actions > button,
-.youtube-connection-actions .inline-confirmation button {
-  min-height: 42px;
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 13px;
-}
-
-.youtube-connection-actions .primary {
-  background: var(--p-accent);
-  border: 1px solid transparent;
-  color: var(--p-on-accent);
-}
-
-.youtube-connection-actions .secondary {
-  background: var(--p-surface-2);
-  border: 1px solid var(--p-line-strong);
-  color: var(--p-ink);
-}
-
-.youtube-connection-actions .danger-link {
-  background: color-mix(in srgb, var(--p-danger) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--p-danger) 45%, transparent);
-  color: var(--p-danger);
-}
-
-.youtube-connection button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.youtube-connection button:focus-visible,
 .youtube-channel-name:focus-visible {
   outline: 2px solid var(--p-focus-ring);
   outline-offset: 3px;
@@ -135,7 +103,7 @@
   line-height: 1.5;
 }
 
-/* Light mode: the dark privacy callout, pale link and dark buttons would hide their text on white. */
+/* Light mode: the dark privacy callout and pale link would hide their text on white. */
 :root[data-colour-mode='light'] .youtube-connection p.youtube-privacy-copy {
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
@@ -147,15 +115,4 @@
 
 :root[data-colour-mode='light'] .youtube-channel-name {
   color: var(--p-accent-text);
-}
-
-:root[data-colour-mode='light'] .youtube-connection-actions .secondary {
-  border-color: var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
-
-:root[data-colour-mode='light'] .youtube-connection-actions .danger-link {
-  border-color: color-mix(in srgb, var(--p-danger) 40%, transparent);
-  color: var(--p-danger);
 }

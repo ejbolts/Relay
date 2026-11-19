@@ -44,6 +44,7 @@ export function PendingWorkoutSaveCard({
         </span>
         <span className="pending-workout-buttons">
           <InlineConfirmButton
+            className="pulse-button danger-soft small"
             label="Discard"
             confirmLabel="Discard workout"
             workingLabel="Discarding…"
@@ -56,15 +57,30 @@ export function PendingWorkoutSaveCard({
             onConfirm={onDiscard}
           />
           {onKeepMine ? (
-            <button type="button" disabled={saving} onClick={onKeepMine}>
+            <button
+              type="button"
+              className="pulse-button secondary small"
+              disabled={saving}
+              onClick={onKeepMine}
+            >
               Keep my version
             </button>
           ) : onReview ? (
-            <button type="button" disabled={reviewBlocked} onClick={onReview}>
+            <button
+              type="button"
+              className="pulse-button secondary small"
+              disabled={reviewBlocked}
+              onClick={onReview}
+            >
               Review workout
             </button>
           ) : (
-            <button type="button" disabled={saving} onClick={onRetry}>
+            <button
+              type="button"
+              className="pulse-button secondary small"
+              disabled={saving}
+              onClick={onRetry}
+            >
               {saving ? 'Syncing…' : 'Retry sync'}
             </button>
           )}

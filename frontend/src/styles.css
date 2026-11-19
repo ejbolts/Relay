@@ -91,27 +91,15 @@ button:disabled {
   align-items: center;
   gap: 0.25rem;
 }
-.brand,
-.text-button,
-.danger-link {
+.brand {
   border: 0;
   background: transparent;
   color: #183f5c;
-  font-weight: 700;
-}
-.brand {
   font-size: 1.05rem;
+  font-weight: 700;
 }
 .brand span {
   color: #0a9e87;
-}
-.text-button {
-  color: var(--p-accent-text);
-  font-size: 0.9rem;
-}
-.danger-link {
-  color: #b42318;
-  padding: 0.35rem;
 }
 .page {
   width: min(100%, 760px);
@@ -262,14 +250,6 @@ textarea {
   align-items: center;
   gap: 0.25rem;
 }
-.small-button {
-  border: 1px solid #b9c9d8;
-  border-radius: 7px;
-  color: #183f5c;
-  background: #fff;
-  min-width: 2rem;
-  min-height: 2rem;
-}
 .primary,
 .secondary {
   width: 100%;
@@ -298,10 +278,6 @@ textarea {
   background: #fff;
   color: #b42318;
   font-weight: 800;
-}
-.link-button {
-  display: block;
-  text-decoration: none;
 }
 .privacy-note {
   text-align: center;
@@ -5096,8 +5072,7 @@ html.edge-swipe-active .edge-swipe-indicator {
   gap: 0.5rem;
 }
 
-.create-exercise-remove-muscle,
-.create-exercise-add-muscle {
+.create-exercise-remove-muscle {
   min-height: 2.75rem;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -5112,7 +5087,6 @@ html.edge-swipe-active .edge-swipe-indicator {
 
 .create-exercise-add-muscle {
   justify-self: start;
-  padding: 0.5rem 0.75rem;
 }
 
 .create-exercise-dialog input,
@@ -5477,7 +5451,7 @@ html.edge-swipe-active .edge-swipe-indicator {
   box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
 }
 
-.body-row-menu .body-history-actions button {
+.body-row-menu .body-history-actions button:where(:not(.pulse-button)) {
   min-height: 2.75rem;
   border: 0;
   border-bottom: 1px solid #454b4e;
@@ -5488,7 +5462,7 @@ html.edge-swipe-active .edge-swipe-indicator {
   text-align: left;
 }
 
-.body-row-menu .body-history-actions button:last-child {
+.body-row-menu .body-history-actions button:where(:not(.pulse-button)):last-child {
   border-bottom: 0;
 }
 
@@ -5790,12 +5764,6 @@ body,
 
 .video-content .picker {
   border-color: rgb(50 200 144 / 55%);
-}
-
-.video-content .secondary,
-.video-content .small-button,
-.video-content .danger-button {
-  background: var(--card);
 }
 
 .video-content .history-open,
@@ -6636,7 +6604,6 @@ body,
 .cardio-history .cardio-session-summary {
   margin-top: 0.08rem;
 }
-.cardio-history .cardio-session-actions button,
 .cardio-history .cardio-history-workout-link,
 .previous-zone2 button {
   border: 0;
@@ -6976,45 +6943,9 @@ body,
   background: #050807;
 }
 
-.video-content .small-button {
-  min-width: 2.25rem;
-  min-height: 2.25rem;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: #101513;
-  color: var(--ink);
-}
-
-.video-content .danger-link {
-  color: #ff8c82;
-}
-
-.video-content .primary,
-.video-content .secondary,
-.video-content .danger-button {
-  min-height: 3rem;
+/* The page stacks its actions, so each one keeps a gap above it. */
+.video-content .video-page > :is(.pulse-button, .inline-confirmation) {
   margin-top: 0.85rem;
-  border-radius: 11px;
-  padding: 0.8rem 1rem;
-}
-
-.video-content .primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 10px 28px rgb(255 99 84 / 18%);
-}
-
-.video-content .secondary {
-  border-color: var(--line);
-  background: var(--card);
-  color: var(--ink);
-}
-
-.video-content .danger-button {
-  border-color: rgb(255 99 84 / 42%);
-  background: transparent;
-  color: #ff8c82;
 }
 
 .video-content .privacy-note {
@@ -7321,16 +7252,6 @@ body:has(.notification-dialog[open]) {
   border-bottom: 1px solid var(--line);
 }
 
-.inline-confirmation > button:where(:not(.pulse-button)) {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.5rem 0.65rem;
-  background: transparent;
-  color: var(--ink);
-  font-size: 0.64rem;
-  font-weight: 850;
-}
-
 .photo-inline-editor,
 .photo-detail {
   width: 100%;
@@ -7476,11 +7397,6 @@ body:has(.notification-dialog[open]) {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-}
-
-.inline-confirmation > button:first-child {
-  border-color: color-mix(in srgb, var(--p-danger) 45%, transparent);
-  color: var(--p-danger);
 }
 
 .body-history-actions,
@@ -9048,8 +8964,7 @@ body,
   line-height: 1.5;
 }
 
-.settings-actions > button:where(:not(.pulse-button)),
-.settings-actions .inline-confirmation > button:where(:not(.pulse-button)) {
+.settings-actions > button:where(:not(.pulse-button)) {
   min-height: 2.6rem;
   border: 1px solid #41484b;
   border-radius: 4px;
@@ -10624,16 +10539,6 @@ body.chart-fullscreen-open {
   font-size: 0.85rem;
 }
 
-.pending-workout-actions button {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--ink);
-  background: var(--card);
-  font-size: inherit;
-  font-weight: inherit;
-}
-
 .pending-workout-buttons,
 .pending-workout-buttons .inline-confirmation {
   display: flex;
@@ -10652,11 +10557,6 @@ body.chart-fullscreen-open {
   color: var(--muted-ink);
   font-size: inherit;
   text-align: right;
-}
-
-.pending-workout-buttons .inline-confirmation-message + button {
-  border-color: var(--p-danger);
-  color: var(--p-danger);
 }
 
 .background-activity-bar {
@@ -11134,9 +11034,6 @@ html {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
-}
-.cardio-session-actions button {
-  min-height: 2.5rem;
 }
 .cardio-history .cardio-session-energy {
   color: #9ec5f4;

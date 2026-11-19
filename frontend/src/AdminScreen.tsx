@@ -556,6 +556,7 @@ function UserRow({
                 workingLabel="Resetting…"
                 confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
                 className={resetRequestedAt ? 'profile-primary' : 'profile-secondary'}
+                size="default"
                 disabled={busy}
                 onConfirm={() => onResetPassword(user)}
               />
@@ -586,6 +587,7 @@ function UserRow({
                 workingLabel="Disabling…"
                 confirmationMessage="Signs them out everywhere and blocks sign-in. Their data is kept, so enabling the account restores everything."
                 className="profile-danger"
+                size="default"
                 disabled={busy}
                 onConfirm={() => onDisabledChange(user, true)}
               />
