@@ -8,7 +8,7 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
 import { updateCachedReactions } from './sharedProfileCache';
 import { useTimeline } from './timeline';
-import { formatVolume, workingSets, workoutVolumeKg } from './trainingSummary';
+import { formatVolume, strengthSets, workoutVolumeKg } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type {
   FriendActivity,
@@ -41,7 +41,7 @@ function completedSets(movement: TrackedMovement) {
 function FeedStats({ workout, records }: { workout: TrackedWorkout; records: number }) {
   const weightUnit = useWeightUnit();
   const session = friendSession(workout);
-  const sets = workingSets(workout).length;
+  const sets = strengthSets(workout).length;
   const volume = workoutVolumeKg(workout);
   // One line: each value carries its own unit, so none needs a label.
   const stats: string[] = [];

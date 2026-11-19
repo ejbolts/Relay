@@ -8,11 +8,14 @@ export function MuscleGoalEditor({
   defaultGoal,
   goals = {},
   onChange,
+  onCommit,
 }: {
   exercises: Exercise[];
   defaultGoal: number;
   goals?: MuscleSetGoals;
   onChange: (goals: MuscleSetGoals) => void;
+  /** Leaving a target's field, for saving what was typed. */
+  onCommit?: () => void;
 }) {
   const muscles = [
     ...new Set([
@@ -39,12 +42,21 @@ export function MuscleGoalEditor({
               <span>{muscle}</span>
               <input
                 type="number"
+                inputMode="numeric"
+                enterKeyHint="next"
                 min="1"
                 max="1000"
                 step="1"
                 aria-label={`${muscle} weekly set goal`}
+                aria-invalid={
+                  goals[muscle] === undefined ||
+                  (Number.isInteger(goals[muscle]) && goals[muscle] >= 1 && goals[muscle] <= 1000)
+                    ? undefined
+                    : true
+                }
                 value={goals[muscle] ?? ''}
                 placeholder={String(defaultGoal)}
+                onBlur={onCommit}
                 onChange={(event) =>
                   event.target.value === ''
                     ? reset(muscle)

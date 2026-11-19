@@ -16,6 +16,18 @@ export function inactiveWorkoutFinishAt(
   return Math.max(startedAt + limitMs, lastActiveAt + RECENT_WORKOUT_ACTIVITY_MS);
 }
 
+/**
+ * When a workout left running is saved as ending: its last activity, such as the last set
+ * logged, rather than the cutoff that noticed it was left, and never after that cutoff.
+ */
+export function inactiveWorkoutEndAt(
+  startedAt: number,
+  lastActiveAt: number,
+  finishAt: number,
+): number {
+  return Math.min(finishAt, Math.max(startedAt, lastActiveAt));
+}
+
 export function shouldAutoFinishWorkout(
   startedAt: number,
   lastActiveAt: number,

@@ -19,7 +19,8 @@ import { localDate } from './utils';
 import { numberOrNull, prettyDate } from './appShared';
 import { LoadingState } from './LoadingState';
 
-const CARDIO_HISTORY_PAGE_SIZE = 5;
+/** History pages hold whole weeks, so a week's sessions are never split across pages. */
+const CARDIO_HISTORY_WEEKS_PER_PAGE = 3;
 
 /** A history value, marked with ≈ when it was calculated rather than logged. */
 function estimatedMetric(value: number | null, estimated: boolean, unit: string) {
@@ -43,11 +44,14 @@ export function CardioScreen({
   exercises,
   onDataChange,
   onOpenWorkout,
+  onEditWorkout = onOpenWorkout,
 }: {
   dataRevision: string | null;
   exercises: Exercise[];
   onDataChange: () => Promise<void>;
   onOpenWorkout: (workoutId: string) => void;
+  /** Opens the workout a session was logged in, in the workout editor. */
+  onEditWorkout?: (workoutId: string) => void;
 }) {
   const tips = useTips();
   const cardioExercises = exercises.filter((exercise) => exercise.kind === 'cardio');
@@ -123,15 +127,28 @@ export function CardioScreen({
           ? 'workout_plus_cardio'
           : 'pure_cardio') === historyFilter,
     ) ?? [];
+  const allHistoryGroups = groupCardioHistory(
+    filteredSessions,
+    weekStartDayFrom(overview?.current_week.week_start),
+  );
   const historyPageCount = Math.max(
     1,
-    Math.ceil(filteredSessions.length / CARDIO_HISTORY_PAGE_SIZE),
+    Math.ceil(allHistoryGroups.length / CARDIO_HISTORY_WEEKS_PER_PAGE),
   );
   const currentHistoryPage = Math.min(historyPage, historyPageCount);
-  const pagedSessions = filteredSessions.slice(
-    (currentHistoryPage - 1) * CARDIO_HISTORY_PAGE_SIZE,
-    currentHistoryPage * CARDIO_HISTORY_PAGE_SIZE,
+  const historyGroups = allHistoryGroups.slice(
+    (currentHistoryPage - 1) * CARDIO_HISTORY_WEEKS_PER_PAGE,
+    currentHistoryPage * CARDIO_HISTORY_WEEKS_PER_PAGE,
   );
+  // Sessions per workout: deleting a session deletes its workout only when that is all it holds.
+  const sessionsPerWorkout = new Map<string, number>();
+  for (const session of overview?.sessions ?? []) {
+    if (session.source_workout_id)
+      sessionsPerWorkout.set(
+        session.source_workout_id,
+        (sessionsPerWorkout.get(session.source_workout_id) ?? 0) + 1,
+      );
+  }
 
   useEffect(() => {
     setHistoryPage((page) => Math.min(page, historyPageCount));
@@ -213,9 +230,11 @@ export function CardioScreen({
       setSaving(false);
     }
   }
-  async function remove(id: string) {
+  async function remove(session: CardioSession) {
     try {
-      await api.deleteCardio(id);
+      // A session logged on its own is saved as a cardio-only workout; deleting it deletes that.
+      if (session.source_workout_id) await api.deleteWorkout(session.source_workout_id);
+      else await api.deleteCardio(session.id);
       await onDataChange();
       await load();
     } catch (reason) {
@@ -225,8 +244,7 @@ export function CardioScreen({
   if (!overview) return <LoadingState />;
   const week = overview.current_week;
   const today = localDate();
-  const historyGroups = groupCardioHistory(pagedSessions, weekStartDayFrom(week.week_start));
-  const allHistoryGroups = groupCardioHistory(filteredSessions, weekStartDayFrom(week.week_start));
+  const zonesSet = Boolean(overview.cardio_preferences?.heart_rate_zones.length);
   return (
     <div className="cardio-screen">
       {cardioSharing &&
@@ -562,10 +580,7 @@ export function CardioScreen({
             <h3>
               Week of {prettyDate(group.start)}
               <span>
-                {allHistoryGroups
-                  .find((item) => item.start === group.start)!
-                  .sessions.reduce((total, item) => total + item.duration_minutes, 0)}{' '}
-                min
+                {group.sessions.reduce((total, item) => total + item.duration_minutes, 0)} min
               </span>
             </h3>
             {group.sessions.map((session, index) => {
@@ -574,6 +589,11 @@ export function CardioScreen({
                   ? 'workout_plus_cardio'
                   : 'pure_cardio';
               const workoutName = session.source_workout_name?.replace(/\s+workout$/i, '');
+              const linked = session.source_workout_id;
+              // A session inside a strength workout, or sharing one, is removed in that workout.
+              const deletable =
+                !linked ||
+                (workoutContext === 'pure_cardio' && sessionsPerWorkout.get(linked) === 1);
               return (
                 <details
                   className={`cardio-history-row${index > 0 && group.sessions[index - 1].session_date !== session.session_date ? ' cardio-history-new-day' : ''}`}
@@ -588,7 +608,7 @@ export function CardioScreen({
                       <small>
                         {prettyDate(session.session_date)} ·{' '}
                         {workoutContext === 'workout_plus_cardio'
-                          ? 'With workout'
+                          ? `With ${workoutName ?? 'workout'}`
                           : (session.zone ?? 'Cardio only')}
                       </small>
                     </span>
@@ -598,34 +618,6 @@ export function CardioScreen({
                     <Icon name="chevron-down" />
                   </summary>
                   <div className="cardio-history-row-content">
-                    <div className="cardio-session-title-row">
-                      {session.source_workout_id ? (
-                        <button
-                          type="button"
-                          className="cardio-history-workout-link"
-                          onClick={() => onOpenWorkout(session.source_workout_id!)}
-                        >
-                          <strong>{session.activity_type}</strong>
-                        </button>
-                      ) : (
-                        <strong>{session.activity_type}</strong>
-                      )}
-                    </div>
-                    <div className="cardio-session-date-row">
-                      <small className="cardio-session-date">
-                        {prettyDate(session.session_date)}
-                      </small>
-                      {workoutContext === 'workout_plus_cardio' && (
-                        <span className="cardio-context-badge workout-plus-cardio">
-                          With workout
-                        </span>
-                      )}
-                    </div>
-                    <small className="cardio-session-summary">
-                      {session.duration_minutes} min ·{' '}
-                      {session.zone ?? session.intensity ?? 'Unspecified'}
-                      {workoutName ? ` · ${workoutName}` : ''}
-                    </small>
                     <small className="cardio-session-energy">
                       {session.calories_kcal == null
                         ? 'Calories not logged'
@@ -686,27 +678,35 @@ export function CardioScreen({
                         ? 'Edit metrics'
                         : 'Log metrics'}
                     </button>
-                    {!session.source_workout_id && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditingId(session.id);
-                            setDraft({
-                              ...session,
-                              exercise_id:
-                                cardioExercises.find((item) => item.name === session.activity_type)
-                                  ?.id ?? null,
-                            });
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <InlineConfirmButton
-                          label="Delete"
-                          confirmLabel="Delete session"
-                          onConfirm={() => remove(session.id)}
-                        />
-                      </>
+                    <button
+                      type="button"
+                      aria-label={
+                        linked
+                          ? `Edit ${session.activity_type} on ${session.session_date} in its workout`
+                          : undefined
+                      }
+                      onClick={() => {
+                        if (linked) {
+                          onEditWorkout(linked);
+                          return;
+                        }
+                        setEditingId(session.id);
+                        setDraft({
+                          ...session,
+                          exercise_id:
+                            cardioExercises.find((item) => item.name === session.activity_type)
+                              ?.id ?? null,
+                        });
+                      }}
+                    >
+                      Edit
+                    </button>
+                    {deletable && (
+                      <InlineConfirmButton
+                        label="Delete"
+                        confirmLabel="Delete session"
+                        onConfirm={() => remove(session)}
+                      />
                     )}
                   </div>
                 </details>
@@ -727,11 +727,11 @@ export function CardioScreen({
           <button
             type="button"
             className="cardio-goals-edit"
-            aria-label="Edit heart-rate zones and goals"
+            aria-label={zonesSet ? 'Edit heart-rate zones and goals' : 'Set heart-rate zones'}
             onClick={() => setZoneSettingsOpen(true)}
           >
             <Icon name="edit" />
-            Edit
+            {zonesSet ? 'Edit' : 'Set zones'}
           </button>
         </header>
         <ul className="cardio-goal-list">
@@ -749,14 +749,21 @@ export function CardioScreen({
                     </small>
                   )}
                 </span>
-                <span>
-                  <b>
-                    {goal.completed_minutes} / {goal.goal_minutes} min
-                  </b>
-                  <small>
-                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
-                  </small>
-                </span>
+                {zonesSet ? (
+                  <span>
+                    <b>
+                      {goal.completed_minutes} / {goal.goal_minutes} min
+                    </b>
+                    <small>
+                      {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                    </small>
+                  </span>
+                ) : (
+                  // Sessions get a zone from heart-rate ranges, so progress waits for them.
+                  <span>
+                    <b>– / {goal.goal_minutes} min</b>
+                  </span>
+                )}
               </li>
             );
           })}

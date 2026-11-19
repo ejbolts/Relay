@@ -39,3 +39,44 @@ export function rememberUser(user: User, storage = browserAccountStorage()) {
     // Storage can be unavailable or full; the cleanup check just runs again next time.
   }
 }
+
+/**
+ * The account whose session ended without signing out on this device, such as after "Sign out
+ * everywhere" on another device. Its unsynced workout waits on this device for it to sign in
+ * again, and the sign-in form starts with its username.
+ */
+export const SIGNED_OUT_ACCOUNT_KEY = 'relay.signed-out-account';
+
+export type SignedOutAccount = Pick<User, 'id' | 'username'>;
+
+export function readSignedOutAccount(
+  storage: AccountStorage | null = browserAccountStorage(),
+): SignedOutAccount | null {
+  if (!storage) return null;
+  try {
+    const parsed = JSON.parse(
+      storage.getItem(SIGNED_OUT_ACCOUNT_KEY) ?? 'null',
+    ) as Partial<SignedOutAccount> | null;
+    return parsed && typeof parsed.id === 'string' && typeof parsed.username === 'string'
+      ? { id: parsed.id, username: parsed.username }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberSignedOutAccount(
+  account: SignedOutAccount | null,
+  storage: AccountStorage | null = browserAccountStorage(),
+): void {
+  try {
+    if (account)
+      storage?.setItem(
+        SIGNED_OUT_ACCOUNT_KEY,
+        JSON.stringify({ id: account.id, username: account.username }),
+      );
+    else storage?.removeItem(SIGNED_OUT_ACCOUNT_KEY);
+  } catch {
+    // Without storage the sign-in form simply starts empty.
+  }
+}

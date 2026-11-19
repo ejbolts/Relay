@@ -1215,7 +1215,9 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
     <dl className="shared-stat-row">
       <div>
         <dt>Workouts</dt>
-        <dd className="num">{(profile.workout_count ?? 0).toLocaleString('en-GB')}</dd>
+        <dd className="num">
+          {(profile.strength_workout_count ?? profile.workout_count ?? 0).toLocaleString('en-GB')}
+        </dd>
       </div>
       <div>
         <dt>Last 30 days</dt>

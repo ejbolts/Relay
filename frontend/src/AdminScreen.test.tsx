@@ -262,9 +262,36 @@ describe('AdminScreenView', () => {
     expect(view()).not.toContain('Account limits');
   });
 
-  it('shows errors and notices', () => {
+  it('shows a page error at the top and an action error beside its account', () => {
     expect(view({ error: 'Only an administrator can do that.' })).toContain('role="alert"');
-    expect(view({ notice: 'Sign-ups are closed.' })).toContain('Sign-ups are closed.');
+    const scoped = view({ error: 'Could not disable.', errorScope: 'user:tester' });
+    const card = scoped.slice(scoped.indexOf('id="admin-user-tester"'));
+    expect(card).toContain('Could not disable.');
+    expect(scoped.indexOf('Could not disable.')).toBeGreaterThan(
+      scoped.indexOf('id="admin-user-tester"'),
+    );
+  });
+
+  it('puts accounts first and folds limits, storage and versions into Server', () => {
+    const markup = view({ limits, feedback: [] });
+    const order = ['admin-users-title', 'admin-feedback-title', 'admin-switches-title'].map((id) =>
+      markup.indexOf(`id="${id}"`),
+    );
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    const server = markup.slice(markup.indexOf('<details class="admin-server"'));
+    expect(server).toContain('Account limits');
+    expect(server).toContain('Storage &amp; processing');
+    expect(server).toContain('25% disk used');
+    expect(markup).not.toMatch(/<details class="admin-server" open/);
+  });
+
+  it('shows each account as one line that opens, and opens those waiting on a reset', () => {
+    const markup = view({
+      users: [owner, { ...tester, password_reset_requested_at: '2026-10-12T01:00:00Z' }],
+    });
+    expect(markup).toMatch(/id="admin-user-owner"[^]*?aria-expanded="false"/);
+    expect(markup).toMatch(/id="admin-user-tester"[^]*?aria-expanded="true"/);
+    expect(markup).toContain('aria-label="Refresh"');
   });
 
   it('shows private feedback as text and makes the empty state clear', () => {

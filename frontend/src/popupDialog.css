@@ -1,0 +1,4 @@
+/* A dialog opened by a tap starts with focus on itself; the container never needs a ring. */
+.popup-dialog:focus {
+  outline: none;
+}

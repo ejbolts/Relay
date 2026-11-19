@@ -1,21 +1,37 @@
 import { useContext, useId, useState } from 'react';
 import { Icon } from './Icon';
+import { openTipTarget } from './tipActions';
+import { useUserSession } from './userContext';
 import {
   searchSettings,
   SETTINGS_GROUP_LABELS,
   SettingsNavigationContext,
+  useSettingsPageJump,
   type SettingsDestination,
 } from './settingsNavigation';
 import './settingsSearch.css';
 
+const PAGE_LABELS: Record<SettingsDestination['page'], string> = {
+  settings: 'Settings',
+  profile: 'Profile',
+  cardio: 'Cardio',
+  dashboard: 'Home',
+  admin: 'Admin',
+};
+
 export function SettingsSearch({ includeProfile = true }: { includeProfile?: boolean }) {
   const navigation = useContext(SettingsNavigationContext);
+  const isAdmin = Boolean(useUserSession().user?.is_admin);
   const [query, setQuery] = useState('');
   const id = useId();
-  const results = searchSettings(query, includeProfile);
+  const results = searchSettings(query, includeProfile, isAdmin);
+  // Settings stays mounted, so it finishes jumps to results on the Cardio and Admin screens.
+  useSettingsPageJump('cardio', true);
+  useSettingsPageJump('admin', true);
   function choose(entry: SettingsDestination) {
     setQuery('');
-    navigation?.navigate(entry);
+    if (entry.action) openTipTarget(entry.action);
+    else navigation?.navigate(entry);
   }
   return (
     <section className="settings-search" aria-label="Search settings and profile">
@@ -58,11 +74,7 @@ export function SettingsSearch({ includeProfile = true }: { includeProfile?: boo
                     <span>
                       <strong>{entry.title}</strong>
                       <small>
-                        {entry.page === 'profile'
-                          ? 'Profile'
-                          : entry.group
-                            ? SETTINGS_GROUP_LABELS[entry.group]
-                            : 'Settings'}
+                        {entry.group ? SETTINGS_GROUP_LABELS[entry.group] : PAGE_LABELS[entry.page]}
                       </small>
                     </span>
                     <Icon name="chevron-right" />

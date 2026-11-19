@@ -17,25 +17,30 @@ export function useHomeLayout(active = true) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  // Leaving Home mid-edit keeps the draft and picks the edit up again on return.
+  const [paused, setPaused] = useState(false);
   const editButton = useRef<HTMLButtonElement>(null);
   const focusAfterEdit = useRef(false);
 
   useEffect(() => {
     if (editing) focusAfterEdit.current = true;
-    else if (!saving && focusAfterEdit.current) {
+    else if (!saving && !paused && focusAfterEdit.current) {
       editButton.current?.focus();
       focusAfterEdit.current = false;
     }
-  }, [editing, saving]);
+  }, [editing, saving, paused]);
 
   useEffect(() => {
-    if (active) return;
-    setEditing(false);
-    setDragging(false);
-    setDraft(defaultHomeLayout());
-    setError(null);
-    setMessage('');
-  }, [active]);
+    // A save under way finishes the edit itself.
+    if (!active && editing && !saving) {
+      setEditing(false);
+      setDragging(false);
+      setPaused(true);
+    } else if (active && paused) {
+      setPaused(false);
+      setEditing(true);
+    }
+  }, [active, editing, paused, saving]);
 
   useEffect(() => {
     if (!user) return;

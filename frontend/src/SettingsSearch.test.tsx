@@ -11,6 +11,7 @@ import {
   SettingsNavigationContext,
   useSettingsPageJump,
   type SettingsJump,
+  type SettingsPage,
 } from './settingsNavigation';
 
 let root: Root;
@@ -55,7 +56,7 @@ function Harness({ identityKey = 'initial' }: { identityKey?: string }) {
   );
 }
 
-function JumpObserver({ page }: { page: 'settings' | 'profile' }) {
+function JumpObserver({ page }: { page: SettingsPage }) {
   useSettingsPageJump('settings', page === 'settings');
   useSettingsPageJump('profile', page === 'profile');
   return null;
@@ -165,4 +166,26 @@ it('waits for a destination that arrives after loading and focuses it when ready
   });
   await act(async () => vi.advanceTimersByTime(10));
   expect(document.activeElement).toBe(target);
+});
+
+it('finds settings that live on other screens, and admin tools only for admins', () => {
+  const ids = (query: string, admin = false) =>
+    searchSettings(query, true, admin).map((entry) => entry.id);
+  expect(ids('zone')).toContain('cardio-zones');
+  expect(ids('heart rate')).toContain('cardio-zones');
+  expect(ids('check-in')).toContain('home-check-in');
+  expect(ids('body fat')).toContain('home-check-in');
+  expect(ids('sex')).toContain('profile-sex');
+  expect(ids('rest alert')).toContain('alerts');
+  expect(ids('routine')).toContain('training-split');
+  expect(ids('automatic')).toContain('appearance');
+  expect(ids('admin')).toEqual([]);
+  expect(ids('admin', true)).toEqual(['admin']);
+  expect(searchSettings('admin', false, true).map((entry) => entry.id)).toEqual(['admin']);
+});
+
+it('matches the start of words, so "plate" no longer finds templates', () => {
+  expect(searchSettings('plate')).toEqual([]);
+  expect(searchSettings('temp').map((entry) => entry.id)).toContain('training-split');
+  expect(searchSettings('time').map((entry) => entry.id)).toContain('rest');
 });

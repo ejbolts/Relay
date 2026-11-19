@@ -1,0 +1,37 @@
+/* Existing exercises like the name being typed, offered instead of adding a near-duplicate. */
+.create-exercise-matches {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: -0.25rem;
+}
+
+.create-exercise-duplicate {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--p-danger);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.create-exercise-dialog .create-exercise-match {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.25rem;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  background: var(--p-surface-2);
+  color: var(--p-accent-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.create-exercise-dialog .create-exercise-name input[aria-invalid='true'] {
+  border-color: var(--p-danger);
+}

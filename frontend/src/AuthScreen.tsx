@@ -1,4 +1,12 @@
-import { useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   DEFAULT_AUTH_CONFIG,
   MIN_PASSWORD_LENGTH,
@@ -15,11 +23,11 @@ import {
   lightStylePreference,
 } from './colourThemes';
 import { ForgotPasswordDialog } from './ForgotPasswordDialog';
-import { Icon } from './Icon';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
 import { pendingRegistrationInvite } from './friendInvite';
 import { motionReduced } from './motion';
+import { PasswordInput } from './PasswordInput';
 import { requestPhonePushPermissionFromTap } from './push';
 import { SampleProfileDialog } from './SampleProfileDialog';
 import type { AuthConfig, User } from './types';
@@ -29,6 +37,10 @@ interface AuthScreenProps {
   config: AuthConfig | null;
   onAuthenticated: (user: User) => Promise<void> | void;
   initialMode?: AuthMode;
+  /** Why the screen is showing, such as a session that ended on another device. */
+  notice?: string;
+  /** Starts the username field, such as the account whose session just ended. */
+  initialUsername?: string;
   /** Signed in: the screen plays its exit above the app, then calls `onExited`. */
   exiting?: boolean;
   onExited?: () => void;
@@ -174,6 +186,8 @@ export function AuthScreen({
   config,
   onAuthenticated,
   initialMode = 'sign-in',
+  notice: arrivalNotice,
+  initialUsername = '',
   exiting = false,
   onExited,
 }: AuthScreenProps) {
@@ -183,14 +197,15 @@ export function AuthScreen({
   const [requestedMode, setMode] = useState<AuthMode>(initialMode);
   const mode: AuthMode = registrationOpen ? requestedMode : 'sign-in';
   const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState(() => pendingRegistrationInvite() ?? '');
-  const [showPassword, setShowPassword] = useState(false);
   const [inviteRevealed, setInviteRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The arrival notice stays until the person submits the form or switches tab.
+  const [notice, setNotice] = useState<string | null>(arrivalNotice ?? null);
+  const [closedNoteOpen, setClosedNoteOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -248,6 +263,20 @@ export function AuthScreen({
     setFieldErrors({});
   }
 
+  /** Return in a field moves on to the next empty required field instead of submitting. */
+  function advanceOnEnter(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    const fields = [...event.currentTarget.elements].filter(
+      (element): element is HTMLInputElement => element instanceof HTMLInputElement,
+    );
+    const index = fields.indexOf(event.target as HTMLInputElement);
+    if (index < 0) return;
+    const next = fields.slice(index + 1).find((field) => field.required && !field.value);
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
@@ -266,16 +295,17 @@ export function AuthScreen({
       if (mode === 'create-account') {
         queueHomeScreenGuide(result.user.id);
         queueAppGuide(result.user.id);
+      }
+      if (result.needsSignIn) {
+        // Created, but the sign-in that follows did not go through: finish it from the form.
         setMode('sign-in');
         setDisplayName('');
-        setUsername('');
         setPassword('');
         setInviteCode('');
-        setShowPassword(false);
         setInviteRevealed(false);
-        setNotice('Account created. Sign in with your username and password.');
+        setNotice('Account created. Sign in with your password.');
         setSubmitting(false);
-        window.requestAnimationFrame(() => document.getElementById(ids.username)?.focus());
+        window.requestAnimationFrame(() => document.getElementById(ids.password)?.focus());
         return;
       }
       shellTopRef.current =
@@ -333,19 +363,22 @@ export function AuthScreen({
               id={`${idPrefix}-tab-create`}
               aria-selected={creating}
               aria-controls={`${idPrefix}-form`}
+              // Stays tappable while closed, to say why it is unavailable.
               aria-disabled={!registrationOpen}
-              disabled={!registrationOpen}
               className={creating ? 'active' : ''}
-              onClick={() => switchMode('create-account')}
+              onClick={() =>
+                registrationOpen
+                  ? switchMode('create-account')
+                  : setClosedNoteOpen((current) => !current)
+              }
             >
               Create account
             </button>
           </div>
 
-          {!registrationOpen && (
-            <p className="auth-note">
-              New accounts are closed on this server. Ask whoever runs it for access, then sign in
-              here.
+          {!registrationOpen && closedNoteOpen && (
+            <p className="auth-note" role="status">
+              New accounts are closed on this server. Ask whoever runs it for access.
             </p>
           )}
 
@@ -360,6 +393,7 @@ export function AuthScreen({
             role="tabpanel"
             aria-labelledby={`${idPrefix}-tab-${creating ? 'create' : 'sign-in'}`}
             noValidate
+            onKeyDown={advanceOnEnter}
             onSubmit={(event) => void submit(event)}
           >
             {creating && (
@@ -375,6 +409,7 @@ export function AuthScreen({
                   type="text"
                   autoComplete="name"
                   autoCapitalize="words"
+                  enterKeyHint="next"
                   required
                   placeholder="Sam Sample"
                   value={displayName}
@@ -410,6 +445,7 @@ export function AuthScreen({
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
+                  enterKeyHint="next"
                   required
                   maxLength={32}
                   placeholder={creating ? 'sam.sample' : undefined}
@@ -438,39 +474,22 @@ export function AuthScreen({
                 )
               }
             >
-              <div className="auth-password">
-                <input
-                  id={ids.password}
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete={creating ? 'new-password' : 'current-password'}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  required
-                  minLength={creating ? MIN_PASSWORD_LENGTH : undefined}
-                  value={password}
-                  aria-invalid={Boolean(fieldErrors.password)}
-                  aria-describedby={describedBy(
-                    ids.password,
-                    fieldErrors.password,
-                    creating ? 'hint' : undefined,
-                  )}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="auth-reveal"
-                  // One name with a pressed state; the eye shows what a tap will do.
-                  aria-label="Show password"
-                  aria-pressed={showPassword}
-                  aria-controls={ids.password}
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword((current) => !current)}
-                >
-                  <Icon name={showPassword ? 'hide' : 'eye'} />
-                </button>
-              </div>
+              <PasswordInput
+                id={ids.password}
+                name="password"
+                autoComplete={creating ? 'new-password' : 'current-password'}
+                enterKeyHint={showInviteCode ? 'next' : 'go'}
+                required
+                minLength={creating ? MIN_PASSWORD_LENGTH : undefined}
+                value={password}
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={describedBy(
+                  ids.password,
+                  fieldErrors.password,
+                  creating ? 'hint' : undefined,
+                )}
+                onChange={(event) => setPassword(event.target.value)}
+              />
             </AuthField>
 
             {showInviteCode && (
@@ -483,6 +502,7 @@ export function AuthScreen({
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
+                  enterKeyHint="go"
                   required={effectiveConfig.invite_code_required}
                   value={inviteCode}
                   aria-invalid={Boolean(fieldErrors.inviteCode)}

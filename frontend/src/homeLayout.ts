@@ -367,6 +367,21 @@ export function moveHomeSection(
   return { ...layout, order };
 }
 
+/**
+ * Shows a hidden section straight after `after` (Home's first card), so a section added from
+ * **Add sections** lands in view rather than at the bottom of a long page.
+ */
+export function showHomeSectionAfter(
+  layout: HomeLayout,
+  id: HomeSectionId,
+  after: HomeSectionId | undefined,
+): HomeLayout {
+  if (!layout.order.includes(id)) return layout;
+  const order = layout.order.filter((item) => item !== id);
+  order.splice(after && after !== id ? order.indexOf(after) + 1 : 0, 0, id);
+  return { ...layout, order, hidden: layout.hidden.filter((item) => item !== id) };
+}
+
 export function toggleHomeSection(layout: HomeLayout, id: HomeSectionId): HomeLayout {
   return {
     ...layout,

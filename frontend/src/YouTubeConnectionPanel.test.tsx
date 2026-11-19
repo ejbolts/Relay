@@ -129,10 +129,19 @@ describe('personal YouTube connection', () => {
     },
   );
 
+  it('keeps a failed connection result in the panel as an error', async () => {
+    window.history.replaceState(null, '', '/?youtube=expired#settings');
+    await render(connected);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('expired');
+    expect(document.body.querySelector('.top-toast')).toBeNull();
+  });
+
   it('shows the callback result and removes its query parameter without losing navigation', async () => {
     window.history.replaceState({ gymLogger: true }, '', '/?youtube=connected#videos');
     await render(connected);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('YouTube connected');
+    // A confirmation, so it shows in the top toast rather than inside the panel.
+    expect(document.body.querySelector('.top-toast')?.textContent).toContain('YouTube connected');
+    expect(container.querySelector('[role="status"]')).toBeNull();
     expect(window.location.search).toBe('');
     expect(window.location.hash).toBe('#videos');
     expect(window.history.state).toEqual({ gymLogger: true });

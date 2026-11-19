@@ -119,12 +119,16 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     return result;
   }
 
-  /** Saves one measurement typed on the figure into the entry being shown. */
+  /**
+   * Saves one measurement typed on the figure into today's entry, starting it if needed, so an
+   * earlier entry is only changed through Edit.
+   */
   function saveOnFigure(field: BodySizeField, typed: string): boolean {
-    const day = shown?.measurement_date ?? localDate();
+    const day = localDate();
     const entry = logs?.find((row) => row.measurement_date === day) ?? emptyLog(day);
     const text = typed.trim().replace(',', '.');
-    const original = entry[field];
+    // What the box started with, so confirming it unchanged saves nothing.
+    const original = figureValues[field];
     if (!text || (original != null && text === editText(original))) {
       setInlineField(null);
       setInlineError(null);
@@ -225,6 +229,20 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const shownIndex = Math.max(0, logs?.findIndex((row) => row.measurement_date === shownDate) ?? 0);
   const shown = logs?.[shownIndex];
   const previous = logs?.[shownIndex + 1];
+  // The figure shows the shown entry's values, and for parts it lacks, the latest earlier value,
+  // muted, so it stays complete without copying old values into the entry.
+  const figureValues: Partial<Record<BodySizeField, number>> = {};
+  const carried = new Set<BodySizeField>();
+  for (const [key] of BODY_SIZE_FIELDS) {
+    if (shown?.[key] != null) figureValues[key] = shown[key]!;
+    else {
+      const earlier = logs?.slice(shownIndex + 1).find((row) => row[key] != null)?.[key];
+      if (earlier != null) {
+        figureValues[key] = earlier;
+        carried.add(key);
+      }
+    }
+  }
   const history = (logs ?? []).filter((row) => historyPart === 'all' || row[historyPart] !== null);
   const partLabel = BODY_SIZE_FIELDS.find(([key]) => key === historyPart)?.[1];
   const format = (cm: number) => `${Number((cm / factor).toFixed(1))} ${unit}`;
@@ -242,6 +260,11 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     const change = Number((display(shown[key]) - display(previous[key])).toFixed(1));
     return change === 0 ? [] : [{ key, label, change }];
   });
+  /** The most recent measurement of a part before the dialog's date, as a hint to type over. */
+  const lastValue = (key: BodySizeField) => {
+    const cm = logs?.find((row) => row.measurement_date < date && row[key] != null)?.[key];
+    return cm == null ? undefined : String(display(cm));
+  };
   const open = (day: string, field: BodySizeField | null = null) => {
     chooseDate(day);
     setFocusField(field);
@@ -315,7 +338,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
             }}
             editing={inlineField}
             editValue={
-              inlineField && shown?.[inlineField] != null ? editText(shown[inlineField]!) : ''
+              inlineField && figureValues[inlineField] != null
+                ? editText(figureValues[inlineField]!)
+                : ''
             }
             invalid={inlineError !== null && inlineField !== null}
             onCommit={saveOnFigure}
@@ -324,11 +349,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               setInlineError(null);
             }}
             values={Object.fromEntries(
-              BODY_SIZE_FIELDS.filter(([key]) => shown?.[key] != null).map(([key]) => [
-                key,
-                String(display(shown![key]!)),
-              ]),
+              Object.entries(figureValues).map(([key, cm]) => [key, String(display(cm))]),
             )}
+            carried={carried}
           />
           {inlineError && (
             <p id="body-figure-error" role="alert" className="inline-error body-figure-error">
@@ -524,6 +547,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     disabled={saving}
                     step="any"
                     inputMode="decimal"
+                    placeholder={lastValue(key)}
                     value={draft[key] ?? ''}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, [key]: event.target.value }))

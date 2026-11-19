@@ -246,7 +246,7 @@ describe('BodySizesCard', () => {
     expect(api.deleteBodySizes).toHaveBeenCalledWith('2026-10-11');
     expect(stepper.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-25');
   });
-  it('types a measurement tapped on the figure straight into the shown date', async () => {
+  it('types a measurement tapped on the figure into today’s entry, leaving earlier ones as they were', async () => {
     await render([
       row('2026-10-25', { waist_cm: 81, chest_cm: 103 }),
       row('2026-10-18', { waist_cm: 82, chest_cm: 102 }),
@@ -264,13 +264,25 @@ describe('BodySizesCard', () => {
     expect(box.value).toBe('82');
     await act(async () => typeInto(box, '81.5'));
     await act(async () => press(box, 'Enter'));
-    expect(api.saveBodySizes).toHaveBeenCalledWith(
-      expect.objectContaining({ measurement_date: '2026-10-18', waist_cm: 81.5, chest_cm: 102 }),
+    // It starts today's entry with only the typed part; the shown Oct 18 entry is untouched.
+    expect(api.saveBodySizes).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ measurement_date: localDate(), waist_cm: 81.5, chest_cm: null }),
+    );
+    expect(host.querySelector('.body-sizes-stepper time')?.getAttribute('datetime')).toBe(
+      localDate(),
     );
     expect(host.querySelector('[data-field="waist_cm"]')?.textContent).toBe('Waist81.5 cm');
     expect(host.querySelector('.body-figure-editor')).toBeNull();
+    // The figure stays complete: chest shows the latest earlier value, muted.
+    const chest = host.querySelector('[data-field="chest_cm"]')!;
+    expect(chest.textContent).toBe('Chest103 cm');
+    expect(chest.classList.contains('carried')).toBe(true);
+    expect(chest.getAttribute('aria-label')).toBe('Add chest, last 103 cm');
+    expect(host.querySelector('[data-field="waist_cm"]')?.classList.contains('carried')).toBe(
+      false,
+    );
 
-    // A blank part is added to the same entry, keeping the rest of it.
+    // A blank part is added to today's entry, keeping what it already has.
     const neck = host.querySelector('[data-field="neck_cm"]')!;
     expect(neck.getAttribute('aria-label')).toBe('Add neck');
     await act(async () => neck.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -280,13 +292,18 @@ describe('BodySizesCard', () => {
     await act(async () => box.blur());
     expect(api.saveBodySizes).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        measurement_date: '2026-10-18',
+        measurement_date: localDate(),
         neck_cm: 38.5,
         waist_cm: 81.5,
-        chest_cm: 102,
+        chest_cm: null,
       }),
     );
     expect(host.querySelector('[data-field="neck_cm"]')?.textContent).toBe('Neck38.5 cm');
+    // Confirming a carried value unchanged saves nothing.
+    await act(async () => chest.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(figureBox().value).toBe('103');
+    await act(async () => press(figureBox(), 'Enter'));
+    expect(api.saveBodySizes).toHaveBeenCalledTimes(2);
   });
   it('rejects an impossible value beside the figure and saves nothing for an empty or unchanged box', async () => {
     unit = 'lb';
@@ -343,7 +360,12 @@ describe('BodySizesCard', () => {
     await act(async () => pending[0]({} as BodySizeLog));
     expect(api.saveBodySizes).toHaveBeenCalledTimes(2);
     expect(api.saveBodySizes).toHaveBeenLastCalledWith(
-      expect.objectContaining({ neck_cm: 38, chest_cm: 101, waist_cm: 81 }),
+      expect.objectContaining({
+        measurement_date: localDate(),
+        neck_cm: 38,
+        chest_cm: 101,
+        waist_cm: null,
+      }),
     );
     await act(async () => pending[1]({} as BodySizeLog));
   });
@@ -483,5 +505,18 @@ describe('BodySizesCard', () => {
     expect(api.saveBodySizes).toHaveBeenCalledWith(
       expect.objectContaining({ measurement_date: '2026-10-19', waist_cm: null, chest_cm: 100 }),
     );
+  });
+  it('hints each part’s latest earlier value when logging new measurements', async () => {
+    await render([
+      row('2026-10-20', { waist_cm: 82 }),
+      row('2026-10-12', { waist_cm: 83, chest_cm: 101.04 }),
+    ]);
+    await act(async () => button('Log measurements').click());
+    const field = (name: string) =>
+      document.querySelector<HTMLInputElement>(`dialog input[name="${name}"]`)!;
+    expect(field('waist_cm').placeholder).toBe('82');
+    expect(field('chest_cm').placeholder).toBe('101');
+    expect(field('neck_cm').placeholder).toBe('');
+    expect(field('waist_cm').value).toBe('');
   });
 });

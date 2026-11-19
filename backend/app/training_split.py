@@ -191,6 +191,34 @@ def split_recommendation(
     index = (
         progress.step if progress else (scheduled_date - split.start_date).days % len(split.steps)
     )
+    recommendation = _split_day(db, user_id, split, index, scheduled_date, progress)
+    if recommendation.is_rest_day:
+        # What starting a workout on the rest day trains: the next training day of the cycle.
+        for ahead in range(1, len(split.steps)):
+            if split.steps[(index + ahead) % len(split.steps)].workout_type_id is None:
+                continue
+            following = _split_day(
+                db,
+                user_id,
+                split,
+                (index + ahead) % len(split.steps),
+                scheduled_date + timedelta(days=ahead),
+                None,
+            )
+            if not following.needs_split_update:
+                recommendation.next_training_day = following
+            break
+    return recommendation
+
+
+def _split_day(
+    db: Session,
+    user_id: str,
+    split: TrainingSplit,
+    index: int,
+    scheduled_date: date,
+    progress: SplitProgress | None,
+) -> WorkoutRecommendationRead:
     type_id = split.steps[index].workout_type_id
     is_rest = type_id is None
     workout_type = next(

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
@@ -58,7 +58,7 @@ const bench: Exercise = {
 let root: Root;
 let container: HTMLDivElement;
 
-function liveDraft() {
+function liveDraft(workoutDate = '2026-11-17') {
   const startedAt = Date.now() - 30 * 60_000;
   const draft: ActiveWorkoutDraft = {
     version: 1,
@@ -67,7 +67,7 @@ function liveDraft() {
     lastActiveAt: startedAt,
     inactiveFinishAt: startedAt + 3 * 60 * 60 * 1000,
     name: 'Push workout',
-    workoutDate: '2026-11-17',
+    workoutDate,
     category: 'push',
     notes: '',
     movements: [
@@ -205,25 +205,28 @@ it('lets the summary go when dismissed', async () => {
 
 it('lists the records on the card once the workout has synced, with no toast over it', async () => {
   liveDraft();
+  let created: TrackedWorkout | null = null;
+  // Once saved, the workout is in history, as the server would list it.
+  vi.mocked(api.listWorkouts).mockImplementation(async () => (created ? [created] : []));
   // The server echoes the workout's client session, which ties its records to the card.
-  vi.mocked(api.createWorkout).mockImplementation(
-    async (payload: WorkoutInput) =>
-      ({
-        id: 'saved-workout',
-        name: payload.name,
-        workout_date: payload.workout_date,
-        category: payload.category,
-        client_session_id: payload.client_session_id,
-        notes: null,
-        duration_minutes: payload.duration_minutes,
-        start_time: null,
-        end_time: null,
-        is_sample: false,
-        created_at: '2026-11-17T08:00:00Z',
-        updated_at: '2026-11-17T08:00:00Z',
-        movements: [],
-      }) as unknown as TrackedWorkout,
-  );
+  vi.mocked(api.createWorkout).mockImplementation(async (payload: WorkoutInput) => {
+    created = {
+      id: 'saved-workout',
+      name: payload.name,
+      workout_date: payload.workout_date,
+      category: payload.category,
+      client_session_id: payload.client_session_id,
+      notes: null,
+      duration_minutes: payload.duration_minutes,
+      start_time: null,
+      end_time: null,
+      is_sample: false,
+      created_at: '2026-11-17T08:00:00Z',
+      updated_at: '2026-11-17T08:00:00Z',
+      movements: [],
+    } as unknown as TrackedWorkout;
+    return created;
+  });
   vi.mocked(api.listPersonalRecords).mockImplementation(async (filter) =>
     filter?.workoutId === 'saved-workout'
       ? [
@@ -256,4 +259,61 @@ it('lists the records on the card once the workout has synced, with no toast ove
     'All-time Weight PR',
   );
   expect(document.querySelector('.workout-completion-toast')).toBeNull();
+});
+
+describe('a finished workout that is deleted', () => {
+  const today = () =>
+    new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  const refresh = () =>
+    act(async () => {
+      window.dispatchEvent(new Event('training-blocks-updated'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+  it('leaves Home once a refresh no longer finds its synced workout', async () => {
+    liveDraft(today());
+    let listed: TrackedWorkout[] = [];
+    vi.mocked(api.listWorkouts).mockImplementation(async () => listed);
+    vi.mocked(api.createWorkout).mockImplementation(async (payload: WorkoutInput) => {
+      listed = [
+        {
+          id: 'saved-workout',
+          name: payload.name,
+          workout_date: payload.workout_date,
+          category: payload.category,
+          client_session_id: payload.client_session_id,
+          notes: null,
+          duration_minutes: payload.duration_minutes,
+          start_time: null,
+          end_time: null,
+          is_sample: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          movements: [],
+        } as unknown as TrackedWorkout,
+      ];
+      return listed[0];
+    });
+    await mount();
+    await finish();
+    await refresh();
+    expect(card()).not.toBeNull();
+
+    // Deleted on another device: the next refresh no longer lists it.
+    listed = [];
+    await refresh();
+    expect(card()).toBeNull();
+    expect(
+      Object.keys(window.localStorage).some((key) => key.startsWith('relay:finished-workout')),
+    ).toBe(false);
+  });
+
+  it('stays while its workout is still waiting to sync', async () => {
+    liveDraft(today());
+    vi.mocked(api.createWorkout).mockImplementation(() => new Promise(() => undefined));
+    await mount();
+    await finish();
+    await refresh();
+    expect(card()?.querySelector('h2')?.textContent).toBe('Push workout');
+  });
 });

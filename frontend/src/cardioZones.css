@@ -65,6 +65,25 @@
   outline: 2px solid var(--p-accent);
   outline-offset: 1px;
 }
+.cardio-zone-dialog input[aria-invalid='true'] {
+  border-color: var(--p-danger);
+}
+.cardio-zone-fill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.cardio-zone-fill label {
+  display: grid;
+  gap: 4px;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.cardio-zone-fill .pulse-button {
+  min-height: 44px;
+}
 .cardio-goal-remove,
 .cardio-goal-add,
 .cardio-goals-edit {
