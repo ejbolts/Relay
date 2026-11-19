@@ -239,7 +239,7 @@
   gap: 8px;
   margin: 16px 0 18px;
 }
-.body-sizes-entry-actions button {
+.body-sizes-entry-actions button:where(:not(.pulse-button)) {
   flex: 1;
   min-height: 40px;
   border: 1px solid var(--p-line-strong);

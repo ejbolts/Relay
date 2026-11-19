@@ -1530,7 +1530,8 @@
 }
 
 .comment-delete-dialog .popup-dialog-actions .comment-delete-confirm {
-  background: var(--p-danger);
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
 }
 
 /* Pair the app's height glide with a small entrance for discussion content, including
@@ -1586,7 +1587,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--p-accent);
+  color: var(--p-accent-text);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -1613,7 +1614,7 @@
   border: 0;
   padding: 0.4rem 0;
   background: none;
-  color: var(--p-accent);
+  color: var(--p-accent-text);
   font: inherit;
   cursor: pointer;
 }
