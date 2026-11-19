@@ -25,11 +25,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* A 44px touch target around the 28px button, reaching a little into the rows above and below. */
+/*
+ * A 44px wide touch target around the 28px button. It stays inside the 30px line, because the set
+ * numbers directly above and below are buttons too.
+ */
 .set-insert-button::before {
   content: '';
   position: absolute;
-  inset: -8px;
+  inset: -1px -8px;
 }
 
 /* Specific enough to beat the rest divider's own `span` label styles. */
