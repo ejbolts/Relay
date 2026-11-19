@@ -12,6 +12,7 @@ vi.mock('./api', () => ({
 let root: Root;
 let container: HTMLDivElement;
 const onClose = vi.fn();
+const onExported = vi.fn();
 const downloads: string[] = [];
 const workoutBlob = new Blob(['workout rows']);
 const bodyBlob = new Blob(['bodyweight rows']);
@@ -46,6 +47,7 @@ beforeEach(async () => {
         workoutDates={['2026-09-15']}
         bodyweightDates={['2026-10-18']}
         onClose={onClose}
+        onExported={onExported}
       />,
     ),
   );
@@ -73,12 +75,14 @@ describe('Relay export choices', () => {
     expect(api.exportBodyMeasurements).not.toHaveBeenCalled();
   });
 
-  it('exports only workouts by default and reports the downloaded file', async () => {
+  it('exports only workouts by default and confirms the download for the toast', async () => {
+    onExported.mockClear();
     await click(download());
     expect(api.exportWorkouts).toHaveBeenCalledWith({});
     expect(api.exportBodyMeasurements).not.toHaveBeenCalled();
     expect(downloads).toEqual([expect.stringMatching(/^gym-workouts-.*\.csv$/)]);
-    expect(document.querySelector('[role=status]')?.textContent).toBe('CSV downloaded.');
+    expect(onExported).toHaveBeenCalledWith('CSV downloaded.');
+    expect(document.querySelector('[role=status]')).toBeNull();
     expect(URL.createObjectURL).toHaveBeenCalledWith(workoutBlob);
     expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
   });
@@ -110,7 +114,7 @@ describe('Relay export choices', () => {
       'gym-workouts-2026-09-18-to-2026-10-18.csv',
       'body-weight-2026-09-18-to-2026-10-18.csv',
     ]);
-    expect(document.querySelector('[role=status]')?.textContent).toBe('Both CSV files downloaded.');
+    expect(onExported).toHaveBeenLastCalledWith('Both CSV files downloaded.');
   });
 
   it('downloads neither file if preparing either fails, and allows retry', async () => {
@@ -119,6 +123,7 @@ describe('Relay export choices', () => {
     await click(download());
     expect(downloads).toEqual([]);
     expect(document.querySelector('[role=alert]')?.textContent).toBe('Try again later.');
+    expect(onExported).not.toHaveBeenCalledWith('Both CSV files downloaded.');
     expect(download().disabled).toBe(false);
     await click(download());
     expect(downloads).toHaveLength(2);

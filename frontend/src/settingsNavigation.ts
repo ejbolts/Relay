@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
+import type { TipAction } from './tipActions';
 
 export const SETTINGS_GROUP_LABELS = {
   training: 'Training',
@@ -10,16 +11,22 @@ export const SETTINGS_GROUP_LABELS = {
 } as const;
 export type SettingsGroupId = keyof typeof SETTINGS_GROUP_LABELS;
 
+/** Screens a search result can open; settings found elsewhere live on Cardio, Home and Admin. */
+export type SettingsPage = 'settings' | 'profile' | 'cardio' | 'dashboard' | 'admin';
+
 export interface SettingsDestination {
   id: string;
   title: string;
-  page: 'settings' | 'profile';
+  page: SettingsPage;
   group?: SettingsGroupId;
   keywords: string;
   selector: string;
   reveal?: string[];
   editProfile?: boolean;
   requiresAccount?: boolean;
+  requiresAdmin?: boolean;
+  /** Opens the place another way, such as Home's edit mode, instead of jumping to `selector`. */
+  action?: TipAction;
 }
 
 export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
@@ -54,7 +61,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'Your split',
     page: 'settings',
     keywords:
-      'schedule rotation upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
+      'schedule rotation routine routines upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
     selector: '#training-split-settings',
   },
   {
@@ -96,7 +103,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     group: 'notifications',
     title: 'Phone alerts',
     page: 'settings',
-    keywords: 'notifications reminders push',
+    keywords: 'notifications reminders push rest alert alerts sound vibrate vibration',
     selector: '#notification-settings-title',
   },
   {
@@ -105,7 +112,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'App theme',
     page: 'settings',
     keywords:
-      'appearance light dark mode colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
+      'appearance light dark mode automatic system colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
     selector: '#colour-theme-title',
   },
   {
@@ -289,6 +296,38 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '#profile-session-title',
   },
   {
+    id: 'profile-sex',
+    title: 'Sex',
+    page: 'profile',
+    requiresAccount: true,
+    keywords: 'male female gender profile body figure',
+    selector: '.profile-sex-field',
+    editProfile: true,
+  },
+  {
+    id: 'cardio-zones',
+    title: 'Heart-rate zones',
+    page: 'cardio',
+    keywords: 'cardio zone zones heart rate hr bpm zone 2 weekly goal minutes',
+    selector: '[aria-label="Edit heart-rate zones and goals"]',
+  },
+  {
+    id: 'home-check-in',
+    title: 'Home check-in card',
+    page: 'dashboard',
+    keywords: 'check-in checkin weigh-in bodyweight body weight fat customise layout home card',
+    selector: '.home-section',
+    action: { target: 'home-edit' },
+  },
+  {
+    id: 'admin',
+    title: 'Admin console',
+    page: 'admin',
+    requiresAdmin: true,
+    keywords: 'administrator accounts users sign-ups registration limits server storage feedback',
+    selector: '#admin-users-title',
+  },
+  {
     id: 'delete',
     group: 'account',
     title: 'Delete account',
@@ -299,15 +338,31 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   },
 ];
 
-export function searchSettings(query: string, includeProfile = true): SettingsDestination[] {
-  const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+const searchWords = (text: string) =>
+  text
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+/** Every searched word must start a word, so "plate" no longer finds "templates". */
+const startsWords = (words: string[], text: string) => {
+  const candidates = searchWords(text);
+  return words.every((word) => candidates.some((candidate) => candidate.startsWith(word)));
+};
+
+export function searchSettings(
+  query: string,
+  includeProfile = true,
+  includeAdmin = false,
+): SettingsDestination[] {
+  const words = searchWords(query);
   if (!words.length) return [];
-  const inTitle = (entry: SettingsDestination) =>
-    words.every((word) => entry.title.toLocaleLowerCase().includes(word));
+  const inTitle = (entry: SettingsDestination) => startsWords(words, entry.title);
   const matches = SETTINGS_DESTINATIONS.filter(
     (entry) =>
       (includeProfile || (entry.page !== 'profile' && !entry.requiresAccount)) &&
-      words.every((word) => `${entry.title} ${entry.keywords}`.toLocaleLowerCase().includes(word)),
+      (includeAdmin || !entry.requiresAdmin) &&
+      startsWords(words, `${entry.title} ${entry.keywords}`),
   );
   // "rest" should lead with Rest timer, not a section that only mentions rest days.
   return [...matches.filter(inTitle), ...matches.filter((entry) => !inTitle(entry))];
@@ -333,7 +388,7 @@ export function useSettingsReveal(title: string, reveal: () => void) {
 }
 
 /** Runs after page navigation and destination controls have been revealed. */
-export function useSettingsPageJump(page: 'settings' | 'profile', active: boolean) {
+export function useSettingsPageJump(page: SettingsPage, active: boolean) {
   const navigation = useContext(SettingsNavigationContext);
   const handled = useRef(0);
   useEffect(() => {
@@ -357,9 +412,12 @@ export function useSettingsPageJump(page: 'settings' | 'profile', active: boolea
       first = requestAnimationFrame(() => {
         second = requestAnimationFrame(() => {
           queued = false;
-          const root = document.querySelector(`[data-settings-page="${page}"]`);
-          const target = root?.querySelector<HTMLElement>(destination.selector);
-          if (!target || target.closest('.is-collapsed, [hidden]')) return;
+          // Screens other than Settings and Profile are found by the control itself.
+          const root = document.querySelector(`[data-settings-page="${page}"]`) ?? document;
+          const target = Array.from(root.querySelectorAll<HTMLElement>(destination.selector)).find(
+            (element) => !element.closest('.is-collapsed, [hidden]'),
+          );
+          if (!target) return;
           handled.current = serial;
           observer.disconnect();
           clearTimeout(expiry);

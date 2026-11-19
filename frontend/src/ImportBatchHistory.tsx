@@ -30,13 +30,11 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<ImportBatch | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function show() {
     setOpen(true);
     setLoading(true);
     setError(null);
-    setNotice(null);
     try {
       setBatches(await api.importBatches());
     } catch (caught) {
@@ -54,7 +52,8 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
       await onUndo(selected.id);
       setBatches((batches ?? []).filter((batch) => batch.id !== selected.id));
       setSelected(null);
-      setNotice('Import undone.');
+      // The app confirms with a toast, which a modal would cover.
+      setOpen(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not undo that import.');
     } finally {
@@ -129,7 +128,6 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
                       onClick={() => {
                         setSelected(batch);
                         setError(null);
-                        setNotice(null);
                       }}
                     >
                       Undo
@@ -141,11 +139,6 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
             {error && (
               <p role="alert" className="inline-error">
                 {error}
-              </p>
-            )}
-            {notice && (
-              <p role="status" className="import-history-muted">
-                {notice}
               </p>
             )}
           </div>
