@@ -243,6 +243,47 @@ describe('password reset requests in the admin console', () => {
   });
 });
 
+describe('changing a username in the admin console', () => {
+  it('saves through the admin API and updates the card in place', async () => {
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.open = false;
+    };
+    const save = vi
+      .spyOn(api.admin, 'setUserUsername')
+      .mockResolvedValue({ ...casey, username: 'casey.s' });
+    await render(true);
+
+    const card = host.querySelector('#admin-user-casey')!;
+    const change = [...card.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Change username',
+    )!;
+    await act(async () => change.click());
+    const input = document.querySelector<HTMLInputElement>(
+      'dialog.admin-username-dialog input[name="username"]',
+    )!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Casey.S',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () =>
+      [...document.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Save username')!
+        .click(),
+    );
+
+    expect(save).toHaveBeenCalledWith('casey', 'casey.s');
+    expect(document.querySelector('dialog.admin-username-dialog')).toBeNull();
+    expect(card.querySelector('.admin-user-heading')?.textContent).toContain('casey.s');
+    expect(document.body.textContent).toContain('Casey’s username is now @casey.s.');
+  });
+});
+
 describe('username requests in the admin console', () => {
   const jordan = account('jordan', { username_reminder_requested_at: requestedAt });
 

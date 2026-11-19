@@ -83,7 +83,7 @@ export function AdminRequestDialog({
   }
 
   return (
-    <PopupDialog title={title} className={`admin-request-dialog ${className}`} onClose={onClose}>
+    <PopupDialog title={title} className={`field-dialog ${className}`} onClose={onClose}>
       {sentFor ? (
         <>
           <div className="admin-request-sent" role="status">
@@ -103,7 +103,7 @@ export function AdminRequestDialog({
         </>
       ) : (
         <form noValidate onSubmit={(event) => void submit(event)}>
-          <div className="admin-request-body">
+          <div className="field-dialog-body">
             <div className="auth-field">
               <label htmlFor={inputId}>{label}</label>
               <input

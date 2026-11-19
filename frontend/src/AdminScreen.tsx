@@ -21,6 +21,7 @@ import { SEX_LABELS } from './profileDisplay';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { motionReduced } from './motion';
 import { StatusToast } from './StatusToast';
+import { AdminUsernameDialog } from './AdminUsernameDialog';
 import type {
   AccountLimits,
   AppFeedback,
@@ -69,6 +70,8 @@ export interface AdminScreenViewProps {
   onUserSexChange?: (user: AdminUser, sex: Sex | null) => void;
   /** Clears the account's waiting password reset and username requests. */
   onRequestDismiss?: (user: AdminUser) => void;
+  /** Rejects with the server's error, for the Change username dialog to show. */
+  onUsernameChange?: (user: AdminUser, username: string) => Promise<void>;
   onTemporaryPasswordDismiss: () => void;
   onNoticeDismiss?: () => void;
   onRefresh: () => void;
@@ -396,6 +399,7 @@ function UserRow({
   onResetPassword,
   onSexChange,
   onRequestDismiss,
+  onUsernameChange,
   onTemporaryPasswordDismiss,
 }: {
   user: AdminUser;
@@ -408,6 +412,7 @@ function UserRow({
   onResetPassword: (user: AdminUser) => Promise<void>;
   onSexChange?: (user: AdminUser, sex: Sex | null) => void;
   onRequestDismiss?: (user: AdminUser) => void;
+  onUsernameChange?: (user: AdminUser, username: string) => Promise<void>;
   onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
@@ -420,6 +425,7 @@ function UserRow({
   // Accounts that need something done start open; the rest show one line until tapped.
   const needsAction = Boolean(requested || temporaryPassword || error || busy);
   const [toggled, setToggled] = useState<boolean | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const open = toggled ?? needsAction;
   const detailsId = `${adminUserRowId(user.id)}-details`;
   return (
@@ -559,7 +565,7 @@ function UserRow({
             {error}
           </p>
         )}
-        {(!isSelf || (requested && onRequestDismiss)) && (
+        {(!isSelf || onUsernameChange || (requested && onRequestDismiss)) && (
           <div className="admin-user-actions">
             {!isSelf && (
               <InlineConfirmButton
@@ -571,6 +577,16 @@ function UserRow({
                 disabled={busy}
                 onConfirm={() => onResetPassword(user)}
               />
+            )}
+            {onUsernameChange && (
+              <button
+                type="button"
+                className="profile-secondary"
+                disabled={busy}
+                onClick={() => setRenaming(true)}
+              >
+                Change username
+              </button>
             )}
             {requested && onRequestDismiss && (
               <button
@@ -605,6 +621,16 @@ function UserRow({
           </div>
         )}
       </div>
+      {renaming && onUsernameChange && (
+        <AdminUsernameDialog
+          user={user}
+          onSave={async (username) => {
+            await onUsernameChange(user, username);
+            setRenaming(false);
+          }}
+          onClose={() => setRenaming(false)}
+        />
+      )}
     </li>
   );
 }
@@ -643,6 +669,7 @@ function AccountsPanel({
   onResetPassword,
   onUserSexChange,
   onRequestDismiss,
+  onUsernameChange,
   onTemporaryPasswordDismiss,
 }: Pick<
   AdminScreenViewProps,
@@ -657,6 +684,7 @@ function AccountsPanel({
   | 'onResetPassword'
   | 'onUserSexChange'
   | 'onRequestDismiss'
+  | 'onUsernameChange'
   | 'onTemporaryPasswordDismiss'
 > & { users: AdminUser[] | null; now: number }) {
   const [query, setQuery] = useState('');
@@ -751,6 +779,7 @@ function AccountsPanel({
               onResetPassword={onResetPassword}
               onSexChange={onUserSexChange}
               onRequestDismiss={onRequestDismiss}
+              onUsernameChange={onUsernameChange}
               onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
             />
           ))}
@@ -827,6 +856,7 @@ export function AdminScreenView({
   onResetPassword,
   onUserSexChange,
   onRequestDismiss,
+  onUsernameChange,
   onTemporaryPasswordDismiss,
   onNoticeDismiss,
   onRefresh,
@@ -858,6 +888,7 @@ export function AdminScreenView({
         onResetPassword={onResetPassword}
         onUserSexChange={onUserSexChange}
         onRequestDismiss={onRequestDismiss}
+        onUsernameChange={onUsernameChange}
         onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
       />
       {feedback && (
@@ -1113,6 +1144,21 @@ export function AdminScreen({ active }: { active: boolean }) {
     }
   }
 
+  async function changeUsername(target: AdminUser, username: string) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await api.admin.setUserUsername(target.id, username);
+      setUsers((current) =>
+        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
+      );
+      setNotice(`${updated.display_name}’s username is now @${updated.username}.`);
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
   async function dismissRequests(target: AdminUser) {
     setBusyUserId(target.id);
     setError(null);
@@ -1190,6 +1236,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       onResetPassword={resetUserPassword}
       onUserSexChange={(target, sex) => void changeUserSex(target, sex)}
       onRequestDismiss={(target) => void dismissRequests(target)}
+      onUsernameChange={changeUsername}
       onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
       onNoticeDismiss={() => setNotice(null)}
       onRefresh={() => void load()}

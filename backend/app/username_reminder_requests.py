@@ -1,7 +1,8 @@
 """Forgotten usernames: a signed-out person asks the administrators to tell them their username.
 
-There is no email address to send it to, so the person gives the name on their profile and each
-active account with that name is flagged for the admin console. The username is never shown to
+There is no email address to send it to, so the person gives the name on their profile. Display
+names are unique, so that normally flags one account for the admin console; accounts that shared a
+name before names had to be unique are all flagged. The username is never shown to
 the person asking, and nothing about the account changes; an admin passes the username on.
 """
 
@@ -15,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .accounts import no_store
+from .accounts import comparable_display_name, no_store
 from .auth import (
     AppSettings,
     LoginThrottle,
@@ -58,11 +59,6 @@ class UsernameReminderRequestRead(PasswordResetRequestRead):
     """The same details as a password reset request."""
 
 
-def comparable_name(name: str) -> str:
-    """A display name as the request matches it, whatever its case and spacing."""
-    return " ".join(name.split()).casefold()
-
-
 def open_username_request_time(user: User, now: datetime | None = None) -> datetime | None:
     """When the account asked for its username, while that request is still waiting."""
     return open_since(user.username_reminder_requested_at, user, now)
@@ -87,7 +83,7 @@ def request_username_reminder(
     if throttle.is_blocked(ip_key, max_failures=MAX_REQUESTS_PER_ADDRESS):
         raise too_many_requests()
     throttle.record_failure(ip_key)
-    wanted = comparable_name(payload.name)
+    wanted = comparable_display_name(payload.name)
     if not wanted:
         return
     matching = [
@@ -95,7 +91,7 @@ def request_username_reminder(
         for user_id, display_name in db.execute(
             select(User.id, User.display_name).where(User.disabled_at.is_(None))
         )
-        if comparable_name(display_name) == wanted
+        if comparable_display_name(display_name) == wanted
     ]
     if not matching:
         return

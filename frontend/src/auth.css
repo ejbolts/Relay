@@ -1175,21 +1175,22 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   margin-bottom: 0.5rem;
 }
 
-.popup-dialog.admin-request-dialog {
+/* One-field dialogs: Forgot password, Forgot username and the admin's Change username. */
+.popup-dialog.field-dialog {
   width: min(24rem, calc(100vw - 2rem));
 }
 
-.admin-request-body {
+.field-dialog-body {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
 }
 
-.admin-request-body .inline-error {
+.field-dialog-body .inline-error {
   margin: 0;
 }
 
-.admin-request-dialog .popup-dialog-actions {
+.field-dialog .popup-dialog-actions {
   margin: 0;
   padding: 0.875rem 1rem 1rem;
 }

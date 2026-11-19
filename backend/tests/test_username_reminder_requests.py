@@ -98,7 +98,7 @@ def test_names_match_whatever_their_case_and_spacing(client):
     assert [item["user_id"] for item in listed(client)] == [sam]
 
 
-def test_every_active_account_with_the_name_is_flagged(client):
+def test_accounts_that_shared_a_name_before_it_had_to_be_unique_are_all_flagged(client):
     first = add_account("sam.one", "Sam Sample")
     second = add_account("sam.two", "Sam Sample")
     add_account("sam.gone", "Sam Sample", disabled=True)

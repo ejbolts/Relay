@@ -41,6 +41,8 @@ describe('authErrorMessage', () => {
     ['invalid_credentials', 401, 'do not match'],
     ['too_many_attempts', 429, 'Too many attempts'],
     ['username_taken', 409, 'already exists'],
+    ['display_name_taken', 409, 'already uses that name'],
+    ['username_locked', 409, 'Only an administrator'],
     ['registration_closed', 403, 'not being accepted'],
     ['setup_required', 403, 'not set up yet'],
     ['invalid_invite_code', 403, 'invite code is not valid'],
@@ -192,6 +194,13 @@ describe('submitAuthForm', () => {
     expect(await submitAuthForm('create-account', values, open, taken)).toMatchObject({
       ok: false,
       fieldErrors: { username: expect.any(String) },
+    });
+    const nameTaken = endpoints({
+      register: vi.fn().mockRejectedValue(new ApiError('x', 'display_name_taken', 409)),
+    });
+    expect(await submitAuthForm('create-account', values, open, nameTaken)).toMatchObject({
+      ok: false,
+      fieldErrors: { displayName: 'This name is already used.' },
     });
     expect(await submitAuthForm('create-account', values, open, rejected)).toMatchObject({
       ok: false,

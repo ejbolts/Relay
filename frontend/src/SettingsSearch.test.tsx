@@ -173,23 +173,24 @@ it('opens the Admin console from a partial query only for administrators', async
   expect(input.value).toBe('');
 });
 
-it('opens profile editing and focuses Username, then jumps back to Rest timer without changing it', async () => {
+it('opens profile editing at the locked Username, then jumps back to Rest timer without changing it', async () => {
   await act(async () => root.render(<Harness />));
   await jump('username');
   expect(container.querySelector('.profile-identity')?.classList.contains('is-editing')).toBe(true);
-  expect(document.activeElement?.getAttribute('autocomplete')).toBe('username');
-  expect((document.activeElement as HTMLInputElement).value).toBe('sample');
+  expect(document.activeElement?.classList.contains('profile-username-field')).toBe(true);
+  expect(document.activeElement?.textContent).toContain('sample');
+  expect(container.querySelector('.profile-identity input[autocomplete="username"]')).toBeNull();
   await jump('rest timer');
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Rest timer');
   expect(restChanged).not.toHaveBeenCalled();
 });
 it('keeps the searched field focused when loaded profile data remounts the editor', async () => {
   await act(async () => root.render(<Harness />));
-  await jump('username');
+  await jump('display name');
   await act(async () => root.render(<Harness identityKey="loaded" />));
   await act(async () => vi.runAllTimers());
-  expect(document.activeElement?.getAttribute('autocomplete')).toBe('username');
-  expect((document.activeElement as HTMLInputElement).value).toBe('sample');
+  expect(document.activeElement?.getAttribute('autocomplete')).toBe('name');
+  expect((document.activeElement as HTMLInputElement).value).toBe('Sample Lifter');
 });
 it('reveals a folded password form and offers an empty-result message and Escape clear', async () => {
   await act(async () => root.render(<Harness />));

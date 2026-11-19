@@ -96,7 +96,9 @@ describe('sex on the profile', () => {
 
     await press(button('Edit profile'));
     expect(sexChoices()).toEqual([]);
-    expect(container.querySelector('.profile-sex-locked')?.textContent).toBe('MaleLocked');
+    expect(container.querySelector('.profile-sex-field .profile-locked-value')?.textContent).toBe(
+      'MaleLocked',
+    );
     expect(button('Save profile').disabled).toBe(true);
     expect(update).not.toHaveBeenCalled();
   });

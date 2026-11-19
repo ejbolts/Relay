@@ -505,6 +505,13 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ sex }),
       }),
+    /** The only way to change a username: people cannot change their own. */
+    setUserUsername: (userId: string, username: string) =>
+      request<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/username`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ username }),
+      }),
     resetUserPassword: (userId: string) =>
       request<{ temporary_password: string }>(
         `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
