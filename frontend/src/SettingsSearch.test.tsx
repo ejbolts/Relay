@@ -115,6 +115,25 @@ it('matches cross-page terms and synonyms and does not list anything for an empt
   );
 });
 
+it('forgives typing mistakes, joined words and plurals, but keeps exact words precise', () => {
+  const ids = (query: string) => searchSettings(query, true, true).map((entry) => entry.id);
+  expect(ids('pasword')).toEqual(['password']);
+  expect(ids('notifcations')).toEqual(['alerts', 'workout-sharing']);
+  expect(ids('consle')).toEqual(['admin']);
+  expect(ids('delet acount')).toEqual(['delete']);
+  expect(ids('rest timr')).toEqual(['rest', 'rest-times']);
+  expect(ids('signout')).toEqual(['signout']);
+  expect(ids('darkmode')).toEqual(['appearance']);
+  expect(ids('timers')).toEqual(['rest']);
+  expect(ids('Animación')).toEqual(['motion']);
+  // A real word is matched as typed, so "timer" does not also find "times".
+  expect(ids('timer')).toEqual(['rest']);
+  // Words match from their start, so "plate" still does not find templates.
+  expect(ids('plate')).toEqual([]);
+  // Sections in the same group follow those that name the word.
+  expect(ids('appearance').slice(0, 2)).toEqual(['appearance', 'motion']);
+});
+
 it('opens the Admin console from a partial query only for administrators', async () => {
   const navigate = vi.fn();
   const renderSearch = (isAdmin: boolean) =>

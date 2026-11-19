@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
+import { searchWords, typoMatch } from './fuzzyText';
 
 export const SETTINGS_GROUP_LABELS = {
   training: 'Training',
@@ -306,23 +307,99 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   },
 ];
 
+interface SearchField {
+  words: string[];
+  /** Neighbouring words written together, so "signout" finds Sign out. */
+  joined: { text: string; first: string }[];
+  weight: number;
+}
+
+function searchField(text: string, weight: number): SearchField {
+  const words = searchWords(text);
+  const joined = words
+    .slice(1)
+    .map((word, index) => ({ text: words[index] + word, first: words[index] }));
+  return { words, joined, weight };
+}
+
+const SEARCH_FIELDS = new Map(
+  SETTINGS_DESTINATIONS.map((entry) => [
+    entry.id,
+    [
+      searchField(entry.title, 0),
+      searchField(entry.keywords, 2),
+      searchField(entry.group ? SETTINGS_GROUP_LABELS[entry.group] : '', 3),
+    ],
+  ]),
+);
+
+/** "timers" and "colours" also match timer and colour. */
+const singular = (word: string) =>
+  word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : null;
+
+/**
+ * Scores one searched word against a field as typed: a whole word, the start of a word (so
+ * "plate" does not find templates) or words written together. Lower is better.
+ */
+function exactScore(query: string, field: SearchField): number | null {
+  const stem = singular(query);
+  const scores: number[] = [];
+  for (const word of field.words) {
+    if (word === query) scores.push(0);
+    else if (word.startsWith(query)) scores.push(1 + (word.length - query.length) * 0.01);
+    else if (stem && word === stem) scores.push(0.5);
+  }
+  for (const { text, first } of field.joined) {
+    if (query.length > first.length && text.startsWith(query))
+      scores.push(text === query ? 0.5 : 1.5);
+  }
+  return scores.length ? Math.min(...scores) + field.weight : null;
+}
+
+/** Scores a mistyped word, such as "pasword" or "notifcations". */
+function typoScore(query: string, field: SearchField): number | null {
+  const scores = [...field.words, ...field.joined.map(({ text }) => text)].flatMap((word) => {
+    const match = typoMatch(query, word);
+    return match ? [3 + match.distance + (match.length === word.length ? 0 : 0.5)] : [];
+  });
+  return scores.length ? Math.min(...scores) + field.weight : null;
+}
+
 export function searchSettings(
   query: string,
   includeProfile = true,
   includeAdmin = false,
 ): SettingsDestination[] {
-  const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const words = searchWords(query);
   if (!words.length) return [];
-  const inTitle = (entry: SettingsDestination) =>
-    words.every((word) => entry.title.toLocaleLowerCase().includes(word));
-  const matches = SETTINGS_DESTINATIONS.filter(
+  const available = SETTINGS_DESTINATIONS.filter(
     (entry) =>
       (includeProfile || (entry.page !== 'profile' && !entry.requiresAccount)) &&
-      (includeAdmin || entry.page !== 'admin') &&
-      words.every((word) => `${entry.title} ${entry.keywords}`.toLocaleLowerCase().includes(word)),
+      (includeAdmin || entry.page !== 'admin'),
   );
-  // "rest" should lead with Rest timer, not a section that only mentions rest days.
-  return [...matches.filter(inTitle), ...matches.filter((entry) => !inTitle(entry))];
+  const fields = (entry: SettingsDestination) => SEARCH_FIELDS.get(entry.id) ?? [];
+  // Typing mistakes are only forgiven for a word that matches nothing as typed, so "timer"
+  // finds Rest timer but not Show rest times.
+  const forgiving = words.map(
+    (word) =>
+      !available.some((entry) => fields(entry).some((field) => exactScore(word, field) !== null)),
+  );
+  return available
+    .map((entry, index) => {
+      let score = 0;
+      for (const [position, word] of words.entries()) {
+        const scores = fields(entry).flatMap((field) => {
+          const value = forgiving[position] ? typoScore(word, field) : exactScore(word, field);
+          return value === null ? [] : [value];
+        });
+        if (!scores.length) return null;
+        score += Math.min(...scores);
+      }
+      return { entry, index, score };
+    })
+    .filter((match) => match !== null)
+    .sort((first, second) => first.score - second.score || first.index - second.index)
+    .map(({ entry }) => entry);
 }
 
 export interface SettingsJump {

@@ -6,7 +6,7 @@ import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { exerciseEquipment } from './exerciseEquipment';
-import { exerciseSearchScore } from './exerciseSearch';
+import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
 import {
   TrainingBlockDialog,
   TrainingBlockToast,
@@ -126,6 +126,7 @@ export function ExerciseLibraryList({
   ].sort();
   const hiddenCount = exercises.filter((exercise) => exercise.hidden).length;
   const showHidden = hiddenOnly && hiddenCount > 0;
+  const typos = exerciseSearchAllowsTypos(exercises, query);
   const list = exercises
     .filter(
       (exercise) =>
@@ -133,7 +134,7 @@ export function ExerciseLibraryList({
         (!customOnly || exercise.is_custom) &&
         (muscle === 'All' || exerciseMuscles(exercise).includes(muscle)) &&
         (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
-        exerciseSearchScore(exercise, query) !== null,
+        exerciseSearchScore(exercise, query, typos) !== null,
     )
     .sort((a, b) => {
       const first = byId.get(a.id),
