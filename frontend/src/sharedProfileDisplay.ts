@@ -48,6 +48,17 @@ export function friendStatusLabel(profile: SharedProfileSummary): string {
   }
 }
 
+/**
+ * The line under a people-search result's name: a public profile's @username, so people with the
+ * same name can be told apart, or else how you are connected. The action button shows the
+ * friendship itself.
+ */
+export function searchResultDetail(
+  profile: SharedProfileSummary & { username?: string | null },
+): string {
+  return profile.username ? `@${profile.username}` : friendStatusLabel(profile);
+}
+
 /** “4 sets”, “2 warm-up sets”, or both counts when an exercise had each. */
 export function sharedSetCount(sets: TrackedSet[]): string {
   const completed = sets.filter((item) => item.completed);

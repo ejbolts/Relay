@@ -32,6 +32,7 @@ import { useUserSession } from './userContext';
 import { ProfileCardioCard } from './ProfileCardioCard';
 import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
+import { consistencyWeeks } from './consistencyWeeks';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
@@ -43,14 +44,15 @@ import { formatMemberSince } from './profileDisplay';
 import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
 import {
-  friendStatusLabel,
+  searchResultDetail,
   plural,
   SHARED_WORKOUT_PAGE_SIZE,
   sinceMonthLabel,
 } from './sharedProfileDisplay';
 import { byLiveActivity, presenceStatus, presenceText, useNow } from './presence';
 import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
-import { localDateOf } from './utils';
+import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
+import { localDate, localDateOf } from './utils';
 import {
   cachedSharedProfile,
   forgetSharedProfile,
@@ -242,6 +244,15 @@ function ProfileFriendControl({
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const viewerId = useUserSession().user?.id ?? null;
+  // Remove friend waits out an Undo window before it is sent, so Undo keeps the friendship
+  // without a new request. Leaving the profile sends it at once.
+  const removal = useGoalRemoval<{ id: string }>({
+    remove: (id) => api.sharing.removeFriend(id),
+    onRemoved: () => onChange('none'),
+    onRestore: () => undefined,
+    onFailed: () => setError('Could not remove this friend. You are still friends.'),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -264,7 +275,7 @@ function ProfileFriendControl({
   }, [open]);
 
   if (profile.is_you) return null;
-  const status = profile.friend_status;
+  const status = removal.pending ? 'none' : profile.friend_status;
   const since = status === 'friends' ? sinceMonthLabel(profile.friends_since) : null;
   const pill = status === 'friends' ? 'Friends' : status === 'outgoing' ? 'Requested' : null;
   const spinner = <span className="auth-spinner" aria-hidden="true" />;
@@ -371,7 +382,18 @@ function ProfileFriendControl({
             <div ref={menu} id={menuId} className="profile-follow-menu" role="menu">
               {since && <p>{since}</p>}
               {status === 'friends' && (
-                <button type="button" role="menuitem" disabled={busy} onClick={() => void remove()}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={() => {
+                    setOpen(false);
+                    setError(null);
+                    // A copy saved while friends must not reopen once the removal is sent.
+                    forgetSharedProfile(viewerId, profile.id);
+                    removal.start({ id: profile.id }, 0);
+                  }}
+                >
                   Remove friend
                 </button>
               )}
@@ -408,7 +430,7 @@ function ProfileFriendControl({
         >
           <p>
             They will no longer find you or see your profile, data and activity, and you stop being
-            friends. You can unblock them in Social, under Find.
+            friends. You can unblock them in Social, under Friends.
           </p>
           <div className="friend-block-actions">
             <button
@@ -429,6 +451,29 @@ function ProfileFriendControl({
           </div>
         </PopupDialog>
       )}
+      {removal.pending &&
+        createPortal(
+          <div
+            className="undo-toast top-toast"
+            role="status"
+            aria-atomic="true"
+            style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
+          >
+            <span>Removed {profile.display_name}</span>
+            <button className="undo-toast-action" type="button" onClick={removal.undo}>
+              Undo
+            </button>
+            <button
+              className="undo-toast-close"
+              type="button"
+              aria-label="Dismiss friend removal notification"
+              onClick={removal.dismiss}
+            >
+              <Icon name="close" />
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -612,7 +657,7 @@ export function PeopleSearch({
                 <FriendRow
                   key={profile.id}
                   person={profile}
-                  detail={friendStatusLabel(profile)}
+                  detail={searchResultDetail(profile)}
                   onOpen={() => onOpenProfile(profile)}
                   actions={<FriendButton profile={profile} onChange={onFriendChanged} />}
                 />
@@ -1174,10 +1219,18 @@ function SharedConsistencyCalendar({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const colors = builtinTypeColors(data.workout_types);
+  // The heatmap holds every training day, so its earliest is the member's first workout.
+  const firstWorkout = data.heatmap
+    .filter((day) => day.workout_count > 0)
+    .reduce<string | undefined>(
+      (first, day) => (!first || day.workout_date < first ? day.workout_date : first),
+      undefined,
+    );
   return (
     <ConsistencyCard
       streak={data.current_streak}
       trainingDays={data.training_days}
+      weeks={consistencyWeeks(firstWorkout, localDate())}
       onOpenSplits={onOpenSplits}
     >
       <WorkoutCalendar
@@ -1300,6 +1353,8 @@ export function SharedProfileScreen({
   const [records, setRecords] = useState<PersonalRecord[]>(seed?.page?.personal_records ?? []);
   const [total, setTotal] = useState(seed?.page?.total ?? 0);
   const [state, setState] = useState<LoadState>(seed ? 'ready' : 'loading');
+  const [unblocking, setUnblocking] = useState(false);
+  const [unblockError, setUnblockError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1519,6 +1574,21 @@ export function SharedProfileScreen({
     }
   }
 
+  async function unblock() {
+    if (unblocking) return;
+    setUnblocking(true);
+    setUnblockError(null);
+    try {
+      await api.sharing.unblockMember(profileId);
+      setState('loading');
+      setAttempt((count) => count + 1);
+    } catch (reason) {
+      setUnblockError(authErrorMessage(reason));
+    } finally {
+      setUnblocking(false);
+    }
+  }
+
   function friendChanged(status: FriendStatus) {
     if (!profile) return;
     // Gaining or losing access to a friends-only profile changes what it shows.
@@ -1614,9 +1684,20 @@ export function SharedProfileScreen({
               <h2>You blocked {profile.display_name}</h2>
             </div>
           </header>
-          <p>
-            They can no longer find you or see your profile. Unblock them in Social, under Find.
-          </p>
+          <p>They can no longer find you or see your profile.</p>
+          {unblockError && (
+            <p className="inline-error" role="alert">
+              {unblockError}
+            </p>
+          )}
+          <button
+            type="button"
+            className="profile-secondary"
+            disabled={unblocking}
+            onClick={() => void unblock()}
+          >
+            {unblocking ? 'Unblocking…' : 'Unblock'}
+          </button>
         </section>
       </section>
     );

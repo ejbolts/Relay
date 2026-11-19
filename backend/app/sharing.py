@@ -12,8 +12,9 @@ choose.
 New accounts start public; existing accounts retain their choices, including private defaults.
 
 Private, disabled and missing profiles all answer "not found". A friends-only profile shows only
-its name and photo until the two members are friends. Public friend suggestions include usernames;
-other shared-profile responses omit them. Videos and sample data are never shared.
+its name and photo until the two members are friends. Public friend suggestions and people search
+results for public profiles include usernames; other shared-profile responses omit them. Videos and
+sample data are never shared.
 """
 
 from __future__ import annotations
@@ -152,6 +153,11 @@ class SharedProfileSummary(BaseModel):
 
 class SuggestedProfileSummary(SharedProfileSummary):
     username: str
+
+
+class SearchedProfileSummary(SharedProfileSummary):
+    # Public profiles only, as in friend suggestions, so same-named people can be told apart.
+    username: str | None = None
 
 
 class SuggestedProfilePage(BaseModel):
@@ -817,10 +823,10 @@ def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, g
     )
 
 
-@sharing_router.get("/profiles", response_model=list[SharedProfileSummary])
+@sharing_router.get("/profiles", response_model=list[SearchedProfileSummary])
 def list_shared_profiles(
     user: CurrentUser, db: Db, q: str | None = Query(default=None, max_length=100)
-) -> list[SharedProfileSummary]:
+) -> list[SearchedProfileSummary]:
     require_sharing(db, user)
     query = (
         select(User, ProfileSharing)
@@ -858,7 +864,12 @@ def list_shared_profiles(
     ]
     stats = workout_stats(db, viewable_ids)
     profiles = [
-        profile_summary(user, member, sharing, friendships.get(member.id), stats.get(member.id))
+        SearchedProfileSummary(
+            **profile_summary(
+                user, member, sharing, friendships.get(member.id), stats.get(member.id)
+            ).model_dump(),
+            username=member.username if q is not None and sharing.visibility == PUBLIC else None,
+        )
         for member, sharing in rows
     ]
 

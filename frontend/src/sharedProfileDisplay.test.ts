@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { friendStatusLabel, sharedParts, sinceMonthLabel } from './sharedProfileDisplay';
+import {
+  friendStatusLabel,
+  searchResultDetail,
+  sharedParts,
+  sinceMonthLabel,
+} from './sharedProfileDisplay';
 import type { SharedProfileSummary } from './types';
 
 const nothingExtra = {
@@ -61,5 +66,15 @@ describe('shared profile display', () => {
       'Sent you a friend request',
     );
     expect(friendStatusLabel({ ...profile, friend_status: 'friends' })).toBe('Friend');
+  });
+
+  it('names a search result by @username when the server sends one', () => {
+    expect(searchResultDetail({ ...profile, username: 'sam.chen' })).toBe('@sam.chen');
+    expect(searchResultDetail({ ...profile, friend_status: 'friends', username: 'sam.chen' })).toBe(
+      '@sam.chen',
+    );
+    // Friends-only profiles come without one, as do servers before this change.
+    expect(searchResultDetail({ ...friendsOnly, username: null })).toBe('Friends only');
+    expect(searchResultDetail(profile)).toBe('Public');
   });
 });
