@@ -192,6 +192,7 @@ import { CachedTabPanel } from './CachedTabPanel';
 import { optimisePhoto } from './photoOptimise';
 import { ConfettiBurst } from './ConfettiBurst';
 import { EdgeSwipeBack } from './EdgeSwipeBack';
+import { closeTopOverlay } from './overlayBack';
 import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
@@ -253,9 +254,12 @@ import {
   createAppHistoryState,
   historySectionForTab,
   isAppHistoryState,
+  isMainTabScreen,
   mainTabFor,
+  tabScrollKey,
   type AppTab,
   type HistorySection,
+  type MainTab,
 } from './appNavigation';
 import { AppTabBar } from './AppTabBar';
 import { PaginationControls } from './PaginationControls';
@@ -808,6 +812,11 @@ function AppContent() {
     isAdmin,
   );
   const scrollPositionsRef = useRef(new Map<number, number>());
+  /** Each main screen's scroll, restored when the tab bar selects it again. */
+  const tabScrollRef = useRef(new Map<AppTab, number>());
+  const restoreScrollRef = useRef<number | null>(null);
+  /** Counts tab-bar taps on the current tab, which return Training to its exercise list. */
+  const [tabRootRequest, setTabRootRequest] = useState(0);
   const navigationActionRef = useRef<'push' | 'replace' | 'pop'>('replace');
   const currentTabRef = useRef(tab);
   const initialRefreshStartedRef = useRef(false);
@@ -1129,6 +1138,8 @@ function AppContent() {
   const setTab = useCallback((nextTab: AppTab, options: { replace?: boolean } = {}) => {
     if (nextTab === currentTabRef.current) return;
     scrollPositionsRef.current.set(historyIndexRef.current, window.scrollY);
+    if (isMainTabScreen(currentTabRef.current))
+      tabScrollRef.current.set(tabScrollKey(currentTabRef.current), window.scrollY);
     navigationActionRef.current = options.replace ? 'replace' : 'push';
     setNavDirection('forward');
     setTabState(nextTab);
@@ -1177,6 +1188,32 @@ function AppContent() {
     }));
     setTab('shared-profile');
   }, [friendInvite, user, setTab]);
+
+  /**
+   * The tab bar. Switching between main screens replaces the history entry, so Back does not
+   * replay every tab, and each screen comes back where it was left. Tapping the current tab
+   * returns to its top, out of a member's profile or an exercise's detail first.
+   */
+  function selectMainTab(nextMain: MainTab) {
+    const current = currentTabRef.current;
+    if (mainTabFor(current) === nextMain) {
+      if (current === 'shared-profile') {
+        setTab('social', { replace: true });
+        return;
+      }
+      setTabRootRequest((request) => request + 1);
+      window.scrollTo({ top: 0, behavior: motionReduced() ? 'auto' : 'smooth' });
+      return;
+    }
+    const next =
+      nextMain === 'training'
+        ? lastHistorySection === 'history'
+          ? 'training'
+          : lastHistorySection
+        : nextMain;
+    restoreScrollRef.current = tabScrollRef.current.get(tabScrollKey(next)) ?? 0;
+    setTab(next, { replace: isMainTabScreen(current) });
+  }
 
   function navigateBack() {
     if (tab === 'settings' && settingsGroup !== null) {
@@ -1488,8 +1525,11 @@ function AppContent() {
     // Runs before any screen's own animation-frame scroll (e.g. revealing an opened workout).
     window.scrollTo(
       0,
-      action === 'pop' ? (scrollPositionsRef.current.get(historyIndexRef.current) ?? 0) : 0,
+      action === 'pop'
+        ? (scrollPositionsRef.current.get(historyIndexRef.current) ?? 0)
+        : (restoreScrollRef.current ?? 0),
     );
+    restoreScrollRef.current = null;
     if (action === 'pop') {
       navigationActionRef.current = 'replace';
       return;
@@ -1512,6 +1552,18 @@ function AppContent() {
     // The app restores each screen's scroll itself; the browser's restore would fight it.
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
     const restoreNavigation = (event: PopStateEvent) => {
+      // The browser's Back closes an open sheet or dialog first and keeps the screen behind it.
+      const goingBack =
+        !isAppHistoryState(event.state) || event.state.index < historyIndexRef.current;
+      if (goingBack && closeTopOverlay()) {
+        const shown = currentTabRef.current;
+        window.history.pushState(
+          createAppHistoryState(shown, historyIndexRef.current),
+          '',
+          `#${shown}`,
+        );
+        return;
+      }
       const nextTab = isAppHistoryState(event.state)
         ? event.state.tab
         : appTabFromHash(window.location.hash);
@@ -2197,7 +2249,11 @@ function AppContent() {
             onOpenBody={() => setTab('body')}
           />
         )}
-        <EdgeSwipeBack onBack={navigateBack} enabled={canNavigateBack} />
+        {/* An open sheet or dialog closes first; the next swipe changes screen. */}
+        <EdgeSwipeBack
+          onBack={() => closeTopOverlay() || navigateBack()}
+          enabled={canNavigateBack}
+        />
         <BackgroundActivityBar label={backgroundActivityLabel} />
         {message && (
           <NotificationDialog
@@ -2627,6 +2683,7 @@ function AppContent() {
                   machineWeightsFor !== null && machineWeightsFor === historyExerciseId
                 }
                 onMachineWeightsOpened={() => setMachineWeightsFor(null)}
+                rootRequest={tabRootRequest}
                 initialMovementId={historyMovementId}
                 weekStartDay={weekStartDayFrom(dashboard?.weekly_sets?.week_start)}
                 heatmap={shownDashboard?.heatmap ?? []}
@@ -2779,11 +2836,7 @@ function AppContent() {
             restEndsAt={restEndsAt}
             restDoneAt={restDoneAt}
             workoutSaving={workoutSaveBlocked}
-            onSelect={(nextTab) => {
-              if (nextTab === 'training')
-                setTab(lastHistorySection === 'history' ? 'training' : lastHistorySection);
-              else setTab(nextTab);
-            }}
+            onSelect={selectMainTab}
             onStart={() => {
               if (activeWorkoutStartedAt === null) startWorkout();
               // The ringing bell opens the workout at the next set; the logger opens it.
@@ -10220,6 +10273,7 @@ function HistoryScreen({
   onReplaceActiveWorkout,
   onOpenSettings,
   accountActions,
+  rootRequest = 0,
 }: {
   exerciseLibrary: ExerciseLibraryState;
   dataRevision: string | null;
@@ -10257,9 +10311,16 @@ function HistoryScreen({
   onReplaceActiveWorkout: (workoutDate: string) => void;
   onOpenSettings: () => void;
   accountActions?: ReactNode;
+  /** Each increase returns from an exercise's detail to the list (the tab bar's re-tap). */
+  rootRequest?: number;
 }) {
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
+  const exerciseHeaderRef = useRef(exerciseHeader);
+  exerciseHeaderRef.current = exerciseHeader;
+  useEffect(() => {
+    if (rootRequest) exerciseHeaderRef.current?.onBack();
+  }, [rootRequest]);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
   const [createdExerciseName, setCreatedExerciseName] = useState<string | null>(null);
   const openExerciseCreation = () => {

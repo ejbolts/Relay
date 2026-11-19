@@ -1,5 +1,6 @@
 import { useTips } from './Tips';
 import { useEffect, useRef } from 'react';
+import { topOverlay } from './overlayBack';
 import {
   completesEdgeSwipe,
   EDGE_SWIPE_DISTANCE_PX,
@@ -14,7 +15,12 @@ function isStandalonePwa(): boolean {
   );
 }
 
+/**
+ * A full-screen chart keeps edge drags for itself, and so does the live workout (it minimises
+ * with its own drag). A sheet or dialog above either is closed by the swipe like any other.
+ */
 function gestureBlocked(): boolean {
+  if (topOverlay()) return false;
   return Boolean(document.querySelector('[aria-modal="true"], body.chart-fullscreen-open'));
 }
 
@@ -27,13 +33,16 @@ function gestureBlocked(): boolean {
 export function EdgeSwipeBack({ onBack, enabled }: { onBack: () => void; enabled: boolean }) {
   const { learn } = useTips();
   const onBackRef = useRef(onBack);
+  // Without a screen to go back to, the swipe still closes an open sheet.
+  const enabledRef = useRef(enabled);
 
   useEffect(() => {
     onBackRef.current = onBack;
-  }, [onBack]);
+    enabledRef.current = enabled;
+  }, [enabled, onBack]);
 
   useEffect(() => {
-    if (!enabled || !isStandalonePwa()) return;
+    if (!isStandalonePwa()) return;
 
     let trackingId: number | null = null;
     let startX = 0;
@@ -52,6 +61,7 @@ export function EdgeSwipeBack({ onBack, enabled }: { onBack: () => void; enabled
 
     const begin = (id: number, x: number, y: number) => {
       if (x > EDGE_SWIPE_START_PX || gestureBlocked()) return;
+      if (!enabledRef.current && !topOverlay()) return;
       trackingId = id;
       startX = x;
       startY = y;
@@ -164,7 +174,7 @@ export function EdgeSwipeBack({ onBack, enabled }: { onBack: () => void; enabled
       window.removeEventListener('pointerup', onPointerUp, capture);
       window.removeEventListener('pointercancel', onPointerCancel, capture);
     };
-  }, [enabled, learn]);
+  }, [learn]);
 
   return (
     <div className="edge-swipe-indicator" aria-hidden="true">
