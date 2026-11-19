@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { NotificationDialog } from './NotificationDialog';
+import { TOAST_MS } from './Toast';
 
 let root: Root;
 let host: HTMLDivElement;
@@ -36,11 +37,11 @@ it.each(['Workout CSV exported.', 'Could not export workout data.'])(
 it('dismisses automatically and does not restart the timer on unrelated renders', async () => {
   const close = vi.fn();
   await act(async () => root.render(<NotificationDialog message="Saved." onClose={close} />));
-  await act(async () => vi.advanceTimersByTime(4000));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.status / 2));
   await act(async () =>
     root.render(<NotificationDialog message="Saved." onClose={() => close()} />),
   );
-  await act(async () => vi.advanceTimersByTime(4000));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.status / 2));
   expect(close).toHaveBeenCalledOnce();
 });
 it('offers dismissal and escapes message content', async () => {
@@ -48,17 +49,17 @@ it('offers dismissal and escapes message content', async () => {
   await act(async () =>
     root.render(<NotificationDialog message="Could not import <script>." onClose={close} />),
   );
-  expect(document.querySelector('.app-notification-toast script')).toBeNull();
+  expect(document.querySelector('.toast script')).toBeNull();
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
   );
   expect(close).toHaveBeenCalledOnce();
 });
 
-it('can keep a toast inside the modal top layer without a second dialog', async () => {
+it('shows inside an open modal dialog without a second dialog', async () => {
   await act(async () =>
     root.render(
-      <dialog open>
+      <dialog open aria-modal="true">
         <NotificationDialog message="Card downloaded" onClose={vi.fn()} portal={false} />
       </dialog>,
     ),
@@ -67,7 +68,7 @@ it('can keep a toast inside the modal top layer without a second dialog', async 
   expect(document.querySelectorAll('dialog')).toHaveLength(1);
 });
 
-it('offers an optional action without taking focus and retains the eight-second dismissal', async () => {
+it('offers an optional action without taking focus and lasts as long as an action toast', async () => {
   const close = vi.fn();
   const share = vi.fn();
   const input = document.createElement('input');
@@ -84,18 +85,16 @@ it('offers an optional action without taking focus and retains the eight-second 
   );
   expect(document.activeElement).toBe(input);
   expect(document.querySelector('dialog, [aria-modal="true"], [inert]')).toBeNull();
-  await act(async () =>
-    document.querySelector<HTMLButtonElement>('.notification-toast-action')!.click(),
-  );
+  await act(async () => document.querySelector<HTMLButtonElement>('.toast-action')!.click());
   expect(share).toHaveBeenCalledOnce();
-  await act(async () => vi.advanceTimersByTime(7999));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1));
   expect(close).not.toHaveBeenCalled();
   await act(async () => vi.advanceTimersByTime(1));
   expect(close).toHaveBeenCalledOnce();
   input.remove();
 });
 
-it('matches the countdown bar to a three-second timeout without restarting on rerender', async () => {
+it('keeps one countdown bar in step with the timeout without restarting on rerender', async () => {
   const close = vi.fn();
   const render = () =>
     root.render(
@@ -107,13 +106,15 @@ it('matches the countdown bar to a three-second timeout without restarting on re
       />,
     );
   await act(async () => render());
-  const bar = document.querySelector<HTMLElement>('.notification-toast-countdown > span')!;
-  expect(bar.style.animationDuration).toBe('3000ms');
-  expect(bar.parentElement?.getAttribute('aria-hidden')).toBe('true');
+  const bar = document.querySelector<HTMLElement>('.toast-timer')!;
+  expect(bar.getAttribute('aria-hidden')).toBe('true');
+  expect(bar.closest<HTMLElement>('.toast')!.style.getPropertyValue('--toast-ms')).toBe(
+    `${TOAST_MS.status}ms`,
+  );
   await act(async () => vi.advanceTimersByTime(1500));
   await act(async () => render());
-  expect(document.querySelector('.notification-toast-countdown > span')).toBe(bar);
-  await act(async () => vi.advanceTimersByTime(1499));
+  expect(document.querySelector('.toast-timer')).toBe(bar);
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1501));
   expect(close).not.toHaveBeenCalled();
   await act(async () => vi.advanceTimersByTime(1));
   expect(close).toHaveBeenCalledOnce();

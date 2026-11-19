@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { AuthGate } from './AuthGate';
+import { ToastProvider } from './Toast';
 import { registerAppUpdates } from './appUpdates';
 import { captureFriendInvite } from './friendInvite';
 import { captureInstallPrompt } from './installPrompt';
@@ -52,8 +53,10 @@ followSystemColourMode();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthGate>
-      <App />
-    </AuthGate>
+    <ToastProvider>
+      <AuthGate>
+        <App />
+      </AuthGate>
+    </ToastProvider>
   </StrictMode>,
 );

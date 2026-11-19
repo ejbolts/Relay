@@ -1,0 +1,239 @@
+/* ───────── Toasts: one card style, one lane, one countdown bar ─────────
+   The viewport is a popover in the top layer when the browser supports it, so a toast draws above
+   sheets and dialogs. Inside an open modal dialog the viewport moves into it (see Toast.tsx). */
+
+.toast-viewport {
+  position: fixed;
+  /* Only used without the top layer (older browsers); clears every fixed pop-up. */
+  z-index: 400;
+  inset: auto;
+  top: calc(var(--app-banner-height, 0px) + max(0.75rem, env(safe-area-inset-top)));
+  left: 50%;
+  width: min(calc(100% - 2rem), 26rem);
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: visible;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-ink);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast-viewport.is-bottom {
+  top: auto;
+  bottom: var(--toast-bottom, calc(1rem + env(safe-area-inset-bottom)));
+}
+
+.toast {
+  --toast-bar: var(--p-accent);
+  --toast-bg: color-mix(in srgb, var(--p-surface-2) 97%, transparent);
+  --toast-title: var(--p-ink);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 3.5rem;
+  overflow: hidden;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 16px;
+  padding: 0.375rem 0.375rem 0.375rem 1rem;
+  background: var(--toast-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 45%);
+  color: var(--p-ink);
+  text-align: left;
+  pointer-events: auto;
+  animation: toast-in-top 220ms var(--ease-out, ease-out) backwards;
+}
+
+.toast-viewport.is-bottom .toast {
+  animation-name: toast-in-bottom;
+}
+
+/* Remounted part-way through, for example when a dialog opened under it. */
+.toast[data-resumed] {
+  animation: none;
+}
+
+:root[data-colour-mode='light'] .toast {
+  --toast-bg: color-mix(in srgb, var(--p-surface-raised) 97%, transparent);
+  box-shadow: 0 14px 36px rgb(16 24 32 / 18%);
+}
+
+.toast[data-variant='warning'],
+.toast[data-variant='error'] {
+  --toast-bar: var(--p-danger);
+}
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0;
+}
+
+.toast-text p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.toast-text .toast-line {
+  display: block;
+}
+
+.toast-text .toast-line + .toast-line,
+.toast-text .toast-more {
+  margin-top: 0.25rem;
+}
+
+.toast-line strong {
+  display: block;
+  color: var(--toast-title);
+  font-size: 0.875rem;
+  font-weight: 750;
+}
+
+.toast-line small,
+.toast-text .toast-more {
+  display: block;
+  margin-top: 1px;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 550;
+}
+
+.toast .toast-action,
+.toast .toast-close {
+  flex: none;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  margin: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+}
+
+.toast .toast-action {
+  padding: 0 0.75rem;
+  color: var(--p-accent-text);
+  font-size: 0.9375rem;
+  font-weight: 750;
+}
+
+.toast .toast-close {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  padding: 0;
+  color: var(--p-muted);
+}
+
+.toast .toast-close .pulse-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.toast button:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: -2px;
+}
+
+.toast-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-right: 0.375rem;
+  color: var(--p-gold);
+}
+
+.toast-icon .pulse-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* A personal record: gold edge, tint and title, in both colour modes. */
+.toast[data-variant='celebrate'] {
+  --toast-bar: var(--p-gold);
+  --toast-title: var(--p-gold);
+  border-color: color-mix(in srgb, var(--p-gold) 45%, transparent);
+  padding-left: 0.875rem;
+  background: linear-gradient(var(--p-gold-soft), var(--p-gold-soft)), var(--toast-bg);
+}
+
+:root[data-colour-mode='light'] .toast[data-variant='celebrate'] {
+  /* The light gold is too pale for small bold text on the gold tint. */
+  --toast-title: color-mix(in srgb, var(--p-gold) 78%, var(--p-ink));
+}
+
+/* Shrinks over the toast's lifetime to show when it will close; stops while it is paused. */
+.toast-timer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--toast-bar);
+  transform-origin: left;
+  animation: toast-timer var(--toast-ms, 4s) linear var(--toast-offset, 0ms) forwards;
+  pointer-events: none;
+}
+
+.toast[data-paused] .toast-timer {
+  animation-play-state: paused;
+}
+
+@keyframes toast-in-top {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+}
+
+@keyframes toast-in-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+@keyframes toast-timer {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Less motion: no slide, and the bar steps down instead of gliding. It stays, because it shows
+   how long Undo lasts. These selectors out-rank the global rules that end every animation. */
+@media (prefers-reduced-motion: reduce) {
+  .toast .toast-timer {
+    animation-duration: var(--toast-ms, 4s) !important;
+    animation-delay: var(--toast-offset, 0ms) !important;
+    animation-timing-function: steps(4, end) !important;
+  }
+}
+
+html[data-reduce-motion] .toast .toast-timer {
+  animation-duration: var(--toast-ms, 4s) !important;
+  animation-delay: var(--toast-offset, 0ms) !important;
+  animation-timing-function: steps(4, end) !important;
+}
+
+/* The live logger's bottom stack, until it docks the shared viewport. */
+.logger-bottom-toasts > .toast {
+  width: 100%;
+  animation-name: toast-in-bottom;
+}
