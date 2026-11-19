@@ -3785,7 +3785,7 @@ describe('inactive workout suggestions', () => {
     expect(window.location.hash).toBe('#dashboard');
     expect(inactivePrompt()?.textContent).toContain('Unfinished workout');
     expect(inactivePrompt()?.textContent).toContain('Recovery workout');
-    expect(inactivePrompt()?.textContent?.replace(/ /g, ' ')).toContain('1 set logged');
+    expect(inactivePrompt()?.textContent?.replace(/\u00a0/g, ' ')).toContain('1 set logged');
     expectPreserved(draft);
   });
 
@@ -3801,7 +3801,7 @@ describe('inactive workout suggestions', () => {
       hour: 'numeric',
       minute: '2-digit',
     });
-    expect(inactivePrompt()?.textContent?.replace(/ /g, ' ')).toContain(`ended ${ended}`);
+    expect(inactivePrompt()?.textContent?.replace(/\u00a0/g, ' ')).toContain(`ended ${ended}`);
     await chooseInactive('Save workout');
     expect(vi.mocked(api.createWorkout).mock.lastCall![0]).toMatchObject({ duration_minutes: 25 });
   });
