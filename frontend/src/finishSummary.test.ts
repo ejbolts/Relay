@@ -100,7 +100,7 @@ function finished(
 const exercises = [legPress, extension, bike];
 
 describe('buildFinishSummary', () => {
-  it('totals logged sets and working volume, leaving out warm-ups, unticked sets and cardio', () => {
+  it('totals working sets and volume, leaving out warm-ups, unticked sets and cardio', () => {
     const summary = buildFinishSummary(
       finished([
         {
@@ -122,7 +122,8 @@ describe('buildFinishSummary', () => {
       sessionId: 'session-1',
       name: 'Lower body workout',
       durationMinutes: 55,
-      sets: 4,
+      // The two working sets, as history and the share card count them.
+      sets: 2,
       volumeKg: 1600,
       previous: null,
       machineChanges: [],

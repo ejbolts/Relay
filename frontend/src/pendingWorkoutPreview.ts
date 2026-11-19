@@ -1,4 +1,4 @@
-import { addDays, workingSets, workoutVolumeKg } from './trainingSummary';
+import { addDays, isStrengthWorkout, workingSets, workoutVolumeKg } from './trainingSummary';
 import type {
   DashboardData,
   Exercise,
@@ -393,6 +393,8 @@ export function dashboardWithPreview(
     history: history && {
       ...history,
       total_workouts: history.total_workouts + 1,
+      ...(history.strength_workouts != null &&
+        isStrengthWorkout(preview) && { strength_workouts: history.strength_workouts + 1 }),
       first_workout_date:
         history.first_workout_date && history.first_workout_date < date
           ? history.first_workout_date

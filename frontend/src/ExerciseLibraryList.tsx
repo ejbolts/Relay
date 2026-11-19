@@ -429,6 +429,11 @@ export function ExerciseLibraryList({
               <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
+                {summary?.latest_estimated_1rm != null && (
+                  <small className="exercise-list-metric">
+                    <abbr title="Estimated one-rep max">e1RM</abbr>
+                  </small>
+                )}
                 <b title={summary?.normalised ? 'In your reference machine’s weights' : undefined}>
                   {summary?.latest_estimated_1rm == null ? (
                     '—'
@@ -443,7 +448,7 @@ export function ExerciseLibraryList({
                 {change != null && (
                   <small className={change > 0 ? 'up' : change < 0 ? 'down' : ''}>
                     {change > 0 ? '+' : change < 0 ? '−' : ''}
-                    {Number(weightFromKg(Math.abs(change), weightUnit).toFixed(1))}
+                    {Number(weightFromKg(Math.abs(change), weightUnit).toFixed(1))} {weightUnit}
                   </small>
                 )}
               </span>

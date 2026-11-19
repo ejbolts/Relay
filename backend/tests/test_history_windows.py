@@ -51,6 +51,7 @@ def test_dashboard_calendar_window_keeps_whole_log_figures(client):
     assert windowed["recommendation"]["rotation_next"] == "cardio"
     assert windowed["history"] == {
         "total_workouts": 3,
+        "strength_workouts": 3,
         "first_workout_date": old["workout_date"],
         "last_workout_date": today.isoformat(),
         "has_sample_workouts": False,
@@ -160,3 +161,46 @@ def test_exercise_history_baselines_summarise_only_older_owned_sets(client, othe
     assert run_baseline["best_weight_kg"] is None
     assert run_baseline["reps_by_weight"] == []
     assert run_baseline["latest"]["sets"][0]["distance_km"] == 4
+
+
+def test_history_counts_workouts_beside_cardio_without_cardio_only_sessions(client):
+    exercises = {item["name"]: item["id"] for item in client.get("/api/exercises").json()}
+    today = date.today().isoformat()
+
+    def save(movements: list[dict]) -> None:
+        response = client.post(
+            "/api/workouts",
+            json={
+                "name": "Session",
+                "workout_date": today,
+                "category": "lower",
+                "movements": movements,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    cardio = {"duration_seconds": 1800, "completed": True}
+    save(
+        [
+            {
+                "exercise_id": exercises["Back Squat"],
+                "sets": [{"weight_kg": 100, "reps": 5, "completed": True}],
+            }
+        ]
+    )
+    # Cardio after strength keeps it a workout.
+    save(
+        [
+            {
+                "exercise_id": exercises["Back Squat"],
+                "sets": [{"weight_kg": 100, "reps": 5, "completed": True}],
+            },
+            {"exercise_id": exercises["Incline Treadmill Walking"], "sets": [cardio]},
+        ]
+    )
+    save([{"exercise_id": exercises["Incline Treadmill Walking"], "sets": [cardio]}])
+
+    history = client.get("/api/dashboard").json()["history"]
+    assert (history["total_workouts"], history["strength_workouts"]) == (3, 2)
+    own = client.get(f"/api/sharing/profiles/{client.user['id']}").json()
+    assert (own["workout_count"], own["strength_workout_count"], own["cardio_count"]) == (3, 2, 2)

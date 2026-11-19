@@ -342,6 +342,14 @@
   font-size: 0.6875rem;
   font-weight: 600;
 }
+.exercise-list-value > .exercise-list-metric {
+  font-size: 0.5625rem;
+  font-weight: 500;
+  line-height: 1;
+}
+.exercise-list-metric abbr {
+  text-decoration: none;
+}
 .exercise-list-value > .up,
 .exercise-list-spark.up {
   color: var(--p-good);

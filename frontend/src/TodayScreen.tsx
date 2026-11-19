@@ -32,6 +32,7 @@ import {
   daysBetween,
   latestTopSets,
   parseLocalDate,
+  prSetCount,
   recentStrengthRecords,
   shortDate,
   trainingDayGrid,
@@ -376,12 +377,7 @@ export function TodayScreen({
     () => muscleFreshness([thisWeekSets, ...(earlierWeekSets ?? [])], today),
     [thisWeekSets, earlierWeekSets, today],
   );
-  const strengthRecordCount = useMemo(
-    () =>
-      personalRecords.filter((record) => record.value > 0 && record.record_type in RECORD_LABELS)
-        .length,
-    [personalRecords],
-  );
+  const strengthRecordCount = useMemo(() => prSetCount(personalRecords), [personalRecords]);
   const memberSince = profile ? formatMemberSince(profile.created_at, 'short') : null;
 
   const checkIns = useDailyCheckIns(onSaveBodyweight, onSaveBodyFat);
@@ -417,7 +413,9 @@ export function TodayScreen({
                 </span>
                 Workouts
               </dt>
-              <dd className="num">{formatTotal(data?.history?.total_workouts)}</dd>
+              <dd className="num">
+                {formatTotal(data?.history?.strength_workouts ?? data?.history?.total_workouts)}
+              </dd>
             </div>
             <div>
               <dt>

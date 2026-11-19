@@ -1,3 +1,4 @@
+import { strengthSets } from './trainingSummary';
 import { isCompletedWorkingSet } from './workoutSets';
 import type { Exercise, TrackedWorkout, WorkoutInput, WorkoutSetInput } from './types';
 
@@ -115,19 +116,18 @@ export function buildFinishSummary(
     name: payload.name,
     workoutDate: payload.workout_date,
     durationMinutes: payload.duration_minutes,
-    sets: payload.movements.reduce(
-      (total, movement) => total + movement.sets.filter((item) => item.completed).length,
+    // Strength working sets, as history, the share card and the feed count them; warm-ups are
+    // left out as they are from volume.
+    sets: strength.reduce(
+      (total, movement) => total + movement.sets.filter(isCompletedWorkingSet).length,
       0,
     ),
     volumeKg: strength.reduce((total, movement) => total + volumeOf(movement.sets), 0),
     previous: sameName
       ? {
           workoutDate: sameName.workout_date,
-          // Completed sets on both sides: a set left unticked last time is not work done.
-          sets: sameName.movements.reduce(
-            (total, movement) => total + movement.sets.filter((item) => item.completed).length,
-            0,
-          ),
+          // Working sets on both sides: a set left unticked last time is not work done.
+          sets: strengthSets(sameName).length,
           volumeKg: sameName.movements
             .filter((movement) => movement.exercise.kind !== 'cardio')
             .reduce((total, movement) => total + volumeOf(movement.sets), 0),
