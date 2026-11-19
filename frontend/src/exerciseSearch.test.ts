@@ -4,6 +4,7 @@ import {
   fuzzyMatchIndices,
   fuzzyMatchesFields,
   fuzzyScoreFields,
+  exerciseSearchAllowsTypos,
   exerciseSearchScore,
   progressExerciseMatches,
   rankExerciseSearchMatches,
@@ -104,6 +105,24 @@ describe('exercise fuzzy search', () => {
     expect(directScore).not.toBeNull();
     expect(scatteredScore).not.toBeNull();
     expect(directScore!).toBeLessThan(scatteredScore!);
+  });
+
+  it('finds exercises typed with a mistake only when nothing matches as typed', () => {
+    const exercises = [
+      { id: 'bench', name: 'Barbell Bench Press', muscle_group: 'Chest', equipment: 'Barbell' },
+      { id: 'pushdown', name: 'Triceps Pushdown', muscle_group: 'Triceps', equipment: 'Cable' },
+      { id: 'pulldown', name: 'Lat Pulldown', muscle_group: 'Lats', equipment: 'Cable' },
+      { id: 'raise', name: 'Full Can Raise', muscle_group: 'Shoulders', equipment: 'Dumbbell' },
+    ];
+    const ids = (query: string) =>
+      rankExerciseSearchMatches(exercises, query, []).map((exercise) => exercise.id);
+    expect(ids('bemch press')).toEqual(['bench']);
+    expect(ids('tricepps')).toEqual(['pushdown']);
+    expect(ids('pull')).toEqual(['pulldown']);
+    expect(exerciseSearchAllowsTypos(exercises, 'pull')).toBe(false);
+    expect(exerciseSearchScore(exercises[0], 'bemch')).toBeNull();
+    expect(exerciseSearchScore(exercises[0], 'bemch', true)).not.toBeNull();
+    expect(fuzzyHighlightIndices('Barbell Bench Press', 'bemch')).toEqual([8, 9, 10, 11, 12]);
   });
 
   it('does not match letters in the wrong order', () => {

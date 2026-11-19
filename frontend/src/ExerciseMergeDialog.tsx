@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
-import { exerciseSearchScore } from './exerciseSearch';
+import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
 import { canMergeExercises, mergeChanges, mergeDistance } from './exerciseMergeCompatibility';
 import type { Exercise } from './types';
 import './exerciseMerge.css';
@@ -30,12 +30,13 @@ export function ExerciseMergeDialog({
   const busy = useRef(false);
   const all = exercises.map((item) => changed[item.id] ?? item);
   const source = all.find((item) => item.id === sourceId);
+  const typos = exerciseSearchAllowsTypos(all, query);
   const candidates = source
     ? all
         .map((item) => ({ item, changes: mergeChanges(source, item) }))
         .filter(
           (entry): entry is typeof entry & { changes: NonNullable<typeof entry.changes> } =>
-            entry.changes !== null && exerciseSearchScore(entry.item, query) !== null,
+            entry.changes !== null && exerciseSearchScore(entry.item, query, typos) !== null,
         )
         .map((entry) => ({
           ...entry,
@@ -43,7 +44,7 @@ export function ExerciseMergeDialog({
           distance: mergeDistance(source, entry.item),
           // Before a search, a duplicate usually shares its name: "DB Bench" and
           // "Dumbbell Bench Press".
-          score: exerciseSearchScore(entry.item, query.trim() || source.name),
+          score: exerciseSearchScore(entry.item, query.trim() || source.name, typos),
         }))
         .sort(
           (a, b) =>

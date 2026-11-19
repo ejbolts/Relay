@@ -13,6 +13,7 @@ import {
   type SettingsJump,
   type SettingsPage,
 } from './settingsNavigation';
+import { UserContext } from './userContext';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -113,6 +114,65 @@ it('matches cross-page terms and synonyms and does not list anything for an empt
     SETTINGS_DESTINATIONS.length,
   );
 });
+
+it('forgives typing mistakes, joined words and plurals, but keeps exact words precise', () => {
+  const ids = (query: string) => searchSettings(query, true, true).map((entry) => entry.id);
+  expect(ids('pasword')).toEqual(['password']);
+  expect(ids('notifcations')).toEqual(['alerts', 'workout-sharing']);
+  expect(ids('consle')).toEqual(['admin']);
+  expect(ids('delet acount')).toEqual(['delete']);
+  expect(ids('rest timr')).toEqual(['rest', 'rest-times']);
+  expect(ids('signout')).toEqual(['signout']);
+  expect(ids('darkmode')).toEqual(['appearance']);
+  expect(ids('timers')).toEqual(['rest']);
+  expect(ids('Animación')).toEqual(['motion']);
+  // A real word is matched as typed, so "timer" does not also find "times".
+  expect(ids('timer')).toEqual(['rest']);
+  // Words match from their start, so "plate" still does not find templates.
+  expect(ids('plate')).toEqual([]);
+  // Sections in the same group follow those that name the word.
+  expect(ids('appearance').slice(0, 2)).toEqual(['appearance', 'motion']);
+});
+
+it('opens the Admin console from a partial query only for administrators', async () => {
+  const navigate = vi.fn();
+  const renderSearch = (isAdmin: boolean) =>
+    act(async () =>
+      root.render(
+        <UserContext.Provider
+          value={{
+            user: { ...account, is_admin: isAdmin },
+            updateUser: vi.fn(),
+            signOut: vi.fn(),
+            accountDeleted: vi.fn(),
+          }}
+        >
+          <SettingsNavigationContext.Provider value={{ request: null, navigate }}>
+            <SettingsSearch includeProfile={false} />
+          </SettingsNavigationContext.Provider>
+        </UserContext.Provider>,
+      ),
+    );
+
+  await renderSearch(false);
+  const input = await type('console');
+  expect(container.textContent).toContain('No sections found');
+  await act(async () =>
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  expect(navigate).not.toHaveBeenCalled();
+
+  await renderSearch(true);
+  expect(container.querySelector('.settings-search-results button')?.textContent).toContain(
+    'Admin console',
+  );
+  await act(async () =>
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ page: 'admin' }));
+  expect(input.value).toBe('');
+});
+
 it('opens profile editing and focuses Username, then jumps back to Rest timer without changing it', async () => {
   await act(async () => root.render(<Harness />));
   await jump('username');
