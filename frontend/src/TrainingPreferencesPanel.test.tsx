@@ -42,7 +42,7 @@ function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) 
 }
 
 const goalInput = () => host.querySelector<HTMLInputElement>('input[type=number]')!;
-const toast = () => document.body.querySelector('.top-toast')?.textContent ?? null;
+const toast = () => document.body.querySelector('.toast')?.textContent ?? null;
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);

@@ -30,6 +30,7 @@ import { SharedBodySizesCard } from './SharedBodySizesCard';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
 import { ProfileCardioCard } from './ProfileCardioCard';
+import { PaginationControls } from './PaginationControls';
 import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
 import { consistencyWeeks } from './consistencyWeeks';
@@ -687,7 +688,6 @@ export function SuggestedFriends({
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const focusPage = useRef(false);
   const headingId = useId();
   useEffect(() => {
     if (!active) return;
@@ -710,30 +710,19 @@ export function SuggestedFriends({
       cancelled = true;
     };
   }, [active, refreshKey, requestedPage, revision]);
-  useEffect(() => {
-    if (state !== 'ready' || !focusPage.current) return;
-    focusPage.current = false;
-    heading.current?.focus({ preventScroll: true });
-    heading.current?.scrollIntoView({ block: 'start' });
-  }, [state, result]);
   const pageCount = result ? Math.ceil(result.total / result.page_size) : 0;
-  const page = result?.page ?? 1;
-  const firstPage = Math.max(1, Math.min(page - 2, pageCount - 4));
-  const pageNumbers = Array.from(
-    { length: Math.min(5, pageCount) },
-    (_, index) => firstPage + index,
-  );
-  function changePage(next: number) {
-    if (next === page) return;
-    focusPage.current = true;
-    setRequestedPage(next);
-  }
+  // A page that is loading keeps the previous one on screen, so the list and pager stay put.
+  const loading = state === 'loading';
   return (
-    <div className="friend-group suggested-friends" aria-labelledby={headingId}>
-      <h3 id={headingId} ref={heading} tabIndex={-1}>
+    <div
+      className="friend-group suggested-friends"
+      aria-labelledby={headingId}
+      aria-busy={loading && result !== null}
+    >
+      <h3 id={headingId} ref={heading}>
         Suggested friends
       </h3>
-      {state === 'loading' && (
+      {loading && !result && (
         <p role="status" className="sharing-loading">
           Loading suggestions…
         </p>
@@ -752,7 +741,7 @@ export function SuggestedFriends({
           </button>
         </div>
       )}
-      {state === 'ready' && result && (
+      {state !== 'error' && result && (
         <>
           {result.profiles.length === 0 ? (
             <p className="shared-card-empty">No suggested friends right now.</p>
@@ -777,43 +766,14 @@ export function SuggestedFriends({
               ))}
             </ul>
           )}
-          {result.total > 0 && (
-            <p className="suggested-friends-range" role="status">
-              {(page - 1) * result.page_size + 1}–{Math.min(page * result.page_size, result.total)}{' '}
-              of {result.total}
-            </p>
-          )}
-          {pageCount > 1 && (
-            <nav className="suggested-friends-pages" aria-label="Suggested friends pages">
-              <button
-                type="button"
-                disabled={page === 1}
-                aria-label="Previous suggested friends page"
-                onClick={() => changePage(page - 1)}
-              >
-                ‹
-              </button>
-              {pageNumbers.map((number) => (
-                <button
-                  type="button"
-                  key={number}
-                  aria-current={page === number ? 'page' : undefined}
-                  aria-label={`Suggested friends page ${number}`}
-                  onClick={() => changePage(number)}
-                >
-                  {number}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={page === pageCount}
-                aria-label="Next suggested friends page"
-                onClick={() => changePage(page + 1)}
-              >
-                ›
-              </button>
-            </nav>
-          )}
+          <PaginationControls
+            label="suggested friends"
+            currentPage={result.page}
+            totalPages={pageCount}
+            busy={loading}
+            scrollTarget={heading}
+            onPageChange={setRequestedPage}
+          />
         </>
       )}
     </div>

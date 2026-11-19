@@ -5,6 +5,7 @@ import { REACTIONS } from './friendFeedData';
 import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ShowMoreButton } from './ShowMoreButton';
 import type { WorkoutReactionPage } from './types';
 import './workoutReactionPeople.css';
 
@@ -142,14 +143,7 @@ export function WorkoutReactionPeople({
           </div>
         )}
         {page?.next_offset != null && (
-          <button
-            type="button"
-            className="show-more-button"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-          >
-            {loadingMore ? 'Loading…' : 'Show more'}
-          </button>
+          <ShowMoreButton loading={loadingMore} onClick={() => void loadMore()} />
         )}
       </div>
     </PopupDialog>

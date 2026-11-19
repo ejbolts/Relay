@@ -122,8 +122,8 @@
 
 /* A destructive confirm: the primary, filled red and labelled with the verb. */
 .popup-primary-action.is-danger {
-  background: var(--p-danger);
-  color: #fff;
+  background: var(--p-danger-fill);
+  color: var(--p-on-danger);
 }
 
 /* A quiet action at the far edge of the footer, such as Skip or Remove goal. */
