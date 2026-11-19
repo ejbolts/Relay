@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from './api';
 import { defaultHomeLayout, toggleHomeSectionWidth, type HomeLayout } from './homeLayout';
 import { useHomeLayout } from './useHomeLayout';
@@ -123,7 +123,7 @@ describe('account Home layout drafts', () => {
     expect(api.saveHomeLayout).toHaveBeenCalledTimes(1);
   });
 
-  it('discards unsaved width edits when leaving the cached Today tab', async () => {
+  it('keeps unsaved edits when leaving the cached Today tab and resumes them on return', async () => {
     await act(async () => root.render(<Harness active />));
     await act(async () => home.edit());
     expect(home.draft.widths).toEqual(saved.widths);
@@ -131,11 +131,17 @@ describe('account Home layout drafts', () => {
     await act(async () => home.change(toggleHomeSectionWidth(home.draft, 'combined-check-in', 3)));
     expect(home.draft.widths?.['combined-check-in']).toBe('full');
 
+    // Away from Home, the bottom bar goes back to the tabs.
     await act(async () => root.render(<Harness active={false} />));
-    await act(async () => root.render(<Harness active />));
     expect(container.textContent).toBe('Viewing Home');
+    expect(home.editing).toBe(false);
+    await act(async () => root.render(<Harness active />));
+    expect(container.textContent).toBe('Editing Home');
+    expect(home.draft.widths?.['combined-check-in']).toBe('full');
     expect(home.layout).toEqual(saved);
     expect(api.saveHomeLayout).not.toHaveBeenCalled();
+
+    await act(async () => home.cancel());
     await act(async () => home.edit());
     expect(home.draft.widths).toEqual(saved.widths);
   });
@@ -186,6 +192,24 @@ describe('account Home layout drafts', () => {
     await click('Save layout');
     expect(api.saveHomeLayout).toHaveBeenLastCalledWith(defaultHomeLayout());
     expect(home.layout).toEqual(defaultHomeLayout());
+  });
+
+  it('puts a section added from Add sections after the first card and brings it into view', async () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    onTestFinished(() => {
+      Element.prototype.scrollIntoView = original;
+    });
+    await act(async () => root.render(<EditorHarness />));
+    await act(async () => home.editButton.current!.click());
+    await click('Add Body goal');
+    const order = home.draft.order.filter((id) => !home.draft.hidden.includes(id));
+    expect(order.slice(0, 2)).toEqual(['next-workout', 'body-goal']);
+    const card = container.querySelector('[data-home-section="body-goal"]')!;
+    expect(card.classList).toContain('is-added');
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }));
+    expect(scrollIntoView.mock.contexts[0]).toBe(card);
   });
 
   it('saves editing from the Today pencil instead of cancelling the draft', async () => {

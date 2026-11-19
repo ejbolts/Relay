@@ -654,7 +654,7 @@ button.pulse-card:hover {
   font-size: 0.8125rem;
 }
 
-/* Two columns of one-line rows: exercise name and last time's top set. */
+/* Two columns of rows: exercise name (up to two lines) and last time's top set. */
 .next-session-exercises {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -677,11 +677,14 @@ button.pulse-card:hover {
 }
 
 .next-session-exercises li span {
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   color: var(--p-ink);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 .next-session-exercises li b {

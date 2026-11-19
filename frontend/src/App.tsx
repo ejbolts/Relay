@@ -186,6 +186,7 @@ import { ImportHistoryPrompt } from './ImportHistoryPrompt';
 import { plural } from './sharedProfileDisplay';
 import { CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
+import { ExerciseCreatedToast } from './ExerciseCreatedToast';
 import { BackgroundActivityBar } from './BackgroundActivityBar';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
@@ -10548,9 +10549,9 @@ function HistoryScreen({
   const weightUnit = useWeightUnit();
   const [exerciseHeader, setExerciseHeader] = useState<ExerciseDetailHeader | null>(null);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
-  const [createdExerciseName, setCreatedExerciseName] = useState<string | null>(null);
+  const [createdExercise, setCreatedExercise] = useState<Exercise | null>(null);
   const openExerciseCreation = () => {
-    setCreatedExerciseName(null);
+    setCreatedExercise(null);
     setCreateExerciseOpen(true);
   };
   const { types } = useWorkoutTypes();
@@ -10851,11 +10852,6 @@ function HistoryScreen({
               Cardio
             </button>
           </div>
-          {section !== 'cardio' && createdExerciseName && (
-            <p className="training-exercise-notice" role="status">
-              {createdExerciseName} added to your library.
-            </p>
-          )}
         </>
       )}
       {createExerciseOpen && (
@@ -10867,9 +10863,20 @@ function HistoryScreen({
           onCreate={onCreateExercise}
           onCreated={(exercise) => {
             setCreateExerciseOpen(false);
-            setCreatedExerciseName(exercise.name);
+            setCreatedExercise(exercise);
+          }}
+          onUseExisting={(exercise) => {
+            setCreateExerciseOpen(false);
+            onOpenExercise(exercise.id);
           }}
           onClose={() => setCreateExerciseOpen(false)}
+        />
+      )}
+      {createdExercise && (
+        <ExerciseCreatedToast
+          name={createdExercise.name}
+          onOpen={() => onOpenExercise(createdExercise.id)}
+          onDismiss={() => setCreatedExercise(null)}
         />
       )}
       {visitedSections.has('progress') && (
