@@ -411,6 +411,130 @@ describe('app updates', () => {
     });
   });
 
+  describe('applying an update on sign-in', () => {
+    function waitingWorker(registration: { waiting: Worker | null }) {
+      const worker = new Worker();
+      worker.state = 'installed';
+      registration.waiting = worker;
+      return worker;
+    }
+
+    async function takeControl(context: Awaited<ReturnType<typeof setup>>, worker: Worker) {
+      await flushPromises();
+      expect(worker.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' });
+      context.registration.waiting = null;
+      context.serviceWorker.controller = worker;
+      context.serviceWorker.dispatchEvent(new Event('controllerchange'));
+      await flushPromises();
+    }
+
+    it('reloads into a downloaded update, even after the sign-in form was used', async () => {
+      const context = await setup();
+      Object.assign(context.document, {
+        activeElement: null,
+        querySelector: vi.fn().mockReturnValue(null),
+      });
+      context.app.registerAppUpdates();
+      await flushPromises();
+      // Typing into the form ends the automatic update window on opening.
+      context.window.dispatchEvent(new Event('pointerdown'));
+      const worker = waitingWorker(context.registration);
+      await context.app.checkForAppUpdate();
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+
+      const signingIn = context.app.applyUpdateOnSignIn();
+      await takeControl(context, worker);
+
+      await expect(signingIn).resolves.toBe(true);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks for a release and waits briefly for it to download', async () => {
+      const context = await setup();
+      context.update.mockImplementation(async () => {
+        context.registration.installing = new Worker();
+      });
+
+      const signingIn = context.app.applyUpdateOnSignIn();
+      await flushPromises();
+      expect(context.update).toHaveBeenCalledTimes(1);
+      expect(context.window.location.reload).not.toHaveBeenCalled();
+      const worker = finishInstallation(context.registration);
+      await takeControl(context, worker);
+
+      await expect(signingIn).resolves.toBe(true);
+      expect(context.window.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens this release when there is no update or it is a first install', async () => {
+      for (const firstInstall of [false, true]) {
+        vi.resetModules();
+        const context = await setup({ firstInstall });
+        await expect(context.app.applyUpdateOnSignIn()).resolves.toBe(false);
+        expect(context.update).toHaveBeenCalledTimes(1);
+        expect(context.window.location.reload).not.toHaveBeenCalled();
+      }
+    });
+
+    it('opens this release without waiting long when offline or the download is slow', async () => {
+      const offline = await setup({ online: false });
+      await expect(offline.app.applyUpdateOnSignIn()).resolves.toBe(false);
+      expect(offline.update).not.toHaveBeenCalled();
+
+      vi.resetModules();
+      const slow = await setup();
+      slow.update.mockImplementation(async () => {
+        slow.registration.installing = new Worker();
+      });
+      const signingIn = slow.app.applyUpdateOnSignIn();
+      await flushPromises();
+      vi.advanceTimersByTime(slow.app.SIGN_IN_UPDATE_TIMEOUT_MS);
+      await expect(signingIn).resolves.toBe(false);
+      expect(slow.window.location.reload).not.toHaveBeenCalled();
+      // The download still finishes in the background and offers the refresh arrow.
+      finishInstallation(slow.registration);
+      await flushPromises();
+      expect(slow.app.isAppUpdateAvailable()).toBe(true);
+    });
+
+    it('never reloads while a notification permission prompt is still open', async () => {
+      const context = await setup();
+      const worker = waitingWorker(context.registration);
+      let answer!: () => void;
+      const promptSettled = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+
+      const signingIn = context.app.applyUpdateOnSignIn({ promptSettled });
+      await flushPromises();
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      answer();
+      await takeControl(context, worker);
+      await expect(signingIn).resolves.toBe(true);
+
+      vi.resetModules();
+      const unanswered = await setup();
+      const pending = waitingWorker(unanswered.registration);
+      const waiting = unanswered.app.applyUpdateOnSignIn({ promptSettled: new Promise(() => {}) });
+      await flushPromises();
+      vi.advanceTimersByTime(unanswered.app.SIGN_IN_PROMPT_TIMEOUT_MS);
+      await expect(waiting).resolves.toBe(false);
+      expect(pending.postMessage).not.toHaveBeenCalled();
+      expect(unanswered.window.location.reload).not.toHaveBeenCalled();
+    });
+
+    it('does not reload while a save is still in flight', async () => {
+      const context = await setup();
+      const worker = waitingWorker(context.registration);
+      const endWrite = context.app.beginWrite();
+      await expect(context.app.applyUpdateOnSignIn()).resolves.toBe(false);
+      expect(worker.postMessage).not.toHaveBeenCalled();
+      expect(context.window.location.reload).not.toHaveBeenCalled();
+      endWrite();
+    });
+  });
+
   it('marks an update as required when the server turns away a save', async () => {
     const { app, update, window } = await setup();
     const notify = vi.fn();
