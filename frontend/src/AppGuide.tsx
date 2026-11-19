@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { FeedbackForm } from './FeedbackForm';
+import { GuideCard } from './GuideCard';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { HomeScreenGuideContent } from './HomeScreenGuide';
 import { appGuideSteps, CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import type { AppTab } from './appNavigation';
-import { useElementHeight } from './useElementHeight';
-import { useSwipeToggle } from './useSwipeToggle';
 
 type TargetBox = { top: number; left: number; width: number; height: number };
 
@@ -92,121 +91,96 @@ export function AppGuide({
 
   // Put the annotation opposite the highlighted control, leaving it visible behind the modal.
   const position = box && box.top + box.height / 2 > window.innerHeight / 2 ? 'top' : 'bottom';
-  // A tour step can be swiped towards its edge of the screen, folding the step away to see more
-  // of the screen behind it; the header and buttons stay. The next step opens again.
-  const tour = !installing && !finished;
-  const [foldRef, full] = useElementHeight<HTMLDivElement>();
-  const { open, dragged, handleProps } = useSwipeToggle({
-    opens: position === 'top' ? 'down' : 'up',
-    full,
-    resetKey: index,
-  });
-  const handle = tour && (
-    <button
-      type="button"
-      className={`app-guide-handle is-${position}`}
-      aria-label={open ? 'Minimise guide' : 'Show guide'}
-      {...handleProps}
-    >
-      <span className="app-guide-grabber" aria-hidden="true" />
-    </button>
-  );
   const availableHeight =
     box && step
       ? position === 'top'
         ? box.top - 32
         : window.innerHeight - box.top - box.height - 32
       : null;
+  // Back, Escape and phone Back all go to the previous page; only Skip or End leave the guide.
+  const back = index > 0 && !finished ? () => setIndex(index - 1) : undefined;
+  const next = () => setIndex(index + 1);
   return (
     <PopupDialog
       title={installing ? 'Add to Home Screen' : 'App guide'}
-      kicker={
-        finished
-          ? 'YOU ARE READY'
-          : installing
-            ? 'SET UP YOUR PHONE'
-            : `QUICK TOUR · ${index + 1} OF ${steps.length}`
-      }
-      className={`app-guide ${installing ? 'home-guide app-guide-install' : finished ? 'app-guide-finish' : `app-guide-${position} app-guide-tour`}${dragged === null ? '' : ' is-dragging'}`}
+      kicker={finished ? 'YOU ARE READY' : installing ? 'SET UP YOUR PHONE' : undefined}
+      className={`app-guide ${installing ? 'home-guide app-guide-install' : finished ? 'app-guide-finish' : `app-guide-${position} app-guide-tour`}`}
       style={
-        {
-          ...(availableHeight
-            ? { '--guide-max-height': `${Math.max(180, availableHeight)}px` }
-            : {}),
-          ...(tour ? { '--open': dragged ?? (open ? 1 : 0), '--full': `${full}px` } : {}),
-        } as CSSProperties
+        availableHeight
+          ? ({ '--guide-max-height': `${Math.max(180, availableHeight)}px` } as CSSProperties)
+          : undefined
       }
+      dismissOnBackdrop={false}
+      onBack={back}
       onClose={onClose}
     >
       {step && box && <div className="app-guide-spotlight" style={box} aria-hidden="true" />}
-      {installing ? (
+      {step ? (
+        <GuideCard
+          guide="Quick tour"
+          index={index}
+          total={steps.length}
+          title={step.title}
+          titleRef={titleRef}
+          edge={position}
+          onBack={back}
+          next={{ label: index === steps.length - 1 ? 'Show steps' : 'Next', onClick: next }}
+          onLeave={onClose}
+        >
+          <p>{step.description}</p>
+        </GuideCard>
+      ) : installing ? (
         <HomeScreenGuideContent />
       ) : (
-        <div className={tour ? 'app-guide-fold' : undefined} aria-hidden={tour ? !open : undefined}>
-          <div className="app-guide-body" ref={tour ? foldRef : undefined}>
-            <div className="app-guide-step" key={index}>
-              <span className="app-guide-glyph">
-                <Icon name={step?.icon ?? 'heart'} />
-              </span>
-              <h3 ref={titleRef} tabIndex={-1}>
-                {step?.title ?? 'Thanks for trying Relay!'}
-              </h3>
-              <p>
-                {step?.description ??
-                  'We hope it makes your next workout a little easier. What worked well, and what could be better?'}
-              </p>
-            </div>
-            {finished ? (
-              <>
-                <FeedbackForm optional onSendingChange={setSendingFeedback} />
-                <details className="guide-contribute">
-                  <summary>Want to help build Relay?</summary>
-                  <p>
-                    Check existing issues, discuss bigger changes first, then work on a focused
-                    branch or fork. Use sample data, run the project checks and include screenshots
-                    for UI changes in your pull request.
-                  </p>
-                  <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
-                    GitHub repository <Icon name="external" />
-                  </a>
-                  <a href={CONTRIBUTING_URL} target="_blank" rel="noopener noreferrer">
-                    Contribution instructions <Icon name="external" />
-                  </a>
-                </details>
-              </>
-            ) : (
-              <div
-                className="app-guide-progress"
-                aria-label={`Step ${index + 1} of ${steps.length}`}
-              >
-                {steps.map((item, itemIndex) => (
-                  <span key={item.target} className={itemIndex <= index ? 'complete' : ''} />
-                ))}
-              </div>
-            )}
+        <div className="app-guide-body">
+          <div className="app-guide-step">
+            <span className="app-guide-glyph">
+              <Icon name="heart" />
+            </span>
+            <h3 ref={titleRef} tabIndex={-1}>
+              Thanks for trying Relay!
+            </h3>
+            <p>
+              We hope it makes your next workout a little easier. What worked well, and what could
+              be better?
+            </p>
           </div>
+          <FeedbackForm optional onSendingChange={setSendingFeedback} />
+          <details className="guide-contribute">
+            <summary>Want to help build Relay?</summary>
+            <p>
+              Check existing issues, discuss bigger changes first, then work on a focused branch or
+              fork. Use sample data, run the project checks and include screenshots for UI changes
+              in your pull request.
+            </p>
+            <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
+              GitHub repository <Icon name="external" />
+            </a>
+            <a href={CONTRIBUTING_URL} target="_blank" rel="noopener noreferrer">
+              Contribution instructions <Icon name="external" />
+            </a>
+          </details>
         </div>
       )}
-      {handle}
-      <footer className="popup-dialog-actions">
-        <button type="button" className="guide-skip" disabled={sendingFeedback} onClick={onClose}>
-          {finished ? 'End guide' : 'Skip guide'}
-        </button>
-        {index > 0 && !finished && (
-          <button type="button" onClick={() => setIndex(index - 1)}>
-            Back
+      {!step && (
+        <footer className="popup-dialog-actions">
+          <button type="button" className="guide-skip" disabled={sendingFeedback} onClick={onClose}>
+            {finished ? 'End guide' : 'Skip guide'}
           </button>
-        )}
-        {!finished && (
-          <button
-            type="button"
-            className="popup-primary-action"
-            onClick={() => setIndex(index + 1)}
-          >
-            {index === steps.length - 1 ? 'Show steps' : 'Next'} <span aria-hidden="true">→</span>
-          </button>
-        )}
-      </footer>
+          {back && (
+            <button type="button" onClick={back}>
+              <Icon name="chevron-left" />
+              Back
+            </button>
+          )}
+          {!finished && (
+            <button type="button" className="popup-primary-action" onClick={next}>
+              Next
+              <Icon name="chevron-right" />
+            </button>
+          )}
+        </footer>
+      )}
     </PopupDialog>
   );
 }

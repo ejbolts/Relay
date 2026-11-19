@@ -162,14 +162,6 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
   cursor: grab;
 }
 
-.workout-sheet-grab span {
-  width: 2.25rem;
-  height: 0.25rem;
-  border-radius: 999px;
-  background: var(--p-muted);
-  opacity: 0.65;
-}
-
 .live-workout-toolbar {
   width: min(100%, 720px);
   margin: 0 auto;

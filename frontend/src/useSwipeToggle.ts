@@ -1,5 +1,14 @@
-import { useRef, useState, type PointerEvent } from 'react';
+import { useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { DRAG_SLOP, dragOpenness, settleOpen } from './drawerGesture';
+
+export interface SwipeToggleHandleProps {
+  'aria-expanded': boolean;
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void;
+  onPointerMove: (event: PointerEvent<HTMLElement>) => void;
+  onPointerUp: (event: PointerEvent<HTMLElement>) => void;
+  onPointerCancel: () => void;
+  onClick: () => void;
+}
 
 interface Drag {
   pointerId: number;
@@ -99,17 +108,20 @@ export function useSwipeToggle({
     setOpen(!open);
   }
 
+  const handleProps: SwipeToggleHandleProps = {
+    'aria-expanded': open,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+    onClick,
+  };
   return {
     open,
     /** How open the panel is while dragged, from 0 to 1, or null when not dragging. */
     dragged,
-    handleProps: {
-      'aria-expanded': open,
-      onPointerDown,
-      onPointerMove,
-      onPointerUp,
-      onPointerCancel,
-      onClick,
-    },
+    /** The panel's fold variables, for the `.swipe-fold` inside it. */
+    panelStyle: { '--open': dragged ?? (open ? 1 : 0), '--full': `${full}px` } as CSSProperties,
+    handleProps,
   };
 }

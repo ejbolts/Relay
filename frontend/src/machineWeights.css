@@ -52,77 +52,10 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   background: var(--p-surface);
 }
 
-/* The chart slides down from the top when it appears, and follows the handle while dragged. */
-.machine-weights-preview-body {
-  height: calc(var(--full, 0px) * var(--open, 1));
-  overflow: hidden;
-  transition: height 360ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.machine-weights-preview-body > div {
-  opacity: var(--open, 1);
-  transform: translateY(calc((1 - var(--open, 1)) * -1.5rem));
-  transition:
-    opacity 280ms ease,
-    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.machine-weights-preview.is-dragging .machine-weights-preview-body,
-.machine-weights-preview.is-dragging .machine-weights-preview-body > div {
-  transition: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .machine-weights-preview-body,
-  .machine-weights-preview-body > div {
-    transition: none;
-  }
-}
-
-:root[data-reduce-motion] .machine-weights-preview-body,
-:root[data-reduce-motion] .machine-weights-preview-body > div {
-  transition: none;
-}
-
-/* Swipe up to minimise the chart to this strip, down to bring it back; a tap does either. */
-.machine-weights-preview-handle {
-  display: grid;
-  justify-items: center;
+/* The chart folds up to the handle (swipeFold.css); swipe down or tap to bring it back. */
+.machine-weights-preview button.machine-weights-preview-handle {
   gap: 0.35rem;
-  width: 100%;
-  border: 0;
   padding: 0.3rem 0 0.45rem;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.machine-weights-preview.is-dragging .machine-weights-preview-handle {
-  cursor: grabbing;
-}
-
-.machine-weights-grabber {
-  width: 2.25rem;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--p-line-strong);
-  transition: background-color 150ms ease;
-}
-
-.machine-weights-preview-handle:hover .machine-weights-grabber,
-.machine-weights-preview-handle:focus-visible .machine-weights-grabber,
-.machine-weights-preview.is-dragging .machine-weights-grabber {
-  background: var(--p-muted);
-}
-
-.machine-weights-preview-handle:focus-visible {
-  border-radius: 10px;
-  outline: 2px solid var(--p-accent);
-  outline-offset: -2px;
 }
 
 /* The line follows the slider as it moves, so it never replays the chart's draw-in. */
