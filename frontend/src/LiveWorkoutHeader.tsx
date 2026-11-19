@@ -7,6 +7,7 @@ import './liveWorkout.css';
 
 export function LiveWorkoutHeader({
   name,
+  dateLabel = null,
   durationLabel,
   loggedSets,
   paused,
@@ -23,6 +24,8 @@ export function LiveWorkoutHeader({
   saving = false,
 }: {
   name: string;
+  /** The workout's day when it is not today, such as a resumed session from last night. */
+  dateLabel?: string | null;
   durationLabel: string;
   loggedSets: number;
   paused: boolean;
@@ -101,6 +104,12 @@ export function LiveWorkoutHeader({
         <div className="overlay-header-copy">
           <strong title={name}>{name}</strong>
           <div className="live-workout-meta">
+            {dateLabel && (
+              <>
+                <span className="live-workout-date">{dateLabel}</span>
+                <span aria-hidden="true">·</span>
+              </>
+            )}
             <WorkoutHeaderMeta
               durationLabel={durationLabel}
               paused={paused}
