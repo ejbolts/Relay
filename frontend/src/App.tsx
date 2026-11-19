@@ -270,6 +270,7 @@ import {
 } from './appNavigation';
 import { AppTabBar } from './AppTabBar';
 import { PaginationControls } from './PaginationControls';
+import { LIST_PAGE_SIZE } from './pagination';
 import { useHomeLayout } from './useHomeLayout';
 import { Icon } from './Icon';
 import { TrendChart, type TrendPoint } from './PulseCharts';
@@ -9052,7 +9053,8 @@ export function ProgressScreen({
   const [progressError, setProgressError] = useState<string | null>(null);
   const [progressAttempt, setProgressAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [visibleSessions, setVisibleSessions] = useState(browseFirst ? 5 : HISTORY_PAGE_SIZE);
+  const [sessionPage, setSessionPage] = useState(1);
+  const sessionsRef = useRef<HTMLElement>(null);
   const [pickerRequest, setPickerRequest] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loadedMapping, setMapping] = useState<{
@@ -9166,7 +9168,7 @@ export function ProgressScreen({
   useEffect(() => {
     if (!exerciseId || libraryMode) return;
     let cancelled = false;
-    setVisibleSessions(browseFirst ? 5 : HISTORY_PAGE_SIZE);
+    setSessionPage(1);
     setLoading(true);
     setProgress(null);
     setProgressError(null);
@@ -9292,6 +9294,8 @@ export function ProgressScreen({
   );
   const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
   const sessionsNewestFirst = viewPoints.slice().reverse();
+  const sessionPages = Math.max(1, Math.ceil(sessionsNewestFirst.length / HISTORY_PAGE_SIZE));
+  const currentSessionPage = Math.min(sessionPage, sessionPages);
   const sessionCountByYear = new Map(
     groupByYear(sessionsNewestFirst, (point) => point.workout_date).map((group) => [
       group.year,
@@ -9787,6 +9791,7 @@ export function ProgressScreen({
                   </section>
                   {friendsRanking}
                   <section
+                    ref={sessionsRef}
                     className="pulse-card progress-sessions"
                     aria-label="Exercise session history"
                   >
@@ -9795,7 +9800,10 @@ export function ProgressScreen({
                       <span>Best set · {metricInfo.label}</span>
                     </header>
                     {groupByYear(
-                      sessionsNewestFirst.slice(0, visibleSessions),
+                      sessionsNewestFirst.slice(
+                        (currentSessionPage - 1) * HISTORY_PAGE_SIZE,
+                        currentSessionPage * HISTORY_PAGE_SIZE,
+                      ),
                       (point) => point.workout_date,
                     ).map((group) => (
                       <section
@@ -9856,15 +9864,13 @@ export function ProgressScreen({
                         </ul>
                       </section>
                     ))}
-                    {visibleSessions < sessionsNewestFirst.length && (
-                      <button
-                        type="button"
-                        className="show-more-button"
-                        onClick={() => setVisibleSessions((count) => count + HISTORY_PAGE_SIZE * 2)}
-                      >
-                        Show more · {sessionsNewestFirst.length - visibleSessions} older
-                      </button>
-                    )}
+                    <PaginationControls
+                      currentPage={currentSessionPage}
+                      totalPages={sessionPages}
+                      onPageChange={setSessionPage}
+                      label="session"
+                      scrollTarget={sessionsRef}
+                    />
                   </section>
                 </div>
               </>
@@ -10589,6 +10595,8 @@ function HistoryScreen({
   const [machineHistoryError, setMachineHistoryError] = useState<string | null>(null);
   const openFirstMachineWorkoutRef = useRef(false);
   const machineFilterRef = useRef<HTMLElement>(null);
+  const [machinePage, setMachinePage] = useState(1);
+  const machineListRef = useRef<HTMLElement>(null);
   const openWorkoutSummaryRef = useRef<HTMLButtonElement>(null);
   const targetExerciseRef = useRef<HTMLDivElement>(null);
   const revealWorkoutRef = useRef(initialOpenId !== null);
@@ -10597,6 +10605,8 @@ function HistoryScreen({
   const machineFilterId = machineFilter?.photo.id ?? null;
   const machineWorkouts =
     machineHistory && machineHistory.photoId === machineFilterId ? machineHistory.workouts : null;
+  const machinePages = Math.max(1, Math.ceil((machineWorkouts?.length ?? 0) / LIST_PAGE_SIZE));
+  const currentMachinePage = Math.min(machinePage, machinePages);
   const { hasOlder, loadingOlder, olderError, onLoadOlder, historyStart } = olderHistory;
   const oldestWorkoutDate = [historySummary?.first_workout_date, workouts.at(-1)?.workout_date]
     .filter((date): date is string => Boolean(date))
@@ -10656,12 +10666,6 @@ function HistoryScreen({
   function changeHistoryPage(page: number) {
     setChosenHistoryPage(page);
     setOpenId(null);
-    window.requestAnimationFrame(() =>
-      sessionListRef.current?.scrollIntoView({
-        behavior: motionReduced() ? 'instant' : 'smooth',
-        block: 'start',
-      }),
-    );
   }
 
   // Loaded from the server, so a machine last used long ago is found even when older history is
@@ -10707,6 +10711,7 @@ function HistoryScreen({
     setExpandedPhoto(null);
     setMachineHistoryError(null);
     setMachineFilter(filter);
+    setMachinePage(1);
     setTargetExerciseId(filter.photo.exercise_id);
     setOpenId(null);
     openFirstMachineWorkoutRef.current = true;
@@ -10949,12 +10954,33 @@ function HistoryScreen({
                 onClear={clearMachineFilter}
               />
               {machineWorkouts && machineWorkouts.length > 0 && (
-                <section className="history-week" aria-label="Workouts on this machine">
+                <section
+                  ref={machineListRef}
+                  className="history-week"
+                  aria-label="Workouts on this machine"
+                >
                   <header className="history-week-header">
                     <h2>On this machine</h2>
                     <span className="num">Newest first</span>
                   </header>
-                  <div className="history-week-list">{machineWorkouts.map(renderWorkoutCard)}</div>
+                  <div className="history-week-list">
+                    {machineWorkouts
+                      .slice(
+                        (currentMachinePage - 1) * LIST_PAGE_SIZE,
+                        currentMachinePage * LIST_PAGE_SIZE,
+                      )
+                      .map(renderWorkoutCard)}
+                  </div>
+                  <PaginationControls
+                    currentPage={currentMachinePage}
+                    totalPages={machinePages}
+                    onPageChange={(page) => {
+                      setMachinePage(page);
+                      setOpenId(null);
+                    }}
+                    label="machine workout"
+                    scrollTarget={machineListRef}
+                  />
                 </section>
               )}
             </section>
@@ -11050,6 +11076,7 @@ function HistoryScreen({
                     totalPages={historyPages}
                     onPageChange={changeHistoryPage}
                     label="workout history"
+                    scrollTarget={sessionListRef}
                   />
                 </div>
               )}
@@ -11072,7 +11099,7 @@ function HistoryScreen({
  * A profile's shared workouts, grouped by week like History but read-only, two weeks with
  * workouts to a page. Older workouts are read as later pages need them.
  */
-function SharedWorkoutHistory({
+export function SharedWorkoutHistory({
   workouts,
   focusWorkoutId,
   personalRecords,
@@ -11106,7 +11133,6 @@ function SharedWorkoutHistory({
     start: pageStart,
     end: pageEnd,
     needsMore: pageNeedsMore,
-    hasNext: hasNextPage,
     totalPages,
   } = weekGroupPage(
     weekGroups.length,
@@ -11114,20 +11140,19 @@ function SharedWorkoutHistory({
     hasMore,
   );
   const pageWeeks = weekGroups.slice(pageStart, pageEnd);
+  // Until every workout has loaded, the pager counts the pages read so far and leaves a gap after.
+  const loadedPages =
+    totalPages ?? Math.max(page + 1, Math.ceil(weekGroups.length / HISTORY_WEEKS_PER_PAGE));
+  const pageLoading = pageNeedsMore && !loadMoreFailed;
 
   useEffect(() => {
     if (pageNeedsMore && !loadingMore && !loadMoreFailed) onLoadMore?.();
   }, [loadMoreFailed, loadingMore, onLoadMore, pageNeedsMore, workouts.length]);
 
+  /** Takes the pager's 1-based page. */
   function changePage(next: number) {
-    setChosenPage(Math.max(0, next));
+    setChosenPage(Math.max(0, next - 1));
     setOpenId(null);
-    window.requestAnimationFrame(() =>
-      pagesRef.current?.scrollIntoView({
-        behavior: motionReduced() ? 'instant' : 'smooth',
-        block: 'start',
-      }),
-    );
   }
 
   useEffect(() => {
@@ -11184,32 +11209,15 @@ function SharedWorkoutHistory({
           </section>
         );
       })}
-      {(page > 0 || hasNextPage) && (
-        <nav className="pagination-controls shared-workout-pager" aria-label="Workout pages">
-          <button
-            type="button"
-            className="pagination-arrow"
-            disabled={page === 0}
-            onClick={() => changePage(page - 1)}
-            aria-label="Newer workouts"
-          >
-            <Icon name="chevron-left" />
-          </button>
-          <small className="pagination-status" aria-live="polite">
-            Page {page + 1}
-            {totalPages ? ` of ${totalPages}` : ''}
-          </small>
-          <button
-            type="button"
-            className="pagination-arrow"
-            disabled={!hasNextPage || pageNeedsMore}
-            onClick={() => changePage(page + 1)}
-            aria-label="Older workouts"
-          >
-            <Icon name="chevron-right" />
-          </button>
-        </nav>
-      )}
+      <PaginationControls
+        label="workout"
+        currentPage={page + 1}
+        totalPages={loadedPages}
+        hasMore={totalPages === null && !(pageNeedsMore && loadMoreFailed)}
+        busy={pageLoading}
+        scrollTarget={pagesRef}
+        onPageChange={changePage}
+      />
     </div>
   );
 }

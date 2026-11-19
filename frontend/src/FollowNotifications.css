@@ -158,12 +158,6 @@
   font-size: 0.75rem;
   white-space: nowrap;
 }
-.follow-notifications > .pagination-controls {
-  margin: 0;
-  border-top: 0;
-  padding: 0.75rem 0.875rem;
-}
-
 .release-notification-icon {
   display: grid;
   place-items: center;

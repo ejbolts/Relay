@@ -10,10 +10,10 @@ import {
 import { api } from './api';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
-import { pageButtons } from './pageButtons';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { useFlipAnimation, useHeightAnimation } from './motionHooks';
+import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -26,7 +26,8 @@ import './liftComparison.css';
 /** The most lifts a head to head can show. */
 const MAX_LIFTS = 20;
 /** Lifts on each page of the picker: as many as fit the sheet on a phone without scrolling. */
-const PAGE_SIZE = 6; /** Matches the sheet's slide-down in liftComparison.css. */
+const PAGE_SIZE = 6;
+/** Matches the sheet's slide-down in liftComparison.css. */
 const CLOSE_MS = 240;
 /** The gap between one new lift rising into the card and the next, as useFlipAnimation spaces them. */
 const ENTER_STAGGER_MS = 80;
@@ -317,11 +318,6 @@ function LiftPicker({
     setPage(0);
   }
 
-  function turnTo(next: number) {
-    setPage(next);
-    list.current?.scrollTo?.({ top: 0 });
-  }
-
   /** Slides the sheet back down before it unmounts. */
   function dismiss() {
     if (closeTimer.current !== null) return;
@@ -461,44 +457,14 @@ function LiftPicker({
             No exercises match “{query.trim()}”.
           </p>
         )}
-        {pages > 1 && (
-          <nav className="lift-picker-pager" aria-label="Pages">
-            <button
-              type="button"
-              aria-label="Previous page"
-              disabled={current === 0}
-              onClick={() => turnTo(current - 1)}
-            >
-              <Icon name="chevron-left" />
-            </button>
-            {pageButtons(current, pages).map((item, index) =>
-              item === null ? (
-                <span key={`gap-${index}`} aria-hidden="true">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={item}
-                  type="button"
-                  className="num"
-                  aria-label={`Page ${item + 1} of ${pages}`}
-                  aria-current={item === current ? 'page' : undefined}
-                  onClick={() => turnTo(item)}
-                >
-                  {item + 1}
-                </button>
-              ),
-            )}
-            <button
-              type="button"
-              aria-label="Next page"
-              disabled={current === pages - 1}
-              onClick={() => turnTo(current + 1)}
-            >
-              <Icon name="chevron-right" />
-            </button>
-          </nav>
-        )}
+        <PaginationControls
+          label="lifts"
+          className="is-sheet-footer"
+          currentPage={current + 1}
+          totalPages={pages}
+          onPageChange={(next) => setPage(next - 1)}
+          scrollTarget={list}
+        />
       </div>
       {cleared && (
         <div

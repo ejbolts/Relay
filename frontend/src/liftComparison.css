@@ -677,52 +677,10 @@ html[data-reduce-motion] .lift-picker-check .pulse-icon {
   text-align: center;
 }
 
-/* The pages of the list, under it, with the current page outlined in the accent colour. */
-.lift-picker-pager {
-  display: flex;
+/* The pager is the sheet's footer, its divider running edge to edge. */
+.lift-picker-body > .pagination-controls {
   flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  margin: 0 -1rem;
-  border-top: 1px solid var(--p-line);
-  padding: 0.625rem 1rem max(0.75rem, env(safe-area-inset-bottom));
-}
-
-.lift-picker-pager button {
-  display: grid;
-  place-items: center;
-  min-width: 2.375rem;
-  height: 2.375rem;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 0 0.25rem;
-  background: none;
-  color: var(--p-ink-2, var(--p-ink));
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.lift-picker-pager button[aria-current='page'] {
-  border-color: var(--p-accent);
-  background: var(--p-accent-soft);
-  color: var(--p-ink);
-}
-
-.lift-picker-pager button:disabled {
-  color: var(--p-deemph);
-}
-
-.lift-picker-pager .pulse-icon {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-
-.lift-picker-pager > span {
-  min-width: 1.25rem;
-  color: var(--p-muted);
-  text-align: center;
+  margin-inline: -1rem;
 }
 
 /* Unselect all's Undo floats over the bottom of the sheet, above the pages. */
