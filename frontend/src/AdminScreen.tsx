@@ -67,7 +67,8 @@ export interface AdminScreenViewProps {
   onResetPassword: (user: AdminUser) => Promise<void>;
   /** Changes or clears an account's sex; absent hides the control. */
   onUserSexChange?: (user: AdminUser, sex: Sex | null) => void;
-  onResetRequestDismiss?: (user: AdminUser) => void;
+  /** Clears the account's waiting password reset and username requests. */
+  onRequestDismiss?: (user: AdminUser) => void;
   onTemporaryPasswordDismiss: () => void;
   onNoticeDismiss?: () => void;
   onRefresh: () => void;
@@ -394,7 +395,7 @@ function UserRow({
   onDisabledChange,
   onResetPassword,
   onSexChange,
-  onResetRequestDismiss,
+  onRequestDismiss,
   onTemporaryPasswordDismiss,
 }: {
   user: AdminUser;
@@ -406,7 +407,7 @@ function UserRow({
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
   onResetPassword: (user: AdminUser) => Promise<void>;
   onSexChange?: (user: AdminUser, sex: Sex | null) => void;
-  onResetRequestDismiss?: (user: AdminUser) => void;
+  onRequestDismiss?: (user: AdminUser) => void;
   onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
@@ -414,8 +415,10 @@ function UserRow({
   const live = disabled ? null : user.presence?.workout;
   const versions = user.client_versions ?? [];
   const resetRequestedAt = user.password_reset_requested_at ?? null;
+  const usernameRequestedAt = user.username_reminder_requested_at ?? null;
+  const requested = Boolean(resetRequestedAt || usernameRequestedAt);
   // Accounts that need something done start open; the rest show one line until tapped.
-  const needsAction = Boolean(resetRequestedAt || temporaryPassword || error || busy);
+  const needsAction = Boolean(requested || temporaryPassword || error || busy);
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? needsAction;
   const detailsId = `${adminUserRowId(user.id)}-details`;
@@ -423,7 +426,7 @@ function UserRow({
     <li
       id={adminUserRowId(user.id)}
       tabIndex={-1}
-      className={`admin-user ${disabled ? 'is-disabled' : ''} ${resetRequestedAt ? 'has-reset-request' : ''}`}
+      className={`admin-user ${disabled ? 'is-disabled' : ''} ${requested ? 'has-request' : ''}`}
     >
       <button
         type="button"
@@ -439,6 +442,9 @@ function UserRow({
             {isSelf && <span className="admin-tag">You</span>}
             {disabled && <span className="admin-tag is-danger">Disabled</span>}
             {resetRequestedAt && <span className="admin-tag is-request">Reset requested</span>}
+            {usernameRequestedAt && (
+              <span className="admin-tag is-request">Username requested</span>
+            )}
             {user.must_change_password && <span className="admin-tag">Temporary password</span>}
           </strong>
           <span>{user.username}</span>
@@ -458,6 +464,12 @@ function UserRow({
             <div className="admin-user-request">
               <dt>Asked for a reset</dt>
               <dd>{formatLastActive(resetRequestedAt, new Date(now))}</dd>
+            </div>
+          )}
+          {usernameRequestedAt && (
+            <div className="admin-user-request">
+              <dt>Asked for username</dt>
+              <dd>{formatLastActive(usernameRequestedAt, new Date(now))}</dd>
             </div>
           )}
           <div>
@@ -547,7 +559,7 @@ function UserRow({
             {error}
           </p>
         )}
-        {(!isSelf || (resetRequestedAt && onResetRequestDismiss)) && (
+        {(!isSelf || (requested && onRequestDismiss)) && (
           <div className="admin-user-actions">
             {!isSelf && (
               <InlineConfirmButton
@@ -560,14 +572,14 @@ function UserRow({
                 onConfirm={() => onResetPassword(user)}
               />
             )}
-            {resetRequestedAt && onResetRequestDismiss && (
+            {requested && onRequestDismiss && (
               <button
                 type="button"
                 className="profile-secondary"
                 disabled={busy}
-                onClick={() => onResetRequestDismiss(user)}
+                onClick={() => onRequestDismiss(user)}
               >
-                Dismiss request
+                {resetRequestedAt && usernameRequestedAt ? 'Dismiss requests' : 'Dismiss request'}
               </button>
             )}
             {isSelf ? null : disabled ? (
@@ -603,6 +615,11 @@ const ACCOUNT_FILTERS = [
     label: 'Reset requested',
     matches: (user: AdminUser) => !!user.password_reset_requested_at,
   },
+  {
+    id: 'username',
+    label: 'Username requested',
+    matches: (user: AdminUser) => !!user.username_reminder_requested_at,
+  },
   { id: 'disabled', label: 'Disabled', matches: (user: AdminUser) => user.disabled_at !== null },
   {
     id: 'temporary',
@@ -625,7 +642,7 @@ function AccountsPanel({
   onUserDisabledChange,
   onResetPassword,
   onUserSexChange,
-  onResetRequestDismiss,
+  onRequestDismiss,
   onTemporaryPasswordDismiss,
 }: Pick<
   AdminScreenViewProps,
@@ -639,13 +656,22 @@ function AccountsPanel({
   | 'onUserDisabledChange'
   | 'onResetPassword'
   | 'onUserSexChange'
-  | 'onResetRequestDismiss'
+  | 'onRequestDismiss'
   | 'onTemporaryPasswordDismiss'
 > & { users: AdminUser[] | null; now: number }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<AccountFilter | null>(null);
   const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
   const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
+  const usernameRequests = users?.filter((user) => user.username_reminder_requested_at).length ?? 0;
+  const waitingRequests =
+    resetRequests && usernameRequests
+      ? plural(resetRequests + usernameRequests, 'request')
+      : resetRequests
+        ? plural(resetRequests, 'reset request')
+        : usernameRequests
+          ? plural(usernameRequests, 'username request')
+          : null;
   const words = query.trim().toLocaleLowerCase();
   // Only offer filters that would find someone, and keep a chosen one until it is cleared.
   const filters = ACCOUNT_FILTERS.filter(
@@ -670,11 +696,7 @@ function AccountsPanel({
             {disabledCount > 0 && ` · ${disabledCount} disabled`}
           </h2>
         </div>
-        {resetRequests > 0 && (
-          <span className="sharing-state is-on">
-            {resetRequests} {resetRequests === 1 ? 'reset request' : 'reset requests'}
-          </span>
-        )}
+        {waitingRequests && <span className="sharing-state is-on">{waitingRequests}</span>}
         <button
           type="button"
           className="icon-button-pulse admin-refresh"
@@ -728,7 +750,7 @@ function AccountsPanel({
               onDisabledChange={onUserDisabledChange}
               onResetPassword={onResetPassword}
               onSexChange={onUserSexChange}
-              onResetRequestDismiss={onResetRequestDismiss}
+              onRequestDismiss={onRequestDismiss}
               onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
             />
           ))}
@@ -804,7 +826,7 @@ export function AdminScreenView({
   onUserDisabledChange,
   onResetPassword,
   onUserSexChange,
-  onResetRequestDismiss,
+  onRequestDismiss,
   onTemporaryPasswordDismiss,
   onNoticeDismiss,
   onRefresh,
@@ -835,7 +857,7 @@ export function AdminScreenView({
         onUserDisabledChange={onUserDisabledChange}
         onResetPassword={onResetPassword}
         onUserSexChange={onUserSexChange}
-        onResetRequestDismiss={onResetRequestDismiss}
+        onRequestDismiss={onRequestDismiss}
         onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
       />
       {feedback && (
@@ -1091,20 +1113,26 @@ export function AdminScreen({ active }: { active: boolean }) {
     }
   }
 
-  async function dismissResetRequest(target: AdminUser) {
+  async function dismissRequests(target: AdminUser) {
     setBusyUserId(target.id);
     setError(null);
     setNotice(null);
-    try {
-      await api.admin.dismissPasswordResetRequest(target.id);
-      // The tag and the header count clear; the card keeps its place until the next refresh.
+    // The tag and the header count clear; the card keeps its place until the next refresh.
+    const clear = (fields: Partial<AdminUser>) =>
       setUsers((current) =>
         current
-          ? current.map((row) =>
-              row.id === target.id ? { ...row, password_reset_requested_at: null } : row,
-            )
+          ? current.map((row) => (row.id === target.id ? { ...row, ...fields } : row))
           : current,
       );
+    try {
+      if (target.password_reset_requested_at) {
+        await api.admin.dismissPasswordResetRequest(target.id);
+        clear({ password_reset_requested_at: null });
+      }
+      if (target.username_reminder_requested_at) {
+        await api.admin.dismissUsernameReminderRequest(target.id);
+        clear({ username_reminder_requested_at: null });
+      }
     } catch (reason) {
       setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
@@ -1161,7 +1189,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       onUserDisabledChange={changeUserDisabled}
       onResetPassword={resetUserPassword}
       onUserSexChange={(target, sex) => void changeUserSex(target, sex)}
-      onResetRequestDismiss={(target) => void dismissResetRequest(target)}
+      onRequestDismiss={(target) => void dismissRequests(target)}
       onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
       onNoticeDismiss={() => setNotice(null)}
       onRefresh={() => void load()}

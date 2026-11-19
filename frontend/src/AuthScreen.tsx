@@ -23,6 +23,7 @@ import {
   lightStylePreference,
 } from './colourThemes';
 import { ForgotPasswordDialog } from './ForgotPasswordDialog';
+import { ForgotUsernameDialog } from './ForgotUsernameDialog';
 import { queueHomeScreenGuide } from './homeScreenGuideState';
 import { queueAppGuide } from './appGuideState';
 import { pendingRegistrationInvite } from './friendInvite';
@@ -208,7 +209,7 @@ export function AuthScreen({
   const [closedNoteOpen, setClosedNoteOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
-  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState<'username' | 'password' | null>(null);
 
   const screenRef = useRef<HTMLElement>(null);
   const shellTopRef = useRef<number | null>(null);
@@ -429,6 +430,17 @@ export function AuthScreen({
                   ? 'Used to sign in and shown as your handle so friends can find you. Must be unique.'
                   : undefined
               }
+              labelAction={
+                creating ? undefined : (
+                  <button
+                    type="button"
+                    className="auth-forgot"
+                    onClick={() => setForgotOpen('username')}
+                  >
+                    Forgot username?
+                  </button>
+                )
+              }
             >
               <div className={creating ? 'auth-handle' : undefined}>
                 {creating && (
@@ -466,8 +478,8 @@ export function AuthScreen({
                 creating ? undefined : (
                   <button
                     type="button"
-                    className="auth-forgot-password"
-                    onClick={() => setForgotOpen(true)}
+                    className="auth-forgot"
+                    onClick={() => setForgotOpen('password')}
                   >
                     Forgot password?
                   </button>
@@ -554,8 +566,11 @@ export function AuthScreen({
               onClose={() => setSampleOpen(false)}
             />
           )}
-          {!creating && forgotOpen && (
-            <ForgotPasswordDialog initialUsername={username} onClose={() => setForgotOpen(false)} />
+          {!creating && forgotOpen === 'password' && (
+            <ForgotPasswordDialog initialUsername={username} onClose={() => setForgotOpen(null)} />
+          )}
+          {!creating && forgotOpen === 'username' && (
+            <ForgotUsernameDialog onClose={() => setForgotOpen(null)} />
           )}
         </section>
       </div>

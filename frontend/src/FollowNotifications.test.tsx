@@ -657,6 +657,7 @@ it('shows admins who asked for a password reset until it is handled, and opens t
     },
   ];
   vi.spyOn(api.admin, 'passwordResetRequests').mockImplementation(async () => requests);
+  vi.spyOn(api.admin, 'usernameReminderRequests').mockResolvedValue([]);
   const opened = vi.fn();
   const stop = onAdminAccountFocusRequested(opened);
   try {
@@ -694,11 +695,57 @@ it('shows admins who asked for a password reset until it is handled, and opens t
   }
 });
 
+it('shows admins who asked for their username until it is handled, and opens the account', async () => {
+  let requests = [
+    {
+      user_id: 'jordan',
+      username: 'jordan',
+      display_name: 'Jordan Sample',
+      requested_at: '2026-10-21T09:00:00Z',
+    },
+  ];
+  vi.spyOn(api.admin, 'passwordResetRequests').mockResolvedValue([]);
+  vi.spyOn(api.admin, 'usernameReminderRequests').mockImplementation(async () => requests);
+  const opened = vi.fn();
+  const stop = onAdminAccountFocusRequested(opened);
+  try {
+    await act(async () =>
+      root.render(
+        <UserContext.Provider value={adminSession}>
+          <FollowNotifications active />
+        </UserContext.Provider>,
+      ),
+    );
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe(
+      'Notifications, 1 unread',
+    );
+
+    await click('Notifications, 1 unread');
+    const row = document.querySelector('.username-reminder-notification-row');
+    expect(row?.textContent).toContain('Jordan Sample asked for their username');
+    expect(row?.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-21T09:00:00Z');
+    expect(api.sharing.markNotificationsRead).not.toHaveBeenCalled();
+
+    await click('Review Jordan Sample’s username request');
+
+    expect(document.querySelector('dialog.follow-notifications')).toBeNull();
+    expect(opened).toHaveBeenCalledOnce();
+
+    requests = [];
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Notifications');
+  } finally {
+    stop();
+  }
+});
+
 it('never asks the admin API for members', async () => {
   const load = vi.spyOn(api.admin, 'passwordResetRequests');
+  const loadUsernames = vi.spyOn(api.admin, 'usernameReminderRequests');
   await render();
   await click('Notifications');
   expect(load).not.toHaveBeenCalled();
+  expect(loadUsernames).not.toHaveBeenCalled();
   expect(document.querySelector('.password-reset-notification-row')).toBeNull();
 });
 

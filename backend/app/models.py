@@ -113,6 +113,11 @@ class User(Base):
     password_reset_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When someone gave this account's display name on the sign-in screen's Forgot username form;
+    # cleared once an admin dismisses it or the person signs in.
+    username_reminder_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # A square WebP in data/profile-photos/; a new upload gets a new name, which busts caches.
     profile_photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)

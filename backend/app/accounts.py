@@ -508,6 +508,8 @@ def login(
         user.password_hash = hash_password(payload.password)
     # They remembered it, so an admin no longer needs to reset it; committed with the session.
     user.password_reset_requested_at = None
+    # Likewise, they found their username.
+    user.username_reminder_requested_at = None
     token = create_user_session(db, user, settings, request.headers.get("user-agent"))
     set_session_cookie(response, token, settings)
     return user_to_read(db, user, settings)

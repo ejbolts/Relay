@@ -68,6 +68,8 @@ PUBLIC_ROUTES = {
     ("POST", "/api/auth/logout-session"),
     # Asking the admins for a temporary password happens while signed out.
     ("POST", "/api/auth/password-reset-request"),
+    # So is asking them for a forgotten username.
+    ("POST", "/api/auth/username-reminder-request"),
 }
 
 

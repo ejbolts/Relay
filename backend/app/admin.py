@@ -58,6 +58,7 @@ from .server_settings import (
     save_runtime_setting,
 )
 from .session_events import session_events
+from .username_reminder_requests import open_username_request_time
 
 DbDependency = Annotated[Session, Depends(get_db)]
 Throttle = Annotated[LoginThrottle, Depends(get_login_throttle)]
@@ -98,6 +99,8 @@ class AdminUserRead(BaseModel):
     must_change_password: bool
     # The person asked for a temporary password from the sign-in screen and is still waiting.
     password_reset_requested_at: datetime | None = None
+    # Someone asked for this account's username from the sign-in screen and is still waiting.
+    username_reminder_requested_at: datetime | None = None
     created_at: datetime
     last_active_at: datetime | None
     presence: FriendPresence
@@ -231,6 +234,7 @@ def _admin_user_reads(
             disabled_at=as_utc(user.disabled_at) if user.disabled_at else None,
             must_change_password=user.must_change_password,
             password_reset_requested_at=open_request_time(user, now),
+            username_reminder_requested_at=open_username_request_time(user, now),
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
             presence=activity[user.id],
