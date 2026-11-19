@@ -144,7 +144,11 @@ export function WeeklyReviewSummary({
           <p className="pulse-empty-line">No new strength records.</p>
         )}
         {review.records.length > 3 && (
-          <button type="button" className="pulse-button link small" onClick={() => onOpenProgress()}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => onOpenProgress()}
+          >
             All {review.recordCount} in Progress
           </button>
         )}

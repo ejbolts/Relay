@@ -537,7 +537,11 @@ export function VideoUpload() {
             </button>
           )}
           {serverSession.status === 'cancelled' && (
-            <button type="button" className="pulse-button primary large block" onClick={resetUpload}>
+            <button
+              type="button"
+              className="pulse-button primary large block"
+              onClick={resetUpload}
+            >
               Start a new upload
             </button>
           )}
@@ -594,7 +598,11 @@ export function VideoUpload() {
               </a>
             ))}
           </section>
-          <button type="button" className="pulse-button secondary large block" onClick={resetUpload}>
+          <button
+            type="button"
+            className="pulse-button secondary large block"
+            onClick={resetUpload}
+          >
             Upload another session
           </button>
           <InlineConfirmButton

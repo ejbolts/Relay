@@ -714,7 +714,11 @@ export function TodayScreen({
       <section className="pulse-card" aria-labelledby="records-title">
         <header className="pulse-card-header">
           <h2 id="records-title">Recent records</h2>
-          <button type="button" className="pulse-button link small" onClick={() => onOpenProgress()}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => onOpenProgress()}
+          >
             Progress
           </button>
         </header>
