@@ -414,3 +414,34 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
 html[data-reduce-motion] .live-workout-header {
   transition: none;
 }
+
+/* The exercise's note, one line under its title; tapping it edits the note. */
+.logger-screen .movement-note-line {
+  display: block;
+  width: calc(100% - 2rem);
+  margin: -0.25rem 1rem 0.5rem;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logger-screen .movement-note-line.is-last-time {
+  color: var(--p-muted);
+}
+
+.movement-note-dialog form {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.movement-note-dialog textarea {
+  width: 100%;
+  resize: vertical;
+}

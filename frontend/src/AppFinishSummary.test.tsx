@@ -101,9 +101,11 @@ async function click(target: HTMLElement) {
 const card = () => container.querySelector<HTMLElement>('.finished-workout');
 async function finish() {
   await click(container.querySelector<HTMLButtonElement>('[aria-label="Finish workout"]')!);
-  await click(
-    document.querySelector<HTMLButtonElement>('.workout-finish-actions .popup-primary-action')!,
+  // With every entered set ticked, Finish saves straight away without asking.
+  const confirm = document.querySelector<HTMLButtonElement>(
+    '.workout-finish-actions .popup-primary-action',
   );
+  if (confirm) await click(confirm);
 }
 
 beforeEach(() => {

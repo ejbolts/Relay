@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import './prToast.css';
 import { bodyweightContext } from './relativeStrength';
+import { Icon } from './Icon';
 
 export interface PrToastEntry {
   exercise: string;
@@ -15,6 +16,10 @@ export interface PrToastEntry {
 
 export const PR_TOAST_MS = 5000;
 
+/**
+ * A compact pill above the rest timer while training, so a record never covers the workout's
+ * header, timer or Finish. The set's row keeps its PR badge; Home's finished card lists them all.
+ */
 export function PrToast({ entries, onClose }: { entries: PrToastEntry[]; onClose: () => void }) {
   const weightUnit = useWeightUnit();
   useEffect(() => {
@@ -24,38 +29,35 @@ export function PrToast({ entries, onClose }: { entries: PrToastEntry[]; onClose
 
   return (
     <aside
-      className="pr-toast"
+      className="undo-toast pr-toast"
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      style={{ '--pr-toast-duration': `${PR_TOAST_MS}ms` } as CSSProperties}
+      style={{ '--undo-toast-duration': `${PR_TOAST_MS}ms` } as CSSProperties}
     >
-      <span className="pr-toast-icon" aria-hidden="true">
+      <i className="pr-toast-icon" aria-hidden="true">
         🏆
-      </span>
+      </i>
       <div className="pr-toast-copy">
         {entries.map((entry, index) => (
-          <div key={index}>
+          <p key={index}>
             <strong>{entry.labels.join(' + ')}</strong>
-            <span>{entry.exercise}</span>
             <small>
-              {entry.reps} reps at {formatWeight(entry.weightKg, weightUnit)}
-              {entry.bodyweightKg != null && (
-                <>
-                  <br />
-                  {bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}
-                </>
-              )}
+              {entry.exercise} · {entry.reps} reps at {formatWeight(entry.weightKg, weightUnit)}
+              {entry.bodyweightKg != null &&
+                ` · ${bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}`}
             </small>
-          </div>
+          </p>
         ))}
       </div>
-      <button type="button" onClick={onClose} aria-label="Dismiss personal record popup">
-        ×
+      <button
+        type="button"
+        className="undo-toast-close"
+        onClick={onClose}
+        aria-label="Dismiss personal record popup"
+      >
+        <Icon name="close" />
       </button>
-      <span className="pr-toast-countdown" aria-hidden="true">
-        <span className="pr-toast-countdown-fill" />
-      </span>
     </aside>
   );
 }

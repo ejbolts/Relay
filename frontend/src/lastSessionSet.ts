@@ -24,3 +24,24 @@ export function matchingLastSessionSet<T extends KindFields>(
   const position = rows.slice(0, rowIndex).filter((item) => kindGroup(item) === group).length;
   return lastSession.filter((item) => kindGroup(item) === group)[position];
 }
+
+/**
+ * Planned rows with last time's reps wherever their weight matches last time's matching set, so
+ * an untouched row shows what was actually lifted rather than the plan's placeholder reps.
+ * Warm-ups and rows at a new weight keep the plan's reps.
+ */
+export function withLastSessionReps<
+  T extends KindFields & Pick<WorkoutSetInput, 'weight_kg' | 'reps'>,
+>(
+  rows: readonly T[],
+  lastSession: readonly (KindFields & Pick<WorkoutSetInput, 'weight_kg' | 'reps'>)[],
+): T[] {
+  return rows.map((row, index) => {
+    if (kindGroup(row) === 'warmup') return row;
+    const last = matchingLastSessionSet(rows, index, lastSession);
+    if (!last || last.reps == null || (last.weight_kg ?? null) !== (row.weight_kg ?? null)) {
+      return row;
+    }
+    return { ...row, reps: last.reps };
+  });
+}

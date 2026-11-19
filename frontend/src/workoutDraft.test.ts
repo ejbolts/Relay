@@ -182,7 +182,25 @@ describe('active workout draft persistence', () => {
     };
     expect(writeActiveWorkoutDraft(completed, storage)).toBe(true);
     expect(readActiveWorkoutDraft(storage)).toEqual(completed);
+    // A live workout's completion carries its clock times, both or neither.
+    const timed = {
+      ...completed,
+      pendingSave: {
+        ...completed.pendingSave!,
+        payload: { ...completed.pendingSave!.payload, start_time: '16:15', end_time: '16:45' },
+      },
+    };
+    expect(writeActiveWorkoutDraft(timed, storage)).toBe(true);
+    expect(readActiveWorkoutDraft(storage)).toEqual(timed);
     for (const invalid of [
+      {
+        ...completed.pendingSave,
+        payload: { ...completed.pendingSave!.payload, start_time: '16:15', end_time: null },
+      },
+      {
+        ...completed.pendingSave,
+        payload: { ...completed.pendingSave!.payload, start_time: 'soon', end_time: '16:45' },
+      },
       { ...completed.pendingSave, workoutId: undefined },
       {
         ...completed.pendingSave,

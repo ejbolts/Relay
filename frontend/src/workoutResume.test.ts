@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canResumeWorkout,
+  liveWorkoutTimes,
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
@@ -68,6 +69,23 @@ describe('resuming a finished workout', () => {
   it('treats a corrected duration as the total, not another segment', () => {
     const resumedAt = Date.UTC(2026, 8, 28, 18, 0);
     expect(completedWorkoutDurationMinutes(45, resumedAt, resumedAt + 10 * 60_000, 50)).toBe(50);
+  });
+});
+
+describe('live workout clock times', () => {
+  it('records the real start and the end its saved duration reaches, across midnight', () => {
+    expect(liveWorkoutTimes(new Date(2026, 10, 19, 16, 15, 40).getTime(), 45)).toEqual({
+      start: '16:15',
+      end: '17:00',
+    });
+    expect(liveWorkoutTimes(new Date(2026, 10, 19, 23, 30).getTime(), 60)).toEqual({
+      start: '23:30',
+      end: '00:30',
+    });
+  });
+
+  it('leaves out a full day, which the times would read as zero', () => {
+    expect(liveWorkoutTimes(new Date(2026, 10, 19, 9, 0).getTime(), 1440)).toBeNull();
   });
 });
 

@@ -249,10 +249,11 @@ import {
   setKindUpdate,
   setNumberLabels,
 } from './setFieldValues';
+import { MovementNoteDialog } from './MovementNoteDialog';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
 import { selectInputValue } from './selectInputValue';
-import { matchingLastSessionSet } from './lastSessionSet';
+import { matchingLastSessionSet, withLastSessionReps } from './lastSessionSet';
 import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
@@ -486,6 +487,7 @@ import {
   cardioAdjustedEndTime,
   completedCardioDurationSeconds,
   completedWorkoutDurationMinutes,
+  liveWorkoutTimes,
 } from './workoutResume';
 import {
   isWorkoutSetAutoSavable,
@@ -768,6 +770,7 @@ function AppContent() {
   finishSummaryRef.current = finishSummary;
   /** Records set by the workout on the card; they arrive once it has synced. */
   const [finishRecords, setFinishRecords] = useState<PersonalRecord[]>([]);
+  const [finishShareOpen, setFinishShareOpen] = useState(false);
   function rememberFinish(summary: FinishSummary | null) {
     setFinishSummary(summary);
     setFinishRecords([]);
@@ -874,6 +877,10 @@ function AppContent() {
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
+  // The workout on Home's finished card once it has saved, for View workout, Share and Undo.
+  const finishedSaved = finishSummary?.sessionId
+    ? workouts.find((workout) => workout.client_session_id === finishSummary.sessionId)
+    : undefined;
   // Workouts and calendar days are loaded from this date onwards; older ones load on demand.
   const [historyStart, setHistoryStart] = useState(() => initialHistoryStart());
   const historyStartRef = useRef(historyStart);
@@ -2480,30 +2487,40 @@ function AppContent() {
                       workoutDeletion.pending &&
                       finishSummaryIsFor(finishSummary, workoutDeletion.pending)
                     ) && (
-                      <FinishedWorkoutCard
-                        key={finishSummary.finishedAt}
-                        summary={finishSummary}
-                        records={finishRecords.map((record) => ({
-                          id: record.id,
-                          exercise: record.exercise_name ?? 'Exercise',
-                          detail: completionRecordDetail(record, weightUnit),
-                        }))}
-                        onDismiss={() => rememberFinish(null)}
-                        onOpenWorkout={() => {
-                          const saved = finishSummary.sessionId
-                            ? workouts.find(
-                                (workout) => workout.client_session_id === finishSummary.sessionId,
-                              )
-                            : undefined;
-                          if (saved) openSavedWorkout(saved.id, null);
-                          else openHistorySection('history');
-                        }}
-                        onCompareMachines={(exerciseId) => {
-                          setMachineWeightsFor(exerciseId);
-                          openHistorySection('progress', exerciseId);
-                        }}
-                        onNotice={setMessage}
-                      />
+                      <>
+                        <FinishedWorkoutCard
+                          key={finishSummary.finishedAt}
+                          summary={finishSummary}
+                          records={finishRecords.map((record) => ({
+                            id: record.id,
+                            exercise: record.exercise_name ?? 'Exercise',
+                            detail: completionRecordDetail(record, weightUnit),
+                          }))}
+                          onDismiss={() => rememberFinish(null)}
+                          onOpenWorkout={() => {
+                            if (finishedSaved) openSavedWorkout(finishedSaved.id, null);
+                            else openHistorySection('history');
+                          }}
+                          onShare={finishedSaved ? () => setFinishShareOpen(true) : undefined}
+                          onUndo={
+                            finishedSaved && !workoutSaveBlocked && activeWorkoutStartedAt === null
+                              ? () => resumeWorkout(finishedSaved)
+                              : undefined
+                          }
+                          onCompareMachines={(exerciseId) => {
+                            setMachineWeightsFor(exerciseId);
+                            openHistorySection('progress', exerciseId);
+                          }}
+                          onNotice={setMessage}
+                        />
+                        {finishShareOpen && finishedSaved && (
+                          <WorkoutShareCard
+                            workout={finishedSaved}
+                            records={finishRecords.length}
+                            onClose={() => setFinishShareOpen(false)}
+                          />
+                        )}
+                      </>
                     )
                   }
                   data={shownDashboard}
@@ -3779,18 +3796,15 @@ function WorkoutLogger({
   /** Draft rows for planned or last-session exercises, with sets suggested from history. */
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
     return items.map(({ exercise, plannedSets, repRange }) => {
+      const ranged = repRange && plannedSets && exercise.kind !== 'cardio';
+      const lastSession = ranged
+        ? latestExerciseSets(historicalWorkouts, exercise.id, initialDate)
+        : [];
       // A planned range suggests its target weight for working sets the plan left blank.
-      const targetWeight =
-        repRange && plannedSets && exercise.kind !== 'cardio'
-          ? progressionWeightKg(
-              progressionTarget(
-                repRange,
-                latestExerciseSets(historicalWorkouts, exercise.id, initialDate),
-                weightUnit,
-              ),
-            )
-          : null;
-      return templateMovement(exercise, plannedSets, repRange, targetWeight);
+      const targetWeight = ranged
+        ? progressionWeightKg(progressionTarget(repRange, lastSession, weightUnit))
+        : null;
+      return templateMovement(exercise, plannedSets, repRange, targetWeight, lastSession);
     });
   }
   function templateMovement(
@@ -3798,6 +3812,7 @@ function WorkoutLogger({
     plannedSets: SessionTemplate['exercises'][number]['plannedSets'],
     repRange: RepRange | undefined,
     targetWeight: number | null,
+    lastSession: TrackedSet[],
   ): DraftMovement {
     return {
       key: crypto.randomUUID(),
@@ -3809,18 +3824,22 @@ function WorkoutLogger({
       supersetKey: null,
       isComplete: false,
       sets: plannedSets
-        ? plannedSets.map((set) => ({
-            ...createWorkoutSet(exercise.kind),
-            ...set,
-            ...(targetWeight !== null &&
-              set.weight_kg == null &&
-              set.set_type !== 'warmup' && { weight_kg: targetWeight }),
-            key: crypto.randomUUID(),
-            warmup: set.set_type === 'warmup',
-            completed: false,
-            fromPrevious: true,
-            restRevealed: false,
-          }))
+        ? // At last time's weight, a row shows last time's reps: the range is the target.
+          withLastSessionReps(
+            plannedSets.map((set) => ({
+              ...createWorkoutSet(exercise.kind),
+              ...set,
+              ...(targetWeight !== null &&
+                set.weight_kg == null &&
+                set.set_type !== 'warmup' && { weight_kg: targetWeight }),
+              key: crypto.randomUUID(),
+              warmup: set.set_type === 'warmup',
+              completed: false,
+              fromPrevious: true,
+              restRevealed: false,
+            })),
+            lastSession,
+          )
         : suggestedSetsFromHistory(
             historicalWorkouts,
             exercise,
@@ -4862,8 +4881,13 @@ function WorkoutLogger({
     (total, movement) => total + movement.sets.filter((item) => item.completed).length,
     0,
   );
+  // Rows left empty are not sets; only entered ones left unticked need a decision at Finish.
   const untickedSetCount = movements.reduce(
-    (total, movement) => total + movement.sets.filter((item) => !item.completed).length,
+    (total, movement) =>
+      total +
+      movement.sets.filter(
+        (item) => !item.completed && hasRecordedPerformance(movement.exercise.kind, item),
+      ).length,
     0,
   );
 
@@ -5005,6 +5029,11 @@ function WorkoutLogger({
       setWarmupReviewOpen(true);
       return;
     }
+    // With every entered set ticked there is nothing to decide: finish, with Undo on Home.
+    if (check.kind === 'ready' && untickedSetCount === 0) {
+      void finishWorkout();
+      return;
+    }
     setFinishBlocker(check.kind === 'blocked' ? check.message : null);
     setFinishConfirmationOpen(true);
   }
@@ -5084,6 +5113,8 @@ function WorkoutLogger({
         false,
       );
     }
+    const liveTimes =
+      !initialWorkout && !resumedWorkoutId ? liveWorkoutTimes(startedAt, durationMinutes) : null;
     return {
       ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
       ...((initialWorkout || resumedWorkoutId) &&
@@ -5094,11 +5125,12 @@ function WorkoutLogger({
       workout_type_id: customTypeId,
       notes: notes.trim() || null,
       duration_minutes: durationMinutes,
-      start_time: initialWorkout && startTime && endTime ? startTime : null,
+      // A new live workout records when it started and ended; edits keep their own times.
+      start_time: initialWorkout && startTime && endTime ? startTime : (liveTimes?.start ?? null),
       end_time:
         initialWorkout && startTime && endTime
           ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
-          : null,
+          : (liveTimes?.end ?? null),
       movements: movementsToSave.map((movement) => ({
         exercise_id: movement.exercise.id,
         notes: movement.notes.trim() || null,
@@ -5340,9 +5372,6 @@ function WorkoutLogger({
       className={`logger-screen content-page${!initialWorkout ? ' is-live-workout' : ''} ${dockSpacing}`}
       inert={saving}
     >
-      {prToastEntries.length > 0 && (
-        <PrToast key={`pr-toast-${prToastId}`} entries={prToastEntries} onClose={closePrToast} />
-      )}
       {prConfettiBurst > 0 &&
         (motionReduced() ? null : (
           <ConfettiBurst key={prConfettiBurst} onComplete={() => setPrConfettiBurst(0)} />
@@ -5690,6 +5719,16 @@ function WorkoutLogger({
                 olderHistory?.get(movement.exercise.id)?.latest ?? null,
               )}
               onExerciseHistory={() => onExerciseHistory(movement.exercise.id)}
+              onNotesChange={
+                readOnly
+                  ? undefined
+                  : (notes) =>
+                      setMovements((items) =>
+                        items.map((item) =>
+                          item.key === movement.key ? { ...item, notes } : item,
+                        ),
+                      )
+              }
               onExerciseComplete={(isComplete) => completeExercise(movement, isComplete)}
               onUpdateSet={(setKey, update) => updateSet(movement.key, setKey, update)}
               onToggleSet={(item) => toggleSet(movement, item)}
@@ -5768,9 +5807,18 @@ function WorkoutLogger({
         </div>
       )}
 
-      {(undoDeletion || swapUndo || loggerNotice) && (
+      {(undoDeletion || swapUndo || loggerNotice || prToastEntries.length > 0) && (
         // Popups that stay up while you train sit at the bottom, above the timer dock.
-        <div className={`logger-bottom-toasts ${dockSpacing}`}>
+        <div
+          className={`logger-bottom-toasts ${dockSpacing}${weeklySetsUpdate ? ' has-weekly-shelf' : ''}`}
+        >
+          {prToastEntries.length > 0 && (
+            <PrToast
+              key={`pr-toast-${prToastId}`}
+              entries={prToastEntries}
+              onClose={closePrToast}
+            />
+          )}
           {loggerNotice && (
             <div
               key={loggerNotice.id}
@@ -5987,19 +6035,11 @@ function WorkoutLogger({
               {finishBlocker}
             </p>
           ) : (
-            <>
-              {untickedSetCount > 0 && (
-                <p className="workout-finish-summary">
-                  <strong>
-                    {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked.
-                  </strong>{' '}
-                  Unticked sets won't count.
-                </p>
-              )}
-              <p>
-                This saves your workout and stops the live timer. You can resume it from History.
-              </p>
-            </>
+            <p className="workout-finish-summary">
+              <strong>
+                {tickedSetCount} of {tickedSetCount + untickedSetCount} sets ticked
+              </strong>
+            </p>
           )}
           <div className="popup-dialog-actions workout-finish-actions">
             <button
@@ -6070,6 +6110,7 @@ function WorkoutLogger({
           onFavoriteChange={onExerciseFavorite}
           onCreateExercise={onCreateExercise}
           singleSelect={switchingMovementKey !== null}
+          workoutCategory={liveIdentity.category}
           onChoose={(selected, machineChoices) =>
             switchingMovementKey
               ? switchExercise(selected, machineChoices)
@@ -6429,6 +6470,7 @@ function MovementCard({
   number,
   history: exerciseHistory,
   onExerciseHistory,
+  onNotesChange,
   onExerciseComplete,
   onUpdateSet,
   onToggleSet,
@@ -6460,6 +6502,8 @@ function MovementCard({
   number: number;
   history: ExerciseHistoryEntry[];
   onExerciseHistory: () => void;
+  /** Saves the exercise's note for this workout; absent while read-only. */
+  onNotesChange?: (notes: string) => void;
   onExerciseComplete: (isComplete: boolean) => void;
   onUpdateSet: (setKey: string, update: Partial<DraftSet>) => void;
   onToggleSet: (item: DraftSet) => void;
@@ -6503,6 +6547,7 @@ function MovementCard({
     : 0;
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   // Free weights and bodyweight exercises show the equipment row only once it is in use.
   const [machineRowRequested, setMachineRowRequested] = useState(false);
@@ -7308,6 +7353,21 @@ function MovementCard({
                 </span>
                 {historyOpen ? 'Hide recent history' : 'Recent history'}
               </button>
+              {onNotesChange && (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setNoteOpen(true);
+                    closeMovementMenu();
+                  }}
+                >
+                  <span aria-hidden="true">
+                    <Icon name="edit" />
+                  </span>
+                  {movement.notes.trim() ? 'Edit note' : 'Add note'}
+                </button>
+              )}
               <button
                 type="button"
                 aria-haspopup="dialog"
@@ -7402,12 +7462,34 @@ function MovementCard({
           </details>
         </div>
       </header>
+      {onNotesChange && (movement.notes.trim() || history[0]?.movementNotes) && (
+        // This workout's note, or last time's (faint) until one is written.
+        <button
+          type="button"
+          className={`movement-note-line${movement.notes.trim() ? '' : ' is-last-time'}`}
+          aria-label={`${movement.notes.trim() ? 'Edit' : 'Add'} note for ${movement.exercise.name}`}
+          onClick={() => setNoteOpen(true)}
+        >
+          {movement.notes.trim() || `Last time: ${history[0]?.movementNotes}`}
+        </button>
+      )}
 
       <ExerciseMuscleHelp
         exercise={movement.exercise}
         open={creditsOpen}
         onClose={() => setCreditsOpen(false)}
       />
+      {noteOpen && onNotesChange && (
+        <MovementNoteDialog
+          exerciseName={movement.exercise.name}
+          value={movement.notes}
+          onSave={(notes) => {
+            onNotesChange(notes);
+            setNoteOpen(false);
+          }}
+          onClose={() => setNoteOpen(false)}
+        />
+      )}
       {expanded && !cardio && movement.repRange && (
         <p className="movement-rep-target">
           {progressionHint(
@@ -8333,6 +8415,14 @@ function MachinePhotoDetail({
   );
 }
 
+/** "zercher squat" as "Zercher Squat", for an exercise named from a search. */
+function titleCase(text: string): string {
+  return text.replace(
+    /(^|\s)(\p{L})/gu,
+    (_, space: string, letter: string) => `${space}${letter.toUpperCase()}`,
+  );
+}
+
 export function ExercisePicker({
   exercises,
   excludedIds,
@@ -8341,12 +8431,15 @@ export function ExercisePicker({
   onFavoriteChange,
   onCreateExercise,
   singleSelect = false,
+  workoutCategory,
   onChoose,
   onCreateSuperset,
   onClose,
 }: {
   exercises: Exercise[];
   excludedIds: string[];
+  /** The workout's type, which an exercise created from a search starts in. */
+  workoutCategory?: WorkoutCategory;
   recentExerciseIds: string[];
   /** Each exercise's latest workout date, shown beside its tags. */
   lastDoneDates?: ReadonlyMap<string, string>;
@@ -8371,6 +8464,8 @@ export function ExercisePicker({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [favoriteSavingIds, setFavoriteSavingIds] = useState<string[]>([]);
   const [createExerciseOpen, setCreateExerciseOpen] = useState(false);
+  // Created from a search with no match: named after it, in the workout's type.
+  const [createFromSearch, setCreateFromSearch] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [viewport, setViewport] = useState(() => {
     const visualViewport = window.visualViewport;
@@ -8762,7 +8857,10 @@ export function ExercisePicker({
             className="create-exercise-trigger"
             aria-label="Create new exercise"
             aria-haspopup="dialog"
-            onClick={() => setCreateExerciseOpen(true)}
+            onClick={() => {
+              setCreateFromSearch(false);
+              setCreateExerciseOpen(true);
+            }}
           >
             +
           </button>
@@ -8777,7 +8875,24 @@ export function ExercisePicker({
                 </section>
               ),
           )}
-          {!visibleExerciseCount && <p className="muted-empty">No exercises match that search.</p>}
+          {!visibleExerciseCount && (
+            <div className="exercise-picker-empty">
+              <p className="muted-empty">No exercises match that search.</p>
+              {query && (
+                <button
+                  type="button"
+                  className="exercise-picker-create"
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setCreateFromSearch(true);
+                    setCreateExerciseOpen(true);
+                  }}
+                >
+                  Create “{titleCase(query)}”
+                </button>
+              )}
+            </div>
+          )}
           {pickerError && <p className="inline-error">{pickerError}</p>}
         </div>
         <div className={`exercise-picker-actions ${singleSelect ? 'single-action' : ''}`}>
@@ -8821,8 +8936,10 @@ export function ExercisePicker({
         <CreateExerciseDialog
           exercises={exercises}
           categoryLabels={categoryNames}
-          initialName={query}
-          initialCategory={bodyPart === 'all' ? '' : bodyPart}
+          initialName={createFromSearch ? titleCase(query) : query}
+          initialCategory={
+            bodyPart !== 'all' ? bodyPart : createFromSearch ? (workoutCategory ?? '') : ''
+          }
           viewportHeight={viewport.height}
           viewportTop={viewport.top}
           onCreate={onCreateExercise}
@@ -11188,8 +11305,13 @@ function HistoryWorkoutCard({
     workout.duration_minutes ? formatMinutesDuration(workout.duration_minutes) : null,
     workingSetCount ? `${workingSetCount} ${workingSetCount === 1 ? 'set' : 'sets'}` : null,
   ].filter(Boolean);
+  // Exercises planned but never done are listed by name only, not as empty tables.
+  const skipped = workout.movements.filter(
+    (movement) => !movement.notes && !movement.sets.some((item) => item.completed),
+  );
   const movements = open
     ? workout.movements.map((movement) => {
+        if (skipped.includes(movement)) return null;
         const targeted = targetMovementId
           ? targetMovementId === movement.id
           : targetExerciseId === movement.exercise.id;
@@ -11353,6 +11475,11 @@ function HistoryWorkoutCard({
             )
           )}
           {shared ? <div className="shared-session-exercises">{movements}</div> : movements}
+          {skipped.length > 0 && (
+            <p className="history-skipped">
+              Skipped: {skipped.map((movement) => movement.exercise.name).join(', ')}
+            </p>
+          )}
           {!detailsOnly && workout.notes && (
             <p className="history-workout-notes">{workout.notes}</p>
           )}
