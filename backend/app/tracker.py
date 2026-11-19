@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -185,6 +185,7 @@ from .training_metrics import (
     seed_muscle_mappings,
     set_setting,
     start_of_week,
+    top_set_candidates,
     workout_query,
 )
 from .training_split import (
@@ -194,7 +195,7 @@ from .training_split import (
     split_recommendation,
     validate_split_types,
 )
-from .training_time import training_time_totals
+from .training_time import is_cardio_only_workout, training_time_totals
 from .weight_factors import normalising_factors
 from .workout_photos import (
     MAX_PHOTOS_PER_WORKOUT,
@@ -1456,9 +1457,13 @@ def merge_saved_machine_photos(
 ) -> MachinePhotoUsageRead:
     if not get_owned(db, Exercise, exercise_id, user.id):
         raise HTTPException(404, "Exercise was not found.")
+    normalised = exercise_id in normalising_factors(db, user.id)
     photo = merge_machine_photos(
         db, user.id, exercise_id, payload.photo_ids, payload.keep_photo_id, payload.caption
     )
+    # Records compare normalised machines in the reference machine's weights.
+    if normalised:
+        rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     return machine_photo_usage(db, user.id, [photo])[0]
@@ -1536,7 +1541,11 @@ def delete_machine_photo(
             )
         )
     files = [(image.full_filename, image.thumbnail_filename) for image in images]
+    # Records compare normalised machines in the reference machine's weights.
+    normalised = bool(reference) and photo.exercise_id in normalising_factors(db, user.id)
     db.delete(photo)
+    if normalised:
+        rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
     db.commit()
     for full_filename, thumbnail_filename in files:
@@ -2301,6 +2310,7 @@ def list_personal_records(
         )
     ]
     unit = preferred_weight_unit(db, user.id)
+    factors = normalising_factors(db, user.id)
 
     def scoped_records(
         workouts: list[TrainingWorkout],
@@ -2309,7 +2319,9 @@ def list_personal_records(
     ) -> Iterator[PersonalRecordRead]:
         """Records against one block's or fresh start's own baseline: the workouts given."""
         prefix = f"block:{block.id}" if block else f"fresh:{fresh_start}"
-        for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
+        for workout, movement, item, record_type in personal_record_events(
+            workouts, bodyweights, factors
+        ):
             if (workout_id and workout.id != workout_id) or (
                 exercise_id and movement.exercise_id != exercise_id
             ):
@@ -2416,7 +2428,8 @@ def block_stats(
         workout_count=len(owned),
         set_count=set_count,
         volume_kg=round(volume, 1),
-        pr_count=sum(1 for record in records if owns(record.achieved_date)),
+        # A set can earn a weight and a relative-strength record at once; it counts once.
+        pr_count=len({record.set_id for record in records if owns(record.achieved_date)}),
     )
 
 
@@ -3318,9 +3331,10 @@ def build_heatmap(
 
 
 def workout_history_summary(db: Session, user_id: str) -> WorkoutHistorySummaryRead:
-    total, first, last = db.execute(
+    total, strength, first, last = db.execute(
         select(
             func.count(TrainingWorkout.id),
+            func.coalesce(func.sum(case((is_cardio_only_workout(), 0), else_=1)), 0),
             func.min(TrainingWorkout.workout_date),
             func.max(TrainingWorkout.workout_date),
         ).where(TrainingWorkout.user_id == user_id)
@@ -3332,6 +3346,7 @@ def workout_history_summary(db: Session, user_id: str) -> WorkoutHistorySummaryR
     )
     return WorkoutHistorySummaryRead(
         total_workouts=total,
+        strength_workouts=strength,
         first_workout_date=first,
         last_workout_date=last,
         has_sample_workouts=sample_id is not None,
@@ -3628,7 +3643,10 @@ def progress_point(
     sets: list[WorkoutSet],
     bodyweights: BodyweightHistory | None = None,
 ) -> ProgressPoint:
-    best_set = max(sets, key=lambda item: ((item.weight_kg or 0), (item.reps or 0)))
+    # A set with a missed rep counts for volume but not as the heaviest set.
+    best_set = max(
+        top_set_candidates(sets), key=lambda item: ((item.weight_kg or 0), (item.reps or 0))
+    )
     best_e1rm = max(
         (
             estimated_one_rep_max(item.weight_kg or 0, item.reps or 0)

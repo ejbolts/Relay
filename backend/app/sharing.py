@@ -74,7 +74,7 @@ from .tracker_schemas import (
     Zone2WeekRead,
 )
 from .training_metrics import start_of_week
-from .training_time import past_year_start, training_time_totals
+from .training_time import is_cardio_only_workout, past_year_start, training_time_totals
 from .workout_types import workout_type_catalog
 
 Db = Annotated[Session, Depends(get_db)]
@@ -142,9 +142,11 @@ class SharedProfileSummary(BaseModel):
     workout_count: int | None = None
     recent_workout_count: int | None = None
     last_workout_date: date | None = None
-    # Shared cardio sessions and weight and volume PRs, as counted on the member's Today.
+    # Shared cardio sessions and PR sets, as counted on the member's Today.
     cardio_count: int | None = None
     record_count: int | None = None
+    # Workouts other than cardio-only sessions, which add up with ``cardio_count``.
+    strength_workout_count: int | None = None
     shares: SharedContent | None = None
 
 
@@ -307,7 +309,7 @@ class TimelineItem(BaseModel):
     member: TimelineMember
     workout: TrainingWorkoutRead
     reactions: WorkoutReactions
-    # Weight and reps records set in the workout, as counted on the member's history.
+    # Sets in the workout that earned a record, as counted on the member's history.
     record_count: int = 0
 
 
@@ -479,6 +481,14 @@ def viewable_member(db: Session, viewer: User, user_id: str) -> tuple[User, Prof
     return member, sharing
 
 
+# Records counted as PRs; a set that earns several of them counts once.
+STRENGTH_RECORD_TYPES = (
+    PersonalRecordType.WEIGHT,
+    PersonalRecordType.REPS_AT_WEIGHT,
+    PersonalRecordType.RELATIVE_STRENGTH,
+)
+
+
 def photo_url(user: User) -> str | None:
     if not user.profile_photo_filename:
         return None
@@ -492,11 +502,12 @@ class ActivityStats(NamedTuple):
     last_workout_date: date | None = None
     cardio_sessions: int = 0
     records: int = 0
+    strength_workouts: int = 0
 
 
 def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
     """Per account: shared workouts, those in the last 30 days, the latest workout date, and
-    totals of shared cardio sessions and weight and volume PRs, as counted on Today."""
+    totals of shared cardio sessions, PR sets and strength workouts, as counted on Today."""
     if not user_ids:
         return {}
     cutoff = date.today() - timedelta(days=RECENT_DAYS)
@@ -506,11 +517,15 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             func.count(TrainingWorkout.id),
             func.sum(case((TrainingWorkout.workout_date >= cutoff, 1), else_=0)),
             func.max(TrainingWorkout.workout_date),
+            func.sum(case((is_cardio_only_workout(), 0), else_=1)),
         )
         .where(TrainingWorkout.user_id.in_(user_ids), TrainingWorkout.is_sample.is_(False))
         .group_by(TrainingWorkout.user_id)
     )
-    workouts = {user_id: (count, recent or 0, latest) for user_id, count, recent, latest in rows}
+    workouts, strength = {}, {}
+    for user_id, count, recent, latest, strength_count in rows:
+        workouts[user_id] = (count, recent or 0, latest)
+        strength[user_id] = strength_count or 0
     cardio = dict(
         db.execute(
             select(CardioSession.user_id, func.count(CardioSession.id))
@@ -526,13 +541,11 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
     )
     records = dict(
         db.execute(
-            select(PersonalRecord.user_id, func.count(PersonalRecord.id))
+            select(PersonalRecord.user_id, func.count(func.distinct(PersonalRecord.set_id)))
             .where(
                 PersonalRecord.user_id.in_(user_ids),
                 PersonalRecord.value > 0,
-                PersonalRecord.record_type.in_(
-                    [PersonalRecordType.WEIGHT, PersonalRecordType.REPS_AT_WEIGHT]
-                ),
+                PersonalRecord.record_type.in_(STRENGTH_RECORD_TYPES),
                 PersonalRecord.workout_id.not_in(sample_workout_ids()),
             )
             .group_by(PersonalRecord.user_id)
@@ -543,6 +556,7 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             *workouts.get(user_id, (0, 0, None)),
             cardio_sessions=cardio.get(user_id, 0),
             records=records.get(user_id, 0),
+            strength_workouts=strength.get(user_id, 0),
         )
         for user_id in user_ids
     }
@@ -578,6 +592,7 @@ def profile_summary(
         last_workout_date=stats.last_workout_date if viewable else None,
         cardio_count=stats.cardio_sessions if viewable else None,
         record_count=stats.records if viewable else None,
+        strength_workout_count=stats.strength_workouts if viewable else None,
         shares=(
             SharedContent(
                 notes=sharing.share_notes,
@@ -1408,12 +1423,10 @@ def workout_timeline(
     records = (
         dict(
             db.execute(
-                select(PersonalRecord.workout_id, func.count())
+                select(PersonalRecord.workout_id, func.count(func.distinct(PersonalRecord.set_id)))
                 .where(
                     PersonalRecord.workout_id.in_(workout_ids),
-                    PersonalRecord.record_type.in_(
-                        (PersonalRecordType.WEIGHT, PersonalRecordType.REPS_AT_WEIGHT)
-                    ),
+                    PersonalRecord.record_type.in_(STRENGTH_RECORD_TYPES),
                 )
                 .group_by(PersonalRecord.workout_id)
             ).all()

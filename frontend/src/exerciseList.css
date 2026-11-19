@@ -349,11 +349,20 @@
   font-size: 0.6875rem;
   font-weight: 600;
 }
-.exercise-list-value > .up,
+.exercise-list-meta {
+  display: flex;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.exercise-list-meta abbr {
+  text-decoration: none;
+  font-weight: 500;
+}
+.exercise-list-meta .up,
 .exercise-list-spark.up {
   color: var(--p-good);
 }
-.exercise-list-value > .down,
+.exercise-list-meta .down,
 .exercise-list-spark.down {
   color: var(--p-danger);
 }

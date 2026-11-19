@@ -438,6 +438,8 @@ class WorkoutHistorySummaryRead(BaseModel):
     first_workout_date: date | None
     last_workout_date: date | None
     has_sample_workouts: bool
+    # Workouts other than cardio-only sessions, which are counted as cardio.
+    strength_workouts: int | None = None
 
 
 class WeightRepsRead(BaseModel):

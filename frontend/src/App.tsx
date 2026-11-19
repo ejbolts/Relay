@@ -273,7 +273,7 @@ import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import {
   dayMonth,
-  formatVolume,
+  formatListVolume,
   groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
@@ -281,11 +281,12 @@ import {
   setLabel,
   sessionTemplateFor,
   shortDate,
+  strengthSets,
   topWorkingSet,
   weekGroupLabel,
+  weekGroupSummary,
   weekStartDayFrom,
   weeklyBestPoints,
-  workingSets,
   workoutDisplayName,
   workoutVolumeKg,
   type SessionTemplate,
@@ -472,6 +473,7 @@ import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { TIME_RANGE_OPTIONS } from './dateRanges';
+import { rangeOutgrowsBlock, withNormalisedRelativeStrength } from './exerciseProgressScope';
 import { useRangePinchZoom } from './rangePinchZoom';
 import {
   captureFriendInvite,
@@ -8515,6 +8517,8 @@ const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: st
 interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
+  /** The training block the progress is scoped to, if any. */
+  blockName?: string | null;
   onBack: () => void;
   onMerge?: (trigger: HTMLButtonElement) => void;
   onRename?: (trigger: HTMLButtonElement) => void;
@@ -8537,6 +8541,7 @@ export function ProgressScreen({
   onDetailChange,
   onCreateExercise,
   onExercisesMerged,
+  onRecordsChange,
   onOpenMember,
 }: {
   exerciseLibrary: ExerciseLibraryState;
@@ -8558,6 +8563,8 @@ export function ProgressScreen({
   onDetailChange?: (header: ExerciseDetailHeader | null) => void;
   onCreateExercise?: () => void;
   onExercisesMerged?: () => Promise<void>;
+  /** Saving machine weights rebuilds personal records, so they are loaded again. */
+  onRecordsChange?: () => Promise<void>;
 }) {
   const { block, config: blockConfig, select: selectBlock } = useTrainingBlocks();
   const blockId = block?.id;
@@ -8675,6 +8682,7 @@ export function ProgressScreen({
         ? {
             exercise: selectedExercise,
             sessionCount: progressSessionCount,
+            blockName: block?.name ?? null,
             onBack: backToExercises,
             onMerge: canMergeSelected ? openSelectedMerge : undefined,
             onRename:
@@ -8689,6 +8697,7 @@ export function ProgressScreen({
     fullProgress,
     selectedExercise,
     progressSessionCount,
+    block?.name,
     backToExercises,
     canMergeSelected,
     canEditSelected,
@@ -8800,7 +8809,14 @@ export function ProgressScreen({
   const bestEstimatedOneRepMax = defaultView
     ? (progress?.personal_best_estimated_1rm ?? 0)
     : (estimatedOneRepMaxPoint?.estimated_1rm ?? 0);
-  const relativeBest = viewPoints.reduce<(typeof viewPoints)[number] | null>(
+  const relativePoints = useMemo(
+    () =>
+      progress && normalised
+        ? withNormalisedRelativeStrength(viewPoints, progress, mapping)
+        : viewPoints,
+    [progress, normalised, viewPoints, mapping],
+  );
+  const relativeBest = relativePoints.reduce<(typeof viewPoints)[number] | null>(
     (best, point) =>
       (point.relative_strength ?? 0) > (best?.relative_strength ?? 0) ? point : best,
     null,
@@ -8860,7 +8876,10 @@ export function ProgressScreen({
           aria-selected={displayRange === option.value}
           aria-label={option.label}
           className={displayRange === option.value ? 'active' : ''}
-          onClick={() => selectRange(option.value)}
+          onClick={() => {
+            if (block && rangeOutgrowsBlock(option.value, block, localDate())) selectBlock('all');
+            selectRange(option.value);
+          }}
         >
           {RANGE_LABELS[option.value]}
         </button>
@@ -9149,6 +9168,8 @@ export function ProgressScreen({
                   setMapping({ exerciseId: progress.exercise.id, mapping: next });
                   setMappingOpen(false);
                   setMappingNotice((serial) => serial + 1);
+                  // PRs are recalculated in the reference machine's weights.
+                  void onRecordsChange?.();
                 }}
               />
             )}
@@ -9298,7 +9319,7 @@ export function ProgressScreen({
                       <span>Relative strength</span>
                       <b className="num">
                         {relativeBest?.relative_strength != null
-                          ? `${relativeBest.relative_strength.toFixed(2)}× BW`
+                          ? `${approx}${relativeBest.relative_strength.toFixed(2)}× BW`
                           : '–'}
                       </b>
                       <small>
@@ -10488,7 +10509,7 @@ function HistoryScreen({
             exerciseHeader.exercise.equipment,
             exerciseHeader.sessionCount === null
               ? null
-              : `${exerciseHeader.sessionCount} ${exerciseHeader.sessionCount === 1 ? 'session' : 'sessions'}`,
+              : `${exerciseHeader.sessionCount} ${exerciseHeader.sessionCount === 1 ? 'session' : 'sessions'}${exerciseHeader.blockName ? ` in ${exerciseHeader.blockName}` : ''}`,
           ]
             .filter(Boolean)
             .join(' \u00b7 ')}
@@ -10586,6 +10607,7 @@ function HistoryScreen({
             onDetailChange={setExerciseHeader}
             onCreateExercise={openExerciseCreation}
             onExercisesMerged={onDataChange}
+            onRecordsChange={onDataChange}
             onOpenMember={onOpenMember}
             initialExerciseId={initialExerciseId}
             openMachineWeights={openMachineWeights}
@@ -10693,14 +10715,7 @@ function HistoryScreen({
                         <section className="history-week" key={group.weekStart} aria-label={label}>
                           <header className="history-week-header">
                             <h2>{label}</h2>
-                            <span className="num">
-                              {group.workouts.length}{' '}
-                              {group.workouts.length === 1 ? 'workout' : 'workouts'} · {group.sets}{' '}
-                              sets
-                              {group.volumeKg > 0
-                                ? ` · ${formatVolume(group.volumeKg, weightUnit)}`
-                                : ''}
-                            </span>
+                            <span className="num">{weekGroupSummary(group, weightUnit)}</span>
                           </header>
                           <div className="history-week-list">
                             {group.workouts.map(renderWorkoutCard)}
@@ -10950,7 +10965,8 @@ function HistoryWorkoutCard({
   const completedWorkoutSets = workout.movements
     .flatMap((movement) => movement.sets)
     .filter((item) => item.completed);
-  const workingSetCount = workingSets(workout).length;
+  // A cardio entry is not a set: cardio-only rows show their time and distance instead.
+  const workingSetCount = strengthSets(workout).length;
   const totalVolume = workoutVolumeKg(workout);
   const totalDistance = completedWorkoutSets.reduce(
     (total, item) => total + (item.distance_km ?? 0),
@@ -11104,7 +11120,7 @@ function HistoryWorkoutCard({
           </span>
           <span className="history-card-metric num">
             {totalVolume > 0
-              ? formatVolume(totalVolume, weightUnit)
+              ? formatListVolume(totalVolume, weightUnit)
               : totalDistance > 0
                 ? `${Number(totalDistance.toFixed(1))} km`
                 : formatMinutesDuration(workout.duration_minutes)}

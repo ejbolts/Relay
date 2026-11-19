@@ -145,7 +145,7 @@ export function FinishedWorkoutCard({
         <div>
           <dt>Sets</dt>
           <dd>
-            {summary.sets}
+            {summary.sets || '–'}
             <Delta value={setChange} label={String(Math.abs(setChange))} />
           </dd>
         </div>

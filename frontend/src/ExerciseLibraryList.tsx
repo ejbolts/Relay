@@ -440,10 +440,15 @@ export function ExerciseLibraryList({
                     </>
                   )}
                 </b>
-                {change != null && (
-                  <small className={change > 0 ? 'up' : change < 0 ? 'down' : ''}>
-                    {change > 0 ? '+' : change < 0 ? '−' : ''}
-                    {Number(weightFromKg(Math.abs(change), weightUnit).toFixed(1))}
+                {summary?.latest_estimated_1rm != null && (
+                  <small className="exercise-list-meta">
+                    <abbr title="Estimated one-rep max">e1RM</abbr>
+                    {change != null && (
+                      <span className={change > 0 ? 'up' : change < 0 ? 'down' : ''}>
+                        {change > 0 ? '+' : change < 0 ? '−' : ''}
+                        {Number(weightFromKg(Math.abs(change), weightUnit).toFixed(1))} {weightUnit}
+                      </span>
+                    )}
                   </small>
                 )}
               </span>

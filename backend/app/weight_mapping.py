@@ -1,8 +1,8 @@
 """Optional per-exercise conversion of each saved machine's weights to a reference machine.
 
-Logged sets are never rewritten. Progress charts multiply a machine's weights by
-``reference_kg / machine_kg`` when normalising is on, so the mapping can be edited
-or switched off at any time.
+Logged sets are never rewritten. Progress charts and personal records multiply a machine's
+weights by ``reference_kg / machine_kg`` when normalising is on, so the mapping can be edited
+or switched off at any time; records are rebuilt when it is saved.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from .account_limits import limit_save_rate
 from .auth import CurrentUser
 from .database import get_db
 from .models import Exercise, MachinePhoto
-from .tracker import machine_photo_usage
-from .training_metrics import get_setting, set_setting
+from .tracker import bump_workout_cache_revision, machine_photo_usage
+from .training_metrics import get_setting, rebuild_personal_records, set_setting
 
 router = APIRouter(prefix="/api/exercises", tags=["machine weight mapping"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -180,5 +180,10 @@ def save_weight_mapping(
         },
     }
     set_setting(db, user.id, setting_key(exercise_id), json.dumps(value))
+    # Weight and relative-strength records compare this exercise's machines in the reference
+    # machine's weights, so they change with the mapping.
+    db.flush()
+    rebuild_personal_records(db, user.id)
+    bump_workout_cache_revision(db, user.id)
     db.commit()
     return read_mapping(db, user.id, exercise_id)

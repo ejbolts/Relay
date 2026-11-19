@@ -62,6 +62,29 @@ export function workingSets(workout: TrackedWorkout): TrackedSet[] {
   return workout.movements.flatMap((movement) => movement.sets.filter(isCompletedWorkingSet));
 }
 
+/** Working sets of the workout's strength exercises; a cardio movement's entry is not a set. */
+export function strengthSets(workout: Pick<TrackedWorkout, 'movements'>): TrackedSet[] {
+  return workout.movements
+    .filter((movement) => movement.exercise.kind !== 'cardio')
+    .flatMap((movement) => movement.sets.filter(isCompletedWorkingSet));
+}
+
+/** A workout that only logged cardio, such as a session logged on the Cardio tab. */
+export function isCardioOnlyWorkout(workout: Pick<TrackedWorkout, 'movements'>): boolean {
+  return (
+    workout.movements.length > 0 &&
+    workout.movements.every((movement) => movement.exercise.kind === 'cardio')
+  );
+}
+
+/**
+ * A workout counted under "Workouts": any but a cardio-only one, whose session is counted as
+ * cardio, so the two add up (as the server counts them).
+ */
+export function isStrengthWorkout(workout: Pick<TrackedWorkout, 'movements'>): boolean {
+  return !isCardioOnlyWorkout(workout);
+}
+
 export function workoutVolumeKg(workout: TrackedWorkout): number {
   return workingSets(workout).reduce(
     (total, item) => total + (item.weight_kg ?? 0) * (item.reps ?? 0),
@@ -113,7 +136,7 @@ export function weeklyTrainingTotals(
     if (workout.workout_date > today) continue;
     const bucket = byStart.get(weekStartFor(workout.workout_date, weekStartDay));
     if (!bucket) continue;
-    bucket.workouts += 1;
+    if (isStrengthWorkout(workout)) bucket.workouts += 1;
     bucket.cardioSessions += cardioSessionCount(workout);
     bucket.sets += workingSets(workout).length;
     bucket.volumeKg += workoutVolumeKg(workout);
@@ -217,6 +240,15 @@ export function formatVolume(kg: number, unit: WeightUnit = 'kg'): string {
   return `${Math.round(kg).toLocaleString('en-GB')} kg`;
 }
 
+/**
+ * Volume in a list of sessions, in one unit for every row: tonnes to one decimal, or pounds
+ * with thousands separators. `formatVolume` would switch between kg and t from row to row.
+ */
+export function formatListVolume(kg: number, unit: WeightUnit = 'kg'): string {
+  if (unit === 'lb') return formatVolume(kg, unit);
+  return `${(kg / 1000).toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} t`;
+}
+
 export function formatKg(value: number): string {
   return `${Number(value.toFixed(1)).toLocaleString('en-GB')} kg`;
 }
@@ -263,9 +295,23 @@ export function dayMonth(value: string): string {
   return `${date.getDate()} ${SHORT_MONTHS[date.getMonth()]}`;
 }
 
-/** Heaviest completed working set, preferring more reps at equal weight. */
+/**
+ * Whether a working set can be a session's top set: a set marked as attempted counts only when it
+ * still reached its target, matching the server's PR rule.
+ */
+export function isTopSetCandidate(item: TrackedSet): boolean {
+  if (!isCompletedWorkingSet(item)) return false;
+  return !item.failed || (item.target_reps != null && (item.reps ?? 0) >= item.target_reps);
+}
+
+/**
+ * Heaviest completed working set, preferring more reps at equal weight. A set with a missed rep
+ * still counts for volume, but is the top set only when no other set qualifies.
+ */
 export function topWorkingSet(sets: TrackedSet[]): TrackedSet | null {
-  return sets.filter(isCompletedWorkingSet).reduce<TrackedSet | null>((best, item) => {
+  const working = sets.filter(isCompletedWorkingSet);
+  const candidates = working.some(isTopSetCandidate) ? working.filter(isTopSetCandidate) : working;
+  return candidates.reduce<TrackedSet | null>((best, item) => {
     if (item.weight_kg === null) return best;
     if (!best || best.weight_kg === null) return item;
     if (item.weight_kg > best.weight_kg) return item;
@@ -420,6 +466,11 @@ export function sessionTemplateFromWorkout(
 export interface WorkoutWeekGroup {
   weekStart: string;
   workouts: TrackedWorkout[];
+  /** Workouts other than cardio-only ones. */
+  strengthWorkouts: number;
+  /** Workouts that only logged cardio. */
+  cardioWorkouts: number;
+  /** Working sets of strength exercises. */
   sets: number;
   volumeKg: number;
 }
@@ -433,14 +484,38 @@ export function groupWorkoutsByWeek(
     const weekStart = weekStartFor(workout.workout_date, weekStartDay);
     let group = groups.at(-1);
     if (!group || group.weekStart !== weekStart) {
-      group = { weekStart, workouts: [], sets: 0, volumeKg: 0 };
+      group = {
+        weekStart,
+        workouts: [],
+        strengthWorkouts: 0,
+        cardioWorkouts: 0,
+        sets: 0,
+        volumeKg: 0,
+      };
       groups.push(group);
     }
     group.workouts.push(workout);
-    group.sets += workingSets(workout).length;
+    if (isCardioOnlyWorkout(workout)) group.cardioWorkouts += 1;
+    else group.strengthWorkouts += 1;
+    group.sets += strengthSets(workout).length;
     group.volumeKg += workoutVolumeKg(workout);
   }
   return groups;
+}
+
+/** "4 workouts · 3 cardio · 66 sets · 24.1 t": a week's strength workouts, cardio and sets. */
+export function weekGroupSummary(group: WorkoutWeekGroup, unit: WeightUnit = 'kg'): string {
+  const count = (value: number, word: string) => `${value} ${word}${value === 1 ? '' : 's'}`;
+  return [
+    group.strengthWorkouts || !group.cardioWorkouts
+      ? count(group.strengthWorkouts, 'workout')
+      : null,
+    group.cardioWorkouts ? `${group.cardioWorkouts} cardio` : null,
+    group.sets ? count(group.sets, 'set') : null,
+    group.volumeKg > 0 ? formatListVolume(group.volumeKg, unit) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 export function weekGroupLabel(weekStart: string, today: string, weekStartDay: number): string {
@@ -454,37 +529,64 @@ export function weekGroupLabel(weekStart: string, today: string, weekStartDay: n
     : `${dayMonth(weekStart)} – ${dayMonth(end)}`;
 }
 
-/** Strength records worth surfacing on Today, newest first. */
+const STRENGTH_RECORD_TYPES: PersonalRecord['record_type'][] = [
+  'weight',
+  'reps_at_weight',
+  'relative_strength',
+];
+/** Which of a set's records names it in a list: a weight PR before a volume or ratio PR. */
+const RECORD_TYPE_RANK: Partial<Record<PersonalRecord['record_type'], number>> = {
+  weight: 0,
+  reps_at_weight: 1,
+  relative_strength: 2,
+};
+
+const isStrengthRecord = (record: PersonalRecord) =>
+  STRENGTH_RECORD_TYPES.includes(record.record_type) && record.value > 0;
+
+/**
+ * PRs as counted everywhere a total is shown: one per set. A set can earn a weight PR and a
+ * relative-strength PR at once; it is still one PR.
+ */
+export function prSetCount(records: PersonalRecord[]): number {
+  return new Set(records.filter(isStrengthRecord).map((record) => record.set_id)).size;
+}
+
+/** Strength records worth surfacing on Today, newest first: one per set, exercise and type. */
 export function recentStrengthRecords(records: PersonalRecord[], limit = 3): PersonalRecord[] {
-  const seen = new Set<string>();
+  const seenTypes = new Set<string>();
+  const seenSets = new Set<string>();
   return records
-    .filter((record) =>
-      ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
-    )
-    .filter((record) => record.value > 0)
+    .filter(isStrengthRecord)
     .sort(
       (left, right) =>
         right.achieved_date.localeCompare(left.achieved_date) ||
-        (left.record_type === 'weight' ? -1 : 1) - (right.record_type === 'weight' ? -1 : 1) ||
+        (RECORD_TYPE_RANK[left.record_type] ?? 3) - (RECORD_TYPE_RANK[right.record_type] ?? 3) ||
         right.value - left.value,
     )
     .filter((record) => {
+      // A set's relative-strength record repeats its weight PR, so the set is listed once.
+      if (seenSets.has(record.set_id)) return false;
       // One row per exercise and record type: the best of a day's repeated records.
       const key = `${record.exercise_id}:${record.record_type}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      if (seenTypes.has(key)) return false;
+      seenSets.add(record.set_id);
+      seenTypes.add(key);
       return true;
     })
     .slice(0, limit);
 }
 
+/** PRs in each workout, counted once per set. */
 export function recordCountsByWorkout(records: PersonalRecord[]): Map<string, number> {
-  const counts = new Map<string, number>();
+  const sets = new Map<string, Set<string>>();
   for (const record of records) {
-    if (!['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type)) continue;
-    counts.set(record.workout_id, (counts.get(record.workout_id) ?? 0) + 1);
+    if (!isStrengthRecord(record)) continue;
+    const ids = sets.get(record.workout_id) ?? new Set<string>();
+    ids.add(record.set_id);
+    sets.set(record.workout_id, ids);
   }
-  return counts;
+  return new Map([...sets].map(([workoutId, ids]) => [workoutId, ids.size]));
 }
 
 /** The strength exercise trained in the most sessions recently, a sensible default to chart. */
