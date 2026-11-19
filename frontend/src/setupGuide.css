@@ -92,10 +92,15 @@
   margin: 0 auto;
 }
 
-/* Swipe down to minimise the guide to its header, up to bring it back; a tap does either. */
-button.setup-coach-handle {
+/*
+ * Swipe down to minimise the guide to its header, up to bring it back; a tap does either. The
+ * coach's buttons are scoped to it, so a page's own button styles (such as the splits page's)
+ * cannot restyle them.
+ */
+.setup-coach button.setup-coach-handle {
   display: grid;
   place-items: center;
+  min-height: 0;
   margin: 0 -0.95rem 0.25rem;
   padding: 0.45rem 0 0.35rem;
   border: 0;
@@ -119,7 +124,7 @@ button.setup-coach-handle {
   transition: background-color 150ms ease;
 }
 
-button.setup-coach-handle:hover .setup-coach-grabber,
+.setup-coach button.setup-coach-handle:hover .setup-coach-grabber,
 .setup-coach.is-dragging .setup-coach-grabber {
   background: var(--p-muted);
 }
@@ -184,7 +189,7 @@ button.setup-coach-handle:hover .setup-coach-grabber,
   height: 0.9rem;
 }
 
-button.setup-coach-exit {
+.setup-coach button.setup-coach-exit {
   min-height: 2rem;
   padding: 0 0.25rem;
   border: 0;
@@ -213,7 +218,7 @@ button.setup-coach-exit {
   gap: 0.5rem;
 }
 
-button.setup-coach-back {
+.setup-coach button.setup-coach-back {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
@@ -228,7 +233,7 @@ button.setup-coach-back {
   font-weight: 600;
 }
 
-button.setup-coach-next {
+.setup-coach button.setup-coach-next {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -242,12 +247,12 @@ button.setup-coach-next {
   font-weight: 650;
 }
 
-button.setup-coach-next:disabled {
+.setup-coach button.setup-coach-next:disabled {
   opacity: 0.45;
 }
 
-button.setup-coach-back svg,
-button.setup-coach-next svg {
+.setup-coach button.setup-coach-back svg,
+.setup-coach button.setup-coach-next svg {
   width: 0.9rem;
   height: 0.9rem;
 }
