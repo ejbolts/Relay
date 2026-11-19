@@ -69,14 +69,15 @@ describe('AuthScreen', () => {
     expect(render(open, 'create-account')).not.toContain('invite code');
   });
 
-  it('disables account creation and explains why when registration is closed', () => {
+  it('marks account creation unavailable when registration is closed', () => {
     const markup = render(
       { registration_open: false, invite_code_required: false },
       'create-account',
     );
 
-    expect(markup).toContain('new accounts are closed');
-    expect(markup).toMatch(/<button[^>]*role="tab"[^>]*disabled=""[^>]*>create account/);
+    // The reason shows only once the unavailable tab is tapped.
+    expect(markup).not.toContain('new accounts are closed');
+    expect(markup).toMatch(/<button[^>]*role="tab"[^>]*aria-disabled="true"[^>]*>create account/);
     // A closed server always shows the sign-in form, even if create-account was requested.
     expect(markup).toContain('autocomplete="current-password"');
     expect(markup).not.toContain('autocomplete="name"');

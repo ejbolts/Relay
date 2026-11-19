@@ -127,7 +127,8 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   color: var(--p-ink);
 }
 
-.auth-tabs button:disabled {
+.auth-tabs button:disabled,
+.auth-tabs button[aria-disabled='true'] {
   opacity: 0.4;
 }
 
@@ -1156,22 +1157,22 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 
 /* ───────── Forgot password: the sign-in link, its dialog, and the admin console's request ───────── */
 
+/* A 44px target for fingers that leaves the label row's height alone. */
 .auth-forgot-password {
   position: relative;
-  margin-left: auto;
+  min-height: 2.75rem;
+  margin: -0.875rem -0.5rem -0.875rem auto;
   border: 0;
-  padding: 0;
+  padding: 0 0.5rem;
   background: transparent;
   color: var(--p-accent-text);
   font-size: 0.8125rem;
   font-weight: 650;
 }
 
-/* A larger invisible target for fingers. */
-.auth-forgot-password::after {
-  position: absolute;
-  inset: -0.6rem -0.4rem;
-  content: '';
+/* Room below the link, so its target stays clear of the password field. */
+.auth-label-row:has(.auth-forgot-password) {
+  margin-bottom: 0.5rem;
 }
 
 .popup-dialog.forgot-password-dialog {

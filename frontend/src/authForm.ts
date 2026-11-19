@@ -101,7 +101,12 @@ export interface AuthApi {
 }
 
 export type AuthSubmitResult =
-  | { ok: true; user: User }
+  | {
+      ok: true;
+      user: User;
+      /** The account was created, but signing in to it straight afterwards failed. */
+      needsSignIn?: true;
+    }
   | {
       ok: false;
       message: string;
@@ -128,16 +133,21 @@ export async function submitAuthForm(
   }
   try {
     const username = values.username.trim().toLowerCase();
-    const user =
-      mode === 'sign-in'
-        ? await endpoints.login({ username, password: values.password })
-        : await endpoints.register({
-            username,
-            password: values.password,
-            display_name: values.displayName.trim(),
-            invite_code: values.inviteCode.trim() || null,
-          });
-    return { ok: true, user };
+    if (mode === 'sign-in') {
+      return { ok: true, user: await endpoints.login({ username, password: values.password }) };
+    }
+    const created = await endpoints.register({
+      username,
+      password: values.password,
+      display_name: values.displayName.trim(),
+      invite_code: values.inviteCode.trim() || null,
+    });
+    // Registering does not start a session, so sign in to the new account with the same details.
+    try {
+      return { ok: true, user: await endpoints.login({ username, password: values.password }) };
+    } catch {
+      return { ok: true, user: created, needsSignIn: true };
+    }
   } catch (reason) {
     const code = reason instanceof ApiError ? reason.code : '';
     return {
