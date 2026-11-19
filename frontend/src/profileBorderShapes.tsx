@@ -692,7 +692,8 @@ function effects(id: string, spec: Spec, layer: 'back' | 'front') {
   return (
     <>
       <circle
-        className="profile-border-sheen"
+        // Mythic, tier V of the strength families, runs its sheen the other way.
+        className={`profile-border-sheen${spec.grade === 5 ? ' is-reversed' : ''}`}
         cx={C}
         cy={C}
         r={RING}

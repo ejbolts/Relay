@@ -104,6 +104,23 @@ describe('ProfileAvatar', () => {
     expect(draw('deadlift-club-5')).toContain('>V</text>');
   });
 
+  it('runs the sheen the other way on every tier V strength border', () => {
+    const draw = (key: string) =>
+      renderToStaticMarkup(
+        <ProfileAvatar
+          className="profile-avatar"
+          user={{ ...account, profile_photo_url: null, profile_border: key }}
+          animated
+        />,
+      );
+    const families = ['bench-club', 'squat-club', 'deadlift-club', 'big-three'];
+    for (const family of [...families, 'pound-for-pound', 'atlas', 'gravity-defier']) {
+      expect(draw(`${family}-5`)).toContain('profile-border-sheen is-reversed');
+      expect(draw(`${family}-4`)).not.toContain('is-reversed');
+    }
+    expect(draw('season-1-3')).not.toContain('is-reversed');
+  });
+
   it('leaves the photo plain for a border this version cannot draw', () => {
     const markup = renderToStaticMarkup(
       <ProfileAvatar
