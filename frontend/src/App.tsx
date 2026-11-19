@@ -10506,7 +10506,8 @@ function HistoryScreen({
           title={exerciseHeader.exercise.name}
           subtitle={[
             exerciseHeader.exercise.muscle_group,
-            exerciseHeader.exercise.equipment,
+            // A block-scoped count names its block; the equipment makes room for it.
+            exerciseHeader.blockName ? null : exerciseHeader.exercise.equipment,
             exerciseHeader.sessionCount === null
               ? null
               : `${exerciseHeader.sessionCount} ${exerciseHeader.sessionCount === 1 ? 'session' : 'sessions'}${exerciseHeader.blockName ? ` in ${exerciseHeader.blockName}` : ''}`,
