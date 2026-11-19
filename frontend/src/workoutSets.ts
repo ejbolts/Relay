@@ -15,7 +15,8 @@ export function createWorkoutSet(
   return {
     reps: kind === 'strength' ? (previous?.reps ?? null) : null,
     weight_kg: kind === 'strength' ? (previous?.weight_kg ?? null) : null,
-    rpe: previous?.rpe ?? null,
+    // Effort is logged only when picked; last time's RPE is shown as a hint instead.
+    rpe: null,
     rest_seconds: kind === 'strength' ? (previous?.rest_seconds ?? DEFAULT_REST_SECONDS) : null,
     duration_seconds: kind === 'cardio' ? (previous?.duration_seconds ?? null) : null,
     distance_km: kind === 'cardio' ? (previous?.distance_km ?? null) : null,
@@ -76,6 +77,12 @@ export function latestExerciseSet(
   return latestExerciseSets(workouts, exerciseId, onOrBeforeDate, excludedWorkoutId)[0];
 }
 
+/**
+ * The logged sets of the exercise's latest session with working sets, to suggest and progress
+ * from. A session cut short to warm-ups says nothing about working weights and is skipped. When
+ * the latest session logged fewer working sets than the one before it, its last working set is
+ * repeated up to that count, so one short day does not shrink the next workout.
+ */
 export function latestExerciseSets(
   workouts: TrackedWorkout[],
   exerciseId: string,
@@ -87,6 +94,7 @@ export function latestExerciseSets(
       right.workout_date.localeCompare(left.workout_date) ||
       right.created_at.localeCompare(left.created_at),
   );
+  const sessions: TrackedSet[][] = [];
 
   for (const workout of newestFirst) {
     if (workout.id === excludedWorkoutId || workout.workout_date > onOrBeforeDate) continue;
@@ -94,10 +102,31 @@ export function latestExerciseSets(
     const completedSets = movement?.sets
       .filter((item) => item.completed)
       .sort((left, right) => left.order_index - right.order_index);
-    if (completedSets?.length) return completedSets;
+    if (!completedSets?.some(isLoggedWorkingSet)) continue;
+    sessions.push(completedSets);
+    if (sessions.length === 2) break;
   }
 
-  return [];
+  const [latest, before] = sessions;
+  if (!latest) return [];
+  const working = latest.filter(isLoggedWorkingSet);
+  const missing = (before?.filter(isLoggedWorkingSet).length ?? 0) - working.length;
+  if (missing <= 0) return latest;
+  const last = working[working.length - 1];
+  const lastIndex = latest.lastIndexOf(last);
+  const repeats = Array.from({ length: missing }, (_, offset) => ({
+    ...last,
+    id: `${last.id}-repeat-${offset + 1}`,
+    notes: null,
+  }));
+  return [...latest.slice(0, lastIndex + 1), ...repeats, ...latest.slice(lastIndex + 1)];
+}
+
+/** A ticked set that counts as training, rather than a warm-up. */
+export function isLoggedWorkingSet(
+  item: Pick<WorkoutSetInput, 'completed' | 'set_type' | 'warmup'>,
+): boolean {
+  return item.completed && item.set_type !== 'warmup' && !item.warmup;
 }
 
 export function isCompletedWorkingSet(item: WorkoutSetInput): boolean {

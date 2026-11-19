@@ -667,6 +667,8 @@ class WorkoutRecommendationRead(BaseModel):
     scheduled_date: date | None = None
     split_name: str | None = None
     routine_day: RoutineDayRead | None = None
+    # On a split's rest day: the next training day, which starting a workout then trains.
+    next_training_day: WorkoutRecommendationRead | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):

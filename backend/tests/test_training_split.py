@@ -97,6 +97,47 @@ def test_consecutive_rest_days_persist_and_do_not_count_as_workouts(client):
     assert client.get("/api/workouts").json() == []
 
 
+def test_a_rest_day_names_the_next_training_day_to_start_instead(client):
+    save_split(client, "push", None, None, "pull", None)
+    item = recommended(client, "2026-10-27")
+    following = item["next_training_day"]
+    assert (following["category"], following["session_name"]) == ("pull", "Pull workout")
+    assert following["scheduled_date"] == "2026-10-29"
+    assert following["is_rest_day"] is False
+    assert following["next_training_day"] is None
+    assert recommended(client, "2026-10-26")["next_training_day"] is None
+    # A rest before a removed type has nothing to start.
+    custom = client.post("/api/workout-types", json={"name": "Arms", "color": "#123456"}).json()
+    save_split(client, None, custom["id"])
+    assert client.delete(f"/api/workout-types/{custom['id']}").status_code in (200, 204)
+    assert recommended(client, "2026-10-26")["next_training_day"] is None
+
+
+def test_a_rest_day_offers_the_next_routine_day_with_its_plan(client):
+    bench = next(
+        x for x in client.get("/api/exercises").json() if x["name"] == "Barbell Bench Press"
+    )
+    routine = client.post(
+        "/api/routines",
+        json={
+            "name": "Rest / Upper",
+            "days": [
+                {"workout_type_id": None, "movements": []},
+                {
+                    "workout_type_id": "upper",
+                    "movements": [{"exercise_id": bench["id"], "sets": [{"reps": 8}] * 3}],
+                },
+            ],
+            "schedule": {"start_date": "2026-10-26", "progression": "calendar"},
+        },
+    )
+    assert routine.status_code == 201, routine.text
+    item = recommended(client, "2026-10-26")
+    assert item["is_rest_day"] is True and item["routine_day"] is None
+    day = item["next_training_day"]["routine_day"]
+    assert [movement["exercise_id"] for movement in day["movements"]] == [bench["id"]]
+
+
 def test_future_start_shows_first_scheduled_day_and_uses_the_requested_local_date(client):
     save_split(client, "pull", None, start_date="2026-11-01")
     before = recommended(client, "2026-10-31")

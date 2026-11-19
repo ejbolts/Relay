@@ -228,7 +228,7 @@ After an upload finishes, YouTube may still need time to create playback version
 
 On the installed phone PWA, enable **Settings > Notifications > Phone alerts**. The browser asks for notification permission, saves the phone's subscription, and sends a test alert immediately. iPhone notifications require the PWA to be installed from Safari's **Add to Home Screen** flow. The server creates its local VAPID private key at `data/web-push-vapid-private.pem`; this is ignored by Git and must remain private.
 
-The workout logger uses the same subscription for rest-timer alerts. Start a rest timer and tap **Alert** on its compact top bar once; subsequent rest timers notify that phone automatically, including while the PWA is backgrounded or the screen is locked. Extending or skipping the visible timer reschedules or cancels its pending notification.
+The workout logger uses the same subscription for rest-timer alerts. Start a rest timer and tap **Alert** on its compact top bar once; subsequent rest timers notify that phone automatically, including while the PWA is backgrounded or the screen is locked. Extending or skipping the visible timer reschedules or cancels its pending notification. The running rest is kept on the device beside the draft (`relay.live-rest-timer.v1` in `frontend/src/liveRestTimer.ts`, tied to the draft's session), so reloading the app restores the countdown, a paused rest or the finished-rest prompt; the synced draft format is unchanged.
 
 Active workouts are private account-wide drafts at `GET/PUT /api/active-workout`. Both devices
 can resume and edit the same workout. The presence socket sends a content-free `active_workout`
@@ -266,7 +266,10 @@ steps). Each device keeps a copy so the cutoff is known offline.
 
 The server never re-derives the workout. With each draft revision the logger sends, as the
 optional `autoSave` field of `PUT /api/active-workout`, the finished workout that **Save
-workout** in the inactive-workout prompt would save at the draft's cutoff. The server keeps it
+workout** in the inactive-workout prompt would save. Either way the workout ends at its last
+activity (`lastActiveAt`, such as the last set logged), not at the cutoff that noticed it was
+left, and the prompt shows that end time; see `inactiveWorkoutEndAt` in
+`frontend/src/activeWorkoutTimeout.ts`. The server keeps it
 only while it matches the stored draft exactly; any other write, including a merge with another
 device's edit or a save from an older release, clears it. The scheduler (every 15 seconds)
 saves a due workout through the normal create or resumed-workout replace path, consuming the
@@ -358,7 +361,7 @@ the custom type ID as well as the compatibility category.
 
 A planned exercise in a split day (`/api/routines`) or a workout type (`/api/workout-type-exercises`) accepts an optional `rep_range` of `{min, max}` (1–100, `min` no more than `max`); cardio exercises ignore it. It is stored in the same `user_settings` JSON as the plan, so no migration is needed, and it is copied with shared splits and returned with the day's planned exercises on the dashboard. Saves replace the whole plan, so `rep_range` is registered under `routine_movement` in `FIELDS_ADDED_IN`: an older app that omits it keeps the stored range for an exercise in the same position, while an explicit value, including `null`, is always taken.
 
-A workout started from the plan carries each exercise's range in the active draft (`repRange`). The logger shows one target line per exercise from `frontend/src/repProgression.ts`, using double progression on the exercise's last session (the pinned machine's when it has one): warm-ups are ignored, the sets at the heaviest weight decide, and once all of them reach `max` the line suggests the next weight (2.5 kg, or 5 lb for pound users); otherwise it says to stay at the weight. When the workout starts, working sets the plan left without a weight are pre-filled with that target weight as unticked suggestions; warm-ups and weights the plan set are left alone. Test with `backend/tests/test_rep_ranges.py`, `frontend/src/repProgression.test.ts` and `frontend/src/AppRepTarget.test.tsx`.
+A workout started from the plan carries each exercise's range in the active draft (`repRange`). The logger shows one target line per exercise from `frontend/src/repProgression.ts`, using double progression on the exercise's last session with working sets (the pinned machine's when it has one; a session cut short to warm-ups is skipped): warm-ups are ignored, the sets at the heaviest weight decide, and once all of them reach `max` the line suggests the next weight (2.5 kg, or 5 lb for pound users); otherwise it says to stay at the weight. When the workout starts, working sets the plan left without a weight are pre-filled with that target weight as unticked suggestions; warm-ups and weights the plan set are left alone. Test with `backend/tests/test_rep_ranges.py`, `frontend/src/repProgression.test.ts` and `frontend/src/AppRepTarget.test.tsx`.
 
 ## Saved and shared routines
 
@@ -383,7 +386,9 @@ consistency header; other profiles show only their shared plans. Importing does 
 or activate a split automatically. Templates remain disabled while a saved plan matches
 their ordered workout/rest days. Sharing is a separate saved-plan option, outside the editor.
 Recommendations include that day's planned movements; the logger prefills them as
-unchecked suggestions. Editing an active routine updates its schedule while preserving
+unchecked suggestions. On a rest day the recommendation also carries `next_training_day`, the
+cycle's next training day (with its routine day), which **Start > Up next** starts instead; Up
+next is hidden when there is none. Editing an active routine updates its schedule while preserving
 the start date, unless a schedule change is explicitly included in the same atomic save.
 Editing the schedule directly clears its routine link; deleting the
 routine keeps the schedule and restores history-based suggestions. Mutations invalidate
