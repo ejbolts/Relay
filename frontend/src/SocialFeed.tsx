@@ -5,6 +5,7 @@ import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
 import { FriendsRail } from './FriendsRail';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ShowMoreButton } from './ShowMoreButton';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
 import { updateCachedReactions } from './sharedProfileCache';
 import { useTimeline } from './timeline';
@@ -223,14 +224,14 @@ function FeedCard({
                   type="button"
                   aria-label={
                     showAll
-                      ? 'Show fewer exercises'
+                      ? 'Show less'
                       : `Show ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`
                   }
                   aria-expanded={showAll}
                   aria-controls={exercisesId}
                   onClick={() => setShowAll((current) => !current)}
                 >
-                  {showAll ? 'Show fewer' : `+${hidden} more`}
+                  {showAll ? 'Show less' : `+${hidden} more`}
                 </button>
               </li>
             )}
@@ -404,14 +405,9 @@ export function SocialFeed({
         </PopupDialog>
       )}
       {hasMore && (
-        <button
-          type="button"
-          className="show-more-button"
-          disabled={loadingMore}
-          onClick={() => void loadMore()}
-        >
-          {loadingMore ? 'Loading…' : 'Show older workouts'}
-        </button>
+        <ShowMoreButton loading={loadingMore} onClick={() => void loadMore()}>
+          Show older workouts
+        </ShowMoreButton>
       )}
     </div>
   );

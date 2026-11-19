@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { HISTORY_PAGE_SIZE } from './appShared';
 import { BodyFigure } from './BodyFigure';
 import { loadBodyFigure, saveBodyFigure } from './bodyFigurePreference';
 import type { BodyFigureKind } from './bodyFigureShapes';
 import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySizes';
 import { Icon } from './Icon';
+import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { HelpPopup } from './HelpPopup';
 import { SEX_LABELS } from './profileDisplay';
@@ -48,7 +50,8 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [visible, setVisible] = useState(5);
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyRef = useRef<HTMLDetailsElement>(null);
   const [historyPart, setHistoryPart] = useState<BodySizeField | 'all'>('all');
   const [retry, setRetry] = useState(0);
   // The entry drawn on the figure: the latest one until another is stepped to or saved.
@@ -244,6 +247,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     }
   }
   const history = (logs ?? []).filter((row) => historyPart === 'all' || row[historyPart] !== null);
+  const historyPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPages);
+  const firstRow = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
   const partLabel = BODY_SIZE_FIELDS.find(([key]) => key === historyPart)?.[1];
   const format = (cm: number) => `${Number((cm / factor).toFixed(1))} ${unit}`;
   function changeFromPrevious(index: number): string {
@@ -432,7 +438,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                   Delete
                 </button>
               </div>
-              <details className="body-sizes-history">
+              <details className="body-sizes-history" ref={historyRef}>
                 <summary>
                   Measurement history <span>{history.length}</span>
                 </summary>
@@ -442,7 +448,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     value={historyPart}
                     onChange={(event) => {
                       setHistoryPart(event.target.value as BodySizeField | 'all');
-                      setVisible(5);
+                      setHistoryPage(1);
                     }}
                   >
                     <option value="all">All measurements</option>
@@ -454,7 +460,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                   </select>
                 </label>
                 {history.length === 0 && <p>No {partLabel?.toLowerCase()} measurements yet.</p>}
-                {history.slice(0, visible).map((row, index) => (
+                {history.slice(firstRow, firstRow + HISTORY_PAGE_SIZE).map((row, index) => (
                   <article key={row.measurement_date}>
                     <div className="body-sizes-history-heading">
                       <time dateTime={row.measurement_date}>{shortDate(row.measurement_date)}</time>
@@ -484,9 +490,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                       <div className="body-sizes-part-value">
                         <strong>{format(row[historyPart]!)}</strong>
                         <span
-                          aria-label={`Change from previous measurement: ${changeFromPrevious(index)}`}
+                          aria-label={`Change from previous measurement: ${changeFromPrevious(firstRow + index)}`}
                         >
-                          {changeFromPrevious(index)}
+                          {changeFromPrevious(firstRow + index)}
                         </span>
                       </div>
                     ) : (
@@ -498,11 +504,13 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     )}
                   </article>
                 ))}
-                {history.length > visible && (
-                  <button type="button" onClick={() => setVisible((count) => count + 5)}>
-                    Show more
-                  </button>
-                )}
+                <PaginationControls
+                  currentPage={currentHistoryPage}
+                  totalPages={historyPages}
+                  onPageChange={setHistoryPage}
+                  label="measurement history"
+                  scrollTarget={historyRef}
+                />
               </details>
             </>
           )}

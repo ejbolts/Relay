@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from .cardio_zones import CardioGoalWeek, CardioPreferences
+from .exercise_aliases import alternative_exercise_names
 from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
@@ -111,6 +112,12 @@ class ExerciseRead(BaseModel):
     @property
     def partial_sets_enabled(self) -> bool:
         return partial_sets_enabled_on(self, date.today())
+
+    @computed_field
+    @property
+    def alternative_names(self) -> list[str]:
+        # Lets the app suggest a standard exercise for a custom one named differently.
+        return [] if self.is_custom else alternative_exercise_names(self.name)
 
     @computed_field
     @property

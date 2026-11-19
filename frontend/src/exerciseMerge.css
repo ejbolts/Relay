@@ -75,8 +75,23 @@
 .exercise-merge-targets {
   display: grid;
   gap: 6px;
-  max-height: 210px;
+  max-height: 280px;
   overflow-y: auto;
+}
+.exercise-merge-targets .exercise-merge-group {
+  margin: 4px 0 0;
+  color: var(--p-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.exercise-merge-targets .exercise-merge-group:first-child {
+  margin-top: 0;
+}
+.exercise-merge-targets .exercise-search-match {
+  color: var(--p-accent-text);
+  font-weight: 750;
 }
 .exercise-merge-targets label {
   display: flex;
@@ -226,4 +241,44 @@
 
 .exercise-rename-dialog .inline-error {
   margin: 0.6rem 0 0;
+}
+.exercise-merge-nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 12px;
+  margin: 0 0 14px;
+  border: 1px solid color-mix(in srgb, var(--p-accent) 45%, var(--p-line-strong));
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--p-accent-soft);
+}
+.exercise-merge-nudge-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 100%;
+}
+.exercise-merge-nudge-copy strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.exercise-merge-nudge-copy small {
+  color: var(--p-muted);
+  font-size: 12px;
+}
+.exercise-merge-nudge-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.exercise-merge-nudge-actions .pulse-button {
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  border-radius: 11px;
+  padding: 0 14px;
+  font-size: 13px;
+  white-space: nowrap;
 }

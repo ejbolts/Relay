@@ -1,7 +1,7 @@
 import { equipmentSearchTerms, exerciseEquipment } from './exerciseEquipment';
 import { typoMatch } from './fuzzyText';
 
-function searchTokens(query: string): string[] {
+export function searchTokens(query: string): string[] {
   const aliases: Record<string, string> = {
     db: 'dumbbell',
     dumbbells: 'dumbbell',

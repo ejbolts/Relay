@@ -206,9 +206,9 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   const more = button(friendCard, 'Show 2 more exercises')!;
   expect(more.getAttribute('aria-expanded')).toBe('false');
   await click(more);
-  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip ', 'Show fewer']);
-  expect(button(friendCard, 'Show fewer exercises')?.getAttribute('aria-expanded')).toBe('true');
-  await click(button(friendCard, 'Show fewer exercises'));
+  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip ', 'Show less']);
+  expect(button(friendCard, 'Show less')?.getAttribute('aria-expanded')).toBe('true');
+  await click(button(friendCard, 'Show less'));
   expect(rows()).toHaveLength(4);
   // Your one-exercise workout still names its exercise, as it differs from the workout's name.
   expect(own.querySelector('.feed-exercises')?.textContent).toBe('Bench press');

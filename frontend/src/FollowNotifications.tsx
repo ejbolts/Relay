@@ -679,12 +679,10 @@ export function FollowNotifications({ active }: { active: boolean }) {
           <PaginationControls
             currentPage={currentPage}
             totalPages={pageCount}
-            onPageChange={(next) => {
-              setPage(next);
-              const dialog = list.current?.closest('dialog');
-              if (dialog) dialog.scrollTop = 0;
-            }}
+            onPageChange={setPage}
             label="notifications"
+            className="is-sheet-footer"
+            scrollTarget={list}
           />
         </PopupDialog>
       )}
