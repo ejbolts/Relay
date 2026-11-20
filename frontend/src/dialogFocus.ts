@@ -70,10 +70,31 @@ export function focusDialogStart(dialog: HTMLDialogElement) {
   }
 }
 
+/** Marks a control that holds focus without a ring; popupDialog.css hides its outline. */
+export const QUIET_FOCUS_ATTRIBUTE = 'data-quiet-focus';
+
+/**
+ * Hides the ring on a control focused for a tap user, as iPhone Safari draws one for any focus
+ * a script moves. It comes back once a key is pressed, and goes when the control loses focus.
+ */
+function focusQuietly(element: HTMLElement) {
+  element.setAttribute(QUIET_FOCUS_ATTRIBUTE, '');
+  const clear = () => {
+    element.removeAttribute(QUIET_FOCUS_ATTRIBUTE);
+    element.removeEventListener('blur', clear);
+    document.removeEventListener('keydown', clear, true);
+  };
+  element.addEventListener('blur', clear);
+  document.addEventListener('keydown', clear, true);
+  element.focus({ preventScroll: true });
+  if (document.activeElement !== element) clear();
+}
+
 /** Gives focus back to the control that opened the dialog, unless something else has taken it. */
 export function restoreDialogOpener(opener: Element | null, dialog: Element) {
   if (!(opener instanceof HTMLElement) || !opener.isConnected || dialog.contains(opener)) return;
   const active = document.activeElement;
   if (active && active !== document.body && !dialog.contains(active)) return;
-  opener.focus({ preventScroll: true });
+  if (lastInputWasPointer) focusQuietly(opener);
+  else opener.focus({ preventScroll: true });
 }
