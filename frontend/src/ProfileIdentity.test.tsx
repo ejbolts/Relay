@@ -200,6 +200,15 @@ describe('profile viewing and editing', () => {
     expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:draft-photo');
   });
+  it('shows the username locked, since only an administrator can change it', async () => {
+    await act(async () => button('Edit profile').click());
+    const field = container.querySelector('.profile-username-field')!;
+    expect(field.querySelector('.profile-locked-value')?.textContent).toBe('sampleLocked');
+    expect(container.querySelector('input[autocomplete="username"]')).toBeNull();
+    await changeName();
+    await save();
+    expect(api.updateProfile).toHaveBeenCalledExactlyOnceWith({ display_name: 'New name' });
+  });
   it('saves text and photo together, then returns to viewing', async () => {
     await act(async () => button('Edit profile').click());
     await changeName();
@@ -218,7 +227,7 @@ describe('profile viewing and editing', () => {
     await choosePhoto();
     await save();
     expect(container.querySelector('[role=alert]')?.textContent).toContain(
-      'Your name and username were saved.',
+      'Your details were saved.',
     );
     expect(container.querySelector('.profile-photo-edit')).not.toBeNull();
     await save();

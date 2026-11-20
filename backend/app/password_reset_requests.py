@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, and_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from .accounts import no_store
 from .auth import (
@@ -65,20 +65,24 @@ def open_request_cutoff(now: datetime | None = None) -> datetime:
     return (now or utc_now()) - REQUEST_LIFETIME
 
 
-def open_request_time(user: User, now: datetime | None = None) -> datetime | None:
-    """When the account asked for a reset, while that request is still waiting for an admin."""
-    requested = user.password_reset_requested_at
+def open_since(
+    requested: datetime | None, user: User, now: datetime | None = None
+) -> datetime | None:
+    """When a request from the sign-in screen was made, while it is still waiting for an admin."""
     if requested is None or user.disabled_at is not None:
         return None
     requested = as_utc(requested)
     return requested if requested > open_request_cutoff(now) else None
 
 
-def open_request_condition() -> ColumnElement[bool]:
-    return and_(
-        User.password_reset_requested_at > open_request_cutoff(),
-        User.disabled_at.is_(None),
-    )
+def open_request_time(user: User, now: datetime | None = None) -> datetime | None:
+    """When the account asked for a reset, while that request is still waiting for an admin."""
+    return open_since(user.password_reset_requested_at, user, now)
+
+
+def open_condition(requested: InstrumentedAttribute[datetime | None]) -> ColumnElement[bool]:
+    """Accounts whose request in this column is still waiting for an admin."""
+    return and_(requested > open_request_cutoff(), User.disabled_at.is_(None))
 
 
 def admin_account_url(user_id: str) -> str:
@@ -91,10 +95,11 @@ def notify_admins(
     settings: Settings,
     *,
     user_id: str,
-    username: str,
-    display_name: str,
+    title: str,
+    body: str,
+    tag: str,
 ) -> None:
-    """Alert every active admin's phones about a new request, except the person asking."""
+    """Alert every active admin's phones about a new request, except the account it is for."""
     with session_factory() as db:
         admin_ids = list(
             db.scalars(
@@ -108,15 +113,15 @@ def notify_admins(
             send_push_notification(
                 session_factory,
                 settings,
-                title="Password reset request",
-                body=f"{display_name} (@{username}) asked for a temporary password.",
+                title=title,
+                body=body,
                 user_id=admin_id,
                 url=admin_account_url(user_id),
-                # A later alert about the same person replaces this one.
-                tag=f"password-reset-{user_id}",
+                # A later alert of the same kind about the same person replaces this one.
+                tag=tag,
             )
         except Exception:  # One admin's failed alert must not stop the others.
-            logger.exception("Could not send a password reset alert")
+            logger.exception("Could not send an account request alert")
 
 
 def too_many_requests():
@@ -155,8 +160,9 @@ def request_password_reset(
             SessionLocal,
             settings,
             user_id=user.id,
-            username=user.username,
-            display_name=user.display_name,
+            title="Password reset request",
+            body=f"{user.display_name} (@{user.username}) asked for a temporary password.",
+            tag=f"password-reset-{user.id}",
         )
 
 
@@ -164,7 +170,7 @@ def request_password_reset(
 def list_password_reset_requests(db: DbDependency) -> list[PasswordResetRequestRead]:
     users = db.scalars(
         select(User)
-        .where(open_request_condition())
+        .where(open_condition(User.password_reset_requested_at))
         .order_by(User.password_reset_requested_at.desc(), User.username)
     )
     return [
