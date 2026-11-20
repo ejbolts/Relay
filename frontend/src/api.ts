@@ -449,6 +449,8 @@ export interface SavedStartupData {
   workouts: TrackedWorkout[];
   personalRecords: PersonalRecord[];
   measurements: BodyMeasurement[];
+  /** The revision every copy was read at. They are current only while the server reports it. */
+  revision: string;
   /** The day the saved dashboard was read for, when known. It is current only on that day. */
   dashboardDate: string | null;
 }
@@ -465,17 +467,19 @@ async function rememberStartupData(revision: string, date: string): Promise<void
 }
 
 /**
- * This device's saved copies of the data the app opens with, when they were all saved at
- * `revision`, the one the server has just reported. The app can then show them at once while it
- * reads the same data again. Null when a copy is missing or belongs to another revision.
+ * This device's saved copies of the data the app opens with, from the last time they were all
+ * read together, and the revision they were read at. The app shows them at once and treats them
+ * as current only once the server reports that same revision. Null when a copy is missing, the
+ * copies were not all read at one revision, or another release saved them.
  */
-async function savedStartupData(revision: string, since: string): Promise<SavedStartupData | null> {
+async function savedStartupData(since: string): Promise<SavedStartupData | null> {
   const scope = captureAccountCacheScope();
   const owner = scope.owner;
   if (!owner) return null;
   try {
     const stamp = await readOffline<StartupStamp>(STARTUP_STAMP_KEY, owner);
-    if (stamp?.value.revision !== revision || stamp.value.version !== CLIENT_VERSION) return null;
+    if (!stamp || stamp.value.version !== CLIENT_VERSION) return null;
+    const { revision } = stamp.value;
     const [cached, exercises, personalRecords, measurements] = await Promise.all([
       readWorkoutCache(),
       readOffline<Exercise[]>(`response:${EXERCISES_PATH}`, owner),
@@ -489,6 +493,7 @@ async function savedStartupData(revision: string, since: string): Promise<SavedS
       workouts,
       personalRecords: personalRecords.value,
       measurements,
+      revision,
       dashboardDate: stamp.value.date ?? null,
     };
   } catch {

@@ -162,11 +162,16 @@ async function open(user: User, section = 'dashboard') {
   );
 }
 
-const saved = (name: string, dashboardDate: string | null = localDate()): SavedStartupData => ({
+const saved = (
+  name: string,
+  dashboardDate: string | null = localDate(),
+  revision = 'rev-1',
+): SavedStartupData => ({
   exercises: [exercise(name)],
   workouts: [] as TrackedWorkout[],
   personalRecords: [] as PersonalRecord[],
   measurements: [],
+  revision,
   dashboardDate,
 });
 
@@ -225,8 +230,7 @@ it('asks for the revision once when the server did not report it', async () => {
   await open(await signedIn(null));
 
   expect(api.workoutRevision).toHaveBeenCalledOnce();
-  // The saved copies are checked against the revision whichever way it was learnt.
-  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith('asked', expect.any(String));
+  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith(expect.any(String));
   // The workouts read reuses that answer instead of asking again.
   expect(api.listWorkouts).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'asked');
   expect(api.rememberStartupData).toHaveBeenCalledExactlyOnceWith('asked', localDate());
@@ -238,9 +242,11 @@ it('opens with the copies saved on this device while the server is still answeri
   vi.mocked(api.savedStartupData).mockResolvedValue(saved('Saved press'));
   await open(await signedIn('rev-1'), 'progress');
 
-  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith('rev-1', expect.any(String));
+  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith(expect.any(String));
   expect(host.querySelector('.today-loading-skeleton')).toBeNull();
   expect(host.textContent).toContain('Saved press');
+  // The server confirmed these copies are current, so nothing says otherwise.
+  expect(waitingNotice()).toBe('');
 
   await act(async () => exercises.answer([exercise('Server press')]));
   expect(host.textContent).toContain('Server press');
@@ -354,7 +360,7 @@ it('keeps an exercise added here when an older read of the list answers afterwar
   expect(host.querySelector('[data-exercise-id="custom"]')?.textContent).toContain('Custom press');
 });
 
-it('opens a remembered account with its saved copies as soon as the revision is known', async () => {
+it('shows the saved copies before the revision is known, and starts nothing from them until it is', async () => {
   // Opened before the session check answered, so the app asks for the revision itself.
   const revision = held<{ revision: string }>();
   vi.mocked(api.workoutRevision).mockReturnValue(revision.promise);
@@ -363,21 +369,44 @@ it('opens a remembered account with its saved copies as soon as the revision is 
   vi.mocked(api.savedStartupData).mockResolvedValue(saved('Saved press'));
   await open(await signedIn(null), 'progress');
 
-  // Nothing vouches for the saved lists yet, and nothing is read before the revision.
-  expect(host.querySelector('.today-loading-skeleton')).not.toBeNull();
-  expect(api.savedStartupData).not.toHaveBeenCalled();
-  expect(api.dashboard).not.toHaveBeenCalled();
-  expect(api.exerciseLibrary).not.toHaveBeenCalled();
-
-  await act(async () => revision.answer({ revision: 'rev-1' }));
-  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith('rev-1', expect.any(String));
+  // Every screen has its figures at once, though nothing vouches for them yet.
   expect(host.querySelector('.today-loading-skeleton')).toBeNull();
   expect(host.textContent).toContain('Saved press');
+  expect(api.dashboard).not.toHaveBeenCalled();
+  expect(api.exerciseLibrary).not.toHaveBeenCalled();
+  await chooseStart('Cardio');
+  expect(window.location.hash).toBe('#progress');
+  expect(waitingNotice()).toContain('Getting your latest training');
+
+  // The server is at the revision the copies were read at today: they are current.
+  await act(async () => revision.answer({ revision: 'rev-1' }));
+  expect(window.location.hash).toBe('#log');
+  expect(waitingNotice()).toBe('');
   expect(api.listWorkouts).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'rev-1');
   expect(api.exerciseLibrary).toHaveBeenCalledOnce();
 
   // The same exercise as the server has it now: the list did not change, so the trends stand.
   await act(async () => exercises.answer([{ ...exercise('Saved press'), name: 'Server press' }]));
-  expect(host.textContent).toContain('Server press');
   expect(api.exerciseLibrary).toHaveBeenCalledOnce();
+});
+
+it('says it is updating while saved copies that are behind the server are being replaced', async () => {
+  const exercises = held<Exercise[]>();
+  vi.mocked(api.listExercises).mockReturnValue(exercises.promise);
+  // Something changed on another device since these copies were saved.
+  vi.mocked(api.savedStartupData).mockResolvedValue(saved('Saved press', localDate(), 'older'));
+  await open(await signedIn('rev-1'), 'progress');
+
+  expect(host.querySelector('.today-loading-skeleton')).toBeNull();
+  expect(host.textContent).toContain('Saved press');
+  expect(waitingNotice()).toContain('Updating your training');
+  // Nothing is started from figures known to be behind.
+  await chooseStart('Cardio');
+  expect(window.location.hash).toBe('#progress');
+
+  await act(async () => exercises.answer([exercise('Server press')]));
+  expect(host.textContent).toContain('Server press');
+  expect(host.textContent).not.toContain('Saved press');
+  expect(waitingNotice()).toBe('');
+  expect(window.location.hash).toBe('#log');
 });
