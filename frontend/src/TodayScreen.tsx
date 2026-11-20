@@ -457,7 +457,7 @@ export function TodayScreen({
               {recommendation ? 'Up next' : 'Ready when you are'}
             </p>
             {onEditSplit && (
-              <button className="text-button" type="button" onClick={onEditSplit}>
+              <button className="pulse-button link small" type="button" onClick={onEditSplit}>
                 {recommendation?.split_name ? 'Edit split' : 'Set up split'}
               </button>
             )}
@@ -714,7 +714,11 @@ export function TodayScreen({
       <section className="pulse-card" aria-labelledby="records-title">
         <header className="pulse-card-header">
           <h2 id="records-title">Recent records</h2>
-          <button type="button" className="text-link" onClick={() => onOpenProgress()}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => onOpenProgress()}
+          >
             Progress
           </button>
         </header>
@@ -864,7 +868,7 @@ export function TodayScreen({
       {home.loadError && (
         <p className="inline-error" role="alert">
           Could not load your saved layout.{' '}
-          <button type="button" className="text-link" onClick={home.retry}>
+          <button type="button" className="pulse-button link small" onClick={home.retry}>
             Retry
           </button>
         </p>

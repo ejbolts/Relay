@@ -144,7 +144,11 @@ export function WeeklyReviewSummary({
           <p className="pulse-empty-line">No new strength records.</p>
         )}
         {review.records.length > 3 && (
-          <button type="button" className="text-link" onClick={() => onOpenProgress()}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => onOpenProgress()}
+          >
             All {review.recordCount} in Progress
           </button>
         )}
@@ -227,7 +231,7 @@ export function WeeklyReviewSummary({
         ) : (
           <p className="pulse-empty-line">No cardio data.</p>
         )}
-        <button type="button" className="text-link" onClick={onOpenCardio}>
+        <button type="button" className="pulse-button link small" onClick={onOpenCardio}>
           Cardio
         </button>
       </div>
@@ -248,7 +252,7 @@ export function WeeklyReviewSummary({
           )}
         </h3>
         {body.averageKg === null && <p className="pulse-empty-line">No check-ins logged.</p>}
-        <button type="button" className="text-link" onClick={onOpenBody}>
+        <button type="button" className="pulse-button link small" onClick={onOpenBody}>
           Body
         </button>
       </div>

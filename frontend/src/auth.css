@@ -677,15 +677,6 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   gap: 0.5rem;
 }
 
-.admin-user .inline-confirmation > button:last-child {
-  min-height: 2.9rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 12px;
-  background: var(--p-surface);
-  color: var(--p-ink);
-  font-weight: 700;
-}
-
 /* ───────── Sign-in exit ─────────
    After signing in, the app mounts underneath and starts loading while this screen leaves:
    the form closes from top and bottom to its middle, the tagline fades, the logo and name

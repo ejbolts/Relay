@@ -139,7 +139,7 @@ export function SharedWorkoutFilters({
         </label>
         {active > 0 && (
           <button
-            className="text-link"
+            className="pulse-button link small"
             type="button"
             onClick={() =>
               onChange({

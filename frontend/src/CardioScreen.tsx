@@ -657,12 +657,14 @@ export function CardioScreen({
                   <div className="cardio-session-actions">
                     <button
                       type="button"
+                      className="pulse-button small"
                       onClick={() => setCardioSharing({ session, prompt: false })}
                     >
                       Share card
                     </button>
                     <button
                       type="button"
+                      className="pulse-button small"
                       onClick={() => setMetricSession(session)}
                       aria-label={`Edit performance metrics for ${session.activity_type} on ${session.session_date}`}
                     >
@@ -681,6 +683,7 @@ export function CardioScreen({
                     </button>
                     <button
                       type="button"
+                      className="pulse-button small"
                       aria-label={
                         linked
                           ? `Edit ${session.activity_type} on ${session.session_date} in its workout`
@@ -704,6 +707,7 @@ export function CardioScreen({
                     </button>
                     {deletable && (
                       <InlineConfirmButton
+                        className="pulse-button danger-soft small"
                         label="Delete"
                         confirmLabel="Delete session"
                         onConfirm={() => remove(session)}
@@ -728,11 +732,10 @@ export function CardioScreen({
           <h2 id="cardio-goals-title">Weekly zone goals</h2>
           <button
             type="button"
-            className="cardio-goals-edit"
+            className="pulse-button link small cardio-goals-edit"
             aria-label={zonesSet ? 'Edit heart-rate zones and goals' : 'Set heart-rate zones'}
             onClick={() => setZoneSettingsOpen(true)}
           >
-            <Icon name="edit" />
             {zonesSet ? 'Edit' : 'Set zones'}
           </button>
         </header>

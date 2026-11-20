@@ -46,14 +46,7 @@
   border-color: transparent;
 }
 .routine-panel .routine-link {
-  display: inline-flex;
-  align-items: center;
   gap: 2px;
-  min-height: 32px;
-  border: 0;
-  padding: 4px 0;
-  background: transparent;
-  color: var(--p-accent-text);
 }
 .routine-editor input,
 .routine-editor select,
@@ -84,30 +77,13 @@
 .routine-panel-embedded .routine-create {
   margin-top: 0;
 }
-.routine-panel .routine-create button,
-.routine-editor .routine-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-style: dashed;
-  background: transparent;
-  color: var(--p-ink-2);
-}
 .routine-panel .routine-create {
   grid-template-columns: 1fr;
 }
 .routine-panel .routine-options-button {
   order: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  width: 36px;
-  height: 38px;
-  padding: 0;
   margin-left: auto;
-  background: transparent;
 }
 .routine-options {
   display: grid;
@@ -264,10 +240,6 @@
 .routine-active-toggle:has(input:focus-visible) {
   outline: 2px solid var(--p-accent-text);
   outline-offset: 2px;
-}
-.routine-panel .routine-secondary {
-  background: transparent;
-  color: var(--p-ink-2);
 }
 .routine-card:has(> summary .routine-active) > .routine-actions {
   justify-content: flex-start;
@@ -776,10 +748,6 @@
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   text-align: center;
-}
-.routine-editor .routine-add {
-  min-height: 34px;
-  font-size: 12px;
 }
 .routine-editor .routine-add-exercise {
   border-style: dashed;

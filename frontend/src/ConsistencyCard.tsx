@@ -23,7 +23,7 @@ export function ConsistencyCard({
         <div className="consistency-header-actions">
           <span>Last 12 weeks</span>
           {onOpenSplits && (
-            <button type="button" className="text-link" onClick={onOpenSplits}>
+            <button type="button" className="pulse-button link small" onClick={onOpenSplits}>
               My splits <Icon name="chevron-right" />
             </button>
           )}

@@ -180,19 +180,6 @@
   width: 6px;
   border-radius: 4px;
 }
-.training-block-dialog .training-block-cards li > button {
-  width: auto;
-  min-height: 36px;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 9px;
-  padding: 0.4rem 0.75rem;
-  background: transparent;
-  color: var(--p-ink);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
 /* New / edit form */
 /* The first field starts clear of the title bar. */
 .training-block-form {

@@ -93,7 +93,7 @@
   color: var(--p-ink-2);
   font-size: 0.8125rem;
 }
-.weekly-review-block .text-link {
+.weekly-review-block .pulse-button.link {
   margin-top: 0.5rem;
 }
 .weekly-review-block-name {

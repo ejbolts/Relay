@@ -311,7 +311,7 @@ export function RoutinePanel({
           <h2 id={headingId}>{heading}</h2>
           <button
             type="button"
-            className="routine-link"
+            className="pulse-button link small routine-link"
             disabled={busy || types.loading}
             onClick={() => template('custom')}
           >
@@ -323,7 +323,11 @@ export function RoutinePanel({
         <header className="routine-heading">
           <h2 id={headingId}>{heading}</h2>
           {own && onOpenSplits && (
-            <button type="button" className="routine-link" onClick={() => onOpenSplits()}>
+            <button
+              type="button"
+              className="pulse-button link small routine-link"
+              onClick={() => onOpenSplits()}
+            >
               My splits
               <Icon name="chevron-right" />
             </button>
@@ -332,7 +336,12 @@ export function RoutinePanel({
       )}
       {own && !embedded && (
         <div className="routine-create">
-          <button type="button" disabled={busy || types.loading} onClick={() => template('custom')}>
+          <button
+            type="button"
+            className="pulse-button tonal block"
+            disabled={busy || types.loading}
+            onClick={() => template('custom')}
+          >
             <Icon name="plus" />
             New split
           </button>
@@ -341,7 +350,11 @@ export function RoutinePanel({
       {error && !editing && !using && !deleting && !options && (
         <p className="inline-error" role="alert">
           {error}{' '}
-          <button type="button" onClick={() => setAttempt((x) => x + 1)}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => setAttempt((x) => x + 1)}
+          >
             Try again
           </button>
         </p>
@@ -351,7 +364,7 @@ export function RoutinePanel({
         <div className="routine-notice">
           <button
             type="button"
-            className="routine-link"
+            className="pulse-button link small routine-link"
             onClick={() => onOpenSplits(importedId ?? undefined)}
           >
             View my splits
@@ -409,6 +422,7 @@ export function RoutinePanel({
                 <>
                   <button
                     type="button"
+                    className="pulse-button small"
                     onClick={() => {
                       setError(null);
                       setEditing(structuredClone(routine));
@@ -419,7 +433,7 @@ export function RoutinePanel({
                   {routine.id !== 'current-split' && (
                     <button
                       type="button"
-                      className="routine-options-button"
+                      className="pulse-button small icon-only routine-options-button"
                       aria-label={`Options for ${routine.name}`}
                       onClick={() => {
                         setError(null);
@@ -431,7 +445,7 @@ export function RoutinePanel({
                   )}
                   <button
                     type="button"
-                    className={routine.id === activeId ? 'routine-secondary' : 'routine-primary'}
+                    className={routine.id === activeId ? 'pulse-button small' : 'routine-primary'}
                     onClick={() => {
                       setError(null);
                       setStartDate(
@@ -1052,7 +1066,11 @@ function RoutineEditor({
           {types.error && (
             <p className="inline-error" role="alert">
               {types.error}{' '}
-              <button type="button" onClick={() => void types.reload()}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => void types.reload()}
+              >
                 Retry workout types
               </button>
             </p>
@@ -1060,7 +1078,11 @@ function RoutineEditor({
           {loadError && (
             <p role="alert" className="inline-error">
               {loadError}{' '}
-              <button type="button" onClick={() => setAttempt((x) => x + 1)}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => setAttempt((x) => x + 1)}
+              >
                 Try again
               </button>
             </p>
@@ -1204,7 +1226,7 @@ function RoutineEditor({
           <div className="routine-add-days">
             <button
               type="button"
-              className="routine-add"
+              className="pulse-button tonal small routine-add"
               disabled={value.days.length >= 28 || types.loading}
               onClick={() => {
                 const type = types.types.find((t) => !t.archived);
@@ -1216,7 +1238,7 @@ function RoutineEditor({
             </button>
             <button
               type="button"
-              className="routine-add"
+              className="pulse-button tonal small routine-add"
               disabled={value.days.length >= 28}
               onClick={() => addDay({ workout_type_id: null, workout_type: null, movements: [] })}
             >
@@ -1242,6 +1264,7 @@ function RoutineEditor({
               />
               <button
                 type="button"
+                className="pulse-button tonal small"
                 disabled={addingType || !typeName.trim()}
                 onClick={() =>
                   void (async () => {
@@ -1276,7 +1299,7 @@ function RoutineEditor({
                   })()
                 }
               >
-                {addingType ? 'Adding...' : 'Add type'}
+                {addingType ? 'Adding…' : 'Add type'}
               </button>
             </div>
           </details>

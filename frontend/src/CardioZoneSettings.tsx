@@ -233,7 +233,7 @@ export function CardioZoneSettings({
           {unusedZone && (
             <button
               type="button"
-              className="cardio-goal-add"
+              className="pulse-button tonal small cardio-goal-add"
               onClick={() => setGoals([...goals, { zone: unusedZone, minutes: 30 }])}
             >
               <Icon name="plus" />

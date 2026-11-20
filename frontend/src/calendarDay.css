@@ -23,12 +23,7 @@
 
 .planned-day-sheet .planned-day-edit-split {
   display: block;
-  min-height: 2.75rem;
-  margin: 0.5rem auto 0;
-  padding: 0 0.75rem;
-  color: var(--p-accent-text);
-  font-size: 0.875rem;
-  font-weight: 600;
+  margin: 0.75rem auto 0;
 }
 
 /* With the row opening the session card, editing is the day sheet's secondary action. */

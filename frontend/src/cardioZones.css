@@ -84,9 +84,7 @@
 .cardio-zone-fill .pulse-button {
   min-height: 44px;
 }
-.cardio-goal-remove,
-.cardio-goal-add,
-.cardio-goals-edit {
+.cardio-goal-remove {
   display: inline-flex;
   gap: 6px;
   align-items: center;
@@ -108,18 +106,8 @@
 }
 .cardio-goal-add {
   justify-self: start;
-  min-height: 40px;
-  padding: 0 4px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-size: 0.875rem;
 }
-:root[data-colour-mode='light'] .cardio-goal-add {
-  color: var(--p-accent);
-}
-.cardio-goal-remove svg,
-.cardio-goal-add svg,
-.cardio-goals-edit svg {
+.cardio-goal-remove svg {
   width: 1rem;
   height: 1rem;
 }
@@ -138,14 +126,6 @@
   margin: 0;
   color: var(--p-ink);
   font-size: 0.9375rem;
-}
-.cardio-goals-edit {
-  min-height: 36px;
-  margin: -4px -6px -4px 0;
-  padding: 0 10px;
-  background: var(--p-surface-3);
-  color: var(--p-ink);
-  font-size: 0.8125rem;
 }
 .cardio-goal-list {
   display: grid;
