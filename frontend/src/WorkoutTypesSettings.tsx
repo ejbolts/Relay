@@ -242,7 +242,7 @@ export function WorkoutTypesSettings({
         </label>
         <button
           type="submit"
-          className="pulse-button primary workout-types-add-button"
+          className="pulse-button primary small workout-types-add-button"
           disabled={disabled || !name.trim()}
         >
           {pending === 'add' ? 'Adding…' : 'Add type'}
