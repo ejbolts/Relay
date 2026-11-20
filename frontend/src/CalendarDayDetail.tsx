@@ -84,7 +84,7 @@ export function CalendarDayDetail({
               ))}
               <button
                 type="button"
-                className={`calendar-edit-workout${onOpenWorkout ? ' is-secondary' : ''}`}
+                className="calendar-edit-workout pulse-button secondary block"
                 onClick={() => onEditWorkout(workout.id)}
               >
                 {onOpenWorkout ? 'Edit workout' : <>View &amp; edit workout</>}
@@ -94,7 +94,7 @@ export function CalendarDayDetail({
         </div>
         <button
           type="button"
-          className="calendar-add-workout"
+          className="calendar-add-workout pulse-button tonal block"
           onClick={() => onStartWorkout(day.workout_date)}
         >
           Add another workout

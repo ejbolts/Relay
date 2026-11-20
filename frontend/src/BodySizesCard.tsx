@@ -291,7 +291,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         </div>
         <button
           type="button"
-          className="body-sizes-add"
+          className="body-sizes-add pulse-button tonal small"
           disabled={logs === null}
           onClick={() => open(localDate())}
         >
@@ -301,7 +301,11 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
       {error && !editing && !deleting && (
         <p role="alert" className="inline-error">
           {error}
-          <button type="button" onClick={() => setRetry((count) => count + 1)}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => setRetry((count) => count + 1)}
+          >
             Retry
           </button>
         </p>
@@ -424,12 +428,16 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                 </div>
               )}
               <div className="body-sizes-entry-actions">
-                <button type="button" onClick={() => open(shown.measurement_date)}>
+                <button
+                  type="button"
+                  className="pulse-button secondary small"
+                  onClick={() => open(shown.measurement_date)}
+                >
                   Edit
                 </button>
                 <button
                   type="button"
-                  className="danger"
+                  className="pulse-button danger-soft small"
                   onClick={() => {
                     setError(null);
                     setDeleting(shown.measurement_date);
@@ -467,6 +475,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                       <div>
                         <button
                           type="button"
+                          className="pulse-button secondary small"
                           aria-label={`Edit measurements ${row.measurement_date}`}
                           onClick={() => open(row.measurement_date)}
                         >
@@ -475,6 +484,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                         {historyPart === 'all' && (
                           <button
                             type="button"
+                            className="pulse-button danger-soft small"
                             aria-label={`Delete measurements ${row.measurement_date}`}
                             onClick={() => {
                               setError(null);

@@ -314,7 +314,7 @@ function ProfileFriendControl({
         {status === 'none' && (
           <button
             type="button"
-            className="profile-follow-button is-follow"
+            className="pulse-button primary small profile-follow-button is-follow"
             disabled={busy}
             onClick={() => void add()}
           >
@@ -326,7 +326,7 @@ function ProfileFriendControl({
           <>
             <button
               type="button"
-              className="profile-follow-button is-follow"
+              className="pulse-button primary small profile-follow-button is-follow"
               disabled={busy}
               onClick={() => void accept()}
             >
@@ -335,7 +335,7 @@ function ProfileFriendControl({
             </button>
             <button
               type="button"
-              className="profile-follow-button"
+              className="pulse-button secondary small profile-follow-button"
               disabled={busy}
               onClick={() => void remove()}
             >
@@ -347,7 +347,7 @@ function ProfileFriendControl({
           <button
             ref={trigger}
             type="button"
-            className={`profile-follow-button${pill ? '' : ' is-more'}`}
+            className={`pulse-button secondary small profile-follow-button${pill ? '' : ' icon-only is-more'}`}
             disabled={busy}
             aria-label={pill ? undefined : `More options for ${profile.display_name}`}
             aria-haspopup="menu"

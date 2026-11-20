@@ -173,8 +173,7 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
 }
 
 .live-workout-add,
-.live-workout-options,
-.live-workout-finish {
+.live-workout-options {
   width: 2.75rem;
   height: 2.75rem;
   min-height: 2.75rem;
@@ -199,14 +198,10 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
   color: var(--p-accent-text);
 }
 
-/* A word, not a tick: ticks belong to sets and exercises. */
-.live-workout-finish {
-  width: auto;
-  padding-inline: 0.875rem;
+/* A word, not a tick: ticks belong to sets and exercises. Green, on the standard small shape. */
+.live-workout-toolbar .pulse-button.live-workout-finish {
   border-color: color-mix(in srgb, var(--p-good) 55%, transparent);
   color: var(--p-good);
-  font-size: 0.875rem;
-  font-weight: 750;
 }
 
 .live-workout-toolbar .overlay-header-copy {
@@ -376,13 +371,6 @@ html[data-reduce-motion] .live-workout-sheet-backdrop {
   border-radius: 0.75rem;
   padding: 0.75rem;
   font-size: 0.875rem;
-}
-
-.logger-screen.is-live-workout .live-workout-actions .add-exercise-button {
-  border: 1px solid var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-accent-text);
-  font-weight: 650;
 }
 
 .logger-screen.is-live-workout {

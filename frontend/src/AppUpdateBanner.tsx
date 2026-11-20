@@ -36,7 +36,7 @@ export function AppUpdateBanner({
       </div>
       <button
         type="button"
-        className="app-update-refresh"
+        className="pulse-button primary small app-update-refresh"
         title="Refresh to update"
         disabled={refreshing}
         aria-busy={refreshing || undefined}

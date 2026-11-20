@@ -2381,7 +2381,11 @@ function AppContent() {
               {bodyMeasurementSync.error ? (
                 <>
                   <p className="error">{bodyMeasurementSync.error}</p>
-                  <button className="secondary" onClick={bodyMeasurementSync.retry}>
+                  <button
+                    type="button"
+                    className="pulse-button secondary small"
+                    onClick={bodyMeasurementSync.retry}
+                  >
                     Retry sync
                   </button>
                 </>
@@ -2701,7 +2705,7 @@ function AppContent() {
                     {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
                     <button
                       type="button"
-                      className="primary"
+                      className="pulse-button secondary block"
                       onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
                     >
                       Retry loading exercises
@@ -5592,7 +5596,11 @@ function WorkoutLogger({
       )}
       {!readOnly && (
         <div className="live-workout-actions">
-          <button className="add-exercise-button" type="button" onClick={openExercisePicker}>
+          <button
+            className="add-exercise-button pulse-button tonal block"
+            type="button"
+            onClick={openExercisePicker}
+          >
             ＋ Add exercise
           </button>
           {initialWorkout && (
@@ -7147,7 +7155,7 @@ function MovementCard({
           }}
         />
       )}
-      <button type="button" className="add-set-button" onClick={onAddSet}>
+      <button type="button" className="add-set-button pulse-button tonal" onClick={onAddSet}>
         ＋ Add set
       </button>
       {plateSet && barType && (
@@ -7679,7 +7687,11 @@ function MachinePhotoDetail({
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
       <div>
-        <button className="photo-detail-close" type="button" onClick={onClose}>
+        <button
+          className="photo-detail-close pulse-button secondary small"
+          type="button"
+          onClick={onClose}
+        >
           Close
         </button>
         <img src={image.full_url} alt={photo.caption} />
@@ -7709,13 +7721,19 @@ function MachinePhotoDetail({
             <strong>{photo.caption}</strong>
           )}
           {onUpdate && (
-            <button type="button" onClick={() => void saveCaption()} disabled={saving}>
+            <button
+              type="button"
+              className="pulse-button primary small"
+              onClick={() => void saveCaption()}
+              disabled={saving}
+            >
               Save name
             </button>
           )}
           {onUpdate && (
             <button
               type="button"
+              className="pulse-button secondary small"
               aria-label="Edit machine settings"
               onClick={() => setEditingSettings(true)}
             >
@@ -7723,19 +7741,27 @@ function MachinePhotoDetail({
             </button>
           )}
           {onChooseAnother && (
-            <button type="button" className="photo-choose-other" onClick={onChooseAnother}>
+            <button
+              type="button"
+              className="photo-choose-other pulse-button secondary small"
+              onClick={onChooseAnother}
+            >
               Switch photo
             </button>
           )}
           {onShowHistory && (
-            <button type="button" className="photo-machine-history" onClick={onShowHistory}>
+            <button
+              type="button"
+              className="photo-machine-history pulse-button secondary small"
+              onClick={onShowHistory}
+            >
               <Icon name="filter" />
               All workouts on this machine
             </button>
           )}
           {onDelete && (
             <InlineConfirmButton
-              className="photo-delete"
+              className="photo-delete pulse-button danger-soft small"
               label={images.length > 1 ? 'Delete machine' : 'Delete'}
               confirmLabel={images.length > 1 ? 'Delete machine and all photos' : 'Delete photo'}
               confirmationMessage={
@@ -8309,7 +8335,7 @@ export function ProgressScreen({
             <p>{progressError}</p>
             <button
               type="button"
-              className="text-link"
+              className="pulse-button link small"
               onClick={() => setProgressAttempt((attempt) => attempt + 1)}
             >
               Retry
@@ -9069,7 +9095,7 @@ function SettingsScreen({
                   </header>
                   <button
                     type="button"
-                    className="profile-secondary workout-data-guide-button"
+                    className="pulse-button secondary block workout-data-guide-button"
                     onClick={() => onCsvGuideOpenChange(true)}
                   >
                     Show guide
@@ -9081,15 +9107,20 @@ function SettingsScreen({
                       guideOpen={csvGuideOpen}
                       onGuideOpenChange={onCsvGuideOpenChange}
                     />
-                    <button type="button" onClick={() => setExportOpen(true)}>
+                    <button
+                      type="button"
+                      className="pulse-button secondary"
+                      onClick={() => setExportOpen(true)}
+                    >
                       ↓ Export data
                     </button>
                     {(historySummary?.has_sample_workouts ??
                       workouts.some((workout) => workout.is_sample)) && (
                       <InlineConfirmButton
-                        className="sample-clear"
+                        className="sample-clear pulse-button danger-soft block"
                         label="Remove sample workouts"
                         confirmLabel="Confirm removal"
+                        size="default"
                         onConfirm={onDeleteSamples}
                       />
                     )}
@@ -9788,7 +9819,11 @@ function HistoryScreen({
                       {olderError ? (
                         <>
                           <p>{olderError}</p>
-                          <button type="button" className="show-more-button" onClick={onLoadOlder}>
+                          <button
+                            type="button"
+                            className="pulse-button secondary"
+                            onClick={onLoadOlder}
+                          >
                             Retry loading older workouts
                           </button>
                         </>
@@ -10245,19 +10280,23 @@ function HistoryWorkoutCard({
             <div className="workout-actions">
               <WorkoutShareMenu workout={workout} onShareCard={() => setShareOpen(true)} />
               {resumable && (
-                <button className="resume-workout-button" type="button" onClick={onResume}>
+                <button
+                  className="resume-workout-button pulse-button primary small"
+                  type="button"
+                  onClick={onResume}
+                >
                   Resume
                 </button>
               )}
               <button
                 type="button"
-                className={`edit-workout-button${resumable ? '' : ' is-main'}`}
+                className="edit-workout-button pulse-button secondary small"
                 onClick={onEdit}
               >
                 Edit
               </button>
               <InlineConfirmButton
-                className="delete-workout"
+                className="delete-workout pulse-button danger-soft small"
                 label="Delete"
                 confirmLabel="Confirm delete"
                 onConfirm={onDelete}

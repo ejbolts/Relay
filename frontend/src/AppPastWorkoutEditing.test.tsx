@@ -266,18 +266,21 @@ describe('editing a past workout', () => {
 describe('past workout actions', () => {
   const actionLabels = () =>
     [...container.querySelectorAll('.history-card.open .workout-actions > button')].map(
-      (item) => `${item.textContent}${item.classList.contains('is-main') ? ' (main)' : ''}`,
+      (item) => `${item.textContent}${item.classList.contains('primary') ? ' (primary)' : ''}`,
     );
 
-  it('makes Edit the main action of an older workout, without Resume', async () => {
+  it('keeps Edit neutral on an older workout, without Resume', async () => {
     await openCard();
     expect(container.querySelector('.resume-workout-button')).toBeNull();
-    expect(actionLabels()).toEqual(['Edit (main)', 'Delete']);
+    expect(actionLabels()).toEqual(['Edit', 'Delete']);
+    expect(container.querySelector('.edit-workout-button')?.className).toContain(
+      'pulse-button secondary',
+    );
   });
 
-  it("keeps Resume first for today's workout", async () => {
+  it("keeps Resume first and primary for today's workout", async () => {
     await openCard([savedWorkout({ workout_date: today(), created_at: new Date().toISOString() })]);
-    expect(actionLabels()).toEqual(['Resume', 'Edit', 'Delete']);
+    expect(actionLabels()).toEqual(['Resume (primary)', 'Edit', 'Delete']);
   });
 
   it('hides a deleted workout at once, with an Undo before it is removed', async () => {

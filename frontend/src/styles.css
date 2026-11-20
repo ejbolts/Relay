@@ -250,35 +250,6 @@ textarea {
   align-items: center;
   gap: 0.25rem;
 }
-.primary,
-.secondary {
-  width: 100%;
-  border-radius: 11px;
-  margin-top: 1.25rem;
-  padding: 0.9rem 1rem;
-  font-weight: 800;
-  text-align: center;
-}
-.primary {
-  border: 1px solid #087f6b;
-  background: #087f6b;
-  color: #fff;
-}
-.secondary {
-  border: 1px solid #b9c9d8;
-  background: #fff;
-  color: #183f5c;
-}
-.danger-button {
-  width: 100%;
-  border: 1px solid #b42318;
-  border-radius: 11px;
-  margin-top: 0.75rem;
-  padding: 0.9rem 1rem;
-  background: #fff;
-  color: #b42318;
-  font-weight: 800;
-}
 .privacy-note {
   text-align: center;
   color: #68798c;
@@ -964,27 +935,11 @@ button.metric-card:focus-visible {
 }
 
 .calendar-edit-workout {
-  width: 100%;
-  margin: 0.75rem 0 0;
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  padding: 0.7rem;
-  background: var(--accent);
-  color: white;
-  font-size: 0.68rem;
-  font-weight: 850;
+  margin-top: 0.75rem;
 }
 
 .calendar-add-workout {
-  width: 100%;
   margin-top: 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.65rem;
-  background: transparent;
-  color: var(--ink);
-  font-size: 0.68rem;
-  font-weight: 850;
 }
 
 .heatmap-legend {
@@ -2766,19 +2721,6 @@ button.metric-card:focus-visible {
   font-size: 0.68rem;
   font-weight: 800;
   cursor: pointer;
-}
-
-.add-set-button {
-  color: var(--accent-dark);
-}
-
-.add-exercise-button {
-  width: 100%;
-  margin: 0.8rem 0;
-  border: 1.5px dashed #d2a6a0;
-  padding: 1rem;
-  color: var(--accent-dark);
-  font-weight: 900;
 }
 
 .finish-workout-bottom {
@@ -5262,10 +5204,6 @@ body,
   color: var(--accent-dark);
 }
 
-.add-exercise-button {
-  color: var(--accent-dark);
-}
-
 .filter-pills button,
 .metric-tabs button {
   border-color: var(--line);
@@ -6577,7 +6515,7 @@ body,
 }
 
 .photo-inline-actions button,
-.photo-detail-caption button {
+.photo-detail-caption button:where(:not(.pulse-button)) {
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 0.6rem 0.75rem;
@@ -6596,11 +6534,6 @@ body,
 
 .photo-detail-close {
   justify-self: end;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.45rem 0.65rem;
-  background: transparent;
-  color: var(--muted-ink);
 }
 
 .photo-detail img {
@@ -6630,11 +6563,6 @@ body,
   flex-basis: 100%;
   color: var(--muted-ink);
   font-size: 0.7rem;
-}
-
-.photo-detail-caption > .photo-choose-other {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .body-edit-form {
@@ -7054,31 +6982,11 @@ body,
   color: var(--accent-dark);
 }
 
-.add-set-button {
-  width: 100%;
-  min-height: 3.1rem;
-  margin: 0.75rem 0;
-  border: 0;
-  border-radius: 5px;
-  padding: 0.75rem;
-  background: #202526;
-  color: #d3d0cd;
-  font-size: 0.92rem;
-  font-weight: 500;
-}
-
-.add-set-button:hover,
-.add-set-button:focus-visible {
-  background: #272d2f;
-  outline: 1px solid #41494c;
-}
-
 .movement-note {
   width: 100%;
   margin: 0 0 1rem;
 }
 
-.add-exercise-button,
 .primary-action,
 .add-selected-button,
 .body-entry-panel > button,
@@ -7087,10 +6995,6 @@ body,
   border-radius: 5px;
   background: var(--accent);
   color: #f2fbff;
-}
-
-.add-exercise-button {
-  border-style: solid;
 }
 
 .workout-notes {
@@ -7873,25 +7777,14 @@ body,
   line-height: 1.5;
 }
 
-.settings-actions > button:where(:not(.pulse-button)) {
-  min-height: 2.6rem;
-  border: 1px solid #41484b;
-  border-radius: 4px;
-  padding: 0.55rem 0.65rem;
-  background: #202526;
-  color: #dedbd8;
-  font-size: 0.7rem;
-  font-weight: 750;
+/* Two buttons share a phone-width row; trimmed so "Download backup" stays on one line. */
+.settings-actions > .pulse-button {
+  padding-inline: 0.5rem;
+  font-size: 0.875rem;
 }
 
 .settings-actions .inline-confirmation {
   grid-column: 1 / -1;
-}
-
-.settings-actions .sample-clear {
-  width: 100%;
-  border-color: #68423d;
-  color: #f09c93;
 }
 
 .history-calendar-panel .panel-heading {

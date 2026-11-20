@@ -313,7 +313,12 @@ export function WorkoutCsvImport({
           if (file) void selectFile(file);
         }}
       />
-      <button type="button" disabled={previewing || saving} onClick={() => input.current?.click()}>
+      <button
+        type="button"
+        className="pulse-button secondary"
+        disabled={previewing || saving}
+        onClick={() => input.current?.click()}
+      >
         {previewing ? 'Reviewing…' : '↑ Choose CSV file'}
       </button>
       {error && !review && (

@@ -136,11 +136,14 @@
   width: 100%;
 }
 
-/* Small and icon buttons look compact but keep a 44px touch target. */
+/*
+ * Small and icon buttons look compact but keep a 44px touch target. The layer is placed from
+ * inside the 1px border, so a 36px button needs 5px on each side.
+ */
 .pulse-button:is(.small, .icon-only)::before {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -5px;
 }
 
 /* Links stay the height of their text, so card headers keep their size; the touch target grows. */
