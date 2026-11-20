@@ -172,8 +172,8 @@ async function render(children: ReactNode) {
 }
 
 const coach = () => document.querySelector('.setup-coach');
-const back = () => coach()?.querySelector<HTMLButtonElement>('.setup-coach-back') ?? null;
-const coachTitle = () => coach()?.querySelector('strong')?.textContent;
+const back = () => coach()?.querySelector<HTMLButtonElement>('.guide-card-back') ?? null;
+const coachTitle = () => coach()?.querySelector('.guide-card-title')?.textContent;
 const button = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,

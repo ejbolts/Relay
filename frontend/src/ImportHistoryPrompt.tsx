@@ -22,13 +22,15 @@ export function ImportHistoryPrompt({
       className="app-guide import-history-prompt"
       dismissOnBackdrop={false}
       onClose={onSkip}
+      actionsClassName="guide-actions"
       actions={
         <>
           <button type="button" className="popup-tertiary-action guide-skip" onClick={onSkip}>
             Skip for now
           </button>
-          <button type="button" className="popup-primary-action" onClick={onContinue}>
-            Import or export <span aria-hidden="true">→</span>
+          <button type="button" className="pulse-button primary" onClick={onContinue}>
+            Import or export
+            <Icon name="chevron-right" />
           </button>
         </>
       }
