@@ -22,7 +22,12 @@ from .account_backups import (
     create_account_snapshot,
     import_legacy_backup,
 )
-from .accounts import UsernameTakenError, create_user, normalize_username
+from .accounts import (
+    DisplayNameTakenError,
+    UsernameTakenError,
+    create_user,
+    normalize_username,
+)
 from .auth import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, hash_password
 from .config import get_settings
 from .database import SessionLocal
@@ -65,6 +70,8 @@ def command_create_user(args: argparse.Namespace) -> None:
             )
         except UsernameTakenError:
             raise SystemExit(f"An account for {username} already exists.") from None
+        except DisplayNameTakenError:
+            raise SystemExit(f"Another account already uses the name {display_name}.") from None
         role = "admin" if user.is_admin else "user"
         print(f"Created {role} account {user.username} ({user.id}).")
 

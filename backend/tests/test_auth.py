@@ -68,6 +68,8 @@ PUBLIC_ROUTES = {
     ("POST", "/api/auth/logout-session"),
     # Asking the admins for a temporary password happens while signed out.
     ("POST", "/api/auth/password-reset-request"),
+    # So is asking them for a forgotten username.
+    ("POST", "/api/auth/username-reminder-request"),
 }
 
 
@@ -676,23 +678,80 @@ def test_first_user_with_legacy_workouts_does_not_receive_sample_data():
 
 
 def test_profile_update(client, other_client):
-    updated = client.patch("/api/profile", json={"display_name": " New  Name ", "username": "New"})
+    updated = client.patch("/api/profile", json={"display_name": " New  Name "})
     assert updated.status_code == 200
     assert updated.json()["display_name"] == "New Name"
-    assert updated.json()["username"] == "new"
-    assert client.get("/api/auth/me").json()["username"] == "new"
-    assert login(TestClient(client.app), "new").status_code == 200
-
-    only_name = client.patch("/api/profile", json={"display_name": "Solo"})
-    assert only_name.json()["username"] == "new"
-    assert client.patch("/api/profile", json={"username": "same@x"}).status_code == 422
+    assert updated.json()["username"] == "owner"
     assert client.patch("/api/profile", json={"display_name": ""}).status_code == 422
+    assert client.patch("/api/profile", json={"username": "same@x"}).status_code == 422
 
-    taken = client.patch("/api/profile", json={"username": other_client.user["username"]})
+
+def test_only_an_admin_can_change_a_username(client, other_client):
+    locked = other_client.patch("/api/profile", json={"username": "renamed"})
+    assert locked.status_code == 409
+    assert locked.json()["error"]["code"] == "username_locked"
+    # Older apps send the unchanged username with a name change.
+    kept = other_client.patch("/api/profile", json={"display_name": "Otto", "username": "OTHER"})
+    assert kept.status_code == 200
+    assert (kept.json()["username"], kept.json()["display_name"]) == ("other", "Otto")
+    # Admins cannot change their own from Edit profile either.
+    assert client.patch("/api/profile", json={"username": "boss"}).status_code == 409
+
+    path = f"/api/admin/users/{other_client.user['id']}/username"
+    assert other_client.put(path, json={"username": "renamed"}).status_code == 403
+    renamed = client.put(path, json={"username": " Renamed "})
+    assert renamed.status_code == 200
+    assert renamed.json()["username"] == "renamed"
+    assert other_client.get("/api/auth/me").json()["username"] == "renamed"
+    assert login(TestClient(client.app), "renamed").status_code == 200
+    assert login(TestClient(client.app), "other").status_code == 401
+
+    taken = client.put(path, json={"username": "OWNER"})
     assert taken.status_code == 409
     assert taken.json()["error"]["code"] == "username_taken"
-    # Re-submitting your own username is not a conflict.
-    assert client.patch("/api/profile", json={"username": "new"}).status_code == 200
+    assert client.put(path, json={"username": "bad name"}).status_code == 422
+    assert client.put(path, json={"username": "renamed"}).status_code == 200
+    missing = client.put("/api/admin/users/missing/username", json={"username": "nobody"})
+    assert missing.status_code == 404
+    # An admin renames their own account from the admin console.
+    own = client.put(f"/api/admin/users/{client.user['id']}/username", json={"username": "boss"})
+    assert own.json()["username"] == "boss"
+
+
+def test_display_names_are_unique_whatever_their_case_and_spacing(client, other_client):
+    base = {
+        "username": "newcomer",
+        "password": TEST_PASSWORD,
+        "invite_code": TEST_INVITE_CODE,
+    }
+    clash = TestClient(client.app).post(
+        "/api/auth/register", json={**base, "display_name": "  oTHER "}
+    )
+    assert clash.status_code == 409
+    assert clash.json()["error"]["code"] == "display_name_taken"
+    # The refused sign-up does not hold on to the username.
+    created = TestClient(client.app).post(
+        "/api/auth/register", json={**base, "display_name": "Other Person"}
+    )
+    assert created.status_code == 201
+
+    taken = client.patch("/api/profile", json={"display_name": "other  PERSON"})
+    assert taken.status_code == 409
+    assert taken.json()["error"]["code"] == "display_name_taken"
+    assert client.get("/api/auth/me").json()["display_name"] == "Owner"
+    # Changing the case of your own name is not a clash.
+    assert client.patch("/api/profile", json={"display_name": "OWNER"}).status_code == 200
+
+
+def test_accounts_that_already_share_a_name_keep_it(client, other_client):
+    with SessionLocal() as db:
+        db.get(User, other_client.user["id"]).display_name = "Owner"
+        db.commit()
+
+    # Other profile changes still save while the old duplicate remains.
+    kept = other_client.patch("/api/profile", json={"display_name": "Owner", "sex": "female"})
+    assert kept.status_code == 200
+    assert kept.json()["display_name"] == "Owner"
 
 
 def test_password_change_revokes_other_sessions_only(client):

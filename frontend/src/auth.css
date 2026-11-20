@@ -1111,10 +1111,10 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   gap: 0.5rem;
 }
 
-/* ───────── Forgot password: the sign-in link, its dialog, and the admin console's request ───────── */
+/* ───────── Forgot password or username: the sign-in links, their dialog, and the admin console's requests ───────── */
 
 /* A 44px target for fingers that leaves the label row's height alone. */
-.auth-forgot-password {
+.auth-forgot {
   position: relative;
   min-height: 2.75rem;
   margin: -0.875rem -0.5rem -0.875rem auto;
@@ -1126,38 +1126,39 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   font-weight: 650;
 }
 
-/* Room below the link, so its target stays clear of the password field. */
-.auth-label-row:has(.auth-forgot-password) {
+/* Room below the link, so its target stays clear of the field. */
+.auth-label-row:has(.auth-forgot) {
   margin-bottom: 0.5rem;
 }
 
-.popup-dialog.forgot-password-dialog {
+/* One-field dialogs: Forgot password, Forgot username and the admin's Change username. */
+.popup-dialog.field-dialog {
   width: min(24rem, calc(100vw - 2rem));
 }
 
-.forgot-password-body {
+.field-dialog-body {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
 }
 
-.forgot-password-body .inline-error {
+.field-dialog-body .inline-error {
   margin: 0;
 }
 
-.forgot-password-dialog .popup-dialog-actions {
+.field-dialog .popup-dialog-actions {
   margin: 0;
   padding: 0.875rem 1rem 1rem;
 }
 
-.forgot-password-sent {
+.admin-request-sent {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
   padding: 1rem;
 }
 
-.forgot-password-sent-icon {
+.admin-request-sent-icon {
   flex: none;
   width: 2.25rem;
   height: 2.25rem;
@@ -1168,12 +1169,12 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   color: var(--p-accent-text);
 }
 
-.forgot-password-sent-icon .pulse-icon {
+.admin-request-sent-icon .pulse-icon {
   width: 1.2rem;
   height: 1.2rem;
 }
 
-.forgot-password-sent p {
+.admin-request-sent p {
   display: grid;
   gap: 0.2rem;
   margin: 0;
@@ -1182,13 +1183,13 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   line-height: 1.45;
 }
 
-.forgot-password-sent strong {
+.admin-request-sent strong {
   overflow-wrap: anywhere;
   color: var(--p-ink);
   font-size: 0.9375rem;
 }
 
-.admin-user.has-reset-request {
+.admin-user.has-request {
   border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
   background: color-mix(in srgb, var(--p-accent-soft) 45%, var(--p-surface-2));
 }

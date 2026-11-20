@@ -150,16 +150,19 @@ def fixture_account(test_client: TestClient, password_hash: str, *, other: bool 
 def register_user(
     test_client: TestClient,
     username: str = "owner",
-    display_name: str = "Owner",
+    display_name: str | None = None,
     password: str = TEST_PASSWORD,
 ) -> dict:
-    """Register, then explicitly sign in so authenticated fixtures have a real session."""
+    """Register, then explicitly sign in so authenticated fixtures have a real session.
+
+    Display names must be unique, so the default comes from the username ("owner" -> "Owner").
+    """
     response = test_client.post(
         "/api/auth/register",
         json={
             "username": username,
             "password": password,
-            "display_name": display_name,
+            "display_name": display_name or username.strip().title(),
             "invite_code": TEST_INVITE_CODE,
         },
     )

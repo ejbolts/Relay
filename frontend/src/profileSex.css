@@ -30,7 +30,7 @@
   margin: 0;
 }
 
-.profile-sex-locked {
+.profile-locked-value {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -43,12 +43,12 @@
   font-size: 0.9375rem;
 }
 
-.profile-sex-locked .pulse-icon {
+.profile-locked-value .pulse-icon {
   width: 1rem;
   height: 1rem;
 }
 
-.profile-sex-locked .pulse-icon:last-of-type {
+.profile-locked-value .pulse-icon:last-of-type {
   margin-left: auto;
   color: var(--p-muted);
 }
