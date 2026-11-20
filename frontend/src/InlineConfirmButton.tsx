@@ -73,7 +73,7 @@ export function InlineConfirmButton({
       </button>
       <button
         type="button"
-        className={`pulse-button secondary${sizeClass}`}
+        className={`pulse-button${sizeClass}`}
         disabled={working}
         onClick={() => setConfirming(false)}
       >

@@ -50,7 +50,7 @@ export function TrainingSplitEditor({
           {error}
           <button
             type="button"
-            className="pulse-button secondary block"
+            className="pulse-button block"
             onClick={() => setAttempt((n) => n + 1)}
           >
             Try again

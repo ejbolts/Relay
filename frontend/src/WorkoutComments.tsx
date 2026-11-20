@@ -367,7 +367,7 @@ export function WorkoutComments({
           {editing ? 'Editing comment' : <>Replying to {member(reply!.author, true)}</>}
           <button
             type="button"
-            className="pulse-button secondary small icon-only"
+            className="pulse-button small icon-only"
             aria-label="Cancel comment reply or edit"
             onClick={() => {
               setReply(null);

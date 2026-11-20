@@ -416,7 +416,7 @@ export function VideoUpload() {
                     <div className="clip-actions">
                       <button
                         type="button"
-                        className="pulse-button secondary small icon-only"
+                        className="pulse-button small icon-only"
                         onClick={() => moveClip(index, index - 1)}
                         disabled={index === 0}
                         aria-label={`Move set ${index + 1} up`}
@@ -425,7 +425,7 @@ export function VideoUpload() {
                       </button>
                       <button
                         type="button"
-                        className="pulse-button secondary small icon-only"
+                        className="pulse-button small icon-only"
                         onClick={() => moveClip(index, index + 1)}
                         disabled={index === clips.length - 1}
                         aria-label={`Move set ${index + 1} down`}
@@ -475,7 +475,7 @@ export function VideoUpload() {
           {failedClips.length > 0 && (
             <button
               type="button"
-              className="pulse-button secondary large block"
+              className="pulse-button large block"
               disabled={busy}
               onClick={() => void retryFailedUploads()}
             >
@@ -484,7 +484,7 @@ export function VideoUpload() {
           )}
           <button
             type="button"
-            className="pulse-button secondary large block"
+            className="pulse-button large block"
             disabled={busy}
             onClick={() => void cancelSession()}
           >
@@ -528,11 +528,7 @@ export function VideoUpload() {
             <p className="error-box">{serverSession.processing_error}</p>
           )}
           {serverSession.status === 'failed' && (
-            <button
-              type="button"
-              className="pulse-button secondary large block"
-              onClick={retryFailedSession}
-            >
+            <button type="button" className="pulse-button large block" onClick={retryFailedSession}>
               {serverSession.youtube_video_id ? 'Check YouTube again' : 'Retry processing'}
             </button>
           )}
@@ -598,11 +594,7 @@ export function VideoUpload() {
               </a>
             ))}
           </section>
-          <button
-            type="button"
-            className="pulse-button secondary large block"
-            onClick={resetUpload}
-          >
+          <button type="button" className="pulse-button large block" onClick={resetUpload}>
             Upload another session
           </button>
           <InlineConfirmButton

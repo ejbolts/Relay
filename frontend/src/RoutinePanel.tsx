@@ -422,7 +422,7 @@ export function RoutinePanel({
                 <>
                   <button
                     type="button"
-                    className="pulse-button secondary small"
+                    className="pulse-button small"
                     onClick={() => {
                       setError(null);
                       setEditing(structuredClone(routine));
@@ -433,7 +433,7 @@ export function RoutinePanel({
                   {routine.id !== 'current-split' && (
                     <button
                       type="button"
-                      className="pulse-button secondary small icon-only routine-options-button"
+                      className="pulse-button small icon-only routine-options-button"
                       aria-label={`Options for ${routine.name}`}
                       onClick={() => {
                         setError(null);
@@ -445,11 +445,7 @@ export function RoutinePanel({
                   )}
                   <button
                     type="button"
-                    className={
-                      routine.id === activeId
-                        ? 'pulse-button secondary small routine-secondary'
-                        : 'pulse-button primary small routine-primary'
-                    }
+                    className={routine.id === activeId ? 'pulse-button small' : 'routine-primary'}
                     onClick={() => {
                       setError(null);
                       setStartDate(
@@ -467,7 +463,7 @@ export function RoutinePanel({
               ) : (
                 <button
                   type="button"
-                  className="pulse-button primary small routine-primary routine-save"
+                  className="routine-primary routine-save"
                   disabled={busy || copied.includes(routine.id)}
                   onClick={() => void copy(routine)}
                 >

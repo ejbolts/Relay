@@ -1673,7 +1673,7 @@ button.metric-card:focus-visible {
   font-size: 0.64rem;
 }
 
-.body-history-panel > article button {
+.body-history-panel > article button:where(:not(.pulse-button)) {
   border: 0;
   background: transparent;
   color: var(--accent-dark);

@@ -97,7 +97,7 @@ export function FreshStartSetting() {
             setError(null);
           }}
         />
-        <button type="submit" className="pulse-button secondary small" disabled={saving}>
+        <button type="submit" className="pulse-button small" disabled={saving}>
           Start fresh
         </button>
       </form>

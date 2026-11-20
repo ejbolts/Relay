@@ -41,7 +41,7 @@ describe('InlineConfirmButton', () => {
     await click(button('Delete'));
 
     expect(button('Delete session').className).toBe('pulse-button danger small');
-    expect(button('Cancel').className).toBe('pulse-button secondary small');
+    expect(button('Cancel').className).toBe('pulse-button small');
     expect(container.querySelector('.row-delete')).toBeNull();
 
     await click(button('Cancel'));
@@ -64,7 +64,7 @@ describe('InlineConfirmButton', () => {
 
     await click(button('Disable account'));
     expect(button('Disable and sign out').className).toBe('pulse-button danger');
-    expect(button('Cancel').className).toBe('pulse-button secondary');
+    expect(button('Cancel').className).toBe('pulse-button');
 
     await click(button('Disable and sign out'));
     expect(onConfirm).toHaveBeenCalledOnce();

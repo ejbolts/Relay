@@ -657,14 +657,14 @@ export function CardioScreen({
                   <div className="cardio-session-actions">
                     <button
                       type="button"
-                      className="pulse-button secondary small"
+                      className="pulse-button small"
                       onClick={() => setCardioSharing({ session, prompt: false })}
                     >
                       Share card
                     </button>
                     <button
                       type="button"
-                      className="pulse-button secondary small"
+                      className="pulse-button small"
                       onClick={() => setMetricSession(session)}
                       aria-label={`Edit performance metrics for ${session.activity_type} on ${session.session_date}`}
                     >
@@ -683,7 +683,7 @@ export function CardioScreen({
                     </button>
                     <button
                       type="button"
-                      className="pulse-button secondary small"
+                      className="pulse-button small"
                       aria-label={
                         linked
                           ? `Edit ${session.activity_type} on ${session.session_date} in its workout`

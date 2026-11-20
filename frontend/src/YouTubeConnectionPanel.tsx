@@ -195,11 +195,7 @@ export function YouTubeConnectionPanel({
           />
         )}
         {!connection && (
-          <button
-            type="button"
-            className="pulse-button secondary block"
-            onClick={() => void refresh()}
-          >
+          <button type="button" className="pulse-button block" onClick={() => void refresh()}>
             Try again
           </button>
         )}

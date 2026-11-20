@@ -59,7 +59,7 @@ export function PendingWorkoutSaveCard({
           {onKeepMine ? (
             <button
               type="button"
-              className="pulse-button secondary small"
+              className="pulse-button small"
               disabled={saving}
               onClick={onKeepMine}
             >
@@ -68,7 +68,7 @@ export function PendingWorkoutSaveCard({
           ) : onReview ? (
             <button
               type="button"
-              className="pulse-button secondary small"
+              className="pulse-button small"
               disabled={reviewBlocked}
               onClick={onReview}
             >
@@ -77,7 +77,7 @@ export function PendingWorkoutSaveCard({
           ) : (
             <button
               type="button"
-              className="pulse-button secondary small"
+              className="pulse-button small"
               disabled={saving}
               onClick={onRetry}
             >

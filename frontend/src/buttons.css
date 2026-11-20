@@ -57,7 +57,9 @@
   color: var(--p-on-accent);
 }
 
-.pulse-button.secondary {
+/* Secondary is also the look of a button with no variant class, at the same strength. */
+.pulse-button.secondary,
+.pulse-button:not(.primary, .tonal, .link, .danger, .danger-soft) {
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
   color: var(--p-ink);
@@ -132,17 +134,6 @@
 
 .pulse-button.block {
   width: 100%;
-}
-
-/*
- * The legacy .primary and .secondary rule in styles.css also gives full width and a top margin.
- * Buttons with a size or block modifier size themselves; this stays at that rule's specificity
- * so context rules still win. Plain primary and secondary buttons keep the old layout until the
- * legacy rule is deleted.
- */
-.pulse-button:where(.primary, .secondary):where(.small, .large, .block, .icon-only) {
-  width: auto;
-  margin-top: 0;
 }
 
 /* Small and icon buttons look compact but keep a 44px touch target. */
