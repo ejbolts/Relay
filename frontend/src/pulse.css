@@ -4960,12 +4960,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 /* ───────── Popups: one sheet style everywhere ───────── */
 
-.modal-backdrop {
-  background: rgb(4 6 8 / 72%);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
 .popup-dialog::backdrop {
   background: rgb(4 6 8 / 72%);
   backdrop-filter: blur(6px);
@@ -4973,10 +4967,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .popup-dialog,
-.exercise-picker,
-.pr-summary,
-.calendar-day-detail,
-.superset-picker {
+.pr-summary {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
   background: var(--p-surface);
@@ -4986,15 +4977,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 /* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
 :root:not([data-colour-mode='light'])
-  :is(
-    .popup-dialog,
-    .exercise-picker,
-    .pr-summary,
-    .calendar-day-detail,
-    .superset-picker,
-    .relay-tip-popover,
-    .relay-tip-nudge
-  ) {
+  :is(.popup-dialog, .pr-summary, .relay-tip-popover, .relay-tip-nudge) {
   --p-surface: var(--p-surface-raised);
   --p-surface-2: var(--p-raised-2);
   --p-surface-3: var(--p-raised-3);
@@ -5011,8 +4994,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .popup-dialog h2,
-.calendar-day-detail h2,
-.superset-picker h2,
 .pr-summary h2 {
   color: var(--p-ink);
   font-size: 1.1875rem;
@@ -5063,32 +5044,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 /* Exercise picker */
-.exercise-picker-backdrop .exercise-picker {
-  border-color: var(--p-line-strong);
-  border-radius: 24px;
-  background: var(--p-surface);
-}
-
-.exercise-picker > header {
-  min-height: 0;
-  border-bottom: 1px solid var(--p-line);
-}
-
-.exercise-picker h2 {
-  color: var(--p-ink);
-  font-size: 1.1875rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.exercise-picker > header .icon-button {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
-}
 
 .exercise-picker .exercise-search-wrap {
   border: 1px solid var(--p-line-strong);
@@ -5237,8 +5192,7 @@ small.custom-exercise-label,
 }
 
 /* Popup headings and actions */
-.popup-dialog .section-kicker,
-.modal-backdrop .section-kicker {
+.popup-dialog .section-kicker {
   color: var(--p-muted);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -5429,20 +5383,12 @@ html {
   }
 }
 
-.modal-backdrop,
 .popup-dialog[open]::backdrop {
   animation: fade-in 200ms ease backwards;
 }
 
-.popup-dialog[open],
-.modal-backdrop > [role='dialog'],
-.modal-backdrop > [role='alertdialog'],
-.modal-backdrop > section {
+.popup-dialog[open] {
   animation: pop-in 260ms var(--ease-out) backwards;
-}
-
-.exercise-picker-backdrop .exercise-picker {
-  animation: pop-in 280ms var(--ease-out) backwards;
 }
 
 @keyframes menu-pop {
@@ -6290,53 +6236,9 @@ html[data-reduce-motion] ::backdrop {
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
 
-/* The exercise picker fills the phone screen, so it drops its rounded corners there. */
-@media (max-width: 620px) {
-  .exercise-picker-backdrop .exercise-picker {
-    border: 0;
-    border-radius: 0;
-  }
-}
-
-/* On phones, Add exercise slides the full-screen picker up from the bottom, like the logger. */
-@media (max-width: 620px) {
-  .exercise-picker-backdrop .exercise-picker {
-    animation: exercise-picker-in 400ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
-  }
-}
-
-@media (max-width: 620px) and (prefers-reduced-motion: reduce) {
-  .exercise-picker-backdrop .exercise-picker {
-    animation: none;
-  }
-}
-
-html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
-  animation: none;
-}
-
-@keyframes exercise-picker-in {
-  from {
-    translate: 0 100%;
-  }
-
-  to {
-    translate: 0 0;
-  }
-}
-
-/* On phones the frosted picker covers the whole app, so the dimming behind it would only darken
-   the glass; the picker's own blur does the work instead. */
-@media (max-width: 620px) {
-  :where(:root:not([data-glass='off'])) .exercise-picker-backdrop {
-    background: transparent;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
-
-/* The exercise picker is frosted over the app, with its search, filters and rows. */
-:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker {
+/* The exercise picker is frosted over the app, with its search, filters and rows. [open] keeps
+   it ahead of the light theme's solid popup surface. */
+:where(:root:not([data-glass='off'])) .popup-dialog.popup-dialog--sheet.exercise-picker[open] {
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
   --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
   --p-surface-2: color-mix(
@@ -6351,7 +6253,7 @@ html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
   );
 }
 
-:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker::before {
+:where(:root:not([data-glass='off'])) .popup-dialog.popup-dialog--sheet.exercise-picker::before {
   position: absolute;
   z-index: -1;
   inset: 0;
@@ -6362,8 +6264,13 @@ html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
 
-/* The picker's exercise list drops its older solid backing so the rows are frosted too. */
-:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-list {
+/* The picker's header and exercise list drop their solid backing so they are frosted too. */
+:where(:root:not([data-glass='off']))
+  .popup-dialog.popup-dialog--sheet.exercise-picker[open]
+  > header.popup-dialog-header,
+:where(:root:not([data-glass='off']))
+  .popup-dialog.popup-dialog--sheet.exercise-picker
+  .exercise-list {
   background: transparent;
 }
 

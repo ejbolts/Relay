@@ -2446,7 +2446,9 @@ describe('finishing workouts in the background', () => {
       ),
     ).toEqual([true]);
     await act(async () =>
-      document.querySelector<HTMLButtonElement>('[aria-label="Close workout details"]')!.click(),
+      document
+        .querySelector<HTMLButtonElement>('.calendar-day-detail .popup-dialog-close')!
+        .click(),
     );
     expect(container.querySelector('.home-sections .selected')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
