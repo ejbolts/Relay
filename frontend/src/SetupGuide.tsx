@@ -79,13 +79,9 @@ export function SetupGuideHost({ workouts }: { workouts: TrackedWorkout[] }) {
     <PopupDialog
       title="Compare machines"
       className="setup-guide-wait"
+      size="compact"
       onClose={() => setNeedsMachines(false)}
-    >
-      <p>
-        This needs one exercise logged on two saved machines. Save a machine photo on an exercise
-        while you log it, then use the other machine next time.
-      </p>
-      <footer className="popup-dialog-actions">
+      actions={
         <button
           type="button"
           className="popup-primary-action"
@@ -93,7 +89,12 @@ export function SetupGuideHost({ workouts }: { workouts: TrackedWorkout[] }) {
         >
           OK
         </button>
-      </footer>
+      }
+    >
+      <p>
+        This needs one exercise logged on two saved machines. Save a machine photo on an exercise
+        while you log it, then use the other machine next time.
+      </p>
     </PopupDialog>
   );
 }

@@ -100,6 +100,7 @@ export function WorkoutPhotos({
       </div>
       {viewing && (
         <PopupDialog
+          variant="screen"
           title={photos.length > 1 ? `Photo ${position + 1} of ${photos.length}` : 'Workout photo'}
           className="profile-photo-viewer workout-photo-viewer"
           headerActions={

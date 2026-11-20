@@ -974,7 +974,7 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 .sample-profile-body {
   display: grid;
   gap: 0.75rem;
-  padding: 0.75rem 1rem 0.25rem;
+  padding: 0.75rem 1rem 1rem;
 }
 
 .sample-profile-intro {
@@ -1065,14 +1065,6 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 .sample-profile-key dd {
   margin: 0;
   color: var(--p-ink-2);
-}
-
-.sample-profile-dialog .popup-dialog-actions {
-  padding: 0.5rem 1rem 1rem;
-}
-
-.sample-profile-dialog .popup-dialog-actions .popup-primary-action {
-  flex: 1;
 }
 
 .admin-user .admin-user-stats dd.admin-user-online {

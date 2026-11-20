@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { BodyMeasurement } from './types';
@@ -50,6 +50,7 @@ export function WeighInDialog({
   const [draft, setDraft] = useState(() => weighInDraft(entryOn(localDate())));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formId = useId();
   const existing = entryOn(date);
 
   function chooseDate(next: string) {
@@ -84,11 +85,22 @@ export function WeighInDialog({
   return (
     <PopupDialog
       title="Log weigh-in"
-      kicker="CHECK-IN"
       className="body-entry-popup"
       onClose={onClose}
+      busy={saving}
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action" disabled={saving}>
+            {saving ? 'Saving…' : existing ? 'Update check-in' : 'Save check-in'}
+          </button>
+        </>
+      }
     >
       <form
+        id={formId}
         className="body-entry-form"
         onSubmit={(event) => {
           event.preventDefault();
@@ -132,14 +144,6 @@ export function WeighInDialog({
           rows={2}
         />
         {error && <p className="inline-error">{error}</p>}
-        <footer className="popup-dialog-actions">
-          <button type="button" disabled={saving} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="popup-primary-action" disabled={saving}>
-            {saving ? 'Saving…' : existing ? 'Update check-in' : 'Save check-in'}
-          </button>
-        </footer>
       </form>
     </PopupDialog>
   );

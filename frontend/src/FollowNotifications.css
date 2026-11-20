@@ -5,17 +5,17 @@
   width: min(24rem, calc(100vw - 1.5rem));
   max-height: min(32rem, 80dvh);
 }
-.follow-notifications > header {
-  padding: 0.625rem 0.875rem;
+/* With more than one page it keeps its height, so the pager stays put on a short last page. */
+.popup-dialog.follow-notifications[open]:has(> .pagination-controls) {
+  display: flex;
+  flex-direction: column;
+  height: min(32rem, 80dvh);
 }
-.follow-notifications > header h2 {
-  font-size: 1rem;
+.follow-notifications[open]:has(> .pagination-controls) > * {
+  flex-shrink: 0;
 }
-.follow-notifications .popup-dialog-close {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  font-size: 1.2rem;
+.follow-notifications[open]:has(> .pagination-controls) > .follow-notification-list {
+  flex-grow: 1;
 }
 .follow-notifications > .shared-card-empty,
 .follow-notifications > .inline-error {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
@@ -40,9 +40,26 @@ export function CardioZoneSettings({
   const maxBpm = Number(maxHeartRate);
   const canFill = Number.isInteger(maxBpm) && maxBpm >= 100 && maxBpm <= 250;
   const unusedZone = [1, 2, 3, 4, 5].find((zone) => !goals.some((goal) => goal.zone === zone));
+  const formId = useId();
   return (
-    <PopupDialog title="Heart-rate zones & goals" onClose={onClose} className="cardio-zone-dialog">
+    <PopupDialog
+      title="Heart-rate zones & goals"
+      busy={saving}
+      onClose={onClose}
+      className="cardio-zone-dialog"
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action" disabled={saving}>
+            {saving ? 'Saving…' : 'Save zones & goals'}
+          </button>
+        </>
+      }
+    >
       <form
+        id={formId}
         onSubmit={async (event) => {
           event.preventDefault();
           setError(null);
@@ -229,9 +246,6 @@ export function CardioZoneSettings({
             {error}
           </p>
         )}
-        <button className="primary-action" disabled={saving}>
-          {saving ? 'Saving…' : 'Save zones & goals'}
-        </button>
       </form>
     </PopupDialog>
   );

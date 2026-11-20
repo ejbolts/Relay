@@ -427,29 +427,34 @@ function ProfileFriendControl({
         <PopupDialog
           title={`Block ${profile.display_name}?`}
           className="friend-block-dialog"
+          size="compact"
+          busy={busy}
           onClose={() => setConfirmBlock(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                autoFocus
+                disabled={busy}
+                onClick={() => setConfirmBlock(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action is-danger"
+                disabled={busy}
+                onClick={() => void block()}
+              >
+                Block
+              </button>
+            </>
+          }
         >
           <p>
             They will no longer find you or see your profile, data and activity, and you stop being
             friends. You can unblock them in Social, under Friends.
           </p>
-          <div className="friend-block-actions">
-            <button
-              type="button"
-              className="profile-secondary"
-              onClick={() => setConfirmBlock(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="profile-danger"
-              disabled={busy}
-              onClick={() => void block()}
-            >
-              Block
-            </button>
-          </div>
         </PopupDialog>
       )}
       {removal.pending &&

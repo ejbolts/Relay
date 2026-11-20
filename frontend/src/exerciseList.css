@@ -420,9 +420,6 @@
 .exercise-list-detail .exercise-progress-detail .stat-grid {
   margin-top: 0.75rem;
 }
-.exercise-session-sheet {
-  width: min(100% - 2rem, 28rem);
-}
 .exercise-session-heading {
   display: grid;
   gap: 0.25rem;
@@ -457,11 +454,6 @@
 }
 .exercise-session-sheet > p,
 .exercise-session-sheet > [role='alert'] {
-  margin: 1rem;
-}
-.exercise-session-sheet > .pulse-button {
-  display: flex;
-  width: calc(100% - 2rem);
   margin: 1rem;
 }
 .exercise-list-detail button:focus-visible {

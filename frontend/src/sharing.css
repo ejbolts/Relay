@@ -980,17 +980,6 @@
   padding: 1rem;
   line-height: 1.5;
 }
-.friend-block-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0 1rem 1rem;
-}
-.friend-block-actions > button {
-  width: auto;
-  min-height: 2.5rem;
-  padding: 0.45rem 1rem;
-}
 .friend-react-error {
   width: 100%;
   margin: 0.25rem;
@@ -1417,21 +1406,10 @@
   text-align: left;
 }
 
-/* Delete comment? uses the app's dialog layout, with Delete in the danger colour. */
 .comment-delete-dialog > p {
   margin: 0;
   padding: 1rem;
   line-height: 1.5;
-}
-
-.comment-delete-dialog > .popup-dialog-actions {
-  margin: 0;
-  padding: 1rem;
-}
-
-.comment-delete-dialog .popup-dialog-actions .comment-delete-confirm {
-  background: var(--p-danger-fill);
-  color: var(--p-on-danger);
 }
 
 /* Pair the app's height glide with a small entrance for discussion content, including

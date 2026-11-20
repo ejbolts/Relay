@@ -105,6 +105,8 @@ it('allows only custom sources, matching kinds, and reviews the chosen destinati
   expect(document.querySelector('[aria-label="Merge review"]')?.textContent).toContain(
     'cannot be undone',
   );
+  // The merge cannot be undone, so it is the red destructive primary.
+  expect(submit().classList).toContain('is-danger');
   expect(merge).not.toHaveBeenCalled();
   await click(submit());
   expect(merge).toHaveBeenCalledExactlyOnceWith('custom', 'official');

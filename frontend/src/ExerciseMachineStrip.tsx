@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { machineDate, machineUsedShort } from './machineHistory';
@@ -32,6 +32,7 @@ export function ExerciseMachineStrip({
   const [caption, setCaption] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const addFormId = useId();
   const today = localDate();
 
   const updateEdges = useCallback(() => {
@@ -213,11 +214,29 @@ export function ExerciseMachineStrip({
             title="Add machine"
             kicker={exercise.name.toUpperCase()}
             className="exercise-machine-add-dialog"
-            onClose={() => {
-              if (!saving) setPending(null);
-            }}
+            busy={saving}
+            onClose={() => setPending(null)}
+            actions={
+              <>
+                <button type="button" disabled={saving} onClick={() => setPending(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form={addFormId}
+                  className="popup-primary-action"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Save machine'}
+                </button>
+              </>
+            }
           >
-            <form className="exercise-machine-add-form" onSubmit={(event) => void save(event)}>
+            <form
+              id={addFormId}
+              className="exercise-machine-add-form"
+              onSubmit={(event) => void save(event)}
+            >
               <img src={pending.previewUrl} alt="New machine preview" />
               <label>
                 Machine name
@@ -239,14 +258,6 @@ export function ExerciseMachineStrip({
                   {error}
                 </p>
               )}
-              <footer className="popup-dialog-actions">
-                <button type="button" disabled={saving} onClick={() => setPending(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="popup-primary-action" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save machine'}
-                </button>
-              </footer>
             </form>
           </PopupDialog>
         </span>

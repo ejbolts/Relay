@@ -29,7 +29,12 @@ const batch = {
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
-  return [node, ...elements(node.props.children as ReactNode)];
+  // A pop-up's footer buttons arrive through its actions prop.
+  return [
+    node,
+    ...elements(node.props.children as ReactNode),
+    ...elements(node.props.actions as ReactNode),
+  ];
 }
 function render(onUndo: (id: string) => Promise<void>) {
   hooks.cursor = 0;
@@ -58,6 +63,12 @@ it('loads batches on demand, cancels safely, and removes only the confirmed batc
   click(render(onUndo), 'Undo');
   click(render(onUndo), 'Cancel');
   expect(onUndo).not.toHaveBeenCalled();
+  // The confirmation is a nested view: the back chevron returns to the list too.
+  click(render(onUndo), 'Undo');
+  const confirm = render(onUndo).find((node) => typeof node.props.onBack === 'function')!;
+  expect(confirm.props.title).toBe('Undo import?');
+  (confirm.props.onBack as () => void)();
+  expect(render(onUndo).find((node) => typeof node.props.onBack === 'function')).toBeUndefined();
   click(render(onUndo), 'Undo');
   click(render(onUndo), 'Undo import');
   await vi.waitFor(() => expect(onUndo).toHaveBeenCalledWith('one'));

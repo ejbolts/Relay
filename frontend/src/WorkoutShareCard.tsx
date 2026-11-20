@@ -118,7 +118,46 @@ export function WorkoutShareCard({
 
   return (
     <>
-      <PopupDialog title="Share workout" className="workout-share-dialog" onClose={onClose}>
+      <PopupDialog
+        title="Share workout"
+        className="workout-share-dialog"
+        onClose={onClose}
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={!file || busy || !canCopy}
+              title={canCopy ? undefined : 'Image copying is unavailable in this browser'}
+              onClick={() => void copy()}
+            >
+              {action === 'copy' ? 'Copying…' : 'Copy image'}
+            </button>
+            <button
+              type="button"
+              className={canShare ? undefined : 'popup-primary-action'}
+              disabled={!file || busy}
+              onClick={() => {
+                if (file) {
+                  downloadWorkoutCard(file);
+                  setMessage('Card downloaded');
+                }
+              }}
+            >
+              {!file && !error ? 'Preparing…' : 'Download PNG'}
+            </button>
+            {canShare && (
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={busy}
+                onClick={() => void share()}
+              >
+                {action === 'share' ? 'Sharing…' : 'Share image'}
+              </button>
+            )}
+          </>
+        }
+      >
         <div className="workout-share-layout">
           <div className="workout-share-preview">
             <img src={preview} alt="Workout card preview" width="1080" />
@@ -199,39 +238,6 @@ export function WorkoutShareCard({
             )}
           </p>
         )}
-        <div className="popup-dialog-actions">
-          <button
-            type="button"
-            disabled={!file || busy || !canCopy}
-            title={canCopy ? undefined : 'Image copying is unavailable in this browser'}
-            onClick={() => void copy()}
-          >
-            {action === 'copy' ? 'Copying…' : 'Copy image'}
-          </button>
-          <button
-            type="button"
-            className={canShare ? undefined : 'popup-primary-action'}
-            disabled={!file || busy}
-            onClick={() => {
-              if (file) {
-                downloadWorkoutCard(file);
-                setMessage('Card downloaded');
-              }
-            }}
-          >
-            {!file && !error ? 'Preparing…' : 'Download PNG'}
-          </button>
-          {canShare && (
-            <button
-              type="button"
-              className="popup-primary-action"
-              disabled={busy}
-              onClick={() => void share()}
-            >
-              {action === 'share' ? 'Sharing…' : 'Share image'}
-            </button>
-          )}
-        </div>
         {message && (
           <NotificationDialog message={message} onClose={() => setMessage(null)} portal={false} />
         )}

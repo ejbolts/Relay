@@ -327,20 +327,23 @@ it('shows a saved colour outside the palette as the custom choice', async () => 
   expect(button('Coral').getAttribute('aria-checked')).toBe('true');
 });
 
-it('returns to the blocks from an edit or removal instead of closing', async () => {
+it('steps back from an edit or removal, and × closes from any view', async () => {
   const update = vi.spyOn(api.trainingBlocks, 'update').mockResolvedValue(structuredClone(config));
   await open();
   await click('Edit Spring strength');
   expect(title()).toBe('Edit block');
   expect(button('Coral').getAttribute('aria-checked')).toBe('true');
-  await click('Close Edit block');
+  await click('Back');
   expect(onClose).not.toHaveBeenCalled();
   expect(title()).toBe('Training blocks');
 
   await click('Edit Spring strength');
   await click('Remove');
   expect(title()).toBe('Remove training block?');
-  await click('Close Remove training block?');
+  // The safe choice has focus, and the confirm is the red primary.
+  expect(document.activeElement?.textContent).toBe('Cancel');
+  expect(button('Remove block').className).toContain('is-danger');
+  await click('Back');
   expect(title()).toBe('Edit block');
   await click('Automatic colour');
   await submit();
@@ -352,6 +355,7 @@ it('returns to the blocks from an edit or removal instead of closing', async () 
   });
   expect(title()).toBe('Training blocks');
 
-  await click('Close Training blocks');
+  await click('Edit Spring strength');
+  await click('Close Edit block');
   expect(onClose).toHaveBeenCalledOnce();
 });

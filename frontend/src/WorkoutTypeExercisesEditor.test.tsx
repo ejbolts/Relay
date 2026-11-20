@@ -108,6 +108,14 @@ it('saves exercises to a workout type without a split', async () => {
 
   await act(async () => byLabel<HTMLButtonElement>('Arms exercises')!.click());
   expect(document.querySelector('dialog h2')!.textContent).toBe('Arms exercises');
+  // A full screen: back on the left and the shared header Save, with no close button.
+  const screen = document.querySelector('dialog')!;
+  expect(screen.classList).toContain('popup-dialog--screen');
+  expect(screen.querySelector('.popup-dialog-back')?.getAttribute('aria-label')).toBe('Back');
+  expect(screen.querySelector('.popup-dialog-close')).toBeNull();
+  expect(screen.querySelector('header button[type="submit"]')?.className).toBe(
+    'overlay-header-save routine-editor-save',
+  );
   await act(async () => byLabel<HTMLButtonElement>('Add exercise to Arms')!.click());
   const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) =>
     item.textContent?.includes('Band Biceps Curl'),

@@ -44,7 +44,29 @@ export function InactiveWorkoutDialog({
   onClose: () => void;
 }) {
   return (
-    <PopupDialog title="Unfinished workout" className="inactive-workout-dialog" onClose={onClose}>
+    <PopupDialog
+      title="Unfinished workout"
+      className="inactive-workout-dialog"
+      onClose={onClose}
+      actionsClassName="inactive-workout-actions"
+      actions={
+        <>
+          <button
+            type="button"
+            className="popup-tertiary-action is-danger inactive-workout-discard"
+            onClick={onDiscard}
+          >
+            {resuming ? 'Discard session' : 'Discard'}
+          </button>
+          <button type="button" autoFocus onClick={onResume}>
+            Resume
+          </button>
+          <button type="button" className="popup-primary-action" disabled={saving} onClick={onSave}>
+            {saving ? 'Saving…' : 'Save workout'}
+          </button>
+        </>
+      }
+    >
       <p>
         <strong>{name}</strong>
         <span>
@@ -52,17 +74,6 @@ export function InactiveWorkoutDialog({
           {loggedSets}&nbsp;{loggedSets === 1 ? 'set' : 'sets'}&nbsp;logged
         </span>
       </p>
-      <div className="popup-dialog-actions inactive-workout-actions">
-        <button type="button" className="inactive-workout-discard" onClick={onDiscard}>
-          {resuming ? 'Discard session' : 'Discard'}
-        </button>
-        <button type="button" autoFocus onClick={onResume}>
-          Resume
-        </button>
-        <button type="button" className="popup-primary-action" disabled={saving} onClick={onSave}>
-          {saving ? 'Saving…' : 'Save workout'}
-        </button>
-      </div>
     </PopupDialog>
   );
 }

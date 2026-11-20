@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
 import { formatSeconds } from './utils';
 import './restTimeSelect.css';
@@ -30,6 +30,7 @@ export function RestTimeSelect({
   const [minutes, setMinutes] = useState('');
   const [remainder, setRemainder] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const formId = useId();
   function close() {
     setEditing(false);
     window.requestAnimationFrame(() => select.current?.focus({ preventScroll: true }));
@@ -73,8 +74,23 @@ export function RestTimeSelect({
         <option value="custom">Custom...</option>
       </select>
       {editing && (
-        <PopupDialog title="Custom rest time" className="custom-rest-time-dialog" onClose={close}>
+        <PopupDialog
+          title="Custom rest time"
+          className="custom-rest-time-dialog"
+          onClose={close}
+          actions={
+            <>
+              <button type="button" onClick={close}>
+                Cancel
+              </button>
+              <button type="submit" form={formId} className="popup-primary-action">
+                Set rest time
+              </button>
+            </>
+          }
+        >
           <form
+            id={formId}
             className="custom-rest-time-form"
             onSubmit={(event) => {
               event.preventDefault();
@@ -138,14 +154,6 @@ export function RestTimeSelect({
                 {error}
               </p>
             )}
-            <div className="popup-dialog-actions">
-              <button type="button" onClick={close}>
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action">
-                Set rest time
-              </button>
-            </div>
           </form>
         </PopupDialog>
       )}

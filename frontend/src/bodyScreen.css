@@ -43,17 +43,6 @@
   stroke-width: 2.4;
 }
 
-/* Remove goal sits apart from Cancel and Save, in the danger colour. */
-.body-goal-form .popup-dialog-actions .body-goal-remove {
-  color: var(--p-danger);
-}
-
-@media (min-width: 481px) {
-  .body-goal-form .popup-dialog-actions .body-goal-remove {
-    margin-right: auto;
-  }
-}
-
 /* The dialogs open outside the app shell, so in light mode their fields take the light input
    surface the app's other fields use. */
 :root[data-colour-mode='light']

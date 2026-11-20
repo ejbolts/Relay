@@ -396,17 +396,17 @@ export function HomeLayoutSections({
           title={`Customise ${titleFor(customising)}`}
           className="home-section-customiser"
           onClose={() => setCustomising(null)}
-        >
-          <div className="home-customiser-body">
-            {customisers[customising]}
+          actions={
             <button
               type="button"
-              className="pulse-button primary home-customiser-done"
+              className="popup-primary-action home-customiser-done"
               onClick={() => setCustomising(null)}
             >
               Done
             </button>
-          </div>
+          }
+        >
+          <div className="home-customiser-body">{customisers[customising]}</div>
         </PopupDialog>
       )}
       {edit && (
