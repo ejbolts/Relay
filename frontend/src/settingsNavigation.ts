@@ -209,10 +209,10 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   },
   {
     id: 'username',
-    title: 'Change username',
+    title: 'Username',
     page: 'profile',
-    keywords: 'account login name edit',
-    selector: '.profile-identity input[autocomplete="username"]',
+    keywords: 'account login name handle change edit',
+    selector: '.profile-username-field',
     editProfile: true,
   },
   {

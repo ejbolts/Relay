@@ -43,6 +43,7 @@ import type {
   MuscleVolume,
   MuscleSetCreditInput,
   PasswordResetRequest,
+  UsernameReminderRequest,
   PersonalRecord,
   TrainingBlockInput,
   TrainingBlockSummary,
@@ -474,6 +475,12 @@ export const api = {
         { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ username }) },
         { signalExpiredSession: false },
       ),
+    requestUsernameReminder: (name: string) =>
+      request<void>(
+        '/api/auth/username-reminder-request',
+        { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ name }) },
+        { signalExpiredSession: false },
+      ),
   },
   admin: {
     feedback: () => request<AppFeedback[]>('/api/admin/feedback'),
@@ -498,6 +505,13 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ sex }),
       }),
+    /** The only way to change a username: people cannot change their own. */
+    setUserUsername: (userId: string, username: string) =>
+      request<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/username`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ username }),
+      }),
     resetUserPassword: (userId: string) =>
       request<{ temporary_password: string }>(
         `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
@@ -507,6 +521,12 @@ export const api = {
       request<PasswordResetRequest[]>('/api/admin/password-reset-requests'),
     dismissPasswordResetRequest: (userId: string) =>
       request<void>(`/api/admin/password-reset-requests/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
+    usernameReminderRequests: () =>
+      request<UsernameReminderRequest[]>('/api/admin/username-reminder-requests'),
+    dismissUsernameReminderRequest: (userId: string) =>
+      request<void>(`/api/admin/username-reminder-requests/${encodeURIComponent(userId)}`, {
         method: 'DELETE',
       }),
     settings: () => request<ServerSettings>('/api/admin/settings'),

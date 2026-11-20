@@ -910,6 +910,8 @@ export interface AdminUser {
   must_change_password: boolean;
   /** The person asked for a temporary password from the sign-in screen and is still waiting. */
   password_reset_requested_at?: string | null;
+  /** Someone gave this account's name on the sign-in screen and is waiting for its username. */
+  username_reminder_requested_at?: string | null;
   created_at: string;
   last_active_at: string | null;
   /** Admin-only live activity, including accounts that do not share with friends. */
@@ -931,6 +933,9 @@ export interface PasswordResetRequest {
   display_name: string;
   requested_at: string;
 }
+
+/** A signed-out person who gave this account's name and is waiting to be told its username. */
+export type UsernameReminderRequest = PasswordResetRequest;
 
 export interface ServerSettings {
   video_uploads: VideoUploadMode;

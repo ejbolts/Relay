@@ -41,6 +41,10 @@ export function authErrorMessage(reason: unknown): string {
         return 'Too many attempts. Wait a few minutes before trying again.';
       case 'username_taken':
         return 'An account with that username already exists. Try signing in instead.';
+      case 'display_name_taken':
+        return 'Another account already uses that name. Add a surname, initial or nickname.';
+      case 'username_locked':
+        return 'Only an administrator can change your username.';
       case 'registration_closed':
         return 'New accounts are not being accepted right now.';
       case 'setup_required':
@@ -156,9 +160,11 @@ export async function submitAuthForm(
       fieldErrors:
         code === 'username_taken'
           ? { username: 'This username is already registered.' }
-          : code === 'invalid_invite_code'
-            ? { inviteCode: 'This invite code was not accepted.' }
-            : {},
+          : code === 'display_name_taken'
+            ? { displayName: 'This name is already used.' }
+            : code === 'invalid_invite_code'
+              ? { inviteCode: 'This invite code was not accepted.' }
+              : {},
       needsInviteCode: code === 'invalid_invite_code',
     };
   }

@@ -32,6 +32,7 @@ import type {
   ReactionNotice,
   CommentNotice,
   PasswordResetRequest,
+  UsernameReminderRequest,
 } from './types';
 import './FollowNotifications.css';
 
@@ -41,6 +42,7 @@ type NotificationRow =
   | { kind: 'release'; item: Release }
   | { kind: 'weekly-review'; item: WeeklyReviewNotice }
   | { kind: 'password-reset'; item: PasswordResetRequest }
+  | { kind: 'username-reminder'; item: UsernameReminderRequest }
   | { kind: 'comment'; item: CommentNotice }
   | { kind: 'request'; item: SharingConnection }
   | { kind: 'reaction'; item: ReactionNotice }
@@ -53,6 +55,8 @@ interface LocalNotices {
   weeklyReview?: WeeklyReviewNotice | null;
   /** Only loaded for administrators. */
   resetRequests?: PasswordResetRequest[];
+  /** Only loaded for administrators. */
+  usernameRequests?: UsernameReminderRequest[];
 }
 
 /** The start of the day after the reviewed week, when its review became available. */
@@ -64,12 +68,19 @@ function weeklyReviewTime(notice: WeeklyReviewNotice): number {
 
 function notificationRows(
   items: SharingNotifications,
-  { release, releaseUnread = false, weeklyReview, resetRequests = [] }: LocalNotices = {},
+  {
+    release,
+    releaseUnread = false,
+    weeklyReview,
+    resetRequests = [],
+    usernameRequests = [],
+  }: LocalNotices = {},
 ): NotificationRow[] {
   const rows: NotificationRow[] = [
     ...(release ? [{ kind: 'release' as const, item: release }] : []),
     ...(weeklyReview ? [{ kind: 'weekly-review' as const, item: weeklyReview }] : []),
     ...resetRequests.map((item) => ({ kind: 'password-reset' as const, item })),
+    ...usernameRequests.map((item) => ({ kind: 'username-reminder' as const, item })),
     ...(items.comments ?? []).map((item) => ({ kind: 'comment' as const, item })),
     ...items.requests.map((item) => ({ kind: 'request' as const, item })),
     ...(items.reactions ?? []).map((item) => ({ kind: 'reaction' as const, item })),
@@ -80,7 +91,7 @@ function notificationRows(
     const value = Date.parse(
       row.kind === 'release'
         ? (row.item.date ?? '')
-        : row.kind === 'password-reset'
+        : row.kind === 'password-reset' || row.kind === 'username-reminder'
           ? row.item.requested_at
           : row.item.since,
     );
@@ -209,9 +220,12 @@ export function FollowNotifications({ active }: { active: boolean }) {
   const restoreBellFocus = useRef(false);
   const isAdmin = useUserSession().user?.is_admin === true;
   const [resetRequests, setResetRequests] = useState<PasswordResetRequest[]>([]);
+  const [usernameRequests, setUsernameRequests] = useState<UsernameReminderRequest[]>([]);
   // Read by the refresh below without restarting its polling when the requests change.
   const resetRequestsRef = useRef(resetRequests);
   resetRequestsRef.current = resetRequests;
+  const usernameRequestsRef = useRef(usernameRequests);
+  usernameRequestsRef.current = usernameRequests;
 
   useEffect(() => {
     // Runs after the notes dialog has closed, so its own focus restoration cannot override this.
@@ -246,6 +260,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               releaseUnread,
               weeklyReview,
               resetRequests: resetRequestsRef.current,
+              usernameRequests: usernameRequestsRef.current,
             }),
           );
           if (open && unread.length) {
@@ -279,7 +294,8 @@ export function FollowNotifications({ active }: { active: boolean }) {
   }, [active, open, attempt, page, release, releaseUnread, weeklyReview]);
 
   useEffect(() => {
-    // Administrators also see people waiting for a temporary password, until it is handled.
+    // Administrators also see people waiting for a temporary password or their username, until
+    // it is handled.
     if (!active || !isAdmin) return;
     let cancelled = false;
     function refresh() {
@@ -288,6 +304,12 @@ export function FollowNotifications({ active }: { active: boolean }) {
         .passwordResetRequests()
         .then((next) => {
           if (!cancelled) setResetRequests(next);
+        })
+        .catch(() => undefined);
+      void api.admin
+        .usernameReminderRequests()
+        .then((next) => {
+          if (!cancelled) setUsernameRequests(next);
         })
         .catch(() => undefined);
     }
@@ -305,6 +327,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
     };
   }, [active, isAdmin, open]);
   const waitingResets = isAdmin ? resetRequests : [];
+  const waitingUsernames = isAdmin ? usernameRequests : [];
 
   useEffect(() => {
     if (!open || !items) return;
@@ -353,13 +376,15 @@ export function FollowNotifications({ active }: { active: boolean }) {
     Number(announcement?.noticeUnread ?? false) +
     Number(weeklyReview?.unread ?? false) +
     // Like friend requests, these count until they have been dealt with.
-    waitingResets.length;
+    waitingResets.length +
+    waitingUsernames.length;
   const currentItems = items ?? { requests: [], accepted: [] };
   const notices = {
     release,
     releaseUnread,
     weeklyReview,
     resetRequests: waitingResets,
+    usernameRequests: waitingUsernames,
   };
   const rows = notificationRows(currentItems, notices);
   const total = rows.length;
@@ -497,6 +522,32 @@ export function FollowNotifications({ active }: { active: boolean }) {
                     type="button"
                     className="pulse-button secondary small release-notification-view"
                     aria-label={`Review ${row.item.display_name}’s password reset request`}
+                    onClick={() => {
+                      setOpen(false);
+                      requestAdminAccountFocus(row.item.user_id);
+                    }}
+                  >
+                    Review
+                  </button>
+                </li>
+              ) : row.kind === 'username-reminder' ? (
+                <li
+                  key={`username-reminder-${row.item.user_id}`}
+                  className="release-notification-row username-reminder-notification-row"
+                >
+                  <span className="release-notification-icon" aria-hidden="true">
+                    <Icon name="user" />
+                  </span>
+                  <div className="follow-notification-copy">
+                    <p>
+                      <strong>{row.item.display_name}</strong> asked for their username
+                      <NotificationDate since={row.item.requested_at} />
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-secondary release-notification-view"
+                    aria-label={`Review ${row.item.display_name}’s username request`}
                     onClick={() => {
                       setOpen(false);
                       requestAdminAccountFocus(row.item.user_id);
