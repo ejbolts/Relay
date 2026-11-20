@@ -36,7 +36,7 @@ import {
 } from 'react';
 import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import { api, revisionAfterSave } from './api';
+import { api, revisionAfterSave, revisionAtSignIn } from './api';
 import { SetDragHandle } from './SetDragHandle';
 import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
@@ -896,7 +896,24 @@ function AppContent() {
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
-  const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
+  // The revision the server reported when it confirmed who is signed in. With it, the first
+  // reads and the other tabs' background loads all start together instead of in turn.
+  const [startRevision] = useState(() => (user ? revisionAtSignIn(user) : null));
+  /** What the server has answered this visit; this device's saved copies never replace it. */
+  const answeredRef = useRef({
+    exercises: false,
+    workouts: false,
+    records: false,
+    checkIns: false,
+  });
+  /** Set once the first refresh has finished, so background loads for hidden screens can follow. */
+  const [startupRefreshed, setStartupRefreshed] = useState(false);
+  const exerciseLibrary = useExerciseLibrary(
+    exercises,
+    dataRevision ?? startRevision,
+    !loading || startRevision !== null,
+    exerciseCatalogue.loaded,
+  );
   const { show: showToast, active: toastActive } = useToast();
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
@@ -1313,6 +1330,7 @@ function AppContent() {
           .listExercises()
           .then((nextExercises) => {
             if (!current()) return;
+            answeredRef.current.exercises = true;
             // Publish readiness with the actual catalogue, so an urgent loading update cannot
             // mount the logger against an empty or partial list and overwrite its stored draft.
             setExerciseCatalogue({ exercises: nextExercises, loaded: true, error: null });
@@ -1325,11 +1343,13 @@ function AppContent() {
             }));
             throw reason;
           }),
-        (revision && knownRevision
+        // The revision read above already precedes this read, so it is not asked for again.
+        (revision
           ? api.listWorkouts(windowStart, revision.revision)
           : api.listWorkouts(windowStart)
         ).then((nextWorkouts) => {
           if (!current()) return;
+          answeredRef.current.workouts = true;
           loadedWorkouts = nextWorkouts;
           startTransition(() =>
             setWorkouts((current) => [
@@ -1340,10 +1360,12 @@ function AppContent() {
         }),
         api.listBodyMeasurements().then((nextMeasurements) => {
           if (!current()) return;
+          answeredRef.current.checkIns = true;
           startTransition(() => setMeasurements(nextMeasurements));
         }),
         api.listPersonalRecords().then((nextRecords) => {
           if (!current()) return;
+          answeredRef.current.records = true;
           startTransition(() => setPersonalRecords(nextRecords));
         }),
       ]);
@@ -1356,6 +1378,9 @@ function AppContent() {
       ) {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
+        // Every read was just saved on this device at this revision, so the next opening can
+        // start from those copies while it reads again.
+        if (revision) void api.rememberStartupData(revision.revision).catch(() => undefined);
         window.dispatchEvent(new Event('training-data-refreshed'));
         forgetFinishIfGone(loadedWorkouts, windowStart);
       }
@@ -1470,10 +1495,38 @@ function AppContent() {
     initialRefreshStartedRef.current = true;
     let cancelled = false;
 
+    const refreshed = () => {
+      if (!cancelled) setStartupRefreshed(true);
+    };
     void readDashboardCache().then((cachedDashboard) => {
-      if (!cancelled && cachedDashboard) setDashboard(cachedDashboard);
-      if (!cancelled) void refreshData();
+      // The server's dashboard can arrive first; this device's older copy never replaces it.
+      if (!cancelled && cachedDashboard) setDashboard((current) => current ?? cachedDashboard);
+      if (!cancelled && !startRevision) void refreshData().then(refreshed, refreshed);
     });
+    if (startRevision) {
+      // With the revision already known, the reads do not wait for the saved dashboard either.
+      void Promise.resolve().then(() => {
+        if (!cancelled)
+          void refreshData({ knownRevision: startRevision }).then(refreshed, refreshed);
+      });
+      // Nothing has changed since this device last saved its copies, so the app opens with them
+      // straight away. The reads above still replace them with the server's answers.
+      void api
+        .savedStartupData(startRevision, historyStartRef.current)
+        .then((saved) => {
+          if (cancelled || !saved) return;
+          const answered = answeredRef.current;
+          if (!answered.exercises)
+            setExerciseCatalogue({ exercises: saved.exercises, loaded: true, error: null });
+          if (!answered.workouts) setWorkouts(saved.workouts);
+          if (!answered.records) setPersonalRecords(saved.personalRecords);
+          if (!answered.checkIns) setMeasurements(saved.measurements);
+          setDataRevision((current) => current ?? startRevision);
+          setLoading(false);
+        })
+        // Unreadable copies only mean waiting for the server, as before.
+        .catch(() => undefined);
+    }
 
     return () => {
       cancelled = true;
@@ -2841,8 +2894,8 @@ function AppContent() {
               />
             </CachedTabPanel>
           )}
-          {/* Like the exercise library, Social loads in the background once the app's data is in. */}
-          {user && (tab === 'social' || visitedTabs.has('social') || !loading) && (
+          {/* Like the exercise library, Social loads in the background alongside Home's data. */}
+          {user && (
             <CachedTabPanel active={tab === 'social'}>
               <SocialScreen
                 active={tab === 'social'}
@@ -2863,6 +2916,7 @@ function AppContent() {
                 onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
+                preloadReady={startupRefreshed}
                 onChooseSharing={openSharingSettings}
                 renderWorkouts={(props) => (
                   <SharedWorkoutHistory

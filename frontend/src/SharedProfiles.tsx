@@ -1282,6 +1282,7 @@ export function SharedProfileScreen({
   renderWorkouts,
   onChooseSharing,
   active = true,
+  preloadReady = true,
   ownProfile,
   invite = false,
   onLoaded,
@@ -1291,6 +1292,8 @@ export function SharedProfileScreen({
   profileId: string;
   targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>;
   active?: boolean;
+  /** Your own profile loads while hidden, but only once this is true. */
+  preloadReady?: boolean;
   ownProfile?: { user: User; onSaved: (user: User) => void };
   /** Opened from a friend QR code or invite link. */
   invite?: boolean;
@@ -1356,7 +1359,7 @@ export function SharedProfileScreen({
   const invalidDates = Boolean(
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
-  const preload = Boolean(ownProfile);
+  const preload = Boolean(ownProfile) && preloadReady;
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
   // Scanning a friend QR code sends the request once, before the profile first appears. Every
