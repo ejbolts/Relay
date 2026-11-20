@@ -320,7 +320,7 @@ export function ExerciseLibraryList({
           {blocks.error && (
             <p className="exercise-list-options-error" role="alert">
               {blocks.error}{' '}
-              <button type="button" className="text-link" onClick={blocks.retry}>
+              <button type="button" className="pulse-button link small" onClick={blocks.retry}>
                 Retry
               </button>
             </p>
@@ -370,7 +370,7 @@ export function ExerciseLibraryList({
       {error && (
         <div className="exercise-progress-error" role="alert">
           Could not load exercise trends.{' '}
-          <button type="button" className="text-link" onClick={retry}>
+          <button type="button" className="pulse-button link small" onClick={retry}>
             Retry
           </button>
         </div>

@@ -142,11 +142,6 @@
   gap: 0.5rem;
   font-size: 0.75rem;
 }
-.machine-settings-error button {
-  padding: 0 0.5rem;
-  background: transparent;
-  color: var(--p-accent-text);
-}
 .machine-settings-summary {
   display: flex;
   flex-wrap: wrap;

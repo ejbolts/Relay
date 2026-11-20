@@ -55,6 +55,13 @@
   color: var(--p-danger);
 }
 
+/* Delete's confirm step stacks inside the narrow menu: the danger button above Cancel. */
+.body-row-menu .inline-confirmation {
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.5rem;
+}
+
 /* Option B: the new goal on the left, its start date on the right, joined by round dots. */
 .body-history-goal-divider {
   display: flex;

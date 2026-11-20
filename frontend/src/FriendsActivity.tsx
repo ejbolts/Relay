@@ -152,7 +152,7 @@ export function FriendsActivityCard({
         <h2 id={titleId}>{title}</h2>
         <button
           type="button"
-          className="text-link"
+          className="pulse-button link small"
           onClick={state.kind === 'locked' ? (onChooseSharing ?? onOpenFriends) : onOpenFriends}
         >
           {state.kind === 'locked' ? 'Share' : friendsLabel}

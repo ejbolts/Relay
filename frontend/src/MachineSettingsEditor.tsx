@@ -147,7 +147,11 @@ export function MachineSettingsEditor({
       ) : loadError ? (
         <div className="machine-settings-error" role="alert">
           Could not load settings.
-          <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
             Retry
           </button>
         </div>

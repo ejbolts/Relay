@@ -270,7 +270,10 @@
 }
 :root[data-colour-mode='light'] .body-history-panel > article,
 :root[data-colour-mode='light'] .body-row-menu .body-history-actions,
-:root[data-colour-mode='light'] .body-row-menu .body-history-actions button {
+:root[data-colour-mode='light']
+  .body-row-menu
+  .body-history-actions
+  button:where(:not(.pulse-button)) {
   border-color: var(--p-line-strong);
 }
 :root[data-colour-mode='light'] .app-tab-start.live .app-tab-start-bubble {

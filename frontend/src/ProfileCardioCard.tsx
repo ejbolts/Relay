@@ -132,6 +132,7 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
           </p>
           <button
             type="button"
+            className="pulse-button small"
             onClick={() => setRequest((current) => ({ ...current, serial: current.serial + 1 }))}
           >
             Try again
