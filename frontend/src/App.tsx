@@ -901,6 +901,9 @@ function AppContent() {
   // The revision the server reported when it confirmed who is signed in. With it, the first
   // reads and the other tabs' background loads all start together instead of in turn.
   const [startRevision] = useState(() => (user ? revisionAtSignIn(user) : null));
+  // The revision the opening reads start from: that one, or the one the app asked for itself
+  // (an account opened before its session check answered, or an older server).
+  const [openingRevision, setOpeningRevision] = useState(startRevision);
   /** What the server has answered this visit; this device's saved copies never replace it. */
   const answeredRef = useRef({
     exercises: false,
@@ -924,8 +927,8 @@ function AppContent() {
   const exerciseEditsRef = useRef(0);
   const exerciseLibrary = useExerciseLibrary(
     exercises,
-    dataRevision ?? startRevision,
-    !loading || startRevision !== null,
+    dataRevision ?? openingRevision,
+    !loading || openingRevision !== null,
     exerciseCatalogue.loaded,
   );
   const { show: showToast, active: toastActive } = useToast();
@@ -1284,11 +1287,14 @@ function AppContent() {
     silent = false,
     activityLabel = trainingDataActivityLabel('startup'),
     knownRevision = null,
+    onRevision,
   }: {
     silent?: boolean;
     activityLabel?: string | null;
     /** A revision the server already reported, such as a save's, so the reads start at once. */
     knownRevision?: string | null;
+    /** Told the revision the reads start from, as soon as it is known. */
+    onRevision?: (revision: string) => void;
   } = {}) {
     const generation = ++refreshGenerationRef.current;
     const cacheScope = captureAccountCacheScope();
@@ -1303,6 +1309,7 @@ function AppContent() {
           ? { revision: knownRevision }
           : await api.workoutRevision().catch(() => null);
       if (!current()) return;
+      if (revision) onRevision?.(revision.revision);
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
       const savedAnswersBefore = savedDataAnswerCount();
@@ -1531,18 +1538,15 @@ function AppContent() {
     void readDashboardCache().then((cachedDashboard) => {
       // The server's dashboard can arrive first; this device's older copy never replaces it.
       if (!cancelled && cachedDashboard) setDashboard((current) => current ?? cachedDashboard);
-      if (!cancelled && !startRevision) void refreshData().then(refreshed, refreshed);
     });
-    if (startRevision) {
-      // With the revision already known, the reads do not wait for the saved dashboard either.
-      void Promise.resolve().then(() => {
-        if (!cancelled)
-          void refreshData({ knownRevision: startRevision }).then(refreshed, refreshed);
-      });
-      // Nothing has changed since this device last saved its copies, so the app opens with them
-      // straight away. The reads above still replace them with the server's answers.
+    // Once the revision the reads start from is known, this device's copies are checked against
+    // it. When nothing has changed since they were saved, the app opens with them straight away;
+    // the reads still replace them with the server's answers.
+    const opening = (revision: string) => {
+      if (cancelled) return;
+      setOpeningRevision(revision);
       void api
-        .savedStartupData(startRevision, historyStartRef.current)
+        .savedStartupData(revision, historyStartRef.current)
         .then((saved) => {
           if (cancelled || !saved) return;
           const answered = answeredRef.current;
@@ -1551,14 +1555,23 @@ function AppContent() {
           if (!answered.workouts) setWorkouts(saved.workouts);
           if (!answered.records) setPersonalRecords(saved.personalRecords);
           if (!answered.checkIns) setMeasurements(saved.measurements);
-          setDataRevision((current) => current ?? startRevision);
+          setDataRevision((current) => current ?? revision);
           setLoading(false);
           // The saved dashboard was read for a particular day, so it is only current on that day.
           if (saved.dashboardDate === localDate()) setHomeConfirmed(true);
         })
         // Unreadable copies only mean waiting for the server, as before.
         .catch(() => undefined);
-    }
+    };
+    // The reads do not wait for the saved dashboard. With the revision from the session check
+    // they start at once; otherwise they ask for it first.
+    void Promise.resolve().then(() => {
+      if (!cancelled)
+        void refreshData({ knownRevision: startRevision, onRevision: opening }).then(
+          refreshed,
+          refreshed,
+        );
+    });
 
     return () => {
       cancelled = true;

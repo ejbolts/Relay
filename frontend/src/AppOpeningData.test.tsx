@@ -224,8 +224,9 @@ it('starts every opening read at once when the session check reported the revisi
 it('asks for the revision once when the server did not report it', async () => {
   await open(await signedIn(null));
 
-  expect(api.savedStartupData).not.toHaveBeenCalled();
   expect(api.workoutRevision).toHaveBeenCalledOnce();
+  // The saved copies are checked against the revision whichever way it was learnt.
+  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith('asked', expect.any(String));
   // The workouts read reuses that answer instead of asking again.
   expect(api.listWorkouts).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'asked');
   expect(api.rememberStartupData).toHaveBeenCalledExactlyOnceWith('asked', localDate());
@@ -351,4 +352,32 @@ it('keeps an exercise added here when an older read of the list answers afterwar
   expect(api.listExercises).toHaveBeenCalledTimes(2);
   expect(api.rememberStartupData).toHaveBeenCalledExactlyOnceWith('rev-1', localDate());
   expect(host.querySelector('[data-exercise-id="custom"]')?.textContent).toContain('Custom press');
+});
+
+it('opens a remembered account with its saved copies as soon as the revision is known', async () => {
+  // Opened before the session check answered, so the app asks for the revision itself.
+  const revision = held<{ revision: string }>();
+  vi.mocked(api.workoutRevision).mockReturnValue(revision.promise);
+  const exercises = held<Exercise[]>();
+  vi.mocked(api.listExercises).mockReturnValue(exercises.promise);
+  vi.mocked(api.savedStartupData).mockResolvedValue(saved('Saved press'));
+  await open(await signedIn(null), 'progress');
+
+  // Nothing vouches for the saved lists yet, and nothing is read before the revision.
+  expect(host.querySelector('.today-loading-skeleton')).not.toBeNull();
+  expect(api.savedStartupData).not.toHaveBeenCalled();
+  expect(api.dashboard).not.toHaveBeenCalled();
+  expect(api.exerciseLibrary).not.toHaveBeenCalled();
+
+  await act(async () => revision.answer({ revision: 'rev-1' }));
+  expect(api.savedStartupData).toHaveBeenCalledExactlyOnceWith('rev-1', expect.any(String));
+  expect(host.querySelector('.today-loading-skeleton')).toBeNull();
+  expect(host.textContent).toContain('Saved press');
+  expect(api.listWorkouts).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'rev-1');
+  expect(api.exerciseLibrary).toHaveBeenCalledOnce();
+
+  // The same exercise as the server has it now: the list did not change, so the trends stand.
+  await act(async () => exercises.answer([{ ...exercise('Saved press'), name: 'Server press' }]));
+  expect(host.textContent).toContain('Server press');
+  expect(api.exerciseLibrary).toHaveBeenCalledOnce();
 });

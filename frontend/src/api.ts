@@ -106,6 +106,7 @@ import {
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
+import { sessionConfirmation } from './sessionGate';
 import { beginWrite, reportClientOutdated, trackWrite } from './appUpdates';
 import {
   CLIENT_VERSION,
@@ -226,6 +227,18 @@ function isUnreachable(reason: unknown): boolean {
   return reason instanceof TypeError;
 }
 
+/**
+ * Waits while the app is open on a remembered account the server has not confirmed yet, so no
+ * change is sent on behalf of a session that might be gone or belong to another account. Refuses
+ * the change when the session turns out to have ended. Signing in and out are never held.
+ */
+async function changeAllowed(path: string): Promise<void> {
+  const confirmation = sessionConfirmation();
+  if (!confirmation || path.startsWith('/api/auth/')) return;
+  if ((await confirmation) === 'ended')
+    throw new ApiError('Sign in again to continue.', NOT_AUTHENTICATED_CODE, 401);
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
@@ -235,15 +248,20 @@ async function request<T>(
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const changes = method !== 'GET' && method !== 'HEAD';
+  if (changes && sessionConfirmation()) {
+    await changeAllowed(path);
+    checkAccount();
+  }
   const sent = fetch(path, {
     ...init,
     headers: withClientVersion(init?.headers),
     credentials: 'same-origin',
   });
-  const method = init?.method?.toUpperCase() ?? 'GET';
   let response: Response;
   try {
-    response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
+    response = await (changes ? trackWrite(sent) : sent);
   } catch (reason) {
     if (isUnreachable(reason)) reportConnectionFailure('unreachable');
     throw reason;
@@ -1343,38 +1361,42 @@ export const api = {
     clip: { clientId: string; file: File; exerciseLabel: string; orderIndex: number },
     onProgress: (percent: number) => void,
   ) =>
-    new Promise<Clip>((resolve, reject) => {
-      const form = new FormData();
-      form.append('client_clip_id', clip.clientId);
-      form.append('order_index', String(clip.orderIndex));
-      form.append('exercise_label', clip.exerciseLabel);
-      form.append('file', clip.file, clip.file.name);
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/sessions/${sessionId}/clips`);
-      xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
-      xhr.onloadend = beginWrite();
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-      };
-      xhr.onerror = () => reject(new ApiError('Network error while uploading this clip.'));
-      xhr.onload = () => {
-        const body = xhr.responseText
-          ? (JSON.parse(xhr.responseText) as { error?: { code?: string; message?: string } })
-          : null;
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(body as unknown as Clip);
-          return;
-        }
-        if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE) emitAuthExpired();
-        if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
-        reject(
-          new ApiError(
-            body?.error?.message ?? `Upload failed (${xhr.status})`,
-            body?.error?.code,
-            xhr.status,
-          ),
-        );
-      };
-      xhr.send(form);
-    }),
+    changeAllowed(`/api/sessions/${sessionId}/clips`).then(
+      () =>
+        new Promise<Clip>((resolve, reject) => {
+          const form = new FormData();
+          form.append('client_clip_id', clip.clientId);
+          form.append('order_index', String(clip.orderIndex));
+          form.append('exercise_label', clip.exerciseLabel);
+          form.append('file', clip.file, clip.file.name);
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `/api/sessions/${sessionId}/clips`);
+          xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
+          xhr.onloadend = beginWrite();
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+          };
+          xhr.onerror = () => reject(new ApiError('Network error while uploading this clip.'));
+          xhr.onload = () => {
+            const body = xhr.responseText
+              ? (JSON.parse(xhr.responseText) as { error?: { code?: string; message?: string } })
+              : null;
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(body as unknown as Clip);
+              return;
+            }
+            if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE)
+              emitAuthExpired();
+            if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
+            reject(
+              new ApiError(
+                body?.error?.message ?? `Upload failed (${xhr.status})`,
+                body?.error?.code,
+                xhr.status,
+              ),
+            );
+          };
+          xhr.send(form);
+        }),
+    ),
 };
