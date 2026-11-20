@@ -23,7 +23,7 @@ import {
 } from './sessionCleanup';
 import { holdChangesUntilSessionConfirmed, type SessionHold } from './sessionGate';
 import { rememberAccountDeleted, signInNoticeText, takeAccountDeleted } from './signInNotice';
-import { TodaySkeleton } from './TodayScreen';
+import { TodaySkeleton } from './TodaySkeleton';
 import type { AuthConfig, User } from './types';
 import { UserContext, type UserSession } from './userContext';
 import { useSessionConnection } from './useSessionConnection';
@@ -38,7 +38,7 @@ export function AuthLoading() {
   );
 }
 
-function AuthUnreachable({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function AuthUnreachable({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <main className="auth-screen">
       <div className="auth-shell">
