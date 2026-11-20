@@ -17,9 +17,10 @@ function withoutRepeats(items: TimelineItem[]): TimelineItem[] {
 
 /**
  * Social's feed, a page at a time. While `active` it reloads on focus, when the app is shown
- * again or comes back online, and every minute, so new sessions and reactions appear.
+ * again or comes back online, and every minute, so new sessions and reactions appear. With
+ * `preload`, the first page is read once in the background before the feed is first shown.
  */
-export function useTimeline(active: boolean) {
+export function useTimeline(active: boolean, preload = false) {
   const [items, setItems] = useState<TimelineItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [state, setState] = useState<TimelineState>('loading');
@@ -28,9 +29,11 @@ export function useTimeline(active: boolean) {
   const [version, setVersion] = useState(0);
   const shown = useRef(0);
   shown.current = items?.length ?? 0;
+  const settled = useRef(false);
 
   useEffect(() => {
-    if (!active) return;
+    // A background read happens once; refreshing waits until the feed is shown.
+    if (!active && (!preload || settled.current)) return;
     let cancelled = false;
     let request = 0;
     function load() {
@@ -41,6 +44,7 @@ export function useTimeline(active: boolean) {
         .timeline(0, size)
         .then((page) => {
           if (cancelled || current !== request) return;
+          settled.current = true;
           setItems((existing) => {
             // Workouts beyond the reloaded part stay as they were.
             const kept = existing && existing.length > size ? existing.slice(size) : [];
@@ -52,6 +56,7 @@ export function useTimeline(active: boolean) {
         })
         .catch((reason: unknown) => {
           if (cancelled || current !== request) return;
+          settled.current = true;
           if (reason instanceof ApiError && reason.code === 'sharing_required') {
             setItems(null);
             setState('locked');
@@ -63,6 +68,11 @@ export function useTimeline(active: boolean) {
         });
     }
     load();
+    if (!active) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const timer = window.setInterval(load, REFRESH_MS);
     window.addEventListener('focus', load);
     window.addEventListener('online', load);
@@ -74,7 +84,7 @@ export function useTimeline(active: boolean) {
       window.removeEventListener('online', load);
       document.removeEventListener('visibilitychange', load);
     };
-  }, [active, version]);
+  }, [active, preload, version]);
 
   const refresh = useCallback(() => setVersion((current) => current + 1), []);
 

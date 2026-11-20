@@ -156,11 +156,58 @@ it('shows a loading status on Friends until the initial friends response arrives
     }),
   );
   await render();
-  expect(host.querySelector('[role="status"]')?.textContent).toBe('Loading your friends…');
+  const skeleton = host.querySelector('.find-loading-skeleton');
+  expect(skeleton?.getAttribute('role')).toBe('status');
+  expect(skeleton?.textContent).toBe('Loading your friends…');
+  expect(skeleton?.querySelectorAll('.find-skeleton-row')).toHaveLength(3);
 
   await act(async () => resolve(connections));
-  expect(host.textContent).not.toContain('Loading your friends');
+  expect(host.querySelector('.find-loading-skeleton')).toBeNull();
   expect(host.textContent).toContain('Alex Sample');
+});
+
+it('reads friends and the feed once in the background before Social is opened', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  try {
+    await act(async () =>
+      root.render(
+        <SocialScreen
+          active={false}
+          preload
+          onOpenProfile={openProfile}
+          onOpenOwnProfile={openOwnProfile}
+          onChooseSharing={chooseSharing}
+          onOpenSettings={vi.fn()}
+        />,
+      ),
+    );
+    expect(api.sharing.friends).toHaveBeenCalledOnce();
+    expect(api.sharing.timeline).toHaveBeenCalledOnce();
+    expect(api.sharing.notifications).not.toHaveBeenCalled();
+    expect(host.querySelector('.page-eyebrow')?.textContent).toBe('2 friends');
+
+    // Hidden, it neither polls nor refreshes on focus.
+    await act(async () => {
+      vi.advanceTimersByTime(120_000);
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(api.sharing.friends).toHaveBeenCalledOnce();
+    expect(api.sharing.timeline).toHaveBeenCalledOnce();
+
+    // Opening it shows the loaded friends straight away and refreshes them.
+    await render(true);
+    expect(host.querySelector('.find-loading-skeleton')).toBeNull();
+    expect(host.textContent).toContain('Alex Sample');
+    expect(api.sharing.friends).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('does not read Social in the background without preload', async () => {
+  await render(false, 'Feed');
+  expect(api.sharing.friends).not.toHaveBeenCalled();
+  expect(api.sharing.timeline).not.toHaveBeenCalled();
 });
 
 it('keeps the existing friends visible during a slow background refresh', async () => {

@@ -851,9 +851,7 @@ export function FindPanel({
     return state === 'error' ? (
       <LoadProblem message={error ?? 'Could not load your friends.'} onRetry={onRetry} />
     ) : (
-      <p className="sharing-loading" role="status">
-        Loading your friends…
-      </p>
+      <FriendsSkeleton />
     );
   }
   const open = (person: SharingConnection) => () => onOpenProfile(person);
@@ -1223,6 +1221,31 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
         </dd>
       </div>
     </dl>
+  );
+}
+
+/** The outline of Social's Friends list while it loads: a search box and a group of friends. */
+function FriendsSkeleton() {
+  return (
+    <div className="friends-loading-skeleton find-loading-skeleton" role="status">
+      <span className="sr-only">Loading your friends…</span>
+      <div className="find-skeleton-group" aria-hidden="true">
+        <span className="skeleton-block find-skeleton-heading" />
+        <span className="skeleton-block find-skeleton-search" />
+      </div>
+      <div className="find-skeleton-group" aria-hidden="true">
+        <span className="skeleton-block find-skeleton-heading" />
+        {[0, 1, 2].map((row) => (
+          <span className="find-skeleton-row" key={row}>
+            <span className="skeleton-block friend-skeleton-avatar" />
+            <span className="find-skeleton-copy">
+              <span className="skeleton-block friend-skeleton-name" />
+              <span className="skeleton-block friend-skeleton-meta" />
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
