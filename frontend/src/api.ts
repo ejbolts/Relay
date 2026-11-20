@@ -366,6 +366,19 @@ function accountRead<T>(path: string, savedKey = `response:${path}`): Promise<T>
   );
 }
 
+/**
+ * The copy of an account read this device saved, without asking the server. Null when there is
+ * none. Screens show it while the usual read is under way, so they open in their final shape
+ * instead of rearranging when the answer arrives.
+ */
+async function savedAccountRead<T>(path: string, savedKey = `response:${path}`): Promise<T | null> {
+  const scope = captureAccountCacheScope();
+  const owner = scope.owner;
+  if (!owner) return null;
+  const saved = await readOffline<T>(savedKey, owner);
+  return saved && scope.isCurrent() ? saved.value : null;
+}
+
 async function requestBlob(path: string): Promise<Blob> {
   const scope = captureAccountCacheScope();
   const checkAccount = () => {
@@ -874,6 +887,18 @@ export const api = {
     }),
   listSessions: () => request<WorkoutSession[]>('/api/sessions'),
   listExercises: () => accountRead<Exercise[]>(EXERCISES_PATH),
+  /**
+   * This device's copies of the settings Home is built from. Each is shown until the read of the
+   * same name answers; nothing is saved from them.
+   */
+  saved: {
+    trainingBlocks: () => savedAccountRead<TrainingBlocks>('/api/training-blocks'),
+    trainingPreferences: () => savedAccountRead<TrainingPreferences>('/api/training-preferences'),
+    homeLayout: () => savedAccountRead<HomeLayout>('/api/home-layout'),
+    workoutTypes: () => savedAccountRead<WorkoutType[]>('/api/workout-types'),
+    workoutTypeExercises: () =>
+      savedAccountRead<WorkoutTypeExercises[]>('/api/workout-type-exercises'),
+  },
   savedStartupData,
   rememberStartupData,
   createExercise: (payload: ExerciseCreateInput) =>
