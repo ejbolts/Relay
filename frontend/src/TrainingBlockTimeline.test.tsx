@@ -37,3 +37,39 @@ it('mentions pre-block history inside the Earlier segment', () => {
   );
   expect(labels(markup)).toMatch(/^2 earlier blocks and history, Block 3/);
 });
+
+const running = (planned: string | null): TrainingBlocks =>
+  ({
+    blocks: [
+      { id: 'a', name: 'Base', start_date: '2026-09-01', end_date: '2026-11-01' },
+      {
+        id: 'b',
+        name: 'Peak',
+        start_date: '2026-11-01',
+        end_date: null,
+        planned_end_date: planned,
+      },
+    ],
+  }) as TrainingBlocks;
+
+it('marks today inside the running block and runs the strip to its planned end', () => {
+  const markup = renderToStaticMarkup(
+    <BlockTimeline config={running('2026-11-28')} currentId="b" today="2026-11-14" />,
+  );
+  // Day 14 of a 28-day plan puts the line halfway along the block.
+  expect(markup).toContain('training-block-segment current has-today');
+  expect(markup).toContain('--today:50%');
+  expect(markup).toContain('class="training-block-today"');
+  expect(markup).toContain('<span>28 Nov</span>');
+  expect(markup).not.toContain('<span>Today</span>');
+});
+
+it('keeps the strip ending today without a planned end or once it has passed', () => {
+  for (const planned of [null, '2026-11-10']) {
+    const markup = renderToStaticMarkup(
+      <BlockTimeline config={running(planned)} currentId="b" today="2026-11-14" />,
+    );
+    expect(markup).not.toContain('training-block-today');
+    expect(markup).toContain('<span>Today</span>');
+  }
+});
