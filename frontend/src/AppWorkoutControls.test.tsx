@@ -265,6 +265,9 @@ describe('quieter set rows', () => {
     await click(labelled('Edit weight for set 1'));
     await click(labelled('Delete set 1'));
     expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.key)).toEqual(['set-1']);
+    const undo = document.querySelector<HTMLElement>('.toast');
+    expect(undo?.textContent).toContain('Set deleted');
+    expect(undo?.style.getPropertyValue('--toast-ms')).toBe('2500ms');
   });
 });
 
