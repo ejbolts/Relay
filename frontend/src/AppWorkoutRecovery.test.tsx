@@ -3307,7 +3307,7 @@ describe('high-rep warning preference', () => {
   const preference = () =>
     document.querySelector<HTMLInputElement>('.set-entry-warning-preference input')!;
   const confirm = () => document.querySelector<HTMLButtonElement>('.confirm-unusual-set')!;
-  const popup = () => document.querySelector('.set-entry-confirmation');
+  const popup = () => document.querySelector('.set-entry-confirmation-dialog');
 
   it('keeps warning by default and does not apply a checked preference when cancelled', async () => {
     writeActiveWorkoutDraft(highRepDraft());
