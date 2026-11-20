@@ -185,13 +185,6 @@
 }
 .follow-notifications .release-notification-view {
   flex-shrink: 0;
-  width: auto;
-  min-height: 2.25rem;
-  padding: 0.375rem 0.625rem;
-  font-size: 0.75rem;
-  background: var(--p-accent-soft);
-  border-color: var(--p-accent);
-  color: var(--p-accent-text);
 }
 
 /* A person's photo and name open their shared profile, above a row that opens a workout. */

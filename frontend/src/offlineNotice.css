@@ -166,12 +166,9 @@ button.offline-notice-pill[aria-expanded='true'] {
   white-space: nowrap;
 }
 
-/* The shared .primary rule makes buttons full width with a top margin; this one sits inline. */
 .offline-notice-actions .pulse-button {
   flex: none;
-  width: auto;
   min-height: 2.5rem;
-  margin-top: 0;
   padding: 0 1rem;
 }
 

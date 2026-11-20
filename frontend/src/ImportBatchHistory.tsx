@@ -63,7 +63,7 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
 
   return (
     <>
-      <button type="button" onClick={() => void show()}>
+      <button type="button" className="pulse-button secondary" onClick={() => void show()}>
         Import history
       </button>
       {open && (

@@ -31,15 +31,7 @@
 }
 
 .workout-data-guide-button {
-  min-height: 2.75rem;
   margin: 0.25rem 0 0.85rem;
-  padding: 0.55rem 1rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 7px;
-  background: var(--p-surface-2);
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 750;
 }
 
 .csv-guide-link {

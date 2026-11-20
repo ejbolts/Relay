@@ -237,7 +237,7 @@ export function HeadToHeadCard({
       <button
         ref={opener}
         type="button"
-        className="show-more-button"
+        className="show-more-button pulse-button secondary block"
         aria-haspopup="dialog"
         data-flip-key="choose"
         onClick={() => {
