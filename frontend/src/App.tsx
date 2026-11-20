@@ -4606,6 +4606,9 @@ function WorkoutLogger({
         if (item.key !== movement.key) return item;
         const at = Math.min(Math.max(position ?? item.sets.length, 0), item.sets.length);
         const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1]);
+        // A set slotted in with "+" keeps its neighbour's rest hidden, like a suggested set,
+        // until it is ticked; only Add set at the end shows its rest straight away.
+        if (position !== undefined) added.restRevealed = false;
         markSetAdded(added.key);
         addedSetKeys.current.add(added.key);
         return {

@@ -1860,8 +1860,10 @@ describe('inserting sets', () => {
     let sets = readActiveWorkoutDraft()!.movements[0].sets;
     expect(sets.map((set) => set.key).slice(1)).toEqual(['first', 'second']);
     expect(sets[0]).toMatchObject({ weight_kg: 60, reps: 10, completed: false });
+    // The inserted set adds no rest divider: its gap is a plain insert line until it is ticked.
+    expect(container.querySelector('.movement-card [aria-label="Rest after set 1"]')).toBeNull();
+    expect(insertButton('Add set before set 2')?.closest('.set-insert-row')).not.toBeNull();
 
-    // The new set 1 is unticked with a revealed rest, so the next gap is a divider too.
     await act(async () => insertButton('Add set before set 3')!.click());
     sets = readActiveWorkoutDraft()!.movements[0].sets;
     expect(sets).toHaveLength(4);
@@ -1891,6 +1893,15 @@ describe('inserting sets', () => {
     const sets = readActiveWorkoutDraft()!.movements[0].sets;
     expect(sets.map((set) => set.weight_kg)).toEqual([40, 40, 80]);
     expect(sets[1].key).not.toMatch(/^suggested-/);
+    expect(container.querySelector('.movement-card [aria-label="Rest after set 2"]')).toBeNull();
+
+    // Ticking the inserted set reveals the rest it copied and starts the timer.
+    await act(async () => insertButton('Complete set 2')!.click());
+    expect(
+      container.querySelector<HTMLSelectElement>('.movement-card [aria-label="Rest after set 2"]')
+        ?.value,
+    ).toBe(String(sets[0].rest_seconds));
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
   });
 
   it('adds the rest chosen from the menu in the gap below a set', async () => {
