@@ -98,3 +98,36 @@ it('hides the pager when every workout fits on one page', async () => {
   await render({ workouts: workouts.slice(0, 2) });
   expect(host.querySelector('nav')).toBeNull();
 });
+
+it("draws each workout in the member's own type colours, as their calendar does", async () => {
+  const stripes = () =>
+    [...host.querySelectorAll<HTMLElement>('.history-card-summary > i')].map(
+      (item) => item.style.background,
+    );
+  const custom = {
+    id: 'legs',
+    name: 'Legs',
+    color: '#123456',
+    is_custom: true,
+    archived: false,
+  };
+  const memberWorkouts: TrackedWorkout[] = [
+    { ...workouts[0], category: 'lower' },
+    { ...workouts[1], category: 'pull', workout_type_id: 'legs', workout_type: custom },
+  ];
+  const viewerColors = { lower: '#f59e0b', pull: '#3b82f6' } as never;
+
+  await render({
+    workouts: memberWorkouts,
+    categoryColors: viewerColors,
+    workoutTypes: [
+      { id: 'lower', name: 'Lower body', color: '#eab308', is_custom: false, archived: false },
+      custom,
+    ],
+  } as never);
+  expect(stripes()).toEqual(['rgb(234, 179, 8)', 'rgb(18, 52, 86)']);
+
+  // Without the member's types, the viewer's colours remain.
+  await render({ workouts: memberWorkouts, categoryColors: viewerColors } as never);
+  expect(stripes()).toEqual(['rgb(245, 158, 11)', 'rgb(18, 52, 86)']);
+});

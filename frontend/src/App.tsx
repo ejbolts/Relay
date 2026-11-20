@@ -9872,9 +9872,15 @@ export function SharedWorkoutHistory({
   loadingMore = false,
   loadMoreFailed = false,
   onLoadMore,
-  categoryColors,
+  categoryColors: viewerColors,
   weekStartDay,
+  workoutTypes,
 }: SharedWorkoutListProps & { categoryColors: WorkoutTypeColors; weekStartDay: number }) {
+  // Draw the member's own colours, as their calendar does, rather than the viewer's.
+  const categoryColors = useMemo(
+    () => (workoutTypes ? builtinTypeColors(workoutTypes) : viewerColors),
+    [viewerColors, workoutTypes],
+  );
   const [chosenPage, setChosenPage] = useState<number | null>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const [openId, setOpenId] = useState<string | null>(focusWorkoutId ?? null);
@@ -9957,7 +9963,10 @@ export function SharedWorkoutHistory({
                   summaryRef={workout.id === focusWorkoutId ? summaryRef : null}
                   targetExerciseId={null}
                   targetExerciseRef={targetExerciseRef}
-                  categoryColor={workout.workout_type?.color ?? categoryColors[workout.category]}
+                  categoryColor={workoutTypeColor(
+                    effectiveWorkoutType(workout, workoutTypes),
+                    categoryColors,
+                  )}
                   records={recordCounts.get(workout.id) ?? 0}
                   personalRecords={personalRecords}
                   activeWorkout={false}
