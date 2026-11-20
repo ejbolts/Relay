@@ -8,7 +8,8 @@ import type {
 } from './types';
 import type { WorkoutDraftMovement as DraftMovement } from './workoutMovements';
 import { blockOn, freshStartOn } from './trainingBlocks';
-import { bodyweightOn, relativeStrength } from './relativeStrength';
+import { bodyweightContext, bodyweightOn, relativeStrength } from './relativeStrength';
+import { formatWeight, type WeightUnit } from './weightUnits';
 
 // Compare canonical kilograms, independently of the preferred display unit.
 // Four decimals absorb conversion noise without merging distinct plate weights.
@@ -188,4 +189,25 @@ export function calculateScopedDraftPrs(
       return [movement.key, badges];
     }),
   );
+}
+
+/** A record set just logged in the live workout, for its celebrate toast. */
+export interface PrToastEntry {
+  exercise: string;
+  labels: string[];
+  reps: number;
+  weightKg: number;
+  bodyweightKg?: number | null;
+}
+
+/** The celebrate toast's lines: which records the set beat, then the set itself. */
+export function prToastLines(entries: PrToastEntry[], weightUnit: WeightUnit) {
+  return entries.map((entry) => ({
+    title: entry.labels.join(' + '),
+    detail:
+      `${entry.exercise} · ${entry.reps} reps at ${formatWeight(entry.weightKg, weightUnit)}` +
+      (entry.bodyweightKg != null
+        ? ` · ${bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}`
+        : ''),
+  }));
 }

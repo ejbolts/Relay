@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, type ReactElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
@@ -13,6 +13,7 @@ import type {
   TrainingBlock,
   WeightMapping,
 } from './types';
+import { createToastRoot, toastText } from './toastTestUtils';
 
 const press: Exercise = {
   id: 'press',
@@ -115,7 +116,7 @@ beforeEach(async () => {
   vi.spyOn(api, 'saveWeightMapping').mockImplementation(async (_, mapping) => mapping);
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
   await act(async () => root.render(<Screen />));
 });
 afterEach(async () => {
@@ -200,7 +201,7 @@ it('filters progress by machine and normalises All machines once mapped', async 
     machines: [unmapped.machines[0], { ...unmapped.machines[1], machine_kg: 40, reference_kg: 50 }],
   });
   expect(document.querySelector('.machine-weights-dialog')).toBeNull();
-  expect(document.querySelector('.undo-toast')?.textContent).toContain('Machine weights saved');
+  expect(toastText()).toBe('Machine weights saved');
 
   // The single-machine view still shows Life Fitness as logged.
   expect(hero()).toBe('69kg');
@@ -250,7 +251,7 @@ const threeMachines: WeightMapping = {
 
 async function remount(element: ReactElement) {
   await act(async () => root.unmount());
-  root = createRoot(host);
+  root = createToastRoot(host);
   await act(async () => root.render(element));
 }
 const field = (label: string) =>

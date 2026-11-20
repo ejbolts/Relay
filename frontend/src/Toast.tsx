@@ -53,17 +53,15 @@ export interface ToastProps {
   dismissLabel?: string;
   /**
    * The countdown ended, a newer toast replaced this one, or the app was hidden while an action
-   * was on offer. Defaults to `onDismiss`. `null` means the owner ends the toast on its own timer;
-   * a replacement then settles it through `onDismiss`.
+   * was on offer. Defaults to `onDismiss`.
    */
-  onTimeout?: (() => void) | null;
+  onTimeout?: () => void;
   /** The close button. For an Undo toast this settles at once (commits), as before. */
   onDismiss: () => void;
 }
 
-export interface ToastOptions extends Omit<ToastProps, 'onDismiss' | 'onTimeout'> {
+export interface ToastOptions extends Omit<ToastProps, 'onDismiss'> {
   onDismiss?: () => void;
-  onTimeout?: () => void;
 }
 
 export interface ToastApi {
@@ -71,7 +69,7 @@ export interface ToastApi {
   show: (toast: string | ToastOptions) => void;
   /** Closes the toast on screen, as its close button does. */
   dismiss: () => void;
-  /** True while a toast is on screen. */
+  /** True while a toast is on screen, from the render in which `show` is called. */
   active: boolean;
 }
 
@@ -89,7 +87,7 @@ function toastDuration(variant: ToastVariant, message: string): number {
 
 /** What ends a toast without the close button: the owner's timeout, or dismissal by default. */
 function settle({ onTimeout, onDismiss }: Pick<ToastProps, 'onTimeout' | 'onDismiss'>) {
-  (onTimeout === null ? onDismiss : (onTimeout ?? onDismiss))();
+  (onTimeout ?? onDismiss)();
 }
 
 // ───────── The top-most open modal dialog ─────────
@@ -347,15 +345,13 @@ function ToastCard({
  * is false while another toast holds the slot; the card is then not shown and its timer stops.
  */
 function useToastCard(props: ToastProps, current: boolean): ReactElement {
-  const { id, message, action, busy = false, onTimeout } = props;
+  const { id, message, action, busy = false } = props;
   const variant = toastVariant(props);
   const durationMs = toastDuration(variant, message);
   const latest = useRef(props);
   latest.current = props;
   const [held, setHeld] = useState(false);
-  // An owner that runs its own timer cannot be paused, so its bar keeps time with it.
-  const ownerTimed = onTimeout === null;
-  const running = current && (ownerTimed || (!held && !busy));
+  const running = current && !held && !busy;
   // The countdown and leaving the app can both end a toast; it settles once per id.
   const settledId = useRef<{ id: ToastProps['id'] } | null>(null);
   const settleOnce = useCallback(() => {
@@ -372,12 +368,7 @@ function useToastCard(props: ToastProps, current: boolean): ReactElement {
     if (!Object.is(state.id, id)) Object.assign(state, { id, used: 0 });
     const since = Date.now();
     state.since = since;
-    const timer = window.setTimeout(
-      () => {
-        if (latest.current.onTimeout !== null) settleOnce();
-      },
-      Math.max(0, durationMs - state.used),
-    );
+    const timer = window.setTimeout(settleOnce, Math.max(0, durationMs - state.used));
     return () => {
       window.clearTimeout(timer);
       state.used += Date.now() - since;
@@ -516,10 +507,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     () => ({ current: holder, viewport, claim, release, place }),
     [holder, viewport, claim, release, place],
   );
-  const api = useMemo<ToastApi>(
-    () => ({ show, dismiss, active: holder !== null }),
-    [show, dismiss, holder],
-  );
+  // A shown toast counts before it takes the slot, so nothing opens over it in the meantime.
+  const active = holder !== null || shown !== null;
+  const api = useMemo<ToastApi>(() => ({ show, dismiss, active }), [show, dismiss, active]);
 
   return (
     <ToastApiContext.Provider value={api}>
@@ -594,39 +584,4 @@ function StandaloneToast({ props }: { props: ToastProps }) {
 export function Toast(props: ToastProps) {
   const slot = useContext(ToastSlotContext);
   return slot ? <SlottedToast slot={slot} props={props} /> : <StandaloneToast props={props} />;
-}
-
-/**
- * A toast drawn in place instead of in the shared slot. Only the live logger's bottom stack uses
- * it, until the logger docks the shared slot with `useToastPlacement`.
- */
-export function InlineToast(props: ToastProps) {
-  return useToastCard(props, true);
-}
-
-/** @deprecated Use `Toast`. Kept so existing call sites compile; `durationMs` follows the variant. */
-export function TimedToast({
-  message,
-  action,
-  dismissLabel,
-  onDismiss,
-  onTimeout,
-}: {
-  message: string;
-  durationMs: number;
-  action?: { label: string; run: () => void };
-  dismissLabel: string;
-  onDismiss: () => void;
-  /** `null` when the owner's own timer ends the toast. */
-  onTimeout?: (() => void) | null;
-}) {
-  return (
-    <Toast
-      message={message}
-      action={action}
-      dismissLabel={dismissLabel}
-      onDismiss={onDismiss}
-      onTimeout={onTimeout}
-    />
-  );
 }

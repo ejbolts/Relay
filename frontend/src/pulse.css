@@ -4498,79 +4498,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: #fff;
 }
 
-/* ───────── Undo toast: floats over the page without blocking it ───────── */
+/* ───────── Dismissible inline error ───────── */
 
-.undo-toast {
-  position: fixed;
-  z-index: 90;
-  bottom: calc(1rem + env(safe-area-inset-bottom));
-  left: 50%;
-  width: min(calc(100% - 2rem), 26rem);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  overflow: hidden;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 16px;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
-  background: rgb(30 34 38 / 94%);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 14px 36px rgb(0 0 0 / 45%);
-  color: var(--p-ink);
-  transform: translateX(-50%);
-  animation: undo-toast-in 220ms var(--ease-out) backwards;
-}
-
-.undo-toast > span {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.9375rem;
-  font-weight: 650;
-}
-
-.bodyweight-undo-toast,
-.top-toast {
-  top: max(1rem, env(safe-area-inset-top));
-  bottom: auto;
-  z-index: 120;
-}
-
-.bodyweight-undo-toast.is-undoing::after {
-  animation-play-state: paused;
-}
-
-.undo-toast button {
-  min-height: 2.5rem;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--p-accent-text);
-}
-
-.undo-toast .undo-toast-action {
-  padding: 0 0.875rem;
-  font-size: 0.9375rem;
-  font-weight: 750;
-}
-
-.undo-toast .undo-toast-close,
-.inline-error-dismissible .undo-toast-close {
-  width: 2.5rem;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: var(--p-muted);
-}
-
-.undo-toast .undo-toast-close .pulse-icon,
-.inline-error-dismissible .undo-toast-close .pulse-icon {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-
-/* An inline error with the toast's dismiss X on the right; the button's
-   negative margins keep the box the same height as a plain inline error. */
+/* An inline error with a dismiss X on the right; the button's negative margins keep the box
+   the same height as a plain inline error. */
 .inline-error-dismissible {
   display: flex;
   align-items: center;
@@ -4582,82 +4513,26 @@ html.edge-swipe-ready .edge-swipe-indicator {
   min-width: 0;
 }
 
-.inline-error-dismissible .undo-toast-close {
+.inline-error-dismissible .inline-error-dismiss {
+  width: 2.5rem;
   flex: none;
+  display: grid;
+  place-items: center;
   min-height: 2.5rem;
   margin: -0.65rem -0.45rem -0.65rem 0;
   border: 0;
   border-radius: 10px;
+  padding: 0;
   background: transparent;
   color: inherit;
 }
 
-/* Shrinks over the toast's lifetime to show when it will close. */
-.undo-toast::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: var(--p-accent);
-  transform-origin: left;
-  animation: undo-toast-timer var(--undo-toast-duration, 4s) linear forwards;
+.inline-error-dismissible .inline-error-dismiss .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
-/* A notice explaining why an action didn't happen; its countdown is the warning colour. */
-.logger-notice-toast > span {
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.logger-notice-toast::after {
-  background: var(--p-danger);
-}
-
-@keyframes undo-toast-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 0.75rem);
-  }
-}
-
-@keyframes undo-toast-timer {
-  to {
-    transform: scaleX(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .undo-toast::after {
-    display: none;
-  }
-}
-
-/* ───────── Workout popups: the rest timer and set Undo stack at the bottom ───────── */
-
-.logger-bottom-toasts {
-  position: fixed;
-  z-index: 90;
-  bottom: calc(1rem + env(safe-area-inset-bottom));
-  left: 50%;
-  width: min(calc(100% - 2rem), 26rem);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.logger-bottom-toasts > .undo-toast {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  transform: none;
-  animation-name: rest-timer-toast-in;
-  pointer-events: auto;
-}
+/* ───────── Workout screen: room above the rest timer dock ───────── */
 
 /* Keep Finish workout reachable above the timer dock. */
 .logger-screen.has-rest-pill {
@@ -4666,14 +4541,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .logger-screen.has-rest-notch {
   padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
-}
-
-.logger-bottom-toasts.has-rest-pill {
-  bottom: calc(5rem + env(safe-area-inset-bottom));
-}
-
-.logger-bottom-toasts.has-rest-notch {
-  bottom: calc(4rem + env(safe-area-inset-bottom));
 }
 
 /* ───────── Rest timer dock: the rest pill, or a notch on the bottom edge ───────── */
@@ -4948,13 +4815,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
   from {
     opacity: 0;
     transform: translateY(calc(100% + 0.75rem + env(safe-area-inset-bottom)));
-  }
-}
-
-@keyframes rest-timer-toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.75rem);
   }
 }
 
