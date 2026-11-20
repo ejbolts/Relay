@@ -13,7 +13,7 @@
 
 /* Inset like other pop-ups; the list scrolls when many sets differ. */
 .workout-sync-intro {
-  margin: 1rem 1rem 0;
+  margin: 1rem 1rem 0.75rem;
   color: var(--p-ink-2);
 }
 
@@ -22,7 +22,7 @@
   gap: 0.5rem;
   max-height: 50dvh;
   overflow: auto;
-  margin: 0.75rem 1rem 1rem;
+  margin: 0 1rem 1rem;
   padding: 0;
   list-style: none;
 }
@@ -50,16 +50,4 @@
   display: block;
   color: var(--p-muted);
   font-size: 0.75rem;
-}
-
-.workout-sync-actions {
-  margin: 0;
-  padding: 0.875rem 1rem 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-.workout-sync-actions button {
-  min-height: 44px;
 }

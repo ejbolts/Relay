@@ -111,10 +111,9 @@ export function ExerciseSwapSheet({
 
   return (
     <PopupDialog
+      variant="sheet"
       title={`Swap ${exercise.name}`}
       className="exercise-swap-sheet"
-      closeLabel={<Icon name="close" />}
-      swipeToDismiss
       onClose={onClose}
     >
       <div className="exercise-swap-body">

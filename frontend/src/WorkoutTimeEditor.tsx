@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { PopupDialog } from './PopupDialog';
 import { MAX_LIVE_CLOCK_SECONDS } from './workoutPause';
 
@@ -24,6 +24,7 @@ export function WorkoutTimeEditor({
   const startingMinutes = Math.floor(Math.min(elapsedSeconds, MAX_LIVE_CLOCK_SECONDS) / 60);
   const [hours, setHours] = useState(String(Math.floor(startingMinutes / 60)));
   const [minutes, setMinutes] = useState(String(startingMinutes % 60));
+  const formId = useId();
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -36,8 +37,22 @@ export function WorkoutTimeEditor({
   }
 
   return (
-    <PopupDialog title="Workout time so far" className="workout-time-editor" onClose={onClose}>
-      <form onSubmit={submit}>
+    <PopupDialog
+      title="Workout time so far"
+      className="workout-time-editor"
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action">
+            Set time
+          </button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={submit}>
         <div className="workout-time-fields">
           <label>
             Hours
@@ -64,14 +79,6 @@ export function WorkoutTimeEditor({
             />
           </label>
         </div>
-        <footer className="popup-dialog-actions">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="popup-primary-action">
-            Set time
-          </button>
-        </footer>
       </form>
     </PopupDialog>
   );

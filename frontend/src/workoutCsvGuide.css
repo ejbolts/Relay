@@ -26,31 +26,6 @@
   font-size: 0.8rem;
 }
 
-/* Keep Close and Choose CSV file visible together on phones. */
-.workout-csv-guide .workout-csv-guide-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  flex-direction: row;
-  align-items: center;
-  margin: 0;
-  padding: 0.85rem 1.25rem;
-  border-top: 1px solid var(--p-line-strong);
-  background: var(--p-surface-2);
-}
-
-.workout-csv-guide .workout-csv-guide-actions > button {
-  width: auto;
-}
-
-.workout-csv-guide-actions .workout-csv-guide-close {
-  margin-right: auto;
-  border-color: transparent;
-  background: transparent;
-  color: var(--p-ink-2);
-  font-weight: 500;
-}
-
 .workout-data-panel {
   scroll-margin-top: var(--overlay-header-content-offset);
 }
@@ -97,16 +72,4 @@
   color: var(--p-accent-text);
   min-height: 2.75rem;
   font-size: 0.75rem;
-}
-
-@media (max-width: 360px) {
-  .workout-csv-guide .workout-csv-guide-actions {
-    gap: 0.35rem;
-    padding-inline: 0.75rem;
-  }
-
-  .workout-csv-guide .workout-csv-guide-actions > button {
-    padding-inline: 0.65rem;
-    font-size: 0.8rem;
-  }
 }

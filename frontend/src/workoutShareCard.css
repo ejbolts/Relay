@@ -15,11 +15,6 @@
   margin-inline: 20px;
 }
 
-.workout-share-dialog > .popup-dialog-actions {
-  margin-top: 0;
-  padding: 16px 20px 20px;
-}
-
 .workout-share-preview {
   border-radius: 16px;
   overflow: hidden;

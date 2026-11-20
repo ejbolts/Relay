@@ -78,19 +78,15 @@ export function WorkoutTypeExercisesEditor({
   }
   return (
     <PopupDialog
+      variant="screen"
       title={`${type.name} exercises`}
       className="routine-editor-dialog routine-editor-screen type-exercises-dialog"
       style={{ '--day-colour': type.color } as CSSProperties}
-      closeLabel={
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M14.5 5.5 8 12l6.5 6.5" />
-        </svg>
-      }
       headerActions={
         <button
           type="submit"
           form={formId}
-          className="routine-editor-save"
+          className="overlay-header-save routine-editor-save"
           disabled={busy || !!loadError}
         >
           {busy ? 'Saving…' : 'Save'}

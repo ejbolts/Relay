@@ -137,10 +137,6 @@
 
 .setup-guide-wait p {
   margin: 0;
-  padding: 1rem 1rem 0;
+  padding: 1rem;
   line-height: 1.5;
-}
-
-.setup-guide-wait .popup-dialog-actions {
-  padding: 0 1rem 1rem;
 }

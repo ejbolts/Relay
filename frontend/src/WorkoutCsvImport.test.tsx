@@ -59,7 +59,12 @@ const preview: CsvImportPreview = {
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
-  return [node, ...elements(node.props.children as ReactNode)];
+  // A pop-up's footer buttons arrive through its actions prop.
+  return [
+    node,
+    ...elements(node.props.children as ReactNode),
+    ...elements(node.props.actions as ReactNode),
+  ];
 }
 
 function render(onImport: (file: File) => Promise<void>) {

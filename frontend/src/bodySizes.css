@@ -355,10 +355,6 @@
 .body-sizes-delete > p {
   margin: 16px;
 }
-.body-sizes-delete > .popup-dialog-actions {
-  margin: 0;
-  padding: 16px;
-}
 @media (max-width: 450px) {
   .body-sizes-card .pulse-card-header {
     align-items: flex-start;

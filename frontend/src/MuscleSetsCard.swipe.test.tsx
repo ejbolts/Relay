@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import { SHEET_CLOSE_MS } from './PopupDialog';
 import type { WeeklySets } from './types';
 
 let root: Root;
@@ -67,6 +68,12 @@ afterEach(async () => {
 function sheet() {
   return document.querySelector<HTMLDialogElement>('dialog')!;
 }
+/** The sheet slides away from where it was let go, then closes. */
+async function expectSlidAway(dialog: HTMLDialogElement) {
+  expect(dialog.classList).toContain('is-closing');
+  await act(async () => new Promise((resolve) => setTimeout(resolve, SHEET_CLOSE_MS + 20)));
+  expect(sheet()).toBeNull();
+}
 async function touch(target: Element, type: string, x: number, y: number, count = 1) {
   clock += step;
   const point = { identifier: 1, clientX: x, clientY: y };
@@ -91,7 +98,8 @@ it('tracks a downward touch from the handle and dismisses on release', async () 
   expect(dialog.open).toBe(true);
   const end = await touch(header, 'touchend', 185, 390);
   expect(end.defaultPrevented).toBe(true);
-  expect(sheet()).toBeNull();
+  expect(dialog.style.getPropertyValue('--sheet-offset')).toBe('90px');
+  await expectSlidAway(dialog);
 });
 it('snaps back a short slow pull and suppresses its click on an exercise', async () => {
   step = 200;
@@ -132,7 +140,7 @@ it('preserves content scrolling and lets the sticky header dismiss a scrolled sh
   await touch(header, 'touchstart', 180, 300);
   await touch(header, 'touchmove', 180, 400);
   await touch(header, 'touchend', 180, 400);
-  expect(sheet()).toBeNull();
+  await expectSlidAway(dialog);
 });
 it.each(['touchcancel', 'second-touch'])('resets an interrupted drag (%s)', async (reason) => {
   const header = sheet().querySelector('header')!;
@@ -151,7 +159,7 @@ it('keeps keyboard dismissal available after a short slow touch pull', async () 
   await touch(header, 'touchmove', 180, 330);
   await touch(header, 'touchend', 180, 330);
   await act(async () => sheet().querySelector<HTMLButtonElement>('.popup-dialog-close')!.click());
-  expect(sheet()).toBeNull();
+  await expectSlidAway(sheet());
 });
 
 it('keeps tracking touch input if the browser cancels its parallel pointer stream', async () => {
@@ -164,5 +172,5 @@ it('keeps tracking touch input if the browser cancels its parallel pointer strea
   });
   await touch(header, 'touchmove', 180, 400);
   await touch(header, 'touchend', 180, 400);
-  expect(sheet()).toBeNull();
+  await expectSlidAway(sheet());
 });

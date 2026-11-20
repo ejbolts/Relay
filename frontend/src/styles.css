@@ -8853,6 +8853,10 @@ body,
   margin: 0.75rem 1rem 0;
 }
 
+.account-archive-dialog > p:last-of-type {
+  margin-bottom: 1rem;
+}
+
 .account-archive-dialog .account-archive-note {
   color: var(--p-muted);
   font-size: 0.8125rem;
@@ -8861,11 +8865,6 @@ body,
 .account-archive-dialog .account-archive-warning {
   color: var(--p-ink-2);
   font-size: 0.8125rem;
-}
-
-.account-archive-dialog > .popup-dialog-actions {
-  margin: 1rem 0 0;
-  padding: 0.875rem 1rem 1rem;
 }
 
 .settings-actions {

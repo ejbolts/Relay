@@ -110,11 +110,6 @@ html[data-reduce-motion] .release-confetti {
   text-underline-offset: 0.2em;
 }
 
-.release-announcement .popup-dialog-actions {
-  display: flex;
-  padding: 1rem 1.25rem;
-}
-
 .release-trailer {
   width: min(100%, 26rem, calc(60dvh * 4 / 5));
   margin: 1rem auto 1.25rem;

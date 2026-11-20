@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
@@ -114,6 +114,7 @@ export function TrainingBlockSummaryDialog({
   const [plan, setPlan] = useState<Plan>('none');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const nextFormId = useId();
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
   const deloadEnd = weeksEnd(today, 1);
@@ -178,8 +179,71 @@ export function TrainingBlockSummaryDialog({
       kicker={
         view === 'summary' ? (block.deload ? 'Deload complete' : 'Block complete') : undefined
       }
-      onClose={() => !busyRef.current && onClose()}
+      onClose={onClose}
+      onBack={view === 'summary' ? undefined : () => setView('summary')}
+      busy={busy}
       className="training-block-dialog training-block-summary"
+      actions={
+        view === 'summary' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenProgress();
+              }}
+            >
+              View progress
+            </button>
+            {!block.deload && (
+              <button type="button" onClick={() => setView('deload')}>
+                Deload week first
+              </button>
+            )}
+            <button type="button" className="popup-primary-action" onClick={() => setView('next')}>
+              Start next block
+            </button>
+          </>
+        ) : view === 'next' ? (
+          <>
+            <button type="button" disabled={busy} onClick={() => setView('summary')}>
+              Back
+            </button>
+            <button
+              type="submit"
+              form={nextFormId}
+              className="popup-primary-action"
+              disabled={busy || !name.trim()}
+            >
+              {busy ? 'Starting…' : 'Start block'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" disabled={busy} onClick={() => setView('summary')}>
+              Back
+            </button>
+            <button
+              type="button"
+              className="popup-primary-action"
+              disabled={busy}
+              onClick={() =>
+                void start(
+                  {
+                    name: 'Deload week',
+                    start_date: today,
+                    planned_end_date: deloadEnd,
+                    deload: true,
+                  },
+                  'Deload week started',
+                )
+              }
+            >
+              {busy ? 'Starting…' : 'Start deload'}
+            </button>
+          </>
+        )
+      }
     >
       {view === 'summary' && (
         <div className="training-block-summary-body">
@@ -210,29 +274,10 @@ export function TrainingBlockSummaryDialog({
               </button>
             </p>
           )}
-          <div className="training-block-summary-actions">
-            <button type="button" className="primary-action" onClick={() => setView('next')}>
-              Start next block
-            </button>
-            {!block.deload && (
-              <button type="button" onClick={() => setView('deload')}>
-                Deload week first
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenProgress();
-              }}
-            >
-              View progress
-            </button>
-          </div>
         </div>
       )}
       {view === 'next' && (
-        <form onSubmit={submitNext} className="training-block-form">
+        <form id={nextFormId} onSubmit={submitNext} className="training-block-form">
           <fieldset disabled={busy}>
             <label>
               Block name
@@ -260,14 +305,6 @@ export function TrainingBlockSummaryDialog({
                 </button>
               ))}
             </div>
-            <div className="training-block-actions">
-              <button type="button" onClick={() => setView('summary')}>
-                Back
-              </button>
-              <button type="submit" className="primary-action" disabled={!name.trim()}>
-                {busy ? 'Starting…' : 'Start block'}
-              </button>
-            </div>
           </fieldset>
         </form>
       )}
@@ -277,29 +314,6 @@ export function TrainingBlockSummaryDialog({
             A 7-day deload block starts today and runs to {blockDay(deloadEnd, false)}. Start your
             next block when it ends.
           </p>
-          <div className="training-block-actions">
-            <button type="button" disabled={busy} onClick={() => setView('summary')}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="primary-action"
-              disabled={busy}
-              onClick={() =>
-                void start(
-                  {
-                    name: 'Deload week',
-                    start_date: today,
-                    planned_end_date: deloadEnd,
-                    deload: true,
-                  },
-                  'Deload week started',
-                )
-              }
-            >
-              {busy ? 'Starting…' : 'Start deload'}
-            </button>
-          </div>
         </div>
       )}
       {error && (
