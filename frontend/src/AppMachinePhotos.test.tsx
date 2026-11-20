@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
@@ -17,6 +17,7 @@ import type {
   MachinePhotoUsage,
   TrackedWorkout,
 } from './types';
+import { createToastRoot, toastButton } from './toastTestUtils';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -236,7 +237,7 @@ beforeEach(() => {
   );
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -443,7 +444,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await type(input, 'Hammer leg press 3');
     await click(button('Save name'));
     expect(notice()).not.toBeNull();
-    await click(button('Close notification'));
+    await click(toastButton('Dismiss notification')!);
     expect(notice()).toBeNull();
   });
 
@@ -671,7 +672,7 @@ describe('saving and pinning a machine photo while logging', () => {
       });
     }
     await act(async () => root.unmount());
-    root = createRoot(container);
+    root = createToastRoot(container);
     await act(async () => root.render(<App />));
     expect(
       [...container.querySelectorAll<HTMLSelectElement>('.set-machine-select')].map((s) => s.value),

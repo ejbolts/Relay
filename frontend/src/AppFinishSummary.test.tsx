@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
@@ -14,6 +14,7 @@ import type {
   TrackedWorkout,
   WorkoutInput,
 } from './types';
+import { createToastRoot } from './toastTestUtils';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -141,7 +142,7 @@ beforeEach(() => {
   vi.mocked(writeDashboardCache).mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -168,7 +169,7 @@ it('shows the finished workout on Home at once, before it has synced, and keeps 
   expect(card()?.closest('.today-screen')).not.toBeNull();
 
   await act(async () => root.unmount());
-  root = createRoot(container);
+  root = createToastRoot(container);
   await mount();
   expect(card()?.querySelector('h2')?.textContent).toBe('Push workout');
 });
@@ -198,7 +199,7 @@ it('lets the summary go when dismissed', async () => {
   expect(card()).toBeNull();
 
   await act(async () => root.unmount());
-  root = createRoot(container);
+  root = createToastRoot(container);
   await mount();
   expect(card()).toBeNull();
 });
@@ -258,7 +259,7 @@ it('lists the records on the card once the workout has synced, with no toast ove
   expect(card()!.querySelector('.finished-workout-records small')?.textContent).toContain(
     'All-time Weight PR',
   );
-  expect(document.querySelector('.workout-completion-toast')).toBeNull();
+  expect(document.querySelector('.toast[data-variant="celebrate"]')).toBeNull();
 });
 
 describe('a finished workout that is deleted', () => {

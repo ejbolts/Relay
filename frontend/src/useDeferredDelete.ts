@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * Holds a deletion back for a few seconds so it can be undone. It goes through when the time
- * runs out, when another deletion starts, or when the app is hidden or closed, so leaving the
+ * Holds a deletion back so it can be undone. Its toast's countdown ends it with `flush`; it also
+ * goes through when another deletion starts, or when the app is hidden or closed, so leaving the
  * app never quietly brings the item back.
  */
-export function useDeferredDelete<T>(commit: (item: T) => void, delayMs: number) {
+export function useDeferredDelete<T>(commit: (item: T) => void) {
   const [pending, setPending] = useState<T | null>(null);
   const pendingRef = useRef<T | null>(null);
-  const timerRef = useRef<number | undefined>(undefined);
   const commitRef = useRef(commit);
   commitRef.current = commit;
 
   const settle = useCallback((apply: boolean) => {
-    window.clearTimeout(timerRef.current);
     const item = pendingRef.current;
     pendingRef.current = null;
     setPending(null);
@@ -27,9 +25,8 @@ export function useDeferredDelete<T>(commit: (item: T) => void, delayMs: number)
       flush();
       pendingRef.current = item;
       setPending(item);
-      timerRef.current = window.setTimeout(flush, delayMs);
     },
-    [delayMs, flush],
+    [flush],
   );
 
   useEffect(() => {

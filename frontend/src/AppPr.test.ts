@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDraftPrs, calculateScopedDraftPrs } from './workoutPr';
+import { calculateDraftPrs, calculateScopedDraftPrs, prToastLines } from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
 import type { WorkoutDraftMovement } from './workoutMovements';
 import type { Exercise, ExerciseHistoryBaseline, TrackedWorkout, WorkoutSetInput } from './types';
@@ -445,5 +445,32 @@ describe('training-block PR scopes', () => {
   });
   it('uses the workout date rather than the viewed/current block', () => {
     expect(scoped([set(105, 8)], [baseline], '2026-01-05')).toEqual([['All-time weight PR']]);
+  });
+});
+
+describe('personal record toast lines', () => {
+  it('names the records beaten, then the exercise and set', () => {
+    expect(
+      prToastLines(
+        [{ exercise: 'Bench Press', labels: ['Weight PR', 'Volume PR'], reps: 9, weightKg: 100 }],
+        'kg',
+      ),
+    ).toEqual([{ title: 'Weight PR + Volume PR', detail: 'Bench Press · 9 reps at 100 kg' }]);
+  });
+
+  it('adds the bodyweight context of a relative record, in the preferred unit', () => {
+    const entry = {
+      exercise: 'Bench Press',
+      labels: ['Relative strength PR'],
+      reps: 8,
+      weightKg: 100,
+      bodyweightKg: 80,
+    };
+    const [kg] = prToastLines([entry], 'kg');
+    expect(kg.detail).toContain('1.25× BW');
+    expect(kg.detail).toContain('at 80 kg BW');
+    const [lb] = prToastLines([entry], 'lb');
+    expect(lb.detail).toContain('8 reps at 220.46 lb');
+    expect(lb.detail).not.toContain(' kg');
   });
 });

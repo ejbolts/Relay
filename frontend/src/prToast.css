@@ -1,9 +1,0 @@
-/* The stack rises above the weekly sets shelf while a logged set shows it. */
-.logger-bottom-toasts.has-weekly-shelf {
-  bottom: calc(5.75rem + env(safe-area-inset-bottom));
-}
-
-.logger-bottom-toasts.has-weekly-shelf.has-rest-pill,
-.logger-bottom-toasts.has-weekly-shelf.has-rest-notch {
-  bottom: calc(9.25rem + env(safe-area-inset-bottom));
-}
