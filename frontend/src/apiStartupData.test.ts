@@ -101,72 +101,74 @@ describe('the revision reported with a sign-in', () => {
 
 describe('opening with the copies saved on this device', () => {
   it('has nothing to open with before the opening data has been read', async () => {
-    expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
+    expect(await api.savedStartupData(SINCE)).toBeNull();
     // A revision alone is not enough: the copies themselves must be there.
     await api.rememberStartupData('rev-1', TODAY);
-    expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
+    expect(await api.savedStartupData(SINCE)).toBeNull();
   });
 
-  it('returns every copy once they were all saved at the revision the server reports', async () => {
+  it('returns every copy, and the revision they were all read at', async () => {
     await readOpeningData('rev-1');
     await vi.waitFor(async () =>
-      expect(await api.savedStartupData('rev-1', SINCE)).toEqual({
+      expect(await api.savedStartupData(SINCE)).toEqual({
         exercises: [bench],
         // Only the workouts the app opens with, not the older ones the copy also holds.
         workouts: [workout],
         personalRecords: [record],
         measurements: [expect.objectContaining({ measurement_date: '2026-11-19', weight_kg: 80 })],
-        // The day the dashboard was read for, so the app knows whether it is still current.
+        // The revision and day they were read for, so the app knows whether they are current.
+        revision: 'rev-1',
         dashboardDate: TODAY,
       }),
     );
     // Reading the copies never asks the server.
     const requests = fetchMock.mock.calls.length;
-    await api.savedStartupData('rev-1', SINCE);
+    await api.savedStartupData(SINCE);
     expect(fetchMock).toHaveBeenCalledTimes(requests);
   });
 
-  it('refuses copies saved at another revision', async () => {
+  it('refuses copies that were not all read at one revision', async () => {
     await readOpeningData('rev-1');
-    await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
-    expect(await api.savedStartupData('rev-2', SINCE)).toBeNull();
-    // The server moved on and only the stamp caught up: the workouts copy is still older.
+    await vi.waitFor(async () => expect(await api.savedStartupData(SINCE)).not.toBeNull());
+    // The copies say which revision they were read at; the app decides whether that is current.
+    expect((await api.savedStartupData(SINCE))?.revision).toBe('rev-1');
+    // Only the record moved on: the workouts copy is still the older one, so they disagree.
     await api.rememberStartupData('rev-2', TODAY);
-    expect(await api.savedStartupData('rev-2', SINCE)).toBeNull();
+    expect(await api.savedStartupData(SINCE)).toBeNull();
   });
 
   it('refuses copies that do not reach back as far as the app opens with', async () => {
     await readOpeningData('rev-1');
-    await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
-    expect(await api.savedStartupData('rev-1', '2026-05-01')).toBeNull();
+    await vi.waitFor(async () => expect(await api.savedStartupData(SINCE)).not.toBeNull());
+    expect(await api.savedStartupData('2026-05-01')).toBeNull();
   });
 
   it('refuses copies saved by another release', async () => {
     await readOpeningData('rev-1');
-    await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
+    await vi.waitFor(async () => expect(await api.savedStartupData(SINCE)).not.toBeNull());
     await writeOffline('startup-data-v1', { revision: 'rev-1', version: '0.0.1' }, account.id);
-    expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
+    expect(await api.savedStartupData(SINCE)).toBeNull();
   });
 
   it('does not vouch for the dashboard when the day it was read for is unknown', async () => {
     await readOpeningData('rev-1');
-    await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
+    await vi.waitFor(async () => expect(await api.savedStartupData(SINCE)).not.toBeNull());
     const { CLIENT_VERSION } = await import('./clientVersion');
     await writeOffline(
       'startup-data-v1',
       { revision: 'rev-1', version: CLIENT_VERSION },
       account.id,
     );
-    expect((await api.savedStartupData('rev-1', SINCE))?.dashboardDate).toBeNull();
+    expect((await api.savedStartupData(SINCE))?.dashboardDate).toBeNull();
   });
 
   it('never opens one account with another account’s copies', async () => {
     await readOpeningData('rev-1');
-    await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
+    await vi.waitFor(async () => expect(await api.savedStartupData(SINCE)).not.toBeNull());
     signIn('another-account');
-    expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
+    expect(await api.savedStartupData(SINCE)).toBeNull();
     localStorage.clear();
-    expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
+    expect(await api.savedStartupData(SINCE)).toBeNull();
     await expect(api.rememberStartupData('rev-1', TODAY)).resolves.toBeUndefined();
   });
 });

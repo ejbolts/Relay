@@ -20,7 +20,16 @@ export type AuthState =
       /** Starts the sign-in form, after a session ended without signing out here. */
       username?: string;
     }
-  | { status: 'authenticated'; user: User; offline: boolean }
+  | {
+      status: 'authenticated';
+      user: User;
+      offline: boolean;
+      /**
+       * Opened from the account this device remembers, before the server has answered the
+       * session check. Changes are held until it does; see `sessionGate`.
+       */
+      unconfirmed?: boolean;
+    }
   | { status: 'unreachable'; message: string };
 
 /**

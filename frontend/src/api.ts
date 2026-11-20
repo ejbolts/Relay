@@ -106,6 +106,7 @@ import {
 import { readOffline, writeOffline } from './offlineStore';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
+import { sessionConfirmation } from './sessionGate';
 import { beginWrite, reportClientOutdated, trackWrite } from './appUpdates';
 import {
   CLIENT_VERSION,
@@ -226,6 +227,18 @@ function isUnreachable(reason: unknown): boolean {
   return reason instanceof TypeError;
 }
 
+/**
+ * Waits while the app is open on a remembered account the server has not confirmed yet, so no
+ * change is sent on behalf of a session that might be gone or belong to another account. Refuses
+ * the change when the session turns out to have ended. Signing in and out are never held.
+ */
+async function changeAllowed(path: string): Promise<void> {
+  const confirmation = sessionConfirmation();
+  if (!confirmation || path.startsWith('/api/auth/')) return;
+  if ((await confirmation) === 'ended')
+    throw new ApiError('Sign in again to continue.', NOT_AUTHENTICATED_CODE, 401);
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
@@ -235,15 +248,20 @@ async function request<T>(
   const checkAccount = () => {
     if (!scope.isCurrent()) throw new ApiError('The signed-in account changed.', 'account_changed');
   };
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const changes = method !== 'GET' && method !== 'HEAD';
+  if (changes && sessionConfirmation()) {
+    await changeAllowed(path);
+    checkAccount();
+  }
   const sent = fetch(path, {
     ...init,
     headers: withClientVersion(init?.headers),
     credentials: 'same-origin',
   });
-  const method = init?.method?.toUpperCase() ?? 'GET';
   let response: Response;
   try {
-    response = await (method === 'GET' || method === 'HEAD' ? sent : trackWrite(sent));
+    response = await (changes ? trackWrite(sent) : sent);
   } catch (reason) {
     if (isUnreachable(reason)) reportConnectionFailure('unreachable');
     throw reason;
@@ -348,6 +366,19 @@ function accountRead<T>(path: string, savedKey = `response:${path}`): Promise<T>
   );
 }
 
+/**
+ * The copy of an account read this device saved, without asking the server. Null when there is
+ * none. Screens show it while the usual read is under way, so they open in their final shape
+ * instead of rearranging when the answer arrives.
+ */
+async function savedAccountRead<T>(path: string, savedKey = `response:${path}`): Promise<T | null> {
+  const scope = captureAccountCacheScope();
+  const owner = scope.owner;
+  if (!owner) return null;
+  const saved = await readOffline<T>(savedKey, owner);
+  return saved && scope.isCurrent() ? saved.value : null;
+}
+
 async function requestBlob(path: string): Promise<Blob> {
   const scope = captureAccountCacheScope();
   const checkAccount = () => {
@@ -431,6 +462,8 @@ export interface SavedStartupData {
   workouts: TrackedWorkout[];
   personalRecords: PersonalRecord[];
   measurements: BodyMeasurement[];
+  /** The revision every copy was read at. They are current only while the server reports it. */
+  revision: string;
   /** The day the saved dashboard was read for, when known. It is current only on that day. */
   dashboardDate: string | null;
 }
@@ -447,17 +480,19 @@ async function rememberStartupData(revision: string, date: string): Promise<void
 }
 
 /**
- * This device's saved copies of the data the app opens with, when they were all saved at
- * `revision`, the one the server has just reported. The app can then show them at once while it
- * reads the same data again. Null when a copy is missing or belongs to another revision.
+ * This device's saved copies of the data the app opens with, from the last time they were all
+ * read together, and the revision they were read at. The app shows them at once and treats them
+ * as current only once the server reports that same revision. Null when a copy is missing, the
+ * copies were not all read at one revision, or another release saved them.
  */
-async function savedStartupData(revision: string, since: string): Promise<SavedStartupData | null> {
+async function savedStartupData(since: string): Promise<SavedStartupData | null> {
   const scope = captureAccountCacheScope();
   const owner = scope.owner;
   if (!owner) return null;
   try {
     const stamp = await readOffline<StartupStamp>(STARTUP_STAMP_KEY, owner);
-    if (stamp?.value.revision !== revision || stamp.value.version !== CLIENT_VERSION) return null;
+    if (!stamp || stamp.value.version !== CLIENT_VERSION) return null;
+    const { revision } = stamp.value;
     const [cached, exercises, personalRecords, measurements] = await Promise.all([
       readWorkoutCache(),
       readOffline<Exercise[]>(`response:${EXERCISES_PATH}`, owner),
@@ -471,6 +506,7 @@ async function savedStartupData(revision: string, since: string): Promise<SavedS
       workouts,
       personalRecords: personalRecords.value,
       measurements,
+      revision,
       dashboardDate: stamp.value.date ?? null,
     };
   } catch {
@@ -851,6 +887,18 @@ export const api = {
     }),
   listSessions: () => request<WorkoutSession[]>('/api/sessions'),
   listExercises: () => accountRead<Exercise[]>(EXERCISES_PATH),
+  /**
+   * This device's copies of the settings Home is built from. Each is shown until the read of the
+   * same name answers; nothing is saved from them.
+   */
+  saved: {
+    trainingBlocks: () => savedAccountRead<TrainingBlocks>('/api/training-blocks'),
+    trainingPreferences: () => savedAccountRead<TrainingPreferences>('/api/training-preferences'),
+    homeLayout: () => savedAccountRead<HomeLayout>('/api/home-layout'),
+    workoutTypes: () => savedAccountRead<WorkoutType[]>('/api/workout-types'),
+    workoutTypeExercises: () =>
+      savedAccountRead<WorkoutTypeExercises[]>('/api/workout-type-exercises'),
+  },
   savedStartupData,
   rememberStartupData,
   createExercise: (payload: ExerciseCreateInput) =>
@@ -1343,38 +1391,42 @@ export const api = {
     clip: { clientId: string; file: File; exerciseLabel: string; orderIndex: number },
     onProgress: (percent: number) => void,
   ) =>
-    new Promise<Clip>((resolve, reject) => {
-      const form = new FormData();
-      form.append('client_clip_id', clip.clientId);
-      form.append('order_index', String(clip.orderIndex));
-      form.append('exercise_label', clip.exerciseLabel);
-      form.append('file', clip.file, clip.file.name);
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/sessions/${sessionId}/clips`);
-      xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
-      xhr.onloadend = beginWrite();
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-      };
-      xhr.onerror = () => reject(new ApiError('Network error while uploading this clip.'));
-      xhr.onload = () => {
-        const body = xhr.responseText
-          ? (JSON.parse(xhr.responseText) as { error?: { code?: string; message?: string } })
-          : null;
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(body as unknown as Clip);
-          return;
-        }
-        if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE) emitAuthExpired();
-        if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
-        reject(
-          new ApiError(
-            body?.error?.message ?? `Upload failed (${xhr.status})`,
-            body?.error?.code,
-            xhr.status,
-          ),
-        );
-      };
-      xhr.send(form);
-    }),
+    changeAllowed(`/api/sessions/${sessionId}/clips`).then(
+      () =>
+        new Promise<Clip>((resolve, reject) => {
+          const form = new FormData();
+          form.append('client_clip_id', clip.clientId);
+          form.append('order_index', String(clip.orderIndex));
+          form.append('exercise_label', clip.exerciseLabel);
+          form.append('file', clip.file, clip.file.name);
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `/api/sessions/${sessionId}/clips`);
+          xhr.setRequestHeader(CLIENT_VERSION_HEADER, CLIENT_VERSION);
+          xhr.onloadend = beginWrite();
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+          };
+          xhr.onerror = () => reject(new ApiError('Network error while uploading this clip.'));
+          xhr.onload = () => {
+            const body = xhr.responseText
+              ? (JSON.parse(xhr.responseText) as { error?: { code?: string; message?: string } })
+              : null;
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(body as unknown as Clip);
+              return;
+            }
+            if (xhr.status === 401 && body?.error?.code === NOT_AUTHENTICATED_CODE)
+              emitAuthExpired();
+            if (isClientOutdated(xhr.status, body?.error?.code)) reportClientOutdated();
+            reject(
+              new ApiError(
+                body?.error?.message ?? `Upload failed (${xhr.status})`,
+                body?.error?.code,
+                xhr.status,
+              ),
+            );
+          };
+          xhr.send(form);
+        }),
+    ),
 };
